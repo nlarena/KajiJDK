@@ -1,0 +1,1 @@
+class Fbox { float f; }

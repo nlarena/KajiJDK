@@ -1,0 +1,1 @@
+class Dbox { double d; }
