@@ -236,10 +236,13 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [x] **Verificador de bytecode** (seguridad de tipos antes de ejecutar) — cobertura completa del set de opcodes que ejecuta el intérprete (objetos, arrays, invokes, categoría-2, conversiones, comparaciones).
 - [x] **Sistema de tipos completo** — `int`/`long`/`double`/`float` ejecutados *y* verificados: cómputo, conversiones, comparaciones, división con excepción, categoría-2 (params/campos/estáticos/arrays/frames), y el **lattice de referencias** (covarianza de arrays + `join`/LUB).
 - [x] GC **compactante** (mover + reescribir punteros) — hecho ya en A5.
-- [ ] GC **generacional** (young/old, card tables, write barriers, remembered sets)
-- [ ] Hilos, monitores, `synchronized`; modelo de memoria de Java
+- [x] GC **generacional** (young Eden+survivors por copia / Old; write barrier + remembered set para raíces `old→young`)
+- [x] **Referencias débiles** (`java.lang.ref`: `WeakReference` + `ReferenceQueue`)
+- [x] **Hilos, monitores, `synchronized`** — green threads cooperativos (default + visor) **y** substrato **hilos de SO + GIL** (`JVM_THREADS=os`, E1+E2): `std::thread` por `Thread.start()`, `park`/`unpark`, `wait`/`notify`/`join`, IMSE; GC seguro bajo el GIL
+- [ ] **Sacar el GIL** → paralelismo real (locks finos + TLABs + handshake stop-the-world) — *E3, próximo*
+- [ ] **Modelo de memoria de Java** (`volatile`, happens-before, fences) — recién útil con paralelismo real
 - [ ] JIT (bytecode → código nativo)
-- **✅ Éxito (parcial):** verificación de tipos completa antes de ejecutar; falta la ejecución concurrente y/o el JIT.
+- **✅ Éxito (parcial):** verificación de tipos completa, GC generacional, y concurrencia con hilos de SO reales serializados por un GIL; falta el paralelismo real (sacar el GIL), el JMM y/o el JIT. *Detalle en el informe `Concurrencia_KajiJDK.pdf`.*
 
 ---
 
@@ -381,7 +384,15 @@ El momento épico: las tres piezas funcionando juntas.
 
 ---
 
-## Estado actual (2026-06-02)
+## Estado de A0 — snapshot (2026-06-02)
+
+> **Al día (2026-06-27):** este bloque es el snapshot de **A0**. Desde entonces se
+> completaron **A1–A5 y gran parte de A6**: intérprete, objetos/heap con dispatch
+> dinámico, excepciones, class loaders, nativos+intrínsecos, **GC generacional** +
+> referencias débiles, **verificador JVMS-estricto**, sistema de tipos completo, e
+> **hilos + monitores** con el substrato **OS-threads + GIL** (E1+E2). El proyecto
+> pasa **79 tests** sin warnings. Detalle vigente en `Concurrencia_KajiJDK.pdf` y
+> `Roadmap_JDK.pdf`. **Siguiente: E3 — sacar el GIL (paralelismo real).**
 
 **Fase A / Hito A0 — núcleo logrado.** Compila **sin warnings**, 6 tests verdes,
 **12 fixtures byte-idénticos** a `javap`.
@@ -405,5 +416,5 @@ El momento épico: las tres piezas funcionando juntas.
 **Pendiente de A0:** atributos no esenciales (ver tabla en Hito A0) y flags de contenido
 (`-c`/`-l`/`-s`). Ninguno bloquea avanzar.
 
-**Siguiente:** arrancar el **Nivel 1 / intérprete** (Hito A1) — *frame* (pila de
-operandos + locales), PC y opcodes aritméticos para ejecutar bytecode de verdad.
+*(Histórico: en su momento el siguiente paso fue arrancar el Nivel 1 / intérprete —
+ya hecho. Ver la nota "Al día" arriba para el estado actual.)*

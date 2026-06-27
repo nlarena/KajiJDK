@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Concurrencia e hilos — RustyJDK</title>
+<title>Concurrencia e hilos — KajiJDK</title>
 <style>
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   @page {
@@ -10,7 +10,7 @@
     margin: 24mm 18mm 22mm 18mm;
     @top-left-corner { content: ""; background: #7A2D0A; margin:0; padding:0; }
     @top-left {
-      content: "RustyJDK · Concurrencia e hilos";
+      content: "KajiJDK · Concurrencia e hilos";
       font-family: 'Segoe UI','Calibri',sans-serif; font-size: 9.5pt; font-weight: 600;
       color: #fff; background: #7A2D0A; padding: 3.5mm 0 3.5mm 4mm; margin:0; vertical-align: middle;
     }
@@ -84,14 +84,14 @@
 <!-- Portada -->
 <div class="cover">
   <div class="cover-emblem">&lt;/&gt; Thread.start()</div>
-  <div class="cover-sub">RustyJDK · Sistemas de bajo nivel</div>
+  <div class="cover-sub">KajiJDK · Sistemas de bajo nivel</div>
   <div class="cover-rule"></div>
   <div class="cover-title">Concurrencia e hilos<br>en una JVM en Rust</div>
   <div class="cover-rule"></div>
   <div class="cover-tagline">Informe técnico — qué hay y qué se podría hacer</div>
   <div class="cover-meta">
     Autor: <strong>Esteban Nicolás Larena</strong><br>
-    Fecha: <strong>26 de junio de 2026</strong>
+    Fecha: <strong>27 de junio de 2026</strong>
   </div>
 </div>
 
@@ -101,22 +101,23 @@
   <ul class="toc-list">
     <li><span class="num">1 · Resumen ejecutivo</span><span class="pg">3</span></li>
     <li><span class="num">2 · Estado actual (lo que ya corre)</span><span class="pg">3</span></li>
-    <li><span class="num">3 · El rascacielos de la concurrencia</span><span class="pg">4</span></li>
-    <li><span class="num">4 · Estado verificado contra el código</span><span class="pg">5</span></li>
-    <li><span class="num">5 · Los dos cimientos: park/unpark y CAS</span><span class="pg">6</span></li>
-    <li><span class="num">6 · Ruta crítica — GIL primero (GIL ≠ JIT)</span><span class="pg">6</span></li>
-    <li><span class="num">7 · Plan por hitos (H0–H6)</span><span class="pg">7</span></li>
-    <li><span class="num">8 · Consideraciones de Rust y arquitectura</span><span class="pg">9</span></li>
-    <li><span class="num">9 · Riesgos y orden recomendado</span><span class="pg">10</span></li>
+    <li><span class="num">3 · El rascacielos de la concurrencia</span><span class="pg">5</span></li>
+    <li><span class="num">4 · Estado verificado contra el código</span><span class="pg">6</span></li>
+    <li><span class="num">5 · Los dos cimientos: park/unpark y CAS</span><span class="pg">7</span></li>
+    <li><span class="num">6 · Ruta crítica — GIL primero (GIL ≠ JIT)</span><span class="pg">7</span></li>
+    <li><span class="num">7 · Plan por hitos (H0–H6)</span><span class="pg">8</span></li>
+    <li><span class="num">8 · Consideraciones de Rust y arquitectura</span><span class="pg">10</span></li>
+    <li><span class="num">9 · Riesgos y orden recomendado</span><span class="pg">11</span></li>
   </ul>
 </div>
 
 <!-- 1 Resumen -->
 <div class="section-break">
 <h1>1 · Resumen ejecutivo</h1>
-<p>Este informe es un <strong>deep-dive del Hito A6 (concurrencia)</strong> de RustyJDK: separa, contra el código real, <strong>lo que ya funciona</strong> de <strong>lo que se podría hacer</strong> para llegar a un <em>multithread profesional</em>. La meta no es el cómputo numérico del LLM —que vive en <strong>kernels off-heap</strong> (rayon/CUDA)— sino la <strong>corrección</strong> de la concurrencia Java sobre el heap administrado.</p>
-<p>Hoy la VM ejecuta <strong>green threads cooperativos</strong> sobre un único hilo de SO, con <strong>monitores</strong> (<code>synchronized</code> de bloques y métodos), señalización <code>wait</code>/<code>notify</code> y <code>join</code>/<code>sleep</code>. Es la <em>planta baja</em> de un edificio cuya cumbre es <code>java.util.concurrent</code>.</p>
-<blockquote>Tesis del informe: el salto grande <strong>no</strong> es el JIT ni terminar el monitor, sino <strong>cambiar el substrato</strong> de green threads a hilos de SO. El camino canónico es <strong>GIL primero</strong> (correcto pero sin paralelismo) y después <strong>sacar el GIL</strong>. El JIT es ortogonal (Fase F3) y no está en esta ruta.</blockquote>
+<p>Este informe es un <strong>deep-dive del Hito A6 (concurrencia)</strong> de KajiJDK: separa, contra el código real, <strong>lo que ya funciona</strong> de <strong>lo que se podría hacer</strong> para llegar a un <em>multithread profesional</em>. La meta no es el cómputo numérico del LLM —que vive en <strong>kernels off-heap</strong> (rayon/CUDA)— sino la <strong>corrección</strong> de la concurrencia Java sobre el heap administrado.</p>
+<p>El proyecto ya dio el <strong>salto de substrato (E1+E2)</strong>: además de los <strong>green threads cooperativos</strong> (default y para el visor), hay un modo <strong>hilos de SO reales + GIL</strong> (<code>JVM_THREADS=os</code>) donde cada <code>Thread.start()</code> lanza un <code>std::thread</code>, con <code>park</code>/<code>unpark</code> reales para monitores, <code>wait</code>/<code>notify</code> y <code>join</code>. Es la <em>planta baja</em> de un edificio cuya cumbre es <code>java.util.concurrent</code>.</p>
+<blockquote>Tesis del informe (confirmada): el salto grande <strong>no</strong> era el JIT ni terminar el monitor, sino <strong>cambiar el substrato</strong> de green threads a hilos de SO. Se hizo por el camino canónico — <strong>GIL primero</strong> (correcto pero sin paralelismo). Lo que queda es <strong>sacar el GIL</strong> (E3) para paralelismo real. El JIT es ortogonal (Fase F3) y no está en esta ruta.</blockquote>
+<p class="exito"><strong>✓ Estado:</strong> E1+E2 implementado y validado — <strong>79 tests verdes</strong> (75 + 4 de modo OS: <code>Sync</code>/<code>SyncMethod</code>→200, <code>Threads</code>→100, <code>WaitNotify</code>→42, <code>Joiner</code>→30, <code>Imse</code>→99 con hilos de SO reales), <strong>0 warnings</strong>.</p>
 <p class="legend">
   <strong>Horizontes:</strong>
   <span class="badge b-base">Base</span> el núcleo &nbsp;
@@ -130,8 +131,9 @@
   <li><strong>Green threads (Fase 0).</strong> <code>GreenThread</code> = un call stack propio; scheduler <strong>round-robin cooperativo</strong> que conmuta en el <em>safepoint</em> (entre opcodes); el stack activo vive en <code>self.frames</code> y se intercambia con el del hilo entrante. <code>Thread.start()</code> spawnea (dispatch virtual de <code>run()</code>); <code>join</code> y <code>sleep</code> (reloj lógico de opcodes). El GC toma las raíces de <strong>todos</strong> los hilos (<code>parked()</code>). Verificado: dos workers + <code>main</code> → <code>100</code>.</li>
   <li><strong>Monitores.</strong> <code>Monitor</code> = dueño + conteo reentrante + <em>blocked-set</em> + <em>wait-set</em>. <code>synchronized</code> en sus dos formas: <strong>bloques</strong> (<code>monitorenter</code>/<code>monitorexit</code>) y <strong>métodos</strong> (<code>ACC_SYNCHRONIZED</code>, sin opcode — el VM toma/suelta el monitor del receptor, o del <code>Class</code> en <code>static synchronized</code>, en un único punto de <em>release</em> imposible de saltear, también en el <em>unwind</em> de excepción).</li>
   <li><strong>Señalización.</strong> <code>wait</code>/<code>notify</code>/<code>notifyAll</code>: libera el monitor guardando el conteo de reentrada, parquea en el wait-set y lo re-adquiere al despertar. Verificado: exclusión mutua real (2×100 → 200 vs control sin lock que pierde updates) y handshake productor/consumidor (<code>wait</code> → <code>notify</code> → 42).</li>
-  <li><strong><code>IllegalMonitorStateException</code></strong> (en el working tree, sin commitear): gate <code>owns_monitor</code> sobre <code>monitorexit</code>/<code>wait</code>/<code>notify</code> (JVMS §6.5 / JLS 17.2).</li>
-  <li><strong>El seam.</strong> El heap está tras <code>HeapService</code>, su único dueño; toda escritura de referencia pasa por <code>store_reference</code> (write barrier no-bypasseable) — <strong>el punto donde irá la sincronización</strong> cuando los hilos pasen a ser de SO.</li>
+  <li><strong><code>IllegalMonitorStateException</code></strong>: gate <code>owns_monitor</code> sobre <code>monitorexit</code>/<code>wait</code>/<code>notify</code> (JVMS §6.5 / JLS 17.2).</li>
+  <li><strong>Hilos de SO + GIL (E1+E2) ◀ nuevo.</strong> Modo <code>JVM_THREADS=os</code>: la VM vive tras un <strong>GIL</strong> (<code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code>); cada <code>Thread.start()</code> lanza un <code>std::thread</code> que toma el lock por opcode y lo suelta. Bloqueo real con <code>park</code>/<code>unpark</code> (centralizado en <code>make_runnable</code>) para monitores, <code>wait</code>/<code>notify</code> y <code>join</code>; <code>Thread.sleep</code> en tiempo real. <strong>El GC corre seguro bajo el GIL</strong> (solo un hilo toca la VM) — el GIL <em>es</em> el stop-the-world por ahora.</li>
+  <li><strong>El seam.</strong> El heap está tras <code>HeapService</code>, su único dueño; toda escritura de referencia pasa por <code>store_reference</code> (write barrier no-bypasseable) — el punto donde entrará la sincronización fina cuando se <strong>saque</strong> el GIL (E3).</li>
 </ul>
 </div>
 
@@ -139,7 +141,7 @@
 <div class="section-break">
 <h1>3 · El rascacielos de la concurrencia</h1>
 <p>Cada planta se apoya en la de abajo: no hay <code>ReentrantLock</code> sin CAS, ni CAS útil sin un modelo de memoria, ni modelo de memoria que <em>importe</em> sin hilos reales que lo hagan necesario.</p>
-<pre>            RASCACIELOS DE LA CONCURRENCIA · construir hacia arriba ↑
+<pre>            RASCACIELOS DE LA CONCURRENCIA · estado tras E1+E2
   ┌────────────────────────────────────────────────────────────────────┐
   │ [6] java.util.concurrent · lo que usa la gente            ⬜ FALTA  │
   │     AQS · ReentrantLock · Condition · Semaphore · Latch            │
@@ -152,21 +154,24 @@
   │     volatile · happens-before · fences · final · no-tearing        │
   ├────────────────────────────────────────────────────────────────────┤
   │ [3] API de Thread · control de hilos                      🟡 PARC.  │
-  │     ✅ start · run · join · sleep                                   │
+  │     ✅ start · run · join · sleep (sleep ya wall-clock en OS)      │
   │     ⬜ interrupt · yield · currentThread · prioridad · daemon      │
-  ├────────────────────────────────────────────────────────────────────┤
-  │ [2] Monitor intrínseco         · ← ACÁ ESTAMOS            🟡 PARC.  │
-  │     ✅ monitorenter/exit · synchronized (bloques Y métodos)        │
-  │     ✅ reentrancia · wait / notify / notifyAll · IMSE*             │
-  │     ⬜ wait(timeout) · interrupts · GC-safe (hoy keyed-by-offset)  │
-  ├────────────────────────────────────────────────────────────────────┤
-  │ [1] Substrato de ejecución · paralelismo real             🟡 PARC.  │
-  │     ✅ green threads (cooperativo, 1 carrier OS)                   │
-  │     ⬜ park/unpark · GIL · hilos de SO sin GIL · stop-the-world    │
+  ├════════════════════════════════════════════════════════════════════┤
+  │ [2] Monitor intrínseco                                    🟢 CASI   │
+  │     ✅ monitorenter/exit · synchronized (bloque Y método)         │
+  │     ✅ reentrancia · wait / notify / notifyAll · IMSE             │
+  │     ✅ park/unpark REAL entre hilos de SO       ◀ NUEVO (E2)       │
+  │     ⬜ wait(timeout) · interrupts · GC-safe (keyed-by-offset)     │
+  ├════════════════════════════════════════════════════════════════════┤
+  │ [1] Substrato de ejecución · paralelismo real          ✅🟡 GRAN   │
+  │     ✅ green threads (cooperativo, default + visor)       AVANCE   │
+  │     ✅ hilos de SO reales (std::thread/Thread.start) ◀ NUEVO (E1)  │
+  │     ✅ GIL (Arc&lt;Mutex&lt;JVM&gt;&gt;, 1 opcode/lock)  ◀ NUEVO (E1)     │
+  │     ✅ park/unpark · GC seguro bajo el GIL (= STW gratis)          │
+  │     ⬜ sacar el GIL → paralelismo real · STW handshake (E3)        │
   └────────────────────────────────────────────────────────────────────┘
-                    ▲ todo descansa en la planta 1 ▲
-        * IMSE = IllegalMonitorStateException (en el working tree)</pre>
-<p class="legend"><strong>Estado:</strong> ✅ hecho &nbsp;&nbsp; 🟡 parcial &nbsp;&nbsp; ⬜ falta</p>
+              ▲ las dos plantas base, prácticamente cerradas ▲</pre>
+<p class="legend"><strong>Estado:</strong> ✅ hecho &nbsp;&nbsp; 🟢 casi &nbsp;&nbsp; 🟡 parcial &nbsp;&nbsp; ⬜ falta</p>
 </div>
 
 <!-- 4 Estado verificado -->
@@ -180,8 +185,8 @@
 <tr><td>5 · Atómicos / CAS</td><td>⬜ falta</td><td><code>compareAndSwap</code> (la instrucción atómica raíz) y los <code>Atomic*</code>. Sin esto no hay lock-free ni AQS</td></tr>
 <tr><td>4 · Modelo de Memoria (JMM)</td><td>⬜ falta</td><td><code>volatile</code>, happens-before, barreras/fences, semántica de <code>final</code>, no-tearing de <code>long</code>/<code>double</code></td></tr>
 <tr><td>3 · API de <code>Thread</code></td><td>🟡 parcial</td><td><strong>Hecho:</strong> <code>start</code>/<code>run</code>/<code>join()</code>/<code>sleep(long)</code>. <strong>Falta:</strong> <code>interrupt</code>/<code>InterruptedException</code>, <code>yield</code>, <code>currentThread</code>, prioridad, daemon + shutdown, nombre/id, <code>getState</code>, <code>isAlive</code>, patrón <code>Runnable</code>, <code>start</code>-dos-veces, <code>UncaughtExceptionHandler</code>, <code>ThreadLocal</code></td></tr>
-<tr><td>2 · Monitor intrínseco</td><td>🟡 parcial</td><td><strong>Hecho:</strong> <code>monitorenter</code>/<code>exit</code>, <code>synchronized</code> (bloques y métodos, incl. <code>static</code>), reentrancia, <code>wait</code>/<code>notify</code>/<code>notifyAll</code>, IMSE*. <strong>Falta:</strong> <code>wait(timeout)</code>, interrupciones del wait, monitor <em>GC-safe</em> (hoy se keyea por <em>offset</em> del heap; al compactar, cambia), biased/thin locks, detección de deadlock</td></tr>
-<tr><td>1 · Substrato de ejecución</td><td>🟡 parcial</td><td><strong>Hecho:</strong> green threads (scheduler cooperativo, 1 carrier). <strong>Falta:</strong> <code>park</code>/<code>unpark</code>, GIL, hilos de SO sin GIL (paralelismo real), safepoints stop-the-world, preempción</td></tr>
+<tr><td>2 · Monitor intrínseco</td><td>🟢 casi</td><td><strong>Hecho:</strong> <code>monitorenter</code>/<code>exit</code>, <code>synchronized</code> (bloques y métodos, incl. <code>static</code>), reentrancia, <code>wait</code>/<code>notify</code>/<code>notifyAll</code>, IMSE, y <strong><code>park</code>/<code>unpark</code> real entre hilos de SO (E2)</strong>. <strong>Falta:</strong> <code>wait(timeout)</code>, interrupciones del wait, monitor <em>GC-safe</em> (hoy se keyea por <em>offset</em> del heap; al compactar, cambia), biased/thin locks, detección de deadlock</td></tr>
+<tr><td>1 · Substrato de ejecución</td><td>✅🟡 gran avance</td><td><strong>Hecho (E1):</strong> green threads (cooperativo, default) <em>y</em> <strong>hilos de SO reales</strong> (<code>std::thread</code> por <code>Thread.start()</code>) <strong>serializados por un GIL</strong> (<code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code>, 1 opcode por lock); <code>park</code>/<code>unpark</code>; GC seguro bajo el GIL (STW implícito). <strong>Falta (E3):</strong> <strong>sacar el GIL</strong> → paralelismo real (locks finos + TLABs + handshake STW), preempción</td></tr>
 </tbody>
 </table>
 </div>
@@ -196,10 +201,10 @@
 </ul>
 
 <h1>6 · Ruta crítica — GIL primero (GIL ≠ JIT)</h1>
-<pre>  HOY            cerrar monitor        cambiar substrato          desbloquear "pro"
-  green    ──►   IMSE✔ · wait(t)  ──►  OS threads + GIL     ──►   JMM → CAS → AQS
-  threads        · interrupt           → sacar el GIL              → java.util.concurrent
-                                        (park/unpark reales)</pre>
+<pre>  cerrar monitor      [E1+E2] ✔ HECHO      sacar el GIL          desbloquear "pro"
+  IMSE·wait·notify ─► OS threads + GIL ──►  GIL → sin GIL    ──►  JMM → CAS → AQS
+  (✅)                (✅ park/unpark)       (locks finos, STW)    → java.util.concurrent
+                                            ▲ ACÁ (E3, próximo)</pre>
 <p>El camino canónico —el de CPython y las JVM tempranas— es <strong>GIL primero</strong>: hilos de SO con un <em>lock global</em> que serializa el intérprete (simple y correcto, pero todavía <strong>sin paralelismo real</strong>) y después <strong>sacar el GIL</strong> (locks finos por estructura + TLABs + GC stop-the-world). Recién ahí <code>volatile</code> y los <em>fences</em> dejan de ser decorativos: con green threads no hay reordenamientos reales que tapar; con hilos de SO, omitirlos rompe el código de forma no-determinista.</p>
 <blockquote><strong>Aclaración importante (GIL ≠ JIT).</strong> El <strong>GIL</strong> es un lock que serializa el intérprete; habilita hilos de SO correctos sin reescribir la VM. El <strong>JIT</strong> compila bytecode a nativo y vive en la <strong>Fase F3</strong> (track <code>burst</code>), <em>fuera</em> de esta ruta. No se necesita JIT para tener hilos de SO ni para un JMM correcto: lo que cuesta es el <strong>refactor de ownership</strong>, no la generación de código nativo.</blockquote>
 </div>
@@ -207,12 +212,12 @@
 <!-- 7 Plan por hitos -->
 <div class="section-break">
 <h1>7 · Plan por hitos (H0–H6)</h1>
-<p>Cada hito con su criterio de éxito medible. Los dos primeros (H0–H1) se hacen <strong>sobre el substrato actual</strong> (baratos); H2 es el salto grande.</p>
+<p>Cada hito con su criterio de éxito medible. <strong>H2 (el salto grande) ya está hecho</strong>; H0 quedó parcial y H1 sigue pendiente sobre el nuevo substrato.</p>
 
 <div class="hito">
-  <h3><span class="hito-id">H0</span> Cerrar el monitor intrínseco <span class="badge b-adv">Avanzado</span></h3>
+  <h3><span class="hito-id">H0</span> Cerrar el monitor intrínseco <span class="badge b-adv">Avanzado</span> · 🟡 parcial</h3>
   <ul class="hito-items">
-    <li><span class="badge b-base">Base</span> Commitear <code>IllegalMonitorStateException</code> (gate <code>owns_monitor</code>, ya en el working tree)</li>
+    <li><span class="badge b-base">Base</span> ✅ <code>IllegalMonitorStateException</code> (gate <code>owns_monitor</code>) — hecho y commiteado</li>
     <li><span class="badge b-adv">Avanzado</span> <code>wait(long)</code>/<code>wait(long,int)</code> con timeout — reusar el reloj de <code>sleep_until</code></li>
     <li><span class="badge b-adv">Avanzado</span> Interrupción del <code>wait</code> → <code>InterruptedException</code> (depende de H1)</li>
     <li><span class="badge b-sum">Cumbre</span> Monitor <em>GC-safe</em>: keyear por identidad estable, no por offset (hoy la compactación movería la clave)</li>
@@ -232,18 +237,18 @@
 </div>
 
 <div class="hito">
-  <h3><span class="hito-id">H2</span> Substrato: hilos de SO + GIL <span class="badge b-sum">Cumbre</span></h3>
+  <h3><span class="hito-id">H2</span> Substrato: hilos de SO + GIL <span class="badge b-sum">Cumbre</span> · <span style="color:#2E7D32">✅ HECHO (E1+E2)</span></h3>
   <ul class="hito-items">
     <li><span class="badge b-sum">Cumbre</span> Cada <code>GreenThread</code> → un <code>std::thread</code> real (carrier propio)</li>
     <li><span class="badge b-sum">Cumbre</span> <strong>GIL</strong>: un lock global del intérprete tomado entre opcodes y cedido en cada safepoint (correcto, todavía serializado)</li>
     <li><span class="badge b-sum">Cumbre</span> <code>park</code>/<code>unpark</code> reales sobre el SO (base de <code>wait</code>/<code>join</code>/contención)</li>
     <li><span class="badge b-sum">Cumbre</span> Refactor de ownership: heap/monitors/metaspace compartidos tras el seam <code>HeapService.store_reference</code> (<code>Arc</code> + <code>Send</code>/<code>Sync</code>)</li>
   </ul>
-  <p class="exito"><strong>✓ Éxito:</strong> N hilos de SO ejecutan el mismo programa serializados por el GIL, sin <em>data races</em> (mismo resultado que en green threads).</p>
+  <p class="exito"><strong>✓ Logrado:</strong> N hilos de SO ejecutan el mismo programa serializados por el GIL, sin <em>data races</em> — validado por 4 tests de modo OS (mismo resultado que en green), 79 verdes en total.</p>
 </div>
 
 <div class="hito">
-  <h3><span class="hito-id">H3</span> Sacar el GIL — paralelismo real <span class="badge b-sum">Cumbre</span></h3>
+  <h3><span class="hito-id">H3</span> Sacar el GIL — paralelismo real <span class="badge b-sum">Cumbre</span> · ◀ próximo</h3>
   <ul class="hito-items">
     <li><span class="badge b-sum">Cumbre</span> Locks finos por estructura (regiones del heap, mapa de monitores, metaspace) en vez del lock único</li>
     <li><span class="badge b-sum">Cumbre</span> <strong>TLABs</strong> (Thread-Local Allocation Buffers) — alocar sin lock global</li>
@@ -302,18 +307,18 @@
 <table>
 <thead><tr><th>Hito</th><th>Riesgo / costo</th><th>Nota</th></tr></thead>
 <tbody>
-<tr><td>H0 · cerrar monitor</td><td>Bajo</td><td>Autocontenido, sobre el substrato actual. IMSE ya está</td></tr>
-<tr><td>H1 · API Thread</td><td>Bajo–medio</td><td>Mucho es cableado prolijo; <code>interrupt</code> toca el scheduler</td></tr>
-<tr><td>H2 · OS threads + GIL</td><td><strong>Alto</strong></td><td>El refactor de ownership. El salto grande. GIL = correcto pero serializado</td></tr>
-<tr><td>H3 · sacar el GIL</td><td><strong>Alto</strong></td><td>Locks finos + TLABs + GC STW; acá aparecen los <em>data races</em></td></tr>
+<tr><td>H0 · cerrar monitor</td><td>Bajo</td><td>🟡 parcial — IMSE ✅; faltan <code>wait(timeout)</code> + GC-safe</td></tr>
+<tr><td>H1 · API Thread</td><td>Bajo–medio</td><td>Pendiente. Mucho es cableado prolijo; <code>interrupt</code> toca el scheduler</td></tr>
+<tr><td>H2 · OS threads + GIL</td><td><strong>Alto</strong></td><td>✅ <strong>HECHO (E1+E2)</strong> — refactor a <code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code> + <code>std::thread</code>; GIL = correcto pero serializado. 79 tests verdes</td></tr>
+<tr><td>H3 · sacar el GIL</td><td><strong>Alto</strong></td><td>◀ <strong>próximo</strong>. Locks finos + TLABs + GC STW; acá aparecen los <em>data races</em></td></tr>
 <tr><td>H4 · JMM</td><td>Medio–alto</td><td>Recién útil con H3; fences en accesos <code>volatile</code> y monitor</td></tr>
 <tr><td>H5 · CAS</td><td>Medio</td><td>Mapea directo a <code>std::sync::atomic</code></td></tr>
 <tr><td>H6 · j.u.c</td><td>Alto (volumen)</td><td>Mucha superficie, pero casi todo se deduce de AQS = park/unpark + CAS</td></tr>
 </tbody>
 </table>
-<p><strong>Orden recomendado:</strong> H0 → H1 (ganancias baratas sobre el substrato actual) → <strong>H2</strong> (el salto: OS threads + GIL) → H3 (sacar el GIL) → H4 (JMM, ya con paralelismo real) → H5 (CAS) → H6 (<code>java.util.concurrent</code>).</p>
-<blockquote><strong>Una sola frase:</strong> el JIT no habilita los hilos de SO; el refactor de ownership sí. GIL primero, JIT aparte. El monitor está casi listo; el verdadero trabajo empieza en la planta 1.</blockquote>
-<p class="exito"><strong>✓ Siguiente paso concreto:</strong> commitear IMSE, sumar <code>wait(timeout)</code> + <code>interrupt</code> (H0/H1), y preparar el refactor de <code>HeapService</code> para el GIL (H2).</p>
+<p><strong>Orden:</strong> <s>H0 → H1 → <strong>H2</strong></s> ✅ (substrato hecho) → <strong>H3</strong> (sacar el GIL — paralelismo real) → H4 (JMM, ya con paralelismo) → H5 (CAS) → H6 (<code>java.util.concurrent</code>).</p>
+<blockquote><strong>Una sola frase:</strong> el JIT no habilita los hilos de SO; el refactor de ownership sí — y ya está hecho. GIL primero (✅), JIT aparte. Las dos plantas base quedaron prácticamente cerradas; el próximo trabajo es <strong>sacar el GIL</strong>.</blockquote>
+<p class="exito"><strong>✓ Siguiente paso concreto:</strong> arrancar <strong>E3</strong> — convertir <code>parked()</code> en un handshake stop-the-world real, locks finos por estructura y TLABs, para que dos hilos CPU-bound escalen en paralelo. En paralelo: cerrar H0 (<code>wait(timeout)</code>) y H1 (<code>interrupt</code>/<code>currentThread</code>).</p>
 </div>
 
 </body>
