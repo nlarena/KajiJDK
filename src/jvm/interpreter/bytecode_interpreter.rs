@@ -17,6 +17,9 @@
 //! handing the result down to the caller.
 
 use std::fmt::Write as _;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use super::frame::{Frame, Value};
 use super::gc;
@@ -66,6 +69,32 @@ pub enum ThreadStatus {
     Terminated,
 }
 
+/// The execution **substrate** for Java threads — an application parameter
+/// (`JVM_THREADS`), read once at VM startup like the `JVM_GC_*` knobs.
+///
+/// - `Green` (default): the cooperative scheduler on a single OS thread (`step`
+///   round-robins at opcode granularity). Deterministic and single-steppable — what
+///   the `jvm-step` visualizer needs.
+/// - `Os`: each `java.lang.Thread` runs on a real `std::thread`, with a **GIL** (one
+///   global interpreter lock) serializing opcode execution. Correct but not yet
+///   parallel — removing the GIL is the next milestone. Blocking is real `park`/`unpark`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThreadMode {
+    Green,
+    Os,
+}
+
+impl ThreadMode {
+    /// Reads `JVM_THREADS` (`os` → real OS threads + GIL; anything else → green).
+    /// Defaults to `Green` while the OS substrate stabilises.
+    pub fn from_env() -> Self {
+        match std::env::var("JVM_THREADS").ok().as_deref().map(str::trim) {
+            Some("os") | Some("OS") | Some("Os") => ThreadMode::Os,
+            _ => ThreadMode::Green,
+        }
+    }
+}
+
 /// An object's **monitor** — its lock + wait-set for `synchronized`/`wait`/`notify`.
 /// Cooperative: no OS mutex, just bookkeeping. `owner` holds it (reentrant via `count`);
 /// `blocked` are contenders waiting to *acquire*; `waiting` are threads parked in
@@ -97,6 +126,13 @@ pub struct GreenThread {
     pub joining_on: Option<usize>,
     /// Set while in `sleep`: the logical step (opcode clock) at which to wake.
     pub sleep_until: Option<usize>,
+    /// **OS mode only.** Handle to this thread's `std::thread`, so other threads can
+    /// `unpark` it when they make it runnable (monitor release, notify, join-wake,
+    /// sleeper-wake). `None` in green mode and for the main thread (driven directly).
+    pub os_handle: Option<thread::Thread>,
+    /// **OS mode only.** Whether a real OS thread has already been launched for this
+    /// slot — the driver spawns one per new `Thread.start()` slot exactly once.
+    pub os_spawned: bool,
 }
 
 /// A read-only snapshot of one thread for the visualizer: its id, scheduling state,
@@ -146,6 +182,12 @@ pub struct JVM {
     last_gc_used: usize,
     /// Set by `System.gc()`; honoured at the next safepoint (the explicit trigger).
     gc_requested: bool,
+    /// Threading substrate (green vs OS+GIL), read once from `JVM_THREADS` at startup.
+    mode: ThreadMode,
+    /// **OS mode only.** Raised when the main thread returns: worker OS threads see it
+    /// at the top of their loop and exit (mirrors the green scheduler abandoning workers
+    /// when `main` ends).
+    halt: bool,
 }
 
 impl JVM {
@@ -166,6 +208,8 @@ impl JVM {
                 wait_reacquire: None,
                 joining_on: None,
                 sleep_until: None,
+                os_handle: None,
+                os_spawned: true, // the main thread is driven by execute_os' own thread
             }],
             current: 0,
             next_thread_id: 1,
@@ -177,6 +221,8 @@ impl JVM {
             last_gc_step: 0,
             last_gc_used: 0,
             gc_requested: false,
+            mode: ThreadMode::from_env(),
+            halt: false,
         }
     }
 
@@ -400,14 +446,8 @@ impl JVM {
                 return Step::Return(value); // the main thread finished → program result
             }
             let finished = self.current;
-            self.threads[finished].status = ThreadStatus::Terminated;
-            // Wake anyone blocked in `join` on the thread that just finished.
-            for t in &mut self.threads {
-                if t.joining_on == Some(finished) {
-                    t.joining_on = None;
-                    t.status = ThreadStatus::Runnable;
-                }
-            }
+            // Mark terminated and wake anyone blocked in `join` on it.
+            self.on_thread_terminated(finished);
         }
         self.wake_sleepers();
         // Cooperative context switch: pick the next runnable thread.
@@ -441,6 +481,56 @@ impl JVM {
         std::mem::swap(&mut self.frames, &mut self.threads[self.current].frames);
     }
 
+    /// Mark thread `idx` runnable — the single "wake" primitive. In OS mode it also
+    /// `unpark`s the thread's `std::thread` (it may be parked waiting for exactly this);
+    /// in green mode the round-robin scheduler will simply pick it up. Every place that
+    /// transitions a thread *to* `Runnable` goes through here so the unpark can't be missed.
+    fn make_runnable(&mut self, idx: usize) {
+        self.threads[idx].status = ThreadStatus::Runnable;
+        if self.mode == ThreadMode::Os {
+            if let Some(handle) = &self.threads[idx].os_handle {
+                handle.unpark();
+            }
+        }
+    }
+
+    /// **OS mode.** Load thread `idx` as the running one: set `current` and swap its saved
+    /// stack into the active `self.frames` (the inverse of [`Self::deactivate`]). Every
+    /// opcode handler then touches `self.frames`/`self.current` exactly as in green mode.
+    fn activate(&mut self, idx: usize) {
+        self.current = idx;
+        std::mem::swap(&mut self.frames, &mut self.threads[idx].frames);
+    }
+
+    /// **OS mode.** Park thread `idx`'s stack back into its slot after running an opcode,
+    /// so the slot holds the full stack between turns (and the GC, via `parked`, can walk it).
+    fn deactivate(&mut self, idx: usize) {
+        std::mem::swap(&mut self.frames, &mut self.threads[idx].frames);
+    }
+
+    /// Mark thread `idx` terminated and wake anyone blocked in `join` on it. Shared by the
+    /// green scheduler ([`Self::step`]) and the OS driver loop.
+    fn on_thread_terminated(&mut self, idx: usize) {
+        self.threads[idx].status = ThreadStatus::Terminated;
+        let joiners: Vec<usize> = (0..self.threads.len())
+            .filter(|&i| self.threads[i].joining_on == Some(idx))
+            .collect();
+        for w in joiners {
+            self.threads[w].joining_on = None;
+            self.make_runnable(w);
+        }
+    }
+
+    /// **OS mode.** Unpark every thread with a live OS handle — used on `halt` so parked
+    /// workers wake, see the halt flag, and exit instead of leaking.
+    fn unpark_all(&self) {
+        for t in &self.threads {
+            if let Some(handle) = &t.os_handle {
+                handle.unpark();
+            }
+        }
+    }
+
     /// Spawns a green thread for `Thread.start()`: it runs the receiver's `run()`
     /// (virtual dispatch on the receiver's class), parked `Runnable` until the scheduler
     /// picks it. `start()` itself returns immediately to the caller.
@@ -467,6 +557,8 @@ impl JVM {
             wait_reacquire: None,
             joining_on: None,
             sleep_until: None,
+            os_handle: None,
+            os_spawned: false, // the OS driver launches this slot's std::thread on the next tick
         });
     }
 
@@ -525,7 +617,7 @@ impl JVM {
             }
         };
         if let Some(idx) = wake {
-            self.threads[idx].status = ThreadStatus::Runnable;
+            self.make_runnable(idx);
         }
     }
 
@@ -648,7 +740,7 @@ impl JVM {
             (saved, wake)
         };
         if let Some(idx) = wake {
-            self.threads[idx].status = ThreadStatus::Runnable;
+            self.make_runnable(idx);
         }
         self.threads[current].status = ThreadStatus::Waiting;
         self.threads[current].wait_reacquire = Some((obj, saved));
@@ -722,11 +814,16 @@ impl JVM {
             }
         }
         let now = self.steps;
-        for t in &mut self.threads {
-            if matches!(t.sleep_until, Some(at) if now >= at) {
-                t.sleep_until = None;
-                t.status = ThreadStatus::Runnable;
-            }
+        let due: Vec<usize> = self
+            .threads
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| matches!(t.sleep_until, Some(at) if now >= at))
+            .map(|(i, _)| i)
+            .collect();
+        for i in due {
+            self.threads[i].sleep_until = None;
+            self.make_runnable(i);
         }
     }
 
@@ -1701,10 +1798,129 @@ impl JVM {
 /// Runs the entry method to completion, returning its result. Thin driver over
 /// [`JVM::step`] — the same loop the visualizer runs, minus the pausing.
 pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
-    let mut interp = JVM::new(metaspace, entry);
-    loop {
-        if let Step::Return(value) = interp.step() {
-            return value;
+    match ThreadMode::from_env() {
+        // Cooperative green threads on this one OS thread (the original engine).
+        ThreadMode::Green => {
+            let mut interp = JVM::new(metaspace, entry);
+            loop {
+                if let Step::Return(value) = interp.step() {
+                    return value;
+                }
+            }
         }
+        // Real OS threads serialised by a GIL.
+        ThreadMode::Os => execute_os(metaspace, entry),
+    }
+}
+
+/// OS-thread substrate: the program runs under a **GIL** — the whole VM lives behind one
+/// `Arc<Mutex<JVM>>`. The main thread drives the loop on *this* OS thread; each
+/// `Thread.start()` launches a real `std::thread` that competes for the same lock. Only
+/// the GIL holder mutates VM state, so the heap, monitors and GC stay correct with no
+/// extra synchronisation — the GIL *is* the stop-the-world. Removing it for true
+/// parallelism (fine-grained locks + a real STW handshake) is the next milestone.
+pub(crate) fn execute_os(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
+    let mut jvm = JVM::new(metaspace, entry);
+    jvm.mode = ThreadMode::Os; // force OS mode regardless of the env (e.g. in tests)
+    // The main thread runs the loop on *this* OS thread; record its handle so workers can
+    // `unpark` it (e.g. when a join target finishes) instead of waiting out the poll.
+    jvm.threads[0].os_handle = Some(thread::current());
+    // OS-mode invariant: between turns every thread's stack lives in *its slot* (so
+    // `activate`/`deactivate` swap it into the shared `frames` to run). `JVM::new` follows
+    // the green convention (main's entry frame in the active `frames`, slot 0 empty), so
+    // move it into slot 0 once before the loop.
+    std::mem::swap(&mut jvm.frames, &mut jvm.threads[0].frames);
+    let gil = Arc::new(Mutex::new(jvm));
+    os_thread_loop(&gil, 0)
+}
+
+/// What an OS thread does after one turn under the GIL — decided while holding the lock,
+/// then acted on after releasing it (so we never block/sleep with the GIL held).
+enum OsTick {
+    /// This thread's stack returned — its result (program result for `main`).
+    Done(Option<Value>),
+    /// Ran an opcode and stayed runnable: let a sibling grab the GIL, then loop.
+    Yield,
+    /// Blocked on a monitor / join / wait: park until `unpark` (poll-capped as a backstop).
+    Park,
+    /// Sleeping: in OS mode `Thread.sleep` is **real wall time** (the opcode clock can stall
+    /// when every thread is blocked), capped so tests stay quick.
+    Sleep(u64),
+}
+
+/// One thread slot's run loop on its own OS thread. Acquires the GIL only to run a single
+/// opcode, then yields so siblings can run; **parks** when blocked/waiting (woken by
+/// [`JVM::make_runnable`]'s `unpark`). Returns the thread's result — the program result for
+/// the main thread (`idx == 0`), ignored for workers.
+fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
+    loop {
+        let tick = {
+            let mut vm = gil.lock().unwrap();
+            if vm.halt {
+                return None; // main has finished — workers exit
+            }
+            match vm.threads[idx].status {
+                ThreadStatus::Terminated => return None,
+                ThreadStatus::Blocked | ThreadStatus::Waiting => os_block_tick(&vm, idx),
+                ThreadStatus::Runnable => {
+                    vm.activate(idx);
+                    let step = vm.run_one();
+                    vm.deactivate(idx);
+                    spawn_pending(&mut vm, gil); // launch OS threads for new Thread.start() slots
+                    vm.wake_sleepers();
+                    if let Step::Return(value) = step {
+                        vm.on_thread_terminated(idx);
+                        if idx == 0 {
+                            vm.halt = true; // program done → release the workers
+                            vm.unpark_all();
+                        }
+                        OsTick::Done(value)
+                    } else {
+                        os_block_tick(&vm, idx) // may have blocked us (monitor/wait/join/sleep)
+                    }
+                }
+            }
+        }; // GIL released here
+
+        match tick {
+            OsTick::Done(value) => return value,
+            OsTick::Yield => thread::yield_now(), // let a sibling grab the GIL
+            OsTick::Park => thread::park_timeout(Duration::from_millis(50)),
+            OsTick::Sleep(ms) => {
+                thread::sleep(Duration::from_millis(ms));
+                let mut vm = gil.lock().unwrap();
+                vm.threads[idx].sleep_until = None;
+                vm.make_runnable(idx);
+            }
+        }
+    }
+}
+
+/// Classify a thread that didn't (or couldn't) run this turn: still runnable → yield;
+/// sleeping → real sleep of the remaining ticks-as-millis (capped); otherwise park.
+fn os_block_tick(vm: &JVM, idx: usize) -> OsTick {
+    match vm.threads[idx].status {
+        ThreadStatus::Runnable => OsTick::Yield,
+        ThreadStatus::Blocked => match vm.threads[idx].sleep_until {
+            Some(at) => OsTick::Sleep((at.saturating_sub(vm.steps)).min(200) as u64),
+            None => OsTick::Park,
+        },
+        _ => OsTick::Park, // Waiting (or, defensively, Terminated)
+    }
+}
+
+/// Launch a real `std::thread` for every slot that doesn't have one yet (each
+/// `Thread.start()` pushes a slot; this turns it into an OS thread exactly once). Runs
+/// while the caller holds the GIL, so the handle is recorded before the child can run.
+fn spawn_pending(vm: &mut JVM, gil: &Arc<Mutex<JVM>>) {
+    let pending: Vec<usize> = (0..vm.threads.len()).filter(|&i| !vm.threads[i].os_spawned).collect();
+    for i in pending {
+        vm.threads[i].os_spawned = true;
+        let child_gil = Arc::clone(gil);
+        let handle = thread::spawn(move || {
+            os_thread_loop(&child_gil, i);
+        });
+        // Keep the Thread handle for `unpark`; detach the JoinHandle (workers exit on halt).
+        vm.threads[i].os_handle = Some(handle.thread().clone());
     }
 }

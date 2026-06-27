@@ -945,6 +945,56 @@ mod tests {
         }
     }
 
+    /// Like `run_int` but forces the **OS-thread + GIL** substrate (real `std::thread`s),
+    /// bypassing the `JVM_THREADS` env so parallel tests don't race on a global.
+    fn run_int_os(class_file: &str) -> i32 {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::bytecode_interpreter::execute_os;
+        use crate::jvm::interpreter::frame::Frame;
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let class = ClassFile::from_path(class_file).expect("load class");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        let frame = Frame::new(entry, max_locals, Vec::new());
+        match execute_os(metaspace, frame) {
+            Some(Value::Int(v)) => v,
+            other => panic!("expected an int result, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn os_threads_monitor_exclusion() {
+        // The same demos as the green tests, but each java.lang.Thread is a real
+        // std::thread serialised by the GIL. Mutual exclusion via the intrinsic monitor
+        // (block form and synchronized-method form) still holds → exactly 200.
+        assert_eq!(run_int_os("java/Sync.class"), 200);
+        assert_eq!(run_int_os("java/SyncMethod.class"), 200);
+    }
+
+    #[test]
+    fn os_threads_spawn_and_spin() {
+        // main spawns two workers (real OS threads) and spin-waits on shared statics → 100.
+        assert_eq!(run_int_os("java/Threads.class"), 100);
+    }
+
+    #[test]
+    fn os_threads_wait_notify_and_join() {
+        // wait/notify (park/unpark across OS threads) and join + sleep (real wall time in
+        // OS mode) coordinate exactly as in green mode.
+        assert_eq!(run_int_os("java/WaitNotify.class"), 42);
+        assert_eq!(run_int_os("java/Joiner.class"), 30);
+    }
+
+    #[test]
+    fn os_threads_illegal_monitor_state() {
+        // notify() without the monitor still throws IllegalMonitorStateException → 99.
+        assert_eq!(run_int_os("java/Imse.class"), 99);
+    }
+
     #[test]
     fn synchronized_gives_mutual_exclusion() {
         // Two threads each add 100 to a shared counter inside `synchronized` → the
