@@ -1,0 +1,5 @@
+# Disable incremental compilation: avoids the "hard linking ... failed" warning
+# on filesystems that don't support hard links. Negligible impact on a project
+# this small.
+[build]
+incremental = false
