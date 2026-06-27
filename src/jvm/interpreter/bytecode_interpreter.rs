@@ -269,7 +269,34 @@ impl JVM {
     /// Runs a **mark-compact**: relocates live objects into one contiguous run and
     /// fixes the references to them. Returns what moved / how much was reclaimed.
     pub fn gc_compact(&mut self) -> gc::CompactReport {
-        self.parked(|m, h, t| gc::compact(m, h, t))
+        let report = self.parked(|m, h, t| gc::compact(m, h, t));
+        self.remap_monitor_keys(&report.relocations);
+        self.prune_dead_monitors();
+        report
+    }
+
+    /// Relocate the object-monitor map through a GC `forward` map (old offset → new).
+    /// Monitors are keyed by the lock object's heap offset, which a *moving* collection
+    /// (minor evacuation / compaction) changes — without this a `synchronized`/`wait` on a
+    /// relocated object would lose its monitor. (Frame monitors and `wait_reacquire` are
+    /// remapped inside the collector itself; this fixes the map the collector can't see.)
+    fn remap_monitor_keys(&mut self, forward: &std::collections::HashMap<usize, usize>) {
+        if forward.is_empty() {
+            return;
+        }
+        let monitors = std::mem::take(&mut self.monitors);
+        self.monitors = monitors
+            .into_iter()
+            .map(|(obj, mon)| (forward.get(&obj).copied().unwrap_or(obj), mon))
+            .collect();
+    }
+
+    /// Drop monitors whose lock object is no longer allocated (it was collected), so a
+    /// later allocation reusing that offset can't inherit a stale monitor.
+    fn prune_dead_monitors(&mut self) {
+        let live: std::collections::HashSet<usize> =
+            self.heap.allocations().iter().map(|a| a.offset).collect();
+        self.monitors.retain(|obj, _| live.contains(obj));
     }
 
     /// Runs a **minor** collection: the young generation's copying collector — evacuate
@@ -277,7 +304,10 @@ impl JVM {
     /// frequent; the visualizer can trigger it, and the safepoint runs it when Eden fills.
     pub fn gc_minor(&mut self) -> gc::MinorReport {
         let tenure = self.gc_policy.tenure;
-        self.parked(|m, h, t| gc::minor(m, h, t, tenure))
+        let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
+        self.remap_monitor_keys(&report.relocations);
+        self.prune_dead_monitors();
+        report
     }
 
     /// Flags an explicit collection request (`System.gc()`), serviced at the next
@@ -297,6 +327,8 @@ impl JVM {
         if self.heap.eden_used() * 10 >= self.heap.eden_capacity() * 9 {
             let tenure = self.gc_policy.tenure;
             let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
+            self.remap_monitor_keys(&report.relocations); // young objects moved → fix monitor keys
+            self.prune_dead_monitors();
             let _ = writeln!(
                 self.console,
                 "[gc] minor: {} copiados, {} promovidos · recuperó {}B",
@@ -329,13 +361,22 @@ impl JVM {
         // A full collection is generational: a minor first (evacuate/promote the young),
         // then the major over Old (sweep, and compact if fragmented). All over every
         // thread's roots, so it runs inside `parked`.
-        let (live, garbage, compacted) = self.parked(|m, h, t| {
-            gc::minor(m, h, t, policy.tenure);
+        let (live, garbage, compacted, minor_reloc, compact_reloc) = self.parked(|m, h, t| {
+            let minor = gc::minor(m, h, t, policy.tenure);
             let report = gc::sweep(m, h, t);
-            let compacted =
-                if gc::should_compact(h, &policy) { gc::compact(m, h, t).reclaimed } else { 0 };
-            (report.live.len(), report.garbage.len(), compacted)
+            let (compacted, compact_reloc) = if gc::should_compact(h, &policy) {
+                let c = gc::compact(m, h, t);
+                (c.reclaimed, c.relocations)
+            } else {
+                (0, std::collections::HashMap::new())
+            };
+            (report.live.len(), report.garbage.len(), compacted, minor.relocations, compact_reloc)
         });
+        // Objects moved (minor evacuation, then compaction) → relocate the monitor map keys,
+        // applied minor-then-compact (the composition), then drop monitors on dead objects.
+        self.remap_monitor_keys(&minor_reloc);
+        self.remap_monitor_keys(&compact_reloc);
+        self.prune_dead_monitors();
         let after = self.heap.used();
 
         self.gc_requested = false;
@@ -724,7 +765,7 @@ impl JVM {
     /// `wait()` call only after a `notify` moves it to the blocked-set and it
     /// re-acquires the monitor (see the re-acquire check in `run_one`). Releasing the
     /// monitor wakes one blocked contender. (Assumes the caller holds the monitor.)
-    fn monitor_wait(&mut self, obj: usize) -> Step {
+    fn monitor_wait(&mut self, obj: usize, timeout: Option<i64>) -> Step {
         // `wait()` requires holding the monitor (JLS 17.2) — else IllegalMonitorState.
         if !self.owns_monitor(obj) {
             return self.throw_exception("java/lang/IllegalMonitorStateException");
@@ -744,6 +785,15 @@ impl JVM {
         }
         self.threads[current].status = ThreadStatus::Waiting;
         self.threads[current].wait_reacquire = Some((obj, saved));
+        // Timed `wait(ms)`: a deadline (opcode-ticks in green; real time in OS mode) after
+        // which the wait returns even without a `notify`. `expire_timed_block` then pulls
+        // the thread out of the wait-set so the re-acquire path resumes it (a self-notify).
+        // `wait(0)` / `wait()` is an indefinite wait (no deadline).
+        if let Some(ms) = timeout {
+            if ms > 0 {
+                self.threads[current].sleep_until = Some(self.steps + ms as usize);
+            }
+        }
         self.advance_past_call(); // resume *after* wait() once the monitor is re-acquired
         Step::Continue
     }
@@ -801,9 +851,25 @@ impl JVM {
         Step::Continue
     }
 
-    /// Wakes any sleeping thread whose wake time has arrived. If *every* thread is asleep
-    /// (no one to advance the opcode clock), the clock jumps to the earliest wake time so
-    /// the program can't deadlock on `sleep` alone.
+    /// A timed block (`Thread.sleep` or `Object.wait(ms)`) reached its deadline: clear it
+    /// and make the thread runnable. For a timed `wait`, also pull the thread out of its
+    /// monitor's wait-set so the re-acquire path resumes it — the deadline acting as a
+    /// self-`notify`. (A plain `sleep` has no monitor and just becomes runnable.)
+    fn expire_timed_block(&mut self, idx: usize) {
+        self.threads[idx].sleep_until = None;
+        if self.threads[idx].status == ThreadStatus::Waiting {
+            if let Some((obj, _)) = self.threads[idx].wait_reacquire {
+                if let Some(mon) = self.monitors.get_mut(&obj) {
+                    mon.waiting.retain(|&w| w != idx);
+                }
+            }
+        }
+        self.make_runnable(idx);
+    }
+
+    /// Wakes any thread whose timed block (`sleep` or `wait(ms)`) has come due. If *every*
+    /// thread is parked on a deadline (no one to advance the opcode clock), the clock jumps
+    /// to the earliest wake time so the program can't deadlock on `sleep`/`wait` alone.
     fn wake_sleepers(&mut self) {
         let any_runnable = self.threads.iter().any(|t| t.status == ThreadStatus::Runnable);
         if !any_runnable {
@@ -822,8 +888,7 @@ impl JVM {
             .map(|(i, _)| i)
             .collect();
         for i in due {
-            self.threads[i].sleep_until = None;
-            self.make_runnable(i);
+            self.expire_timed_block(i);
         }
     }
 
@@ -1889,8 +1954,7 @@ fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
             OsTick::Sleep(ms) => {
                 thread::sleep(Duration::from_millis(ms));
                 let mut vm = gil.lock().unwrap();
-                vm.threads[idx].sleep_until = None;
-                vm.make_runnable(idx);
+                vm.expire_timed_block(idx); // sleep done, or timed wait expired → re-acquire
             }
         }
     }
@@ -1901,11 +1965,13 @@ fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
 fn os_block_tick(vm: &JVM, idx: usize) -> OsTick {
     match vm.threads[idx].status {
         ThreadStatus::Runnable => OsTick::Yield,
-        ThreadStatus::Blocked => match vm.threads[idx].sleep_until {
+        // Both a `sleep` (Blocked) and a timed `wait(ms)` (Waiting) carry a deadline →
+        // a real-time sleep; an indefinite `wait()`/monitor block parks until unparked.
+        ThreadStatus::Blocked | ThreadStatus::Waiting => match vm.threads[idx].sleep_until {
             Some(at) => OsTick::Sleep((at.saturating_sub(vm.steps)).min(200) as u64),
             None => OsTick::Park,
         },
-        _ => OsTick::Park, // Waiting (or, defensively, Terminated)
+        ThreadStatus::Terminated => OsTick::Park,
     }
 }
 

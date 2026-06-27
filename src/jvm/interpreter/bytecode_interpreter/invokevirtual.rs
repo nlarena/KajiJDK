@@ -84,11 +84,19 @@ impl JVM {
 
         // `Object.wait()` / `notify()` / `notifyAll()`: monitor signalling. Handled here
         // (not the native bridge) because they suspend/wake threads via the scheduler.
-        if descriptor == "()V" && self.metaspace.class_of(callee) == "java/lang/Object" {
-            match name.as_str() {
-                "wait" => return self.monitor_wait(receiver),
-                "notify" => return self.monitor_notify(receiver, false),
-                "notifyAll" => return self.monitor_notify(receiver, true),
+        if self.metaspace.class_of(callee) == "java/lang/Object" {
+            match (name.as_str(), descriptor.as_str()) {
+                ("wait", "()V") => return self.monitor_wait(receiver, None),
+                ("wait", "(J)V") => {
+                    // `wait(long ms)`: the timeout is the long arg popped under the receiver.
+                    let ms = match locals.get(1) {
+                        Some(Value::Long(v)) => *v,
+                        _ => 0,
+                    };
+                    return self.monitor_wait(receiver, Some(ms));
+                }
+                ("notify", "()V") => return self.monitor_notify(receiver, false),
+                ("notifyAll", "()V") => return self.monitor_notify(receiver, true),
                 _ => {}
             }
         }

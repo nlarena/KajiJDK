@@ -18,7 +18,8 @@ public class Object {
     // Monitor signalling — the condition-variable half of `synchronized`. All native:
     // they manipulate the VM's scheduler (suspend/wake threads on this object's
     // monitor), which plain bytecode can't reach. Must be called holding the monitor.
-    public final native void wait();    // release the monitor + sleep until notified
-    public final native void notify();    // wake one waiter
-    public final native void notifyAll(); // wake all waiters
+    public final native void wait();        // release the monitor + sleep until notified
+    public final native void wait(long ms); // ...or return after `ms` ms even without notify
+    public final native void notify();      // wake one waiter
+    public final native void notifyAll();   // wake all waiters
 }

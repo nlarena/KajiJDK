@@ -168,6 +168,11 @@ impl Frame {
                 *offset = remap(*offset);
             }
         }
+        // A `synchronized` method's lock object can move too — keep the release target
+        // (used by `pop_frame`) pointing at the relocated object.
+        if let Some(obj) = self.monitor {
+            self.monitor = Some(remap(obj));
+        }
     }
 
     /// This frame's method handle — resolve its bytecode via `MetaspaceService::code`.

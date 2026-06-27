@@ -105,6 +105,9 @@ pub struct MinorReport {
     pub promoted: usize,
     /// Young bytes reclaimed — the dead that weren't copied.
     pub reclaimed: usize,
+    /// `old offset → new offset` for every object this collection moved — so callers can
+    /// fix offset-keyed state the GC doesn't own (e.g. the object-monitor map).
+    pub relocations: HashMap<usize, usize>,
 }
 
 /// The mutable state of one minor collection — the heap being evacuated, the
@@ -234,6 +237,12 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
     for frame in threads.iter_mut().flat_map(|t| t.frames.iter_mut()) {
         frame.remap_references(|off| forward.get(&off).copied().unwrap_or(off));
     }
+    // A thread parked in `wait()` remembers the monitor object to re-acquire — move it too.
+    for t in threads.iter_mut() {
+        if let Some((obj, count)) = t.wait_reacquire {
+            t.wait_reacquire = Some((forward.get(&obj).copied().unwrap_or(obj), count));
+        }
+    }
 
     // 5. Rebuild the remembered set for the next cycle: a holder is kept iff it still
     //    points into the young generation (its targets survived as survivors). The
@@ -262,7 +271,7 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
     new_log.append(&mut m.new_objects);
     m.heap.reset_after_minor(new_log);
 
-    MinorReport { copied, promoted, reclaimed: young_total.saturating_sub(survived) }
+    MinorReport { copied, promoted, reclaimed: young_total.saturating_sub(survived), relocations: forward }
 }
 
 /// Recomputes the remembered set from scratch by scanning every Old object for a young
@@ -489,6 +498,9 @@ pub struct CompactReport {
     pub moved: usize,
     /// Bytes the high-water mark dropped by — the contiguous space handed back.
     pub reclaimed: usize,
+    /// `old offset → new offset` for every relocated object — so callers can fix
+    /// offset-keyed state the GC doesn't own (e.g. the object-monitor map).
+    pub relocations: HashMap<usize, usize>,
 }
 
 /// **Mark-compact**: mark the live set, then slide every live object down into one
@@ -554,6 +566,12 @@ pub fn compact(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &m
     for frame in threads.iter_mut().flat_map(|t| t.frames.iter_mut()) {
         frame.remap_references(|off| *forward.get(&off).unwrap_or(&off));
     }
+    //    (a') a thread parked in `wait()` remembers its monitor object — move that too.
+    for t in threads.iter_mut() {
+        if let Some((obj, count)) = t.wait_reacquire {
+            t.wait_reacquire = Some((*forward.get(&obj).unwrap_or(&obj), count));
+        }
+    }
     //    (b) inter-object references: a pointer to a moved Old object can live in *any*
     //        object's slot — young or old — so rewrite every object's reference words.
     let all: Vec<usize> = heap.allocations().iter().map(|a| a.offset).collect();
@@ -582,7 +600,7 @@ pub fn compact(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &m
     heap.reset_after_compaction(new_layout, new_old_cursor);
     heap.clear_all_marks();
     rebuild_remembered(metaspace, heap); // Old objects moved → recompute the set
-    CompactReport { moved, reclaimed: before.saturating_sub(heap.used()) }
+    CompactReport { moved, reclaimed: before.saturating_sub(heap.used()), relocations: forward }
 }
 
 /// Gathers the **GC roots** — the references the program reaches *directly*, without
@@ -987,6 +1005,8 @@ mod tests {
         // OS mode) coordinate exactly as in green mode.
         assert_eq!(run_int_os("java/WaitNotify.class"), 42);
         assert_eq!(run_int_os("java/Joiner.class"), 30);
+        // Timed wait(50) expires by real time in OS mode → 7.
+        assert_eq!(run_int_os("java/WaitTimeout.class"), 7);
     }
 
     #[test]
@@ -1032,6 +1052,22 @@ mod tests {
         // notifies; it then reads 42. Exercises wait (release + park), notify (move the
         // waiter to the blocked-set), and the re-acquire on wake.
         assert_eq!(run_int("java/WaitNotify.class"), 42);
+    }
+
+    #[test]
+    fn wait_timeout_returns_after_deadline() {
+        // A timed wait(50) with no notifier returns once the deadline passes, re-acquires
+        // the monitor, and the program continues → 7. (Green mode: opcode-clock deadline.)
+        assert_eq!(run_int("java/WaitTimeout.class"), 7);
+    }
+
+    #[test]
+    fn monitor_survives_gc_relocation() {
+        // Inside `synchronized(lock)`, System.gc() runs a minor that evacuates `lock` to a
+        // new address. The monitor map (keyed by offset) must follow the move, else the
+        // closing monitorexit throws IllegalMonitorStateException. 5 = the monitor survived.
+        assert_eq!(run_int("java/GcMonitor.class"), 5);
+        assert_eq!(run_int_os("java/GcMonitor.class"), 5); // also under OS-threads + GIL
     }
 
     #[test]
