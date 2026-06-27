@@ -1,0 +1,17 @@
+# Rust build output
+/target
+
+# Class corpus extracted from the JDK for differential testing (not committed)
+/corpus/
+/.corpus_tmp/
+
+# float/double differential battery (generated from real Java)
+/.float_battery.txt
+/.jdk25_tmp/
+
+# Frozen Nivel-0 javap snapshot (binary, not committed)
+/bin/
+
+# Stray artifacts (not part of the project)
+/out.txt
+/bootout/
