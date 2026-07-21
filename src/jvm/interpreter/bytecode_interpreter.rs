@@ -474,6 +474,16 @@ impl JVM {
         i16::from_be_bytes([code[pc + 1], code[pc + 2]])
     }
 
+    /// Reads the signed **4-byte** branch offset that follows a wide branch
+    /// (`goto_w`, 0xc8) — the same role as [`branch_offset`](Self::branch_offset),
+    /// with the range the 16-bit form can't express.
+    fn wide_branch_offset(&self) -> i32 {
+        let frame = self.frame();
+        let code = self.metaspace.code(frame.method());
+        let pc = frame.pc();
+        i32::from_be_bytes([code[pc + 1], code[pc + 2], code[pc + 3], code[pc + 4]])
+    }
+
     /// One scheduler tick: run a single opcode of the **current** thread, then hand
     /// the CPU to the next runnable thread (round-robin, cooperative). The program ends
     /// when the entry thread (`main`, id 0) returns. A worker thread that returns is
@@ -1344,12 +1354,27 @@ impl JVM {
             // athrow: throw an exception, unwinding the call stack to a handler.
             0xbf => self.athrow(),
 
+            // nop (0x00): do nothing but step over itself. `javac` doesn't emit it,
+            // but it is legal bytecode — obfuscators and instrumentation tools use it
+            // as padding, and the switch alignment rules make it easy to synthesise.
+            0x00 => {
+                self.top().advance(1);
+                Step::Continue
+            }
+
             // goto (0xa7) / if_icmpgt (0xa3): branches. Read the signed 2-byte
             // offset, then let the branch family jump or fall through — it manages
             // the pc itself, so no blind advance here.
             0xa7 => {
                 let offset = self.branch_offset();
                 bifurcation_operations::goto(self.top(), offset);
+                Step::Continue
+            }
+            // goto_w (0xc8): the same jump reading a 4-byte offset, for targets
+            // farther than ±32 KB — out of reach of the 2-byte form.
+            0xc8 => {
+                let offset = self.wide_branch_offset();
+                bifurcation_operations::goto_w(self.top(), offset);
                 Step::Continue
             }
             0xa3 => {

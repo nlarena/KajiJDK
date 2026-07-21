@@ -238,7 +238,8 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [x] GC **compactante** (mover + reescribir punteros) — hecho ya en A5.
 - [x] GC **generacional** (young Eden+survivors por copia / Old; write barrier + remembered set para raíces `old→young`)
 - [x] **Referencias débiles** (`java.lang.ref`: `WeakReference` + `ReferenceQueue`)
-- [x] **Hilos, monitores, `synchronized`** — green threads cooperativos (default + visor) **y** substrato **hilos de SO + GIL** (`JVM_THREADS=os`, E1+E2): `std::thread` por `Thread.start()`, `park`/`unpark`, `wait`/`notify`/`join`, IMSE; GC seguro bajo el GIL
+- [x] **Hilos, monitores, `synchronized`** — green threads cooperativos (default + visor) **y** substrato **hilos de SO + GIL** (`JVM_THREADS=os`, E1+E2): `std::thread` por `Thread.start()`, `park`/`unpark`, `wait`/`notify`/`join`, IMSE, `wait(timeout)` y **monitor GC-safe** (las claves se remapean por el *forward* del GC en minor/compact); GC seguro bajo el GIL
+- [ ] **API de `Thread` completa** — `currentThread`/`yield`/nombre/`isAlive`/`getState`, `Thread(Runnable)`, e `interrupt`/`InterruptedException` (que además cierra la interrupción del `wait`) — *H1, próximo*
 - [ ] **Sacar el GIL** → paralelismo real (locks finos + TLABs + handshake stop-the-world) — *E3, próximo*
 - [ ] **Modelo de memoria de Java** (`volatile`, happens-before, fences) — recién útil con paralelismo real
 - [ ] JIT (bytecode → código nativo)
@@ -386,13 +387,15 @@ El momento épico: las tres piezas funcionando juntas.
 
 ## Estado de A0 — snapshot (2026-06-02)
 
-> **Al día (2026-06-27):** este bloque es el snapshot de **A0**. Desde entonces se
+> **Al día (2026-07-21):** este bloque es el snapshot de **A0** (sus "6 tests verdes"
+> son de aquel momento). Desde entonces se
 > completaron **A1–A5 y gran parte de A6**: intérprete, objetos/heap con dispatch
 > dinámico, excepciones, class loaders, nativos+intrínsecos, **GC generacional** +
 > referencias débiles, **verificador JVMS-estricto**, sistema de tipos completo, e
-> **hilos + monitores** con el substrato **OS-threads + GIL** (E1+E2). El proyecto
-> pasa **79 tests** sin warnings. Detalle vigente en `Concurrencia_KajiJDK.pdf` y
-> `Roadmap_JDK.pdf`. **Siguiente: E3 — sacar el GIL (paralelismo real).**
+> **hilos + monitores** con el substrato **OS-threads + GIL** (E1+E2), más
+> `wait(timeout)` y monitores GC-safe. El proyecto pasa **81 tests** sin warnings.
+> Detalle vigente en `Concurrencia_KajiJDK.pdf` y `Roadmap_JDK.pdf`.
+> **Siguiente: H1 — API de `Thread` + `interrupt`; después E3 (sacar el GIL).**
 
 **Fase A / Hito A0 — núcleo logrado.** Compila **sin warnings**, 6 tests verdes,
 **12 fixtures byte-idénticos** a `javap`.

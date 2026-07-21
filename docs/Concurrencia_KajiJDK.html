@@ -214,7 +214,7 @@
 <!-- 7 Plan por hitos -->
 <div class="section-break">
 <h1>7 · Plan por hitos (H0–H6)</h1>
-<p>Cada hito con su criterio de éxito medible. <strong>H2 (el salto grande) ya está hecho</strong>; H0 quedó parcial y H1 sigue pendiente sobre el nuevo substrato.</p>
+<p>Cada hito con su criterio de éxito medible. <strong>H2 (el salto grande) ya está hecho</strong>; H0 quedó cerrado salvo la interrupción del <code>wait</code>, que vive en H1 — el próximo hito pendiente.</p>
 
 <div class="hito">
   <h3><span class="hito-id">H0</span> Cerrar el monitor intrínseco <span class="badge b-adv">Avanzado</span> · <span style="color:#2E7D32">✅ casi (solo falta interrupt-of-wait → H1)</span></h3>
@@ -246,7 +246,7 @@
     <li><span class="badge b-sum">Cumbre</span> <code>park</code>/<code>unpark</code> reales sobre el SO (base de <code>wait</code>/<code>join</code>/contención)</li>
     <li><span class="badge b-sum">Cumbre</span> Refactor de ownership: heap/monitors/metaspace compartidos tras el seam <code>HeapService.store_reference</code> (<code>Arc</code> + <code>Send</code>/<code>Sync</code>)</li>
   </ul>
-  <p class="exito"><strong>✓ Logrado:</strong> N hilos de SO ejecutan el mismo programa serializados por el GIL, sin <em>data races</em> — validado por 4 tests de modo OS (mismo resultado que en green), 79 verdes en total.</p>
+  <p class="exito"><strong>✓ Logrado:</strong> N hilos de SO ejecutan el mismo programa serializados por el GIL, sin <em>data races</em> — validado por 4 tests de modo OS (mismo resultado que en green), 81 verdes en total.</p>
 </div>
 
 <div class="hito">
@@ -309,18 +309,18 @@
 <table>
 <thead><tr><th>Hito</th><th>Riesgo / costo</th><th>Nota</th></tr></thead>
 <tbody>
-<tr><td>H0 · cerrar monitor</td><td>Bajo</td><td>🟡 parcial — IMSE ✅; faltan <code>wait(timeout)</code> + GC-safe</td></tr>
+<tr><td>H0 · cerrar monitor</td><td>Bajo</td><td>✅ <strong>cerrado</strong> — IMSE, <code>wait(timeout)</code> y monitor GC-safe hechos; solo resta la interrupción del <code>wait</code>, que se hace con H1</td></tr>
 <tr><td>H1 · API Thread</td><td>Bajo–medio</td><td>Pendiente. Mucho es cableado prolijo; <code>interrupt</code> toca el scheduler</td></tr>
-<tr><td>H2 · OS threads + GIL</td><td><strong>Alto</strong></td><td>✅ <strong>HECHO (E1+E2)</strong> — refactor a <code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code> + <code>std::thread</code>; GIL = correcto pero serializado. 79 tests verdes</td></tr>
+<tr><td>H2 · OS threads + GIL</td><td><strong>Alto</strong></td><td>✅ <strong>HECHO (E1+E2)</strong> — refactor a <code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code> + <code>std::thread</code>; GIL = correcto pero serializado. 81 tests verdes</td></tr>
 <tr><td>H3 · sacar el GIL</td><td><strong>Alto</strong></td><td>◀ <strong>próximo</strong>. Locks finos + TLABs + GC STW; acá aparecen los <em>data races</em></td></tr>
 <tr><td>H4 · JMM</td><td>Medio–alto</td><td>Recién útil con H3; fences en accesos <code>volatile</code> y monitor</td></tr>
 <tr><td>H5 · CAS</td><td>Medio</td><td>Mapea directo a <code>std::sync::atomic</code></td></tr>
 <tr><td>H6 · j.u.c</td><td>Alto (volumen)</td><td>Mucha superficie, pero casi todo se deduce de AQS = park/unpark + CAS</td></tr>
 </tbody>
 </table>
-<p><strong>Orden:</strong> <s>H0 → H1 → <strong>H2</strong></s> ✅ (substrato hecho) → <strong>H3</strong> (sacar el GIL — paralelismo real) → H4 (JMM, ya con paralelismo) → H5 (CAS) → H6 (<code>java.util.concurrent</code>).</p>
+<p><strong>Orden:</strong> <s>H0</s> ✅ (monitor cerrado) → <s><strong>H2</strong></s> ✅ (substrato hecho, fuera de turno) → <strong>H1</strong> (API de <code>Thread</code> + <code>interrupt</code>) → <strong>H3</strong> (sacar el GIL — paralelismo real) → H4 (JMM, ya con paralelismo) → H5 (CAS) → H6 (<code>java.util.concurrent</code>).</p>
 <blockquote><strong>Una sola frase:</strong> el JIT no habilita los hilos de SO; el refactor de ownership sí — y ya está hecho. GIL primero (✅), JIT aparte. Las dos plantas base quedaron prácticamente cerradas; el próximo trabajo es <strong>sacar el GIL</strong>.</blockquote>
-<p class="exito"><strong>✓ Siguiente paso concreto:</strong> arrancar <strong>E3</strong> — convertir <code>parked()</code> en un handshake stop-the-world real, locks finos por estructura y TLABs, para que dos hilos CPU-bound escalen en paralelo. En paralelo: cerrar H0 (<code>wait(timeout)</code>) y H1 (<code>interrupt</code>/<code>currentThread</code>).</p>
+<p class="exito"><strong>✓ Siguiente paso concreto:</strong> <strong>H1 — la API de <code>Thread</code></strong>: extender <code>ThreadStatus</code> (hoy <code>Runnable</code>/<code>Blocked</code>/<code>Waiting</code>/<code>Terminated</code>) a los seis estados de <code>Thread.State</code> — faltan <code>NEW</code> y <code>TIMED_WAITING</code>, que hoy se modela con el campo aparte <code>sleep_until</code> —, sumar <code>currentThread</code>/<code>yield</code>/nombre/<code>isAlive</code>/<code>getState</code> y el constructor <code>Thread(Runnable)</code>, y recién ahí <code>interrupt()</code>, reusando el <code>wait_reacquire</code> que ya existe para lanzar <code>InterruptedException</code> <em>después</em> de re-adquirir el monitor (JLS 17.2). Con esa máquina de estados en pie, arrancar <strong>E3</strong>: convertir <code>parked()</code> en un handshake stop-the-world real, locks finos por estructura y TLABs, para que dos hilos CPU-bound escalen en paralelo.</p>
 </div>
 
 </body>

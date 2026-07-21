@@ -13,6 +13,16 @@ pub fn goto(frame: &mut Frame, offset: i16) {
     jump_to(frame, offset);
 }
 
+/// `goto_w` (0xc8): the **wide** `goto` — the same unconditional jump, but with a
+/// signed *4-byte* offset instead of 2. It exists for methods big enough that a
+/// branch target sits farther than ±32 KB from the branch, which the 16-bit form
+/// simply cannot encode. `javac` only emits it for very large methods (generated
+/// code, huge `switch` bodies), so it is rare — but a `.class` using it is perfectly
+/// legal, and the 2-byte form has no way to express that jump.
+pub fn goto_w(frame: &mut Frame, offset: i32) {
+    jump_to_wide(frame, offset);
+}
+
 /// `if_icmpgt` (0xa3): pop `b` then `a` (the top is the second operand) and jump
 /// if `a > b`; otherwise fall through past this 3-byte branch. The pop order
 /// matters — the comparison is `a > b` in the order the values were pushed,
@@ -170,6 +180,13 @@ pub fn ifnonnull(frame: &mut Frame, offset: i16) {
 /// Jumps the frame to the branch target `pc + offset` (offset is relative to the
 /// branch's own pc, where the frame's pc still points). Shared by every branch.
 fn jump_to(frame: &mut Frame, offset: i16) {
+    jump_to_wide(frame, offset as i32);
+}
+
+/// The same jump with a **32-bit** offset — the wide branch range. The 16-bit
+/// [`jump_to`] widens into this, so the target arithmetic lives in exactly one place
+/// no matter how many bytes the offset was encoded in.
+fn jump_to_wide(frame: &mut Frame, offset: i32) {
     let target = (frame.pc() as i64 + offset as i64) as usize;
     frame.jump(target);
 }
@@ -227,5 +244,42 @@ fn pop_int(frame: &mut Frame) -> i32 {
     match frame.pop() {
         Value::Int(v) => v,
         other => panic!("expected an int on the operand stack, found {other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `goto_w` reaches what `goto` cannot: a target more than ±32 KB away, in both
+    /// directions. The offset is relative to the branch's own pc, exactly like the
+    /// 2-byte form — only the encodable range changes.
+    #[test]
+    fn goto_w_reaches_past_the_16_bit_range() {
+        let mut frame = Frame::new(0, 1, Vec::new());
+        frame.jump(100_000);
+
+        // Forward by more than i16::MAX (32 767) — unencodable as a plain `goto`.
+        goto_w(&mut frame, 40_000);
+        assert_eq!(frame.pc(), 140_000);
+
+        // And backward the same distance, landing where we started.
+        goto_w(&mut frame, -40_000);
+        assert_eq!(frame.pc(), 100_000);
+    }
+
+    /// The two widths share one target computation, so a `goto_w` carrying a small
+    /// offset must land exactly where the 2-byte `goto` would.
+    #[test]
+    fn goto_w_and_goto_agree_on_offsets_both_can_encode() {
+        let mut wide = Frame::new(0, 1, Vec::new());
+        let mut narrow = Frame::new(0, 1, Vec::new());
+        wide.jump(500);
+        narrow.jump(500);
+
+        goto_w(&mut wide, -37);
+        goto(&mut narrow, -37);
+        assert_eq!(wide.pc(), narrow.pc());
+        assert_eq!(wide.pc(), 463);
     }
 }
