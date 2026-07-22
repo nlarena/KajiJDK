@@ -55,7 +55,8 @@ pub fn newarray(
         _ => panic!("newarray: unknown primitive atype {atype}"),
     };
     let count = pop_count(frame)?; // negative length → NegativeArraySizeException
-    allocate_array(metaspace, heap, frame, array_class, count, elem_size);
+    let offset = allocate_array(metaspace, heap, array_class, count, elem_size);
+    frame.push(Value::Reference(offset));
     Ok(())
 }
 
@@ -76,27 +77,113 @@ pub fn anewarray(
     let array_class = format!("[L{element};");
     let count = pop_count(frame)?; // negative length → NegativeArraySizeException
     // A reference element is one heap offset wide.
-    allocate_array(metaspace, heap, frame, &array_class, count, SLOT_SIZE);
+    let offset = allocate_array(metaspace, heap, &array_class, count, SLOT_SIZE);
+    frame.push(Value::Reference(offset));
     Ok(())
 }
 
-/// Lays out and `malloc`s an array of `count` elements (each `elem_size` bytes) of
-/// class `array_class`, writes its header + length, and pushes the reference. The
-/// element bytes stay zeroed — `0` for primitives, `null` for references.
-fn allocate_array(
+/// `multianewarray` (0xc5): allocate a **multidimensional** array. `cp_index` names the
+/// *array* type itself (unlike `anewarray`, which names the element type) — e.g. `[[I`
+/// for `new int[3][4]` — and `dimensions` says how many levels to actually build.
+///
+/// The key rule is that **only `dimensions` levels are materialised**, even when the
+/// descriptor is deeper: `new int[3][]` is `dimensions = 1` over `[[I`, so it allocates
+/// the outer array of 3 slots and leaves them `null`. That is why the dimension count
+/// is an operand at all instead of being derived from the descriptor.
+pub fn multianewarray(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
     frame: &mut Frame,
+    cp_index: u16,
+    dimensions: u8,
+) -> Result<(), &'static str> {
+    let caller = metaspace.class_of(frame.method()).to_string();
+    let array_class = metaspace
+        .get(&caller)
+        .and_then(|cf| cf.class_name(cp_index))
+        .expect("multianewarray: cp_index does not point to a Class constant")
+        .to_string();
+
+    // The counts were pushed outermost-first, so the *last* dimension is on top and
+    // popping yields them backwards.
+    let mut counts: Vec<i32> = (0..dimensions).map(|_| pop_int(frame)).collect();
+    counts.reverse();
+
+    // Every count is validated *before* anything is allocated: a negative length in a
+    // later dimension must not leave a half-built array on the heap.
+    if counts.iter().any(|&n| n < 0) {
+        return Err(NEGATIVE_SIZE);
+    }
+    let counts: Vec<usize> = counts.into_iter().map(|n| n as usize).collect();
+
+    let offset = allocate_multi(metaspace, heap, &array_class, &counts);
+    frame.push(Value::Reference(offset));
+    Ok(())
+}
+
+/// Builds one level of a multidimensional array and, while dimensions remain, each of
+/// its children — the recursion that makes `new int[2][3]` two `[I` arrays hanging off
+/// one `[[I`, rather than a single flat block. Java has no true rectangular arrays:
+/// every level is a real object, which is exactly why the rows can be replaced
+/// individually (and why `a[0].length` need not equal `a[1].length`).
+///
+/// Returns the offset of the level it allocated.
+fn allocate_multi(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    array_class: &str,
+    counts: &[usize],
+) -> usize {
+    let component = &array_class[1..]; // strip one `[` → this level's element descriptor
+    let count = counts[0];
+    // Levels above the innermost hold *references* to their sub-arrays; only the
+    // innermost level we actually build holds raw elements at their true width.
+    let elem_size = if counts.len() == 1 { element_width(component) } else { SLOT_SIZE };
+    let offset = allocate_array(metaspace, heap, array_class, count, elem_size);
+
+    if counts.len() > 1 {
+        for i in 0..count {
+            let child = allocate_multi(metaspace, heap, component, &counts[1..]);
+            let at = offset + ARRAY_HEADER_SIZE + i * SLOT_SIZE;
+            // Reference store → through the barrier gateway, never a raw `write_u32`:
+            // these are exactly the `old→young` pointers the remembered set must catch.
+            heap.store_reference(offset, at, child);
+        }
+    }
+    offset
+}
+
+/// The element width of a component descriptor: the faithful primitive widths (so a
+/// `byte[]` row is one byte per element), and one reference slot for anything that is
+/// itself an object or an array.
+fn element_width(component: &str) -> usize {
+    match component.as_bytes().first() {
+        Some(b'Z' | b'B') => 1,
+        Some(b'C' | b'S') => 2,
+        Some(b'I' | b'F') => 4,
+        Some(b'J' | b'D') => 8,
+        _ => SLOT_SIZE, // `L…;` or `[…` — a reference, null until something is stored
+    }
+}
+
+/// Lays out and `malloc`s an array of `count` elements (each `elem_size` bytes) of
+/// class `array_class`, writes its header + length, and **returns its offset** — the
+/// caller decides whether that reference goes on the operand stack (the one-dimensional
+/// opcodes) or into a parent array's slot (`multianewarray`'s recursion). The element
+/// bytes stay zeroed — `0` for primitives, `null` for references.
+fn allocate_array(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
     array_class: &str,
     count: usize,
     elem_size: usize,
-) {
+) -> usize {
     let mirror = array_class_mirror(metaspace, heap, array_class);
     let size = ARRAY_HEADER_SIZE + count * elem_size;
     let offset = heap.malloc(size);
     heap.write_u32(offset, mirror as u32); // class_id → the array class's mirror
     heap.write_u32(offset + LENGTH_OFFSET, count as u32); // length (in elements)
-    frame.push(Value::Reference(offset));
+    offset
 }
 
 /// Ensures the synthetic **array class** `array_class` has a `Class<…>` mirror, and

@@ -963,6 +963,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn multianewarray_builds_every_level() {
+        // `MultiArray.run()` makes javac emit three `multianewarray`s: `[[I` (2 dims),
+        // `[[[I` (3 dims) and `[[B` (2 dims). The demo checks the shape of each level,
+        // that the rows are *distinct objects* (the classic bug is allocating one child
+        // and storing it N times), that the recursion reaches the third dimension, and
+        // that a `byte[][]` row is one byte per element rather than four — a wrong
+        // element width would make the rows overlap. Every failure mode returns its own
+        // negative code; 42 means all of them held. The real `java` of JDK 25 agrees.
+        assert_eq!(run_int("java/MultiArray.class"), 42);
+    }
+
+    #[test]
+    fn wide_prefix_addresses_locals_past_slot_255() {
+        // `WideLocals.run()` declares 300 int locals, so `javac` *must* use the `wide`
+        // prefix to reach the last one: the tail compiles to `istore_w 299`,
+        // `iinc_w 299, 35` (6 bytes) and `iload_w 299` (4 bytes). Without the 0xc4
+        // handler this hits the `todo!()`; with a wrong instruction length the pc
+        // desynchronises and the method decodes garbage. 7 + 35 = 42, and the real
+        // `java` of JDK 25 agrees on the same class file.
+        assert_eq!(run_int("java/WideLocals.class"), 42);
+    }
+
     /// Like `run_int` but forces the **OS-thread + GIL** substrate (real `std::thread`s),
     /// bypassing the `JVM_THREADS` env so parallel tests don't race on a global.
     fn run_int_os(class_file: &str) -> i32 {

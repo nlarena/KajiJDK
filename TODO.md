@@ -4,6 +4,10 @@ Pendientes y mejoras conocidas. Lo marcado `[x]` es registro de lo ya hecho.
 
 ## Estado general
 
+- ✅ **Cobertura del set de opcodes — 198/202.** De los 4 restantes, 3 son `jsr`/`ret`/
+  `jsr_w`, **excluidos por diseño** (JVMS §4.9.1 los prohíbe en class files de versión
+  50.0+, o sea Java 6 en adelante). **Queda un solo pendiente real:** `invokedynamic`
+  (un subsistema, con hito propio). Detalle en «Intérprete».
 - ✅ **Sistema de tipos completo** — `int`/`long`/`double`/`float` ejecutados y
   verificados (cómputo, conversiones, comparaciones, división con excepción,
   categoría-2 en params/campos/estáticos/arrays/frames, lattice de referencias).
@@ -266,3 +270,94 @@ verificación de tipos. Registro de lo hecho, por orden cronológico:
   bytes. Modelado también en el verificador (`transfer`: saca un int, ramifica a
   `default` + casos, sin fall-through). Verificado: demo `Switch` (denso → `tableswitch`,
   disperso → `lookupswitch`) verifica por ambos drivers **y** corre (`run → 205`).
+- [x] **`nop`** (0x00): avanza el pc y nada más. `javac` no lo emite, pero es bytecode
+  legal — los ofuscadores y las herramientas de instrumentación lo usan como relleno.
+- [x] **`goto_w`** (0xc8): el `goto` de offset **4 bytes**, para targets a más de ±32 KB
+  del salto — fuera del alcance de la forma de 2 bytes. Implementado ensanchando en vez
+  de duplicar: `jump_to` (i16) delega en un `jump_to_wide` (i32) nuevo, así el cálculo
+  del target vive en **un solo lugar** sea cual sea el ancho del offset codificado. El
+  verificador ya lo manejaba (calcula sus targets en `branch_targets`). Verificado con
+  tests unitarios: salto de ±40 000 bytes (inencodable como `i16`), y un `goto_w` de
+  offset chico aterrizando **exactamente** donde aterriza un `goto` — que es lo que
+  justifica haber unificado la aritmética.
+- [x] **`wide`** (0xc4): el **prefijo** (no es una instrucción) que reejecuta el opcode
+  siguiente leyendo un índice de local de **16 bits** — la única forma de direccionar
+  los slots pasados el 255 en un método con más de 256 locales. Layout `c4 <op> idx1
+  idx2`, más dos bytes de constante con signo cuando envuelve un `iinc`
+  (`c4 84 idx1 idx2 const1 const2`), o sea **6 bytes para `wide iinc` y 4 para el
+  resto**. Salió barato porque los handlers de `variable_operations` ya reciben
+  `slot: usize` y **nunca se enteran del ancho**: ensanchar es puro *decoding*, y ese
+  módulo no cambió de comportamiento. El decoding se extrajo a la función pura
+  `wide_operands(code, pc) → WideOp` (mismo patrón que `switch_target`), testeable sin
+  levantar un intérprete. `wide ret` (0xa9) queda como `panic!` explícito, coherente con
+  que el verificador rechaza subrutinas. Verificado: 3 tests unitarios del decoder
+  **más** un end-to-end que fuerza a `javac` a emitirlo — `java/WideLocals.java` declara
+  300 locales, así que el compilador real produce `istore_w 299`, `iinc_w 299, 35` y
+  `iload_w 299`; ese `.class` da `42` en el `java` de JDK 25 **y** `42` en nuestra VM
+  (`run_int("java/WideLocals.class")`). El test falla de dos maneras distintas si algo
+  está mal: sin el handler pega contra el `todo!()`, y con la longitud equivocada (4 en
+  vez de 6) el pc se desincroniza y el método decodifica basura.
+
+- [x] **`multianewarray`** (0xc5): `new int[3][4]`. Operandos: u2 al `Class` del pool
+  —que acá **es el descriptor del array mismo** (`[[I`), a diferencia de `anewarray`,
+  cuyo `Class` nombra el *elemento*— más un u1 con la cantidad de dimensiones, o sea
+  instrucción de 4 bytes. Los conteos se empujan de afuera hacia adentro, así que
+  popear los devuelve **al revés** y hay que invertirlos. Se **validan todos antes de
+  alocar nada**: un largo negativo en una dimensión posterior no puede dejar un array a
+  medio construir en el heap. Sólo se materializan los `dimensions` niveles indicados
+  (`new int[3][]` es `dimensions=1` sobre `[[I` y deja los slots internos en `null`) —
+  por eso la cantidad es un operando en vez de deducirse del descriptor. La recursión
+  (`allocate_multi`) refleja que **Java no tiene arrays rectangulares**: cada nivel es
+  un objeto real, que es justamente por qué las filas se pueden reemplazar por separado
+  y `a[0].length` no tiene por qué ser igual a `a[1].length`. Los niveles superiores
+  guardan referencias (`SLOT_SIZE`); sólo el nivel más interno que se construye usa el
+  ancho real del elemento (`element_width`), así una fila `byte[]` ocupa un byte por
+  elemento y no cuatro. Las referencias hijo se escriben por `heap.store_reference`,
+  **nunca** por `write_u32`: son exactamente los punteros `old→young` que el remembered
+  set tiene que ver. `allocate_array` se refactorizó para **devolver el offset** en vez
+  de empujarlo al frame, así lo reusan tanto los opcodes de una dimensión como esta
+  recursión. **También hubo que modelarlo en el verificador** (brazo `0xc5` de
+  `transfer`: saca un conteo por dimensión y empuja el descriptor completo — el tipo
+  estático de `new int[3][]` sigue siendo `[[I` aunque se construya un nivel solo);
+  sin eso la clase daba `VerifyError { unsupported: true }`, que por diseño hace que el
+  llamador **avise y siga**, o sea que habría corrido con el verificador claudicando en
+  silencio. Verificado: `java/MultiArray.java` hace que `javac` emita tres
+  `multianewarray` distintos (`[[I` con 2 dims, `[[[I` con 3, `[[B` con 2) y comprueba
+  la forma de cada nivel, que **las filas sean objetos distintos** (el bug clásico es
+  alocar un hijo y guardarlo N veces), que la recursión llegue a la tercera dimensión y
+  que una fila `byte[][]` no se solape por ancho de elemento mal calculado — cada modo
+  de falla devuelve su propio código negativo. Da `42` en el `java` de JDK 25 **y** en
+  nuestra VM, más un test del verificador (`verifies_multianewarray`).
+
+### Cobertura del set de opcodes — **198 / 202**
+
+Lo que resta **no es homogéneo**: son dos cosas distintas y conviene no contarlas juntas.
+
+| Opcode | Estado | Nota |
+|---|---|---|
+| `jsr` (0xa8) · `ret` (0xa9) · `jsr_w` (0xc9) | ⛔ **excluidos por diseño** | Ver abajo |
+| `invokedynamic` (0xba) | ⬜ **hito propio** | Ver abajo |
+- ⛔ **`jsr`/`ret`/`jsr_w` — decisión, no deuda.** *Ejecutarlos* sería lo más fácil de
+  todo lo que queda (~10 líneas: empujar la dirección de retorno y saltar; `ret` salta a
+  la dirección guardada en un local). El costo está en otro lado: haría falta una
+  variante `ReturnAddress` en `Value` —que toca **todos** los `match` exhaustivos del
+  proyecto— y, sobre todo, verificar subrutinas es la parte más difícil del type-checker
+  del JVMS (las subrutinas polimórficas son *la* razón por la que Java las abandonó).
+  Y el argumento que cierra el caso: **JVMS §4.9.1 prohíbe `jsr`/`jsr_w` en class files
+  de versión 50.0 o superior** — Java 6 en adelante. Ningún `.class` moderno puede
+  contenerlos legalmente. Que `structural_check` los rechace no es un hueco: es lo
+  correcto para todo lo que la VM va a encontrar. Implementarlos sólo tendría sentido
+  para ejecutar bytecode anterior a 2006.
+- [ ] **`invokedynamic`** (0xba) — **no es un opcode, es un subsistema.** El opcode solo
+  no hace nada: delega en un *bootstrap method* que tiene que existir. Correlativas:
+  (1) constantes `MethodHandle`/`MethodType` en el constant pool — hoy `ldc` sólo modela
+  `String`/`Integer`/`Float` y `ldc2_w` sólo `Long`/`Double`; (2) *linkage* de call site
+  con caché (el `CallSite` se resuelve una vez y queda pegado); (3) al menos una fábrica
+  real: `StringConcatFactory` o `LambdaMetafactory`. El lado del parser **ya está**
+  (`BootstrapMethods` se parsea, y `opcode.rs` lo desensambla). Sin esto no hay lambdas,
+  ni method references, ni concatenación de strings al estilo Java 9+.
+  **Correlativa con la Fase B:** mientras el circuito sea *tu* `javac` → *tus*
+  bibliotecas → *tu* VM, controlás los dos extremos y podés no emitirlo nunca. Se vuelve
+  obligatorio en cuanto la VM aspire a ejecutar **bytecode ajeno** — que es el objetivo
+  declarado. Esa es la dependencia A↔B que el diagrama de los tres pilares aplana en una
+  flecha sola.

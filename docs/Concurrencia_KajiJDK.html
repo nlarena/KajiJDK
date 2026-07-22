@@ -117,7 +117,7 @@
 <p>Este informe es un <strong>deep-dive del Hito A6 (concurrencia)</strong> de KajiJDK: separa, contra el código real, <strong>lo que ya funciona</strong> de <strong>lo que se podría hacer</strong> para llegar a un <em>multithread profesional</em>. La meta no es el cómputo numérico del LLM —que vive en <strong>kernels off-heap</strong> (rayon/CUDA)— sino la <strong>corrección</strong> de la concurrencia Java sobre el heap administrado.</p>
 <p>El proyecto ya dio el <strong>salto de substrato (E1+E2)</strong>: además de los <strong>green threads cooperativos</strong> (default y para el visor), hay un modo <strong>hilos de SO reales + GIL</strong> (<code>JVM_THREADS=os</code>) donde cada <code>Thread.start()</code> lanza un <code>std::thread</code>, con <code>park</code>/<code>unpark</code> reales para monitores, <code>wait</code>/<code>notify</code> y <code>join</code>. Es la <em>planta baja</em> de un edificio cuya cumbre es <code>java.util.concurrent</code>.</p>
 <blockquote>Tesis del informe (confirmada): el salto grande <strong>no</strong> era el JIT ni terminar el monitor, sino <strong>cambiar el substrato</strong> de green threads a hilos de SO. Se hizo por el camino canónico — <strong>GIL primero</strong> (correcto pero sin paralelismo). Lo que queda es <strong>sacar el GIL</strong> (E3) para paralelismo real. El JIT es ortogonal (Fase F3) y no está en esta ruta.</blockquote>
-<p class="exito"><strong>✓ Estado:</strong> E1+E2 + refinamientos del monitor (<code>wait(timeout)</code>, GC-safe) implementados y validados — <strong>81 tests verdes</strong>, <strong>0 warnings</strong>. La planta 2 (monitor) quedó prácticamente completa; solo restan los <em>interrupts</em> (H1).</p>
+<p class="exito"><strong>✓ Estado:</strong> E1+E2 + refinamientos del monitor (<code>wait(timeout)</code>, GC-safe) implementados y validados — <strong>89 tests verdes</strong>, <strong>0 warnings</strong>. La planta 2 (monitor) quedó prácticamente completa; solo restan los <em>interrupts</em> (H1).</p>
 <p class="legend">
   <strong>Horizontes:</strong>
   <span class="badge b-base">Base</span> el núcleo &nbsp;
@@ -246,7 +246,7 @@
     <li><span class="badge b-sum">Cumbre</span> <code>park</code>/<code>unpark</code> reales sobre el SO (base de <code>wait</code>/<code>join</code>/contención)</li>
     <li><span class="badge b-sum">Cumbre</span> Refactor de ownership: heap/monitors/metaspace compartidos tras el seam <code>HeapService.store_reference</code> (<code>Arc</code> + <code>Send</code>/<code>Sync</code>)</li>
   </ul>
-  <p class="exito"><strong>✓ Logrado:</strong> N hilos de SO ejecutan el mismo programa serializados por el GIL, sin <em>data races</em> — validado por 4 tests de modo OS (mismo resultado que en green), 81 verdes en total.</p>
+  <p class="exito"><strong>✓ Logrado:</strong> N hilos de SO ejecutan el mismo programa serializados por el GIL, sin <em>data races</em> — validado por 4 tests de modo OS (mismo resultado que en green), 89 verdes en total.</p>
 </div>
 
 <div class="hito">
@@ -311,7 +311,7 @@
 <tbody>
 <tr><td>H0 · cerrar monitor</td><td>Bajo</td><td>✅ <strong>cerrado</strong> — IMSE, <code>wait(timeout)</code> y monitor GC-safe hechos; solo resta la interrupción del <code>wait</code>, que se hace con H1</td></tr>
 <tr><td>H1 · API Thread</td><td>Bajo–medio</td><td>Pendiente. Mucho es cableado prolijo; <code>interrupt</code> toca el scheduler</td></tr>
-<tr><td>H2 · OS threads + GIL</td><td><strong>Alto</strong></td><td>✅ <strong>HECHO (E1+E2)</strong> — refactor a <code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code> + <code>std::thread</code>; GIL = correcto pero serializado. 81 tests verdes</td></tr>
+<tr><td>H2 · OS threads + GIL</td><td><strong>Alto</strong></td><td>✅ <strong>HECHO (E1+E2)</strong> — refactor a <code>Arc&lt;Mutex&lt;JVM&gt;&gt;</code> + <code>std::thread</code>; GIL = correcto pero serializado. 89 tests verdes</td></tr>
 <tr><td>H3 · sacar el GIL</td><td><strong>Alto</strong></td><td>◀ <strong>próximo</strong>. Locks finos + TLABs + GC STW; acá aparecen los <em>data races</em></td></tr>
 <tr><td>H4 · JMM</td><td>Medio–alto</td><td>Recién útil con H3; fences en accesos <code>volatile</code> y monitor</td></tr>
 <tr><td>H5 · CAS</td><td>Medio</td><td>Mapea directo a <code>std::sync::atomic</code></td></tr>

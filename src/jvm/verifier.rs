@@ -897,6 +897,19 @@ fn transfer(
                 pop(&mut state, &name, pc)?; // count
                 state.stack.push(VType::Reference(format!("[L{element};")));
             }
+            // multianewarray → pop one count per dimension, push the array type. The
+            // Class constant already *is* the array descriptor (`[[I`), unlike
+            // `anewarray`'s, which names the element — so no `[L…;` is built here. The
+            // pushed type is the full descriptor even when fewer levels are
+            // materialised: `new int[3][]` still has static type `[[I`.
+            0xc5 => {
+                let array_class = class.class_name(u2(bytes, pc)).unwrap_or("?").to_string();
+                let dimensions = bytes[pc + 3];
+                for _ in 0..dimensions {
+                    pop(&mut state, &name, pc)?; // one count per dimension
+                }
+                state.stack.push(VType::Reference(array_class));
+            }
 
             // tableswitch / lookupswitch → pop the int key; control transfers to the
             // `default` or one of the cases (no fall-through). The targets come from
@@ -1902,6 +1915,15 @@ mod tests {
         // Garbage.run: new/dup/invokespecial <init>, astore/aload, getfield, ireturn —
         // the object core, with the uninitialised → initialised transition.
         verify("java/Garbage.class", "run").expect("Garbage.run should verify");
+    }
+
+    #[test]
+    fn verifies_multianewarray() {
+        // MultiArray.run: three `multianewarray`s (`[[I`, `[[[I`, `[[B`) plus the
+        // loads/stores through each level. Without the 0xc5 arm this is rejected as an
+        // unsupported opcode — executing it is only half the work, since an unverified
+        // class never reaches the interpreter.
+        verify("java/MultiArray.class", "run").expect("MultiArray.run should verify");
     }
 
     #[test]

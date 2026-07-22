@@ -1008,6 +1008,34 @@ impl JVM {
                 Step::Continue
             }
 
+            // wide (0xc4): a **prefix**, not an instruction — it re-runs the opcode
+            // that follows with a 16-bit local index, the only way to address the
+            // slots past 255 in a method with more than 256 locals. Because every
+            // handler above takes `slot: usize`, widening changes nothing but the
+            // decoding: the same `iload`/`istore`/`iinc` run, and only the number of
+            // bytes the index was written in (and so the instruction length) differs.
+            0xc4 => {
+                let pc = self.pc();
+                let wide = variable_operations::wide_operands(self.current_code(), pc);
+                match wide.op {
+                    // The four load widths all just move a `Value` onto the stack —
+                    // int/long/float/double share one handler, exactly as the narrow
+                    // forms do; the verifier is what tells the types apart.
+                    0x15..=0x18 => variable_operations::iload(self.top(), wide.slot),
+                    0x19 => variable_operations::aload(self.top(), wide.slot),
+                    0x36..=0x39 => variable_operations::istore(self.top(), wide.slot),
+                    0x3a => variable_operations::astore(self.top(), wide.slot),
+                    0x84 => variable_operations::iinc(self.top(), wide.slot, wide.delta),
+                    // `wide ret` (0xa9) is the only other form JVMS allows, and
+                    // subroutines are rejected outright by the verifier (§4.9.1 bans
+                    // `jsr`/`ret` from class files of version 50.0+), so getting here
+                    // means unverified bytecode reached the interpreter.
+                    other => panic!("wide: unsupported opcode 0x{other:02x} after the prefix"),
+                }
+                self.top().advance(wide.length);
+                Step::Continue
+            }
+
             // astore_0..astore_3 — store a reference into a local
             0x4b..=0x4e => {
                 let slot = (opcode - 0x4b) as usize;
@@ -1702,6 +1730,26 @@ impl JVM {
                 let frame = self.frames.last_mut().expect("no frame on the call stack");
                 let r = array_operations::anewarray(&mut self.metaspace, &mut self.heap, frame, cp_index);
                 self.after_array_op(r, 3)
+            }
+            // multianewarray (0xc5): allocate a multidimensional array — a u2 Class
+            // index naming the *array* type (`[[I`, not the element type as in
+            // anewarray) plus a u1 dimension count → 4-byte op. Only that many levels
+            // are built, so `new int[3][]` leaves the inner slots null.
+            0xc5 => {
+                let pc = self.frame().pc();
+                let (cp_index, dimensions) = {
+                    let code = self.current_code();
+                    (u16::from_be_bytes([code[pc + 1], code[pc + 2]]), code[pc + 3])
+                };
+                let frame = self.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::multianewarray(
+                    &mut self.metaspace,
+                    &mut self.heap,
+                    frame,
+                    cp_index,
+                    dimensions,
+                );
+                self.after_array_op(r, 4) // negative size → NegativeArraySizeException
             }
 
             // tableswitch (0xaa) / lookupswitch (0xab): pop the int key and jump to its

@@ -242,6 +242,8 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [ ] **API de `Thread` completa** — `currentThread`/`yield`/nombre/`isAlive`/`getState`, `Thread(Runnable)`, e `interrupt`/`InterruptedException` (que además cierra la interrupción del `wait`) — *H1, próximo*
 - [ ] **Sacar el GIL** → paralelismo real (locks finos + TLABs + handshake stop-the-world) — *E3, próximo*
 - [ ] **Modelo de memoria de Java** (`volatile`, happens-before, fences) — recién útil con paralelismo real
+- [x] **Cobertura del set de opcodes — 198/202** — cerrados `nop` (0x00), `goto_w` (0xc8), el prefijo `wide` (0xc4, índices de local de 16 bits: `wide iinc` mide 6 bytes, el resto 4) y `multianewarray` (0xc5, alocación recursiva de sólo los `dimensions` niveles indicados, modelado **también en el verificador**). Los 3 de `jsr`/`ret`/`jsr_w` quedan **excluidos por diseño**: JVMS §4.9.1 los prohíbe en class files de versión 50.0+ (Java 6 en adelante), así que ningún `.class` moderno puede contenerlos y el gate estructural del verificador los rechaza correctamente. **Queda un solo pendiente real: `invokedynamic`.**
+- [ ] **`invokedynamic`** (0xba) — **no es un opcode, es un subsistema**: constantes `MethodHandle`/`MethodType` en el pool, *linkage* de call site con caché, y una fábrica real (`StringConcatFactory`/`LambdaMetafactory`). Sin esto no hay lambdas, method references ni concatenación de strings al estilo Java 9+. El lado del parser ya está (`BootstrapMethods`). **Correlativa con la Fase B:** mientras el circuito sea *tu* `javac` → *tus* bibliotecas → *tu* VM podés no emitirlo nunca; se vuelve obligatorio en cuanto la VM aspire a ejecutar **bytecode ajeno**
 - [ ] JIT (bytecode → código nativo)
 - **✅ Éxito (parcial):** verificación de tipos completa, GC generacional, y concurrencia con hilos de SO reales serializados por un GIL; falta el paralelismo real (sacar el GIL), el JMM y/o el JIT. *Detalle en el informe `Concurrencia_KajiJDK.pdf`.*
 
@@ -393,7 +395,9 @@ El momento épico: las tres piezas funcionando juntas.
 > dinámico, excepciones, class loaders, nativos+intrínsecos, **GC generacional** +
 > referencias débiles, **verificador JVMS-estricto**, sistema de tipos completo, e
 > **hilos + monitores** con el substrato **OS-threads + GIL** (E1+E2), más
-> `wait(timeout)` y monitores GC-safe. El proyecto pasa **81 tests** sin warnings.
+> `wait(timeout)` y monitores GC-safe, más la **cobertura de opcodes en 198/202**
+> (`nop`, `goto_w`, el prefijo `wide` y `multianewarray`). El proyecto pasa **89 tests**
+> sin warnings.
 > Detalle vigente en `Concurrencia_KajiJDK.pdf` y `Roadmap_JDK.pdf`.
 > **Siguiente: H1 — API de `Thread` + `interrupt`; después E3 (sacar el GIL).**
 
