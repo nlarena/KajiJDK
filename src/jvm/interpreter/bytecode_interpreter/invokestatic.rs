@@ -75,6 +75,32 @@ impl JVM {
             args.reverse();
         }
 
+        // `String.valueOf(Object)`: the text of anything. Handled here rather than in the
+        // native bridge for the same reason as the scheduler ops — it isn't a leaf. It
+        // has to call the object's *own* `toString()`, which is a virtual call back into
+        // user bytecode, and the bridge has no way to re-enter the interpreter.
+        //
+        // This is what `"x" + obj` needs: javac emits this call *before* the concatenation
+        // call site, so the indy only ever sees Strings.
+        if callee_class == "java/lang/String"
+            && self.metaspace.name(callee) == "valueOf"
+            && self.metaspace.descriptor(callee) == "(Ljava/lang/Object;)Ljava/lang/String;"
+        {
+            let object = match args.first() {
+                Some(crate::jvm::interpreter::frame::Value::Reference(offset)) => *offset,
+                other => panic!("String.valueOf: expected a reference, found {other:?}"),
+            };
+            let text = self.text_of(object);
+            let offset = crate::jvm::interpreter::strings::intern(
+                &mut self.metaspace,
+                &mut self.heap,
+                &text,
+            );
+            self.top().push(crate::jvm::interpreter::frame::Value::Reference(offset));
+            self.advance_past_call();
+            return Step::Continue;
+        }
+
         // `Thread.sleep(ms)`: park the current thread (scheduler op) — handled here, not
         // the native bridge, since it suspends the thread.
         if callee_class == "java/lang/Thread" && self.metaspace.name(callee) == "sleep" {

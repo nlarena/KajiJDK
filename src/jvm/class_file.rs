@@ -1,5 +1,6 @@
 //! The in-memory model of a parsed `.class` file.
 
+use super::parser::attributes::bootstrap_methods;
 use super::parser::{
     attribute, code, constant_pool, member, AttributeInfo, ClassReader, Code, ConstantPoolEntry,
     MemberInfo, ParseError,
@@ -18,6 +19,57 @@ const ACC_SYNTHETIC: u16 = 0x1000;
 const ACC_ANNOTATION: u16 = 0x2000;
 const ACC_ENUM: u16 = 0x4000;
 const ACC_MODULE: u16 = 0x8000;
+
+/// The nine `MethodHandle` reference kinds (JVMS §4.4.8, table 4.4.8-A). The kind is
+/// what turns a symbolic reference into a *behaviour*: the same `Methodref` means a
+/// virtual call under `InvokeVirtual` and a constructor invocation under
+/// `NewInvokeSpecial`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MethodHandleKind {
+    GetField,
+    GetStatic,
+    PutField,
+    PutStatic,
+    InvokeVirtual,
+    InvokeStatic,
+    InvokeSpecial,
+    NewInvokeSpecial,
+    InvokeInterface,
+}
+
+impl MethodHandleKind {
+    /// The kind byte as stored in the constant pool; `None` for anything outside 1..=9.
+    fn from_byte(kind: u8) -> Option<Self> {
+        Some(match kind {
+            1 => Self::GetField,
+            2 => Self::GetStatic,
+            3 => Self::PutField,
+            4 => Self::PutStatic,
+            5 => Self::InvokeVirtual,
+            6 => Self::InvokeStatic,
+            7 => Self::InvokeSpecial,
+            8 => Self::NewInvokeSpecial,
+            9 => Self::InvokeInterface,
+            _ => return None,
+        })
+    }
+
+    /// Whether the handle's pool index names a **field** (kinds 1–4) rather than a
+    /// method — the fork that decides how the reference is resolved.
+    pub fn names_a_field(self) -> bool {
+        matches!(self, Self::GetField | Self::GetStatic | Self::PutField | Self::PutStatic)
+    }
+}
+
+/// What a `MethodHandle` constant resolves to: the member it names, plus the kind that
+/// says how it would be accessed. Borrows from the class file's pool.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MethodHandleRef<'a> {
+    pub kind: MethodHandleKind,
+    pub class: &'a str,
+    pub name: &'a str,
+    pub descriptor: &'a str,
+}
 
 /// A parsed Java class file.
 ///
@@ -205,6 +257,89 @@ impl ClassFile {
         }
     }
 
+    /// Resolves a `NameAndType` constant to its `(name, descriptor)`. Unlike
+    /// [`Self::methodref_name_and_type`], this takes the `NameAndType` index *directly* —
+    /// which is what an `InvokeDynamic` entry carries. An indy call site names no owning
+    /// class, because its target isn't in the pool at all: a bootstrap method produces it
+    /// at first execution.
+    pub fn name_and_type(&self, index: u16) -> Option<(&str, &str)> {
+        match self.constant_pool.get((index.checked_sub(1)?) as usize)? {
+            ConstantPoolEntry::NameAndType { name_index, descriptor_index } => {
+                Some((self.utf8(*name_index)?, self.utf8(*descriptor_index)?))
+            }
+            _ => None,
+        }
+    }
+
+    /// Resolves an `InvokeDynamic` constant to `(bootstrap method index, name,
+    /// descriptor)`. The index is into the class's `BootstrapMethods` attribute; the
+    /// descriptor is the call site's *shape* — what it pops and what it pushes.
+    pub fn invokedynamic_site(&self, index: u16) -> Option<(u16, &str, &str)> {
+        let (bsm_index, nt_index) = match self.constant_pool.get((index.checked_sub(1)?) as usize)? {
+            ConstantPoolEntry::InvokeDynamic { bootstrap_method_attr_index, name_and_type_index } => {
+                (*bootstrap_method_attr_index, *name_and_type_index)
+            }
+            _ => return None,
+        };
+        let (name, descriptor) = self.name_and_type(nt_index)?;
+        Some((bsm_index, name, descriptor))
+    }
+
+    /// Resolves a `Dynamic` constant (tag 17 — a *constant* dynamic, "condy") to
+    /// `(bootstrap method index, name, descriptor)`.
+    ///
+    /// The twin of [`Self::invokedynamic_site`], and structurally identical: both name a
+    /// bootstrap method that computes something at first use. The difference is only what
+    /// they produce — a call site there, a **value** here.
+    pub fn dynamic_constant(&self, index: u16) -> Option<(u16, &str, &str)> {
+        let (bsm_index, nt_index) = match self.constant_pool.get((index.checked_sub(1)?) as usize)? {
+            ConstantPoolEntry::Dynamic { bootstrap_method_attr_index, name_and_type_index } => {
+                (*bootstrap_method_attr_index, *name_and_type_index)
+            }
+            _ => return None,
+        };
+        let (name, descriptor) = self.name_and_type(nt_index)?;
+        Some((bsm_index, name, descriptor))
+    }
+
+    /// Resolves a `MethodHandle` constant (§4.4.8) to **what it points at plus how it
+    /// would be invoked**.
+    ///
+    /// A handle is a *reference kind* and a pool index, and the kind decides which kind
+    /// of entry that index names: kinds 1–4 (`getField`…`putStatic`) point at a
+    /// `Fieldref`, the rest at a `Methodref`/`InterfaceMethodref`. Resolving only the
+    /// method side is what made a `record`'s component getters — which arrive as
+    /// `REF_getField` handles — unresolvable.
+    ///
+    /// The kind is part of the answer, not a detail to discard: `REF_invokeVirtual` and
+    /// `REF_invokeStatic` can name the very same method and mean different calls.
+    pub fn method_handle(&self, index: u16) -> Option<MethodHandleRef<'_>> {
+        let (raw_kind, reference_index) =
+            match self.constant_pool.get((index.checked_sub(1)?) as usize)? {
+                ConstantPoolEntry::MethodHandle { reference_kind, reference_index } => {
+                    (*reference_kind, *reference_index)
+                }
+                _ => return None,
+            };
+        let kind = MethodHandleKind::from_byte(raw_kind)?;
+        let (class, name, descriptor) = if kind.names_a_field() {
+            self.fieldref_target(reference_index)?
+        } else {
+            self.methodref_target(reference_index)?
+        };
+        Some(MethodHandleRef { kind, class, name, descriptor })
+    }
+
+    /// Parses the class's `BootstrapMethods` attribute (§4.7.23) — the table an
+    /// `invokedynamic` indexes into. Empty when the class has no indy call sites.
+    pub fn bootstrap_methods(&self) -> Vec<bootstrap_methods::BootstrapMethod> {
+        self.attributes
+            .iter()
+            .find(|a| self.utf8(a.name_index) == Some("BootstrapMethods"))
+            .map(|a| bootstrap_methods::parse(&a.info))
+            .unwrap_or_default()
+    }
+
     /// Finds a member's `Code` attribute (if any) and parses its body. Abstract
     /// and native methods have none, so this returns `None` for them.
     pub fn member_code(&self, member: &MemberInfo) -> Option<Code> {
@@ -296,6 +431,64 @@ mod tests {
             .constant_pool
             .iter()
             .any(|e| matches!(e, ConstantPoolEntry::Utf8(s) if s.as_str() == text))
+    }
+
+    /// A `record` is the smallest class file carrying `MethodHandle`s of **two**
+    /// different kinds: the `REF_invokeStatic` of `ObjectMethods.bootstrap`, and one
+    /// `REF_getField` per component. Resolving only the method side — which is what the
+    /// first cut did — left the getters unresolvable, because a field-kind handle points
+    /// at a `Fieldref` and not a `Methodref`.
+    #[test]
+    fn resolves_method_handles_of_both_member_kinds() {
+        let class = ClassFile::from_path("java/Point.class").unwrap();
+        let bootstraps = class.bootstrap_methods();
+        let bootstrap = bootstraps.first().expect("a record has a BootstrapMethods entry");
+
+        let factory = class.method_handle(bootstrap.method_ref).expect("bootstrap handle");
+        assert_eq!(factory.kind, MethodHandleKind::InvokeStatic);
+        assert_eq!(factory.class, "java/lang/runtime/ObjectMethods");
+        assert_eq!(factory.name, "bootstrap");
+        assert!(!factory.kind.names_a_field());
+
+        // The component getters ride along as static bootstrap arguments.
+        let getters: Vec<_> =
+            bootstrap.arguments.iter().filter_map(|&i| class.method_handle(i)).collect();
+        assert_eq!(getters.len(), 2, "one getter per record component");
+        for getter in &getters {
+            assert_eq!(getter.kind, MethodHandleKind::GetField);
+            assert!(getter.kind.names_a_field(), "a getField handle names a field");
+            assert_eq!(getter.class, "Point");
+            assert_eq!(getter.descriptor, "I"); // the *field's* descriptor, not a method's
+        }
+        assert_eq!(getters[0].name, "x");
+        assert_eq!(getters[1].name, "y");
+    }
+
+    /// The kind byte is the fork that decides how a handle resolves, so the whole table
+    /// matters — and anything outside 1..=9 is malformed, not a kind we merely don't
+    /// model yet.
+    #[test]
+    fn method_handle_kinds_cover_the_whole_table() {
+        use MethodHandleKind::*;
+        let table = [
+            (1, GetField),
+            (2, GetStatic),
+            (3, PutField),
+            (4, PutStatic),
+            (5, InvokeVirtual),
+            (6, InvokeStatic),
+            (7, InvokeSpecial),
+            (8, NewInvokeSpecial),
+            (9, InvokeInterface),
+        ];
+        for (byte, expected) in table {
+            assert_eq!(MethodHandleKind::from_byte(byte), Some(expected));
+        }
+        // Only kinds 1–4 read a Fieldref; the rest name methods.
+        assert_eq!(table.iter().filter(|(_, k)| k.names_a_field()).count(), 4);
+
+        assert_eq!(MethodHandleKind::from_byte(0), None);
+        assert_eq!(MethodHandleKind::from_byte(10), None);
     }
 
     #[test]

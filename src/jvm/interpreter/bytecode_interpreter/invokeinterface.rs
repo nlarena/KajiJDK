@@ -3,9 +3,54 @@
 //! slots, so the signature is resolved in the receiver's own table. An
 //! `impl JVM` method, dispatched from `step()`.
 
+use super::objects_operations::HEADER_SIZE;
 use super::{JVM, Step};
 use crate::jvm::interpreter::frame::Value;
+use crate::jvm::interpreter::heap::HeapService;
 use crate::jvm::interpreter::metaspace::MetaspaceService;
+
+/// Reads a lambda object's captured values back out, at the widths their descriptors
+/// imply. They were written in order right after the header when the call site ran.
+fn read_captures(heap: &HeapService, object: usize, descriptors: &[String]) -> Vec<Value> {
+    let mut at = object + HEADER_SIZE;
+    descriptors
+        .iter()
+        .map(|descriptor| {
+            let value = match descriptor.as_bytes().first() {
+                Some(b'J') => Value::Long(heap.read_u64(at) as i64),
+                Some(b'D') => Value::Double(f64::from_bits(heap.read_u64(at))),
+                Some(b'F') => Value::Float(f32::from_bits(heap.read_u32(at))),
+                Some(b'L' | b'[') => Value::Reference(heap.read_u32(at) as usize),
+                _ => Value::Int(heap.read_u32(at) as i32),
+            };
+            at += capture_bytes(descriptor);
+            value
+        })
+        .collect()
+}
+
+/// How many **heap bytes** a captured value occupies in the lambda object — 8 for a
+/// category-2 primitive, 4 otherwise. Only for walking the object's layout.
+fn capture_bytes(descriptor: &str) -> usize {
+    match descriptor.as_bytes().first() {
+        Some(b'J' | b'D') => 8,
+        _ => 4,
+    }
+}
+
+/// How many **local-variable slots** a captured value occupies in the callee's frame —
+/// 2 for a category-2 primitive, 1 otherwise.
+///
+/// Deliberately separate from [`capture_bytes`]: the two answer different questions
+/// (heap layout vs. frame slots) and their numbers differ. Sharing one function silently
+/// placed the interface method's own arguments four slots too far along, past
+/// `max_locals`, where `Frame::for_call` drops them.
+fn capture_slots(descriptor: &str) -> usize {
+    match descriptor.as_bytes().first() {
+        Some(b'J' | b'D') => 2,
+        _ => 1,
+    }
+}
 
 impl JVM {
     /// `invokeinterface` (0xb9): dynamic dispatch through an *interface* reference.
@@ -58,6 +103,26 @@ impl JVM {
             .class_name_at_mirror(mirror_offset)
             .expect("invokeinterface: could not resolve the receiver's class")
             .to_string();
+
+        // A lambda object has no itable: its class is synthetic, minted by the call site
+        // that produced it. This is where the shortcut pays off — instead of a generated
+        // class forwarding to the implementation, the dispatch jumps there directly,
+        // prepending the values the lambda captured. Those captures are the
+        // implementation's *leading* parameters, ahead of the interface method's own.
+        if let Some(shape) = self.lambdas.get(&runtime_class) {
+            let implementation = shape.implementation;
+            let capture_descriptors = shape.captures.clone();
+            let mut operands = read_captures(&self.heap, receiver, &capture_descriptors);
+            let mut widths: Vec<usize> =
+                capture_descriptors.iter().map(|d| capture_slots(d)).collect();
+            // The receiver itself is dropped: the implementation is a plain static, it
+            // never sees the object that stood in for the interface.
+            operands.extend(locals.into_iter().skip(1));
+            widths.extend(MetaspaceService::param_slot_widths(&descriptor));
+
+            let max_locals = self.metaspace.max_locals(implementation);
+            return self.push_frame_locked(implementation, max_locals, operands, &widths, None);
+        }
 
         // No stable interface slot — find the signature in the receiver's own table.
         // A class that doesn't implement the method ⇒ NoSuchMethodError (linkage).

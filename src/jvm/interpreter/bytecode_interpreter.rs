@@ -46,6 +46,11 @@ mod invokespecial;
 mod invokestatic;
 mod invokevirtual;
 
+/// `invokedynamic` — the odd one out: it takes free functions rather than an
+/// `impl JVM` method, because it never pushes a frame (the bootstrap methods are
+/// intrinsics, so the call site's value is produced in Rust).
+pub mod invokedynamic;
+
 /// `athrow` + stack unwinding — also an `impl JVM` method (it walks the
 /// frame stack), in its own module.
 mod athrow;
@@ -135,6 +140,31 @@ pub struct GreenThread {
     pub os_spawned: bool,
 }
 
+/// What a lambda call site produced: everything needed to run the interface method on
+/// the object it created.
+///
+/// A real JVM answers `LambdaMetafactory` by **spinning a class** at runtime that
+/// implements the functional interface and forwards to the implementation method. We
+/// don't have to: we own the dispatch, so a synthetic class name plus this record is
+/// enough — `invokeinterface` recognises the receiver and jumps straight to
+/// `implementation`, prepending the values the lambda captured.
+///
+/// That is the one place our design is *simpler* than HotSpot's rather than a
+/// compromise: class generation exists in the JDK because the JVM interface is fixed
+/// from the outside, and ours isn't.
+/// One shape per **call site**, not per instance: the captured *values* live in each
+/// lambda object (a closure created in a loop must not share them), while everything
+/// static about the site lives here.
+pub struct LambdaShape {
+    /// The method the lambda body compiled to — for a lambda, javac's synthetic
+    /// `lambda$…` static; for a method reference, the referenced method itself.
+    pub implementation: MethodId,
+    /// Descriptors of the captured values, in the order the implementation takes them:
+    /// they are its **leading** parameters, ahead of the interface method's arguments.
+    /// Doubles as the object's field layout, since each is read back at its own width.
+    pub captures: Vec<String>,
+}
+
 /// A read-only snapshot of one thread for the visualizer: its id, scheduling state,
 /// the method it's currently in, and whether it's the running thread.
 pub struct ThreadView {
@@ -164,6 +194,20 @@ pub struct JVM {
     /// Object monitors for `synchronized`, keyed by the lock object's heap offset.
     /// Created lazily on first `monitorenter`.
     monitors: std::collections::HashMap<usize, Monitor>,
+    /// Synthetic classes minted for lambda call sites, keyed by class name. A real JVM
+    /// *generates a class* here; we don't need to, because we own the dispatch — see
+    /// [`LambdaShape`].
+    lambdas: std::collections::HashMap<String, LambdaShape>,
+    /// Resolved **dynamic constants** (condy), keyed by the class and pool index that
+    /// named them. Caching is not an optimisation here: a condy is a *constant*, so it
+    /// must be computed once — and the same one is routinely shared, as when every case
+    /// label of an enum `switch` points at the one `ClassDesc` describing the enum.
+    condy: std::collections::HashMap<(String, u16), Value>,
+    /// Dynamic constants currently being computed. A condy's arguments can be other
+    /// condys, so the resolution is a graph walk — and a constant that (directly or not)
+    /// refers to itself would otherwise recurse until the Rust stack gives out. This
+    /// turns that into a diagnosable error, which is what the JVMS calls for.
+    condy_in_progress: std::collections::HashSet<(String, u16)>,
     heap: HeapService,
     /// Everything the program has printed via native methods (e.g.
     /// `PrintStream.println`). Buffered here so tooling can show it persistently —
@@ -214,6 +258,9 @@ impl JVM {
             current: 0,
             next_thread_id: 1,
             monitors: std::collections::HashMap::new(),
+            lambdas: std::collections::HashMap::new(),
+            condy: std::collections::HashMap::new(),
+            condy_in_progress: std::collections::HashSet::new(),
             heap: HeapService::new(),
             console: String::new(),
             gc_policy: gc::GcPolicy::from_env(),
@@ -1379,6 +1426,21 @@ impl JVM {
             0xb6 => self.invokevirtual(),
             0xb9 => self.invokeinterface(),
 
+            // invokedynamic (0xba): `ba idx1 idx2 00 00` — 5 bytes, the trailing two
+            // always zero. Unlike its siblings it pushes no frame: the bootstrap
+            // methods are VM intrinsics, so the call site's value is produced directly
+            // and the pc simply steps over the instruction.
+            0xba => {
+                let pc = self.frame().pc();
+                let cp_index = {
+                    let code = self.current_code();
+                    u16::from_be_bytes([code[pc + 1], code[pc + 2]])
+                };
+                self.invokedynamic(cp_index);
+                self.top().advance(5);
+                Step::Continue
+            }
+
             // athrow: throw an exception, unwinding the call stack to a handler.
             0xbf => self.athrow(),
 
@@ -1786,7 +1848,7 @@ impl JVM {
         }
         // A synthetic `<clinit>` frame wasn't reached via an invoke, so the caller's
         // pc must NOT advance — the instruction that triggered init resumes as-is.
-        if !popped.map_or(false, |f| f.is_synthetic()) {
+        if !popped.is_some_and(|f| f.is_synthetic()) {
             self.advance_past_call();
         }
         Step::Continue
@@ -1809,18 +1871,97 @@ impl JVM {
             self.ensure_initialized(&superclass);
         }
 
-        // Run the class's `<clinit>` (if it has one) to completion.
+        // Run the class's `<clinit>` (if it has one) to completion. It is the
+        // argument-less, result-less case of [`Self::call_java`] — the same VM-pushed
+        // frame driven by the same nested loop.
         if let Some(clinit) = self.metaspace.resolve_method(class, "<clinit>", "()V") {
-            let max_locals = self.metaspace.max_locals(clinit);
-            let base = self.frames.len();
-            self.frames.push(Frame::new_synthetic(clinit, max_locals));
-            // Drive `<clinit>` to completion on the *current* thread — `run_one`, not
-            // `step`, so the scheduler doesn't interleave other threads mid-init.
-            while self.frames.len() > base {
-                self.run_one();
-            }
+            self.call_java(clinit, Vec::new(), &[]);
         }
         self.metaspace.set_init_state(class, InitState::Done);
+    }
+
+    /// Runs a Java method **from inside the VM** and hands back its result.
+    ///
+    /// This is the general form of what class initialization has always done: push a
+    /// frame the VM owns and drive it to completion with a nested `run_one` loop, so the
+    /// call finishes before the instruction that triggered it proceeds. `<clinit>` was
+    /// just the special case with no arguments and no result.
+    ///
+    /// It matters well beyond initialization, because it is what stops the VM's
+    /// intrinsics from being *terminal*. A native that can only compute and return has to
+    /// reimplement anything it needs from the library — which is how `String.valueOf`
+    /// ended up half-written in Rust. With this, an intrinsic can call back into Java:
+    /// the natural way for `toString()` on a record component, `String.valueOf(Object)`
+    /// in concatenation, and a real `ConstantBootstraps.invoke`.
+    ///
+    /// The frame is marked **synthetic**, so the returning opcode knows there is no call
+    /// instruction to step over in the caller (the caller is a native, not an `invoke`).
+    ///
+    /// Returns the method's result, or `None` for a `void` method.
+    pub(super) fn call_java(
+        &mut self,
+        method: MethodId,
+        args: Vec<Value>,
+        widths: &[usize],
+    ) -> Option<Value> {
+        let max_locals = self.metaspace.max_locals(method);
+        let base = self.frames.len();
+        // The caller's stack is where a returning value lands, so its depth before the
+        // call is what tells us afterwards whether anything came back.
+        let depth_before = self.frames.last().map_or(0, |f| f.stack().len());
+
+        let mut frame = Frame::for_call(method, max_locals, args, widths);
+        frame.mark_synthetic();
+        self.frames.push(frame);
+
+        // Drive it on the *current* thread — `run_one`, not `step`, so the scheduler
+        // can't interleave another thread in the middle of a VM-initiated call.
+        while self.frames.len() > base {
+            self.run_one();
+        }
+
+        let grew = self.frames.last().is_some_and(|f| f.stack().len() > depth_before);
+        grew.then(|| self.top().pop())
+    }
+
+    /// Calls a method **on an object**, dispatched by its runtime class — the virtual
+    /// call an intrinsic needs when the answer depends on user code.
+    ///
+    /// Wraps the two shapes a callee can take: a native goes to the bridge, anything else
+    /// gets a frame via [`Self::call_java`]. `None` means the receiver's class has no such
+    /// method, which is a legitimate answer rather than an error — our `java.lang.Object`
+    /// declares no `equals`, so "no slot" *is* how a class says it inherits identity
+    /// comparison.
+    pub(super) fn call_virtual(
+        &mut self,
+        receiver: usize,
+        name: &str,
+        descriptor: &str,
+        args: Vec<Value>,
+    ) -> Option<Value> {
+        let runtime = self.metaspace.class_name_at_mirror(self.heap.read_u32(receiver) as usize)?;
+        let runtime = runtime.to_string();
+        let slot = self.metaspace.vtable_slot(&runtime, name, descriptor)?;
+        let callee = self.metaspace.vtable_method(&runtime, slot)?;
+
+        let mut operands = vec![Value::Reference(receiver)];
+        operands.extend(args);
+
+        if self.metaspace.is_native(callee) {
+            let class = self.metaspace.class_of(callee).to_string();
+            return crate::jvm::interpreter::natives::dispatch(
+                &class,
+                name,
+                descriptor,
+                &operands,
+                &mut self.metaspace,
+                &mut self.heap,
+                &mut self.console,
+            );
+        }
+        let mut widths = vec![1]; // the receiver, then each parameter at its own width
+        widths.extend(MetaspaceService::param_slot_widths(descriptor));
+        self.call_java(callee, operands, &widths)
     }
 
     /// `ldc`/`ldc_w`: resolve the constant at `cp_index` in the current method's pool
@@ -1849,7 +1990,42 @@ impl JVM {
             return;
         }
 
-        panic!("ldc: unsupported constant at #{cp_index} (only String/Integer/Float modelled)");
+        // A **class literal** (`Foo.class`) → push the class's `Class<…>` mirror.
+        //
+        // Resolution *loads and prepares* the class but must **not initialize** it: a
+        // class literal is not an "active use" (JVMS §5.5), so `Foo.class` alone must not
+        // run `Foo.<clinit>`. `load_class` stops at preparation, which is exactly right.
+        //
+        // The mirror is cached by Class ID, so the same literal evaluated twice yields the
+        // *same* reference — which is what makes `Foo.class == Foo.class` hold.
+        let class_name =
+            self.metaspace.get(&caller).and_then(|cf| cf.class_name(cp_index)).map(str::to_string);
+        if let Some(class_name) = class_name {
+            // An **array** class literal (`int[].class`) names a class that has no
+            // `.class` file, so loading it can't prepare a mirror. It gets the same
+            // synthetic, header-only mirror `anewarray` builds — the array type's
+            // identity lives in its descriptor, not in a file.
+            let mirror = if class_name.starts_with('[') {
+                array_operations::array_class_mirror(
+                    &mut self.metaspace,
+                    &mut self.heap,
+                    &class_name,
+                )
+            } else {
+                class_operations::load_class(&mut self.metaspace, &mut self.heap, &class_name);
+                self.metaspace.class_mirror(&class_name).unwrap_or_else(|| {
+                    // Pushing a null mirror would be a silently wrong answer.
+                    panic!("ldc: class '{class_name}' loaded but has no Class mirror")
+                })
+            };
+            self.top().push(Value::Reference(mirror));
+            return;
+        }
+
+        panic!(
+            "ldc: unsupported constant at #{cp_index} (String/Integer/Float/Class modelled; \
+             MethodHandle/MethodType/Dynamic still pending — see docs/invokedynamic-ruta.md)"
+        );
     }
 
     /// `ldc2_w` (0x14): load a category-2 constant — a `long` or a `double` — and
@@ -1896,11 +2072,16 @@ impl JVM {
     /// otherwise the value lands on the caller's operand stack and it resumes.
     fn ireturn(&mut self) -> Step {
         let value = self.top().pop();
-        self.pop_frame();
+        let popped = self.pop_frame();
         if self.frames.is_empty() {
             return Step::Return(Some(value));
         }
-        self.advance_past_call();
+        // Same rule as `return_void`: a frame the VM pushed itself wasn't reached through
+        // an invoke, so there is no call instruction to step over — advancing would move
+        // the caller's pc by the width of whatever opcode happens to sit there.
+        if !popped.is_some_and(|f| f.is_synthetic()) {
+            self.advance_past_call();
+        }
         self.top().push(value);
         Step::Continue
     }

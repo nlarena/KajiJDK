@@ -190,7 +190,11 @@ fn allocate_array(
 /// returns its offset. Array classes have no `.class` file and no static fields, so
 /// the mirror is just a header — it exists to give the array type an identity (its
 /// descriptor encodes the element kind). Idempotent, like `load_class`'s dedup.
-fn array_class_mirror(metaspace: &mut MetaspaceService, heap: &mut HeapService, array_class: &str) -> usize {
+pub fn array_class_mirror(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    array_class: &str,
+) -> usize {
     let uuid = metaspace.class_id(array_class).to_string();
     if let Some(offset) = metaspace.class_object(&uuid) {
         return offset;

@@ -102,6 +102,12 @@ impl Frame {
         self.synthetic
     }
 
+    /// Marks a frame as VM-pushed after it was built with arguments — the general case
+    /// [`Frame::new_synthetic`] covers only for the argument-less `<clinit>`.
+    pub fn mark_synthetic(&mut self) {
+        self.synthetic = true;
+    }
+
     /// Records that this frame holds `obj`'s monitor (a `synchronized` method) — set
     /// just after the frame is built, once the monitor has been acquired.
     pub fn set_monitor(&mut self, obj: usize) {

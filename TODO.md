@@ -4,10 +4,12 @@ Pendientes y mejoras conocidas. Lo marcado `[x]` es registro de lo ya hecho.
 
 ## Estado general
 
-- ✅ **Cobertura del set de opcodes — 198/202.** De los 4 restantes, 3 son `jsr`/`ret`/
-  `jsr_w`, **excluidos por diseño** (JVMS §4.9.1 los prohíbe en class files de versión
-  50.0+, o sea Java 6 en adelante). **Queda un solo pendiente real:** `invokedynamic`
-  (un subsistema, con hito propio). Detalle en «Intérprete».
+- ✅ **Cobertura del set de opcodes — 199 de 199 alcanzables: completo.** Los 3 que
+  faltan para 202 son `jsr`/`ret`/`jsr_w`, **excluidos por diseño**: JVMS §4.9.1 los
+  prohíbe en class files de versión 50.0+ (Java 6 en adelante), así que ningún `.class`
+  moderno puede contenerlos — ver `docs/subrutinas-jsr-ret.md`. `invokedynamic` incluido:
+  5 de las 6 fábricas que emite `javac`, detalle en «Intérprete» y en
+  `docs/invokedynamic-ruta.md`.
 - ✅ **Sistema de tipos completo** — `int`/`long`/`double`/`float` ejecutados y
   verificados (cómputo, conversiones, comparaciones, división con excepción,
   categoría-2 en params/campos/estáticos/arrays/frames, lattice de referencias).
@@ -329,35 +331,83 @@ verificación de tipos. Registro de lo hecho, por orden cronológico:
   de falla devuelve su propio código negativo. Da `42` en el `java` de JDK 25 **y** en
   nuestra VM, más un test del verificador (`verifies_multianewarray`).
 
-### Cobertura del set de opcodes — **198 / 202**
+### Cobertura del set de opcodes — **199 / 199 alcanzables: completo**
 
 Lo que resta **no es homogéneo**: son dos cosas distintas y conviene no contarlas juntas.
 
+```
+202  opcodes del JVMS
+  3  excluidos por diseño   (jsr 0xa8 · ret 0xa9 · jsr_w 0xc9)
+───
+199  alcanzables
+199  implementados          ← completo
+```
+
+Contar los tres legacy como faltantes mezcla una **decisión** con una **tarea**, y hace
+parecer incompleto algo que está cerrado — por eso el número honesto es 199/199.
+
 | Opcode | Estado | Nota |
 |---|---|---|
-| `jsr` (0xa8) · `ret` (0xa9) · `jsr_w` (0xc9) | ⛔ **excluidos por diseño** | Ver abajo |
-| `invokedynamic` (0xba) | ⬜ **hito propio** | Ver abajo |
-- ⛔ **`jsr`/`ret`/`jsr_w` — decisión, no deuda.** *Ejecutarlos* sería lo más fácil de
-  todo lo que queda (~10 líneas: empujar la dirección de retorno y saltar; `ret` salta a
-  la dirección guardada en un local). El costo está en otro lado: haría falta una
-  variante `ReturnAddress` en `Value` —que toca **todos** los `match` exhaustivos del
-  proyecto— y, sobre todo, verificar subrutinas es la parte más difícil del type-checker
-  del JVMS (las subrutinas polimórficas son *la* razón por la que Java las abandonó).
-  Y el argumento que cierra el caso: **JVMS §4.9.1 prohíbe `jsr`/`jsr_w` en class files
-  de versión 50.0 o superior** — Java 6 en adelante. Ningún `.class` moderno puede
-  contenerlos legalmente. Que `structural_check` los rechace no es un hueco: es lo
-  correcto para todo lo que la VM va a encontrar. Implementarlos sólo tendría sentido
-  para ejecutar bytecode anterior a 2006.
-- [ ] **`invokedynamic`** (0xba) — **no es un opcode, es un subsistema.** El opcode solo
-  no hace nada: delega en un *bootstrap method* que tiene que existir. Correlativas:
-  (1) constantes `MethodHandle`/`MethodType` en el constant pool — hoy `ldc` sólo modela
-  `String`/`Integer`/`Float` y `ldc2_w` sólo `Long`/`Double`; (2) *linkage* de call site
-  con caché (el `CallSite` se resuelve una vez y queda pegado); (3) al menos una fábrica
-  real: `StringConcatFactory` o `LambdaMetafactory`. El lado del parser **ya está**
-  (`BootstrapMethods` se parsea, y `opcode.rs` lo desensambla). Sin esto no hay lambdas,
-  ni method references, ni concatenación de strings al estilo Java 9+.
-  **Correlativa con la Fase B:** mientras el circuito sea *tu* `javac` → *tus*
-  bibliotecas → *tu* VM, controlás los dos extremos y podés no emitirlo nunca. Se vuelve
-  obligatorio en cuanto la VM aspire a ejecutar **bytecode ajeno** — que es el objetivo
-  declarado. Esa es la dependencia A↔B que el diagrama de los tres pilares aplana en una
-  flecha sola.
+| `jsr` (0xa8) · `ret` (0xa9) · `jsr_w` (0xc9) | ⛔ **excluidos por diseño** | `docs/subrutinas-jsr-ret.md` |
+| `invokedynamic` (0xba) | ✅ **5 de 6 fábricas** | `docs/invokedynamic-ruta.md` |
+- ⛔ **`jsr`/`ret`/`jsr_w` — decisión, no deuda.** **JVMS §4.9.1** los prohíbe en class
+  files de versión 50.0+ (Java 6 en adelante), así que ningún `.class` producido después
+  de 2006 puede contenerlos legalmente. La postura es **leer sí, ejecutar no**: el
+  desensamblador los soporta completo (requisito de A0, que se mide contra `javap` sobre
+  `java.base`), y el gate estructural del verificador los rechaza. Razonamiento completo,
+  costo real y qué haría cambiar la decisión: **`docs/subrutinas-jsr-ret.md`**.
+- [x] **`invokedynamic`** (0xba) — **no era un opcode, era un subsistema**, y está
+  implementado: **5 de las 6 fábricas** que `javac` emite corren (`StringConcatFactory`,
+  `SwitchBootstraps.typeSwitch` con patrones de tipo *y* de enum, `ObjectMethods` para
+  records, `LambdaMetafactory.metafactory` para lambdas y method references, y
+  `ConstantBootstraps.invoke` para constantes dinámicas). La sexta, `altMetafactory`,
+  necesita serialización y queda fuera de alcance. Ruta completa, correcciones y
+  mediciones: **`docs/invokedynamic-ruta.md`**.
+
+### TODO · el modelo de objetos de `java.lang.invoke`
+
+> **Para cuando haya acceso a la PC del compilador.** Parte de esto se puede hacer y
+> probar ya; la otra parte **no tiene con qué probarse** hasta que exista el escritor de
+> `.class` (hito **B3**). Está medido, no supuesto — ver abajo.
+
+Lo que falta de 0xba no es más `invokedynamic`: es que `MethodHandle`, `MethodType` y
+`MethodHandles$Lookup` existan como **objetos**. Eso desbloquea de una: `ldc` de esas
+constantes, y los **bootstrap methods definidos por el usuario**.
+
+**Reparto Rust / Java** (las clases en Java, algunos cuerpos nativos — la misma forma que
+el JDK real):
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| `MethodType`, `MethodHandle` (los datos), `Lookup` | **Java**, en `bootstrap/` | Estado puro. `MethodHandle` es lo que ya modela nuestro `MethodHandleRef`. |
+| **`MethodHandle.invoke`** | **Rust, obligatorio** | Invocar un método arbitrario desde un handle es justamente lo que Java no puede hacerse a sí mismo. **No es un atajo: el JDK real también lo trata como intrínseco de VM.** |
+| Materializar el `ldc` | Rust | Leer el pool y armar el objeto es trabajo de VM. |
+| Polimorfia de firma | Rust | No vive en ninguna clase: es lógica del verificador y del dispatch. |
+
+- [ ] **Mitad con oráculo — se puede hacer ya.** `MethodType`, `Lookup.findStatic` y
+  `MethodHandle.invoke` son alcanzables desde **Java corriente**, así que hay bytecode de
+  `javac` con el que contrastar:
+  ```java
+  MethodHandle h = lookup().findStatic(C.class, "twice", methodType(int.class, int.class));
+  return (int) h.invoke(21);            // java real → 42
+  ```
+  Y ahí está la parte difícil servida: `javac` emite
+  `invokevirtual java/lang/invoke/MethodHandle.invoke:(I)I` — **con el descriptor real del
+  call site, no `(Object...)Object`**. Eso *es* la polimorfia de firma (JVMS §2.9.3), y el
+  verificador tiene que saber no resolverla por el camino normal.
+- [ ] **Mitad sin oráculo — necesita B3.** Medido sobre JDK 25: `javac` **nunca** emite un
+  `ldc` de `MethodHandle`/`MethodType` (esas constantes viven en el pool sólo como
+  argumentos de bootstrap, igual que los condy), y un bootstrap method escrito por el
+  usuario **no se puede invocar desde Java** — no hay forma de escribir `invokedynamic` en
+  el lenguaje. Probar cualquiera de las dos exige **producir class files que `javac` no
+  produce**, o sea el escritor de `.class` de la Fase B.
+
+> **El premio, y la razón para priorizarlo.** Hoy `ConstantBootstraps.invoke` es un
+> intrínseco en Rust y **no debería serlo**: es código de biblioteca corriente que sólo
+> llama a un handle. Con `MethodHandle.invoke` como nativo —que sí corresponde— se puede
+> reescribir en **dos líneas de Java**. Lo mismo aplica después a `LambdaMetafactory`.
+> O sea que este hito no agrega un intrínseco: **agrega el único que faltaba para poder
+> sacar los otros**, y convierte la frontera Rust/Java de restricción en decisión.
+
+Nótese la ironía útil para planificar: **la mitad testeable es la difícil** (la que de
+verdad desbloquea mover intrínsecos a Java); la que espera al compilador es la cosmética.

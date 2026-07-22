@@ -47,22 +47,48 @@ La categoría más pura: necesitan internos de la VM que el bytecode no puede ex
 | `String.length()` | largo | ✅ (lee el `length` del header del String) |
 | `String.charAt(int)` | un char | ✅ (matiz: nuestro String es UTF-8; OK para ASCII) |
 | `String.equals` / `hashCode` | comparación / hash de contenido | ✅ |
-| `StringBuilder.append` / `toString` | concatenación (lo que compila el `+`) | ⏳ (necesita `StringBuilder`) |
+| `String.valueOf(Object)` | el texto de cualquier objeto | ✅ (**no es hoja**: llama al `toString()` del objeto, así que se intercepta antes del puente de nativos — ver `call_java`) |
+| `StringBuilder.append` / `toString` | concatenación (lo que compila el `+`) | ➖ **no hace falta**: desde Java 9 el `+` no compila a `StringBuilder` sino a un `invokedynamic` con `StringConcatFactory`, que ya corre |
 
 ## 5. Sistema / tiempo / concurrencia
 | Intrínseco | Qué hace | Estado |
 |---|---|---|
-| `System.currentTimeMillis()` / `nanoTime()` | leer el reloj del SO (native) | ⏳ (devuelven `long`, que no modelamos) |
+| `System.currentTimeMillis()` / `nanoTime()` | leer el reloj del SO (native) | 🟢 (el `long` ya se modela; sólo falta el nativo) |
 | `System.exit(int)` | terminar la VM | 🟢 (necesita una señal especial para frenar la VM) |
-| `Thread.currentThread()` | el hilo actual | ⏳ (necesita modelar hilos → A6) |
+| `Thread.currentThread()` | el hilo actual | 🟢 (los hilos ya existen; es parte del hito **H1**, la API de `Thread`) |
 
 ## Lo que tenemos hoy (✅)
 
-**Introspección/identidad:** `Object.getClass()`, `Object.hashCode()`, `System.identityHashCode()`.
+**Introspección/identidad:** `Object.getClass()`, `Object.hashCode()`, `System.identityHashCode()`, `Class.isInstance()`.
 **Arrays:** `System.arraycopy()` (elementos de 4 bytes).
 **Matemática:** `Math.abs/max/min` (int), `Integer.bitCount`, `Integer.numberOfLeadingZeros`.
-**Strings:** `String.length()`.
+**Strings:** `String.length()`, `charAt()`, `equals()`, `hashCode()`, `valueOf(Object)`.
 **I/O (native, no intrínseco estricto):** `PrintStream.println(int)` y `println(String)`.
+
+## Un intrínseco que dejó de ser terminal
+
+El criterio de este documento —"lo que Java no puede hacerse a sí mismo"— sigue siendo el
+correcto, pero durante mucho tiempo arrastró una limitación que no era parte del criterio:
+**un nativo sólo podía calcular y devolver**. No podía llamar de vuelta a Java. Eso obliga
+a reimplementar en Rust cualquier cosa que el nativo necesite de la biblioteca, y así fue
+como el formato de `double` terminó a medias en Rust en lugar de en `Double.toString`.
+
+`JVM::call_java` cerró ese agujero: la VM empuja un frame propio y lo corre hasta el final,
+igual que venía haciendo con `<clinit>`. Con eso un intrínseco puede **preguntarle a Java**.
+
+Cambia dónde conviene poner las cosas:
+
+- `String.valueOf(Object)` puede llamar al `toString()` del objeto, así que vive en la VM
+  pero **delega la semántica** al usuario.
+- El `equals`/`hashCode` de un `record` pregunta a cada componente en vez de comparar
+  referencias — que daba la respuesta equivocada en silencio.
+- Los *bootstrap methods* de `invokedynamic` son intrínsecos hoy **por falta de
+  `MethodHandle` como objeto**, no por el criterio. Cuando exista, `ConstantBootstraps.invoke`
+  se reescribe en dos líneas de Java y sale de esta lista.
+
+La regla que queda, más afilada: **es intrínseco lo que toca estado que Java no puede
+nombrar** (el header de un objeto, el scheduler, el GC, la identidad). No lo que
+simplemente todavía no escribimos en Java.
 
 Cableado: despacho nativo en `invokestatic` *y* `invokevirtual`; `natives::dispatch` con `&mut Heap`; clases `boot/` `Math`/`Integer`/`Class` + `Object`/`System`/`String`/`PrintStream` extendidas.
 

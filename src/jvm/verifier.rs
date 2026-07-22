@@ -506,6 +506,28 @@ fn transfer(
                 }
             }
 
+            // invokedynamic → pop the parameters, push the return type. Type-wise it is
+            // just `invokestatic` with no receiver and no owning class: the descriptor
+            // of the call site says everything, which is precisely why the verifier can
+            // check an indy site without knowing what the bootstrap method will produce.
+            0xba => {
+                let (site_name, desc) = class
+                    .invokedynamic_site(u2(bytes, pc))
+                    .map(|(_, n, d)| (n.to_string(), d.to_string()))
+                    .ok_or_else(|| err(&name, pc, "invokedynamic: bad InvokeDynamic constant"))?;
+                // The call site's name must be a valid *unqualified* method name, which
+                // rules out the two the VM reserves for itself.
+                reject_special_name(&site_name, "invokedynamic", &name, pc)?;
+                check_invokedynamic_zeros(bytes, pc, &name)?;
+                for param in parse_params(&desc).iter().rev() {
+                    let v = pop(&mut state, &name, pc)?;
+                    expect(&v, param, metaspace, &name, pc)?;
+                }
+                if let Some(ret) = return_type(&desc) {
+                    state.stack.push(ret);
+                }
+            }
+
             // ireturn → pop an int; method ends (no fall-through).
             0xac => {
                 let v = pop(&mut state, &name, pc)?;
@@ -1310,6 +1332,24 @@ fn check_invokeinterface_count(bytes: &[u8], pc: usize, desc: &str, method: &str
     Ok(())
 }
 
+/// Validates an `invokedynamic`'s trailing operands (JVMS §4.9.1). The instruction is
+/// `ba idx1 idx2 00 00`: the third and fourth operand bytes are **reserved and must be
+/// zero**. They exist only so the instruction is the same width as `invokeinterface` —
+/// nothing reads them — which is exactly why a non-zero value there means the bytecode
+/// was not produced by a conforming compiler.
+fn check_invokedynamic_zeros(bytes: &[u8], pc: usize, method: &str) -> Result<(), VerifyError> {
+    for (offset, ordinal) in [(3usize, "3rd"), (4, "4th")] {
+        if bytes[pc + offset] != 0 {
+            return Err(err(
+                method,
+                pc,
+                format!("invokedynamic {ordinal} byte must be 0, got {}", bytes[pc + offset]),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Looks up the `cp` Fieldref and applies the protected-access rule to it (see
 /// [`check_protected_access`]). A no-op if the field reference can't be read.
 fn check_protected_field(
@@ -1617,6 +1657,9 @@ fn ldc_type(class: &ClassFile, cp: u16) -> VType {
         Some(ConstantPoolEntry::String { .. }) => VType::Reference("java/lang/String".to_string()),
         Some(ConstantPoolEntry::Integer(_)) => VType::Int,
         Some(ConstantPoolEntry::Float(_)) => VType::Float,
+        // A class literal pushes the mirror, whose static type is `Class` — *not* the
+        // class the constant names. `Foo.class` has type `Class`, not `Foo`.
+        Some(ConstantPoolEntry::Class { .. }) => VType::Reference("java/lang/Class".to_string()),
         _ => VType::Top,
     }
 }
@@ -1872,6 +1915,32 @@ mod tests {
         assert_eq!(VType::Int.join(&reference("Dog"), &mut ms), VType::Top);
     }
 
+    /// The reserved operands of `ba idx1 idx2 00 00` must be zero (JVMS §4.9.1). Nothing
+    /// reads them — they exist only to make the instruction as wide as
+    /// `invokeinterface` — so a non-zero byte there is a reliable sign the bytecode did
+    /// not come from a conforming compiler.
+    #[test]
+    fn invokedynamic_rejects_non_zero_reserved_bytes() {
+        assert!(check_invokedynamic_zeros(&[0xba, 0, 1, 0, 0], 0, "m").is_ok());
+
+        let third = check_invokedynamic_zeros(&[0xba, 0, 1, 1, 0], 0, "m")
+            .expect_err("a non-zero 3rd byte must be rejected");
+        assert!(third.message.contains("3rd"), "the message should name the byte: {third:?}");
+
+        let fourth = check_invokedynamic_zeros(&[0xba, 0, 1, 0, 7], 0, "m")
+            .expect_err("a non-zero 4th byte must be rejected");
+        assert!(fourth.message.contains("4th"), "the message should name the byte: {fourth:?}");
+    }
+
+    /// An indy call site names a method that does not exist yet, but the name still has
+    /// to be a valid *unqualified* name — which excludes the two the VM reserves.
+    #[test]
+    fn invokedynamic_rejects_the_reserved_method_names() {
+        assert!(reject_special_name("makeConcatWithConstants", "invokedynamic", "m", 0).is_ok());
+        assert!(reject_special_name("<init>", "invokedynamic", "m", 0).is_err());
+        assert!(reject_special_name("<clinit>", "invokedynamic", "m", 0).is_err());
+    }
+
     fn verify(class_file: &str, method: &str) -> Result<(), VerifyError> {
         let mut ms = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
         let class = ClassFile::from_path(class_file).expect("load class");
@@ -1915,6 +1984,41 @@ mod tests {
         // Garbage.run: new/dup/invokespecial <init>, astore/aload, getfield, ireturn —
         // the object core, with the uninitialised → initialised transition.
         verify("java/Garbage.class", "run").expect("Garbage.run should verify");
+    }
+
+    #[test]
+    fn verifies_record_methods() {
+        // Point's three methods have `invokedynamic` bodies; RecordOps drives them.
+        verify("java/Point.class", "toString").expect("Point.toString should verify");
+        verify("java/Point.class", "hashCode").expect("Point.hashCode should verify");
+        verify("java/Point.class", "equals").expect("Point.equals should verify");
+        verify("java/RecordOps.class", "run").expect("RecordOps.run should verify");
+    }
+
+    #[test]
+    fn verifies_type_switch() {
+        // TypeSwitch.classify: an indy call site of shape `(Object, int) -> int` feeding
+        // a `tableswitch` whose low case is **-1** (the null arm). The verifier judges
+        // the call site from its descriptor alone — it never learns which classes the
+        // labels name — which is why an unlinked pattern switch is still type-safe.
+        verify("java/TypeSwitch.class", "classify").expect("TypeSwitch.classify should verify");
+        verify("java/TypeSwitch.class", "run").expect("TypeSwitch.run should verify");
+    }
+
+    #[test]
+    fn verifies_class_literals() {
+        // ClassLit.run: `ldc` of Class constants, compared by reference and passed to
+        // `Class.isInstance`. The pushed type is `Class` — *not* the class the constant
+        // names — which is what lets `Object o = Foo.class` verify.
+        verify("java/ClassLit.class", "run").expect("ClassLit.run should verify");
+    }
+
+    #[test]
+    fn verifies_invokedynamic() {
+        // Concat.run: eight indy call sites. The verifier judges them from the call
+        // site's descriptor alone — it never has to know what the bootstrap method
+        // will produce, which is exactly why an unlinked indy is still type-safe.
+        verify("java/Concat.class", "run").expect("Concat.run should verify");
     }
 
     #[test]

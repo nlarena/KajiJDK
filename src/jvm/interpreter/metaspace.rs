@@ -68,6 +68,9 @@ struct MethodBody {
     class: String,
     /// The method's own name (for tooling/labels).
     name: String,
+    /// The method's descriptor — kept so an already-resolved method can still be told
+    /// from its overloads, which the name alone can't do.
+    descriptor: String,
     max_locals: usize,
     /// Declared argument count, parsed from the descriptor once at resolution.
     arg_count: usize,
@@ -123,6 +126,15 @@ pub struct MetaspaceService {
     /// from a Class ID found in the wild (an object header, say) back to the class,
     /// without scanning. Kept in sync inside [`Self::class_id`].
     names_by_id: HashMap<String, String>,
+    /// Reference-slot layout of **synthetic** classes — the ones the VM mints itself,
+    /// which have no `.class` file to read a field layout from. Today that means lambda
+    /// objects, whose captured values sit right after the header.
+    ///
+    /// It lives here, rather than with the lambda machinery, because this is where the
+    /// **GC already looks**: the collector finds an object's outgoing references through
+    /// the metaspace, so a layout registered here is traced without threading anything
+    /// new through the collector.
+    synthetic_reference_slots: HashMap<String, Vec<usize>>,
     /// The source of those UUIDs, seeded once for the whole metaspace (so ids never
     /// collide from reseeding — see [`UuidGenerator`]).
     uuid_gen: UuidGenerator,
@@ -148,6 +160,7 @@ impl MetaspaceService {
             class_objects: HashMap::new(),
             class_ids: HashMap::new(),
             names_by_id: HashMap::new(),
+            synthetic_reference_slots: HashMap::new(),
             uuid_gen: UuidGenerator::new(),
             vtables: HashMap::new(),
             init_states: HashMap::new(),
@@ -390,6 +403,7 @@ impl MetaspaceService {
         self.methods.push(MethodBody {
             class: class.to_string(),
             name: name.to_string(),
+            descriptor: descriptor.to_string(),
             max_locals,
             arg_count: argument_count(descriptor),
             code,
@@ -476,6 +490,24 @@ impl MetaspaceService {
     /// A resolved method's own name (for tooling labels).
     pub fn name(&self, method: MethodId) -> &str {
         &self.methods[method].name
+    }
+
+    /// A resolved method's descriptor — needed to tell overloads apart once a call has
+    /// already been resolved (`valueOf(Object)` from `valueOf(int)`, say).
+    pub fn descriptor(&self, method: MethodId) -> &str {
+        &self.methods[method].descriptor
+    }
+
+    /// Declares where a synthetic class keeps its references, as byte offsets **within
+    /// an instance**. Idempotent: the same class always has the same layout.
+    pub fn set_synthetic_reference_slots(&mut self, class: &str, offsets: Vec<usize>) {
+        self.synthetic_reference_slots.entry(class.to_string()).or_insert(offsets);
+    }
+
+    /// The reference-slot layout of a synthetic class, or `None` for an ordinary one
+    /// (whose layout the GC reads off its class file instead).
+    pub fn synthetic_reference_slots(&self, class: &str) -> Option<&[usize]> {
+        self.synthetic_reference_slots.get(class).map(Vec::as_slice)
     }
 
     /// Searches the classpath for `<name>.class` and parses the first hit. The

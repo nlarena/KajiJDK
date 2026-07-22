@@ -759,6 +759,13 @@ fn reference_slots(metaspace: &MetaspaceService, heap: &HeapService, offset: usi
         Some(name) => name.to_string(),
         None => return Vec::new(),
     };
+    // A **synthetic** class (one the VM minted, like a lambda's) has no class file to
+    // read a layout from, so it declares one. Without this its captured references would
+    // be invisible to the collector: never marked, never rewritten when the object moves.
+    if let Some(slots) = metaspace.synthetic_reference_slots(&class) {
+        return slots.iter().map(|&within| offset + within).collect();
+    }
+
     if class.starts_with('[') {
         array_reference_slots(heap, offset, &class)
     } else {
@@ -961,6 +968,167 @@ mod tests {
             Some(Value::Int(v)) => v,
             other => panic!("expected an int result, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn call_java_runs_a_method_and_hands_back_its_result() {
+        // The capability that stops intrinsics from being terminal: the VM invokes a Java
+        // method from the outside and gets the value back. Class initialization has
+        // always done the frame-pushing half; what is new is capturing a result, which a
+        // `void` `<clinit>` never exercises.
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::bytecode_interpreter::JVM;
+        use crate::jvm::interpreter::frame::Frame;
+        use std::path::PathBuf;
+
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let class = ClassFile::from_path("java/Lambdas.class").expect("load Lambdas");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run");
+        let twice = metaspace.resolve_method(&name, "twice", "(I)I").expect("twice");
+        let max_locals = metaspace.max_locals(entry);
+
+        // A JVM parked on `run`, which never executes: `call_java` drives `twice` on top
+        // of it and unwinds back, leaving the caller exactly as it was.
+        let mut jvm = JVM::new(metaspace, Frame::new(entry, max_locals, Vec::new()));
+        assert_eq!(jvm.call_java(twice, vec![Value::Int(21)], &[1]), Some(Value::Int(42)));
+
+        // And a second call is independent — the nested loop leaves no residue.
+        assert_eq!(jvm.call_java(twice, vec![Value::Int(-3)], &[1]), Some(Value::Int(-6)));
+    }
+
+    #[test]
+    fn concatenating_an_object_asks_it_for_its_text() {
+        // `"x" + obj`. javac emits `String.valueOf(Object)` *before* the concatenation
+        // call site, so the indy only ever sees Strings — which means the interesting
+        // work isn't in the opcode at all. `valueOf` has to call the object's own
+        // `toString()`, a virtual call back into user bytecode, so it is intercepted
+        // ahead of the native bridge rather than being a leaf native.
+        assert_eq!(run_int("java/ObjConcat.class"), 42);
+    }
+
+    #[test]
+    fn record_with_a_reference_component_asks_the_component() {
+        // `RecStr(String, int)`. Everything here depends on asking the component itself:
+        // the two `"bob"` literals are distinct heap objects (nothing is interned), so
+        // comparing the *references* — which is what this did before — answered `false`
+        // where Java answers `true`. The hash likewise folds the String's own, and the
+        // text comes from its `toString`. The expected hash (3029228) was read off the
+        // real `java` rather than derived, and `java` returns 42 on the same class file.
+        assert_eq!(run_int("java/RecStrOps.class"), 42);
+    }
+
+    #[test]
+    fn enum_pattern_switch_resolves_its_dynamic_labels() {
+        // The whole of D4 in one demo. Each case label is a *dynamic constant* whose
+        // value is produced by `ConstantBootstraps.invoke` — which means the VM has to
+        // run Java (`ClassDesc.of`, then `Enum$EnumDesc.of`) just to know what the label
+        // *is*. The two labels share one `ClassDesc` condy, so the cache is part of the
+        // design rather than an optimisation. Real `java` returns 42 on the same file.
+        assert_eq!(run_int("java/EnumSwitch.class"), 42);
+    }
+
+    #[test]
+    fn enum_constants_carry_name_and_ordinal() {
+        // Enums ran even before `java.lang.Enum` existed: the constants are created by
+        // the class's `<clinit>`, and the unresolvable superclass `<init>` no-opped (the
+        // same escalón the exception hierarchy uses), so identity comparison was already
+        // right. With a real `java.lang.Enum` in `boot/` they also carry state — the
+        // `name()`/`ordinal()` checks fail unless its constructor genuinely runs, which
+        // is what distinguishes "the superclass exists" from "the call no-ops".
+        assert_eq!(run_int("java/EnumProbe.class"), 42);
+    }
+
+    #[test]
+    fn a_captured_reference_survives_a_collection() {
+        // A lambda capturing a String, with a `System.gc()` in between. The capture lives
+        // in a synthetic class the VM mints — no class file, so no field descriptors for
+        // the collector to walk. It is visible only because the class **declares its
+        // reference layout** to the metaspace, which is where `reference_slots` looks.
+        //
+        // Without that the test fails two different ways: the String may be collected out
+        // from under the lambda, and a moving collection leaves the capture pointing at
+        // the old address. Real `java` returns 42 too.
+        assert_eq!(run_int("java/LambdaRef.class"), 42);
+    }
+
+    #[test]
+    fn lambda_capture_reaches_the_implementation() {
+        // The smallest capturing lambda: `int n = 5; a -> a + n` called with 10. The
+        // capture becomes the implementation's leading parameter, so `lambda$run$0(5, 10)`
+        // must run and give 15.
+        assert_eq!(run_int("java/L2.class"), 15);
+    }
+
+    #[test]
+    fn lambdas_and_method_references_run() {
+        // `Lambdas.run()` covers a lambda with no capture, a method reference, and a
+        // capture (which becomes the implementation's *leading* parameter). The decisive
+        // case is `adder(1)` vs `adder(2)`: one call site, two objects, two captures —
+        // which is why the captured values live in each object while the shape (the
+        // implementation method) is shared by the site. Real `java` returns 42 too.
+        assert_eq!(run_int("java/Lambdas.class"), 42);
+    }
+
+    #[test]
+    fn record_methods_run_from_one_bootstrap() {
+        // `RecordOps.run()` drives the `Point` record. Its `equals`/`hashCode`/`toString`
+        // all come from a *single* BootstrapMethods entry — `ObjectMethods.bootstrap` —
+        // and are told apart only by the call site's **name**, which is why discarding
+        // that name would have collapsed the three into one. The demo pins value
+        // equality (distinct objects, equal components), rejection of null and of a
+        // different class, the exact `31*acc + h` folding, and the
+        // `Point[x=1, y=2]` layout. Real `java` returns 42 on the same class files.
+        assert_eq!(run_int("java/RecordOps.class"), 42);
+    }
+
+    #[test]
+    fn type_switch_selects_the_matching_case() {
+        // `TypeSwitch.run()` drives a pattern `switch` — an `invokedynamic` bootstrapped
+        // by `SwitchBootstraps.typeSwitch`, whose call site answers *which case to run*
+        // as an index the `tableswitch` consumes. The demo pins all three outcomes of
+        // the contract: null → -1, the index of the first matching label, and
+        // labels.length → default. It also checks that a subclass matches a superclass
+        // label, so the match walks the hierarchy instead of comparing identity.
+        // Real `java` returns 42 on the same class file.
+        assert_eq!(run_int("java/TypeSwitch.class"), 42);
+    }
+
+    #[test]
+    fn ldc_of_a_class_literal_pushes_the_mirror() {
+        // `ClassLit.run()` does six `ldc`s of Class constants. The demo checks the two
+        // properties that matter: the mirror is **cached by Class ID**, so the same
+        // literal evaluated twice is the *same* reference (`Foo.class == Foo.class`),
+        // and distinct classes never collapse onto one mirror. It then feeds the mirror
+        // to `Class.isInstance`, proving it's a real object the natives can use. Real
+        // `java` returns 42 on the same class file.
+        assert_eq!(run_int("java/ClassLit.class"), 42);
+    }
+
+    #[test]
+    fn invokedynamic_renders_floats_like_java() {
+        // The call site descriptor is `(DF)`, so the double and float arrive raw and the
+        // VM renders them itself. Java prints `1.0` where Rust's `Display` prints `1`,
+        // so the concatenation goes through `float_to_decimal` — the same Java-faithful
+        // formatter that makes `javap` byte-identical — instead of `to_string()`. Real
+        // `java` returns 42 on this same class file.
+        assert_eq!(run_int("java/ConcatFloat.class"), 42);
+    }
+
+    #[test]
+    fn invokedynamic_runs_string_concatenation() {
+        // `Concat.run()` is eight `invokedynamic` call sites, all bootstrapped by
+        // StringConcatFactory.makeConcatWithConstants — which is what every `+` on
+        // strings has compiled to since Java 9. The demo pins the cases where the
+        // *descriptor* decides the rendering rather than the `Value`: a `char` must
+        // print as 'A' and not 65, a `boolean` as `true` and not `1`. It also covers a
+        // String argument read back out of the heap, a category-2 `long`, several
+        // arguments spliced by one call site, and a null rendering as "null". Each
+        // failure returns its own negative code; 42 means all of them held, and the
+        // real `java` of JDK 25 agrees on the same class file.
+        assert_eq!(run_int("java/Concat.class"), 42);
     }
 
     #[test]

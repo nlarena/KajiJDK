@@ -11,4 +11,13 @@ public final class String {
     public native boolean equals(Object o);
 
     public native int hashCode();
+
+    // The text of any object: `null` becomes "null", a String is itself, anything else
+    // answers with its own `toString()`. Declared native, but the VM intercepts it before
+    // the native bridge — it is *not* a leaf operation: calling `toString()` is a virtual
+    // call back into user bytecode, which a native cannot make.
+    //
+    // `javac` emits this ahead of every string concatenation that splices an object, so
+    // the concatenation call site itself only ever sees Strings.
+    public static native String valueOf(Object o);
 }
