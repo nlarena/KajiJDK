@@ -64,13 +64,31 @@ pub enum Step {
     Return(Option<Value>),
 }
 
-/// A thread's scheduling state. The scheduler only runs `Runnable` threads. `Blocked` =
-/// waiting to acquire a contended monitor; `Waiting` = parked in `wait()` until notified.
+/// A thread's scheduling state. The scheduler only runs `Runnable` threads; every other
+/// state is a kind of parked. The distinctions mirror `java.lang.Thread.State` — they say
+/// *why* a thread is parked, not *how* — because that is what `Thread.getState()` reports
+/// and what a stop-the-world handshake (removing the GIL) will need to ask.
+///
+/// The state names the **reason**, not the mechanism: `sleep`, `join` and a contended
+/// `monitorenter` all park the same way, but they are `TimedWaiting`, `Waiting` and
+/// `Blocked` respectively. That information used to live *beside* the status (in
+/// `sleep_until`/`joining_on`); folding it into the state is the point of this enum.
+///
+/// `NEW` (created, not started) has no representation here on purpose: a [`GreenThread`]
+/// only exists once it has started, so `getState()` derives `NEW` from the *absence* of a
+/// scheduler slot rather than from a state the scheduler could never be in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ThreadStatus {
+    /// Running, or ready to run — the only state the scheduler will dispatch.
     Runnable,
+    /// Waiting to acquire a **contended monitor** (`synchronized`). Java's `BLOCKED`.
     Blocked,
+    /// Parked in `wait()` or `join()` with **no deadline**, until notified/woken.
     Waiting,
+    /// Parked with a **deadline**: `sleep(ms)`, or `wait(ms)` — returns even without a
+    /// notify once the time passes. Java's `TIMED_WAITING`.
+    TimedWaiting,
+    /// The thread finished (its `run()` returned). Terminal.
     Terminated,
 }
 
@@ -131,6 +149,14 @@ pub struct GreenThread {
     pub joining_on: Option<usize>,
     /// Set while in `sleep`: the logical step (opcode clock) at which to wake.
     pub sleep_until: Option<usize>,
+    /// Set when the thread was **interrupted out of** an interruptible block
+    /// (`sleep`/`join`/`wait`): on resume it throws `InterruptedException` instead of
+    /// continuing. See the resume check at the top of [`JVM::run_one`].
+    pub interrupt_pending: bool,
+    /// The pc of the blocking call the thread is parked at. An interrupt throws
+    /// `InterruptedException` *from this pc*, not from the instruction after the call —
+    /// the exception table covers the call, so throwing past it would miss the handler.
+    pub block_call_pc: usize,
     /// **OS mode only.** Handle to this thread's `std::thread`, so other threads can
     /// `unpark` it when they make it runnable (monitor release, notify, join-wake,
     /// sleeper-wake). `None` in green mode and for the main thread (driven directly).
@@ -189,8 +215,12 @@ pub struct JVM {
     threads: Vec<GreenThread>,
     /// Index of the running thread in `threads` (thread 0 is the entry/`main` thread).
     current: usize,
-    /// Monotonic id for the next spawned thread.
+    /// Monotonic id for the next spawned thread (the scheduler's internal id).
     next_thread_id: usize,
+    /// Counter behind `Thread.nextThreadNum()` — the id a `Thread` object is stamped with
+    /// at construction. Separate from `next_thread_id` because it advances at *construction*
+    /// (every `new Thread()`), not at `start`. `main`'s lazily-built object takes id 0.
+    java_thread_counter: i64,
     /// Object monitors for `synchronized`, keyed by the lock object's heap offset.
     /// Created lazily on first `monitorenter`.
     monitors: std::collections::HashMap<usize, Monitor>,
@@ -252,11 +282,14 @@ impl JVM {
                 wait_reacquire: None,
                 joining_on: None,
                 sleep_until: None,
+                interrupt_pending: false,
+                block_call_pc: 0,
                 os_handle: None,
                 os_spawned: true, // the main thread is driven by execute_os' own thread
             }],
             current: 0,
             next_thread_id: 1,
+            java_thread_counter: 1, // main's lazily-built object takes 0; the first `new Thread()` takes 1
             monitors: std::collections::HashMap::new(),
             lambdas: std::collections::HashMap::new(),
             condy: std::collections::HashMap::new(),
@@ -489,6 +522,7 @@ impl JVM {
                         ThreadStatus::Runnable => "runnable",
                         ThreadStatus::Blocked => "blocked",
                         ThreadStatus::Waiting => "waiting",
+                        ThreadStatus::TimedWaiting => "timed_waiting",
                         ThreadStatus::Terminated => "terminated",
                     },
                     method,
@@ -579,6 +613,23 @@ impl JVM {
         std::mem::swap(&mut self.frames, &mut self.threads[self.current].frames);
     }
 
+    /// Park thread `idx` — the single "block" primitive, the mirror of [`make_runnable`].
+    /// `status` says *why* it parks (`Blocked`/`Waiting`/`TimedWaiting`), which is the
+    /// distinction `getState()` reports and a stop-the-world handshake will read. Every
+    /// place that transitions a thread *out of* `Runnable` (short of terminating) goes
+    /// through here, so "who is parked, and why" has one authority instead of being
+    /// scattered across the blocking opcodes.
+    ///
+    /// It only records the state: the actual `park` in OS mode happens in the driver loop
+    /// when it sees the thread is no longer runnable, exactly as before.
+    fn block(&mut self, idx: usize, status: ThreadStatus) {
+        debug_assert!(
+            matches!(status, ThreadStatus::Blocked | ThreadStatus::Waiting | ThreadStatus::TimedWaiting),
+            "block() is for parked states; Runnable goes through make_runnable, Terminated through on_thread_terminated",
+        );
+        self.threads[idx].status = status;
+    }
+
     /// Mark thread `idx` runnable — the single "wake" primitive. In OS mode it also
     /// `unpark`s the thread's `std::thread` (it may be parked waiting for exactly this);
     /// in green mode the round-robin scheduler will simply pick it up. Every place that
@@ -632,6 +683,109 @@ impl JVM {
     /// Spawns a green thread for `Thread.start()`: it runs the receiver's `run()`
     /// (virtual dispatch on the receiver's class), parked `Runnable` until the scheduler
     /// picks it. `start()` itself returns immediately to the caller.
+    /// Whether the `Thread` object `receiver` already has a scheduler slot — i.e. it was
+    /// started at some point. The slot outlives the thread (a `Terminated` slot stays), so
+    /// this is `true` for a running, blocked *or* finished thread — all the cases where a
+    /// second `start()` is illegal. The absence of a slot is exactly the `NEW` state.
+    fn already_started(&self, receiver: usize) -> bool {
+        receiver != 0 && self.threads.iter().any(|t| t.thread_obj == receiver)
+    }
+
+    /// `Thread.currentThread()`: the running thread's `Thread` object. A spawned thread
+    /// already has one (its slot's `thread_obj`); the **main** thread doesn't, so its object
+    /// is built lazily on first ask — name `"main"`, id `0`. Because `thread_obj` is a GC
+    /// root, the object we store here survives collections (that is *why* it became a root).
+    fn thread_current(&mut self) -> usize {
+        let current = self.current;
+        if self.threads[current].thread_obj != 0 {
+            return self.threads[current].thread_obj;
+        }
+        // Main's object: allocate a bare `Thread` (its `<init>` is *not* run — main was
+        // never `new`ed), then stamp the two fields `<init>` would have set.
+        class_operations::load_class(&mut self.metaspace, &mut self.heap, "java/lang/Thread");
+        let obj = objects_operations::allocate(&mut self.metaspace, &mut self.heap, "java/lang/Thread");
+        let name = strings::intern(&mut self.metaspace, &mut self.heap, "main");
+        let name_at = obj + objects_operations::field_offset(&mut self.metaspace, "java/lang/Thread", "name");
+        self.heap.store_reference(obj, name_at, name);
+        // `tid` (a long) is left 0 by `allocate`'s zeroing — main is thread 0.
+        self.threads[current].thread_obj = obj;
+        obj
+    }
+
+    /// `Thread.nextThreadNum()`: hand out the next construction-time thread id.
+    fn next_java_thread_num(&mut self) -> i64 {
+        let id = self.java_thread_counter;
+        self.java_thread_counter += 1;
+        id
+    }
+
+    /// `Thread.interrupt0()`: the VM half of interruption — **wake** the target if it is
+    /// parked in an *interruptible* block, so it can throw `InterruptedException`. The flag
+    /// itself was already set on the object by the Java `interrupt()`; this only handles
+    /// waking, and does nothing for a thread that isn't blocked (it will see the flag by
+    /// polling) or has no slot (`NEW`, already flagged on the object).
+    ///
+    /// Only `Waiting`/`TimedWaiting` are interruptible: `sleep`, `join`, and `wait`. A
+    /// `Blocked` thread (contending for a monitor) is **not** interruptible — Java's
+    /// `synchronized` entry can't be interrupted (that's what `lockInterruptibly` is for).
+    ///
+    /// **The notify/interrupt race.** For a `wait`, `notify` and `interrupt` compete for
+    /// the same thread. The GIL serialises them, and keying off the *status* resolves it
+    /// with no lost notification:
+    /// - notify **first** → the thread is already `Blocked` (moved to the blocked-set), so
+    ///   this sees `Blocked` and does nothing: it returns from `wait` normally, having
+    ///   consumed the notification, with its interrupt flag still set (a later poll sees it).
+    /// - interrupt **first** → the thread leaves the wait-set here, so a subsequent
+    ///   `notify` targets some *other* waiter. Nothing is lost.
+    ///
+    /// A thread can never both consume a notification *and* throw, so the notification is
+    /// never dropped. (Removing the GIL would make this need explicit atomicity.)
+    fn thread_interrupt(&mut self, target_obj: usize) {
+        // Set the flag first, so it's observable in *every* state (a NEW thread with no slot,
+        // a running thread that will poll, a blocked thread about to throw).
+        self.set_interrupt_flag(target_obj);
+
+        let idx = match self.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0) {
+            Some(i) => i,
+            None => return, // no slot (NEW / terminated already gone): flag on the object is enough
+        };
+        if !matches!(self.threads[idx].status, ThreadStatus::Waiting | ThreadStatus::TimedWaiting) {
+            return; // Runnable / Blocked / Terminated: not an interruptible park
+        }
+        // Pull it out of whatever it's parked in. For `wait`, keep `wait_reacquire` so the
+        // resume re-acquires the monitor *before* throwing; just remove it from the wait-set.
+        self.threads[idx].sleep_until = None;
+        self.threads[idx].joining_on = None;
+        if let Some((obj, _)) = self.threads[idx].wait_reacquire {
+            if let Some(mon) = self.monitors.get_mut(&obj) {
+                mon.waiting.retain(|&w| w != idx);
+            }
+        }
+        self.threads[idx].interrupt_pending = true;
+        self.make_runnable(idx); // green: reschedulable; OS: also `unpark`s the std::thread
+    }
+
+    /// Writes the `interrupted` boolean field of a `Thread` object.
+    fn write_interrupt_flag(&mut self, thread_obj: usize, value: bool) {
+        if thread_obj != 0 {
+            let at =
+                thread_obj + objects_operations::field_offset(&mut self.metaspace, "java/lang/Thread", "interrupted");
+            self.heap.write_u32(at, value as u32);
+        }
+    }
+
+    /// Sets the interrupt flag on a `Thread` object (the object half of `interrupt()`).
+    fn set_interrupt_flag(&mut self, thread_obj: usize) {
+        self.write_interrupt_flag(thread_obj, true);
+    }
+
+    /// Clears the interrupt flag on thread `idx`'s object — done when the throw of
+    /// `InterruptedException` consumes it (JLS).
+    fn clear_interrupt_flag(&mut self, idx: usize) {
+        let obj = self.threads[idx].thread_obj;
+        self.write_interrupt_flag(obj, false);
+    }
+
     fn spawn_thread(&mut self, receiver: usize) {
         let runtime_class = self
             .metaspace
@@ -655,6 +809,8 @@ impl JVM {
             wait_reacquire: None,
             joining_on: None,
             sleep_until: None,
+            interrupt_pending: false,
+            block_call_pc: 0,
             os_handle: None,
             os_spawned: false, // the OS driver launches this slot's std::thread on the next tick
         });
@@ -689,7 +845,7 @@ impl JVM {
             }
         };
         if !acquired {
-            self.threads[current].status = ThreadStatus::Blocked;
+            self.block(current, ThreadStatus::Blocked); // waiting for a contended monitor
         }
         acquired
     }
@@ -840,17 +996,19 @@ impl JVM {
         if let Some(idx) = wake {
             self.make_runnable(idx);
         }
-        self.threads[current].status = ThreadStatus::Waiting;
-        self.threads[current].wait_reacquire = Some((obj, saved));
         // Timed `wait(ms)`: a deadline (opcode-ticks in green; real time in OS mode) after
         // which the wait returns even without a `notify`. `expire_timed_block` then pulls
         // the thread out of the wait-set so the re-acquire path resumes it (a self-notify).
-        // `wait(0)` / `wait()` is an indefinite wait (no deadline).
-        if let Some(ms) = timeout {
-            if ms > 0 {
-                self.threads[current].sleep_until = Some(self.steps + ms as usize);
-            }
+        // `wait(0)` / `wait()` is an indefinite wait (no deadline) — so a deadline is what
+        // tells `Waiting` from `TimedWaiting`, exactly as Java distinguishes them.
+        self.threads[current].block_call_pc = self.frame().pc(); // for a possible interrupt throw
+        let timed = matches!(timeout, Some(ms) if ms > 0);
+        if timed {
+            let ms = timeout.expect("timed implies Some") as usize;
+            self.threads[current].sleep_until = Some(self.steps + ms);
         }
+        self.block(current, if timed { ThreadStatus::TimedWaiting } else { ThreadStatus::Waiting });
+        self.threads[current].wait_reacquire = Some((obj, saved));
         self.advance_past_call(); // resume *after* wait() once the monitor is re-acquired
         Step::Continue
     }
@@ -875,7 +1033,9 @@ impl JVM {
         };
         for idx in woken {
             self.monitors.entry(obj).or_default().blocked.push(idx);
-            self.threads[idx].status = ThreadStatus::Blocked;
+            // Notified, but not runnable yet: it must re-acquire the monitor first, so it
+            // is contending for a lock — `Blocked`, like any other monitor contender.
+            self.block(idx, ThreadStatus::Blocked);
         }
         self.advance_past_call();
         Step::Continue
@@ -885,16 +1045,48 @@ impl JVM {
     /// terminates (woken in `step` when that thread ends). If it already finished — or
     /// was never `start`ed — `join` returns at once.
     fn thread_join(&mut self, target_obj: usize) -> Step {
+        let current = self.current;
+        // Grab the call site *before* advancing, in case an interrupt has to throw from it.
+        self.threads[current].block_call_pc = self.frame().pc();
         self.advance_past_call(); // resume after join() (now, or once the target ends)
         let target = self.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0);
         if let Some(idx) = target {
             if self.threads[idx].status != ThreadStatus::Terminated {
-                let current = self.current;
-                self.threads[current].status = ThreadStatus::Blocked;
+                // `join()` with no timeout is an indefinite wait on another thread, not
+                // monitor contention — `Waiting`, not `Blocked`. (This was `Blocked`.)
+                self.block(current, ThreadStatus::Waiting);
                 self.threads[current].joining_on = Some(idx);
             }
         }
         Step::Continue
+    }
+
+    /// `Thread.getState()`: the scheduler's state for the thread whose `Thread` object is
+    /// `thread_obj`, mapped to the matching `Thread.State` constant (returns its heap
+    /// offset). The mapping is the whole point of the `ThreadStatus` enum carrying the
+    /// *reason* a thread is parked — the translation is now one-to-one.
+    ///
+    /// `NEW` is **derived**: a `Thread` that was created but never started has no scheduler
+    /// slot, so the absence of a slot *is* how the VM says `NEW`.
+    fn thread_get_state(&mut self, thread_obj: usize) -> usize {
+        let constant = match self.threads.iter().find(|t| t.thread_obj == thread_obj && thread_obj != 0) {
+            None => "NEW", // created but not started — no slot exists yet
+            Some(t) => match t.status {
+                ThreadStatus::Runnable => "RUNNABLE",
+                ThreadStatus::Blocked => "BLOCKED",
+                ThreadStatus::Waiting => "WAITING",
+                ThreadStatus::TimedWaiting => "TIMED_WAITING",
+                ThreadStatus::Terminated => "TERMINATED",
+            },
+        };
+        // The constant objects don't exist until `Thread$State.<clinit>` has run.
+        self.ensure_initialized("java/lang/Thread$State");
+        class_operations::static_reference(
+            &mut self.metaspace,
+            &mut self.heap,
+            "java/lang/Thread$State",
+            constant,
+        )
     }
 
     /// `Thread.sleep(ms)`: park the current thread until `ms` opcode-ticks pass (our
@@ -902,7 +1094,11 @@ impl JVM {
     /// the sleeper is woken in `step` once the clock reaches its wake time.
     fn thread_sleep(&mut self, ms: i64) -> Step {
         let current = self.current;
-        self.threads[current].status = ThreadStatus::Blocked;
+        // Remember the call site so an interrupt throws `InterruptedException` from here,
+        // not from the (advanced) instruction after the call.
+        self.threads[current].block_call_pc = self.frame().pc();
+        // `sleep(ms)` has a deadline — `TimedWaiting`, not `Blocked`. (This was `Blocked`.)
+        self.block(current, ThreadStatus::TimedWaiting);
         self.threads[current].sleep_until = Some(self.steps + ms.max(0) as usize);
         self.advance_past_call();
         Step::Continue
@@ -980,9 +1176,23 @@ impl JVM {
             if acquired {
                 self.threads[current].wait_reacquire = None;
             } else {
-                self.threads[current].status = ThreadStatus::Blocked;
+                self.block(current, ThreadStatus::Blocked); // still contending for the monitor
                 return Step::Continue; // can't re-acquire yet — yield and retry
             }
+        }
+
+        // A thread interrupted out of a `sleep`/`join`/`wait` throws `InterruptedException`
+        // now — *after* any monitor re-acquire above (a `wait` must hold its lock again
+        // before it can throw, JLS 17.2). The pc is rewound to the blocking call so the
+        // handler search hits the `try` that wraps it; throwing also **clears** the
+        // interrupt status (JLS: the flag is consumed by the throw).
+        if self.threads[self.current].interrupt_pending {
+            let current = self.current;
+            self.threads[current].interrupt_pending = false;
+            self.clear_interrupt_flag(current);
+            let call_pc = self.threads[current].block_call_pc;
+            self.top().jump(call_pc);
+            return self.throw_exception("java/lang/InterruptedException");
         }
 
         let opcode = self.current_code()[self.pc()];
@@ -2180,7 +2390,9 @@ fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
             }
             match vm.threads[idx].status {
                 ThreadStatus::Terminated => return None,
-                ThreadStatus::Blocked | ThreadStatus::Waiting => os_block_tick(&vm, idx),
+                ThreadStatus::Blocked | ThreadStatus::Waiting | ThreadStatus::TimedWaiting => {
+                    os_block_tick(&vm, idx)
+                }
                 ThreadStatus::Runnable => {
                     vm.activate(idx);
                     let step = vm.run_one();
@@ -2219,12 +2431,15 @@ fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
 fn os_block_tick(vm: &JVM, idx: usize) -> OsTick {
     match vm.threads[idx].status {
         ThreadStatus::Runnable => OsTick::Yield,
-        // Both a `sleep` (Blocked) and a timed `wait(ms)` (Waiting) carry a deadline →
-        // a real-time sleep; an indefinite `wait()`/monitor block parks until unparked.
-        ThreadStatus::Blocked | ThreadStatus::Waiting => match vm.threads[idx].sleep_until {
+        // The state *is* the answer now: only a deadline state (`sleep`/`wait(ms)`) sleeps
+        // for its remaining ticks-as-millis. Before, the driver peeked at `sleep_until` to
+        // guess timed-ness because `sleep` and `wait(ms)` both hid under `Blocked`/`Waiting`.
+        ThreadStatus::TimedWaiting => match vm.threads[idx].sleep_until {
             Some(at) => OsTick::Sleep((at.saturating_sub(vm.steps)).min(200) as u64),
             None => OsTick::Park,
         },
+        // An indefinite block — monitor contention or `wait()`/`join()` — parks until unparked.
+        ThreadStatus::Blocked | ThreadStatus::Waiting => OsTick::Park,
         ThreadStatus::Terminated => OsTick::Park,
     }
 }

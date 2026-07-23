@@ -127,6 +127,12 @@ pub fn dispatch(
             let hash = text.bytes().fold(0i32, |h, b| h.wrapping_mul(31).wrapping_add(b as i32));
             Some(Value::Int(hash))
         }
+        // startsWith(prefix): whether the receiver begins with the argument String.
+        ("java/lang/String", "startsWith", "(Ljava/lang/String;)Z") => {
+            let text = strings::read(heap, reference(&args[0]));
+            let prefix = strings::read(heap, reference(&args[1]));
+            Some(Value::Int(text.starts_with(&prefix) as i32))
+        }
 
         _ => panic!("no native implementation for {class}.{name}{descriptor}"),
     }

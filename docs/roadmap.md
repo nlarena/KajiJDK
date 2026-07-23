@@ -239,7 +239,7 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [x] GC **generacional** (young Eden+survivors por copia / Old; write barrier + remembered set para raíces `old→young`)
 - [x] **Referencias débiles** (`java.lang.ref`: `WeakReference` + `ReferenceQueue`)
 - [x] **Hilos, monitores, `synchronized`** — green threads cooperativos (default + visor) **y** substrato **hilos de SO + GIL** (`JVM_THREADS=os`, E1+E2): `std::thread` por `Thread.start()`, `park`/`unpark`, `wait`/`notify`/`join`, IMSE, `wait(timeout)` y **monitor GC-safe** (las claves se remapean por el *forward* del GC en minor/compact); GC seguro bajo el GIL
-- [ ] **API de `Thread` completa** — `currentThread`/`yield`/nombre/`isAlive`/`getState`, `Thread(Runnable)`, e `interrupt`/`InterruptedException` (que además cierra la interrupción del `wait`) — *H1, próximo*
+- [x] **API de `Thread` (H1)** — `currentThread`/`yield`/nombre/id/`isAlive`, `getState()` con los seis estados (`ThreadStatus` a cinco + `NEW` derivado, un punto único de bloqueo), `Thread(Runnable)` (una lambda lo satisface), `start` dos veces → `IllegalThreadStateException`, e `interrupt`/`InterruptedException` que despierta `sleep`/`join`/`wait` (re-adquiere el monitor antes de lanzar en el `wait`; la carrera notify/interrupt la resuelve el GIL). Faltan periféricos (daemon, prioridad, `ThreadLocal`)
 - [ ] **Sacar el GIL** → paralelismo real (locks finos + TLABs + handshake stop-the-world) — *E3, próximo*
 - [ ] **Modelo de memoria de Java** (`volatile`, happens-before, fences) — recién útil con paralelismo real
 - [x] **Cobertura del set de opcodes — 199/199 alcanzables: completo** — cerrados `nop` (0x00), `goto_w` (0xc8), el prefijo `wide` (0xc4, índices de local de 16 bits: `wide iinc` mide 6 bytes, el resto 4), `multianewarray` (0xc5, alocación recursiva de sólo los `dimensions` niveles indicados, modelado **también en el verificador**) e `invokedynamic` (0xba). Los 3 de `jsr`/`ret`/`jsr_w` quedan **excluidos por diseño** (JVMS §4.9.1 los prohíbe en class files de versión 50.0+, o sea Java 6 en adelante), con la postura **leer sí, ejecutar no**: el desensamblador los soporta completo —requisito de A0— y el gate estructural del verificador los rechaza. Nota de diseño: `subrutinas-jsr-ret.md`.
@@ -401,10 +401,10 @@ El momento épico: las tres piezas funcionando juntas.
 > `wait(timeout)` y monitores GC-safe, y el **set de opcodes completo**: 199 de 199
 > alcanzables, con `invokedynamic` cubriendo 5 de las 6 fábricas que emite `javac`
 > (concatenación, `switch` sobre patrones, records, lambdas y constantes dinámicas).
-> El proyecto pasa **113 tests** sin warnings.
+> El proyecto pasa **120 tests** sin warnings.
 > Detalle vigente en `Concurrencia_KajiJDK.pdf`, `Roadmap_JDK.pdf` e
 > `invokedynamic-ruta.md`.
-> **Siguiente: H1 — API de `Thread` + `interrupt`; después E3 (sacar el GIL).**
+> **Siguiente: E3 — sacar el GIL (paralelismo real). H1 (API de `Thread` + `interrupt`) cerrado.**
 
 **Fase A / Hito A0 — núcleo logrado.** Compila **sin warnings**, 6 tests verdes,
 **12 fixtures byte-idénticos** a `javap`.

@@ -73,6 +73,12 @@ impl JVM {
         if self.metaspace.class_of(callee) == "java/lang/Thread" && descriptor == "()V" {
             match name.as_str() {
                 "start" => {
+                    // A thread can only be started once. A slot for this `Thread` object
+                    // already existing means it was started before — even if it has since
+                    // terminated, since the slot persists. (JLS: restarting is illegal.)
+                    if self.already_started(receiver) {
+                        return self.throw_exception("java/lang/IllegalThreadStateException");
+                    }
                     self.spawn_thread(receiver);
                     self.advance_past_call();
                     return Step::Continue;
@@ -80,6 +86,32 @@ impl JVM {
                 "join" => return self.thread_join(receiver),
                 _ => {}
             }
+        }
+
+        // `Thread.interrupt()`: set the receiver's interrupt flag and wake it if it's parked
+        // in an interruptible block. Handled here (not the native bridge) because it touches
+        // the thread list and scheduler.
+        if self.metaspace.class_of(callee) == "java/lang/Thread"
+            && name == "interrupt"
+            && descriptor == "()V"
+        {
+            self.thread_interrupt(receiver);
+            self.advance_past_call();
+            return Step::Continue;
+        }
+
+        // `Thread.getState()`: reads the scheduler's authoritative state and hands back the
+        // matching `Thread.State` constant. Handled here (not the native bridge) because it
+        // must *initialize* the `State` enum first — its `<clinit>` is what creates the
+        // constant objects — which only the interpreter can drive.
+        if self.metaspace.class_of(callee) == "java/lang/Thread"
+            && name == "getState"
+            && descriptor == "()Ljava/lang/Thread$State;"
+        {
+            let state = self.thread_get_state(receiver);
+            self.top().push(Value::Reference(state));
+            self.advance_past_call();
+            return Step::Continue;
         }
 
         // `Object.wait()` / `notify()` / `notifyAll()`: monitor signalling. Handled here

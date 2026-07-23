@@ -136,6 +136,20 @@ pub fn putstatic(metaspace: &mut MetaspaceService, heap: &mut HeapService, frame
     }
 }
 
+/// Reads a static **reference** field by name from `class`'s mirror, returning the heap
+/// offset it holds. The class must already be **initialized** (its `<clinit>` run), or the
+/// field still holds its default (`0`/null). For natives that hand back a constant an
+/// enum's `<clinit>` created — e.g. a `java.lang.Thread$State` value from `getState()`.
+pub fn static_reference(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    class: &str,
+    field: &str,
+) -> usize {
+    let at = static_slot(metaspace, heap, class, field);
+    heap.read_u32(at) as usize
+}
+
 /// Resolves a static field to its **absolute heap offset** in the declaring class's
 /// mirror. Finds the class that declares the field (statics are reached through the
 /// declaring class, possibly a superclass of the named one), makes sure its mirror

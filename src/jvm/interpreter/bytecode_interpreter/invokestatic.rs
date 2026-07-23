@@ -111,6 +111,44 @@ impl JVM {
             return self.thread_sleep(ms);
         }
 
+        // `Thread.currentThread()` / `Thread.nextThreadNum()`: scheduler reads — handled
+        // here because they touch the thread list (and `currentThread` may allocate main's
+        // Thread object), which the native bridge can't do.
+        if callee_class == "java/lang/Thread" {
+            match self.metaspace.name(callee) {
+                // A cooperative scheduler already switches every opcode, so yield() is a
+                // no-op beyond stepping past the call.
+                "yield" => {
+                    self.advance_past_call();
+                    return Step::Continue;
+                }
+                // holdsLock(o): does the current thread own o's monitor?
+                "holdsLock" => {
+                    let obj = match args.first() {
+                        Some(crate::jvm::interpreter::frame::Value::Reference(o)) => *o,
+                        _ => 0,
+                    };
+                    let held = self.owns_monitor(obj);
+                    self.top().push(crate::jvm::interpreter::frame::Value::Int(held as i32));
+                    self.advance_past_call();
+                    return Step::Continue;
+                }
+                "currentThread" => {
+                    let obj = self.thread_current();
+                    self.top().push(crate::jvm::interpreter::frame::Value::Reference(obj));
+                    self.advance_past_call();
+                    return Step::Continue;
+                }
+                "nextThreadNum" => {
+                    let id = self.next_java_thread_num();
+                    self.top().push(crate::jvm::interpreter::frame::Value::Long(id));
+                    self.advance_past_call();
+                    return Step::Continue;
+                }
+                _ => {}
+            }
+        }
+
         // A native static (e.g. `Math.max`, `System.arraycopy`): no bytecode — run
         // the bridge with the args, push any result, and step past the call.
         if self.metaspace.is_native(callee) {

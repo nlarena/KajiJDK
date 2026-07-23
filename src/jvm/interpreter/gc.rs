@@ -223,6 +223,14 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
             }
         }
     }
+    // 2b. Each thread's own `Thread` object is a root too — the `main` thread holds it
+    //     *only* here (its entry frame has no `Thread` receiver), so without this it would
+    //     be collected out from under `currentThread()`.
+    for t in threads.iter() {
+        if t.thread_obj != 0 && m.heap.in_collection_set(t.thread_obj) {
+            m.evacuate(t.thread_obj);
+        }
+    }
 
     // 3. Cheney scan: copy reachable young transitively, fixing each copied object's
     //    own reference slots as it's scanned at its new address.
@@ -241,6 +249,10 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
     for t in threads.iter_mut() {
         if let Some((obj, count)) = t.wait_reacquire {
             t.wait_reacquire = Some((forward.get(&obj).copied().unwrap_or(obj), count));
+        }
+        // ...and its `Thread` object (a root, evacuated above) may have moved.
+        if t.thread_obj != 0 {
+            t.thread_obj = forward.get(&t.thread_obj).copied().unwrap_or(t.thread_obj);
         }
     }
 
@@ -567,9 +579,13 @@ pub fn compact(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &m
         frame.remap_references(|off| *forward.get(&off).unwrap_or(&off));
     }
     //    (a') a thread parked in `wait()` remembers its monitor object — move that too.
+    //         Its `Thread` object is a root as well (see the minor collector).
     for t in threads.iter_mut() {
         if let Some((obj, count)) = t.wait_reacquire {
             t.wait_reacquire = Some((*forward.get(&obj).unwrap_or(&obj), count));
+        }
+        if t.thread_obj != 0 {
+            t.thread_obj = *forward.get(&t.thread_obj).unwrap_or(&t.thread_obj);
         }
     }
     //    (b) inter-object references: a pointer to a moved Old object can live in *any*
@@ -627,6 +643,14 @@ fn roots(metaspace: &MetaspaceService, _heap: &HeapService, threads: &[GreenThre
     // mirror (and, transitively, what its statics point at) is always reachable.
     for (_uuid, _name, offset) in metaspace.class_object_offsets() {
         roots.push(offset);
+    }
+
+    // Each live thread's own `Thread` object is a root — `main` holds it only in its slot,
+    // so the mark-sweep would otherwise reclaim it (see the same handling in the minor).
+    for t in threads.iter() {
+        if t.thread_obj != 0 {
+            roots.push(t.thread_obj);
+        }
     }
 
     roots
@@ -1028,6 +1052,71 @@ mod tests {
         // *is*. The two labels share one `ClassDesc` condy, so the cache is part of the
         // design rather than an optimisation. Real `java` returns 42 on the same file.
         assert_eq!(run_int("java/EnumSwitch.class"), 42);
+    }
+
+    #[test]
+    fn interrupt_wakes_a_sleeping_thread() {
+        // A worker sleeps 100000; main interrupts it; the worker catches
+        // InterruptedException out of sleep(). The demo also checks the throw *cleared* the
+        // interrupt flag (isInterrupted() false in the handler), per JLS. Real `java` returns
+        // 42 on the same class files.
+        assert_eq!(run_int("java/InterruptSleep.class"), 42);
+    }
+
+    #[test]
+    fn interrupt_wakes_a_joining_thread() {
+        // A joiner blocked in join() on a long spinner is interrupted and catches
+        // InterruptedException out of join(). Real `java` returns 42.
+        assert_eq!(run_int("java/InterruptJoin.class"), 42);
+    }
+
+    #[test]
+    fn interrupt_wakes_a_waiting_thread_holding_its_lock() {
+        // A thread in `wait()` is interrupted. The catch must run **holding the monitor
+        // again** (JLS: wait re-acquires the lock before the InterruptedException is seen) —
+        // the demo asserts `Thread.holdsLock(lock)` in the handler. This is the notify/
+        // interrupt race path, resolved by the GIL serialising the two. Real `java` → 42.
+        assert_eq!(run_int("java/InterruptWait.class"), 42);
+    }
+
+    #[test]
+    fn thread_interrupt_flag_set_read_and_clear() {
+        // The flag half of interruption (not the waking half): `interrupt()` sets it,
+        // `isInterrupted()` reads without clearing, `interrupted()` (static) reads and
+        // clears the current thread's. The flag lives on the *object*, so a NEW thread can
+        // be interrupted before it starts — verified against real `java`, which is what
+        // forced that placement. Pure Java on top of currentThread(); no new native.
+        assert_eq!(run_int("java/ThreadInterruptFlag.class"), 42);
+    }
+
+    #[test]
+    fn thread_identity_current_name_and_id() {
+        // The identity wiring: `currentThread()` from **main** returns a real Thread object
+        // named "main" (fabricated on first ask, kept alive because `thread_obj` is now a
+        // GC root), and it's the *same* object each call. A spawned thread gets a default
+        // "Thread-N" name and a distinct id; `setName` sticks. Real `java` returns 42 too
+        // — the demo avoids asserting main's exact id, which is implementation-defined.
+        assert_eq!(run_int("java/ThreadIdentity.class"), 42);
+    }
+
+    #[test]
+    fn thread_wiring_runnable_isalive_and_double_start() {
+        // The H1 wiring layer: `new Thread(() -> ...)` runs the lambda target (proving the
+        // Runnable path *and* that a lambda satisfies Runnable), `isAlive()` reads false
+        // before start and after termination (pure Java on getState()), and a second
+        // `start()` on the finished thread throws IllegalThreadStateException. Real `java`
+        // returns 42 on the same class files.
+        assert_eq!(run_int("java/ThreadWiring.class"), 42);
+    }
+
+    #[test]
+    fn thread_get_state_maps_the_scheduler_state() {
+        // `Thread.getState()` reads the scheduler's authoritative state and returns the
+        // matching `Thread.State` constant — the *same object* the enum holds, so
+        // `getState() == Thread.State.NEW` works. The demo pins NEW (created, not started
+        // → no scheduler slot), TERMINATED (after join), and that the constants carry real
+        // enum behaviour (ordinal/name). Real `java` returns 42 on the same class files.
+        assert_eq!(run_int("java/ThreadState.class"), 42);
     }
 
     #[test]

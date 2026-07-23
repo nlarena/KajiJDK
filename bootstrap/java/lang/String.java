@@ -12,6 +12,8 @@ public final class String {
 
     public native int hashCode();
 
+    public native boolean startsWith(String prefix);
+
     // The text of any object: `null` becomes "null", a String is itself, anything else
     // answers with its own `toString()`. Declared native, but the VM intercepts it before
     // the native bridge — it is *not* a leaf operation: calling `toString()` is a virtual
