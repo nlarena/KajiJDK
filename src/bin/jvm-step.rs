@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use jvm::jvm::class_file::ClassFile;
-use jvm::jvm::interpreter::bytecode_interpreter::{JVM, Step};
+use jvm::jvm::interpreter::bytecode_interpreter::{Exec, JVM, Step};
 use jvm::jvm::interpreter::frame::{Frame, Value};
 use jvm::jvm::interpreter::gc::{self, CompactReport, MarkReport};
 use jvm::jvm::interpreter::metaspace::MetaspaceService;
@@ -161,8 +161,8 @@ fn main() -> ExitCode {
     // ↑/↓ scroll it so a large heap never crowds out the instruction panels.
     let mut heap_scroll: usize = 0;
     loop {
-        heap_scroll = heap_scroll.min(max_heap_scroll(&interp)); // clamp if the heap shrank (e.g. compaction)
-        render(&interp, last_gc.as_ref(), heap_scroll);
+        heap_scroll = heap_scroll.min(max_heap_scroll(&interp.exec())); // clamp if the heap shrank (e.g. compaction)
+        render(&interp.exec(), last_gc.as_ref(), heap_scroll);
         print!("\n[↑/↓ = scroll heap · espacio = marcar · s = barrer · c = compactar · otra tecla = avanzar opcode]  ");
         let _ = std::io::stdout().flush();
 
@@ -171,13 +171,13 @@ fn main() -> ExitCode {
         // current GC paint. Any *other* key steps one opcode.
         match read_key() {
             Key::Up => heap_scroll = heap_scroll.saturating_sub(1),
-            Key::Down => heap_scroll = (heap_scroll + 1).min(max_heap_scroll(&interp)),
-            Key::Char(b' ') => last_gc = Some(GcView::Marked(interp.gc_mark())),
-            Key::Char(b's') | Key::Char(b'S') => last_gc = Some(GcView::Swept(interp.gc_sweep())),
-            Key::Char(b'c') | Key::Char(b'C') => last_gc = Some(GcView::Compacted(interp.gc_compact())),
+            Key::Down => heap_scroll = (heap_scroll + 1).min(max_heap_scroll(&interp.exec())),
+            Key::Char(b' ') => last_gc = Some(GcView::Marked(interp.exec().gc_mark())),
+            Key::Char(b's') | Key::Char(b'S') => last_gc = Some(GcView::Swept(interp.exec().gc_sweep())),
+            Key::Char(b'c') | Key::Char(b'C') => last_gc = Some(GcView::Compacted(interp.exec().gc_compact())),
             Key::Char(_) => {
                 last_gc = None; // stepping moves the state on, so any GC paint is now stale
-                if let Step::Return(value) = interp.step() {
+                if let Step::Return(value) = interp.exec().step() {
                     // The entry method returned: the call stack is now empty, so
                     // there's no frame left to draw — just announce the result.
                     match value {
@@ -197,7 +197,7 @@ fn main() -> ExitCode {
 /// row of panels — the two deepest frames (caller frozen, current active) and, on
 /// the far right, the heap. With a single frame there's no caller, so just the
 /// current method + the heap. Going deeper shifts older callers off-screen.
-fn render(interp: &JVM, gc: Option<&GcView>, heap_scroll: usize) {
+fn render(interp: &Exec<'_>, gc: Option<&GcView>, heap_scroll: usize) {
     print!("{CLEAR}");
     let frames = interp.frames();
     let depth = frames.len();
@@ -273,7 +273,7 @@ fn print_columns(panels: &[Vec<String>]) {
 /// The highest valid heap scroll offset (in rows) for the current occupancy — so the
 /// last `HEAP_WINDOW_ROWS` rows sit at the bottom and you can't scroll past the end.
 /// `0` when the whole dump already fits in the window.
-fn max_heap_scroll(interp: &JVM) -> usize {
+fn max_heap_scroll(interp: &Exec<'_>) -> usize {
     let rows = interp.heap().bytes().len().div_ceil(8);
     rows.saturating_sub(HEAP_WINDOW_ROWS)
 }
@@ -281,7 +281,7 @@ fn max_heap_scroll(interp: &JVM) -> usize {
 /// Builds the heap panel: a header with usage, then the visible window of the hex dump
 /// of the allocated region (8 bytes per row, with offsets), starting at row `scroll`.
 /// Empty until `new` starts allocating.
-fn heap_panel_lines(interp: &JVM, gc: Option<&GcView>, scroll: usize) -> Vec<String> {
+fn heap_panel_lines(interp: &Exec<'_>, gc: Option<&GcView>, scroll: usize) -> Vec<String> {
     let heap = interp.heap();
     let used = heap.used();
     let mirrors = interp.class_objects(); // (Class ID, class name, offset), by offset
@@ -401,7 +401,7 @@ fn heap_panel_lines(interp: &JVM, gc: Option<&GcView>, scroll: usize) -> Vec<Str
 /// Builds one frame's panel as lines: a header, the bytecode window (its current
 /// instruction highlighted — actively, or in a paused colour if it's the
 /// suspended caller), the operand stack and the locals.
-fn panel_lines(interp: &JVM, frame: &Frame, frozen: bool) -> Vec<String> {
+fn panel_lines(interp: &Exec<'_>, frame: &Frame, frozen: bool) -> Vec<String> {
     let name = interp.method_name_of(frame);
     let tag = if frozen { "❄ esperando" } else { "▶ ejecutando" };
     let mut lines = vec![format!("{name}()  {tag}"), String::new()];

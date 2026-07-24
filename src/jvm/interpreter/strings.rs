@@ -41,7 +41,7 @@ pub fn intern(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &s
 /// Reads the text of the `String` object at `offset` back out of the heap.
 pub fn read(heap: &HeapService, offset: usize) -> String {
     let bytes = heap.read_bytes(offset + STRING_HEADER, length(heap, offset));
-    String::from_utf8_lossy(bytes).into_owned()
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 /// The length (in UTF-8 bytes) of the `String` object at `offset`.

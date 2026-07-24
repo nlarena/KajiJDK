@@ -9,11 +9,22 @@
 //! This is the base: the byte region and its sizing. The allocator (a bump cursor
 //! + `alloc`) and the object layout come on top of it next.
 
+use super::eden_arena::EdenArena;
 use std::collections::HashSet;
+use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 
 /// Initial size of the heap's byte region, in bytes. Arbitrary — the region
-/// grows (or shrinks) on demand via [`HeapService::resize`].
+/// grows (or shrinks) on demand via [`HeapService::resize`], but never past [`DEFAULT_MAX_HEAP`].
 const DEFAULT_SIZE: usize = 1024;
+
+/// **Maximum** heap byte-region size (`JVM_GC_MAX_HEAP`, default 16 MiB). The backing `Vec` is
+/// **pre-reserved to this capacity** at startup, so it never reallocates while growing (`Vec`
+/// only reallocates when `len` would exceed `capacity`). That keeps every byte's **address
+/// stable** for the VM's life — the invariant the H3 W2 TLABs rely on (a raw pointer into Eden
+/// must stay valid across an unrelated `Old` growth). Growing past it is a controlled
+/// "heap exhausted" panic, never undefined behaviour.
+const DEFAULT_MAX_HEAP: usize = 16 * 1024 * 1024;
 
 /// Bytes reserved at offset 0, never handed out — the **null page**. A reference
 /// is a heap offset and `null` is offset `0`, so offset `0` must not name a real
@@ -76,14 +87,15 @@ struct FreeBlock {
 /// The heap: a flat block of bytes, with no structure imposed on it, into which
 /// objects and arrays are allocated.
 pub struct HeapService {
-    /// The raw byte region. Objects live here as bytes; a reference is an offset
-    /// into this vector.
+    /// The raw byte region for survivors and Old. Objects live here as bytes; a reference is an
+    /// offset into this vector. **Eden** is served separately by [`Self::eden`]; its byte range
+    /// `[NULL_PAGE, eden_end)` in this vector is unused (H3 W2c).
     memory: Vec<u8>,
-    /// **Eden** bump pointer: next free byte in Eden `[NULL_PAGE, eden_end)`. New
-    /// objects allocate here; a minor GC evacuates the survivors and **resets** this
-    /// to the floor, so Eden is reused over and over (the generational allocator's
-    /// fast path). Overflow falls back to Old.
-    eden_cursor: usize,
+    /// **Eden** — a lock-free bump arena (H3 W2c). New objects allocate here without the VM lock
+    /// (`UnsafeCell` bytes, atomic cursor; Miri-verified in `eden_arena`). Addresses are Eden's
+    /// absolute heap offsets minus `NULL_PAGE` (arena-local). A minor GC evacuates survivors and
+    /// `reset`s it. Overflow falls back to Old.
+    eden: EdenArena,
     /// Which survivor space (`0` = `S0`, `1` = `S1`) is the current **to-space** — the
     /// half a minor GC copies survivors *into*. The other is the **from-space** (part
     /// of the collection set). They swap roles after each minor.
@@ -110,6 +122,17 @@ pub struct HeapService {
     /// generational shortcut. (Mirrors hold young statics too but are always scanned, so
     /// they stay out of this set.)
     remembered: HashSet<usize>,
+    /// **Per-thread pending Eden log** (H3 W2b), indexed by thread slot. Eden `malloc`s record
+    /// here — thread-local under the future lock-free allocation (W2c), so concurrent allocation
+    /// doesn't contend on the shared `objects` log. Drained into `objects` by
+    /// [`HeapService::commit_pending`] at every GC entry (so the collector sees them) — the GC's
+    /// own bookkeeping is untouched. `Old` allocations (rare: mirrors) still log straight to
+    /// `objects`.
+    pending: Vec<Mutex<Vec<Allocation>>>,
+    /// The thread slot whose Eden `malloc`s land in `pending[current_thread]`. Set by the driver
+    /// on each context switch ([`activate`]); under the GIL/`.write()` model exactly one thread
+    /// allocates at a time, so a shared index is correct until W2c makes it truly thread-local.
+    current_thread: usize,
 }
 
 /// Byte offset of the **mark word** inside an object header `[class_id | mark]`.
@@ -126,9 +149,15 @@ impl HeapService {
         let survivor_size = env_usize("JVM_GC_SURVIVOR_SIZE", DEFAULT_SURVIVOR_SIZE);
         // Old starts above Eden + both survivors; to-survivor is S0 to begin with.
         let old_start = NULL_PAGE + eden_size + 2 * survivor_size;
+        // Pre-reserve the whole heap capacity so the backing `Vec` never reallocates as `Old`
+        // grows — byte addresses stay stable for the VM's life (H3 W2a, the base TLABs need).
+        let initial = DEFAULT_SIZE.max(old_start);
+        let max_heap = env_usize("JVM_GC_MAX_HEAP", DEFAULT_MAX_HEAP).max(initial);
+        let mut memory = Vec::with_capacity(max_heap);
+        memory.resize(initial, 0);
         HeapService {
-            memory: vec![0; DEFAULT_SIZE.max(old_start)],
-            eden_cursor: NULL_PAGE,
+            memory,
+            eden: EdenArena::new(eden_size),
             to_survivor: 0,
             survivor_cursor: NULL_PAGE + eden_size, // start of S0
             old_cursor: old_start,
@@ -137,6 +166,34 @@ impl HeapService {
             eden_size,
             survivor_size,
             remembered: HashSet::new(),
+            pending: vec![Mutex::new(Vec::new())], // thread 0 (main); grows as workers spawn
+            current_thread: 0,
+        }
+    }
+
+    /// Selects which thread's pending Eden log subsequent `malloc`s record into. Called by the
+    /// driver on each context switch. Grows the per-thread log vector to cover new thread slots.
+    pub fn set_alloc_thread(&mut self, idx: usize) {
+        if idx >= self.pending.len() {
+            self.pending.resize_with(idx + 1, || Mutex::new(Vec::new()));
+        }
+        self.current_thread = idx;
+    }
+
+    /// Ensures a pending-log slot exists for thread `idx` (called before a thread starts
+    /// allocating lock-free, since `set_alloc_thread`'s growth happens under the lock).
+    pub fn ensure_alloc_slot(&mut self, idx: usize) {
+        if idx >= self.pending.len() {
+            self.pending.resize_with(idx + 1, || Mutex::new(Vec::new()));
+        }
+    }
+
+    /// Drains every thread's pending Eden log into the shared `objects` log. Called at each GC
+    /// entry (via [`Self::parked`]) so the collector's wholesale view is complete before it runs.
+    pub fn commit_pending(&mut self) {
+        for i in 0..self.pending.len() {
+            let mut drained = std::mem::take(&mut *self.pending[i].lock().unwrap());
+            self.objects.append(&mut drained);
         }
     }
 
@@ -220,10 +277,21 @@ impl HeapService {
     /// Bytes handed out so far across all three regions (Eden + the live survivor +
     /// Old) — the heap's occupancy, for the GC triggers and the visualizer.
     pub fn used(&self) -> usize {
-        let eden = self.eden_cursor - NULL_PAGE;
+        let eden = self.eden.used();
         let survivor = self.survivor_cursor - self.to_survivor_start();
         let old = self.old_cursor - self.old_start();
         eden + survivor + old
+    }
+
+    /// Whether `offset` lands in Eden — and if so, its **arena-local** address (offset minus
+    /// `NULL_PAGE`). Eden bytes live in [`Self::eden`]; everything else in `memory`. Every heap
+    /// byte accessor routes through this (H3 W2c).
+    fn in_eden(&self, offset: usize) -> Option<usize> {
+        if (NULL_PAGE..self.eden_end()).contains(&offset) {
+            Some(offset - NULL_PAGE)
+        } else {
+            None
+        }
     }
 
     /// The whole occupied arena `memory[..old_cursor]` — for tooling/inspection. Old
@@ -261,7 +329,7 @@ impl HeapService {
     /// Eden's high-water usage in bytes — what the safepoint checks to decide a minor
     /// collection is due.
     pub fn eden_used(&self) -> usize {
-        self.eden_cursor - NULL_PAGE
+        self.eden.used()
     }
 
     /// Eden's capacity in bytes.
@@ -269,9 +337,16 @@ impl HeapService {
         self.eden_size
     }
 
-    /// Grows or shrinks the region to `new_size` bytes — zero-filling the new
-    /// space when growing, dropping the tail when shrinking.
+    /// Grows or shrinks the region to `new_size` bytes — zero-filling the new space when
+    /// growing, dropping the tail when shrinking. **Never reallocates**: the capacity was
+    /// pre-reserved to the max heap (H3 W2a), so `new_size` stays `<= capacity` and the buffer's
+    /// address is stable. Exceeding it is a controlled "heap exhausted" panic, not a realloc.
     pub fn resize(&mut self, new_size: usize) {
+        assert!(
+            new_size <= self.memory.capacity(),
+            "heap exhausted: needed {new_size} B but JVM_GC_MAX_HEAP caps the region at {} B",
+            self.memory.capacity()
+        );
         self.memory.resize(new_size, 0);
     }
 
@@ -279,15 +354,57 @@ impl HeapService {
     /// objects are born in **Eden** (a pure bump — no free list); if Eden is full,
     /// they overflow to **Old**. Logged so the GC can enumerate them.
     pub fn malloc(&mut self, n: usize) -> usize {
-        if self.eden_cursor + n <= self.eden_end() {
-            let offset = self.eden_cursor;
-            self.eden_cursor += n;
-            self.memory[offset..offset + n].fill(0);
-            self.objects.push(Allocation { offset, size: n, gen: Gen::Young, age: 0 });
+        // Bump the lock-free Eden arena (W2c); its `alloc` reserves + zeroes the bytes. The
+        // arena-local address maps to the absolute heap offset by adding `NULL_PAGE`.
+        if let Some(local) = self.eden.alloc(n) {
+            let offset = local + NULL_PAGE;
+            // Record in this thread's pending log (W2b) — committed to `objects` at the next GC.
+            self.pending[self.current_thread]
+                .lock()
+                .unwrap()
+                .push(Allocation { offset, size: n, gen: Gen::Young, age: 0 });
             offset
         } else {
-            self.malloc_old(n) // Eden overflow → Old (until a minor frees Eden)
+            self.malloc_old(n) // Eden full → Old (until a minor frees Eden)
         }
+    }
+
+    /// **Lock-free** object allocation for the W2c `.read()` path: bumps the Eden arena, writes the
+    /// class-id header, and logs into thread `idx`'s pending slot — all through `&self`, so many
+    /// threads allocate concurrently. `None` if Eden is full (the caller escalates to the locked
+    /// Old path). `idx`'s pending slot must already exist (`ensure_alloc_slot`).
+    ///
+    /// Soundness: `eden.alloc` reserves `[local, local+size)` exclusively for this call, and the
+    /// header lands only in that fresh, *unpublished* region — no other thread reads or writes it
+    /// until we return and the reference is pushed. The arena's lock-free writes are Miri-verified.
+    pub fn alloc_object_lockfree(&self, size: usize, class_id: u32, idx: usize) -> Option<usize> {
+        let local = self.eden.alloc(size)?;
+        // SAFETY: `[local, local+4)` is within our fresh, exclusive reservation — no aliasing.
+        unsafe { self.eden.write_u32(local, class_id) };
+        let offset = local + NULL_PAGE;
+        self.pending[idx]
+            .lock()
+            .unwrap()
+            .push(Allocation { offset, size, gen: Gen::Young, age: 0 });
+        Some(offset)
+    }
+
+    /// **Lock-free** array allocation for the W2c `.read()` path — like [`Self::alloc_object_lockfree`]
+    /// but also writes the array **length** field, which sits at `HEADER_SIZE` (8), right after the
+    /// `[class_id | mark]` header.
+    pub fn alloc_array_lockfree(&self, size: usize, class_id: u32, length: u32, idx: usize) -> Option<usize> {
+        let local = self.eden.alloc(size)?;
+        // SAFETY: `[local, local+size)` is our fresh, exclusive reservation — no aliasing.
+        unsafe {
+            self.eden.write_u32(local, class_id); // header class_id (mark stays 0)
+            self.eden.write_u32(local + MARK_OFFSET + 4, length); // length at HEADER_SIZE (= 8)
+        }
+        let offset = local + NULL_PAGE;
+        self.pending[idx]
+            .lock()
+            .unwrap()
+            .push(Allocation { offset, size, gen: Gen::Young, age: 0 });
+        Some(offset)
     }
 
     /// Allocates `n` bytes directly in the **Old** generation and logs it as `Old`.
@@ -337,7 +454,17 @@ impl HeapService {
     /// (survivor or Old) during a minor GC. Source and destination regions are
     /// disjoint, so this never clobbers.
     pub fn evacuate_block(&mut self, from: usize, dest: usize, size: usize) {
-        self.memory.copy_within(from..from + size, dest);
+        // `dest` is always in survivor/Old (`memory`); `from` may be Eden (the arena) or Old.
+        // A cross-buffer move (Eden → memory) copies byte by byte; an in-`memory` move uses the
+        // fast `copy_within`.
+        match self.in_eden(from) {
+            Some(a) => {
+                for i in 0..size {
+                    self.memory[dest + i] = unsafe { self.eden.read_u8(a + i) };
+                }
+            }
+            None => self.memory.copy_within(from..from + size, dest),
+        }
     }
 
     /// Allocates `size` bytes for an **evacuated** survivor: in the to-survivor space
@@ -359,7 +486,7 @@ impl HeapService {
     /// from-space.
     pub fn reset_after_minor(&mut self, objects: Vec<Allocation>) {
         self.objects = objects;
-        self.eden_cursor = NULL_PAGE; // Eden is now empty — reuse it
+        self.eden.reset(); // Eden is now empty — recycle the arena
         self.to_survivor = 1 - self.to_survivor; // swap from/to
         self.survivor_cursor = self.to_survivor_start(); // the new to-space is empty
     }
@@ -452,57 +579,135 @@ impl HeapService {
         }
     }
 
+    // Every byte accessor routes Eden offsets to the lock-free arena, everything else to `memory`
+    // (H3 W2c). The `unsafe` arena calls are sound: while allocation is still serialized under the
+    // VM lock, only one thread touches Eden at a time; the W2c concurrency step will re-justify
+    // them (disjoint published-vs-fresh objects) with its own Miri-checked test.
+
     /// Writes a 32-bit value at `offset`, little-endian. The primitive every object
-    /// field/header write goes through: the heap is just bytes, so a `u32` lands as
-    /// its 4 LE bytes.
+    /// field/header write goes through.
     pub fn write_u32(&mut self, offset: usize, value: u32) {
-        self.memory[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.write_u32(a, value) },
+            None => self.memory[offset..offset + 4].copy_from_slice(&value.to_le_bytes()),
+        }
     }
 
-    /// Reads a 32-bit little-endian value at `offset` — the inverse of
-    /// [`HeapService::write_u32`].
+    /// Reads a 32-bit little-endian value at `offset` — the inverse of [`Self::write_u32`].
     pub fn read_u32(&self, offset: usize) -> u32 {
-        u32::from_le_bytes(self.memory[offset..offset + 4].try_into().unwrap())
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.read_u32(a) },
+            None => u32::from_le_bytes(self.memory[offset..offset + 4].try_into().unwrap()),
+        }
     }
 
     /// Writes a 64-bit value at `offset`, little-endian — for **category-2** values
-    /// (`long`/`double`), which occupy two 4-byte slots (8 bytes). Independent of the
-    /// 4-byte accessors: the heap is flat bytes, so an 8-byte write at any offset is
-    /// fine (no alignment requirement — we copy bytes).
+    /// (`long`/`double`), 8 bytes wide.
     pub fn write_u64(&mut self, offset: usize, value: u64) {
-        self.memory[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.write_u64(a, value) },
+            None => self.memory[offset..offset + 8].copy_from_slice(&value.to_le_bytes()),
+        }
     }
 
-    /// Reads a 64-bit little-endian value at `offset` — the inverse of
-    /// [`HeapService::write_u64`].
+    /// Reads a 64-bit little-endian value at `offset` — the inverse of [`Self::write_u64`].
     pub fn read_u64(&self, offset: usize) -> u64 {
-        u64::from_le_bytes(self.memory[offset..offset + 8].try_into().unwrap())
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.read_u64(a) },
+            None => u64::from_le_bytes(self.memory[offset..offset + 8].try_into().unwrap()),
+        }
+    }
+
+    // ---- H4 relaxed-JMM field access ------------------------------------------------------------
+    // `getfield`/`putfield` use these to read/write fields with explicit memory ordering. A
+    // **volatile** read is `Acquire`, a volatile write `Release` — the publication guarantee. For
+    // an **Eden** object the access is a lock-free atomic op (no VM lock); an **Old** object falls
+    // back to plain byte access, which is sound because Old field access always holds the RwLock
+    // (`.read()` for reads, `.write()` for writes), and that lock already provides happens-before.
+
+    /// `Acquire` read of a `u32` field (volatile int/float/reference). Eden → atomic `Acquire`;
+    /// Old → plain read (the read lock orders it).
+    pub fn read_u32_acquire(&self, offset: usize) -> u32 {
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.load_u32_ordered(a, Ordering::Acquire) },
+            None => u32::from_le_bytes(self.memory[offset..offset + 4].try_into().unwrap()),
+        }
+    }
+
+    /// `Acquire` read of a `u64` field (volatile long/double — 8-aligned, so a real `AtomicU64`).
+    pub fn read_u64_acquire(&self, offset: usize) -> u64 {
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.load_u64_ordered(a, Ordering::Acquire) },
+            None => u64::from_le_bytes(self.memory[offset..offset + 8].try_into().unwrap()),
+        }
+    }
+
+    /// Lock-free write of a `u32` field **if the object is in Eden**: `true` on success, `false`
+    /// if it's in Old (the caller escalates to the locked write path). `order` is `Release` for a
+    /// volatile field, `Relaxed` otherwise — takes `&self`, so many threads can write disjoint
+    /// young objects' fields without serializing on the VM write lock.
+    pub fn write_u32_eden(&self, offset: usize, value: u32, order: Ordering) -> bool {
+        match self.in_eden(offset) {
+            Some(a) => {
+                unsafe { self.eden.store_u32_ordered(a, value, order) };
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Lock-free write of a `u64` field (long/double) if the object is in Eden (see
+    /// [`Self::write_u32_eden`]). Fields are 8-aligned, so this is a real `AtomicU64`.
+    pub fn write_u64_eden(&self, offset: usize, value: u64, order: Ordering) -> bool {
+        match self.in_eden(offset) {
+            Some(a) => {
+                unsafe { self.eden.store_u64_ordered(a, value, order) };
+                true
+            }
+            None => false,
+        }
     }
 
     /// Writes a single byte — for `byte[]`/`boolean[]` elements (1 byte wide).
     pub fn write_u8(&mut self, offset: usize, value: u8) {
-        self.memory[offset] = value;
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.write_u8(a, value) },
+            None => self.memory[offset] = value,
+        }
     }
 
     /// Reads a single byte. The caller sign/zero-extends as the element type wants.
     pub fn read_u8(&self, offset: usize) -> u8 {
-        self.memory[offset]
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.read_u8(a) },
+            None => self.memory[offset],
+        }
     }
 
     /// Writes a 16-bit little-endian value — for `char[]`/`short[]` elements.
     pub fn write_u16(&mut self, offset: usize, value: u16) {
-        self.memory[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.write_u16(a, value) },
+            None => self.memory[offset..offset + 2].copy_from_slice(&value.to_le_bytes()),
+        }
     }
 
-    /// Reads a 16-bit little-endian value. The caller sign-extends (`short`) or
-    /// zero-extends (`char`).
+    /// Reads a 16-bit little-endian value. The caller sign-extends (`short`) or zero-extends (`char`).
     pub fn read_u16(&self, offset: usize) -> u16 {
-        u16::from_le_bytes(self.memory[offset..offset + 2].try_into().unwrap())
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.read_u16(a) },
+            None => u16::from_le_bytes(self.memory[offset..offset + 2].try_into().unwrap()),
+        }
     }
 
-    /// Borrows `len` raw bytes at `offset` — e.g. a `String`'s UTF-8 payload.
-    pub fn read_bytes(&self, offset: usize, len: usize) -> &[u8] {
-        &self.memory[offset..offset + len]
+    /// Reads `len` raw bytes at `offset` into an owned `Vec` — e.g. a `String`'s UTF-8 payload.
+    /// (Owned, not borrowed: an Eden payload lives in the arena's `UnsafeCell`s, which can't hand
+    /// out a plain `&[u8]`.)
+    pub fn read_bytes(&self, offset: usize, len: usize) -> Vec<u8> {
+        match self.in_eden(offset) {
+            Some(a) => unsafe { self.eden.read_bytes(a, len) },
+            None => self.memory[offset..offset + len].to_vec(),
+        }
     }
 }
 
@@ -517,6 +722,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn heap_buffer_address_is_stable_across_old_growth() {
+        // W2a invariant: the backing `Vec` is pre-reserved to the max heap, so growing `Old`
+        // never reallocates it — a byte's address is stable for the VM's life (the base TLABs
+        // need). Grow `Old` far past the initial `DEFAULT_SIZE` and assert the pointer holds.
+        let mut heap = HeapService::new();
+        let ptr_before = heap.memory.as_ptr() as usize;
+        let len_before = heap.memory.len();
+        for _ in 0..2000 {
+            heap.malloc_old(1024); // ~2 MiB of Old — well past the 1 KiB initial region
+        }
+        assert!(heap.memory.len() > len_before, "Old should have grown the region");
+        assert_eq!(
+            heap.memory.as_ptr() as usize,
+            ptr_before,
+            "the heap buffer must not reallocate (W2a): raw pointers into Eden would dangle"
+        );
+    }
+
+    #[test]
     fn classifies_allocations_into_generations_by_region() {
         // Defaults: Eden 256, survivors 64 each → old starts at 8 + 256 + 128 = 392.
         let mut heap = HeapService::new();
@@ -525,9 +749,10 @@ mod tests {
         let a = heap.malloc(16);
         assert_eq!(heap.region_of(a), Region::Eden);
         assert_eq!(heap.gen_of(a), Gen::Young);
+        heap.commit_pending(); // W2b: Eden mallocs go to the pending log; flush before inspecting
         assert_eq!(heap.allocations()[0].gen, Gen::Young);
 
-        // An object too big for Eden overflows straight to Old.
+        // An object too big for Eden overflows straight to Old (logged directly, not pending).
         let big = heap.malloc(heap.eden_capacity() + 8);
         assert!(big >= heap.old_start());
         assert_eq!(heap.region_of(big), Region::Old);

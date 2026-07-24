@@ -371,6 +371,156 @@ pub fn aastore(heap: &mut HeapService, frame: &mut Frame) -> Result<(), &'static
     Ok(())
 }
 
+// ---- Read-only twins for the H3 W3 parallel `.read()` path ---------------------------------
+// Array *loads* already read the heap through `&HeapService`, so they can run under a shared read
+// lock. The catch is escalation: on a null array or an out-of-range index the op would throw, and
+// the throw needs the write path — so these restore the operand stack and return `None` instead of
+// mutating it, letting the driver re-run the op under `.write()` cleanly.
+
+/// Read-only `arraylength`. `Some(())` = pushed the length; `None` = null array → escalate
+/// (stack restored so the write path throws NPE).
+pub fn arraylength_read(heap: &HeapService, frame: &mut Frame) -> Option<()> {
+    let array_v = frame.pop();
+    match array_v {
+        Value::Reference(0) => {
+            frame.push(array_v); // null → restore + escalate
+            None
+        }
+        Value::Reference(off) => {
+            frame.push(Value::Int(heap.read_u32(off + LENGTH_OFFSET) as i32));
+            Some(())
+        }
+        _ => {
+            frame.push(array_v);
+            None
+        }
+    }
+}
+
+/// Read-only array element load for the W3 read path (shared by `iaload`..`saload`). Pops the
+/// index and array ref; on a null array or an out-of-range index it **restores the stack** and
+/// returns `None` (escalate — the write path throws); otherwise reads the element via `read`.
+pub fn array_load_read(
+    heap: &HeapService,
+    frame: &mut Frame,
+    elem_size: usize,
+    read: fn(&HeapService, usize) -> Value,
+) -> Option<()> {
+    let index_v = frame.pop();
+    let array_v = frame.pop();
+    let (index, array) = match (&index_v, &array_v) {
+        (Value::Int(i), Value::Reference(a)) if *a != 0 => (*i, *a),
+        _ => {
+            frame.push(array_v); // restore (array below, index on top) and escalate
+            frame.push(index_v);
+            return None;
+        }
+    };
+    let length = heap.read_u32(array + LENGTH_OFFSET) as i32;
+    if index < 0 || index >= length {
+        frame.push(array_v); // out of bounds → restore + escalate (write path throws AIOOBE)
+        frame.push(index_v);
+        return None;
+    }
+    frame.push(read(heap, array + ARRAY_HEADER_SIZE + (index as usize) * elem_size));
+    Some(())
+}
+
+/// Lock-free array allocation for the W2c `.read()` path (shared by `newarray`/`anewarray`).
+/// `None` = escalate (the array class's mirror isn't prepared yet, or Eden is full).
+fn allocate_array_read(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    array_class: &str,
+    count: usize,
+    elem_size: usize,
+    idx: usize,
+) -> Option<usize> {
+    let uuid = metaspace.class_id_read(array_class)?; // array class not registered → escalate
+    let mirror = metaspace.class_object(uuid)?; // mirror not created yet → escalate
+    let size = ARRAY_HEADER_SIZE + count * elem_size;
+    heap.alloc_array_lockfree(size, mirror as u32, count as u32, idx)
+}
+
+/// Read-only `newarray` (primitive array). `Some(())` = allocated + pushed; `None` = escalate
+/// (negative length, unknown atype, unprepared class, or Eden full) with the stack restored.
+pub fn newarray_read(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    frame: &mut Frame,
+    atype: u8,
+    idx: usize,
+) -> Option<()> {
+    let (array_class, elem_size) = match atype {
+        4 => ("[Z", 1),
+        5 => ("[C", 2),
+        6 => ("[F", 4),
+        7 => ("[D", 8),
+        8 => ("[B", 1),
+        9 => ("[S", 2),
+        10 => ("[I", 4),
+        11 => ("[J", 8),
+        _ => return None, // unknown atype → escalate (the write path panics, matching `run_one`)
+    };
+    let n = match frame.pop() {
+        Value::Int(n) => n,
+        other => {
+            frame.push(other);
+            return None;
+        }
+    };
+    if n < 0 {
+        frame.push(Value::Int(n)); // negative → escalate (write path throws NegativeArraySize)
+        return None;
+    }
+    match allocate_array_read(metaspace, heap, array_class, n as usize, elem_size, idx) {
+        Some(off) => {
+            frame.push(Value::Reference(off));
+            Some(())
+        }
+        None => {
+            frame.push(Value::Int(n)); // restore + escalate
+            None
+        }
+    }
+}
+
+/// Read-only `anewarray` (reference array). Same escalation rules as [`newarray_read`].
+pub fn anewarray_read(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    frame: &mut Frame,
+    cp_index: u16,
+    idx: usize,
+) -> Option<()> {
+    let array_class = {
+        let caller = metaspace.class_of(frame.method());
+        let element = metaspace.get(caller)?.class_name(cp_index)?;
+        format!("[L{element};")
+    };
+    let n = match frame.pop() {
+        Value::Int(n) => n,
+        other => {
+            frame.push(other);
+            return None;
+        }
+    };
+    if n < 0 {
+        frame.push(Value::Int(n));
+        return None;
+    }
+    match allocate_array_read(metaspace, heap, &array_class, n as usize, SLOT_SIZE, idx) {
+        Some(off) => {
+            frame.push(Value::Reference(off));
+            Some(())
+        }
+        None => {
+            frame.push(Value::Int(n));
+            None
+        }
+    }
+}
+
 /// The heap offset of element `index` in `array`, given the element width
 /// `elem_size`. Bounds-checked against the stored length: out of range is an
 /// `ArrayIndexOutOfBoundsException`.

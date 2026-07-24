@@ -5,6 +5,8 @@
 pub mod bytecode_interpreter;
 pub mod frame;
 pub mod gc;
+pub mod atomic_region;
+pub mod eden_arena;
 pub mod heap;
 pub mod metaspace;
 pub mod natives;

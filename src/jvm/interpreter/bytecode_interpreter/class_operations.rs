@@ -36,12 +36,15 @@ pub fn load_class(metaspace: &mut MetaspaceService, heap: &mut HeapService, name
     // `double` static takes two). `malloc` returns zeroed memory, so each static
     // starts at its default value (0 / null) — exactly what Preparation prescribes.
     let static_slots = match metaspace.get(name) {
-        Some(class) => class
-            .fields
-            .iter()
-            .filter(|f| f.is_static())
-            .map(|f| objects_operations::field_slots(class.utf8(f.descriptor_index).unwrap_or("")))
-            .sum::<usize>(),
+        // Fold the single placement rule so the mirror is sized with the same 8-alignment
+        // padding `static_slot` uses for offsets (a per-field sum would miss the padding).
+        Some(class) => {
+            let mut slots = 0;
+            for f in class.fields.iter().filter(|f| f.is_static()) {
+                slots = objects_operations::place_field(slots, class.utf8(f.descriptor_index).unwrap_or("")).1;
+            }
+            slots
+        }
         None => return, // the class couldn't be loaded; nothing to prepare
     };
     let size = HEADER_SIZE + static_slots * SLOT_SIZE;
@@ -173,10 +176,11 @@ fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_c
         .map(|cf| {
             let mut acc = 0;
             for f in cf.fields.iter().filter(|f| f.is_static()) {
+                let (start, next) = objects_operations::place_field(acc, cf.utf8(f.descriptor_index).unwrap_or(""));
                 if cf.utf8(f.name_index) == Some(field) {
-                    return acc;
+                    return start;
                 }
-                acc += objects_operations::field_slots(cf.utf8(f.descriptor_index).unwrap_or(""));
+                acc = next;
             }
             panic!("static_slot: field vanished from its declaring class");
         })

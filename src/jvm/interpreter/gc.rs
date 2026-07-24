@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::jvm::class_file::ClassFile;
 
-use super::bytecode_interpreter::objects_operations::{field_slots, HEADER_SIZE, SLOT_SIZE};
+use super::bytecode_interpreter::objects_operations::{place_field, HEADER_SIZE, SLOT_SIZE};
 use super::bytecode_interpreter::GreenThread;
 use super::frame::Value;
 use super::heap::{Allocation, Gen, HeapService};
@@ -713,10 +713,11 @@ fn field_byte_offset(metaspace: &MetaspaceService, class: &str, field: &str) -> 
     for name in &chain {
         let cf = metaspace.get(name)?;
         for f in cf.fields.iter().filter(|f| !f.is_static()) {
+            let (start, next) = place_field(index, cf.utf8(f.descriptor_index).unwrap_or(""));
             if cf.utf8(f.name_index) == Some(field) {
-                return Some(HEADER_SIZE + index * SLOT_SIZE);
+                return Some(HEADER_SIZE + start * SLOT_SIZE);
             }
-            index += field_slots(cf.utf8(f.descriptor_index).unwrap_or(""));
+            index = next;
         }
     }
     None
@@ -820,12 +821,13 @@ fn instance_reference_slots(metaspace: &MetaspaceService, class: &str, offset: u
     for name in &chain {
         let Some(cf) = metaspace.get(name) else { continue };
         for field in cf.fields.iter().filter(|f| !f.is_static()) {
+            let (start, next) = place_field(index, cf.utf8(field.descriptor_index).unwrap_or(""));
             if is_reference_descriptor(cf, field.descriptor_index) {
-                slots.push(offset + HEADER_SIZE + index * SLOT_SIZE);
+                slots.push(offset + HEADER_SIZE + start * SLOT_SIZE);
             }
-            // Width-aware: a `long`/`double` field consumes two slots, so a reference
-            // declared after it lands two slots further along.
-            index += field_slots(cf.utf8(field.descriptor_index).unwrap_or(""));
+            // Width-aware + 8-aligned: a `long`/`double` field consumes two slots (and may pad
+            // to an even slot), so a reference after it lands correspondingly further along.
+            index = next;
         }
     }
     slots
@@ -850,11 +852,12 @@ fn static_reference_slots(metaspace: &MetaspaceService, class: &str, mirror: usi
     let mut slots = Vec::new();
     let mut index = 0;
     for f in cf.fields.iter().filter(|f| f.is_static()) {
+        let (start, next) = place_field(index, cf.utf8(f.descriptor_index).unwrap_or(""));
         if is_reference_descriptor(cf, f.descriptor_index) {
-            slots.push(mirror + HEADER_SIZE + index * SLOT_SIZE);
+            slots.push(mirror + HEADER_SIZE + start * SLOT_SIZE);
         }
-        // Width-aware: a `long`/`double` static consumes two slots.
-        index += field_slots(cf.utf8(f.descriptor_index).unwrap_or(""));
+        // Width-aware + 8-aligned: a `long`/`double` static consumes two slots (and may pad).
+        index = next;
     }
     slots
 }
@@ -946,6 +949,7 @@ mod tests {
 
         // No roots (no frames) → both are unreachable. The major sweep reclaims the
         // **Old** garbage and leaves the young object to the minor collector.
+        heap.commit_pending(); // W2b: the real GC entry (`parked`) flushes pending Eden first
         sweep(&metaspace, &mut heap, &[]);
         assert!(heap.allocations().iter().any(|a| a.offset == young), "young kept");
         assert!(!heap.allocations().iter().any(|a| a.offset == old), "old reclaimed");
@@ -1017,10 +1021,10 @@ mod tests {
         // A JVM parked on `run`, which never executes: `call_java` drives `twice` on top
         // of it and unwinds back, leaving the caller exactly as it was.
         let mut jvm = JVM::new(metaspace, Frame::new(entry, max_locals, Vec::new()));
-        assert_eq!(jvm.call_java(twice, vec![Value::Int(21)], &[1]), Some(Value::Int(42)));
+        assert_eq!(jvm.exec().call_java(twice, vec![Value::Int(21)], &[1]), Some(Value::Int(42)));
 
         // And a second call is independent — the nested loop leaves no residue.
-        assert_eq!(jvm.call_java(twice, vec![Value::Int(-3)], &[1]), Some(Value::Int(-6)));
+        assert_eq!(jvm.exec().call_java(twice, vec![Value::Int(-3)], &[1]), Some(Value::Int(-6)));
     }
 
     #[test]
@@ -1243,11 +1247,29 @@ mod tests {
         assert_eq!(run_int("java/WideLocals.class"), 42);
     }
 
-    /// Like `run_int` but forces the **OS-thread + GIL** substrate (real `std::thread`s),
+    /// Like `run_int` but forces the **os-gil** substrate (real `std::thread`s + GIL),
     /// bypassing the `JVM_THREADS` env so parallel tests don't race on a global.
     fn run_int_os(class_file: &str) -> i32 {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_os_gil;
+        run_int_with(class_file, execute_os_gil)
+    }
+
+    /// Like `run_int_os` but forces the **os** substrate (real `std::thread`s, GIL-free —
+    /// H3, still sharing the os-gil engine for now). Proves the new mode runs and agrees
+    /// with the green/os-gil oracle.
+    fn run_int_os_parallel(class_file: &str) -> i32 {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_os_parallel;
+        run_int_with(class_file, execute_os_parallel)
+    }
+
+    /// Shared body of the OS-mode test harnesses: load the class, run its `run()I` on the
+    /// given engine, and unwrap the int result. `engine` is `execute_os_gil` or
+    /// `execute_os_parallel` (same signature — the mode differs only in the tag today).
+    fn run_int_with(
+        class_file: &str,
+        engine: fn(MetaspaceService, crate::jvm::interpreter::frame::Frame) -> Option<Value>,
+    ) -> i32 {
         use crate::jvm::class_file::ClassFile;
-        use crate::jvm::interpreter::bytecode_interpreter::execute_os;
         use crate::jvm::interpreter::frame::Frame;
         use std::path::PathBuf;
         let mut metaspace =
@@ -1258,7 +1280,7 @@ mod tests {
         let entry = metaspace.resolve_method(&name, "run", "()I").expect("run()");
         let max_locals = metaspace.max_locals(entry);
         let frame = Frame::new(entry, max_locals, Vec::new());
-        match execute_os(metaspace, frame) {
+        match engine(metaspace, frame) {
             Some(Value::Int(v)) => v,
             other => panic!("expected an int result, got {other:?}"),
         }
@@ -1293,6 +1315,58 @@ mod tests {
     fn os_threads_illegal_monitor_state() {
         // notify() without the monitor still throws IllegalMonitorStateException → 99.
         assert_eq!(run_int_os("java/Imse.class"), 99);
+    }
+
+    #[test]
+    fn os_parallel_stress() {
+        // Real parallelism (H3 1d) + the widened fast-path set (int/long arith, shifts,
+        // conversions, refs, if_acmp). Three workers run a lock-free frame-local compute loop
+        // interleaved with heap-pressuring allocation, so the GC stop-the-world handshake fires
+        // while siblings are mid lock-free run. Value confirmed against real `java` (68126370).
+        //
+        // Cross-substrate oracle first — green ≡ os-gil ≡ os validates the fast-path arms
+        // functionally (a mis-transcribed arm makes os disagree). Then hammer os: a data race
+        // shows as a wrong result, a deadlock as a hang (the harness caps wall time). The hammer
+        // is a *signal*, not a proof, of race/deadlock freedom (the serialized oracle can't see it).
+        assert_eq!(run_int("java/ParallelStress.class"), 68126370); // green (reference)
+        assert_eq!(run_int_os("java/ParallelStress.class"), 68126370); // os-gil (serialized)
+        for _ in 0..20 {
+            assert_eq!(run_int_os_parallel("java/ParallelStress.class"), 68126370); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn os_parallel_volatile_publication() {
+        // H4 (JMM): a publisher writes a payload then a *volatile* flag; a reader spins on the flag
+        // (volatile → Acquire) and then reads the payload — which the Release/Acquire handoff makes
+        // visible, never the stale defaults. Exercises the H4-e field paths end-to-end: volatile
+        // `putfield`/`getfield` (Release/Acquire, on both an int and a `long` → a real `AtomicU64`,
+        // no tearing) and non-volatile lock-free field access. Result 42 + 1000 + 777 = 1819,
+        // confirmed against real `java`.
+        //
+        // Oracle: green ≡ os-gil ≡ os. In os (real parallelism) the reader's spin *must* terminate —
+        // that only happens if the flag write becomes visible — and every run must still read the
+        // published payload, not a default. A wrong result or a hang would surface a broken order.
+        assert_eq!(run_int("java/VolatilePublish.class"), 1819); // green (reference)
+        assert_eq!(run_int_os("java/VolatilePublish.class"), 1819); // os-gil (serialized)
+        for _ in 0..20 {
+            assert_eq!(run_int_os_parallel("java/VolatilePublish.class"), 1819); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn os_parallel_matches_oracle() {
+        // `JVM_THREADS=os` — the GIL-free parallel substrate (H3, in progress). Today it
+        // shares the os-gil engine, so it must produce byte-for-byte the same results as
+        // green/os-gil on the whole concurrency demo set: monitors, spawn/spin, wait/notify,
+        // join, timed wait, and IMSE. This is the oracle that guards every lock-shrinking step.
+        assert_eq!(run_int_os_parallel("java/Sync.class"), 200);
+        assert_eq!(run_int_os_parallel("java/SyncMethod.class"), 200);
+        assert_eq!(run_int_os_parallel("java/Threads.class"), 100);
+        assert_eq!(run_int_os_parallel("java/WaitNotify.class"), 42);
+        assert_eq!(run_int_os_parallel("java/Joiner.class"), 30);
+        assert_eq!(run_int_os_parallel("java/WaitTimeout.class"), 7);
+        assert_eq!(run_int_os_parallel("java/Imse.class"), 99);
     }
 
     #[test]

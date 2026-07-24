@@ -9,11 +9,11 @@
 //! caller. Empty stack → the exception was never caught.
 
 use super::{class_operations, objects_operations};
-use super::{JVM, Step};
+use super::{Exec, Step};
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::metaspace::MethodId;
 
-impl JVM {
+impl Exec<'_> {
     pub(super) fn athrow(&mut self) -> Step {
         // The exception object sits on top of the current frame's operand stack.
         // Throwing `null` is itself a NullPointerException.
@@ -31,8 +31,8 @@ impl JVM {
     pub(super) fn throw_exception(&mut self, exc_class: &str) -> Step {
         // Prepare the class so its mirror exists (the object header's class_id), then
         // allocate the exception instance — like a `new` the VM does on your behalf.
-        class_operations::load_class(&mut self.metaspace, &mut self.heap, exc_class);
-        let offset = objects_operations::allocate(&mut self.metaspace, &mut self.heap, exc_class);
+        class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, exc_class);
+        let offset = objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, exc_class);
         self.unwind_with(offset)
     }
 
@@ -41,8 +41,8 @@ impl JVM {
     /// until one does (jump into its `catch`) or the stack empties (uncaught).
     fn unwind_with(&mut self, exception: usize) -> Step {
         let exc_class = self
-            .metaspace
-            .class_name_at_mirror(self.heap.read_u32(exception) as usize)
+            .shared.metaspace
+            .class_name_at_mirror(self.shared.heap.read_u32(exception) as usize)
             .expect("throw: cannot resolve the thrown object's class")
             .to_string();
 
@@ -61,7 +61,7 @@ impl JVM {
             // Not handled in this frame — discard it (releasing its monitor if it ran a
             // synchronized method) and try the caller.
             self.pop_frame();
-            if self.frames.is_empty() {
+            if self.running.frames.is_empty() {
                 panic!("uncaught exception: {exc_class}");
             }
         }
@@ -71,12 +71,12 @@ impl JVM {
     /// `catch_type` matches `exc_class`. `catch_type == 0` catches anything (a
     /// `finally`/catch-all). Returns the handler pc when one applies.
     fn find_handler(&mut self, method: MethodId, pc: usize, exc_class: &str) -> Option<usize> {
-        let class = self.metaspace.class_of(method).to_string();
+        let class = self.shared.metaspace.class_of(method).to_string();
         let pc = pc as u16;
         // Snapshot the rows so we don't hold a borrow on the metaspace while
         // resolving catch types and running `is_subtype`.
         let rows: Vec<(u16, u16, u16, u16)> = self
-            .metaspace
+            .shared.metaspace
             .exception_table(method)
             .iter()
             .map(|e| (e.start_pc, e.end_pc, e.handler_pc, e.catch_type))
@@ -89,12 +89,12 @@ impl JVM {
                 return Some(handler as usize); // catch-all (finally)
             }
             let catch_name = self
-                .metaspace
+                .shared.metaspace
                 .get(&class)
                 .and_then(|cf| cf.class_name(catch_type))
                 .map(str::to_string);
             if let Some(name) = catch_name {
-                if class_operations::is_subtype(&mut self.metaspace, exc_class, &name) {
+                if class_operations::is_subtype(&mut self.shared.metaspace, exc_class, &name) {
                     return Some(handler as usize);
                 }
             }

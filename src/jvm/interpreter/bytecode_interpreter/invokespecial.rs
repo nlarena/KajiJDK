@@ -2,11 +2,11 @@
 //! `super.m()` — calls that are *statically* bound (never overridden). An
 //! `impl JVM` method, dispatched from `step()`.
 
-use super::{JVM, Step};
+use super::{Exec, Step};
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::metaspace::MetaspaceService;
 
-impl JVM {
+impl Exec<'_> {
     /// `invokespecial` (0xb7): the constructor/super call. Like `invokestatic`, but
     /// the receiver (the object the call runs *on*) sits under the arguments on the
     /// stack and becomes the callee's local 0 (`this`). If the target class can't be
@@ -17,26 +17,26 @@ impl JVM {
         let caller = self.frame().method();
         let pc = self.frame().pc();
         let cp_index = {
-            let code = self.metaspace.code(caller);
+            let code = self.shared.metaspace.code(caller);
             u16::from_be_bytes([code[pc + 1], code[pc + 2]])
         };
-        let caller_class = self.metaspace.class_of(caller).to_string();
+        let caller_class = self.shared.metaspace.class_of(caller).to_string();
 
         // The descriptor (from the caller's pool) tells us how many operands to
         // move/drop — available even when the callee's class can't be resolved.
         let descriptor = {
-            let cf = self.metaspace.get(&caller_class).expect("caller class is loaded");
+            let cf = self.shared.metaspace.get(&caller_class).expect("caller class is loaded");
             let (_, _, d) = cf.methodref_target(cp_index).expect("invokespecial: bad methodref");
             d.to_string()
         };
         let arg_count = MetaspaceService::descriptor_arg_count(&descriptor);
         let total = arg_count + 1; // + the receiver
 
-        match self.metaspace.resolve_call(&caller_class, cp_index) {
+        match self.shared.metaspace.resolve_call(&caller_class, cp_index) {
             // The constructor has a body: push a frame with [receiver, args...] as
             // its leading locals, just like invokestatic but receiver-first.
             Some(callee) => {
-                let max_locals = self.metaspace.max_locals(callee);
+                let max_locals = self.shared.metaspace.max_locals(callee);
                 let mut locals = Vec::with_capacity(total);
                 {
                     let frame = self.top();
@@ -52,7 +52,7 @@ impl JVM {
                 widths.extend(MetaspaceService::param_slot_widths(&descriptor));
                 // A `private synchronized` method (or a synchronized `super.m()`) locks its
                 // receiver (`this`, the leading local). Constructors can't be synchronized.
-                let lock = self.metaspace.is_synchronized(callee).then(|| match locals[0] {
+                let lock = self.shared.metaspace.is_synchronized(callee).then(|| match locals[0] {
                     Value::Reference(offset) => offset,
                     _ => panic!("synchronized instance method: receiver is not a reference"),
                 });

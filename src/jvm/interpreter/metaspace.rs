@@ -279,6 +279,12 @@ impl MetaspaceService {
         self.class_ids.contains_key(name)
     }
 
+    /// The Class ID for `name` if it's already been minted, without minting one — the read-only
+    /// twin of [`Self::class_id`] for the W2c lock-free (`&self`) allocation path.
+    pub fn class_id_read(&self, name: &str) -> Option<&str> {
+        self.class_ids.get(name).map(|id| id.as_str())
+    }
+
     /// The loaded class whose Class ID is `uuid`, or `None` if the UUID is unknown
     /// or its class hasn't been loaded yet. The reverse of [`Self::class_id`]: used
     /// to resolve an object's class from the id carried in its header.

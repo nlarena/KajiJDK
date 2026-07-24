@@ -50,6 +50,15 @@ impl MemberInfo {
     pub fn is_synchronized(&self) -> bool {
         self.access_flags & 0x0020 != 0
     }
+
+    /// Whether `ACC_VOLATILE` (0x0040) is set — only meaningful on a *field*. A volatile
+    /// field's reads and writes carry acquire/release ordering under the H4 memory model
+    /// (see [`crate::jvm::interpreter::atomic_region`]): a write publishes everything before
+    /// it and a matching read sees all of it, so a volatile field is a safe cross-thread
+    /// hand-off. Non-volatile fields relax to plain (`Relaxed`) atomic access instead.
+    pub fn is_volatile(&self) -> bool {
+        self.access_flags & 0x0040 != 0
+    }
 }
 
 /// Reads a `u2` count followed by that many `field_info`/`method_info`.

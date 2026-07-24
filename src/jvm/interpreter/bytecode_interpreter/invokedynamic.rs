@@ -34,7 +34,7 @@
 //! `LambdaMetafactory` is deliberately absent: it needs a runtime-generated class
 //! implementing the functional interface, which is its own milestone.
 
-use super::{class_operations, objects_operations, LambdaShape, JVM};
+use super::{class_operations, objects_operations, Exec, LambdaShape};
 use crate::jvm::class_file::MethodHandleKind;
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::heap::HeapService;
@@ -57,7 +57,7 @@ const TAG_ARG: char = '\u{1}';
 /// Recipe marker: splice the next **constant** bootstrap argument here.
 const TAG_CONST: char = '\u{2}';
 
-impl JVM {
+impl Exec<'_> {
 /// Runs the `invokedynamic` at `cp_index`: resolve the bootstrap method, produce the
 /// call site's value, and leave it on the operand stack.
 ///
@@ -69,9 +69,9 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
     // Everything is read out of the caller's class file into *owned* values first: the
     // borrow of the `ClassFile` has to end before the VM can be used mutably — to intern
     // a String, load a class, or run a bootstrap.
-    let caller = self.metaspace.class_of(self.frame().method()).to_string();
+    let caller = self.shared.metaspace.class_of(self.frame().method()).to_string();
     let site = {
-        let class = self.metaspace.get(&caller).expect("invokedynamic: caller class not loaded");
+        let class = self.shared.metaspace.get(&caller).expect("invokedynamic: caller class not loaded");
         // The call site's *name* is not decoration: `ObjectMethods` bootstraps all three
         // of a record's methods from one entry, and only the name says which.
         let (bsm_index, site_name, descriptor) = class
@@ -228,15 +228,15 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
     match &site.bootstrap {
         Bootstrap::StringConcat { recipe, constants } => {
             let text = match recipe {
-                Some(recipe) => concat_with_recipe(&self.heap, recipe, &args, &params, constants),
+                Some(recipe) => concat_with_recipe(&self.shared.heap, recipe, &args, &params, constants),
                 // No recipe: the arguments, in order, and nothing else.
                 None => args
                     .iter()
                     .zip(&params)
-                    .map(|(value, descriptor)| render(&self.heap, value, descriptor))
+                    .map(|(value, descriptor)| render(&self.shared.heap, value, descriptor))
                     .collect(),
             };
-            let offset = strings::intern(&mut self.metaspace, &mut self.heap, &text);
+            let offset = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
             self.top().push(Value::Reference(offset));
         }
         Bootstrap::TypeSwitch { labels } => {
@@ -261,7 +261,7 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             interface,
         } => {
             let implementation = self
-                .metaspace
+                .shared.metaspace
                 .resolve_method(implementation_class, implementation_name, implementation_descriptor)
                 .unwrap_or_else(|| {
                     panic!(
@@ -274,20 +274,20 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             // loop doesn't mint a class per iteration. The captured values live in each
             // object, which is what keeps two closures over different values apart.
             let synthetic = format!("{caller}$${interface}$${cp_index}");
-            self.lambdas.entry(synthetic.clone()).or_insert_with(|| LambdaShape {
+            self.shared.lambdas.entry(synthetic.clone()).or_insert_with(|| LambdaShape {
                 implementation,
                 captures: params.clone(),
             });
 
             let offset =
-                allocate_lambda(&mut self.metaspace, &mut self.heap, &synthetic, &args, &params);
+                allocate_lambda(&mut self.shared.metaspace, &mut self.shared.heap, &synthetic, &args, &params);
             self.top().push(Value::Reference(offset));
         }
         Bootstrap::ObjectMethods { method, record_class, components } => {
             match method.as_str() {
                 "toString" => {
                     let text = record_to_string(self, record_class, components, &args);
-                    let offset = strings::intern(&mut self.metaspace, &mut self.heap, &text);
+                    let offset = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
                     self.top().push(Value::Reference(offset));
                 }
                 "hashCode" => {
@@ -325,7 +325,7 @@ pub(super) fn static_argument(&mut self, owner: &str, index: u16) -> Value {
         Dynamic,
     }
     let shape = {
-        let class = self.metaspace.get(owner).expect("static argument: owner not loaded");
+        let class = self.shared.metaspace.get(owner).expect("static argument: owner not loaded");
         if let Some(text) = class.string_constant(index) {
             Shape::Text(text.to_string())
         } else if let Some(value) = class.integer_constant(index) {
@@ -347,11 +347,11 @@ pub(super) fn static_argument(&mut self, owner: &str, index: u16) -> Value {
 
     match shape {
         Shape::Text(text) => {
-            Value::Reference(strings::intern(&mut self.metaspace, &mut self.heap, &text))
+            Value::Reference(strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text))
         }
         Shape::Class(name) => {
-            class_operations::load_class(&mut self.metaspace, &mut self.heap, &name);
-            let mirror = self.metaspace.class_mirror(&name).unwrap_or_else(|| {
+            class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, &name);
+            let mirror = self.shared.metaspace.class_mirror(&name).unwrap_or_else(|| {
                 panic!("static argument: no Class mirror for '{name}'")
             });
             Value::Reference(mirror)
@@ -374,19 +374,19 @@ pub(super) fn static_argument(&mut self, owner: &str, index: u16) -> Value {
 /// Java from inside an intrinsic.
 fn dynamic_constant(&mut self, owner: &str, cp_index: u16) -> Value {
     let key = (owner.to_string(), cp_index);
-    if let Some(&cached) = self.condy.get(&key) {
+    if let Some(&cached) = self.shared.condy.get(&key) {
         return cached;
     }
     // A condy's arguments can be condys, so resolution walks a graph. A constant that
     // reaches itself would recurse until the Rust stack died; stop it with a diagnosis.
     assert!(
-        self.condy_in_progress.insert(key.clone()),
+        self.shared.condy_in_progress.insert(key.clone()),
         "condy: constant pool #{cp_index} of {owner} depends on itself"
     );
 
     // Lift the whole shape out of the pool before resolving anything.
     let (target_class, target_name, target_descriptor, argument_indices) = {
-        let class = self.metaspace.get(owner).expect("condy: owner not loaded");
+        let class = self.shared.metaspace.get(owner).expect("condy: owner not loaded");
         let (bsm_index, _, declared) = class
             .dynamic_constant(cp_index)
             .expect("condy: cp_index is not a Dynamic constant");
@@ -450,7 +450,7 @@ fn dynamic_constant(&mut self, owner: &str, cp_index: u16) -> Value {
     let widths = MetaspaceService::param_slot_widths(&target_descriptor);
 
     let target = self
-        .metaspace
+        .shared.metaspace
         .resolve_method(&target_class, &target_name, &target_descriptor)
         .unwrap_or_else(|| {
             panic!("condy: cannot resolve {target_class}.{target_name}{target_descriptor}")
@@ -459,8 +459,8 @@ fn dynamic_constant(&mut self, owner: &str, cp_index: u16) -> Value {
         .call_java(target, args, &widths)
         .expect("condy: the bootstrap target must return a value");
 
-    self.condy_in_progress.remove(&key);
-    self.condy.insert(key, value);
+    self.shared.condy_in_progress.remove(&key);
+    self.shared.condy.insert(key, value);
     value
 }
 
@@ -496,7 +496,7 @@ fn type_switch(&mut self, labels: &[ResolvedLabel], args: &[Value]) -> i32 {
         let matched = match label {
             ResolvedLabel::Type(name) => {
                 let runtime = self.runtime_class_of(selector);
-                class_operations::is_subtype(&mut self.metaspace, &runtime, name)
+                class_operations::is_subtype(&mut self.shared.metaspace, &runtime, name)
             }
             ResolvedLabel::Constant(Value::Reference(descriptor)) => {
                 self.matches_enum_constant(*descriptor, selector)
@@ -524,23 +524,23 @@ fn matches_enum_constant(&mut self, descriptor: usize, selector: usize) -> bool 
     let wanted_class = {
         let name = self.reference_field(class_desc, "name");
         // A ClassDesc carries the binary name with dots; runtime classes use slashes.
-        strings::read(&self.heap, name).replace('.', "/")
+        strings::read(&self.shared.heap, name).replace('.', "/")
     };
     if self.runtime_class_of(selector) != wanted_class {
         return false;
     }
     let wanted_constant = {
         let name = self.reference_field(descriptor, "constantName");
-        strings::read(&self.heap, name)
+        strings::read(&self.shared.heap, name)
     };
     let actual = self.reference_field(selector, "name");
-    strings::read(&self.heap, actual) == wanted_constant
+    strings::read(&self.shared.heap, actual) == wanted_constant
 }
 
 /// The name of an object's runtime class, read from the `class_id` in its header.
 fn runtime_class_of(&mut self, object: usize) -> String {
-    let mirror = self.heap.read_u32(object) as usize;
-    self.metaspace
+    let mirror = self.shared.heap.read_u32(object) as usize;
+    self.shared.metaspace
         .class_name_at_mirror(mirror)
         .expect("the object's header does not point at a known class")
         .to_string()
@@ -558,11 +558,11 @@ pub(super) fn text_of(&mut self, object: usize) -> String {
     }
     let class = self.runtime_class_of(object);
     if class == "java/lang/String" {
-        return strings::read(&self.heap, object);
+        return strings::read(&self.shared.heap, object);
     }
     match self.call_virtual(object, "toString", "()Ljava/lang/String;", Vec::new()) {
         Some(Value::Reference(0)) => "null".to_string(),
-        Some(Value::Reference(text)) => strings::read(&self.heap, text),
+        Some(Value::Reference(text)) => strings::read(&self.shared.heap, text),
         // Our `java.lang.Object` declares no `toString`, so a class that defines none has
         // no text to give. Java would answer `Class@hash`; inventing that here would be
         // guessing at a format nothing has asked us to match yet.
@@ -578,8 +578,8 @@ pub(super) fn text_of(&mut self, object: usize) -> String {
 /// object's **runtime** class so inherited fields (like `Enum.name`) are found too.
 fn reference_field(&mut self, object: usize, field: &str) -> usize {
     let class = self.runtime_class_of(object);
-    let at = object + objects_operations::field_offset(&mut self.metaspace, &class, field);
-    self.heap.read_u32(at) as usize
+    let at = object + objects_operations::field_offset(&mut self.shared.metaspace, &class, field);
+    self.shared.heap.read_u32(at) as usize
 }
 } // impl JVM
 
@@ -654,7 +654,7 @@ fn capture_width(descriptor: &str) -> usize {
 /// A record's `toString`: `Name[a=1, b=2]`, using the class's **simple** name — the part
 /// after the last `/` (package) and `$` (nesting).
 fn record_to_string(
-    jvm: &mut JVM,
+    jvm: &mut Exec<'_>,
     record_class: &str,
     components: &[Component],
     args: &[Value],
@@ -664,12 +664,12 @@ fn record_to_string(
     let body: Vec<String> = components
         .iter()
         .map(|component| {
-            let value = read_component(&mut jvm.metaspace, &jvm.heap, record_class, component, object);
+            let value = read_component(&mut jvm.shared.metaspace, &jvm.shared.heap, record_class, component, object);
             let text = match value {
                 // A reference component is whatever *its own* `toString` says — the one
                 // place a record's text depends on user code.
                 Value::Reference(target) => jvm.text_of(target),
-                other => render(&jvm.heap, &other, &component.descriptor),
+                other => render(&jvm.shared.heap, &other, &component.descriptor),
             };
             format!("{}={}", component.name, text)
         })
@@ -680,7 +680,7 @@ fn record_to_string(
 /// A record's `hashCode`: `31 * accumulator + hash(component)` over the components in
 /// declaration order, starting from zero — so `P(1, 2)` hashes to `1 * 31 + 2 = 33`.
 fn record_hash_code(
-    jvm: &mut JVM,
+    jvm: &mut Exec<'_>,
     record_class: &str,
     components: &[Component],
     args: &[Value],
@@ -688,7 +688,7 @@ fn record_hash_code(
     let object = receiver(args, "hashCode");
     let mut accumulator = 0i32;
     for component in components {
-        let value = read_component(&mut jvm.metaspace, &jvm.heap, record_class, component, object);
+        let value = read_component(&mut jvm.shared.metaspace, &jvm.shared.heap, record_class, component, object);
         let hash = match value {
             // `Objects.hashCode`: null is 0, anything else answers for itself.
             Value::Reference(0) => 0,
@@ -708,7 +708,7 @@ fn record_hash_code(
 /// component must match. Anything else — a different class, or `null` — is `false`
 /// rather than an error.
 fn record_equals(
-    jvm: &mut JVM,
+    jvm: &mut Exec<'_>,
     record_class: &str,
     components: &[Component],
     args: &[Value],
@@ -723,13 +723,13 @@ fn record_equals(
     }
     // A record only equals another instance of the very same class — no subclassing to
     // worry about, since records are implicitly final.
-    let other_class = jvm.metaspace.class_name_at_mirror(jvm.heap.read_u32(other) as usize);
+    let other_class = jvm.shared.metaspace.class_name_at_mirror(jvm.shared.heap.read_u32(other) as usize);
     if other_class != Some(record_class) {
         return false;
     }
     components.iter().all(|component| {
-        let mine = read_component(&mut jvm.metaspace, &jvm.heap, record_class, component, object);
-        let theirs = read_component(&mut jvm.metaspace, &jvm.heap, record_class, component, other);
+        let mine = read_component(&mut jvm.shared.metaspace, &jvm.shared.heap, record_class, component, object);
+        let theirs = read_component(&mut jvm.shared.metaspace, &jvm.shared.heap, record_class, component, other);
         match (mine, theirs) {
             // `Objects.equals`: identical references are equal without asking, a lone
             // null never is, and otherwise the component decides for itself. Comparing

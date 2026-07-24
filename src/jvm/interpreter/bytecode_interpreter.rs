@@ -17,7 +17,8 @@
 //! handing the result down to the caller.
 
 use std::fmt::Write as _;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -98,23 +99,42 @@ pub enum ThreadStatus {
 /// - `Green` (default): the cooperative scheduler on a single OS thread (`step`
 ///   round-robins at opcode granularity). Deterministic and single-steppable — what
 ///   the `jvm-step` visualizer needs.
-/// - `Os`: each `java.lang.Thread` runs on a real `std::thread`, with a **GIL** (one
-///   global interpreter lock) serializing opcode execution. Correct but not yet
-///   parallel — removing the GIL is the next milestone. Blocking is real `park`/`unpark`.
+/// - `OsGil`: each `java.lang.Thread` runs on a real `std::thread`, with a **GIL** (one
+///   global interpreter lock) serializing opcode execution. Correct but not parallel.
+///   Blocking is real `park`/`unpark`.
+/// - `OsParallel`: real OS threads **without** the GIL → true parallelism (H3, *in
+///   progress*). Selected by `JVM_THREADS=os`. Today it still shares the `os-gil` engine
+///   (one global lock per opcode), so it runs and is oracle-correct but is **not yet
+///   actually parallel**; the plan *shrinks* that lock — safepoints, TLABs, fine-grained
+///   locks — rather than removing it in one shot, so the mode stays validated at every step.
+///
+/// `OsGil` and `OsParallel` are the close pair: both run on real `std::thread`s and share
+/// the whole OS substrate, differing only in whether the world-lock is engaged. `Green` is
+/// the outlier — a different scheduler entirely.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadMode {
     Green,
-    Os,
+    OsGil,
+    OsParallel,
 }
 
 impl ThreadMode {
-    /// Reads `JVM_THREADS` (`os` → real OS threads + GIL; anything else → green).
-    /// Defaults to `Green` while the OS substrate stabilises.
+    /// Reads `JVM_THREADS`: `os-gil` → OS threads + GIL; `os` → OS threads without the GIL
+    /// (the in-progress parallel engine); anything else → green (the default while the OS
+    /// substrate stabilises).
     pub fn from_env() -> Self {
         match std::env::var("JVM_THREADS").ok().as_deref().map(str::trim) {
-            Some("os") | Some("OS") | Some("Os") => ThreadMode::Os,
+            Some(v) if v.eq_ignore_ascii_case("os-gil") => ThreadMode::OsGil,
+            Some(v) if v.eq_ignore_ascii_case("os") => ThreadMode::OsParallel,
             _ => ThreadMode::Green,
         }
+    }
+
+    /// True for the substrates that run on real `std::thread`s — so blocking uses real
+    /// `park`/`unpark` — as opposed to the single-threaded cooperative `Green`. Both
+    /// `OsGil` and `OsParallel` qualify; they differ only in the world-lock.
+    pub fn uses_os_threads(self) -> bool {
+        matches!(self, ThreadMode::OsGil | ThreadMode::OsParallel)
     }
 }
 
@@ -164,6 +184,11 @@ pub struct GreenThread {
     /// **OS mode only.** Whether a real OS thread has already been launched for this
     /// slot — the driver spawns one per new `Thread.start()` slot exactly once.
     pub os_spawned: bool,
+    /// **`os` (parallel) mode only.** Set by a `Runnable` thread that has parked itself at a
+    /// GC safepoint (its frames synced to this slot). The GC coordinator waits until every
+    /// non-terminated thread is *safe* (`status != Runnable || at_safepoint`) before moving
+    /// objects, then unparks the safepoint-parked ones. See `os_parallel_loop`.
+    pub at_safepoint: bool,
 }
 
 /// What a lambda call site produced: everything needed to run the interface method on
@@ -203,18 +228,39 @@ pub struct ThreadView {
 /// A program execution in progress: the **metaspace** (the loaded classes and
 /// their bytecode) plus the **call stack** — a stack of frames, one per in-flight
 /// method call. The frame on top is the one currently executing.
-pub struct JVM {
-    metaspace: MetaspaceService,
-    /// The **currently running** thread's call stack (its slot in `threads` is empty
-    /// while it runs; they swap on a context switch). Keeping the active stack here
-    /// means every opcode handler touches `self.frames` exactly as before — threading
-    /// only adds the scheduler around it.
-    frames: Vec<Frame>,
-    /// All green threads. `threads[current]` is the running one (its `frames` empty —
-    /// the live stack is in `self.frames`); the rest are parked with their stacks.
-    threads: Vec<GreenThread>,
-    /// Index of the running thread in `threads` (thread 0 is the entry/`main` thread).
+/// The **per-thread execution context**: the running thread's call stack plus its slot
+/// index. In green mode it lives inside the owner [`JVM`]; in OS mode **each thread owns its
+/// own** `RunningCtx` (H3 1c-ii) and pairs it with a `SharedVm` lock guard per opcode via
+/// [`Exec`]. Every opcode handler reaches it as `self.running.frames`. Frames live in the
+/// thread's slot between turns and are `activate`d into here to run; 1d will let the
+/// frame-local opcodes run on this context **without** taking the shared lock at all.
+#[derive(Default)]
+struct RunningCtx {
+    /// Index into `threads` of the thread currently running. Its slot's own `frames` is
+    /// empty while it runs — the live stack is here in `frames`.
     current: usize,
+    /// The running thread's call stack (bottom → top). Swapped with the slot on a context switch.
+    frames: Vec<Frame>,
+    /// **Code cache** (H3 1d): a copy of the current top frame's bytecode, refreshed lazily
+    /// by [`Exec::sync_code_cache`] whenever the top method changes (invoke/return/activate/
+    /// unwind — all detected by `code_method` mismatch). Lets a frame-local opcode read its
+    /// bytecode from thread-local memory instead of the shared `metaspace`.
+    code: Vec<u8>,
+    /// The `MethodId` whose bytecode currently lives in `code` (`None` before the first fill).
+    code_method: Option<MethodId>,
+}
+
+/// The **shared VM state** — everything that is *not* private to a single thread. In OS mode
+/// it lives behind one `Arc<Mutex<SharedVm>>` (H3 1c-ii), locked per opcode; the H3 endgame
+/// (see `docs/H3_ownership.md`) puts each field behind its own lock in the order `metaspace <
+/// heap < monitors < registry < console < gc`, so threads serialise only on the structure they
+/// actually touch. Grouping the fields into one type now — behaviour identical while the single
+/// `Mutex` still stands in — is the boundary the split needs.
+struct SharedVm {
+    metaspace: MetaspaceService,
+    /// All green threads (the **registry**). `threads[running.current]` is the running one
+    /// (its `frames` empty — the live stack is in `running.frames`); the rest keep their stacks.
+    threads: Vec<GreenThread>,
     /// Monotonic id for the next spawned thread (the scheduler's internal id).
     next_thread_id: usize,
     /// Counter behind `Thread.nextThreadNum()` — the id a `Thread` object is stamped with
@@ -256,12 +302,38 @@ pub struct JVM {
     last_gc_used: usize,
     /// Set by `System.gc()`; honoured at the next safepoint (the explicit trigger).
     gc_requested: bool,
-    /// Threading substrate (green vs OS+GIL), read once from `JVM_THREADS` at startup.
+    /// Threading substrate (green vs `os-gil`), read once from `JVM_THREADS` at startup.
     mode: ThreadMode,
     /// **OS mode only.** Raised when the main thread returns: worker OS threads see it
     /// at the top of their loop and exit (mirrors the green scheduler abandoning workers
     /// when `main` ends).
     halt: bool,
+    /// **`os` parallel driver only.** When set, [`Exec::safepoint`] *defers* collection to the
+    /// driver's stop-the-world handshake instead of collecting inline. The serialised paths
+    /// (green, `os-gil`, and the `os` serialised fallback) leave it `false` and collect inline.
+    gc_by_driver: bool,
+}
+
+// H3 *ownership* border (see `docs/H3_ownership.md` §1). The two fields below are the split:
+// `shared` (guarded as a whole by the GIL today; per-field locks at 1c/1d) and `running` (the
+// per-thread execution context, owned by each OS thread once the GIL is gone). Every opcode
+// handler still reaches them as `self.shared.<x>` / `self.running.<x>`.
+pub struct JVM {
+    /// Shared VM state (heap, metaspace, monitors, registry, GC bookkeeping…). See [`SharedVm`].
+    shared: SharedVm,
+    /// The **per-thread execution context** (running thread's stack + index). See [`RunningCtx`].
+    running: RunningCtx,
+}
+
+/// The interpreter **view**: a borrow of the shared state plus the running thread's context.
+/// Every opcode handler and scheduler method lives here (`impl Exec`), reaching state as
+/// `self.shared.<x>` / `self.running.<x>` exactly as before. Splitting the *receiver* from the
+/// owner ([`JVM`]) is the H3 1c step (see `docs/H3_ownership.md`): today both borrows come from
+/// one owned `JVM`, but the shape lets an OS thread later combine its **own** `RunningCtx` with a
+/// **shared** `SharedVm` guard — the actual GIL removal — without touching a single handler body.
+pub struct Exec<'a> {
+    shared: &'a mut SharedVm,
+    running: &'a mut RunningCtx,
 }
 
 impl JVM {
@@ -270,60 +342,75 @@ impl JVM {
     /// fresh empty heap.
     pub fn new(metaspace: MetaspaceService, entry: Frame) -> Self {
         JVM {
-            metaspace,
             // The entry method runs on thread 0 (`main`); its stack is the active one,
             // so thread 0's own `frames` slot starts empty.
-            frames: vec![entry],
-            threads: vec![GreenThread {
-                id: 0,
-                status: ThreadStatus::Runnable,
-                frames: Vec::new(),
-                thread_obj: 0, // the entry/main thread has no `Thread` object
-                wait_reacquire: None,
-                joining_on: None,
-                sleep_until: None,
-                interrupt_pending: false,
-                block_call_pc: 0,
-                os_handle: None,
-                os_spawned: true, // the main thread is driven by execute_os' own thread
-            }],
-            current: 0,
-            next_thread_id: 1,
-            java_thread_counter: 1, // main's lazily-built object takes 0; the first `new Thread()` takes 1
-            monitors: std::collections::HashMap::new(),
-            lambdas: std::collections::HashMap::new(),
-            condy: std::collections::HashMap::new(),
-            condy_in_progress: std::collections::HashSet::new(),
-            heap: HeapService::new(),
-            console: String::new(),
-            gc_policy: gc::GcPolicy::from_env(),
-            steps: 0,
-            last_gc_step: 0,
-            last_gc_used: 0,
-            gc_requested: false,
-            mode: ThreadMode::from_env(),
-            halt: false,
+            running: RunningCtx { current: 0, frames: vec![entry], ..Default::default() },
+            shared: SharedVm {
+                metaspace,
+                threads: vec![GreenThread {
+                    id: 0,
+                    status: ThreadStatus::Runnable,
+                    frames: Vec::new(),
+                    thread_obj: 0, // the entry/main thread has no `Thread` object
+                    wait_reacquire: None,
+                    joining_on: None,
+                    sleep_until: None,
+                    interrupt_pending: false,
+                    block_call_pc: 0,
+                    os_handle: None,
+                    os_spawned: true, // the main thread is driven by execute_os_gil's own thread
+                    at_safepoint: false,
+                }],
+                next_thread_id: 1,
+                java_thread_counter: 1, // main's lazily-built object takes 0; first `new Thread()` takes 1
+                monitors: std::collections::HashMap::new(),
+                lambdas: std::collections::HashMap::new(),
+                condy: std::collections::HashMap::new(),
+                condy_in_progress: std::collections::HashSet::new(),
+                heap: HeapService::new(),
+                console: String::new(),
+                gc_policy: gc::GcPolicy::from_env(),
+                steps: 0,
+                last_gc_step: 0,
+                last_gc_used: 0,
+                gc_requested: false,
+                mode: ThreadMode::from_env(),
+                halt: false,
+                gc_by_driver: false,
+            },
         }
     }
 
+    /// Borrows this owner as an interpreter [`Exec`] **view** — the receiver every opcode
+    /// handler and scheduler method runs on. Both borrows come from one owner today; the OS
+    /// parallel driver will instead pair a thread-local `RunningCtx` with a shared `SharedVm`.
+    pub fn exec(&mut self) -> Exec<'_> {
+        Exec { shared: &mut self.shared, running: &mut self.running }
+    }
+}
+
+impl Exec<'_> {
     /// What the program has printed so far (via native methods), for tooling.
     pub fn console(&self) -> &str {
-        &self.console
+        &self.shared.console
     }
 
     /// The heap, for tooling that wants to show its contents.
     pub fn heap(&self) -> &HeapService {
-        &self.heap
+        &self.shared.heap
     }
 
     /// Runs `f` with **every** thread stack visible to it. The GC's roots span all
-    /// threads, but the running thread's stack lives in `self.frames`; this parks it
-    /// into its slot so the whole set is in `self.threads`, runs `f` over them, then
+    /// threads, but the running thread's stack lives in `self.running.frames`; this parks it
+    /// into its slot so the whole set is in `self.shared.threads`, runs `f` over them, then
     /// re-activates. Every GC entry point goes through here.
     fn parked<R>(&mut self, f: impl FnOnce(&MetaspaceService, &mut HeapService, &mut [GreenThread]) -> R) -> R {
-        std::mem::swap(&mut self.frames, &mut self.threads[self.current].frames);
-        let result = f(&self.metaspace, &mut self.heap, &mut self.threads);
-        std::mem::swap(&mut self.frames, &mut self.threads[self.current].frames);
+        // Every GC enters here: flush the per-thread pending Eden logs (W2b) into the shared
+        // `objects` log first, so the collector's wholesale view is complete.
+        self.shared.heap.commit_pending();
+        std::mem::swap(&mut self.running.frames, &mut self.shared.threads[self.running.current].frames);
+        let result = f(&self.shared.metaspace, &mut self.shared.heap, &mut self.shared.threads);
+        std::mem::swap(&mut self.running.frames, &mut self.shared.threads[self.running.current].frames);
         result
     }
 
@@ -343,7 +430,7 @@ impl JVM {
     /// The GC compaction policy in effect (read from the environment at startup),
     /// for tooling that evaluates the fragmentation rule.
     pub fn gc_policy(&self) -> &gc::GcPolicy {
-        &self.gc_policy
+        &self.shared.gc_policy
     }
 
     /// Runs a **mark-compact**: relocates live objects into one contiguous run and
@@ -364,8 +451,8 @@ impl JVM {
         if forward.is_empty() {
             return;
         }
-        let monitors = std::mem::take(&mut self.monitors);
-        self.monitors = monitors
+        let monitors = std::mem::take(&mut self.shared.monitors);
+        self.shared.monitors = monitors
             .into_iter()
             .map(|(obj, mon)| (forward.get(&obj).copied().unwrap_or(obj), mon))
             .collect();
@@ -375,15 +462,15 @@ impl JVM {
     /// later allocation reusing that offset can't inherit a stale monitor.
     fn prune_dead_monitors(&mut self) {
         let live: std::collections::HashSet<usize> =
-            self.heap.allocations().iter().map(|a| a.offset).collect();
-        self.monitors.retain(|obj, _| live.contains(obj));
+            self.shared.heap.allocations().iter().map(|a| a.offset).collect();
+        self.shared.monitors.retain(|obj, _| live.contains(obj));
     }
 
     /// Runs a **minor** collection: the young generation's copying collector — evacuate
     /// Eden's survivors to a survivor space (or promote them), recycle Eden. Cheap and
     /// frequent; the visualizer can trigger it, and the safepoint runs it when Eden fills.
     pub fn gc_minor(&mut self) -> gc::MinorReport {
-        let tenure = self.gc_policy.tenure;
+        let tenure = self.shared.gc_policy.tenure;
         let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
@@ -393,7 +480,7 @@ impl JVM {
     /// Flags an explicit collection request (`System.gc()`), serviced at the next
     /// safepoint — not run inline, exactly like the real VM defers it.
     pub fn request_gc(&mut self) {
-        self.gc_requested = true;
+        self.shared.gc_requested = true;
     }
 
     /// A **safepoint**: the point between opcodes where the VM is allowed to collect.
@@ -401,30 +488,60 @@ impl JVM {
     /// causes (out-of-space / occupancy / allocation-rate) — and runs a cycle if one
     /// fires. This is the single place "when does the GC run" is decided.
     fn safepoint(&mut self) {
+        // `os` (parallel) mode: the collector *moves* objects, so it can't run while sibling
+        // threads execute lock-free. The parallel driver owns GC — it runs a stop-the-world
+        // handshake (`coordinate_gc`) instead — so here we defer. `os-gil`/green collect inline
+        // (safe: the single lock / one OS thread already serialises everything).
+        if self.shared.gc_by_driver {
+            return;
+        }
+        self.collect_at_safepoint();
+    }
+
+    /// Whether a collection is due — the same triggers `collect_at_safepoint` acts on. The `os`
+    /// parallel driver polls this after each shared opcode to decide whether to stop the world.
+    fn needs_collection(&self) -> bool {
+        self.shared.heap.eden_used() * 10 >= self.shared.heap.eden_capacity() * 9
+            || self.shared.gc_requested
+            || self
+                .shared
+                .gc_policy
+                .auto_cause(
+                    self.shared.heap.used(),
+                    self.shared.steps,
+                    self.shared.last_gc_used,
+                    self.shared.last_gc_step,
+                )
+                .is_some()
+    }
+
+    /// The actual collection triggers, factored out of [`Self::safepoint`] so the `os` parallel
+    /// driver can run the *same* logic under its stop-the-world handshake.
+    fn collect_at_safepoint(&mut self) {
         // Young generation first: a (near-)full Eden triggers a cheap minor collection.
         // Always on — the copying collector is correct over any program state (the
         // gate the old `JVM_GC_AUTO` guarded was about an incomplete mark, long fixed).
-        if self.heap.eden_used() * 10 >= self.heap.eden_capacity() * 9 {
-            let tenure = self.gc_policy.tenure;
+        if self.shared.heap.eden_used() * 10 >= self.shared.heap.eden_capacity() * 9 {
+            let tenure = self.shared.gc_policy.tenure;
             let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
             self.remap_monitor_keys(&report.relocations); // young objects moved → fix monitor keys
             self.prune_dead_monitors();
             let _ = writeln!(
-                self.console,
+                self.shared.console,
                 "[gc] minor: {} copiados, {} promovidos · recuperó {}B",
                 report.copied, report.promoted, report.reclaimed
             );
         }
 
         // Then the major (Old) triggers: explicit `System.gc()` or the automatic causes.
-        let cause = if self.gc_requested {
+        let cause = if self.shared.gc_requested {
             Some(gc::GcCause::Explicit)
         } else {
-            self.gc_policy.auto_cause(
-                self.heap.used(),
-                self.steps,
-                self.last_gc_used,
-                self.last_gc_step,
+            self.shared.gc_policy.auto_cause(
+                self.shared.heap.used(),
+                self.shared.steps,
+                self.shared.last_gc_used,
+                self.shared.last_gc_step,
             )
         };
         if let Some(cause) = cause {
@@ -436,8 +553,8 @@ impl JVM {
     /// fragmented enough ([`gc::should_compact`]). Resets the trigger baselines and
     /// logs a line (visible in the visualizer's output panel).
     fn collect(&mut self, cause: gc::GcCause) {
-        let before = self.heap.used();
-        let policy = self.gc_policy;
+        let before = self.shared.heap.used();
+        let policy = self.shared.gc_policy;
         // A full collection is generational: a minor first (evacuate/promote the young),
         // then the major over Old (sweep, and compact if fragmented). All over every
         // thread's roots, so it runs inside `parked`.
@@ -457,14 +574,14 @@ impl JVM {
         self.remap_monitor_keys(&minor_reloc);
         self.remap_monitor_keys(&compact_reloc);
         self.prune_dead_monitors();
-        let after = self.heap.used();
+        let after = self.shared.heap.used();
 
-        self.gc_requested = false;
-        self.last_gc_used = after;
-        self.last_gc_step = self.steps;
+        self.shared.gc_requested = false;
+        self.shared.last_gc_used = after;
+        self.shared.last_gc_step = self.shared.steps;
 
         let _ = writeln!(
-            self.console,
+            self.shared.console,
             "[gc] {cause:?}: {live} vivos, {garbage} basura · used {before}B → {after}B{}",
             if compacted > 0 { format!(" (compactó {compacted}B)") } else { String::new() },
         );
@@ -473,12 +590,12 @@ impl JVM {
     /// The mirror index as `(Class ID, class name, offset)` rows, for a visualizer
     /// labelling the heap with which class's mirror sits at which offset.
     pub fn class_objects(&self) -> Vec<(&str, &str, usize)> {
-        self.metaspace.class_object_offsets()
+        self.shared.metaspace.class_object_offsets()
     }
 
     /// The current (top) frame — read by the visualizer to show the live state.
     pub fn frame(&self) -> &Frame {
-        self.frames.last().expect("no frame on the call stack")
+        self.running.frames.last().expect("no frame on the call stack")
     }
 
     /// The current frame's program counter.
@@ -488,33 +605,46 @@ impl JVM {
 
     /// How deep the call stack is (1 = just the entry method).
     pub fn depth(&self) -> usize {
-        self.frames.len()
+        self.running.frames.len()
     }
 
-    /// The bytecode of the current (top) frame, resolved through the metaspace.
-    /// The visualizer disassembles this to draw the instruction window.
+    /// The bytecode of the current (top) frame — served from the [`RunningCtx`] code cache,
+    /// kept current by [`Self::sync_code_cache`] (called at the top of each `run_one`, and on
+    /// every frame change via the `code_method` check).
     pub fn current_code(&self) -> &[u8] {
-        self.metaspace.code(self.frame().method())
+        &self.running.code
+    }
+
+    /// Refreshes the code cache if the top frame's method changed since the last fill. O(1) in
+    /// the common case (same method — just a `MethodId` compare); copies the bytecode only on an
+    /// actual frame change (invoke/return/activate/unwind). This is what lets the H3 1d
+    /// frame-local fast path read opcodes from thread-local memory, never touching `metaspace`.
+    fn sync_code_cache(&mut self) {
+        let method = self.frame().method();
+        if self.running.code_method != Some(method) {
+            self.running.code = self.shared.metaspace.code(method).to_vec();
+            self.running.code_method = Some(method);
+        }
     }
 
     /// The whole call stack (bottom → top), for a visualizer that shows several
     /// frames at once.
     pub fn frames(&self) -> &[Frame] {
-        &self.frames
+        &self.running.frames
     }
 
     /// A snapshot of every green thread (id, state, current method, which is running) —
     /// so the visualizer can show the cooperative scheduling. The running thread's live
-    /// stack is in `self.frames`; parked threads keep theirs in their slot.
+    /// stack is in `self.running.frames`; parked threads keep theirs in their slot.
     pub fn thread_views(&self) -> Vec<ThreadView> {
-        self.threads
+        self.shared.threads
             .iter()
             .enumerate()
             .map(|(i, t)| {
-                let stack = if i == self.current { &self.frames } else { &t.frames };
+                let stack = if i == self.running.current { &self.running.frames } else { &t.frames };
                 let method = stack
                     .last()
-                    .map(|f| self.metaspace.name(f.method()).to_string())
+                    .map(|f| self.shared.metaspace.name(f.method()).to_string())
                     .unwrap_or_else(|| "—".to_string());
                 ThreadView {
                     id: t.id,
@@ -526,7 +656,7 @@ impl JVM {
                         ThreadStatus::Terminated => "terminated",
                     },
                     method,
-                    current: i == self.current,
+                    current: i == self.running.current,
                 }
             })
             .collect()
@@ -534,23 +664,23 @@ impl JVM {
 
     /// The bytecode of an arbitrary frame (not just the top), via the metaspace.
     pub fn code_of(&self, frame: &Frame) -> &[u8] {
-        self.metaspace.code(frame.method())
+        self.shared.metaspace.code(frame.method())
     }
 
     /// A frame's method name, for labelling its panel.
     pub fn method_name_of(&self, frame: &Frame) -> &str {
-        self.metaspace.name(frame.method())
+        self.shared.metaspace.name(frame.method())
     }
 
     /// Mutable access to the top frame, for the opcode helpers.
     fn top(&mut self) -> &mut Frame {
-        self.frames.last_mut().expect("no frame on the call stack")
+        self.running.frames.last_mut().expect("no frame on the call stack")
     }
 
     /// Reads the signed 2-byte branch offset that follows the current opcode.
     fn branch_offset(&self) -> i16 {
         let frame = self.frame();
-        let code = self.metaspace.code(frame.method());
+        let code = self.shared.metaspace.code(frame.method());
         let pc = frame.pc();
         i16::from_be_bytes([code[pc + 1], code[pc + 2]])
     }
@@ -560,7 +690,7 @@ impl JVM {
     /// with the range the 16-bit form can't express.
     fn wide_branch_offset(&self) -> i32 {
         let frame = self.frame();
-        let code = self.metaspace.code(frame.method());
+        let code = self.shared.metaspace.code(frame.method());
         let pc = frame.pc();
         i32::from_be_bytes([code[pc + 1], code[pc + 2], code[pc + 3], code[pc + 4]])
     }
@@ -574,17 +704,17 @@ impl JVM {
     pub fn step(&mut self) -> Step {
         if let Step::Return(value) = self.run_one() {
             // The current thread's last frame returned.
-            if self.current == 0 {
+            if self.running.current == 0 {
                 return Step::Return(value); // the main thread finished → program result
             }
-            let finished = self.current;
+            let finished = self.running.current;
             // Mark terminated and wake anyone blocked in `join` on it.
             self.on_thread_terminated(finished);
         }
         self.wake_sleepers();
         // Cooperative context switch: pick the next runnable thread.
         match self.next_runnable() {
-            Some(next) if next != self.current => {
+            Some(next) if next != self.running.current => {
                 self.switch_to(next);
                 Step::Continue
             }
@@ -596,21 +726,21 @@ impl JVM {
     /// Round-robin from `current`: the index of the next `Runnable` thread (or the
     /// current one if it's the only runnable; `None` if none are).
     fn next_runnable(&self) -> Option<usize> {
-        let n = self.threads.len();
+        let n = self.shared.threads.len();
         // Offsets 1..=n cover every thread, ending at `current` itself — so others are
         // preferred (fairness) and the current thread is the last resort.
         (1..=n)
-            .map(|off| (self.current + off) % n)
-            .find(|&i| self.threads[i].status == ThreadStatus::Runnable)
+            .map(|off| (self.running.current + off) % n)
+            .find(|&i| self.shared.threads[i].status == ThreadStatus::Runnable)
     }
 
     /// Context switch: park the running thread's stack into its slot and load the
     /// target thread's stack into the active `frames` (a pair of swaps — the active
-    /// stack always lives in `self.frames`).
+    /// stack always lives in `self.running.frames`).
     fn switch_to(&mut self, next: usize) {
-        std::mem::swap(&mut self.frames, &mut self.threads[self.current].frames);
-        self.current = next;
-        std::mem::swap(&mut self.frames, &mut self.threads[self.current].frames);
+        std::mem::swap(&mut self.running.frames, &mut self.shared.threads[self.running.current].frames);
+        self.running.current = next;
+        std::mem::swap(&mut self.running.frames, &mut self.shared.threads[self.running.current].frames);
     }
 
     /// Park thread `idx` — the single "block" primitive, the mirror of [`make_runnable`].
@@ -627,7 +757,7 @@ impl JVM {
             matches!(status, ThreadStatus::Blocked | ThreadStatus::Waiting | ThreadStatus::TimedWaiting),
             "block() is for parked states; Runnable goes through make_runnable, Terminated through on_thread_terminated",
         );
-        self.threads[idx].status = status;
+        self.shared.threads[idx].status = status;
     }
 
     /// Mark thread `idx` runnable — the single "wake" primitive. In OS mode it also
@@ -635,37 +765,38 @@ impl JVM {
     /// in green mode the round-robin scheduler will simply pick it up. Every place that
     /// transitions a thread *to* `Runnable` goes through here so the unpark can't be missed.
     fn make_runnable(&mut self, idx: usize) {
-        self.threads[idx].status = ThreadStatus::Runnable;
-        if self.mode == ThreadMode::Os {
-            if let Some(handle) = &self.threads[idx].os_handle {
+        self.shared.threads[idx].status = ThreadStatus::Runnable;
+        if self.shared.mode.uses_os_threads() {
+            if let Some(handle) = &self.shared.threads[idx].os_handle {
                 handle.unpark();
             }
         }
     }
 
     /// **OS mode.** Load thread `idx` as the running one: set `current` and swap its saved
-    /// stack into the active `self.frames` (the inverse of [`Self::deactivate`]). Every
-    /// opcode handler then touches `self.frames`/`self.current` exactly as in green mode.
+    /// stack into the active `self.running.frames` (the inverse of [`Self::deactivate`]). Every
+    /// opcode handler then touches `self.running.frames`/`self.running.current` exactly as in green mode.
     fn activate(&mut self, idx: usize) {
-        self.current = idx;
-        std::mem::swap(&mut self.frames, &mut self.threads[idx].frames);
+        self.running.current = idx;
+        self.shared.heap.set_alloc_thread(idx); // this thread's Eden mallocs log to its own pending (W2b)
+        std::mem::swap(&mut self.running.frames, &mut self.shared.threads[idx].frames);
     }
 
     /// **OS mode.** Park thread `idx`'s stack back into its slot after running an opcode,
     /// so the slot holds the full stack between turns (and the GC, via `parked`, can walk it).
     fn deactivate(&mut self, idx: usize) {
-        std::mem::swap(&mut self.frames, &mut self.threads[idx].frames);
+        std::mem::swap(&mut self.running.frames, &mut self.shared.threads[idx].frames);
     }
 
     /// Mark thread `idx` terminated and wake anyone blocked in `join` on it. Shared by the
     /// green scheduler ([`Self::step`]) and the OS driver loop.
     fn on_thread_terminated(&mut self, idx: usize) {
-        self.threads[idx].status = ThreadStatus::Terminated;
-        let joiners: Vec<usize> = (0..self.threads.len())
-            .filter(|&i| self.threads[i].joining_on == Some(idx))
+        self.shared.threads[idx].status = ThreadStatus::Terminated;
+        let joiners: Vec<usize> = (0..self.shared.threads.len())
+            .filter(|&i| self.shared.threads[i].joining_on == Some(idx))
             .collect();
         for w in joiners {
-            self.threads[w].joining_on = None;
+            self.shared.threads[w].joining_on = None;
             self.make_runnable(w);
         }
     }
@@ -673,7 +804,7 @@ impl JVM {
     /// **OS mode.** Unpark every thread with a live OS handle — used on `halt` so parked
     /// workers wake, see the halt flag, and exit instead of leaking.
     fn unpark_all(&self) {
-        for t in &self.threads {
+        for t in &self.shared.threads {
             if let Some(handle) = &t.os_handle {
                 handle.unpark();
             }
@@ -688,7 +819,7 @@ impl JVM {
     /// this is `true` for a running, blocked *or* finished thread — all the cases where a
     /// second `start()` is illegal. The absence of a slot is exactly the `NEW` state.
     fn already_started(&self, receiver: usize) -> bool {
-        receiver != 0 && self.threads.iter().any(|t| t.thread_obj == receiver)
+        receiver != 0 && self.shared.threads.iter().any(|t| t.thread_obj == receiver)
     }
 
     /// `Thread.currentThread()`: the running thread's `Thread` object. A spawned thread
@@ -696,26 +827,26 @@ impl JVM {
     /// is built lazily on first ask — name `"main"`, id `0`. Because `thread_obj` is a GC
     /// root, the object we store here survives collections (that is *why* it became a root).
     fn thread_current(&mut self) -> usize {
-        let current = self.current;
-        if self.threads[current].thread_obj != 0 {
-            return self.threads[current].thread_obj;
+        let current = self.running.current;
+        if self.shared.threads[current].thread_obj != 0 {
+            return self.shared.threads[current].thread_obj;
         }
         // Main's object: allocate a bare `Thread` (its `<init>` is *not* run — main was
         // never `new`ed), then stamp the two fields `<init>` would have set.
-        class_operations::load_class(&mut self.metaspace, &mut self.heap, "java/lang/Thread");
-        let obj = objects_operations::allocate(&mut self.metaspace, &mut self.heap, "java/lang/Thread");
-        let name = strings::intern(&mut self.metaspace, &mut self.heap, "main");
-        let name_at = obj + objects_operations::field_offset(&mut self.metaspace, "java/lang/Thread", "name");
-        self.heap.store_reference(obj, name_at, name);
+        class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, "java/lang/Thread");
+        let obj = objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, "java/lang/Thread");
+        let name = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, "main");
+        let name_at = obj + objects_operations::field_offset(&mut self.shared.metaspace, "java/lang/Thread", "name");
+        self.shared.heap.store_reference(obj, name_at, name);
         // `tid` (a long) is left 0 by `allocate`'s zeroing — main is thread 0.
-        self.threads[current].thread_obj = obj;
+        self.shared.threads[current].thread_obj = obj;
         obj
     }
 
     /// `Thread.nextThreadNum()`: hand out the next construction-time thread id.
     fn next_java_thread_num(&mut self) -> i64 {
-        let id = self.java_thread_counter;
-        self.java_thread_counter += 1;
+        let id = self.shared.java_thread_counter;
+        self.shared.java_thread_counter += 1;
         id
     }
 
@@ -745,23 +876,23 @@ impl JVM {
         // a running thread that will poll, a blocked thread about to throw).
         self.set_interrupt_flag(target_obj);
 
-        let idx = match self.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0) {
+        let idx = match self.shared.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0) {
             Some(i) => i,
             None => return, // no slot (NEW / terminated already gone): flag on the object is enough
         };
-        if !matches!(self.threads[idx].status, ThreadStatus::Waiting | ThreadStatus::TimedWaiting) {
+        if !matches!(self.shared.threads[idx].status, ThreadStatus::Waiting | ThreadStatus::TimedWaiting) {
             return; // Runnable / Blocked / Terminated: not an interruptible park
         }
         // Pull it out of whatever it's parked in. For `wait`, keep `wait_reacquire` so the
         // resume re-acquires the monitor *before* throwing; just remove it from the wait-set.
-        self.threads[idx].sleep_until = None;
-        self.threads[idx].joining_on = None;
-        if let Some((obj, _)) = self.threads[idx].wait_reacquire {
-            if let Some(mon) = self.monitors.get_mut(&obj) {
+        self.shared.threads[idx].sleep_until = None;
+        self.shared.threads[idx].joining_on = None;
+        if let Some((obj, _)) = self.shared.threads[idx].wait_reacquire {
+            if let Some(mon) = self.shared.monitors.get_mut(&obj) {
                 mon.waiting.retain(|&w| w != idx);
             }
         }
-        self.threads[idx].interrupt_pending = true;
+        self.shared.threads[idx].interrupt_pending = true;
         self.make_runnable(idx); // green: reschedulable; OS: also `unpark`s the std::thread
     }
 
@@ -769,8 +900,8 @@ impl JVM {
     fn write_interrupt_flag(&mut self, thread_obj: usize, value: bool) {
         if thread_obj != 0 {
             let at =
-                thread_obj + objects_operations::field_offset(&mut self.metaspace, "java/lang/Thread", "interrupted");
-            self.heap.write_u32(at, value as u32);
+                thread_obj + objects_operations::field_offset(&mut self.shared.metaspace, "java/lang/Thread", "interrupted");
+            self.shared.heap.write_u32(at, value as u32);
         }
     }
 
@@ -782,26 +913,26 @@ impl JVM {
     /// Clears the interrupt flag on thread `idx`'s object — done when the throw of
     /// `InterruptedException` consumes it (JLS).
     fn clear_interrupt_flag(&mut self, idx: usize) {
-        let obj = self.threads[idx].thread_obj;
+        let obj = self.shared.threads[idx].thread_obj;
         self.write_interrupt_flag(obj, false);
     }
 
     fn spawn_thread(&mut self, receiver: usize) {
         let runtime_class = self
-            .metaspace
-            .class_name_at_mirror(self.heap.read_u32(receiver) as usize)
+            .shared.metaspace
+            .class_name_at_mirror(self.shared.heap.read_u32(receiver) as usize)
             .expect("Thread.start: receiver has no class")
             .to_string();
         let slot = self
-            .metaspace
+            .shared.metaspace
             .vtable_slot("java/lang/Thread", "run", "()V")
             .expect("Thread.run vtable slot");
-        let run = self.metaspace.vtable_method(&runtime_class, slot).expect("run() method");
-        let max_locals = self.metaspace.max_locals(run);
+        let run = self.shared.metaspace.vtable_method(&runtime_class, slot).expect("run() method");
+        let max_locals = self.shared.metaspace.max_locals(run);
         let frame = Frame::for_call(run, max_locals, vec![Value::Reference(receiver)], &[1]);
-        let id = self.next_thread_id;
-        self.next_thread_id += 1;
-        self.threads.push(GreenThread {
+        let id = self.shared.next_thread_id;
+        self.shared.next_thread_id += 1;
+        self.shared.threads.push(GreenThread {
             id,
             status: ThreadStatus::Runnable,
             frames: vec![frame],
@@ -813,6 +944,7 @@ impl JVM {
             block_call_pc: 0,
             os_handle: None,
             os_spawned: false, // the OS driver launches this slot's std::thread on the next tick
+            at_safepoint: false,
         });
     }
 
@@ -823,9 +955,9 @@ impl JVM {
     /// and returns `false`. The *caller* decides what "blocked" means for its opcode (the
     /// pc rewind / operand restore that makes the operation retry when rescheduled).
     fn acquire_monitor(&mut self, obj: usize) -> bool {
-        let current = self.current;
+        let current = self.running.current;
         let acquired = {
-            let mon = self.monitors.entry(obj).or_default();
+            let mon = self.shared.monitors.entry(obj).or_default();
             match mon.owner {
                 None => {
                     mon.owner = Some(current);
@@ -855,9 +987,9 @@ impl JVM {
     /// — the monitor frees only at count 0); on freeing it, wakes one blocked contender so it
     /// can retry its acquire. A no-op if the current thread doesn't actually own it.
     fn release_monitor(&mut self, obj: usize) {
-        let current = self.current;
+        let current = self.running.current;
         let wake = {
-            let mon = self.monitors.entry(obj).or_default();
+            let mon = self.shared.monitors.entry(obj).or_default();
             if mon.owner == Some(current) && mon.count > 0 {
                 mon.count -= 1;
                 if mon.count == 0 {
@@ -879,9 +1011,9 @@ impl JVM {
     /// JVMS/JLS gate for `IllegalMonitorStateException`: a thread may only `monitorexit`, or
     /// `wait`/`notify`/`notifyAll`, on a monitor it actually holds.
     fn owns_monitor(&self, obj: usize) -> bool {
-        self.monitors
+        self.shared.monitors
             .get(&obj)
-            .map_or(false, |m| m.owner == Some(self.current) && m.count > 0)
+            .map_or(false, |m| m.owner == Some(self.running.current) && m.count > 0)
     }
 
     /// `monitorenter` (0xc2): acquire the lock object's monitor, or **block** if another
@@ -948,7 +1080,7 @@ impl JVM {
         if let Some(obj) = lock {
             frame.set_monitor(obj);
         }
-        self.frames.push(frame);
+        self.running.frames.push(frame);
         Step::Continue
     }
 
@@ -966,7 +1098,7 @@ impl JVM {
     /// place. A production VM keeps the synchronized path off the hot return path (and uses
     /// biased/thin locks); here we trade a little speed for one obvious release site.
     fn pop_frame(&mut self) -> Option<Frame> {
-        let popped = self.frames.pop();
+        let popped = self.running.frames.pop();
         if let Some(obj) = popped.as_ref().and_then(Frame::monitor) {
             self.release_monitor(obj);
         }
@@ -983,9 +1115,9 @@ impl JVM {
         if !self.owns_monitor(obj) {
             return self.throw_exception("java/lang/IllegalMonitorStateException");
         }
-        let current = self.current;
+        let current = self.running.current;
         let (saved, wake) = {
-            let mon = self.monitors.entry(obj).or_default();
+            let mon = self.shared.monitors.entry(obj).or_default();
             let saved = mon.count;
             mon.owner = None;
             mon.count = 0;
@@ -1001,14 +1133,14 @@ impl JVM {
         // the thread out of the wait-set so the re-acquire path resumes it (a self-notify).
         // `wait(0)` / `wait()` is an indefinite wait (no deadline) — so a deadline is what
         // tells `Waiting` from `TimedWaiting`, exactly as Java distinguishes them.
-        self.threads[current].block_call_pc = self.frame().pc(); // for a possible interrupt throw
+        self.shared.threads[current].block_call_pc = self.frame().pc(); // for a possible interrupt throw
         let timed = matches!(timeout, Some(ms) if ms > 0);
         if timed {
             let ms = timeout.expect("timed implies Some") as usize;
-            self.threads[current].sleep_until = Some(self.steps + ms);
+            self.shared.threads[current].sleep_until = Some(self.shared.steps + ms);
         }
         self.block(current, if timed { ThreadStatus::TimedWaiting } else { ThreadStatus::Waiting });
-        self.threads[current].wait_reacquire = Some((obj, saved));
+        self.shared.threads[current].wait_reacquire = Some((obj, saved));
         self.advance_past_call(); // resume *after* wait() once the monitor is re-acquired
         Step::Continue
     }
@@ -1022,7 +1154,7 @@ impl JVM {
             return self.throw_exception("java/lang/IllegalMonitorStateException");
         }
         let woken: Vec<usize> = {
-            let mon = self.monitors.entry(obj).or_default();
+            let mon = self.shared.monitors.entry(obj).or_default();
             if all {
                 mon.waiting.drain(..).collect()
             } else if mon.waiting.is_empty() {
@@ -1032,7 +1164,7 @@ impl JVM {
             }
         };
         for idx in woken {
-            self.monitors.entry(obj).or_default().blocked.push(idx);
+            self.shared.monitors.entry(obj).or_default().blocked.push(idx);
             // Notified, but not runnable yet: it must re-acquire the monitor first, so it
             // is contending for a lock — `Blocked`, like any other monitor contender.
             self.block(idx, ThreadStatus::Blocked);
@@ -1045,17 +1177,17 @@ impl JVM {
     /// terminates (woken in `step` when that thread ends). If it already finished — or
     /// was never `start`ed — `join` returns at once.
     fn thread_join(&mut self, target_obj: usize) -> Step {
-        let current = self.current;
+        let current = self.running.current;
         // Grab the call site *before* advancing, in case an interrupt has to throw from it.
-        self.threads[current].block_call_pc = self.frame().pc();
+        self.shared.threads[current].block_call_pc = self.frame().pc();
         self.advance_past_call(); // resume after join() (now, or once the target ends)
-        let target = self.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0);
+        let target = self.shared.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0);
         if let Some(idx) = target {
-            if self.threads[idx].status != ThreadStatus::Terminated {
+            if self.shared.threads[idx].status != ThreadStatus::Terminated {
                 // `join()` with no timeout is an indefinite wait on another thread, not
                 // monitor contention — `Waiting`, not `Blocked`. (This was `Blocked`.)
                 self.block(current, ThreadStatus::Waiting);
-                self.threads[current].joining_on = Some(idx);
+                self.shared.threads[current].joining_on = Some(idx);
             }
         }
         Step::Continue
@@ -1069,7 +1201,7 @@ impl JVM {
     /// `NEW` is **derived**: a `Thread` that was created but never started has no scheduler
     /// slot, so the absence of a slot *is* how the VM says `NEW`.
     fn thread_get_state(&mut self, thread_obj: usize) -> usize {
-        let constant = match self.threads.iter().find(|t| t.thread_obj == thread_obj && thread_obj != 0) {
+        let constant = match self.shared.threads.iter().find(|t| t.thread_obj == thread_obj && thread_obj != 0) {
             None => "NEW", // created but not started — no slot exists yet
             Some(t) => match t.status {
                 ThreadStatus::Runnable => "RUNNABLE",
@@ -1082,8 +1214,8 @@ impl JVM {
         // The constant objects don't exist until `Thread$State.<clinit>` has run.
         self.ensure_initialized("java/lang/Thread$State");
         class_operations::static_reference(
-            &mut self.metaspace,
-            &mut self.heap,
+            &mut self.shared.metaspace,
+            &mut self.shared.heap,
             "java/lang/Thread$State",
             constant,
         )
@@ -1093,13 +1225,13 @@ impl JVM {
     /// clock is the opcode count — there's no wall clock). Other threads run meanwhile;
     /// the sleeper is woken in `step` once the clock reaches its wake time.
     fn thread_sleep(&mut self, ms: i64) -> Step {
-        let current = self.current;
+        let current = self.running.current;
         // Remember the call site so an interrupt throws `InterruptedException` from here,
         // not from the (advanced) instruction after the call.
-        self.threads[current].block_call_pc = self.frame().pc();
+        self.shared.threads[current].block_call_pc = self.frame().pc();
         // `sleep(ms)` has a deadline — `TimedWaiting`, not `Blocked`. (This was `Blocked`.)
         self.block(current, ThreadStatus::TimedWaiting);
-        self.threads[current].sleep_until = Some(self.steps + ms.max(0) as usize);
+        self.shared.threads[current].sleep_until = Some(self.shared.steps + ms.max(0) as usize);
         self.advance_past_call();
         Step::Continue
     }
@@ -1109,10 +1241,10 @@ impl JVM {
     /// monitor's wait-set so the re-acquire path resumes it — the deadline acting as a
     /// self-`notify`. (A plain `sleep` has no monitor and just becomes runnable.)
     fn expire_timed_block(&mut self, idx: usize) {
-        self.threads[idx].sleep_until = None;
-        if self.threads[idx].status == ThreadStatus::Waiting {
-            if let Some((obj, _)) = self.threads[idx].wait_reacquire {
-                if let Some(mon) = self.monitors.get_mut(&obj) {
+        self.shared.threads[idx].sleep_until = None;
+        if self.shared.threads[idx].status == ThreadStatus::Waiting {
+            if let Some((obj, _)) = self.shared.threads[idx].wait_reacquire {
+                if let Some(mon) = self.shared.monitors.get_mut(&obj) {
                     mon.waiting.retain(|&w| w != idx);
                 }
             }
@@ -1124,17 +1256,17 @@ impl JVM {
     /// thread is parked on a deadline (no one to advance the opcode clock), the clock jumps
     /// to the earliest wake time so the program can't deadlock on `sleep`/`wait` alone.
     fn wake_sleepers(&mut self) {
-        let any_runnable = self.threads.iter().any(|t| t.status == ThreadStatus::Runnable);
+        let any_runnable = self.shared.threads.iter().any(|t| t.status == ThreadStatus::Runnable);
         if !any_runnable {
             if let Some(earliest) =
-                self.threads.iter().filter_map(|t| t.sleep_until).min()
+                self.shared.threads.iter().filter_map(|t| t.sleep_until).min()
             {
-                self.steps = self.steps.max(earliest);
+                self.shared.steps = self.shared.steps.max(earliest);
             }
         }
-        let now = self.steps;
+        let now = self.shared.steps;
         let due: Vec<usize> = self
-            .threads
+            .shared.threads
             .iter()
             .enumerate()
             .filter(|(_, t)| matches!(t.sleep_until, Some(at) if now >= at))
@@ -1149,16 +1281,16 @@ impl JVM {
     /// dispatch loop body, with no scheduling (so `<clinit>` and `step` can both use it).
     fn run_one(&mut self) -> Step {
         // The VM is at a safepoint between opcodes — poll the GC triggers first.
-        self.steps += 1;
+        self.shared.steps += 1;
         self.safepoint();
 
         // A thread returning from `wait()` (notified, now scheduled) must re-acquire its
         // monitor before running the instruction after the `wait()` call. If it can't
         // yet, it blocks and retries — exactly like `monitorenter`.
-        if let Some((obj, saved)) = self.threads[self.current].wait_reacquire {
-            let current = self.current;
+        if let Some((obj, saved)) = self.shared.threads[self.running.current].wait_reacquire {
+            let current = self.running.current;
             let acquired = {
-                let mon = self.monitors.entry(obj).or_default();
+                let mon = self.shared.monitors.entry(obj).or_default();
                 match mon.owner {
                     None => {
                         mon.owner = Some(current);
@@ -1174,7 +1306,7 @@ impl JVM {
                 }
             };
             if acquired {
-                self.threads[current].wait_reacquire = None;
+                self.shared.threads[current].wait_reacquire = None;
             } else {
                 self.block(current, ThreadStatus::Blocked); // still contending for the monitor
                 return Step::Continue; // can't re-acquire yet — yield and retry
@@ -1186,15 +1318,18 @@ impl JVM {
         // before it can throw, JLS 17.2). The pc is rewound to the blocking call so the
         // handler search hits the `try` that wraps it; throwing also **clears** the
         // interrupt status (JLS: the flag is consumed by the throw).
-        if self.threads[self.current].interrupt_pending {
-            let current = self.current;
-            self.threads[current].interrupt_pending = false;
+        if self.shared.threads[self.running.current].interrupt_pending {
+            let current = self.running.current;
+            self.shared.threads[current].interrupt_pending = false;
             self.clear_interrupt_flag(current);
-            let call_pc = self.threads[current].block_call_pc;
+            let call_pc = self.shared.threads[current].block_call_pc;
             self.top().jump(call_pc);
             return self.throw_exception("java/lang/InterruptedException");
         }
 
+        // Keep the code cache current with the top frame before dispatch — a no-op compare
+        // unless a frame change (invoke/return/unwind) landed us in a different method.
+        self.sync_code_cache();
         let opcode = self.current_code()[self.pc()];
         match opcode {
             // iadd / isub / imul — integer arithmetic
@@ -1787,12 +1922,12 @@ impl JVM {
                 let method = self.frame().method();
                 let pc = self.frame().pc();
                 let cp_index = {
-                    let code = self.metaspace.code(method);
+                    let code = self.shared.metaspace.code(method);
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_class_at(cp_index); // first active use: run <clinit>
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                class_operations::new(&mut self.metaspace, &mut self.heap, frame, cp_index);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                class_operations::new(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
                 Step::Continue
             }
@@ -1806,8 +1941,8 @@ impl JVM {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_field_owner_at(cp_index); // first active use: run <clinit>
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                class_operations::getstatic(&mut self.metaspace, &mut self.heap, frame, cp_index);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                class_operations::getstatic(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
                 Step::Continue
             }
@@ -1818,8 +1953,8 @@ impl JVM {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_field_owner_at(cp_index); // first active use: run <clinit>
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                class_operations::putstatic(&mut self.metaspace, &mut self.heap, frame, cp_index);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                class_operations::putstatic(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
                 Step::Continue
             }
@@ -1833,9 +1968,9 @@ impl JVM {
                     let code = self.current_code();
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 // A null receiver makes the field op return Err → the VM throws a NPE.
-                match objects_operations::getfield(&mut self.metaspace, &mut self.heap, frame, cp_index) {
+                match objects_operations::getfield(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index) {
                     Ok(()) => {
                         self.top().advance(3);
                         Step::Continue
@@ -1849,8 +1984,8 @@ impl JVM {
                     let code = self.current_code();
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                match objects_operations::putfield(&mut self.metaspace, &mut self.heap, frame, cp_index) {
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                match objects_operations::putfield(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index) {
                     Ok(()) => {
                         self.top().advance(3);
                         Step::Continue
@@ -1861,95 +1996,95 @@ impl JVM {
 
             // arraylength (0xbe): push an array's length (null array → NPE).
             0xbe => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::arraylength(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::arraylength(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             // Array loads — push an element: iaload(int) / baload(byte,bool) /
             // caload(char) / saload(short) / aaload(reference). Null array → NPE,
             // out-of-range index → ArrayIndexOutOfBoundsException.
             0x2e => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::iaload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::iaload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x33 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::baload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::baload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x34 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::caload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::caload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x35 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::saload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::saload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x32 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::aaload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::aaload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             // laload / faload / daload (0x2f/0x30/0x31): long/float/double elements.
             0x2f => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::laload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::laload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x30 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::faload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::faload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x31 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::daload(&self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::daload(&self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             // Array stores — pop value into an element: iastore(int) /
             // bastore(byte,bool) / castore(char) / sastore(short) / aastore(ref).
             // lastore / fastore / dastore (0x50/0x51/0x52): long/float/double elements.
             0x50 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::lastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::lastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x51 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::fastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::fastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x52 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::dastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::dastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x4f => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::iastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::iastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x54 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::bastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::bastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x55 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::castore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::castore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x56 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::sastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::sastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
             0x53 => {
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::aastore(&mut self.heap, frame);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::aastore(&mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
 
@@ -1961,8 +2096,8 @@ impl JVM {
                     let code = self.current_code();
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                class_operations::instanceof(&mut self.metaspace, &self.heap, frame, cp_index);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                class_operations::instanceof(&mut self.shared.metaspace, &self.shared.heap, frame, cp_index);
                 self.top().advance(3);
                 Step::Continue
             }
@@ -1972,9 +2107,9 @@ impl JVM {
                     let code = self.current_code();
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 // A bad cast returns Err → the VM throws ClassCastException.
-                match class_operations::checkcast(&mut self.metaspace, &self.heap, frame, cp_index) {
+                match class_operations::checkcast(&mut self.shared.metaspace, &self.shared.heap, frame, cp_index) {
                     Ok(()) => {
                         self.top().advance(3);
                         Step::Continue
@@ -1989,8 +2124,8 @@ impl JVM {
             0xbc => {
                 let pc = self.frame().pc();
                 let atype = self.current_code()[pc + 1];
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::newarray(&mut self.metaspace, &mut self.heap, frame, atype);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::newarray(&mut self.shared.metaspace, &mut self.shared.heap, frame, atype);
                 self.after_array_op(r, 2) // negative size → NegativeArraySizeException
             }
             0xbd => {
@@ -1999,8 +2134,8 @@ impl JVM {
                     let code = self.current_code();
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::anewarray(&mut self.metaspace, &mut self.heap, frame, cp_index);
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
+                let r = array_operations::anewarray(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.after_array_op(r, 3)
             }
             // multianewarray (0xc5): allocate a multidimensional array — a u2 Class
@@ -2013,10 +2148,10 @@ impl JVM {
                     let code = self.current_code();
                     (u16::from_be_bytes([code[pc + 1], code[pc + 2]]), code[pc + 3])
                 };
-                let frame = self.frames.last_mut().expect("no frame on the call stack");
+                let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 let r = array_operations::multianewarray(
-                    &mut self.metaspace,
-                    &mut self.heap,
+                    &mut self.shared.metaspace,
+                    &mut self.shared.heap,
                     frame,
                     cp_index,
                     dimensions,
@@ -2034,7 +2169,7 @@ impl JVM {
                     Value::Int(v) => v,
                     other => panic!("switch expected an int key, found {other:?}"),
                 };
-                let target = bifurcation_operations::switch_target(self.metaspace.code(method), pc, key);
+                let target = bifurcation_operations::switch_target(self.shared.metaspace.code(method), pc, key);
                 self.top().jump(target);
                 Step::Continue
             }
@@ -2053,7 +2188,7 @@ impl JVM {
     /// — nothing is handed back, unlike `ireturn`.
     fn return_void(&mut self) -> Step {
         let popped = self.pop_frame();
-        if self.frames.is_empty() {
+        if self.running.frames.is_empty() {
             return Step::Return(None);
         }
         // A synthetic `<clinit>` frame wasn't reached via an invoke, so the caller's
@@ -2070,24 +2205,24 @@ impl JVM {
     /// completion — so it finishes before the triggering instruction proceeds.
     /// `InProgress` short-circuits re-entrant uses (a class touching itself mid-init).
     fn ensure_initialized(&mut self, class: &str) {
-        match self.metaspace.init_state(class) {
+        match self.shared.metaspace.init_state(class) {
             InitState::Done | InitState::InProgress => return,
             InitState::NotStarted => {}
         }
-        self.metaspace.set_init_state(class, InitState::InProgress);
+        self.shared.metaspace.set_init_state(class, InitState::InProgress);
 
         // Superclass first — initializing Dog initializes Animal (then Object).
-        if let Some(superclass) = self.metaspace.superclass_name(class) {
+        if let Some(superclass) = self.shared.metaspace.superclass_name(class) {
             self.ensure_initialized(&superclass);
         }
 
         // Run the class's `<clinit>` (if it has one) to completion. It is the
         // argument-less, result-less case of [`Self::call_java`] — the same VM-pushed
         // frame driven by the same nested loop.
-        if let Some(clinit) = self.metaspace.resolve_method(class, "<clinit>", "()V") {
+        if let Some(clinit) = self.shared.metaspace.resolve_method(class, "<clinit>", "()V") {
             self.call_java(clinit, Vec::new(), &[]);
         }
-        self.metaspace.set_init_state(class, InitState::Done);
+        self.shared.metaspace.set_init_state(class, InitState::Done);
     }
 
     /// Runs a Java method **from inside the VM** and hands back its result.
@@ -2114,23 +2249,23 @@ impl JVM {
         args: Vec<Value>,
         widths: &[usize],
     ) -> Option<Value> {
-        let max_locals = self.metaspace.max_locals(method);
-        let base = self.frames.len();
+        let max_locals = self.shared.metaspace.max_locals(method);
+        let base = self.running.frames.len();
         // The caller's stack is where a returning value lands, so its depth before the
         // call is what tells us afterwards whether anything came back.
-        let depth_before = self.frames.last().map_or(0, |f| f.stack().len());
+        let depth_before = self.running.frames.last().map_or(0, |f| f.stack().len());
 
         let mut frame = Frame::for_call(method, max_locals, args, widths);
         frame.mark_synthetic();
-        self.frames.push(frame);
+        self.running.frames.push(frame);
 
         // Drive it on the *current* thread — `run_one`, not `step`, so the scheduler
         // can't interleave another thread in the middle of a VM-initiated call.
-        while self.frames.len() > base {
+        while self.running.frames.len() > base {
             self.run_one();
         }
 
-        let grew = self.frames.last().is_some_and(|f| f.stack().len() > depth_before);
+        let grew = self.running.frames.last().is_some_and(|f| f.stack().len() > depth_before);
         grew.then(|| self.top().pop())
     }
 
@@ -2149,24 +2284,24 @@ impl JVM {
         descriptor: &str,
         args: Vec<Value>,
     ) -> Option<Value> {
-        let runtime = self.metaspace.class_name_at_mirror(self.heap.read_u32(receiver) as usize)?;
+        let runtime = self.shared.metaspace.class_name_at_mirror(self.shared.heap.read_u32(receiver) as usize)?;
         let runtime = runtime.to_string();
-        let slot = self.metaspace.vtable_slot(&runtime, name, descriptor)?;
-        let callee = self.metaspace.vtable_method(&runtime, slot)?;
+        let slot = self.shared.metaspace.vtable_slot(&runtime, name, descriptor)?;
+        let callee = self.shared.metaspace.vtable_method(&runtime, slot)?;
 
         let mut operands = vec![Value::Reference(receiver)];
         operands.extend(args);
 
-        if self.metaspace.is_native(callee) {
-            let class = self.metaspace.class_of(callee).to_string();
+        if self.shared.metaspace.is_native(callee) {
+            let class = self.shared.metaspace.class_of(callee).to_string();
             return crate::jvm::interpreter::natives::dispatch(
                 &class,
                 name,
                 descriptor,
                 &operands,
-                &mut self.metaspace,
-                &mut self.heap,
-                &mut self.console,
+                &mut self.shared.metaspace,
+                &mut self.shared.heap,
+                &mut self.shared.console,
             );
         }
         let mut widths = vec![1]; // the receiver, then each parameter at its own width
@@ -2178,24 +2313,24 @@ impl JVM {
     /// and push it. A `String` literal is materialised as a heap String and pushed as
     /// a reference; an `Integer` is pushed as an int.
     fn ldc(&mut self, cp_index: u16) {
-        let caller = self.metaspace.class_of(self.frame().method()).to_string();
+        let caller = self.shared.metaspace.class_of(self.frame().method()).to_string();
 
         // A String literal → materialise it on the heap, push the reference.
-        let text = self.metaspace.get(&caller).and_then(|cf| cf.string_constant(cp_index)).map(str::to_string);
+        let text = self.shared.metaspace.get(&caller).and_then(|cf| cf.string_constant(cp_index)).map(str::to_string);
         if let Some(text) = text {
-            let offset = strings::intern(&mut self.metaspace, &mut self.heap, &text);
+            let offset = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
             self.top().push(Value::Reference(offset));
             return;
         }
 
         // An int constant → push it directly.
-        if let Some(value) = self.metaspace.get(&caller).and_then(|cf| cf.integer_constant(cp_index)) {
+        if let Some(value) = self.shared.metaspace.get(&caller).and_then(|cf| cf.integer_constant(cp_index)) {
             self.top().push(Value::Int(value));
             return;
         }
 
         // A float constant (category-1, so it comes through `ldc`, not `ldc2_w`).
-        if let Some(value) = self.metaspace.get(&caller).and_then(|cf| cf.float_constant(cp_index)) {
+        if let Some(value) = self.shared.metaspace.get(&caller).and_then(|cf| cf.float_constant(cp_index)) {
             self.top().push(Value::Float(value));
             return;
         }
@@ -2209,7 +2344,7 @@ impl JVM {
         // The mirror is cached by Class ID, so the same literal evaluated twice yields the
         // *same* reference — which is what makes `Foo.class == Foo.class` hold.
         let class_name =
-            self.metaspace.get(&caller).and_then(|cf| cf.class_name(cp_index)).map(str::to_string);
+            self.shared.metaspace.get(&caller).and_then(|cf| cf.class_name(cp_index)).map(str::to_string);
         if let Some(class_name) = class_name {
             // An **array** class literal (`int[].class`) names a class that has no
             // `.class` file, so loading it can't prepare a mirror. It gets the same
@@ -2217,13 +2352,13 @@ impl JVM {
             // identity lives in its descriptor, not in a file.
             let mirror = if class_name.starts_with('[') {
                 array_operations::array_class_mirror(
-                    &mut self.metaspace,
-                    &mut self.heap,
+                    &mut self.shared.metaspace,
+                    &mut self.shared.heap,
                     &class_name,
                 )
             } else {
-                class_operations::load_class(&mut self.metaspace, &mut self.heap, &class_name);
-                self.metaspace.class_mirror(&class_name).unwrap_or_else(|| {
+                class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, &class_name);
+                self.shared.metaspace.class_mirror(&class_name).unwrap_or_else(|| {
                     // Pushing a null mirror would be a silently wrong answer.
                     panic!("ldc: class '{class_name}' loaded but has no Class mirror")
                 })
@@ -2241,11 +2376,11 @@ impl JVM {
     /// `ldc2_w` (0x14): load a category-2 constant — a `long` or a `double` — and
     /// push it. The pool index points at the `Long`/`Double` entry.
     fn ldc2_w(&mut self, cp_index: u16) {
-        let caller = self.metaspace.class_of(self.frame().method()).to_string();
-        if let Some(value) = self.metaspace.get(&caller).and_then(|cf| cf.long_constant(cp_index)) {
+        let caller = self.shared.metaspace.class_of(self.frame().method()).to_string();
+        if let Some(value) = self.shared.metaspace.get(&caller).and_then(|cf| cf.long_constant(cp_index)) {
             self.top().push(Value::Long(value));
         } else if let Some(value) =
-            self.metaspace.get(&caller).and_then(|cf| cf.double_constant(cp_index))
+            self.shared.metaspace.get(&caller).and_then(|cf| cf.double_constant(cp_index))
         {
             self.top().push(Value::Double(value));
         } else {
@@ -2256,8 +2391,8 @@ impl JVM {
     /// Initializes the class named by the `Class` constant at `cp_index` in the
     /// current method's pool — the trigger for `new`.
     fn initialize_class_at(&mut self, cp_index: u16) {
-        let caller = self.metaspace.class_of(self.frame().method()).to_string();
-        let class = self.metaspace.get(&caller).and_then(|cf| cf.class_name(cp_index)).map(str::to_string);
+        let caller = self.shared.metaspace.class_of(self.frame().method()).to_string();
+        let class = self.shared.metaspace.get(&caller).and_then(|cf| cf.class_name(cp_index)).map(str::to_string);
         if let Some(class) = class {
             self.ensure_initialized(&class);
         }
@@ -2266,9 +2401,9 @@ impl JVM {
     /// Initializes the class that owns the field at `cp_index` (a `Fieldref`) — the
     /// trigger for `getstatic`/`putstatic`.
     fn initialize_field_owner_at(&mut self, cp_index: u16) {
-        let caller = self.metaspace.class_of(self.frame().method()).to_string();
+        let caller = self.shared.metaspace.class_of(self.frame().method()).to_string();
         let owner = self
-            .metaspace
+            .shared.metaspace
             .get(&caller)
             .and_then(|cf| cf.fieldref_target(cp_index))
             .map(|(class, _, _)| class.to_string());
@@ -2283,7 +2418,7 @@ impl JVM {
     fn ireturn(&mut self) -> Step {
         let value = self.top().pop();
         let popped = self.pop_frame();
-        if self.frames.is_empty() {
+        if self.running.frames.is_empty() {
             return Step::Return(Some(value));
         }
         // Same rule as `return_void`: a frame the VM pushed itself wasn't reached through
@@ -2305,7 +2440,7 @@ impl JVM {
     fn advance_past_call(&mut self) {
         let method = self.frame().method();
         let pc = self.frame().pc();
-        let opcode = self.metaspace.code(method)[pc];
+        let opcode = self.shared.metaspace.code(method)[pc];
         let length = if opcode == 0xb9 { 5 } else { 3 };
         self.top().advance(length);
     }
@@ -2332,35 +2467,62 @@ pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
         ThreadMode::Green => {
             let mut interp = JVM::new(metaspace, entry);
             loop {
-                if let Step::Return(value) = interp.step() {
+                if let Step::Return(value) = interp.exec().step() {
                     return value;
                 }
             }
         }
         // Real OS threads serialised by a GIL.
-        ThreadMode::Os => execute_os(metaspace, entry),
+        ThreadMode::OsGil => execute_os_gil(metaspace, entry),
+        // Real OS threads without the GIL (H3, in progress — still shares the os-gil engine).
+        ThreadMode::OsParallel => execute_os_parallel(metaspace, entry),
     }
 }
 
-/// OS-thread substrate: the program runs under a **GIL** — the whole VM lives behind one
-/// `Arc<Mutex<JVM>>`. The main thread drives the loop on *this* OS thread; each
-/// `Thread.start()` launches a real `std::thread` that competes for the same lock. Only
-/// the GIL holder mutates VM state, so the heap, monitors and GC stay correct with no
-/// extra synchronisation — the GIL *is* the stop-the-world. Removing it for true
-/// parallelism (fine-grained locks + a real STW handshake) is the next milestone.
-pub(crate) fn execute_os(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
+/// `os-gil` substrate: the program runs under a **GIL** — the shared VM state lives behind one
+/// `Arc<Mutex<SharedVm>>`, locked per opcode (each OS thread owns its own `RunningCtx`). The
+/// main thread drives the loop on *this* OS thread; each `Thread.start()` launches a real
+/// `std::thread` that competes for the same lock. Only the lock holder mutates shared state, so
+/// the heap, monitors and GC stay correct with no extra synchronisation — the lock *is* the
+/// stop-the-world. Releasing it for the frame-local opcodes (+ a real STW handshake for GC) is
+/// the remaining H3 step (1d).
+pub(crate) fn execute_os_gil(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
+    run_os_threaded(metaspace, entry, ThreadMode::OsGil)
+}
+
+/// `os` substrate: real OS threads **without** the GIL — true parallelism (H3).
+///
+/// *In progress.* Today it runs on the **same engine** as [`execute_os_gil`] (the shared state
+/// behind one `Arc<Mutex<SharedVm>>`, locked per opcode), so it is correct and oracle-validated
+/// but **not yet actually parallel**. This is deliberate: the plan is to *shrink* that lock —
+/// release it for frame-local opcodes, add a safepoint handshake + TLABs, then fine-grained
+/// per-structure locks — not to remove it in one flag day. Running under the shared engine now
+/// gives the mode a place to stand and keeps every step diffable against `green`/`os-gil`/`java`.
+pub(crate) fn execute_os_parallel(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
+    run_os_parallel(metaspace, entry)
+}
+
+/// Shared setup + driver for both OS-threaded substrates (`os-gil` and `os`). They differ
+/// only in the `mode` tag today; that tag is where the lock-shrinking work will branch.
+///
+/// H3 1c-ii: only the **`SharedVm`** is shared (behind one `Arc<Mutex<SharedVm>>`); each OS
+/// thread owns a thread-local [`RunningCtx`] and pairs it with a lock guard per opcode via
+/// [`Exec`]. Still one lock per opcode (serialised, oracle-green) — 1d releases it for the
+/// frame-local opcodes that touch only the thread-local context.
+fn run_os_threaded(metaspace: MetaspaceService, entry: Frame, mode: ThreadMode) -> Option<Value> {
+    debug_assert!(mode.uses_os_threads(), "run_os_threaded needs an OS-threaded mode");
     let mut jvm = JVM::new(metaspace, entry);
-    jvm.mode = ThreadMode::Os; // force OS mode regardless of the env (e.g. in tests)
+    jvm.shared.mode = mode; // force the OS substrate regardless of the env (e.g. in tests)
     // The main thread runs the loop on *this* OS thread; record its handle so workers can
     // `unpark` it (e.g. when a join target finishes) instead of waiting out the poll.
-    jvm.threads[0].os_handle = Some(thread::current());
-    // OS-mode invariant: between turns every thread's stack lives in *its slot* (so
-    // `activate`/`deactivate` swap it into the shared `frames` to run). `JVM::new` follows
-    // the green convention (main's entry frame in the active `frames`, slot 0 empty), so
-    // move it into slot 0 once before the loop.
-    std::mem::swap(&mut jvm.frames, &mut jvm.threads[0].frames);
-    let gil = Arc::new(Mutex::new(jvm));
-    os_thread_loop(&gil, 0)
+    jvm.shared.threads[0].os_handle = Some(thread::current());
+    // OS-mode invariant: between turns every thread's stack lives in *its slot*; each OS thread
+    // `activate`s it into its own local `RunningCtx` to run. `JVM::new` follows the green
+    // convention (main's entry frame in the owner's active `running`, slot 0 empty), so move it
+    // into slot 0 before handing the *shared* state off to the threads (the owner is dropped).
+    std::mem::swap(&mut jvm.running.frames, &mut jvm.shared.threads[0].frames);
+    let shared = Arc::new(Mutex::new(jvm.shared));
+    os_thread_loop(&shared, 0)
 }
 
 /// What an OS thread does after one turn under the GIL — decided while holding the lock,
@@ -2377,50 +2539,61 @@ enum OsTick {
     Sleep(u64),
 }
 
-/// One thread slot's run loop on its own OS thread. Acquires the GIL only to run a single
-/// opcode, then yields so siblings can run; **parks** when blocked/waiting (woken by
-/// [`JVM::make_runnable`]'s `unpark`). Returns the thread's result — the program result for
-/// the main thread (`idx == 0`), ignored for workers.
-fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
+/// One thread's run loop on its own OS thread. Owns a thread-local [`RunningCtx`]; locks the
+/// shared state only to run a single opcode (pairing the local context with the guard via
+/// [`Exec`]), then yields so siblings can run; **parks** when blocked/waiting (woken by
+/// `make_runnable`'s `unpark`). Returns the thread's result — the program result for the main
+/// thread (`idx == 0`), ignored for workers.
+fn os_thread_loop(shared_arc: &Arc<Mutex<SharedVm>>, idx: usize) -> Option<Value> {
+    // This OS thread's own execution context. Frames live in the shared slot between turns and
+    // are `activate`d into here to run; the shared state is the only thing behind the lock.
+    let mut running = RunningCtx::default();
     loop {
         let tick = {
-            let mut vm = gil.lock().unwrap();
-            if vm.halt {
+            let mut guard = shared_arc.lock().unwrap();
+            if guard.halt {
                 return None; // main has finished — workers exit
             }
-            match vm.threads[idx].status {
+            match guard.threads[idx].status {
                 ThreadStatus::Terminated => return None,
                 ThreadStatus::Blocked | ThreadStatus::Waiting | ThreadStatus::TimedWaiting => {
-                    os_block_tick(&vm, idx)
+                    os_block_tick(&guard, idx)
                 }
                 ThreadStatus::Runnable => {
-                    vm.activate(idx);
-                    let step = vm.run_one();
-                    vm.deactivate(idx);
-                    spawn_pending(&mut vm, gil); // launch OS threads for new Thread.start() slots
-                    vm.wake_sleepers();
+                    // Run one opcode with the local context bound to the shared guard, then drop
+                    // the view so the guard is free for the scheduler bookkeeping below.
+                    let step = {
+                        let mut ex = Exec { running: &mut running, shared: &mut guard };
+                        ex.activate(idx);
+                        let s = ex.run_one();
+                        ex.deactivate(idx);
+                        s
+                    };
+                    spawn_pending(&mut guard, shared_arc); // OS threads for new Thread.start() slots
+                    Exec { running: &mut running, shared: &mut guard }.wake_sleepers();
                     if let Step::Return(value) = step {
-                        vm.on_thread_terminated(idx);
+                        Exec { running: &mut running, shared: &mut guard }.on_thread_terminated(idx);
                         if idx == 0 {
-                            vm.halt = true; // program done → release the workers
-                            vm.unpark_all();
+                            guard.halt = true; // program done → release the workers
+                            Exec { running: &mut running, shared: &mut guard }.unpark_all();
                         }
                         OsTick::Done(value)
                     } else {
-                        os_block_tick(&vm, idx) // may have blocked us (monitor/wait/join/sleep)
+                        os_block_tick(&guard, idx) // may have blocked us (monitor/wait/join/sleep)
                     }
                 }
             }
-        }; // GIL released here
+        }; // lock released here
 
         match tick {
             OsTick::Done(value) => return value,
-            OsTick::Yield => thread::yield_now(), // let a sibling grab the GIL
+            OsTick::Yield => thread::yield_now(), // let a sibling grab the lock
             OsTick::Park => thread::park_timeout(Duration::from_millis(50)),
             OsTick::Sleep(ms) => {
                 thread::sleep(Duration::from_millis(ms));
-                let mut vm = gil.lock().unwrap();
-                vm.expire_timed_block(idx); // sleep done, or timed wait expired → re-acquire
+                let mut guard = shared_arc.lock().unwrap();
+                // sleep done, or timed wait expired → re-acquire
+                Exec { running: &mut running, shared: &mut guard }.expire_timed_block(idx);
             }
         }
     }
@@ -2428,14 +2601,14 @@ fn os_thread_loop(gil: &Arc<Mutex<JVM>>, idx: usize) -> Option<Value> {
 
 /// Classify a thread that didn't (or couldn't) run this turn: still runnable → yield;
 /// sleeping → real sleep of the remaining ticks-as-millis (capped); otherwise park.
-fn os_block_tick(vm: &JVM, idx: usize) -> OsTick {
-    match vm.threads[idx].status {
+fn os_block_tick(shared: &SharedVm, idx: usize) -> OsTick {
+    match shared.threads[idx].status {
         ThreadStatus::Runnable => OsTick::Yield,
         // The state *is* the answer now: only a deadline state (`sleep`/`wait(ms)`) sleeps
         // for its remaining ticks-as-millis. Before, the driver peeked at `sleep_until` to
         // guess timed-ness because `sleep` and `wait(ms)` both hid under `Blocked`/`Waiting`.
-        ThreadStatus::TimedWaiting => match vm.threads[idx].sleep_until {
-            Some(at) => OsTick::Sleep((at.saturating_sub(vm.steps)).min(200) as u64),
+        ThreadStatus::TimedWaiting => match shared.threads[idx].sleep_until {
+            Some(at) => OsTick::Sleep((at.saturating_sub(shared.steps)).min(200) as u64),
             None => OsTick::Park,
         },
         // An indefinite block — monitor contention or `wait()`/`join()` — parks until unparked.
@@ -2447,15 +2620,641 @@ fn os_block_tick(vm: &JVM, idx: usize) -> OsTick {
 /// Launch a real `std::thread` for every slot that doesn't have one yet (each
 /// `Thread.start()` pushes a slot; this turns it into an OS thread exactly once). Runs
 /// while the caller holds the GIL, so the handle is recorded before the child can run.
-fn spawn_pending(vm: &mut JVM, gil: &Arc<Mutex<JVM>>) {
-    let pending: Vec<usize> = (0..vm.threads.len()).filter(|&i| !vm.threads[i].os_spawned).collect();
+fn spawn_pending(shared: &mut SharedVm, shared_arc: &Arc<Mutex<SharedVm>>) {
+    let pending: Vec<usize> = (0..shared.threads.len()).filter(|&i| !shared.threads[i].os_spawned).collect();
     for i in pending {
-        vm.threads[i].os_spawned = true;
-        let child_gil = Arc::clone(gil);
+        shared.threads[i].os_spawned = true;
+        let child = Arc::clone(shared_arc);
         let handle = thread::spawn(move || {
-            os_thread_loop(&child_gil, i);
+            os_thread_loop(&child, i);
         });
         // Keep the Thread handle for `unpark`; detach the JoinHandle (workers exit on halt).
-        vm.threads[i].os_handle = Some(handle.thread().clone());
+        shared.threads[i].os_handle = Some(handle.thread().clone());
+    }
+}
+
+// ===================== `os` parallel engine (H3 1d) =====================
+// True parallelism: only `SharedVm` is locked, and the **frame-local** opcode subset runs
+// lock-free on each thread's `RunningCtx` (+ code cache). The moving GC can't run while
+// siblings execute lock-free, so it goes through a cooperative stop-the-world handshake
+// (`coordinate_gc`): threads poll `gc_pending`, sync their frames to their slot, park; the
+// coordinator collects once all are safe, then unparks them to reload their remapped frames.
+// `os-gil` is untouched — it stays the serialised reference (and the fallback).
+
+/// The outcome of one [`run_frame_local`] step.
+enum FastStep {
+    /// Ran a frame-local opcode; keep going lock-free.
+    Continue,
+    /// Ran a *backward* branch (a loop back-edge) — the caller polls the safepoint, then continues.
+    BackEdge,
+    /// The opcode is **not** in the frame-local subset — the caller runs it through the locked
+    /// [`Exec::run_one`].
+    NeedsShared,
+}
+
+/// Runs the opcode at the current frame's pc **iff** it is in the conservative frame-local
+/// subset — pure int arithmetic / stack shuffles / int branches that touch only this thread's
+/// own `RunningCtx` (stack, locals, pc, code cache), never shared state or object references.
+/// Anything else returns [`FastStep::NeedsShared`]. Each arm mirrors the matching arm of
+/// [`Exec::run_one`] exactly; the `os_parallel_matches_oracle` test guards that they agree.
+///
+/// **Safety of the classification:** misclassifying a shared opcode as frame-local would be a
+/// bug (running it without the lock); misclassifying a frame-local opcode as shared merely runs
+/// it under the lock (correct, just not parallel). So the set is deliberately *conservative*.
+fn run_frame_local(ctx: &mut RunningCtx) -> FastStep {
+    let pc = ctx.frames.last().expect("run_frame_local: no frame").pc();
+    let op = ctx.code[pc];
+    match op {
+        // iconst_m1..iconst_5
+        0x02..=0x08 => {
+            let v = op as i32 - 0x03;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iconst(f, v);
+            f.advance(1);
+            FastStep::Continue
+        }
+        // bipush / sipush
+        0x10 => {
+            let v = ctx.code[pc + 1] as i8 as i32;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iconst(f, v);
+            f.advance(2);
+            FastStep::Continue
+        }
+        0x11 => {
+            let v = i16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]) as i32;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iconst(f, v);
+            f.advance(3);
+            FastStep::Continue
+        }
+        // iload_0..3 / iload
+        0x1a..=0x1d => {
+            let slot = (op - 0x1a) as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iload(f, slot);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x15 => {
+            let slot = ctx.code[pc + 1] as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iload(f, slot);
+            f.advance(2);
+            FastStep::Continue
+        }
+        // istore_0..3 / istore
+        0x3b..=0x3e => {
+            let slot = (op - 0x3b) as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::istore(f, slot);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x36 => {
+            let slot = ctx.code[pc + 1] as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::istore(f, slot);
+            f.advance(2);
+            FastStep::Continue
+        }
+        // iadd / isub / imul
+        0x60 => {
+            let f = ctx.frames.last_mut().unwrap();
+            arithmetic_operations::iadd(f);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x64 => {
+            let f = ctx.frames.last_mut().unwrap();
+            arithmetic_operations::isub(f);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x68 => {
+            let f = ctx.frames.last_mut().unwrap();
+            arithmetic_operations::imul(f);
+            f.advance(1);
+            FastStep::Continue
+        }
+        // iinc
+        0x84 => {
+            let slot = ctx.code[pc + 1] as usize;
+            let delta = ctx.code[pc + 2] as i8 as i32;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iinc(f, slot, delta);
+            f.advance(3);
+            FastStep::Continue
+        }
+        // pop/pop2/dup*/swap — pure stack shuffles (value-agnostic, no deref)
+        0x57..=0x5f => {
+            let f = ctx.frames.last_mut().unwrap();
+            match op {
+                0x57 => stack_operations::pop(f),
+                0x58 => stack_operations::pop2(f),
+                0x59 => stack_operations::dup(f),
+                0x5a => stack_operations::dup_x1(f),
+                0x5b => stack_operations::dup_x2(f),
+                0x5c => stack_operations::dup2(f),
+                0x5d => stack_operations::dup2_x1(f),
+                0x5e => stack_operations::dup2_x2(f),
+                _ => stack_operations::swap(f),
+            }
+            f.advance(1);
+            FastStep::Continue
+        }
+        // goto and the int comparison branches — the helper manages pc, so detect a *backward*
+        // jump (a loop back-edge) to trigger a safepoint poll.
+        0xa7 => branch(ctx, pc, bifurcation_operations::goto),
+        0x9f => branch(ctx, pc, bifurcation_operations::if_icmpeq),
+        0xa0 => branch(ctx, pc, bifurcation_operations::if_icmpne),
+        0xa1 => branch(ctx, pc, bifurcation_operations::if_icmplt),
+        0xa2 => branch(ctx, pc, bifurcation_operations::if_icmpge),
+        0xa3 => branch(ctx, pc, bifurcation_operations::if_icmpgt),
+        0xa4 => branch(ctx, pc, bifurcation_operations::if_icmple),
+        0x99 => branch(ctx, pc, bifurcation_operations::ifeq),
+        0x9a => branch(ctx, pc, bifurcation_operations::ifne),
+        0x9b => branch(ctx, pc, bifurcation_operations::iflt),
+        0x9c => branch(ctx, pc, bifurcation_operations::ifge),
+        0x9d => branch(ctx, pc, bifurcation_operations::ifgt),
+        0x9e => branch(ctx, pc, bifurcation_operations::ifle),
+
+        // ---- W1: widen the frame-local set --------------------------------------------
+        // aconst_null / lconst_0/1 — push a constant onto the stack.
+        0x01 => {
+            let f = ctx.frames.last_mut().unwrap();
+            f.push(Value::Reference(0));
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x09 | 0x0a => {
+            let v = (op - 0x09) as i64;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::lconst(f, v);
+            f.advance(1);
+            FastStep::Continue
+        }
+        // aload_0..3 / aload — load a *reference* local (moves the offset value, no deref).
+        0x2a..=0x2d => {
+            let slot = (op - 0x2a) as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::aload(f, slot);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x19 => {
+            let slot = ctx.code[pc + 1] as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::aload(f, slot);
+            f.advance(2);
+            FastStep::Continue
+        }
+        // astore_0..3 / astore — store a reference into a local.
+        0x4b..=0x4e => {
+            let slot = (op - 0x4b) as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::astore(f, slot);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x3a => {
+            let slot = ctx.code[pc + 1] as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::astore(f, slot);
+            f.advance(2);
+            FastStep::Continue
+        }
+        // long / float / double add·sub·mul — none can throw.
+        0x61 => arith1(ctx, arithmetic_operations::ladd),
+        0x65 => arith1(ctx, arithmetic_operations::lsub),
+        0x69 => arith1(ctx, arithmetic_operations::lmul),
+        0x62 => arith1(ctx, arithmetic_operations::fadd),
+        0x66 => arith1(ctx, arithmetic_operations::fsub),
+        0x6a => arith1(ctx, arithmetic_operations::fmul),
+        0x63 => arith1(ctx, arithmetic_operations::dadd),
+        0x67 => arith1(ctx, arithmetic_operations::dsub),
+        0x6b => arith1(ctx, arithmetic_operations::dmul),
+        // float/double div & rem, negation, shifts, bitwise — none can throw. (Integer
+        // idiv/irem/ldiv/lrem stay on the shared path: they may throw on /0.)
+        0x6e | 0x6f | 0x72 | 0x73 | 0x74..=0x83 => {
+            let f = ctx.frames.last_mut().unwrap();
+            match op {
+                0x6e => arithmetic_operations::fdiv(f),
+                0x6f => arithmetic_operations::ddiv(f),
+                0x72 => arithmetic_operations::frem(f),
+                0x73 => arithmetic_operations::drem(f),
+                0x74 => arithmetic_operations::ineg(f),
+                0x75 => arithmetic_operations::lneg(f),
+                0x76 => arithmetic_operations::fneg(f),
+                0x77 => arithmetic_operations::dneg(f),
+                0x78 => arithmetic_operations::ishl(f),
+                0x79 => arithmetic_operations::lshl(f),
+                0x7a => arithmetic_operations::ishr(f),
+                0x7b => arithmetic_operations::lshr(f),
+                0x7c => arithmetic_operations::iushr(f),
+                0x7d => arithmetic_operations::lushr(f),
+                0x7e => arithmetic_operations::iand(f),
+                0x7f => arithmetic_operations::land(f),
+                0x80 => arithmetic_operations::ior(f),
+                0x81 => arithmetic_operations::lor(f),
+                0x82 => arithmetic_operations::ixor(f),
+                _ => arithmetic_operations::lxor(f), // 0x83
+            }
+            f.advance(1);
+            FastStep::Continue
+        }
+        // numeric conversions i2l..i2s — pure stack transforms, none throw.
+        0x85..=0x93 => {
+            let f = ctx.frames.last_mut().unwrap();
+            match op {
+                0x85 => conversion_operations::i2l(f),
+                0x86 => conversion_operations::i2f(f),
+                0x87 => conversion_operations::i2d(f),
+                0x88 => conversion_operations::l2i(f),
+                0x89 => conversion_operations::l2f(f),
+                0x8a => conversion_operations::l2d(f),
+                0x8b => conversion_operations::f2i(f),
+                0x8c => conversion_operations::f2l(f),
+                0x8d => conversion_operations::f2d(f),
+                0x8e => conversion_operations::d2i(f),
+                0x8f => conversion_operations::d2l(f),
+                0x90 => conversion_operations::d2f(f),
+                0x91 => conversion_operations::i2b(f),
+                0x92 => conversion_operations::i2c(f),
+                _ => conversion_operations::i2s(f), // 0x93
+            }
+            f.advance(1);
+            FastStep::Continue
+        }
+        // if_acmpeq / if_acmpne — reference-identity branches (compare two offsets).
+        0xa5 => branch(ctx, pc, bifurcation_operations::if_acmpeq),
+        0xa6 => branch(ctx, pc, bifurcation_operations::if_acmpne),
+
+        // fconst_0/1/2 / dconst_0/1 — push a float/double constant.
+        0x0b..=0x0d => {
+            let v = (op - 0x0b) as f32;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::fconst(f, v);
+            f.advance(1);
+            FastStep::Continue
+        }
+        0x0e | 0x0f => {
+            let v = (op - 0x0e) as f64;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::dconst(f, v);
+            f.advance(1);
+            FastStep::Continue
+        }
+        // Typed loads/stores for long/float/double — moving a `Value` is type-agnostic, so
+        // these reuse `iload`/`istore` (as `run_one` does). `_n` forms: the slot is the low
+        // nibble of `op - base`; indexed forms take the slot in the next byte.
+        // lload_0..3 (0x1e-21) · fload_0..3 (0x22-25) · dload_0..3 (0x26-29)
+        0x1e..=0x29 => {
+            let slot = ((op - 0x1e) % 4) as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iload(f, slot);
+            f.advance(1);
+            FastStep::Continue
+        }
+        // lstore_0..3 (0x3f-42) · fstore_0..3 (0x43-46) · dstore_0..3 (0x47-4a)
+        0x3f..=0x4a => {
+            let slot = ((op - 0x3f) % 4) as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::istore(f, slot);
+            f.advance(1);
+            FastStep::Continue
+        }
+        // lload / fload / dload (indexed)
+        0x16..=0x18 => {
+            let slot = ctx.code[pc + 1] as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::iload(f, slot);
+            f.advance(2);
+            FastStep::Continue
+        }
+        // lstore / fstore / dstore (indexed)
+        0x37..=0x39 => {
+            let slot = ctx.code[pc + 1] as usize;
+            let f = ctx.frames.last_mut().unwrap();
+            variable_operations::istore(f, slot);
+            f.advance(2);
+            FastStep::Continue
+        }
+
+        _ => FastStep::NeedsShared,
+    }
+}
+
+/// A no-operand, non-throwing arithmetic op in the fast path: apply the helper to the top
+/// frame and advance one byte.
+fn arith1(ctx: &mut RunningCtx, op: fn(&mut Frame)) -> FastStep {
+    let f = ctx.frames.last_mut().unwrap();
+    op(f);
+    f.advance(1);
+    FastStep::Continue
+}
+
+/// A 2-byte-offset branch in the frame-local fast path: read the offset, run the branch (it
+/// sets pc itself), and report a back-edge if it jumped backward (a loop).
+fn branch(ctx: &mut RunningCtx, pc: usize, bf: fn(&mut Frame, i16)) -> FastStep {
+    let off = i16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+    let f = ctx.frames.last_mut().unwrap();
+    bf(f, off);
+    if f.pc() < pc {
+        FastStep::BackEdge
+    } else {
+        FastStep::Continue
+    }
+}
+
+/// **Read-only** shared opcodes (H3 W3): these run under a `SharedVm` *read* lock, so many
+/// threads execute them concurrently. `Some(step)` = handled under the read lock; `None` =
+/// escalate to the write path ([`Exec::run_one`]). Only ops that are side-effect-free on `None`
+/// belong here — they must leave shared state untouched and, on escalation, the operand stack too.
+fn run_read_shared(shared: &SharedVm, ctx: &mut RunningCtx) -> Option<Step> {
+    let pc = ctx.frames.last()?.pc();
+    let op = *ctx.code.get(pc)?;
+    match op {
+        // getfield — read an object's field. `getfield_read` escalates (`None`) on a null
+        // receiver or an unloaded class, restoring the stack; otherwise it reads and pushes.
+        0xb4 => {
+            let cp_index = u16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+            let frame = ctx.frames.last_mut().unwrap();
+            objects_operations::getfield_read(&shared.metaspace, &shared.heap, frame, cp_index)?;
+            frame.advance(3);
+            Some(Step::Continue)
+        }
+        // putfield — write an object's field **lock-free** when it's a primitive on an Eden object
+        // (`Relaxed`, or `Release` if volatile). `putfield_read` escalates (`None`, restoring the
+        // stack) for a reference store (write barrier), an Old object, an unloaded class, or null.
+        0xb5 => {
+            let cp_index = u16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+            let frame = ctx.frames.last_mut().unwrap();
+            objects_operations::putfield_read(&shared.metaspace, &shared.heap, frame, cp_index)?;
+            frame.advance(3);
+            Some(Step::Continue)
+        }
+        // arraylength — push the array's length. Escalates on a null array.
+        0xbe => {
+            let frame = ctx.frames.last_mut().unwrap();
+            array_operations::arraylength_read(&shared.heap, frame)?;
+            frame.advance(1);
+            Some(Step::Continue)
+        }
+        // new (0xbb) — allocate an object **lock-free** in Eden, but only for an already
+        // *initialized* class (an uninitialized one must run `<clinit>`, a write). Escalates
+        // otherwise, or if the class isn't prepared / Eden is full.
+        0xbb => {
+            let cp_index = u16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+            let method = ctx.frames.last()?.method();
+            let caller = shared.metaspace.class_of(method).to_string();
+            let class_name = shared.metaspace.get(&caller).and_then(|cf| cf.class_name(cp_index))?.to_string();
+            if shared.metaspace.init_state(&class_name) != InitState::Done {
+                return None; // not initialized → escalate (write path runs `<clinit>`)
+            }
+            let offset =
+                objects_operations::allocate_read(&shared.metaspace, &shared.heap, &class_name, ctx.current)?;
+            let frame = ctx.frames.last_mut().unwrap();
+            frame.push(Value::Reference(offset));
+            frame.advance(3);
+            Some(Step::Continue)
+        }
+        // newarray (0xbc) / anewarray (0xbd) — allocate an array lock-free. Escalate on a negative
+        // length, an unprepared array class, or a full Eden (`*_read` restore the stack).
+        0xbc => {
+            let idx = ctx.current;
+            let atype = ctx.code[pc + 1];
+            let frame = ctx.frames.last_mut().unwrap();
+            array_operations::newarray_read(&shared.metaspace, &shared.heap, frame, atype, idx)?;
+            frame.advance(2);
+            Some(Step::Continue)
+        }
+        0xbd => {
+            let idx = ctx.current;
+            let cp_index = u16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+            let frame = ctx.frames.last_mut().unwrap();
+            array_operations::anewarray_read(&shared.metaspace, &shared.heap, frame, cp_index, idx)?;
+            frame.advance(3);
+            Some(Step::Continue)
+        }
+        // iaload..saload — read an array element. Escalate on null array / out-of-bounds.
+        0x2e..=0x35 => {
+            let frame = ctx.frames.last_mut().unwrap();
+            let h = &shared.heap;
+            match op {
+                0x2e => array_operations::array_load_read(h, frame, 4, |h, at| Value::Int(h.read_u32(at) as i32)),
+                0x2f => array_operations::array_load_read(h, frame, 8, |h, at| Value::Long(h.read_u64(at) as i64)),
+                0x30 => array_operations::array_load_read(h, frame, 4, |h, at| Value::Float(f32::from_bits(h.read_u32(at)))),
+                0x31 => array_operations::array_load_read(h, frame, 8, |h, at| Value::Double(f64::from_bits(h.read_u64(at)))),
+                0x32 => array_operations::array_load_read(h, frame, 4, |h, at| Value::Reference(h.read_u32(at) as usize)),
+                0x33 => array_operations::array_load_read(h, frame, 1, |h, at| Value::Int(h.read_u8(at) as i8 as i32)),
+                0x34 => array_operations::array_load_read(h, frame, 2, |h, at| Value::Int(h.read_u16(at) as i32)),
+                _ => array_operations::array_load_read(h, frame, 2, |h, at| Value::Int(h.read_u16(at) as i16 as i32)), // 0x35 saload
+            }?;
+            frame.advance(1);
+            Some(Step::Continue)
+        }
+        _ => None,
+    }
+}
+
+/// `os` parallel substrate entry: set up the shared state (main's frame in slot 0), flip
+/// `gc_by_driver` so `safepoint` defers to us, and run the parallel loop on this OS thread.
+pub(crate) fn run_os_parallel(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
+    let mut jvm = JVM::new(metaspace, entry);
+    jvm.shared.mode = ThreadMode::OsParallel;
+    jvm.shared.gc_by_driver = true; // GC goes through `coordinate_gc`, not inline `safepoint`
+    jvm.shared.threads[0].os_handle = Some(thread::current());
+    std::mem::swap(&mut jvm.running.frames, &mut jvm.shared.threads[0].frames);
+    let shared = Arc::new(RwLock::new(jvm.shared));
+    let gc_pending = Arc::new(AtomicBool::new(false));
+    os_parallel_loop(&shared, &gc_pending, 0)
+}
+
+/// One thread's parallel run loop. Runs frame-local opcodes lock-free on its own `RunningCtx`;
+/// takes the `SharedVm` lock only for shared opcodes and scheduling; and cooperates with the GC
+/// stop-the-world via `gc_pending` + [`reach_safepoint`].
+fn os_parallel_loop(
+    shared_arc: &Arc<RwLock<SharedVm>>,
+    gc_pending: &Arc<AtomicBool>,
+    idx: usize,
+) -> Option<Value> {
+    let mut running = RunningCtx::default();
+    // Load this thread's frames from its slot and fill the code cache (once, under the lock).
+    {
+        let mut g = shared_arc.write().unwrap();
+        Exec { running: &mut running, shared: &mut g }.activate(idx);
+        if !running.frames.is_empty() {
+            Exec { running: &mut running, shared: &mut g }.sync_code_cache();
+        }
+    }
+    loop {
+        // Safepoint poll (lock-free): if a GC is pending, sync + park until it's done.
+        if gc_pending.load(Ordering::Acquire) {
+            reach_safepoint(shared_arc, gc_pending, &mut running, idx);
+        }
+
+        // Fast path: run the top opcode lock-free if it's frame-local.
+        if !running.frames.is_empty() {
+            match run_frame_local(&mut running) {
+                FastStep::Continue | FastStep::BackEdge => continue,
+                FastStep::NeedsShared => {}
+            }
+        }
+
+        // W3 read path: a read-only shared opcode (e.g. `getfield`) runs under a **read** lock,
+        // so sibling threads doing the same run concurrently. `None` → escalate to the write path.
+        if !running.frames.is_empty() {
+            let handled = run_read_shared(&shared_arc.read().unwrap(), &mut running);
+            if handled.is_some() {
+                continue;
+            }
+        }
+
+        // Shared (write) path: one opcode / scheduling step under the write lock.
+        let tick: OsTick = {
+            let mut g = shared_arc.write().unwrap();
+            if g.halt {
+                return None;
+            }
+            match g.threads[idx].status {
+                ThreadStatus::Terminated => return None,
+                ThreadStatus::Blocked | ThreadStatus::Waiting | ThreadStatus::TimedWaiting => {
+                    os_block_tick(&g, idx)
+                }
+                ThreadStatus::Runnable => {
+                    // Reload our frames if a previous block deactivated them into the slot.
+                    if running.frames.is_empty() {
+                        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+                        Exec { running: &mut running, shared: &mut g }.sync_code_cache();
+                    }
+                    let step = Exec { running: &mut running, shared: &mut g }.run_one();
+                    spawn_pending_parallel(&mut g, shared_arc, gc_pending);
+                    Exec { running: &mut running, shared: &mut g }.wake_sleepers();
+                    // The op may have pushed/popped a frame (invoke/return) — re-sync the code
+                    // cache to the new top method so the lock-free fast path reads the right
+                    // bytecode next iteration. (Still under the lock, so `metaspace` is safe.)
+                    if !running.frames.is_empty() {
+                        Exec { running: &mut running, shared: &mut g }.sync_code_cache();
+                    }
+                    if let Step::Return(value) = step {
+                        Exec { running: &mut running, shared: &mut g }.on_thread_terminated(idx);
+                        if idx == 0 {
+                            g.halt = true;
+                            Exec { running: &mut running, shared: &mut g }.unpark_all();
+                        }
+                        return value;
+                    }
+                    if g.threads[idx].status == ThreadStatus::Runnable {
+                        // Still running: GC due? Become the coordinator (frames stay local so
+                        // `collect_at_safepoint`'s `parked()` can sync them). Else yield.
+                        if (Exec { running: &mut running, shared: &mut g }).needs_collection() {
+                            drop(g);
+                            coordinate_gc(shared_arc, gc_pending, &mut running, idx);
+                            continue;
+                        }
+                        OsTick::Yield
+                    } else {
+                        // Blocked/waiting/sleeping: sync our frames into the slot so a GC sees
+                        // them while we're parked, then classify how to wait.
+                        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+                        os_block_tick(&g, idx)
+                    }
+                }
+            }
+        };
+
+        match tick {
+            OsTick::Done(value) => return value,
+            OsTick::Yield => thread::yield_now(),
+            OsTick::Park => thread::park_timeout(Duration::from_millis(50)),
+            OsTick::Sleep(ms) => {
+                thread::sleep(Duration::from_millis(ms));
+                let mut g = shared_arc.write().unwrap();
+                Exec { running: &mut running, shared: &mut g }.expire_timed_block(idx);
+            }
+        }
+    }
+}
+
+/// Reach a GC safepoint: sync our frames into our slot (so the collector can walk and remap
+/// them), mark ourselves safe, park until the coordinator clears `gc_pending`, then reload the
+/// (possibly remapped) frames.
+fn reach_safepoint(
+    shared_arc: &Arc<RwLock<SharedVm>>,
+    gc_pending: &Arc<AtomicBool>,
+    running: &mut RunningCtx,
+    idx: usize,
+) {
+    {
+        let mut g = shared_arc.write().unwrap();
+        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+        g.threads[idx].at_safepoint = true;
+    }
+    while gc_pending.load(Ordering::Acquire) {
+        thread::park();
+    }
+    let mut g = shared_arc.write().unwrap();
+    std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+    g.threads[idx].at_safepoint = false;
+}
+
+/// Stop-the-world coordinator: exactly one thread runs this per collection (won via
+/// `compare_exchange` on `gc_pending`). It waits until every other thread is *safe*
+/// (`status != Runnable`, i.e. blocked with frames in its slot, or `at_safepoint`), collects,
+/// then clears the flag and unparks the safepointed threads to reload their remapped frames.
+fn coordinate_gc(
+    shared_arc: &Arc<RwLock<SharedVm>>,
+    gc_pending: &Arc<AtomicBool>,
+    running: &mut RunningCtx,
+    idx: usize,
+) {
+    if gc_pending
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        // Another thread is already coordinating — reach the safepoint ourselves instead.
+        reach_safepoint(shared_arc, gc_pending, running, idx);
+        return;
+    }
+    loop {
+        {
+            let mut g = shared_arc.write().unwrap();
+            let all_safe = g.threads.iter().enumerate().all(|(i, t)| {
+                i == idx || t.status != ThreadStatus::Runnable || t.at_safepoint
+            });
+            if all_safe {
+                // Everyone stopped and synced. Collect — our own frames are handled by
+                // `parked()` inside; the others' are already in their slots.
+                Exec { running: &mut *running, shared: &mut g }.collect_at_safepoint();
+                gc_pending.store(false, Ordering::Release);
+                for t in &g.threads {
+                    if let Some(h) = &t.os_handle {
+                        h.unpark();
+                    }
+                }
+                return;
+            }
+        }
+        thread::yield_now(); // let the stragglers reach their safepoint
+    }
+}
+
+/// Like [`spawn_pending`] but launches the **parallel** loop for each new `Thread.start()` slot.
+fn spawn_pending_parallel(
+    shared: &mut SharedVm,
+    shared_arc: &Arc<RwLock<SharedVm>>,
+    gc_pending: &Arc<AtomicBool>,
+) {
+    let pending: Vec<usize> =
+        (0..shared.threads.len()).filter(|&i| !shared.threads[i].os_spawned).collect();
+    for i in pending {
+        shared.threads[i].os_spawned = true;
+        let child_shared = Arc::clone(shared_arc);
+        let child_gc = Arc::clone(gc_pending);
+        let handle = thread::spawn(move || {
+            os_parallel_loop(&child_shared, &child_gc, i);
+        });
+        shared.threads[i].os_handle = Some(handle.thread().clone());
     }
 }

@@ -238,17 +238,17 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [x] GC **compactante** (mover + reescribir punteros) — hecho ya en A5.
 - [x] GC **generacional** (young Eden+survivors por copia / Old; write barrier + remembered set para raíces `old→young`)
 - [x] **Referencias débiles** (`java.lang.ref`: `WeakReference` + `ReferenceQueue`)
-- [x] **Hilos, monitores, `synchronized`** — green threads cooperativos (default + visor) **y** substrato **hilos de SO + GIL** (`JVM_THREADS=os`, E1+E2): `std::thread` por `Thread.start()`, `park`/`unpark`, `wait`/`notify`/`join`, IMSE, `wait(timeout)` y **monitor GC-safe** (las claves se remapean por el *forward* del GC en minor/compact); GC seguro bajo el GIL
+- [x] **Hilos, monitores, `synchronized`** — green threads cooperativos (default + visor) **y** substrato **hilos de SO + GIL** (`JVM_THREADS=os-gil`, E1+E2): `std::thread` por `Thread.start()`, `park`/`unpark`, `wait`/`notify`/`join`, IMSE, `wait(timeout)` y **monitor GC-safe** (las claves se remapean por el *forward* del GC en minor/compact); GC seguro bajo el GIL
 - [x] **API de `Thread` (H1)** — `currentThread`/`yield`/nombre/id/`isAlive`, `getState()` con los seis estados (`ThreadStatus` a cinco + `NEW` derivado, un punto único de bloqueo), `Thread(Runnable)` (una lambda lo satisface), `start` dos veces → `IllegalThreadStateException`, e `interrupt`/`InterruptedException` que despierta `sleep`/`join`/`wait` (re-adquiere el monitor antes de lanzar en el `wait`; la carrera notify/interrupt la resuelve el GIL). Faltan periféricos (daemon, prioridad, `ThreadLocal`)
-- [ ] **Sacar el GIL** → paralelismo real (locks finos + TLABs + handshake stop-the-world) — *E3, próximo*
-- [ ] **Modelo de memoria de Java** (`volatile`, happens-before, fences) — recién útil con paralelismo real
+- [x] **Sacar el GIL (E3/H3) — paralelismo real (subconjunto conservador)** — `JVM_THREADS=os`: los opcodes **frame-local** (aritmética int, stack, ramas) corren **lock-free en paralelo** sobre un `RunningCtx` por-hilo con code cache; solo `SharedVm` se lockea. El GC que mueve objetos frena a todos con un **safepoint stop-the-world cooperativo** (`gc_pending` + `park`/`unpark`). El `Arc<Mutex<JVM>>` de toda-la-VM **desapareció**. `os-gil` queda como referencia serializada + fallback. Verificado por el oráculo (`os` ≡ `os-gil` ≡ green) + stress test. **Falta ensanchar:** refs en stack/locals, ops long/float/double, TLABs, y locks finos dentro de `SharedVm` (hoy un `Mutex` único → los opcodes compartidos aún serializan). Diseño: `H3_ownership.md`
+- [ ] **Modelo de memoria de Java** (`volatile`, happens-before, fences) — recién útil con paralelismo real (ya lo hay)
 - [x] **Cobertura del set de opcodes — 199/199 alcanzables: completo** — cerrados `nop` (0x00), `goto_w` (0xc8), el prefijo `wide` (0xc4, índices de local de 16 bits: `wide iinc` mide 6 bytes, el resto 4), `multianewarray` (0xc5, alocación recursiva de sólo los `dimensions` niveles indicados, modelado **también en el verificador**) e `invokedynamic` (0xba). Los 3 de `jsr`/`ret`/`jsr_w` quedan **excluidos por diseño** (JVMS §4.9.1 los prohíbe en class files de versión 50.0+, o sea Java 6 en adelante), con la postura **leer sí, ejecutar no**: el desensamblador los soporta completo —requisito de A0— y el gate estructural del verificador los rechaza. Nota de diseño: `subrutinas-jsr-ret.md`.
 - [x] **`invokedynamic`** (0xba) — **no era un opcode, era un subsistema**, y corre: **5 de las 6 fábricas** que emite `javac`. Concatenación de strings (`StringConcatFactory`), `switch` sobre patrones de tipo *y* de enum (`SwitchBootstraps.typeSwitch`), `equals`/`hashCode`/`toString` de records (`ObjectMethods`), lambdas y method references (`LambdaMetafactory.metafactory`), y constantes dinámicas (`ConstantBootstraps.invoke`). La sexta, `altMetafactory`, necesita serialización y queda fuera de alcance. Ruta, correcciones y mediciones: **`invokedynamic-ruta.md`**
 - [x] **`ldc` de literales de clase** (`Foo.class`, `int[].class`) — empuja el mirror, cacheado por Class ID, y sin inicializar la clase (un literal no es *uso activo*, §5.5)
 - [x] **La VM puede invocar Java** (`call_java`) — empuja un frame propio y lo corre con un bucle anidado, devolviendo el resultado. Era el caso general de lo que ya hacía `<clinit>`. **Los intrínsecos dejan de ser terminales**: es lo que permite que `String.valueOf(Object)` llame al `toString()` del objeto, que un record pregunte el `equals`/`hashCode` de sus componentes, y que un condy ejecute su bootstrap
 - [ ] **Modelo de objetos de `java.lang.invoke`** (`MethodHandle`/`MethodType`/`Lookup`) — desbloquea `ldc` de esas constantes y los bootstrap methods del usuario; **parte necesita el escritor de `.class` (B3) para tener con qué probarse**. Detalle en `TODO.md`
 - [ ] JIT (bytecode → código nativo)
-- **✅ Éxito (parcial):** verificación de tipos completa, GC generacional, set de opcodes completo (incluido `invokedynamic`), y concurrencia con hilos de SO reales serializados por un GIL; falta el paralelismo real (sacar el GIL), el JMM y/o el JIT. *Detalle en los informes `Concurrencia_KajiJDK.pdf` e `invokedynamic-ruta.md`.*
+- **✅ Éxito (parcial):** verificación de tipos completa, GC generacional, set de opcodes completo (incluido `invokedynamic`), y concurrencia con hilos de SO reales — **con paralelismo real (GIL removido) para el subconjunto frame-local**; falta ensanchar el paralelismo (refs/wide ops, TLABs, locks finos), el JMM y/o el JIT. *Detalle en los informes `Concurrencia_KajiJDK.pdf` e `invokedynamic-ruta.md`.*
 
 ---
 
@@ -401,10 +401,10 @@ El momento épico: las tres piezas funcionando juntas.
 > `wait(timeout)` y monitores GC-safe, y el **set de opcodes completo**: 199 de 199
 > alcanzables, con `invokedynamic` cubriendo 5 de las 6 fábricas que emite `javac`
 > (concatenación, `switch` sobre patrones, records, lambdas y constantes dinámicas).
-> El proyecto pasa **120 tests** sin warnings.
+> El proyecto pasa **127 tests** sin warnings.
 > Detalle vigente en `Concurrencia_KajiJDK.pdf`, `Roadmap_JDK.pdf` e
 > `invokedynamic-ruta.md`.
-> **Siguiente: E3 — sacar el GIL (paralelismo real). H1 (API de `Thread` + `interrupt`) cerrado.**
+> **Siguiente: ensanchar el paralelismo (refs/wide ops, TLABs, locks finos) y H4 (JMM). El GIL ya está removido (paralelismo real para el subconjunto frame-local en `JVM_THREADS=os`).**
 
 **Fase A / Hito A0 — núcleo logrado.** Compila **sin warnings**, 6 tests verdes,
 **12 fixtures byte-idénticos** a `javap`.

@@ -2,11 +2,11 @@
 //! the target fixed at link time. Lives as an `impl JVM` method (it drives
 //! the whole call stack, not just one frame), dispatched from `step()`.
 
-use super::{JVM, Step};
+use super::{Exec, Step};
 use crate::jvm::interpreter::metaspace::MetaspaceService;
 use crate::jvm::interpreter::natives;
 
-impl JVM {
+impl Exec<'_> {
     /// `invokestatic` (0xb8): resolve the target static method through the
     /// metaspace (loading its class if needed), move the caller's top-of-stack
     /// arguments into a fresh callee frame's leading locals, and push it.
@@ -16,7 +16,7 @@ impl JVM {
 
         // Read the u2 constant-pool index that follows the opcode (the `00 07`).
         let cp_index = {
-            let code = self.metaspace.code(caller);
+            let code = self.shared.metaspace.code(caller);
             u16::from_be_bytes([code[pc + 1], code[pc + 2]])
         };
 
@@ -24,20 +24,20 @@ impl JVM {
         // The metaspace reads the (already parsed) Methodref and caches the result
         // under (class, index) — the JVM's "resolved constant pool": the next time
         // this same `b8 00 07` runs it's a direct (class, #7) → MethodId lookup.
-        let caller_class = self.metaspace.class_of(caller).to_string();
+        let caller_class = self.shared.metaspace.class_of(caller).to_string();
         // Resolution can fail — that's a *linkage error*, not a VM crash. If the
         // target class can't be loaded it's a NoClassDefFoundError; if the class is
         // there but the method isn't, a NoSuchMethodError. Both are thrown.
-        let callee = match self.metaspace.resolve_call(&caller_class, cp_index) {
+        let callee = match self.shared.metaspace.resolve_call(&caller_class, cp_index) {
             Some(callee) => callee,
             None => {
                 let target = self
-                    .metaspace
+                    .shared.metaspace
                     .get(&caller_class)
                     .and_then(|cf| cf.methodref_target(cp_index))
                     .map(|(class, _, _)| class.to_string());
                 let error = match target {
-                    Some(class) if self.metaspace.get_or_load(&class).is_none() => {
+                    Some(class) if self.shared.metaspace.get_or_load(&class).is_none() => {
                         "java/lang/NoClassDefFoundError"
                     }
                     _ => "java/lang/NoSuchMethodError",
@@ -47,20 +47,20 @@ impl JVM {
         };
 
         // First active use of the callee's class triggers its initialization.
-        let callee_class = self.metaspace.class_of(callee).to_string();
+        let callee_class = self.shared.metaspace.class_of(callee).to_string();
         self.ensure_initialized(&callee_class);
 
         // `System.gc()`: an *explicit* GC request. Flag it and consume the call — it's
         // serviced at the next safepoint (the real VM also defers, never runs it
         // inline). No args, no return value.
-        if callee_class == "java/lang/System" && self.metaspace.name(callee) == "gc" {
+        if callee_class == "java/lang/System" && self.shared.metaspace.name(callee) == "gc" {
             self.request_gc();
             self.advance_past_call();
             return Step::Continue;
         }
 
-        let arg_count = self.metaspace.arg_count(callee);
-        let max_locals = self.metaspace.max_locals(callee);
+        let arg_count = self.shared.metaspace.arg_count(callee);
+        let max_locals = self.shared.metaspace.max_locals(callee);
 
         // Pop the arguments off the caller (top-of-stack is the *last* argument, so
         // reverse). The caller's pc is left *at* the invoke — the matching `return`
@@ -83,8 +83,8 @@ impl JVM {
         // This is what `"x" + obj` needs: javac emits this call *before* the concatenation
         // call site, so the indy only ever sees Strings.
         if callee_class == "java/lang/String"
-            && self.metaspace.name(callee) == "valueOf"
-            && self.metaspace.descriptor(callee) == "(Ljava/lang/Object;)Ljava/lang/String;"
+            && self.shared.metaspace.name(callee) == "valueOf"
+            && self.shared.metaspace.descriptor(callee) == "(Ljava/lang/Object;)Ljava/lang/String;"
         {
             let object = match args.first() {
                 Some(crate::jvm::interpreter::frame::Value::Reference(offset)) => *offset,
@@ -92,8 +92,8 @@ impl JVM {
             };
             let text = self.text_of(object);
             let offset = crate::jvm::interpreter::strings::intern(
-                &mut self.metaspace,
-                &mut self.heap,
+                &mut self.shared.metaspace,
+                &mut self.shared.heap,
                 &text,
             );
             self.top().push(crate::jvm::interpreter::frame::Value::Reference(offset));
@@ -103,7 +103,7 @@ impl JVM {
 
         // `Thread.sleep(ms)`: park the current thread (scheduler op) — handled here, not
         // the native bridge, since it suspends the thread.
-        if callee_class == "java/lang/Thread" && self.metaspace.name(callee) == "sleep" {
+        if callee_class == "java/lang/Thread" && self.shared.metaspace.name(callee) == "sleep" {
             let ms = match args.first() {
                 Some(crate::jvm::interpreter::frame::Value::Long(v)) => *v,
                 _ => 0,
@@ -115,7 +115,7 @@ impl JVM {
         // here because they touch the thread list (and `currentThread` may allocate main's
         // Thread object), which the native bridge can't do.
         if callee_class == "java/lang/Thread" {
-            match self.metaspace.name(callee) {
+            match self.shared.metaspace.name(callee) {
                 // A cooperative scheduler already switches every opcode, so yield() is a
                 // no-op beyond stepping past the call.
                 "yield" => {
@@ -151,9 +151,9 @@ impl JVM {
 
         // A native static (e.g. `Math.max`, `System.arraycopy`): no bytecode — run
         // the bridge with the args, push any result, and step past the call.
-        if self.metaspace.is_native(callee) {
+        if self.shared.metaspace.is_native(callee) {
             let (name, descriptor) = {
-                let cf = self.metaspace.get(&caller_class).expect("caller class is loaded");
+                let cf = self.shared.metaspace.get(&caller_class).expect("caller class is loaded");
                 let (_, n, d) = cf.methodref_target(cp_index).expect("invokestatic: bad methodref");
                 (n.to_string(), d.to_string())
             };
@@ -162,9 +162,9 @@ impl JVM {
                 &name,
                 &descriptor,
                 &args,
-                &mut self.metaspace,
-                &mut self.heap,
-                &mut self.console,
+                &mut self.shared.metaspace,
+                &mut self.shared.heap,
+                &mut self.shared.console,
             );
             if let Some(value) = result {
                 self.top().push(value);
@@ -176,7 +176,7 @@ impl JVM {
         // Lay the arguments into the callee's locals by their slot widths, so a
         // `long`/`double` parameter occupies two slots and the next lands past it.
         let descriptor = self
-            .metaspace
+            .shared.metaspace
             .get(&caller_class)
             .and_then(|cf| cf.methodref_target(cp_index))
             .map(|(_, _, d)| d.to_string())
@@ -184,8 +184,8 @@ impl JVM {
         let widths = MetaspaceService::param_slot_widths(&descriptor);
         // A `static synchronized` method locks the class's `Class` mirror (already
         // allocated — `ensure_initialized` ran above). Ordinary statics: no lock.
-        let lock = self.metaspace.is_synchronized(callee).then(|| {
-            self.metaspace
+        let lock = self.shared.metaspace.is_synchronized(callee).then(|| {
+            self.shared.metaspace
                 .class_mirror(&callee_class)
                 .expect("static synchronized: the Class mirror exists after initialization")
         });
