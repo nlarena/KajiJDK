@@ -12,6 +12,7 @@ macro_rules! pln {
     ($($arg:tt)*) => {{ println!("{}", format!($($arg)*).trim_end()); }};
 }
 
+pub mod javac;
 pub mod javap;
 pub mod jvm;
 pub mod pretty_class_visualizer;

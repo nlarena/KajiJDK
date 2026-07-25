@@ -254,6 +254,14 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 
 ## FASE B — El compilador (`javac`, escrito en Rust)
 
+> **Al día — el compilador está construido (fusionado desde el pendrive):** B0 (lexer),
+> B1 (parser, lenguaje completo), B2 (análisis semántico: pasadas 1 y 2 + chequeos),
+> B3 (generación de bytecode con `StackMapTable`) y B4 (compilador robusto) están
+> **hechos** — el `javac` propio compila objetos/bucles/excepciones y el `.class` corre
+> en la JVM (`fib(10)=55`, `fact(5)=120`) y pasa el verificador JVMS-estricto. Falta B5
+> (cumbre: genéricos completos). El detalle por hito está en `Roadmap_JDK.pdf`. Las
+> casillas de abajo son el plan original.
+
 ### Hito B0 · Lexer 🟢
 - [ ] Scanner: texto `.java` → tokens (palabras clave, identificadores, literales, símbolos)
 - **✅ Éxito:** tokeniza `Add.java` sin perder ni inventar tokens.
