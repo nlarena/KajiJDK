@@ -690,7 +690,7 @@ impl Checker<'_> {
         else {
             return;
         };
-        let parent_ret = self.as_seen_from(decl, parent, &parent_ret);
+        let parent_ret = self.as_seen_from(mine, parent, &parent_ret);
         let ok = match (&mine_ret, &parent_ret) {
             // Sin resolver de un lado: no hay nada que comparar sin inventar un error.
             (RType::Unresolved, _) | (_, RType::Unresolved) => true,
@@ -711,10 +711,14 @@ impl Checker<'_> {
     }
 
     /// El tipo de retorno heredado, con los argumentos de tipo del supertipo **sustituidos**.
-    fn as_seen_from(&self, _decl: &MethodDecl, parent: SymbolId, ret: &RType) -> RType {
+    /// `mine` es **mi** método (el que sobrescribe); su dueña es el subtipo desde donde se mira.
+    fn as_seen_from(&self, mine: SymbolId, parent: SymbolId, ret: &RType) -> RType {
         let Some(owner) = self.table.symbol(parent).owner else { return ret.clone() };
-        // Se busca en la jerarquía el supertipo cuya erasure es la dueña, para tomar sus argumentos.
-        for sup in types::supertypes_of(self.table, ret) {
+        let Some(sub) = self.table.symbol(mine).owner else { return ret.clone() };
+        // Se sube por los supertipos del **subtipo** (no del retorno: `T` solo llega a sus cotas)
+        // hasta el supertipo cuya erasure es la clase dueña del método heredado, y se toman sus
+        // argumentos de tipo: `SB extends Box<String>` da `{T ↦ String}`, y `T get()` se ve `String`.
+        for sup in types::supertypes_of(self.table, &RType::Class(sub)) {
             if types::erased_id(&sup) == Some(owner) {
                 return types::substitute(ret, &types::subst_of(self.table, &sup));
             }
@@ -797,12 +801,22 @@ impl Checker<'_> {
         for &c in std::iter::once(&cid).chain(ancestors.iter()) {
             let cname = self.table.symbol(c).name.clone();
             let in_interface = self.is_interface(c);
+            // Los argumentos que `cid` le pasa a este ancestro (`implements Cmp<C>` ⇒ `{T ↦ C}`):
+            // sin sustituir, el `cmp(T)` de la interfaz quedaría `cmp(Object)` y no lo taparía el
+            // `cmp(C)` de la clase. Vacío si el ancestro no es genérico o es `cid` mismo.
+            let subst = types::subst_for(self.table, &RType::Class(cid), c);
             for id in self.table.members_of(c) {
                 let sym = self.table.symbol(id);
                 if !matches!(sym.kind, SymbolKind::Method { .. }) {
                     continue;
                 }
-                let Some(sig) = erased_params(self.table, id) else { continue };
+                let sig = match self.table.resolved(id) {
+                    Some(Resolved::Method { params, .. }) => params
+                        .iter()
+                        .map(|p| types::erasure(self.table, &types::substitute(p, &subst)))
+                        .collect::<Vec<_>>(),
+                    _ => continue,
+                };
                 let key = (sym.name.clone(), sig);
                 // En una interfaz, `abstract` es implícito: lo que **no** es abstracto es lo que
                 // trae `default` o `static`.

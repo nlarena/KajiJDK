@@ -53,6 +53,7 @@ use super::class_writer::{
     BootstrapMethod, ClassFile, ConstantPool, ExceptionEntry, FieldInfo, MethodInfo,
 };
 use super::symbol::{RType, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable};
+use super::types;
 
 // Flags de acceso (JVMS Table 4.1-B / 4.6-A).
 const ACC_PUBLIC: u16 = 0x0001;
@@ -62,6 +63,8 @@ const ACC_STATIC: u16 = 0x0008;
 const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;
 const ACC_ABSTRACT: u16 = 0x0400;
+const ACC_BRIDGE: u16 = 0x0040; // método puente sintético (JVMS §4.6, tabla 4.6-A)
+const ACC_SYNTHETIC: u16 = 0x1000; // no está en el fuente: lo generó el compilador
 
 /// Compila **cada tipo** de `unit` a su propio `.class` — top-level y anidados (§7.6, §8.1.3): una
 /// unidad puede declarar varios tipos, y cada clase interna, la anónima `C$1` del `switch`-enum, etc.
@@ -210,6 +213,13 @@ fn gen_class(
         cf.methods.push(ctor);
     }
 
+    // Bridges: un override concreto que ve un método heredado con un descriptor borrado distinto
+    // (por un type-var del supertipo, `Box<String>`/`Cmp<C>`) necesita un puente con el descriptor
+    // heredado que reenvía al método específico, o el dispatch dinámico no lo encuentra.
+    for bridge in gen_bridges(&mut cf.pool, table, cid, &this_internal) {
+        cf.methods.push(bridge);
+    }
+
     cf.bootstrap_methods = bootstraps;
     cf.to_bytes()
 }
@@ -300,6 +310,12 @@ fn type_desc(table: &SymbolTable, scope: ScopeId, ty: &Type) -> String {
         Type::Var => "Ljava/lang/Object;".to_string(),
         Type::Class(name) | Type::Parameterized { base: name, .. } => {
             match resolve_type_id(table, scope, name) {
+                // Un parámetro de tipo **de clase** (`Box<T>`) llega acá como `Type::Class("T")`
+                // y resuelve a un símbolo `TypeVar`; se borra a su cota, igual que en `rtype_desc`
+                // (un `<T>` de método ya cae en `Type::Var` de arriba).
+                Some(id) if matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. }) => {
+                    rtype_desc(table, &super::types::erasure(table, &RType::TypeVar(id)))
+                }
                 Some(id) => format!("L{};", internal_name(table, id)),
                 None => "Ljava/lang/Object;".to_string(),
             }
@@ -313,7 +329,11 @@ pub(crate) fn rtype_desc(table: &SymbolTable, rt: &RType) -> String {
         RType::Void => "V".to_string(),
         RType::Prim(p) => prim_desc(*p).to_string(),
         RType::Array(inner) => format!("[{}", rtype_desc(table, inner)),
-        RType::Class(id) | RType::TypeVar(id) => format!("L{};", internal_name(table, *id)),
+        RType::Class(id) => format!("L{};", internal_name(table, *id)),
+        // Una variable de tipo se **borra a su cota** (`Object` si no tiene): el descriptor
+        // de un call-site debe coincidir con el de la definición, que ya erasa. `erasure`
+        // baja el `TypeVar` a un `Class`/`Unresolved`, así que esto nunca recursiona en vano.
+        RType::TypeVar(_) => rtype_desc(table, &super::types::erasure(table, rt)),
         RType::Parameterized { base, .. } => format!("L{};", internal_name(table, *base)),
         RType::Unresolved => "Ljava/lang/Object;".to_string(),
     }
@@ -459,6 +479,207 @@ fn default_ctor(pool: &mut ConstantPool, super_internal: &str) -> MethodInfo {
 
 fn type_width(ty: &Type) -> u16 {
     matches!(ty, Type::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
+}
+
+// ---- bridge methods (§8.4.8.3, JVMS §4.6) ----
+
+/// La *categoría* de carga/retorno de un [`RType`]: `0=int 1=long 2=float 3=double 4=ref`, el
+/// desplazamiento sobre las familias `iload/lload/.../aload` e `ireturn/.../areturn`.
+fn rtype_cat(rt: &RType) -> u8 {
+    match rt {
+        RType::Prim(PrimType::Long) => 1,
+        RType::Prim(PrimType::Float) => 2,
+        RType::Prim(PrimType::Double) => 3,
+        RType::Prim(_) => 0,
+        _ => 4, // toda referencia (un type-var siempre erasa a una clase)
+    }
+}
+
+/// Cuántos slots ocupa (categoría 2 = `long`/`double`).
+fn rtype_width(rt: &RType) -> u16 {
+    matches!(rt, RType::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
+}
+
+/// El nombre interno para un `checkcast`, si es un tipo de referencia con clase conocida.
+fn rtype_internal(table: &SymbolTable, rt: &RType) -> Option<String> {
+    match rt {
+        RType::Class(id) | RType::Parameterized { base: id, .. } => Some(internal_name(table, *id)),
+        RType::Array(_) => Some(rtype_desc(table, rt)), // `checkcast` a un array usa su descriptor
+        _ => None,
+    }
+}
+
+/// Un descriptor `(...)R` a partir de tipos ya resueltos (borrados).
+fn desc_from(table: &SymbolTable, params: &[RType], ret: &RType) -> String {
+    let mut s = String::from("(");
+    for p in params {
+        s.push_str(&rtype_desc(table, p));
+    }
+    s.push(')');
+    s.push_str(&rtype_desc(table, ret));
+    s
+}
+
+/// Los **bridge methods** que esta clase necesita. Se genera uno cuando un método concreto
+/// declarado acá sobrescribe uno heredado cuyo descriptor **borrado crudo** difiere del propio
+/// —porque el supertipo lo declaró con un parámetro de tipo (`Box<T>`, `Cmp<C>`)—. El puente
+/// lleva el descriptor heredado, castea cada argumento al tipo específico y reenvía al método
+/// real; sin él, un `invokevirtual` contra el descriptor del supertipo no lo encuentra.
+fn gen_bridges(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    cid: SymbolId,
+    this_internal: &str,
+) -> Vec<MethodInfo> {
+    // Métodos concretos de instancia declarados por esta clase, con su firma borrada propia.
+    let own: Vec<(SymbolId, String, Vec<RType>, RType)> = table
+        .members_of(cid)
+        .into_iter()
+        .filter(|&id| {
+            matches!(table.symbol(id).kind, SymbolKind::Method { is_constructor: false, .. })
+                && !table.symbol(id).modifiers.contains(&Modifier::Static)
+                && !table.symbol(id).modifiers.contains(&Modifier::Abstract)
+        })
+        .filter_map(|id| match table.resolved(id) {
+            Some(Resolved::Method { params, ret, .. }) => {
+                let pe: Vec<RType> = params.iter().map(|p| types::erasure(table, p)).collect();
+                Some((id, table.symbol(id).name.clone(), pe, types::erasure(table, ret)))
+            }
+            _ => None,
+        })
+        .collect();
+
+    // (nombre, descriptor) que ya son métodos reales: un puente no puede pisarlos.
+    let real: Vec<(String, String)> =
+        own.iter().map(|(_, n, pe, re)| (n.clone(), desc_from(table, pe, re))).collect();
+
+    let mut out: Vec<MethodInfo> = Vec::new();
+    let mut emitted: Vec<(String, String)> = Vec::new();
+
+    for (_mid, name, m_params_er, m_ret_er) in &own {
+        let target_desc = desc_from(table, m_params_er, m_ret_er);
+
+        for sup in types::supertypes_of(table, &RType::Class(cid)) {
+            let Some(base) = types::erased_id(&sup) else { continue };
+            if base == cid {
+                continue;
+            }
+            let subst = types::subst_of(table, &sup);
+            for pid in table.members_of(base) {
+                if table.symbol(pid).name != *name {
+                    continue;
+                }
+                let Some(Resolved::Method { params: p_params, ret: p_ret, .. }) = table.resolved(pid)
+                else {
+                    continue;
+                };
+                if p_params.len() != m_params_er.len() {
+                    continue;
+                }
+                // ¿override-equivalente **visto desde el subtipo**? Se sustituyen los argumentos
+                // del supertipo (`T ↦ String`) y recién ahí se borra.
+                let p_sub_er: Vec<RType> = p_params
+                    .iter()
+                    .map(|p| types::erasure(table, &types::substitute(p, &subst)))
+                    .collect();
+                if p_sub_er != *m_params_er {
+                    continue;
+                }
+                // El descriptor heredado **crudo** (sus type-vars borran a su cota, sin sustituir).
+                let p_params_er: Vec<RType> =
+                    p_params.iter().map(|p| types::erasure(table, p)).collect();
+                let p_ret_er = types::erasure(table, p_ret);
+                let bridge_desc = desc_from(table, &p_params_er, &p_ret_er);
+
+                // Mismo descriptor → es un override normal, no hace falta puente.
+                if bridge_desc == target_desc {
+                    continue;
+                }
+                let key = (name.clone(), bridge_desc.clone());
+                if real.contains(&key) || emitted.contains(&key) {
+                    continue;
+                }
+                emitted.push(key);
+                out.push(build_bridge(
+                    pool,
+                    table,
+                    this_internal,
+                    name,
+                    &p_params_er,
+                    m_params_er,
+                    &p_ret_er,
+                    &target_desc,
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// Emite un bridge: `aload_0`, carga cada parámetro (con `checkcast` al tipo específico donde el
+/// heredado era más ancho), `invokevirtual` al método real y retorna. Sin saltos: sin `StackMapTable`.
+#[allow(clippy::too_many_arguments)]
+fn build_bridge(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    this_internal: &str,
+    name: &str,
+    bridge_params: &[RType], // descriptor del puente (tipos heredados, más anchos)
+    own_params: &[RType],    // tipos específicos a los que castear
+    bridge_ret: &RType,      // retorno **heredado** (el del descriptor del puente)
+    target_desc: &str,
+) -> MethodInfo {
+    let bridge_desc = desc_from(table, bridge_params, bridge_ret);
+    let name_index = pool.utf8(name);
+    let descriptor_index = pool.utf8(&bridge_desc);
+    let target = pool.methodref(this_internal, name, target_desc);
+
+    let mut code = vec![ALOAD_0];
+    let mut slot = 1u16; // 0 es `this`
+    for (bp, op_) in bridge_params.iter().zip(own_params) {
+        let cat = rtype_cat(bp);
+        if slot < 4 {
+            code.push(ILOAD_0 + cat * 4 + slot as u8);
+        } else {
+            code.push(ILOAD + cat);
+            code.push(slot as u8);
+        }
+        // El heredado ve el argumento más ancho (p. ej. `Object`); castear al específico.
+        if rtype_cat(op_) == 4 {
+            if let (Some(from), Some(to)) = (rtype_internal(table, bp), rtype_internal(table, op_)) {
+                if from != to {
+                    let ci = pool.class(&to);
+                    code.push(CHECKCAST);
+                    code.push((ci >> 8) as u8);
+                    code.push(ci as u8);
+                }
+            }
+        }
+        slot += rtype_width(bp);
+    }
+    code.push(INVOKEVIRTUAL);
+    code.push((target >> 8) as u8);
+    code.push(target as u8);
+    if matches!(bridge_ret, RType::Void) {
+        code.push(RETURN);
+    } else {
+        code.push(IRETURN + rtype_cat(bridge_ret));
+    }
+
+    // Pico de pila: `this` + todos los argumentos, justo antes del invoke.
+    let args_slots: u16 = bridge_params.iter().map(|p| rtype_width(p)).sum();
+    let max_stack = (1 + args_slots).max(rtype_width(bridge_ret)) as u16;
+
+    MethodInfo {
+        access_flags: ACC_PUBLIC | ACC_BRIDGE | ACC_SYNTHETIC,
+        name_index,
+        descriptor_index,
+        max_stack,
+        max_locals: 1 + args_slots,
+        code,
+        stack_map: None, // sin saltos
+        exceptions: Vec::new(),
+    }
 }
 
 // ---- opcodes (JVMS §6) ----
@@ -2420,7 +2641,7 @@ mod tests {
         let mut interp = JVM::new(ms, Frame::for_call(id, max_locals, args, &widths));
 
         for _ in 0..100_000 {
-            if let Step::Return(v) = interp.step() {
+            if let Step::Return(v) = interp.exec().step() {
                 let _ = std::fs::remove_dir_all(&dir);
                 return v;
             }
@@ -2478,6 +2699,75 @@ mod tests {
     fn large_int_literals_use_the_constant_pool() {
         let src = "public class M { public static int big() { return 1000000; } }";
         assert_eq!(run_int(src, "M", "big", vec![]), 1_000_000);
+    }
+
+    // ---- genéricos: el loop cerrado (erasure + checkcast en el uso) ----
+
+    #[test]
+    fn compiles_and_runs_a_generic_method() {
+        // `<T> T id(T x)` erase su descriptor a `(Ljava/lang/Object;)Ljava/lang/Object;`.
+        // Al asignar `String s = id("abc")` el emisor debe insertar un `checkcast String`
+        // sobre el `Object` que devuelve, y recién ahí `s.length()` resuelve. Si la erasure
+        // de la variable de tipo saliera como `LT;`, el `.class` ni verificaría.
+        let src = "public class M {
+            static <T> T id(T x) { return x; }
+            public static int use() { String s = id(\"abc\"); return s.length(); }
+        }";
+        assert_eq!(run_int(src, "M", "use", vec![]), 3);
+    }
+
+    #[test]
+    fn compiles_and_runs_a_generic_instance_class() {
+        // Clase genérica de instancia: el campo `T v` erasa a `Object`, el constructor a
+        // `(Ljava/lang/Object;)V` y `T get()` a `()Ljava/lang/Object;`. Con type-args
+        // explícitos (sin diamante todavía) para aislar la erasure de la inferencia.
+        // `b.get()` devuelve `Object`; usado como `String` necesita un `checkcast String`
+        // antes de `.length()`.
+        let src = "class Box<T> { T v; Box(T v) { this.v = v; } T get() { return this.v; } }
+                   public class M {
+                       public static int test() { Box<String> b = new Box<String>(\"xyz\"); return b.get().length(); }
+                   }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 3);
+    }
+
+    #[test]
+    fn compiles_and_runs_a_diamond() {
+        // Igual que el anterior pero con el **diamante** `new Box<>(...)`: el tipo del target
+        // (`Box<String> b = ...`) le da el argumento de tipo, y la erasure emite el mismo
+        // `.class` que la forma explícita.
+        let src = "class Box<T> { T v; Box(T v) { this.v = v; } T get() { return this.v; } }
+                   public class M {
+                       public static int test() { Box<String> b = new Box<>(\"xyz\"); return b.get().length(); }
+                   }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 3);
+    }
+
+    #[test]
+    fn a_covariant_override_needs_a_bridge_method() {
+        // `SB.get()` erasa a `()Ljava/lang/String;`, pero el llamado por `Box<String>` va contra
+        // `Box.get:()Ljava/lang/Object;`. Para que el dispatch dinámico llegue a `SB.get`, el
+        // emisor debe generar en `SB` un **bridge** `()Ljava/lang/Object;` que delega en el
+        // `()Ljava/lang/String;` real. Sin el bridge, cae en el `Box.get` heredado (→ null → NPE).
+        let src = "class Box<T> { T get() { return null; } }
+                   class SB extends Box<String> { String get() { return \"hi\"; } }
+                   public class M {
+                       public static int test() { Box<String> b = new SB(); return b.get().length(); }
+                   }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 2);
+    }
+
+    #[test]
+    fn implementing_a_generic_interface_needs_a_bridge_method() {
+        // `C implements Cmp<C>` con `int cmp(C o)`: el llamado por `Cmp<C>` va contra el descriptor
+        // borrado de la interfaz, `cmp(Ljava/lang/Object;)I`. `C` necesita un **bridge** con ese
+        // descriptor que castea el arg a `C` y reenvía a `cmp(LC;)I`. Sin el puente, el
+        // `invokeinterface` no encuentra el método en `C`.
+        let src = "interface Cmp<T> { int cmp(T o); }
+                   class C implements Cmp<C> { public int cmp(C o) { return 42; } }
+                   public class M {
+                       public static int test() { Cmp<C> c = new C(); C x = new C(); return c.cmp(x); }
+                   }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 42);
     }
 
     // ---- tipos anchos (categoría 2) y `String` ----
