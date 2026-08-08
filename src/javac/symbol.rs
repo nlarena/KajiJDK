@@ -33,6 +33,24 @@ pub enum RType {
     Parameterized { base: SymbolId, args: Vec<RTypeArg> },
     Array(Box<RType>),
     TypeVar(SymbolId),
+    /// Una **variable de captura** (§5.1.10): la variable fresca que la *capture conversion*
+    /// introduce por un *wildcard*. Lleva sus cotas **inline** (no hace falta un símbolo en la
+    /// tabla): `upper` es su cota superior (la del parámetro, o `glb` con la del `? extends`), y
+    /// `lower` la inferior de un `? super` (`None` si no la hay). `id` la hace **distinta** de otra
+    /// captura con las mismas cotas (la frescura del §5.1.10).
+    Capture { id: u32, upper: Box<RType>, lower: Option<Box<RType>> },
+    /// Un **tipo intersección** (§4.9): `A & B & …`, con ≥2 miembros (tipos referencia). Lo produce
+    /// el `lub` (§4.10.4) cuando dos tipos comparten varios supertipos incomparables (p. ej.
+    /// `Integer`/`Long` → `Number & Comparable`). Su *erasure* es la del **primer** miembro (§4.6),
+    /// que por convención es la clase (no una interfaz).
+    Intersection(Vec<RType>),
+    /// Una **variable de inferencia** (§18.1): la variable *fresca* que la inferencia de tipos
+    /// introduce por cada parámetro de tipo de una invocación de método genérico. Distinta del
+    /// [`RType::TypeVar`] (el parámetro declarado): dos invocaciones —o una anidada dentro de otra del
+    /// **mismo** método (`id(id(x))`)— usan `id` frescos, así sus constraints no se pisan. **No escapa
+    /// del módulo `infer`**: la inferencia la resuelve a un tipo concreto antes de devolver, así que el
+    /// resto del compilador nunca la ve.
+    InferVar(u32),
     /// El nombre no resolvió (ya reportado como error en la validación).
     Unresolved,
 }
@@ -55,7 +73,7 @@ pub enum Resolved {
     /// Los supertipos **con sus argumentos** (`extends AbstractList<E>`): el subtipado genérico
     /// (§4.10.2) los necesita enteros para sustituir al subir por la jerarquía. Su *erasure*
     /// (solo el `SymbolId`) se obtiene con [`SymbolTable::super_class`]/[`SymbolTable::interfaces`].
-    Class { super_type: Option<RType>, interface_types: Vec<RType> },
+    Class { super_type: Option<RType>, interface_types: Vec<RType>, permitted: Vec<RType> },
     Field(RType),
     /// Una firma de método. `varargs` marca la *aridad variable* (`int... xs`): el último
     /// parámetro es el array, y lo necesita la **fase 3** del overload resolution (JLS §15.12.2.4).
@@ -87,6 +105,9 @@ pub enum SymbolKind {
         binary: String,
         extends: Option<Type>,
         implements: Vec<Type>,
+        /// La cláusula `permits` sintáctica de un tipo `sealed` (§8.1.6); vacía si no se escribió o
+        /// el tipo no es `sealed`. La resuelve la pasada 2 a `Resolved::Class::permitted`.
+        permits: Vec<Type>,
         /// El scope de miembros de esta clase.
         members: ScopeId,
     },
@@ -154,6 +175,17 @@ pub struct SymbolTable {
     pub static_on_demand: Vec<String>,
     /// Tipos **resueltos** por símbolo (grafo de herencia + firmas) — salida para la pasada 2.
     resolved_map: HashMap<SymbolId, Resolved>,
+    /// Contador de **variables de captura** (§5.1.10): da un `id` fresco por *wildcard* capturado.
+    /// Es mutabilidad **interior** (`Cell`) para poder crear capturas con la tabla compartida `&self`
+    /// —Attribute la tiene inmutable—, sin conflictos de *borrow* en medio del tipado.
+    capture_counter: std::cell::Cell<u32>,
+    /// Contador de **variables de inferencia** (§18.1): da un `id` fresco por parámetro de tipo de cada
+    /// invocación genérica. Mutabilidad **interior** por la misma razón que `capture_counter`.
+    infer_counter: std::cell::Cell<u32>,
+    /// El **método envolvente** de una clase local/anónima (para el atributo `EnclosingMethod`,
+    /// §4.7.7): `class_id → (nombre, descriptor)` del método/constructor que la declara. Ausente si
+    /// se declaró en un inicializador (ahí `method_index` es 0). Lo puebla el desugar.
+    enclosing_methods: HashMap<SymbolId, (String, String)>,
     /// El scope **raíz**: contiene los paquetes; cada paquete tiene su propio scope, y el de
     /// cada clase se enlaza al de su paquete.
     pub global: ScopeId,
@@ -163,6 +195,8 @@ pub struct SymbolTable {
 fn erased_id(t: &RType) -> Option<SymbolId> {
     match t {
         RType::Class(id) | RType::Parameterized { base: id, .. } => Some(*id),
+        RType::Capture { upper, .. } => erased_id(upper),
+        RType::Intersection(ms) => ms.first().and_then(erased_id),
         _ => None,
     }
 }
@@ -179,10 +213,40 @@ impl SymbolTable {
             static_single: HashMap::new(),
             static_on_demand: Vec::new(),
             resolved_map: HashMap::new(),
+            capture_counter: std::cell::Cell::new(0),
+            infer_counter: std::cell::Cell::new(0),
+            enclosing_methods: HashMap::new(),
             global: 0,
         };
         table.global = table.new_scope(None, None);
         table
+    }
+
+    /// Un `id` fresco para una nueva variable de captura (§5.1.10). Solo necesita `&self` (mutabilidad
+    /// interior): así se puede capturar en medio del tipado, con la tabla compartida.
+    pub fn fresh_capture_id(&self) -> u32 {
+        let n = self.capture_counter.get();
+        self.capture_counter.set(n + 1);
+        n
+    }
+
+    /// Un `id` fresco para una nueva **variable de inferencia** (§18.1). Como [`Self::fresh_capture_id`],
+    /// solo necesita `&self` (mutabilidad interior): la inferencia corre con la tabla compartida.
+    pub fn fresh_infer_id(&self) -> u32 {
+        let n = self.infer_counter.get();
+        self.infer_counter.set(n + 1);
+        n
+    }
+
+    /// Registra el **método envolvente** de una clase local/anónima (para `EnclosingMethod`, §4.7.7).
+    pub fn set_enclosing_method(&mut self, class_id: SymbolId, name: String, descriptor: String) {
+        self.enclosing_methods.insert(class_id, (name, descriptor));
+    }
+
+    /// El método envolvente registrado (`(nombre, descriptor)`), o `None` si la clase no está dentro
+    /// de un método (o no es local/anónima).
+    pub fn enclosing_method(&self, class_id: SymbolId) -> Option<&(String, String)> {
+        self.enclosing_methods.get(&class_id)
     }
 
     pub fn symbol_count(&self) -> usize {
@@ -225,6 +289,28 @@ impl SymbolTable {
         }
     }
 
+    /// Los subtipos **autorizados** de un tipo `sealed` (§8.1.6), con sus argumentos de tipo — ya
+    /// resueltos. Vacío si el tipo no es `sealed` o no declaró `permits` (implícita).
+    pub fn permitted(&self, cid: SymbolId) -> &[RType] {
+        match self.resolved_map.get(&cid) {
+            Some(Resolved::Class { permitted, .. }) => permitted,
+            _ => &[],
+        }
+    }
+
+    /// ¿El tipo es `sealed`? (Lo lleva el modificador; el `permits` resuelto vive en el grafo.)
+    pub fn is_sealed(&self, cid: SymbolId) -> bool {
+        self.symbol(cid).modifiers.contains(&Modifier::Sealed)
+    }
+
+    /// Rellena los subtipos autorizados de un tipo `sealed` (para el `permits` **implícito**, §8.1.6).
+    /// No hace nada si el símbolo aún no tiene su `Resolved::Class`.
+    pub fn set_permitted(&mut self, cid: SymbolId, permitted: Vec<RType>) {
+        if let Some(Resolved::Class { permitted: p, .. }) = self.resolved_map.get_mut(&cid) {
+            *p = permitted;
+        }
+    }
+
     /// Registra la posición de fuente de un símbolo.
     pub fn set_pos(&mut self, id: SymbolId, line: u32, col: u32) {
         self.positions.insert(id, (line, col));
@@ -249,6 +335,7 @@ impl SymbolTable {
                 binary: format!("java.lang.{simple}"),
                 extends: None,
                 implements: Vec::new(),
+                permits: Vec::new(),
                 members,
             },
             owner: None,
@@ -525,7 +612,7 @@ impl SymbolTable {
     /// de una clase, el tipo de un campo, `(params): ret` de un método. `—` si no aplica.
     fn signature_str(&self, id: SymbolId) -> String {
         match self.resolved(id) {
-            Some(Resolved::Class { super_type, interface_types }) => {
+            Some(Resolved::Class { super_type, interface_types, permitted }) => {
                 let mut s = String::new();
                 if let Some(sc) = super_type {
                     s.push_str(&format!(": {}", self.rtype_str(sc)));
@@ -533,6 +620,10 @@ impl SymbolTable {
                 if !interface_types.is_empty() {
                     let names: Vec<_> = interface_types.iter().map(|i| self.rtype_str(i)).collect();
                     s.push_str(&format!(" impl {}", names.join(", ")));
+                }
+                if !permitted.is_empty() {
+                    let names: Vec<_> = permitted.iter().map(|i| self.rtype_str(i)).collect();
+                    s.push_str(&format!(" permits {}", names.join(", ")));
                 }
                 if s.is_empty() { "—".to_string() } else { s }
             }
@@ -556,8 +647,9 @@ impl SymbolTable {
         }
     }
 
-    /// Un [`RType`] como texto, resolviendo los `SymbolId` a nombres.
-    fn rtype_str(&self, rt: &RType) -> String {
+    /// Un [`RType`] como texto, resolviendo los `SymbolId` a nombres. Público para los
+    /// **diagnósticos** (las notas `símbolo:`/`ubicación:` de un *cannot find symbol*).
+    pub fn rtype_str(&self, rt: &RType) -> String {
         match rt {
             RType::Prim(p) => type_str(&Type::Prim(*p)),
             RType::Void => "void".to_string(),
@@ -567,6 +659,11 @@ impl SymbolTable {
                 format!("{}<{}>", self.symbols[*base].name, a.join(", "))
             }
             RType::Array(inner) => format!("{}[]", self.rtype_str(inner)),
+            RType::Capture { id, upper, .. } => format!("cap#{id} of {}", self.rtype_str(upper)),
+            RType::InferVar(id) => format!("infer#{id}"),
+            RType::Intersection(ms) => {
+                ms.iter().map(|m| self.rtype_str(m)).collect::<Vec<_>>().join(" & ")
+            }
             RType::Unresolved => "?".to_string(),
         }
     }
@@ -688,6 +785,8 @@ fn modifier_str(m: Modifier) -> &'static str {
         Modifier::Volatile => "volatile",
         Modifier::Strictfp => "strictfp",
         Modifier::Default => "default",
+        Modifier::Sealed => "sealed",
+        Modifier::NonSealed => "non-sealed",
     }
 }
 

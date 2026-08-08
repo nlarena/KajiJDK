@@ -55,7 +55,7 @@ impl Lexer {
     }
 
     fn error(&self, message: impl Into<String>) -> Error {
-        Error { message: message.into(), line: self.line, col: self.col }
+        Error::new(message, self.line, self.col)
     }
 
     fn run(mut self) -> Result<Vec<Token>, Error> {

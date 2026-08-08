@@ -117,9 +117,80 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
                 attrib_block(&mut env, block);
                 env.pop();
             }
-            // Los inicializadores de campo todavía no se atribuyen (cola larga).
-            Member::Field(_) => {}
+            // El **inicializador de un campo** (§8.3.2): se tipa *in situ* contra el tipo declarado,
+            // en contexto de asignación (con boxing/unboxing). Uno `static` corre en el `<clinit>` (sin
+            // `this`); uno de instancia, dentro del constructor tras el `super()` (con `this`).
+            Member::Field(f) => {
+                if let Some(init) = &mut f.init {
+                    let declared = resolve_rtype(table, scope, &f.ty);
+                    let is_static = f.modifiers.contains(&Modifier::Static);
+                    let mut env = Env {
+                        table,
+                        errors,
+                        class: cid,
+                        class_scope: scope,
+                        ret: RType::Void,
+                        has_this: !is_static,
+                        final_field_ok: true,
+                        locals: Vec::new(),
+                        next_slot: if is_static { 0 } else { 1 },
+                    };
+                    env.push();
+                    let it = attrib_expr_to(&mut env, init, Some(&declared));
+                    // §5.2: una **constante** `int` que entra en el rango se asigna a `byte`/`short`/
+                    // `char` sin cast (`static final byte MIN = -128;`).
+                    let ok = assignable(env.table, &it, &declared)
+                        || constant_narrowing_ok(&declared, init);
+                    if !ok {
+                        let name = f.name.clone();
+                        env.error(f.pos, format!("tipo incompatible en el inicializador de `{name}`"));
+                    }
+                    env.pop();
+                }
+            }
         }
+    }
+}
+
+/// Tipa el cuerpo de una **clase local** (§14.3) in situ, dentro de la atribución del método donde se
+/// declara. A diferencia de `attrib_class`, sus métodos ven —además de sus propios miembros— los
+/// **locales del método envolvente** (`env.locals` clonados): un local capturado resuelve a
+/// `Binding::Local`, lo que deja al desugar detectarlo y bajarlo a un campo `val$x`. Los slots de
+/// esta pasada son de descarte: el desugar levanta la clase y se re-atribuye después. El acceso a
+/// miembros del enclosing (campos/métodos de instancia) ya lo cubre la cadena de `owner` de
+/// `resolve_name` —una local es dueña del enclosing igual que una interna—, y su captura de `this$0`
+/// la reusa el desugar.
+fn attrib_local_class(env: &mut Env, lc: &mut ClassDecl) {
+    let Some(cid) = env.table.resolve_type(env.class_scope, &lc.name) else { return };
+    let scope = member_scope(env.table, cid);
+    for member in &mut lc.members {
+        let Member::Method(m) = member else { continue };
+        let ret = resolve_rtype(env.table, scope, &m.return_type);
+        let has_this = !m.modifiers.contains(&Modifier::Static);
+        let mut sub = Env {
+            table: env.table,
+            errors: &mut *env.errors,
+            class: cid,
+            class_scope: scope,
+            ret,
+            has_this,
+            final_field_ok: m.is_constructor,
+            locals: env.locals.clone(),
+            next_slot: if has_this { 1 } else { 0 },
+        };
+        sub.push();
+        let params: Vec<(String, RType)> = m
+            .params
+            .iter()
+            .map(|p| (p.name.clone(), resolve_rtype(env.table, scope, &p.ty)))
+            .collect();
+        for (name, rt) in params {
+            sub.define(&name, rt);
+        }
+        if let Some(body) = &mut m.body {
+            attrib_block(&mut sub, body);
+        }
+        sub.pop();
     }
 }
 
@@ -127,6 +198,7 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
 
 /// Un ámbito de variables locales: sus declaraciones y el slot en que arrancó, para poder
 /// **reusar los slots** al salir del bloque (como javac).
+#[derive(Clone)]
 struct LocalScope {
     vars: HashMap<String, (RType, u16)>,
     entry_slot: u16,
@@ -167,8 +239,150 @@ impl Env<'_> {
         self.locals.iter().rev().find_map(|s| s.vars.get(name).cloned())
     }
     fn error(&mut self, pos: Pos, message: String) {
-        self.errors.push(Error { message, line: pos.line, col: pos.col });
+        self.errors.push(Error::new(message, pos.line, pos.col));
     }
+    /// Como [`error`](Self::error) pero con las sub-líneas `símbolo:`/`ubicación:` de `javac`.
+    fn error_with_notes(&mut self, pos: Pos, message: String, notes: Vec<String>) {
+        self.errors.push(Error::new(message, pos.line, pos.col).with_notes(notes));
+    }
+}
+
+/// Las notas de un *cannot find symbol* al estilo `javac`: qué se buscaba (`símbolo:`) y dónde
+/// (`ubicación:`), con las etiquetas alineadas (el valor arranca en la misma columna).
+fn symbol_notes(symbol: String, location: String) -> Vec<String> {
+    vec![format!("símbolo:   {symbol}"), format!("ubicación: {location}")]
+}
+
+/// **Distancia de edición** (Levenshtein) entre dos nombres — para el *did-you-mean*. Clásica DP por
+/// filas, sobre `char`s (no bytes, por los identificadores con acentos).
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur = vec![0usize; b.len() + 1];
+    for i in 1..=a.len() {
+        cur[0] = i;
+        for j in 1..=b.len() {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev[b.len()]
+}
+
+/// La nota *did-you-mean* (`¿quisiste decir 'x'?`) con el nombre en `candidates` **más cercano** a
+/// `name`, si cae dentro del umbral (`long/3`, mínimo 1 — así `fro`→`from` y `lenght`→`length`
+/// sugieren, pero un nombre totalmente distinto no). `None` si ninguno está lo bastante cerca.
+fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let threshold = (name.chars().count() / 3).max(1);
+    let mut best: Option<(usize, &str)> = None;
+    for c in candidates {
+        if c == name {
+            continue;
+        }
+        let d = levenshtein(name, c);
+        if d <= threshold && best.map_or(true, |(bd, _)| d < bd) {
+            best = Some((d, c));
+        }
+    }
+    best.map(|(_, c)| format!("¿quisiste decir '{c}'?"))
+}
+
+/// Los **nombres** de los miembros (métodos o campos) alcanzables sobre `class`, recorriendo todo el
+/// grafo de supertipos —igual que [`candidates`]—, deduplicados. Alimenta el *did-you-mean* de un
+/// método/campo no hallado.
+fn member_names(table: &SymbolTable, class: SymbolId, want_method: bool) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut stack = vec![class];
+    let mut visited = vec![class];
+    while let Some(c) = stack.pop() {
+        for id in table.members_of(c) {
+            let matches_kind = match table.symbol(id).kind {
+                SymbolKind::Method { is_constructor: false, .. } => want_method,
+                SymbolKind::Field { .. } => !want_method,
+                _ => false,
+            };
+            if matches_kind {
+                let n = table.symbol(id).name.clone();
+                if !out.contains(&n) {
+                    out.push(n);
+                }
+            }
+        }
+        let mut supers: Vec<SymbolId> = table.interfaces(c);
+        supers.extend(table.super_class(c));
+        for sup in supers {
+            if !visited.contains(&sup) {
+                visited.push(sup);
+                stack.push(sup);
+            }
+        }
+    }
+    out
+}
+
+/// Una nota por cada **candidato de sobrecarga descartado** (§15.12.2), al estilo `javac`: la firma
+/// del candidato (con el receptor sustituido) y, en la línea de abajo, **por qué** no aplica. El
+/// render indenta cada línea de la nota, así el motivo queda anidado bajo la firma.
+fn overload_candidate_notes(
+    table: &SymbolTable,
+    cands: &[SymbolId],
+    args: &[RType],
+    recv: &RType,
+) -> Vec<String> {
+    cands
+        .iter()
+        .filter_map(|&m| {
+            let (raw, varargs) = signature_of(table, m)?;
+            let params: Vec<RType> =
+                raw.iter().map(|p| substitute_member(table, recv, m, p)).collect();
+            let owner = table
+                .symbol(m)
+                .owner
+                .map(|o| format!("{}.", table.symbol(o).name))
+                .unwrap_or_default();
+            let sig: Vec<String> = params.iter().map(|p| table.rtype_str(p)).collect();
+            let head =
+                format!("método {owner}{}({}) no es aplicable", table.symbol(m).name, sig.join(", "));
+            Some(format!("{head}\n  ({})", candidate_reason(table, &params, varargs, args)))
+        })
+        .collect()
+}
+
+/// El **motivo** por el que un candidato no aplica a `args` (§15.12.2): distinta cantidad de
+/// argumentos, o el primer argumento que no se convierte a su parámetro. Espeja lo que chequea
+/// [`applicable`] (con *boxing*); si no encuentra un motivo simple —típicamente una inferencia
+/// genérica insatisfacible— cae a un texto genérico.
+fn candidate_reason(table: &SymbolTable, params: &[RType], varargs: bool, args: &[RType]) -> String {
+    let arity_mismatch = if varargs { args.len() + 1 < params.len() } else { params.len() != args.len() };
+    if arity_mismatch {
+        return "las listas de argumentos difieren en longitud".to_string();
+    }
+    let fixed = if varargs { params.len().saturating_sub(1) } else { params.len() };
+    for i in 0..fixed.min(args.len()) {
+        if !convertible(table, &args[i], &params[i], true) {
+            return format!(
+                "los argumentos no coinciden: {} no se convierte a {}",
+                table.rtype_str(&args[i]),
+                table.rtype_str(&params[i])
+            );
+        }
+    }
+    if varargs {
+        if let Some(RType::Array(elem)) = params.last() {
+            for a in &args[fixed..] {
+                if !convertible(table, a, elem, true) {
+                    return format!(
+                        "los argumentos no coinciden: {} no se convierte a {}",
+                        table.rtype_str(a),
+                        table.rtype_str(elem)
+                    );
+                }
+            }
+        }
+    }
+    "no se pueden inferir sus argumentos de tipo".to_string()
 }
 
 /// Cuántos slots ocupa un tipo en la frame: los de **categoría 2** (`long`/`double`) ocupan dos.
@@ -203,7 +417,11 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
                     // no hay nada declarado todavía (§14.4.1: es al revés, el inicializador manda).
                     let expected = (!is_var).then(|| declared.clone());
                     let it = attrib_expr_to(env, e, expected.as_ref());
-                    if !is_var && !assignable(env.table, &it, &declared) {
+                    // §5.2: `byte b = 5;` — una constante `int` en rango narrowea a byte/short/char.
+                    let ok = is_var
+                        || assignable(env.table, &it, &declared)
+                        || constant_narrowing_ok(&declared, e);
+                    if !ok {
                         env.error(pos, format!("tipo incompatible en `{name}`"));
                     }
                     // `var`: el tipo del local es el del inicializador.
@@ -354,9 +572,13 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
             None
         }
         StmtKind::Break(_) | StmtKind::Continue(_) | StmtKind::Empty => None,
-        // Una **clase local** no la entra la pasada 1, así que acá no hay símbolo que resolver ni
-        // cuerpo que tipar todavía: se difiere, como la lambda. La compilación la corta el emisor.
-        StmtKind::LocalClass(_) => None,
+        // Una **clase local** (§14.3): `enter` ya la registró como tipo anidado del enclosing, así
+        // que acá se **tipa su cuerpo in situ** — con los locales del método envolvente **visibles**,
+        // para que un local capturado resuelva a `Binding::Local` y el desugar lo detecte (`val$x`).
+        StmtKind::LocalClass(lc) => {
+            attrib_local_class(env, lc);
+            None
+        }
     };
     stmt.local = local;
 }
@@ -386,7 +608,92 @@ fn ctor_binding(env: &mut Env, cid: SymbolId, args: &[RType], pos: Pos) -> Optio
         return None;
     }
     let name = env.table.symbol(cid).name.clone();
-    resolve_overload(env, &cands, args, &name, pos).map(Binding::Method)
+    resolve_overload(env, &cands, args, &name, pos, &RType::Class(cid)).map(Binding::Method)
+}
+
+/// **Fase 2** de la resolución de sobrecarga (§15.12.2.6): re-atribuye los argumentos **poly** de una
+/// llamada con el tipo de su parámetro —ya sustituido por el receptor— como *target*, que en la fase 1
+/// (síntesis, sin target) no estaba. Los no-poly no se tocan (evita re-resolver de más y re-emitir).
+fn reattribute_poly_args(env: &mut Env, recv: &RType, m: SymbolId, args: &mut [Expr]) {
+    let params: Vec<RType> = match env.table.resolved(m) {
+        Some(Resolved::Method { params, .. }) => {
+            params.iter().map(|p| substitute_member(env.table, recv, m, p)).collect()
+        }
+        _ => return,
+    };
+    for (i, a) in args.iter_mut().enumerate() {
+        if is_poly_arg(&a.kind) {
+            attrib_expr_to(env, a, params.get(i));
+        }
+    }
+}
+
+/// Los argumentos que son **llamadas a método genérico** (`pick(empty(), …)`): candidatos a resolverse
+/// **junto** con la llamada externa (§18.5.2.1), en vez de aislada (que perdía su contexto). Devuelve
+/// `(índice, método, receptor)` de cada uno.
+fn nested_generic_calls(table: &SymbolTable, args: &[Expr]) -> Vec<infer::NestedCall> {
+    let mut out = Vec::new();
+    for (i, a) in args.iter().enumerate() {
+        if !matches!(a.kind, ExprKind::Call { .. }) {
+            continue;
+        }
+        if let Some(Binding::Method(f)) = a.binding {
+            if !infer::method_type_params(table, f).is_empty() {
+                out.push(infer::NestedCall { arg_index: i, method: f, recv: call_recv(table, a, f) });
+            }
+        }
+    }
+    out
+}
+
+/// El **receptor** de una llamada `call` a `f`, para fijar los parámetros de tipo de **clase** de su
+/// retorno: el tipo del *target* si lo hay, o la clase dueña de `f` (estático / `this`).
+fn call_recv(table: &SymbolTable, call: &Expr, f: SymbolId) -> RType {
+    if let ExprKind::Call { target: Some(t), .. } = &call.kind {
+        if let Some(ty) = &t.ty {
+            return ty.clone();
+        }
+    }
+    table.symbol(f).owner.map_or(RType::Unresolved, RType::Class)
+}
+
+/// Re-tipa cada **llamada anidada** con la sustitución que le tocó del solving combinado (§18.5.2.1):
+/// su `ty` pasa de la que resolvió aislada (`Box<Object>`) a la correcta (`Box<String>`), para que el
+/// contexto que la usa vea el tipo bien inferido.
+fn retype_nested_calls(table: &SymbolTable, args: &mut [Expr], nres: &[infer::NestedResult]) {
+    for nr in nres {
+        let idx = nr.arg_index;
+        let (f, ret_raw, recv) = match args.get(idx) {
+            Some(a) => match a.binding {
+                Some(Binding::Method(f)) => {
+                    let ret = match table.resolved(f) {
+                        Some(Resolved::Method { ret, .. }) => ret.clone(),
+                        _ => continue,
+                    };
+                    (f, ret, call_recv(table, a, f))
+                }
+                _ => continue,
+            },
+            None => continue,
+        };
+        // Fijar los parámetros de **clase** por el receptor y los de **método** por lo inferido.
+        let ret = types::substitute(&substitute_member(table, &recv, f, &ret_raw), &nr.subst);
+        if let Some(a) = args.get_mut(idx) {
+            a.ty = Some(ret);
+        }
+    }
+}
+
+/// ¿Es `kind` un argumento **poly** que sin *target* queda roto o sin instanciar? — una **lambda** o
+/// **referencia a método** (sin target no tipan su cuerpo/SAM: quedaban `Unresolved` y el emisor no
+/// podía bajarlas) o un **diamante** `new C<>()` (sin target no infiere sus argumentos de tipo). Una
+/// llamada a método genérico se deja: tipa leniente en la fase 1 y la *erasure* la hace invariante.
+fn is_poly_arg(kind: &ExprKind) -> bool {
+    match kind {
+        ExprKind::Lambda { .. } | ExprKind::MethodRef { .. } => true,
+        ExprKind::NewObject { ty: Type::Parameterized { args, .. }, .. } => args.is_empty(),
+        _ => false,
+    }
 }
 
 /// Atribuye una expresión con un ***target type*** opcional: el modo *checking* («¿puede esto ser
@@ -428,6 +735,9 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
     // El match calcula (tipo, binding); se escriben al final, cuando ya no hay préstamo sobre
     // `expr.kind`.
     let (ty, binding) = match &mut expr.kind {
+        // Un nodo de error (recuperación del parser): ya se reportó el error de sintaxis, así que
+        // **no** se emite uno nuevo; queda `Unresolved` para no encadenar diagnósticos derivados.
+        ExprKind::Error => (RType::Unresolved, None),
         ExprKind::IntLit(_) => (RType::Prim(PrimType::Int), None),
         ExprKind::LongLit(_) => (RType::Prim(PrimType::Long), None),
         ExprKind::FloatLit(_) => (RType::Prim(PrimType::Float), None),
@@ -455,6 +765,15 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             };
             let b = if env.has_this { Some(Binding::Local { slot: 0 }) } else { None };
             (t, b)
+        }
+        ExprKind::QualifiedThis(ty) => {
+            // `Outer.this` (§15.8.4): la instancia envolvente de tipo `Outer`. Se tipa como esa
+            // clase para que el acceso a miembros a través de ella (`Outer.this.f`) resuelva; el
+            // desugar la reescribe a la cadena de `this$0`.
+            if !env.has_this {
+                env.error(pos, "`Clase.this` no se puede usar en un contexto estático".into());
+            }
+            (resolve_rtype(env.table, env.class_scope, ty), None)
         }
         ExprKind::Name(name) => {
             let name = name.clone();
@@ -488,8 +807,11 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             let vt = attrib_expr_to(env, value, Some(&lt));
             // Una asignación **compuesta** (`+=`) lleva un cast implícito al tipo del destino
             // (§15.26.2: `E1 op= E2` es `E1 = (T)(E1 op E2)`), así que no exige asignabilidad
-            // directa; una simple (`=`) sí.
-            if *op == AssignOp::Assign && !assignable(env.table, &vt, &lt) {
+            // directa; una simple (`=`) sí — con el narrowing de constante del §5.2 (`b = 5`).
+            if *op == AssignOp::Assign
+                && !assignable(env.table, &vt, &lt)
+                && !constant_narrowing_ok(&lt, value)
+            {
                 env.error(pos, "asignación de tipo incompatible".into());
             }
             (lt, None)
@@ -580,7 +902,19 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                             if candidates(env.table, c, &name).is_empty()
                                 && hierarchy_complete(env.table, c)
                             {
-                                env.error(pos, format!("no se encuentra el método: {name}"));
+                                let mut notes = symbol_notes(
+                                    format!("método {name}"),
+                                    format!("clase {}", env.table.rtype_str(&qual_type)),
+                                );
+                                let names = member_names(env.table, c, true);
+                                if let Some(s) = did_you_mean(&name, names.iter().map(|s| s.as_str())) {
+                                    notes.push(s);
+                                }
+                                env.error_with_notes(
+                                    pos,
+                                    format!("no se encuentra el método: {name}"),
+                                    notes,
+                                );
                             }
                         }
                     }
@@ -608,12 +942,39 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         ExprKind::Call { target: receiver, name, args, type_args } => {
             let name = name.clone();
             let type_args = type_args.clone();
-            // Los tipos de los argumentos son la entrada del overload resolution.
-            let arg_types: Vec<RType> = args.iter_mut().map(|a| attrib_expr(env, a)).collect();
+            // Los tipos de los argumentos son la entrada del overload resolution. Se les aplica
+            // **capture conversion** (§5.1.10): un argumento `List<?>` se convierte a `List<CAP>`,
+            // lo que permite **inferir** `T` al pasarlo a un `<T> m(List<T>)` (el caso `swap`).
+            let arg_types: Vec<RType> = args
+                .iter_mut()
+                .map(|a| {
+                    let t = attrib_expr(env, a);
+                    types::capture(env.table, &t)
+                })
+                .collect();
             let recv = match receiver {
                 Some(t) => attrib_expr(env, t),
-                None => RType::Class(env.class),
+                // Sin receptor: el método puede ser de esta clase, heredado, o de una clase
+                // **envolvente** (inner class). Se busca por la cadena de `owner`; el desugar
+                // reescribe el acceso a un método envolvente como `this$0.m()`.
+                None => {
+                    let mut found = env.class;
+                    let mut c = Some(env.class);
+                    while let Some(cl) = c {
+                        if !candidates(env.table, cl, &name).is_empty() {
+                            found = cl;
+                            break;
+                        }
+                        c = enclosing_class(env.table, cl);
+                    }
+                    RType::Class(found)
+                }
             };
+            // **Capture conversion** del receptor (§5.1.10), **una sola vez**: así todas las
+            // sustituciones de esta llamada (parámetros y retorno) comparten las **mismas** variables
+            // de captura. `capture` preserva la *erasure*, así que la búsqueda de candidatos sigue
+            // igual. Un receptor sin wildcards se devuelve tal cual.
+            let recv = types::capture(env.table, &recv);
             // El receptor puede ser crudo (`C`) o parametrizado (`List<String>`): se busca sobre
             // su erasure, y después se **sustituyen** los argumentos en la firma.
             match types::erased_id(&recv) {
@@ -628,12 +989,41 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                     let complete = hierarchy_complete(env.table, c);
                     if cands.is_empty() {
                         if complete {
-                            env.error(pos, format!("no se encuentra el método: {name}"));
+                            let sig: Vec<String> =
+                                arg_types.iter().map(|a| env.table.rtype_str(a)).collect();
+                            let mut notes = symbol_notes(
+                                format!("método {name}({})", sig.join(", ")),
+                                format!("clase {}", env.table.rtype_str(&recv)),
+                            );
+                            let names = member_names(env.table, c, true);
+                            if let Some(s) = did_you_mean(&name, names.iter().map(|s| s.as_str())) {
+                                notes.push(s);
+                            }
+                            env.error_with_notes(
+                                pos,
+                                format!("no se encuentra el método: {name}"),
+                                notes,
+                            );
                         }
                         (RType::Unresolved, None)
                     } else {
-                        match resolve_overload(env, &cands, &arg_types, &name, pos) {
+                        // **Desambiguación por el argumento poly** (§15.12.2): un arg lambda se tipa
+                        // `Unresolved` (indulgente), así que sin esto sería aplicable a **toda**
+                        // sobrecarga con un parámetro funcional. Se descartan las incompatibles con la
+                        // **forma** de la lambda (aridad del SAM, y valor-vs-`void`): `f(x -> x + 1)`
+                        // elige `Function` sobre `Consumer`.
+                        let cands = disambiguate_by_lambda(env.table, &recv, &cands, args);
+                        match resolve_overload(env, &cands, &arg_types, &name, pos, &recv) {
                             Some(m) => {
+                                // **Fase 2** (§15.12.2.6 / §18.5.2): resuelta la sobrecarga se conocen
+                                // los tipos de los parámetros, y recién ahora se re-atribuye cada
+                                // argumento **poly** —una lambda, un *method ref*, un diamante o una
+                                // llamada a genérico— con el del suyo como *target*. Es lo único que
+                                // tipa el cuerpo de una **lambda-argumento** (sin él quedaba
+                                // `Unresolved` y el emisor no podía bajarla) e instancia las variables
+                                // de un diamante/genérico argumento. La fase 1 usó el receptor para
+                                // resolver; el *target* de cada parámetro sale de sustituirlo con él.
+                                reattribute_poly_args(env, &recv, m, args);
                                 let ret = match env.table.resolved(m) {
                                     Some(Resolved::Method { ret, .. }) => ret.clone(),
                                     _ => RType::Unresolved,
@@ -647,7 +1037,32 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                 // de tipo del método; sin él, se infieren (§18.5.2). Aplicar el
                                 // witness cierra el hueco de que un override deliberado se ignorara.
                                 let subst = if type_args.is_empty() {
-                                    infer::infer_call(env.table, &recv, m, &arg_types, target)
+                                    // §18.5.2.1 — **solving combinado**: las llamadas genéricas anidadas
+                                    // en los argumentos (`pick(empty(), …)`) se resuelven **junto** con
+                                    // esta, así `empty()` toma su `E` del contexto en vez de dar
+                                    // `Box<Object>` aislada.
+                                    let nested = nested_generic_calls(env.table, args);
+                                    let (s, nres, ok) = infer::infer_call_nested(
+                                        env.table, &recv, m, &arg_types, &nested, target,
+                                    );
+                                    // §18.5.1: constraints **insatisfacibles** (igualdades incompatibles,
+                                    // o argumento fuera de la cota declarada) ⇒ la inferencia **falla**.
+                                    // Se reporta solo en métodos **propios** (con un externo se mantiene la
+                                    // indulgencia: no modelamos toda firma del JDK).
+                                    if !ok
+                                        && env.table.symbol(m).owner.is_some_and(|o| !is_external(env.table, o))
+                                    {
+                                        env.error(
+                                            pos,
+                                            format!(
+                                                "no se pueden inferir los argumentos de tipo de `{name}`: \
+                                                 restricciones de tipo incompatibles"
+                                            ),
+                                        );
+                                    }
+                                    // Re-tipar cada llamada anidada con su parte de la solución combinada.
+                                    retype_nested_calls(env.table, args, &nres);
+                                    s
                                 } else {
                                     witness_subst(env, m, &type_args)
                                 };
@@ -664,9 +1079,17 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                 // modela toda firma del JDK (genéricos, varargs), así que un no-match
                                 // puede ser una limitación nuestra, no un error del fuente.
                                 if !is_external(env.table, c) {
-                                    env.error(
+                                    let sig: Vec<String> =
+                                        arg_types.iter().map(|a| env.table.rtype_str(a)).collect();
+                                    let notes =
+                                        overload_candidate_notes(env.table, &cands, &arg_types, &recv);
+                                    env.error_with_notes(
                                         pos,
-                                        format!("no hay un `{name}` aplicable a esos argumentos"),
+                                        format!(
+                                            "no se encontró un método `{name}({})` aplicable",
+                                            sig.join(", ")
+                                        ),
+                                        notes,
                                     );
                                 }
                                 (RType::Unresolved, None)
@@ -681,7 +1104,9 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         // en este arm queda **tapada** por el binding del patrón.
         ExprKind::Field { expr: receiver, name } => {
             let name = name.clone();
-            let recv = attrib_expr(env, receiver);
+            // **Capture conversion** (§5.1.10): un acceso a campo sobre `Pair<? extends N>` ve el
+            // componente por su variable de captura (usable como `N`). Preserva la *erasure*.
+            let recv = types::capture(env.table, &attrib_expr(env, receiver));
             // `Outer.Inner` — acceso a un **tipo anidado** cualificado: si el receptor es un nombre
             // de tipo y `name` nombra un tipo anidado suyo, esto es una **referencia de tipo**, no un
             // acceso a campo. Sin este caso, `Outer.Inner.v()` fallaba buscando un campo `Inner`.
@@ -710,7 +1135,19 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                         // Ídem que en las llamadas: indulgente solo si la jerarquía está incompleta.
                         None if !hierarchy_complete(env.table, c) => (RType::Unresolved, None),
                         None => {
-                            env.error(pos, format!("no se encuentra el campo: {name}"));
+                            let mut notes = symbol_notes(
+                                format!("variable {name}"),
+                                format!("clase {}", env.table.rtype_str(&recv)),
+                            );
+                            let names = member_names(env.table, c, false);
+                            if let Some(s) = did_you_mean(&name, names.iter().map(|s| s.as_str())) {
+                                notes.push(s);
+                            }
+                            env.error_with_notes(
+                                pos,
+                                format!("no se encuentra el campo: {name}"),
+                                notes,
+                            );
                             (RType::Unresolved, None)
                         }
                     },
@@ -753,7 +1190,13 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         // `body` (una **clase anónima**) no se atribuye acá: sus miembros son un tipo aparte, y
         // entrarlos/tiparlos es de la fase de tipos —igual que la lambda—. Los **argumentos** sí se
         // evalúan (van al `super(...)` de la anónima) y el tipo del `new` es el `ty` extendido.
-        ExprKind::NewObject { ty, args, body: _ } => {
+        ExprKind::NewObject { ty, args, body: _, outer } => {
+            // `outer.new Inner(...)` (§15.9.2): el **calificador** designa la instancia envolvente
+            // que se pasa como `this$0`. Se atribuye para tiparlo (el desugar lo empuja como primer
+            // argumento del ctor); `Inner` se resuelve igual que en un `new` normal.
+            if let Some(o) = outer {
+                attrib_expr(env, o);
+            }
             let arg_types: Vec<RType> = args.iter_mut().map(|a| attrib_expr(env, a)).collect();
             let rt = resolve_rtype(env.table, env.class_scope, ty);
             // Se decora con el **constructor** resuelto: el codegen necesita su descriptor para
@@ -766,7 +1209,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                     if cands.is_empty() {
                         None
                     } else {
-                        resolve_overload(env, &cands, &arg_types, &cname, pos).map(Binding::Method)
+                        resolve_overload(env, &cands, &arg_types, &cname, pos, &rt).map(Binding::Method)
                     }
                 }
                 _ => None,
@@ -776,29 +1219,43 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // esto quedaría un tipo con la lista vacía, que se compara con cualquier cosa sin
             // comparar nada — pasaba por indulgente, no por correcto.
             let rt = match &rt {
-                RType::Parameterized { base, args } if args.is_empty() => {
-                    let ctor = match binding {
-                        Some(Binding::Method(m)) => Some(m),
-                        _ => None,
-                    };
-                    let subst = infer::infer_diamond(env.table, *base, ctor, &arg_types, target);
-                    let vars = types::type_params_of(env.table, *base);
-                    if subst.is_empty() {
-                        rt.clone()
-                    } else {
-                        let args = vars
-                            .iter()
-                            .map(|v| {
-                                RTypeArg::Type(
-                                    subst.get(v).cloned().unwrap_or(RType::Unresolved),
-                                )
-                            })
-                            .collect();
-                        RType::Parameterized { base: *base, args }
+                RType::Parameterized { base, args } if args.is_empty() => match target {
+                    // Con **target** (init/`return`/`=`, o la **fase 2** de un argumento) el diamante
+                    // infiere sus argumentos de él y del constructor (§15.9.3).
+                    Some(_) => {
+                        let ctor = match binding {
+                            Some(Binding::Method(m)) => Some(m),
+                            _ => None,
+                        };
+                        let subst = infer::infer_diamond(env.table, *base, ctor, &arg_types, target);
+                        let vars = types::type_params_of(env.table, *base);
+                        if subst.is_empty() {
+                            rt.clone()
+                        } else {
+                            let args = vars
+                                .iter()
+                                .map(|v| {
+                                    RTypeArg::Type(subst.get(v).cloned().unwrap_or(RType::Unresolved))
+                                })
+                                .collect();
+                            RType::Parameterized { base: *base, args }
+                        }
                     }
-                }
+                    // Sin target se deja **crudo** (`Box<>`): la aplicabilidad lo acepta unchecked
+                    // (§4.8), y como argumento la fase 2 lo re-atribuye ya con el target del parámetro.
+                    None => rt.clone(),
+                },
                 _ => rt.clone(),
             };
+            // **Fase 2** del constructor (§15.12.2.6 / §18.5.2): re-atribuir los argumentos **poly**
+            // (lambda, *method ref*, diamante) con el tipo de su parámetro —ya sustituido por los
+            // argumentos de tipo de la instancia (`Box<long[]>` ⇒ `Supplier<A>` → `Supplier<long[]>`)—
+            // como *target*. Sin esto, una lambda argumento de un constructor genérico
+            // (`new Box<long[]>(() -> …)`) quedaba `Unresolved` y el emisor no podía bajarla a
+            // `invokedynamic` (finding #16). Es el espejo de [`reattribute_poly_args`] de una llamada.
+            if let Some(Binding::Method(ctor)) = &binding {
+                reattribute_poly_args(env, &rt, *ctor, args);
+            }
             (rt, binding)
         }
         ExprKind::NewArray { elem, dims, init } => {
@@ -876,6 +1333,17 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
             return (t.clone(), Some(Binding::Field(f)));
         }
     }
+    // Un campo de instancia de una clase **envolvente** (inner class): se busca por la cadena de
+    // `owner`. El desugar reescribirá el acceso como `this$0.campo`.
+    let mut encl = enclosing_class(env.table, env.class);
+    while let Some(o) = encl {
+        if let Some(f) = lookup_field(env.table, o, name) {
+            if let Some(Resolved::Field(t)) = env.table.resolved(f) {
+                return (t.clone(), Some(Binding::Field(f)));
+            }
+        }
+        encl = enclosing_class(env.table, o);
+    }
     // ¿Un nombre de tipo (para un acceso estático `Tipo.x`)? Lo damos como la clase.
     if let Some(id) = env.table.resolve_type(env.class_scope, name) {
         return (RType::Class(id), Some(Binding::Class(id)));
@@ -883,7 +1351,17 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     if let Some(id) = env.table.external(name) {
         return (RType::Class(id), Some(Binding::Class(id)));
     }
-    env.error(pos, format!("no se encuentra el símbolo: {name}"));
+    let mut notes = symbol_notes(
+        format!("variable {name}"),
+        format!("clase {}", env.table.symbol(env.class).name),
+    );
+    // did-you-mean sobre lo que sí está en scope: los **locales** visibles y los **campos** de la clase.
+    let mut names: Vec<String> = env.locals.iter().flat_map(|s| s.vars.keys().cloned()).collect();
+    names.extend(member_names(env.table, env.class, false));
+    if let Some(s) = did_you_mean(name, names.iter().map(|s| s.as_str())) {
+        notes.push(s);
+    }
+    env.error_with_notes(pos, format!("no se encuentra el símbolo: {name}"), notes);
     (RType::Unresolved, None)
 }
 
@@ -966,6 +1444,31 @@ fn require_bool_operand(env: &mut Env, t: &RType, pos: Pos) {
 
 // ---- asignabilidad y subtipado ----
 
+/// El valor de una **expresión constante** entera, si `e` lo es (§15.28, versión acotada: literales
+/// `int`/`char` y `+`/`-` unario sobre ellos — lo que basta para la conversión del §5.2).
+fn const_int_value(e: &Expr) -> Option<i64> {
+    match &e.kind {
+        ExprKind::IntLit(v) => Some(*v),
+        ExprKind::CharLit(c) => Some(*c as i64),
+        ExprKind::Unary { op: UnOp::Neg, expr, .. } => const_int_value(expr).map(|v| -v),
+        ExprKind::Unary { op: UnOp::Plus, expr, .. } => const_int_value(expr),
+        _ => None,
+    }
+}
+
+/// **Narrowing de una constante** (§5.2): una expresión constante de tipo `int` es asignable a
+/// `byte`/`short`/`char` **si su valor entra** en el rango del destino. Es lo que hace legal
+/// `byte b = 5;` o `static final short MAX = 32767;` sin un cast explícito.
+fn constant_narrowing_ok(to: &RType, init: &Expr) -> bool {
+    let (lo, hi): (i64, i64) = match to {
+        RType::Prim(PrimType::Byte) => (-128, 127),
+        RType::Prim(PrimType::Short) => (-32768, 32767),
+        RType::Prim(PrimType::Char) => (0, 65535),
+        _ => return false,
+    };
+    matches!(const_int_value(init), Some(v) if v >= lo && v <= hi)
+}
+
 fn assignable(table: &SymbolTable, from: &RType, to: &RType) -> bool {
     if from == to || lenient(from) || lenient(to) {
         return true;
@@ -973,6 +1476,18 @@ fn assignable(table: &SymbolTable, from: &RType, to: &RType) -> bool {
     match (from, to) {
         (RType::Prim(a), RType::Prim(b)) => widening_ok(*a, *b),
         (RType::Array(a), RType::Array(b)) => assignable(table, a, b),
+        // **Boxing** (§5.1.7) seguido opcionalmente de *widening* de referencia: `int` → `Integer`,
+        // y también `int` → `Number`/`Object` (el wrapper es subtipo). El contexto de asignación
+        // (§5.2) lo permite; la conversión concreta (`Integer.valueOf`) la inserta `transtypes`.
+        (RType::Prim(p), t) if is_reference(t) => match table.external(types::wrapper_of(*p)) {
+            Some(w) => is_subtype(table, &RType::Class(w), t),
+            None => false,
+        },
+        // **Unboxing** (§5.1.8) seguido opcionalmente de *widening* primitivo: `Integer` → `int`,
+        // `Integer` → `long`/`double`.
+        (RType::Class(c), RType::Prim(b)) => {
+            types::unboxed(table, *c).is_some_and(|p| widening_ok(p, *b))
+        }
         // Tipos referencia (crudos o parametrizados): subtipado, con indulgencia para externos.
         _ if is_reference(from) && is_reference(to) => is_subtype(table, from, to),
         _ => false,
@@ -980,7 +1495,7 @@ fn assignable(table: &SymbolTable, from: &RType, to: &RType) -> bool {
 }
 
 fn is_reference(t: &RType) -> bool {
-    matches!(t, RType::Class(_) | RType::Parameterized { .. } | RType::TypeVar(_))
+    matches!(t, RType::Class(_) | RType::Parameterized { .. } | RType::TypeVar(_) | RType::Capture { .. } | RType::Intersection(_))
 }
 
 /// Subtipo **probado**, delegando en el álgebra de tipos ([`types::is_subtype`]): sube por la
@@ -1136,6 +1651,76 @@ fn signature_of(table: &SymbolTable, m: SymbolId) -> Option<(Vec<RType>, bool)> 
     }
 }
 
+/// Descarta las sobrecargas cuyo parámetro funcional es **incompatible con la forma** de un argumento
+/// lambda (§15.12.2.5): distinta **aridad** del SAM, o un cuerpo que **produce un valor** contra un SAM
+/// `void`. Solo actúa con ≥2 candidatos y algún arg lambda; si el filtro los vacía, se deja la lista
+/// original (mejor "ambiguo" que perder el candidato correcto). Los *method refs* no se filtran acá.
+fn disambiguate_by_lambda(
+    table: &SymbolTable,
+    recv: &RType,
+    cands: &[SymbolId],
+    args: &[Expr],
+) -> Vec<SymbolId> {
+    let has_lambda = args.iter().any(|a| matches!(a.kind, ExprKind::Lambda { .. }));
+    if cands.len() < 2 || !has_lambda {
+        return cands.to_vec();
+    }
+    let filtered: Vec<SymbolId> = cands
+        .iter()
+        .copied()
+        .filter(|&m| {
+            let Some((params, _)) = signature_of(table, m) else { return true };
+            args.iter().enumerate().all(|(i, a)| {
+                let ExprKind::Lambda { params: lp, body } = &a.kind else { return true };
+                let Some(pt) = params.get(i) else { return true };
+                let pt = substitute_member(table, recv, m, pt);
+                let Some(fi) = types::erased_id(&pt) else { return false };
+                let Some(sam) = functional_sam(table, fi) else { return false };
+                let Some((sparams, _)) = signature_of(table, sam) else { return true };
+                if sparams.len() != lp.len() {
+                    return false; // aridad del SAM distinta de la de la lambda
+                }
+                let sam_void = matches!(sam_ret(table, sam), RType::Void);
+                // Un cuerpo que solo produce un **valor** no es *void-compatible* (§15.27.2).
+                !(sam_void && lambda_value_only(body))
+            })
+        })
+        .collect();
+    if filtered.is_empty() {
+        cands.to_vec()
+    } else {
+        filtered
+    }
+}
+
+/// El retorno resuelto de un método (`Unresolved` si no se puede).
+fn sam_ret(table: &SymbolTable, m: SymbolId) -> RType {
+    match table.resolved(m) {
+        Some(Resolved::Method { ret, .. }) => ret.clone(),
+        _ => RType::Unresolved,
+    }
+}
+
+/// ¿El cuerpo de la lambda **solo produce un valor** (§15.27.2)? Un cuerpo-expresión que no es una
+/// **sentencia-expresión** (`x + 1`, un literal, una comparación) no es *void-compatible*; un bloque, o
+/// una expresión que además es sentencia (llamada, asignación, `new`, `++`/`--`), se deja pasar.
+fn lambda_value_only(body: &LambdaBody) -> bool {
+    match body {
+        LambdaBody::Expr(e) => !is_statement_expr(e),
+        LambdaBody::Block(_) => false,
+    }
+}
+
+fn is_statement_expr(e: &Expr) -> bool {
+    matches!(
+        &e.kind,
+        ExprKind::Call { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::NewObject { .. }
+            | ExprKind::Unary { op: UnOp::Inc | UnOp::Dec, .. }
+    )
+}
+
 /// El **SAM** (*single abstract method*) de una interfaz funcional (§9.8), o `None` si `cid` no es
 /// una interfaz con **exactamente uno** de esos métodos. Un lambda/method ref se tipa contra este
 /// método. No cuentan: los `default`/`static`, ni los que tienen la forma de un método público de
@@ -1209,8 +1794,15 @@ fn witness_subst(env: &Env, m: SymbolId, type_args: &[TypeArg]) -> types::Subst 
 
 pub(crate) fn candidates(table: &SymbolTable, class: SymbolId, name: &str) -> Vec<SymbolId> {
     let mut out: Vec<SymbolId> = Vec::new();
-    let mut cur = Some(class);
-    while let Some(c) = cur {
+    // Se recorre **todo** el grafo de supertipos —superclase y **superinterfaces**— no solo la cadena
+    // de `super_class`: un método heredado por una superinterfaz (`apply` de `BiFunction`, sobre un
+    // `BinaryOperator extends BiFunction<T,T,T>`) también es candidato (finding #15). La clase se procesa
+    // **primero**, así sus overrides tapan a los del supertipo (dedup por firma borrada). La sustitución
+    // de los args de tipo del supertipo (`BiFunction<T,U,R>` → `<Integer,Integer,Integer>`) la hace luego
+    // `substitute_member` con el receptor.
+    let mut stack = vec![class];
+    let mut visited = vec![class];
+    while let Some(c) = stack.pop() {
         for &id in table.scope(member_scope(table, c)).get(name) {
             if !matches!(table.symbol(id).kind, SymbolKind::Method { is_constructor: false, .. }) {
                 continue;
@@ -1221,14 +1813,26 @@ pub(crate) fn candidates(table: &SymbolTable, class: SymbolId, name: &str) -> Ve
                 out.push(id);
             }
         }
-        cur = table.super_class(c);
+        let mut supers: Vec<SymbolId> = table.interfaces(c);
+        supers.extend(table.super_class(c));
+        for sup in supers {
+            if !visited.contains(&sup) {
+                visited.push(sup);
+                stack.push(sup);
+            }
+        }
     }
     out
 }
 
 /// ¿Es `m` aplicable a `args` en esta `phase`?
-fn applicable(table: &SymbolTable, m: SymbolId, args: &[RType], phase: Phase) -> bool {
-    let Some((params, varargs)) = signature_of(table, m) else { return false };
+fn applicable(table: &SymbolTable, m: SymbolId, args: &[RType], phase: Phase, recv: &RType) -> bool {
+    let Some((raw, varargs)) = signature_of(table, m) else { return false };
+    // Se **sustituye el receptor** en los parámetros (§15.12.2.2): una variable de tipo de **clase**
+    // (`E` de `List<E>`) pasa a su argumento —incluida la variable de **captura** de un `? super B`,
+    // que fuerza el chequeo del lado escritura (`list.add(x)`)—. Las de **método** (`<T>`) no las
+    // toca el receptor: quedan como variable, indulgentes, para que la inferencia las resuelva.
+    let params: Vec<RType> = raw.iter().map(|p| substitute_member(table, recv, m, p)).collect();
     match phase {
         // Fases 1 y 2: aridad **exacta**. Un método varargs también puede entrar acá si se le
         // pasa el array directo (`f(arr)` con `f(int... xs)`) — su último param *es* `int[]`.
@@ -1253,6 +1857,18 @@ fn applicable(table: &SymbolTable, m: SymbolId, args: &[RType], phase: Phase) ->
     }
 }
 
+/// §18.5.1 — filtro de aplicabilidad por **inferencia**: un método genérico **propio** solo es
+/// aplicable si existe una instanciación de sus variables que satisfaga los argumentos (`m(T, List<T>)`
+/// **no** aplica a `(List<String>, List<String>)`). Sobre un **externo** se mantiene la indulgencia (no
+/// modelamos toda firma del JDK), así que no se corre el filtro.
+fn passes_inference(table: &SymbolTable, m: SymbolId, args: &[RType], recv: &RType) -> bool {
+    let external = match table.symbol(m).owner {
+        Some(o) => is_external(table, o),
+        None => true,
+    };
+    external || infer::applicable_by_inference(table, recv, m, args)
+}
+
 /// ¿Es `a` **más específico** que `b` (JLS §15.12.2.5)? Lo es si cada parámetro de `a` es
 /// subtipo del de `b` — intuitivamente, si `a` acepta menos cosas. Para los primitivos el
 /// subtipado es el *widening* (`int <: long`, §4.10.1), así que `f(int)` gana a `f(long)`.
@@ -1271,12 +1887,25 @@ fn resolve_overload(
     args: &[RType],
     name: &str,
     pos: Pos,
+    recv: &RType,
 ) -> Option<SymbolId> {
     for phase in [Phase::Strict, Phase::Loose, Phase::Varargs] {
         let mut applicables: Vec<SymbolId> =
-            cands.iter().copied().filter(|&m| applicable(env.table, m, args, phase)).collect();
+            cands.iter().copied().filter(|&m| applicable(env.table, m, args, phase, recv)).collect();
         if applicables.is_empty() {
             continue; // esta fase no encontró nada: probar la siguiente
+        }
+        // §18.5.1 — con **varios** candidatos, se descartan los que la **inferencia** hace inaplicables
+        // (`m(T, Lst<T>)` no aplica a `(Lst<String>, Lst<String>)`), lo que puede desempatar. Con un
+        // **único** candidato no se filtra: ahí, aplicable o no, el resultado (o el error) lo da el
+        // sitio de la llamada —y así no se rompe el *solving combinado* de un argumento poly, cuyo tipo
+        // provisional todavía es prematuro—.
+        if applicables.len() > 1 {
+            let refined: Vec<SymbolId> =
+                applicables.iter().copied().filter(|&m| passes_inference(env.table, m, args, recv)).collect();
+            if !refined.is_empty() {
+                applicables = refined;
+            }
         }
         // Si hay algún candidato con la firma **totalmente resuelta**, descartar los que tengan
         // parámetros `Unresolved` (aplicables solo por indulgencia): si no, empatarían con el
@@ -1328,7 +1957,7 @@ fn has_unresolved_params(table: &SymbolTable, m: SymbolId) -> bool {
 /// Aplica a la firma de un miembro la sustitución que impone el **receptor**: mirando
 /// `xs.get(0)` con `xs: List<String>`, el `E` declarado en `List<E>` se ve como `String`.
 /// Sube por la jerarquía para los miembros heredados (`ArrayList<String>` → `List<String>`).
-fn substitute_member(table: &SymbolTable, recv: &RType, member: SymbolId, ty: &RType) -> RType {
+pub(crate) fn substitute_member(table: &SymbolTable, recv: &RType, member: SymbolId, ty: &RType) -> RType {
     let Some(owner) = table.symbol(member).owner else { return ty.clone() };
     let subst = types::subst_for(table, recv, owner);
     if subst.is_empty() {
@@ -1390,7 +2019,7 @@ fn bind_pattern(env: &mut Env, p: &mut Pattern) {
     }
 }
 
-fn member_scope(table: &SymbolTable, cid: SymbolId) -> ScopeId {
+pub(crate) fn member_scope(table: &SymbolTable, cid: SymbolId) -> ScopeId {
     match &table.symbol(cid).kind {
         SymbolKind::Class { members, .. } => *members,
         _ => table.global,
@@ -1412,6 +2041,13 @@ pub(crate) fn constructors(table: &SymbolTable, class: SymbolId) -> Vec<SymbolId
     out
 }
 
+/// La clase que **encierra léxicamente** a `cid` (su `owner`, si es una clase): el enclosing de una
+/// inner class, por donde se resuelven sus miembros capturados. `None` para una top-level.
+pub(crate) fn enclosing_class(table: &SymbolTable, cid: SymbolId) -> Option<SymbolId> {
+    let owner = table.symbol(cid).owner?;
+    matches!(table.symbol(owner).kind, SymbolKind::Class { .. }).then_some(owner)
+}
+
 fn lookup_field(table: &SymbolTable, class: SymbolId, name: &str) -> Option<SymbolId> {
     let mut cur = Some(class);
     while let Some(c) = cur {
@@ -1426,7 +2062,7 @@ fn lookup_field(table: &SymbolTable, class: SymbolId, name: &str) -> Option<Symb
 }
 
 /// Resuelve un `Type` sintáctico a [`RType`] en `scope`.
-fn resolve_rtype(table: &SymbolTable, scope: ScopeId, ty: &Type) -> RType {
+pub(crate) fn resolve_rtype(table: &SymbolTable, scope: ScopeId, ty: &Type) -> RType {
     match ty {
         Type::Void => RType::Void,
         Type::Prim(p) => RType::Prim(*p),
@@ -1465,6 +2101,16 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         }
     } else if let Some(id) = table.external(name) {
         RType::Class(id)
+    } else if let Some((_, simple)) = name.rsplit_once('.') {
+        // Un nombre **cualificado** (`java.lang.Object`): el *class finder* registra los externos por
+        // su nombre **simple**, así que se resuelve por el último segmento. Sin esto, un tipo FQN en un
+        // `new` (`new java.lang.Object()`) quedaba `Unresolved` y el codegen no podía emitir el `new` +
+        // `invokespecial` — finding #20. (En otras posiciones no se notaba: un `Unresolved` de un local
+        // o retorno no rompe la emisión.)
+        match table.external(simple) {
+            Some(id) => RType::Class(id),
+            None => RType::Unresolved,
+        }
     } else {
         RType::Unresolved
     }
@@ -1476,14 +2122,86 @@ mod tests {
     use crate::javac::{enter::enter, lexer::tokenize, parser::parse};
 
     fn check(src: &str) -> Vec<Error> {
-        let mut unit = parse(tokenize(src).unwrap()).unwrap();
+        let mut unit = parse(tokenize(src).unwrap()).0;
         let (table, _e) = enter(&unit);
         attribute(&mut unit, &table)
     }
 
+    #[test]
+    fn a_call_with_contradictory_type_inference_is_reported() {
+        // `m(Lst<Foo>, Lst<Bar>)` sobre `<T> void m(Lst<T>, Lst<T>)`: `T` no puede ser `Foo` **y**
+        // `Bar` a la vez (§18.5.1). Antes se aceptaba en silencio (se elegía una arbitraria); ahora se
+        // reporta el error de inferencia.
+        let errs = check(
+            "class Lst<E> {} class Foo {} class Bar {}
+             class C { <T> void m(Lst<T> a, Lst<T> b) {}
+                       void use(Lst<Foo> f, Lst<Bar> b) { m(f, b); } }",
+        );
+        assert!(
+            errs.iter().any(|e| e.message.contains("inferir los argumentos de tipo")),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn an_argument_outside_a_type_bound_is_reported() {
+        // `m(Other)` sobre `<T extends Num> T m(T)`: `Other` no está dentro de la cota `Num` (§18.3 /
+        // §4.5.1). La aplicabilidad, indulgente con la variable de método, no lo cazaba; ahora la
+        // inferencia lo marca insatisfacible y se reporta.
+        let errs = check(
+            "class Num {} class Other {}
+             class C { <T extends Num> T m(T x) { return x; }
+                       void use(Other o) { m(o); } }",
+        );
+        assert!(
+            errs.iter().any(|e| e.message.contains("inferir los argumentos de tipo")),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn a_call_with_consistent_type_inference_is_fine() {
+        // El mismo método con dos `Lst<Foo>`: `T = Foo` de las dos, consistente — sin error.
+        let errs = check(
+            "class Lst<E> {} class Foo {}
+             class C { <T> void m(Lst<T> a, Lst<T> b) {}
+                       void use(Lst<Foo> f, Lst<Foo> g) { m(f, g); } }",
+        );
+        assert!(!errs.iter().any(|e| e.message.contains("inferir")), "{errs:?}");
+    }
+
+    #[test]
+    fn a_field_initializer_is_type_checked() {
+        // Antes se salteaba; ahora `int f = "x"` se rechaza *in situ* (§8.3.2).
+        let errs = check("class C { int f = \"x\"; }");
+        assert!(errs.iter().any(|e| e.message.contains("inicializador")), "{errs:?}");
+    }
+
+    #[test]
+    fn a_boxed_field_initializer_is_fine() {
+        // Contexto de asignación con boxing: `Integer f = 5` es válido.
+        assert!(check("class C { Integer f = 5; }").is_empty());
+    }
+
+    #[test]
+    fn an_instance_field_initializer_can_use_this_context() {
+        // Un inicializador de instancia corre en el constructor (con `this`): puede llamar un método.
+        assert!(check("class C { int m() { return 1; } int f = m(); }").is_empty());
+    }
+
+    #[test]
+    fn a_constant_int_narrows_to_byte_short_char() {
+        // §5.2 (lo destapó KajiLibrary con `Byte.MIN_VALUE = -128`): una **constante** `int` en rango
+        // se asigna a `byte`/`short`/`char` **sin cast**, en campo o en local.
+        assert!(check("class C { static final byte B = -128; static final short S = 32767; static final char CH = 65; }").is_empty());
+        assert!(check("class C { void m() { byte b = 5; short s = -1; char c = 90; } }").is_empty());
+        // Fuera de rango, sigue siendo error.
+        assert_eq!(check("class C { static final byte B = 200; }").len(), 1, "200 no entra en byte");
+    }
+
     /// Parsea + atribuye, devolviendo la unidad **decorada** (para inspeccionar el AST).
     fn attrib(src: &str) -> crate::javac::ast::CompilationUnit {
-        let mut unit = parse(tokenize(src).unwrap()).unwrap();
+        let mut unit = parse(tokenize(src).unwrap()).0;
         let (table, _e) = enter(&unit);
         attribute(&mut unit, &table);
         unit
@@ -1650,6 +2368,112 @@ mod tests {
         assert_eq!(bad.len(), 1, "get(0) es String, no Integer: {bad:?}");
     }
 
+    // ---- capture conversion (§5.1.10) ----
+    //
+    // Se usa un **campo** `E val` en vez de métodos: el acceso a campo pasa por `assignable` →
+    // `is_subtype`, que sí ejercita las cotas de la captura. La resolución de sobrecarga, en cambio,
+    // trata un parámetro que es variable de tipo de clase como **indulgente** (no sustituye el
+    // receptor en los params), así que el lado de **escritura** de `? super` no se observa por una
+    // llamada — sí por una asignación a campo.
+    const BOX: &str = "class Box<E> { E val; } ";
+
+    #[test]
+    fn capture_of_extends_reads_as_its_upper_bound() {
+        // `Box<? extends Number>.val` captura a una variable con cota superior `Number`.
+        assert!(check(&format!("{BOX} class C {{ void m(Box<? extends Number> b) {{ Number n = b.val; }} }}")).is_empty());
+        let bad = check(&format!("{BOX} class C {{ void m(Box<? extends Number> b) {{ String s = b.val; }} }}"));
+        assert_eq!(bad.len(), 1, "la captura de `? extends Number` no es String: {bad:?}");
+    }
+
+    #[test]
+    fn capture_of_an_unbounded_wildcard_reads_as_object() {
+        // `Box<?>.val` captura con cota superior `Object`: sale un `Object`, no un `Number`.
+        assert!(check(&format!("{BOX} class C {{ void m(Box<?> b) {{ Object o = b.val; }} }}")).is_empty());
+        let bad = check(&format!("{BOX} class C {{ void m(Box<?> b) {{ Number n = b.val; }} }}"));
+        assert_eq!(bad.len(), 1, "de `Box<?>` solo se lee un `Object`: {bad:?}");
+    }
+
+    #[test]
+    fn capture_of_super_reads_as_object() {
+        // `Box<? super Integer>.val` leído da `Object` (cota superior de la captura).
+        assert!(check(&format!("{BOX} class C {{ void m(Box<? super Integer> b) {{ Object o = b.val; }} }}")).is_empty());
+        let bad = check(&format!("{BOX} class C {{ void m(Box<? super Integer> b) {{ Number n = b.val; }} }}"));
+        assert_eq!(bad.len(), 1, "de `? super` solo se lee `Object`, no `Number`: {bad:?}");
+    }
+
+    #[test]
+    fn capture_of_super_accepts_its_lower_bound_on_write() {
+        // El lado **escritura** de `? super Integer`: se puede asignar un `Integer` (cota inferior de
+        // la captura), pero **no** un `Object` (la lista podría ser `Box<Integer>`).
+        assert!(check(&format!("{BOX} class C {{ void m(Box<? super Integer> b, Integer i) {{ b.val = i; }} }}")).is_empty());
+        let bad = check(&format!("{BOX} class C {{ void m(Box<? super Integer> b, Object o) {{ b.val = o; }} }}"));
+        assert_eq!(bad.len(), 1, "no se puede escribir un `Object` en `Box<? super Integer>`: {bad:?}");
+    }
+
+    #[test]
+    fn distinct_captures_of_the_same_wildcard_do_not_unify() {
+        // Frescura (§5.1.10): la captura de `a` y la de `b` son **distintas**, así que el valor de
+        // `b.val` no se puede escribir en `a.val` — el clásico rechazo de captura.
+        let bad = check(&format!("{BOX} class C {{ void m(Box<?> a, Box<?> b) {{ a.val = b.val; }} }}"));
+        assert_eq!(bad.len(), 1, "capturas distintas no unifican: {bad:?}");
+    }
+
+    // Un `Box<E>` con un método de **escritura** (para el lado `? super` por llamada).
+    const WBOX: &str = "class Box<E> { void put(E e) {} } ";
+
+    #[test]
+    fn capture_super_write_via_a_call_accepts_the_lower_bound() {
+        // Con la sustitución del receptor en los params, el lado **escritura** de `? super` se
+        // chequea por **llamada** (antes solo por campo): `put(Integer)` vale.
+        assert!(check(&format!("{WBOX} class C {{ void m(Box<? super Integer> b, Integer i) {{ b.put(i); }} }}")).is_empty());
+    }
+
+    #[test]
+    fn capture_super_write_via_a_call_rejects_a_wider_type() {
+        // `put(Object)` sobre `Box<? super Integer>` se **rechaza** (antes se aceptaba por indulgencia).
+        let bad = check(&format!("{WBOX} class C {{ void m(Box<? super Integer> b, Object o) {{ b.put(o); }} }}"));
+        assert_eq!(bad.len(), 1, "no se puede `put(Object)` en `Box<? super Integer>`: {bad:?}");
+    }
+
+    #[test]
+    fn a_parameterized_call_still_accepts_a_subtype_argument() {
+        // La sustitución del receptor no rompe una llamada legítima: `Box<Number>.put(Integer)` vale
+        // (el argumento es subtipo del parámetro sustituido).
+        assert!(check(&format!("{WBOX} class C {{ void m(Box<Number> b, Integer i) {{ b.put(i); }} }}")).is_empty());
+    }
+
+    #[test]
+    fn a_ternary_of_two_wrappers_is_usable_as_either_shared_supertype() {
+        // `lub(Integer, Long)` = `Number & Comparable`: el resultado del ternario tipa como **ambos**.
+        assert!(check(
+            "class C { void m(boolean b, Integer i, Long l) { \
+             Number n = b ? i : l; Comparable c = b ? i : l; } }"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn a_ternary_intersection_is_not_an_unrelated_type() {
+        // Pero `Number & Comparable` **no** es `String`.
+        let bad =
+            check("class C { String m(boolean b, Integer i, Long l) { return b ? i : l; } }");
+        assert!(!bad.is_empty(), "Number&Comparable no es asignable a String");
+    }
+
+    #[test]
+    fn capture_enables_inference_passing_a_wildcard_to_a_generic_method() {
+        // El caso insignia (§5.1.10 + Cap. 18): `helper(b)` con `b: Box<?>` se captura a `Box<CAP>`
+        // y la sobrecarga genérica **infiere** `T` = la captura, así que la llamada tipa.
+        let ok = check(
+            "class Box<E> {} \
+             class C { \
+               static void swap(Box<?> b) { helper(b); } \
+               static <T> void helper(Box<T> b) {} \
+             }",
+        );
+        assert!(ok.is_empty(), "la captura debería permitir inferir T: {ok:?}");
+    }
+
     #[test]
     fn substitutes_through_an_inherited_generic_member() {
         // `get` se declara en `Base<T>`; visto desde `StrBox` hay que sustituir `T:=String`
@@ -1675,6 +2499,246 @@ mod tests {
         // real del classpath, se chequean como cualquier otro tipo.
         let errs = check("class C { void m(String s) { Integer n = s; } }");
         assert_eq!(errs.len(), 1, "String no es asignable a Integer: {errs:?}");
+    }
+
+    #[test]
+    fn a_wildcard_over_an_inference_variable_is_applicable() {
+        // `<T> T top(Lst<? extends T> l)` con `Lst<Dog>`: la aplicabilidad es **indulgente** con el
+        // `? extends T` (T es variable de inferencia), y la inferencia fija `T = Dog` (§18.2.3). javac
+        // lo acepta; antes daba "no aplicable". El `? extends` de un tipo concreto sí sigue estricto.
+        let ok = check(
+            "class Lst<E> {} class Animal {} class Dog extends Animal {}
+             class C { <T> T top(Lst<? extends T> l) { return null; }
+                       void m(Lst<Dog> l) { Animal a = top(l); } }",
+        );
+        assert!(ok.is_empty(), "{ok:?}");
+    }
+
+    #[test]
+    fn infers_a_type_variable_under_a_wildcard_in_the_return_type() {
+        // §18.3 (capture-in-bounds, §18.5.2.1→§18.3.2): un método que devuelve `Box<? extends T>`
+        // toma `T` del *target*. `Box<? extends Number> b = make()` fija `T = Number`. Antes la
+        // inferencia no miraba dentro del wildcard del retorno, `T` caía a `Object`, y
+        // `Box<? extends Object>` no era asignable a `Box<? extends Number>` → rechazo espurio.
+        let ok = check(
+            "class Box<E> {} class Number {}
+             class C { <T> Box<? extends T> make() { return null; }
+                       void m() { Box<? extends Number> b = make(); } }",
+        );
+        assert!(ok.is_empty(), "extends/extends deberia inferir T=Number: {ok:?}");
+
+        // Contravariante: `Box<? super T> mk()` con target `Box<? super Integer>` da la cota
+        // inferior `Integer <: T` (§18.3.2 caso d).
+        let ok2 = check(
+            "class Box<E> {} class Number {} class Integer extends Number {}
+             class C { <T> Box<? super T> mk() { return null; }
+                       void m() { Box<? super Integer> b = mk(); } }",
+        );
+        assert!(ok2.is_empty(), "super/super deberia inferir: {ok2:?}");
+
+        // Un *target* invariante contra un retorno con wildcard NO es asignable (§18.3.2: `false`):
+        // `Box<Number> b = make()` con `make(): Box<? extends T>` se rechaza, como javac.
+        let bad = check(
+            "class Box<E> {} class Number {}
+             class C { <T> Box<? extends T> make() { return null; }
+                       void m() { Box<Number> b = make(); } }",
+        );
+        assert!(!bad.is_empty(), "target invariante deberia rechazarse: {bad:?}");
+    }
+
+    #[test]
+    fn a_wildcard_argument_captured_against_an_invariant_parameter_conflicts_with_a_concrete_target() {
+        // §5.1.10 (capture conversion del argumento): pasar `Box<? extends T>` (de una llamada anidada
+        // `make()`) a un parámetro INVARIANTE `Box<U>` captura ⇒ `U = CAP` (fresca). Si el target además
+        // fija `U = Number`, son igualdades incompatibles ⇒ error, como javac. Antes lo aceptabamos: el
+        // wildcard del argumento anidado se caía sin producir bound sobre `U`.
+        let bad = check(
+            "class Box<E> {} class Number {}
+             class C { <T> Box<? extends T> make() { return null; }
+                       <U> Box<U> id(Box<U> b) { return b; }
+                       Box<Number> use() { return id(make()); } }",
+        );
+        assert!(!bad.is_empty(), "captura contra param invariante + target concreto: {bad:?}");
+
+        // Contraprueba: capturar un **valor** wildcard contra un parámetro invariante y asignar a un
+        // target compatible sí anda (`U = CAP <: Number`, y `CAP` cabe en `Number`).
+        let ok = check(
+            "class Box<E> {} class Number {}
+             class C { <U> U first(Box<U> b) { return null; }
+                       Number use(Box<? extends Number> x) { return first(x); } }",
+        );
+        assert!(ok.is_empty(), "captura de un valor wildcard a target compatible: {ok:?}");
+    }
+
+    #[test]
+    fn a_nested_wildcard_returning_call_does_not_flow_the_outer_target_into_its_variable() {
+        // §18.4: una llamada anidada que devuelve `Box<? extends T>` tiene su `T` bajo un wildcard;
+        // esa variable se resuelve por SUS cotas (ninguna ⇒ su cota declarada `Object`), NO por el
+        // target externo. `take(make())` con target `Number` ⇒ `U :> Object` (de `make`) y
+        // `U <: Number` (del target) ⇒ incompatibles ⇒ error, como javac. Antes lo aceptabamos: la
+        // clausura transitiva heredaba `Number` a la `T` interna y la bajaba a `Number`.
+        let bad = check(
+            "class Box<E> {} class Number {}
+             class C { <T> Box<? extends T> make() { return null; }
+                       <U> U take(Box<? extends U> b) { return null; }
+                       Number use() { return take(make()); } }",
+        );
+        assert!(!bad.is_empty(), "target Number deberia ser incompatible: {bad:?}");
+
+        // Contraprueba: con target `Object` sí resuelve (`U = Object`), como javac.
+        let ok = check(
+            "class Box<E> {} class Number {}
+             class C { <T> Box<? extends T> make() { return null; }
+                       <U> U take(Box<? extends U> b) { return null; }
+                       Object use() { return take(make()); } }",
+        );
+        assert!(ok.is_empty(), "target Object deberia resolver U=Object: {ok:?}");
+    }
+
+    #[test]
+    fn a_recovered_error_node_does_not_cascade_on_later_uses() {
+        // Recuperación a nivel expresión: `int x = @@@;` deja `x` declarado con un nodo de error, que
+        // la atribución tipa `Unresolved` **sin** un error nuevo. Así `x + 1` no cascadea
+        // "no se encuentra: x" — el único error es el de sintaxis del inicializador.
+        // (El error de sintaxis lo produce el parser; este helper solo devuelve los de la atribución.)
+        // Lo que importa: la atribución **no agrega nada** —`x` está declarado, así que `x + 1` resuelve
+        // y el nodo de error queda `Unresolved` en silencio—; antes, sin `x`, habría dos "no se encuentra".
+        let errs = check("class C { void m() { int x = @@@; int z = x + 1; } }");
+        assert!(errs.is_empty(), "la atribución no debe cascadear sobre `x`: {errs:?}");
+    }
+
+    #[test]
+    fn cannot_find_symbol_attaches_symbol_and_location_notes() {
+        // Un método inexistente sobre un receptor conocido lleva las notas `símbolo:`/`ubicación:`
+        // (con la firma de argumentos y la clase del receptor), como javac.
+        let errs = check("class C { void m(String s) { int n = s.fro(1); } }");
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].message, "no se encuentra el método: fro");
+        assert_eq!(
+            errs[0].notes,
+            vec!["símbolo:   método fro(int)".to_string(), "ubicación: clase String".to_string()]
+        );
+
+        // Un campo inexistente: `variable <name>` en la clase del receptor.
+        let f = check("class C { void m(String s) { int k = s.missing; } }");
+        assert_eq!(f[0].notes, vec![
+            "símbolo:   variable missing".to_string(),
+            "ubicación: clase String".to_string(),
+        ]);
+
+        // Un nombre pelado desconocido: `variable <name>` en la clase **envolvente**.
+        let n = check("class C { void m() { int n = nope; } }");
+        assert_eq!(n[0].notes, vec![
+            "símbolo:   variable nope".to_string(),
+            "ubicación: clase C".to_string(),
+        ]);
+    }
+
+    #[test]
+    fn an_inapplicable_overload_lists_the_discarded_candidates_with_reasons() {
+        // §15.12.2: ninguna sobrecarga de `f` aplica a `f("h")` — la de un `int` no convierte el
+        // `String`, la de dos difiere en aridad. El error lista **ambos** candidatos con su motivo.
+        let errs = check(
+            "class C { int f(int a) { return a; } int f(int a, int b) { return a + b; }
+                       void m() { int x = f(\"h\"); } }",
+        );
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].message.contains("`f(String)`"), "{}", errs[0].message);
+        assert!(
+            errs[0].notes.iter().any(|n| n.contains("f(int) no es aplicable")
+                && n.contains("String no se convierte a int")),
+            "{:?}",
+            errs[0].notes
+        );
+        assert!(
+            errs[0].notes.iter().any(|n| n.contains("f(int, int) no es aplicable")
+                && n.contains("difieren en longitud")),
+            "{:?}",
+            errs[0].notes
+        );
+    }
+
+    #[test]
+    fn a_misspelled_name_suggests_the_closest_one_in_scope() {
+        // did-you-mean sobre un método del receptor (`lenght` → `length` de String).
+        let m = check("class C { void m(String s) { int y = s.lenght(); } }");
+        assert!(
+            m[0].notes.iter().any(|n| n == "¿quisiste decir 'length'?"),
+            "{:?}",
+            m[0].notes
+        );
+        // …y sobre un **campo** de la clase envolvente para un nombre pelado (`valorr` → `valor`).
+        let f = check("class C { int valor = 3; int m() { return valorr; } }");
+        assert!(
+            f[0].notes.iter().any(|n| n == "¿quisiste decir 'valor'?"),
+            "{:?}",
+            f[0].notes
+        );
+        // Un nombre sin nada parecido no sugiere (no hay falso positivo).
+        let none = check("class C { int valor = 3; int m() { return xyzzy; } }");
+        assert!(
+            !none[0].notes.iter().any(|n| n.starts_with("¿quisiste decir")),
+            "{:?}",
+            none[0].notes
+        );
+    }
+
+    #[test]
+    fn a_method_inherited_through_a_generic_superinterface_resolves() {
+        // Finding #15: `apply` se declara en `BiFunction<T,U,R>` y se hereda vía
+        // `BinaryOperator<T> extends BiFunction<T,T,T>`. Al buscar el miembro sobre un
+        // `BinaryOperator<Integer>` hay que caminar el grafo de supertipos y sustituir los
+        // argumentos de tipo de la superinterfaz (`<T,U,R>` → `<Integer,Integer,Integer>`),
+        // así `apply(a, b)` devuelve `Integer`. Antes: "no se encuentra el método: apply".
+        let ok = check(
+            "interface BiFunction<T, U, R> { R apply(T t, U u); }
+             interface BinaryOperator<T> extends BiFunction<T, T, T> {}
+             class C { Integer reduce(BinaryOperator<Integer> op, Integer a, Integer b) {
+                           return op.apply(a, b); } }",
+        );
+        assert!(ok.is_empty(), "{ok:?}");
+    }
+
+    #[test]
+    fn a_generic_overload_with_unsatisfiable_inference_is_not_applicable() {
+        // §18.5.1: `m(T, Lst<T>)` NO es aplicable a `(Lst<String>, Lst<String>)` —el 1º arg fija
+        // `T = Lst<String>` (por `T`), el 2º pide `Lst<String>` contra `Lst<T>` (⇒ `T = String`), y no
+        // hay `T` que cumpla los dos—. Solo `m(T, T)` aplica (T = Lst<String>) y devuelve `String`, que
+        // no cabe en `int` → error. javac reporta lo mismo; antes lo aceptabamos (indulgencia).
+        let errs = check(
+            "class Lst<E> {}
+             class C { <T> String m(T a, T b) { return null; }
+                       <T> int m(T a, Lst<T> b) { return 0; }
+                       int use(Lst<String> x, Lst<String> y) { return m(x, y); } }",
+        );
+        assert!(!errs.is_empty(), "deberia rechazar: {errs:?}");
+    }
+
+    #[test]
+    fn a_generic_overload_that_does_apply_is_still_chosen() {
+        // Contraprueba: `m(Lst<T>)` (mas especifico) sigue aplicando sobre `Lst<String>` y se elige.
+        let errs = check(
+            "class Lst<E> {}
+             class C { <T> String m(T x) { return null; }
+                       <T> int m(Lst<T> x) { return 0; }
+                       int use(Lst<String> l) { return m(l); } }",
+        );
+        assert!(errs.is_empty(), "{errs:?}");
+    }
+
+    #[test]
+    fn a_nested_generic_call_infers_from_the_outer_context() {
+        // §18.5.2.1: `pick(empty(), strs())` — `empty()` (`<E> Box<E>`) toma su `E` del **contexto**
+        // (el otro argumento es `Box<String>`), así que la llamada es `Box<String>` y asigna sin error.
+        // Aislada, `empty()` daba `Box<Object>` y la llamada se rechazaba por igualdades incompatibles.
+        let ok = check(
+            "class Box<E> {}
+             class C { <E> Box<E> empty() { return null; }
+                       <T> Box<T> pick(Box<T> a, Box<T> b) { return null; }
+                       Box<String> strs() { return null; }
+                       Box<String> m() { return pick(empty(), strs()); } }",
+        );
+        assert!(ok.is_empty(), "{ok:?}");
     }
 
     #[test]
@@ -1708,6 +2772,9 @@ mod tests {
                 format!("{}<{}>", table.symbol(*base).name, a.join(","))
             }
             RType::Array(e) => format!("{}[]", rt_name(table, e)),
+            RType::Capture { upper, .. } => format!("capture of {}", rt_name(table, upper)),
+            RType::Intersection(ms) => ms.iter().map(|m| rt_name(table, m)).collect::<Vec<_>>().join("&"),
+            RType::InferVar(id) => format!("infer#{id}"),
             RType::Unresolved => "?".to_string(),
         }
     }
@@ -1715,7 +2782,7 @@ mod tests {
     /// Corre el front-end sobre `src` y devuelve la **firma del método elegido** por la primera
     /// sentencia del método `m` (que debe ser una llamada), p. ej. `"(long)"`.
     fn picked(src: &str) -> String {
-        let mut unit = parse(tokenize(src).unwrap()).unwrap();
+        let mut unit = parse(tokenize(src).unwrap()).0;
         let (table, _e) = enter(&unit);
         let errs = attribute(&mut unit, &table);
         assert!(errs.is_empty(), "no se esperaban errores: {errs:?}");
@@ -1934,7 +3001,7 @@ mod tests {
         // Nombrarlas en firmas las carga (con sus flags de acceso).
         let src = "class C { Runnable r; java.util.function.Function<Integer,Integer> f; \
                    java.util.Comparator<String> cmp; CharSequence cs; }";
-        let unit = parse(tokenize(src).unwrap()).unwrap();
+        let unit = parse(tokenize(src).unwrap()).0;
         let (table, _e) = enter(&unit);
         let sam_name = |iface: &str| {
             let cid = table.external(iface).unwrap_or_else(|| panic!("no cargó {iface}"));

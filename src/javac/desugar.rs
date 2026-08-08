@@ -142,17 +142,27 @@ const OBJECT_METHODS_DESC: &str = "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava
 /// Baja el azúcar de `unit`, transformándolo en el lugar. Necesita la tabla para reconocer
 /// tipos (p. ej. si un `+` es concatenación de `String`).
 pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
+    // El **paquete** es el prefijo del FQN, igual que en `enter` (§7.1): sin él, la búsqueda
+    // `table.class(fqn)` de la síntesis de miembros (enum/record) fallaba para un tipo en un paquete
+    // nombrado —`qualify` solo agrega las clases envolventes, no el paquete—, y el `enum`/`record`
+    // salía **degenerado** (sin constantes, `values()`, `valueOf()`, ni el ctor propio).
+    let base = unit.package.as_deref().unwrap_or("").to_string();
     let mut enums = HashMap::new();
-    collect_enums(table, &unit.types, "", &mut enums);
+    collect_enums(table, &unit.types, &base, &mut enums);
     let mut records = HashMap::new();
-    collect_records(table, &unit.types, "", &mut records);
+    collect_records(table, &unit.types, &base, &mut records);
     let unit_name = unit.types.first().map(|c| c.name.clone()).unwrap_or_else(|| "Switch".into());
     let top_scope = top_level_scope(table, &unit.types);
+    // Los valores de las `static final int` con inicializador **constante** (§15.29), para plegar una
+    // referencia a una de ellas usada como etiqueta de `case`.
+    let mut consts = HashMap::new();
+    collect_constants(table, &unit.types, &base, &mut consts);
     let mut d = Desugarer {
         counter: 0,
         table,
         enums,
         records,
+        consts,
         holder: None,
         unit_name,
         top_scope,
@@ -160,10 +170,17 @@ pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
         lambda_methods: Vec::new(),
         cur_class: None,
         cur_method: String::new(),
+        cur_method_sig: None,
         has_this: false,
+        enclosing_type: None,
+        cur_fqn: String::new(),
+        lifted_locals: Vec::new(),
+        captured_locals: HashMap::new(),
+        local_new_args: HashMap::new(),
+        local_uses_this: HashSet::new(),
     };
     for ty in &mut unit.types {
-        d.class(ty, "");
+        d.class(ty, &base);
     }
     // La clase sintética `C$1` (si algún `switch` sobre `enum` la creó) se agrega como tipo del final.
     if let Some(h) = d.holder.take() {
@@ -182,6 +199,9 @@ struct Desugarer<'a> {
     /// `SymbolId` de cada `record` → nombres de sus componentes **en orden**, que son los de sus
     /// *accessors* (los necesita la deconstrucción de un pattern).
     records: HashMap<SymbolId, Vec<String>>,
+    /// `SymbolId` de cada campo `static final int` con inicializador constante → su valor plegado
+    /// (§15.29), para resolver una referencia a una constante usada como etiqueta de `case`.
+    consts: HashMap<SymbolId, i32>,
     /// La clase sintética que aloja los `$SwitchMap$X` (una por unidad), creada perezosamente.
     holder: Option<Holder>,
     /// Nombre base de la clase sintética (`<primerTipo>$1`, estilo `C$1` de javac).
@@ -199,9 +219,32 @@ struct Desugarer<'a> {
     cur_class: Option<SymbolId>,
     /// Nombre del método/inicializador envolvente, para bautizar `lambda$<envolvente>$<n>`.
     cur_method: String,
+    /// `(nombre, descriptor)` del método/constructor envolvente, o `None` si el punto actual está en
+    /// un **inicializador** (o fuera de un método). Lo lee `lift_local_class` para el atributo
+    /// `EnclosingMethod` (§4.7.7) de la local/anónima que levanta.
+    cur_method_sig: Option<(String, String)>,
     /// Si en el punto actual hay `this` disponible (falso en `static`): una lambda solo puede
     /// **capturar** `this` —y su implementación ser un método de instancia— cuando lo hay.
     has_this: bool,
+    /// La clase que encierra a la que se recorre, **si esta es una interna de instancia** (inner
+    /// class no-estática): el tipo de su campo sintético `this$0` y por donde resuelven sus miembros
+    /// capturados. `None` en top-level, anidadas estáticas, interfaces/enum/record.
+    enclosing_type: Option<SymbolId>,
+    /// El FQN de la clase en curso (`Outer` / `Outer.Inner`), para levantar una clase **local** a
+    /// tipo anidado del enclosing (§14.3).
+    cur_fqn: String,
+    /// Las clases **locales** ya levantadas de la clase en curso: se agregan a sus miembros al
+    /// terminar el recorrido (como los métodos `lambda$…`).
+    lifted_locals: Vec<Member>,
+    /// Los **locales capturados** por la clase local que se está procesando (`nombre → tipo`): dentro
+    /// de su cuerpo, un `Name` a uno de ellos se reescribe a `this.val$nombre`.
+    captured_locals: HashMap<String, RType>,
+    /// Por cada clase local, los nombres de los locales que captura **en orden**: el `new L(...)` de
+    /// su sitio de uso los empuja como argumentos de cabecera.
+    local_new_args: HashMap<String, Vec<String>>,
+    /// Las clases locales que **además** capturan la instancia envolvente (`this$0`): su `new L(...)`
+    /// empuja `this` de cabecera (antes de los `val$`), y su ctor lo lleva de primer parámetro.
+    local_uses_this: HashSet<String>,
 }
 
 /// El scope que contiene los tipos top-level (el del paquete) — el `enclosing` del scope de miembros
@@ -251,6 +294,146 @@ fn collect_enums(
     }
 }
 
+/// Recolecta el valor de cada campo `static final int` con inicializador **constante** (§15.29).
+/// Itera a **punto fijo**: una constante puede referirse a otra ya definida (`B = A + 1`), así que se
+/// repite mientras se pliegue alguna nueva.
+fn collect_constants(table: &SymbolTable, types: &[ClassDecl], base: &str, out: &mut HashMap<SymbolId, i32>) {
+    let mut fields: Vec<(SymbolId, ScopeId, &Expr)> = Vec::new();
+    collect_const_fields(table, types, base, &mut fields);
+    loop {
+        let mut changed = false;
+        for &(fid, scope, init) in &fields {
+            if out.contains_key(&fid) {
+                continue;
+            }
+            if let Some(v) = fold_const_int(table, scope, out, init) {
+                out.insert(fid, v);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
+/// Junta `(símbolo del campo, scope de su clase, inicializador)` de cada `static final` de tipo
+/// entero, recursivo por los tipos anidados.
+fn collect_const_fields<'a>(
+    table: &SymbolTable,
+    types: &'a [ClassDecl],
+    enclosing: &str,
+    out: &mut Vec<(SymbolId, ScopeId, &'a Expr)>,
+) {
+    for class in types {
+        let fqn = qualify(enclosing, &class.name);
+        if let Some(cid) = table.class(&fqn) {
+            let scope = member_scope_id(table, cid);
+            for m in &class.members {
+                match m {
+                    Member::Field(f)
+                        if f.modifiers.contains(&Modifier::Static)
+                            && f.modifiers.contains(&Modifier::Final)
+                            && matches!(
+                                f.ty,
+                                Type::Prim(
+                                    PrimType::Int | PrimType::Char | PrimType::Short | PrimType::Byte
+                                )
+                            ) =>
+                    {
+                        if let Some(init) = &f.init {
+                            if let Some(fid) = field_symbol(table, scope, &f.name) {
+                                out.push((fid, scope, init));
+                            }
+                        }
+                    }
+                    Member::Type(nested) => {
+                        collect_const_fields(table, std::slice::from_ref(nested), &fqn, out)
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+/// Evalúa una **expresión constante entera** (§15.28/§15.29): literales, `char`, unarios (`-`/`+`/`~`),
+/// *cast*, aritmética/bit/desplazamiento entre constantes, y una **referencia a una `static final
+/// int`** (`MAX` o `C.MAX`) ya plegada en `consts`. `None` si no es constante. Aritmética `i32` con
+/// *wrapping*, como Java.
+fn fold_const_int(
+    table: &SymbolTable,
+    scope: ScopeId,
+    consts: &HashMap<SymbolId, i32>,
+    e: &Expr,
+) -> Option<i32> {
+    match &e.kind {
+        ExprKind::IntLit(n) => i32::try_from(*n).ok(),
+        ExprKind::CharLit(c) => Some(*c as i32),
+        ExprKind::Unary { op, expr, .. } => {
+            let v = fold_const_int(table, scope, consts, expr)?;
+            match op {
+                UnOp::Neg => Some(v.wrapping_neg()),
+                UnOp::Plus => Some(v),
+                UnOp::BitNot => Some(!v),
+                _ => None,
+            }
+        }
+        ExprKind::Cast { expr, .. } => fold_const_int(table, scope, consts, expr),
+        ExprKind::Binary { op, lhs, rhs } => {
+            let a = fold_const_int(table, scope, consts, lhs)?;
+            let b = fold_const_int(table, scope, consts, rhs)?;
+            binary_const(*op, a, b)
+        }
+        // Referencia **sin cualificar** a una constante de esta clase (o de un supertipo por scope).
+        ExprKind::Name(n) => consts.get(&field_symbol(table, scope, n)?).copied(),
+        // `C.MAX`: se resuelve `C` a su clase y se busca `MAX` en su scope de miembros.
+        ExprKind::Field { expr, name } => {
+            let ExprKind::Name(cn) = &expr.kind else { return None };
+            let cid = table.resolve_type(scope, cn)?;
+            let fid = field_symbol(table, member_scope_id(table, cid), name)?;
+            consts.get(&fid).copied()
+        }
+        _ => None,
+    }
+}
+
+fn binary_const(op: BinOp, a: i32, b: i32) -> Option<i32> {
+    use BinOp::*;
+    Some(match op {
+        Add => a.wrapping_add(b),
+        Sub => a.wrapping_sub(b),
+        Mul => a.wrapping_mul(b),
+        Div if b != 0 => a.wrapping_div(b),
+        Rem if b != 0 => a.wrapping_rem(b),
+        BitAnd => a & b,
+        BitOr => a | b,
+        BitXor => a ^ b,
+        Shl => a.wrapping_shl((b & 31) as u32),
+        Shr => a.wrapping_shr((b & 31) as u32),
+        UShr => ((a as u32).wrapping_shr((b & 31) as u32)) as i32,
+        _ => return None,
+    })
+}
+
+/// El scope de miembros de una clase por su `SymbolId` (versión libre de `member_scope_of`).
+fn member_scope_id(table: &SymbolTable, cid: SymbolId) -> ScopeId {
+    match &table.symbol(cid).kind {
+        SymbolKind::Class { members, .. } => *members,
+        _ => 0,
+    }
+}
+
+/// El `SymbolId` del **campo** `name` en `scope` (salta un método/tipo homónimo).
+fn field_symbol(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<SymbolId> {
+    table
+        .scope(scope)
+        .get(name)
+        .iter()
+        .copied()
+        .find(|&id| matches!(table.symbol(id).kind, SymbolKind::Field { .. }))
+}
+
 /// Recolecta los `record` (por `SymbolId`) con los nombres de sus componentes en orden — que son los
 /// de sus *accessors*. Es lo que deja bajar `case Point(int x, int y)` a `$r.x()` / `$r.y()`.
 fn collect_records(
@@ -295,6 +478,7 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
     for c in &class.components {
         out.push(Member::Field(FieldDecl {
             annotations: Vec::new(),
+            type_annos: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Private, Modifier::Final],
             ty: c.ty.clone(),
@@ -322,10 +506,12 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
             pos: Pos::default(),
             modifiers: vec![Modifier::Public],
             type_params: Vec::new(),
+            return_annos: Vec::new(),
             return_type: Type::Void,
             name: class.name.clone(),
             params: class.components.clone(),
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(body),
             is_constructor: true,
         }));
@@ -344,10 +530,12 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
             pos: Pos::default(),
             modifiers: vec![Modifier::Public],
             type_params: Vec::new(),
+            return_annos: Vec::new(),
             return_type: c.ty.clone(),
             name: c.name.clone(),
             params: Vec::new(),
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(body),
             is_constructor: false,
         }));
@@ -370,8 +558,20 @@ fn hoist_initializers(class: &mut ClassDecl) {
     for member in &mut class.members {
         match member {
             Member::Field(f) => {
-                let Some(init) = f.init.take() else { continue };
                 let is_static = f.modifiers.contains(&Modifier::Static);
+                let is_final = f.modifiers.contains(&Modifier::Final);
+                // Un `static final` con inicializador de expresión constante (§15.29) **no** se baja al
+                // `<clinit>`: su valor va al atributo `ConstantValue` del campo, que la JVM asigna al
+                // preparar la clase. Se deja `f.init` en su lugar para que el codegen lo lea y emita.
+                if is_static
+                    && is_final
+                    && f.init.as_ref().is_some_and(|init| {
+                        super::codegen::const_field_value(&f.ty, init).is_some()
+                    })
+                {
+                    continue;
+                }
+                let Some(init) = f.init.take() else { continue };
                 // Un campo de instancia se escribe por `this`; uno estático, por su nombre.
                 let target = if is_static {
                     name(&f.name)
@@ -406,10 +606,12 @@ fn hoist_initializers(class: &mut ClassDecl) {
                 pos: Pos::default(),
                 modifiers: vec![Modifier::Public],
                 type_params: Vec::new(),
+                return_annos: Vec::new(),
                 return_type: Type::Void,
                 name: class.name.clone(),
                 params: Vec::new(),
                 throws: Vec::new(),
+                throws_annos: Vec::new(),
                 body: Some(Block(Vec::new())),
                 is_constructor: true,
             }));
@@ -440,9 +642,13 @@ fn holder_class(h: Holder) -> ClassDecl {
         type_params: Vec::new(),
         components: Vec::new(),
         extends: None,
+        extends_annos: Vec::new(),
         implements: Vec::new(),
+        implements_annos: Vec::new(),
+        permits: Vec::new(),
         enum_constants: Vec::new(),
         members: h.members,
+        annotation_defaults: Vec::new(),
     }
 }
 
@@ -497,7 +703,7 @@ fn call(target: Expr, method: &str, args: Vec<Expr>) -> Expr {
     ex(ExprKind::Call { target: Some(Box::new(target)), name: method.to_string(), args, type_args: Vec::new() })
 }
 fn local(ty: Type, name: String, init: Expr) -> Stmt {
-    st(StmtKind::LocalVar { ty, name, init: Some(init), is_final: false })
+    st(StmtKind::LocalVar { ty, name, init: Some(init), is_final: false, type_annos: Vec::new() })
 }
 
 impl Desugarer<'_> {
@@ -517,37 +723,75 @@ impl Desugarer<'_> {
         // El contexto de la clase en curso se **salva**: un tipo anidado recursa por acá y no debe
         // pisar ni el dueño de los métodos sintéticos ni el colector a medio llenar del padre.
         let saved_class = self.cur_class;
+        let saved_fqn = std::mem::replace(&mut self.cur_fqn, fqn.clone());
         let saved_lambdas = std::mem::take(&mut self.lambda_methods);
+        let saved_locals = std::mem::take(&mut self.lifted_locals);
+        // `has_this` se fija por miembro dentro del bucle, pero también hay que **restaurarlo** al
+        // salir: una clase local se procesa (vía `lift_local_class` → `class()`) en medio del método
+        // que la declara, y su método de instancia dejaría `has_this=true` filtrado al resto de ese
+        // método —una segunda local en un método **estático** creería capturar `this$0`—.
+        let saved_has_this = self.has_this;
+        // El método envolvente también se salva/restaura: una local se procesa (vía `class()`) en
+        // medio del método que la declara, y sus propios métodos pisarían este contexto.
+        let saved_method_sig = self.cur_method_sig.take();
         self.cur_class = self.table.class(&fqn);
+        // Una interna de **instancia**: se le sintetiza el campo `this$0` y se le inyecta a los
+        // constructores el parámetro/asignación de la instancia envolvente, **antes** de recorrer sus
+        // cuerpos (que reescriben los accesos capturados).
+        if let (Some(cid), Some(outer)) = (self.cur_class, self.enclosing_type) {
+            self.capture_enclosing_instance(class, cid, outer);
+        }
         for member in &mut class.members {
             match member {
                 Member::Method(m) => {
                     self.cur_method = m.name.clone();
+                    // El método/constructor envolvente, para el `EnclosingMethod` de una local que
+                    // declare en su cuerpo: su nombre (`<init>` para un ctor) y descriptor emitido.
+                    self.cur_method_sig = self.cur_class.map(|cid| {
+                        let scope = self.member_scope_of(cid);
+                        let name = if m.is_constructor { "<init>".to_string() } else { m.name.clone() };
+                        (name, super::codegen::method_descriptor(self.table, scope, m))
+                    });
                     // Un constructor tiene `this`; un método, según su `static`.
                     self.has_this = m.is_constructor || !m.modifiers.contains(&Modifier::Static);
                     if let Some(body) = &mut m.body {
                         self.block(body);
                     }
                 }
-                Member::Type(nested) => self.class(nested, &fqn),
+                Member::Type(nested) => {
+                    // El enclosing de una interna de **instancia** es la clase actual; para una
+                    // anidada estática (o interface/enum/record) no hay captura.
+                    let saved = self.enclosing_type;
+                    self.enclosing_type =
+                        is_instance_inner(nested).then_some(self.cur_class).flatten();
+                    self.class(nested, &fqn);
+                    self.enclosing_type = saved;
+                }
                 Member::StaticInit(block) => {
                     self.cur_method = "static".to_string();
+                    self.cur_method_sig = None; // un inicializador no es un método (EnclosingMethod: 0)
                     self.has_this = false;
                     self.block(block);
                 }
                 Member::InstanceInit(block) => {
                     self.cur_method = "init".to_string();
+                    self.cur_method_sig = None;
                     self.has_this = true;
                     self.block(block);
                 }
                 Member::Field(_) => {}
             }
         }
-        // Los métodos `lambda$…` de ESTA clase pasan a ser miembros suyos; se restaura el colector
-        // del padre para que su recorrido siga acumulando los propios.
+        // Los métodos `lambda$…` y las clases **locales levantadas** de ESTA clase pasan a ser
+        // miembros suyos; se restauran los colectores del padre para que siga acumulando los propios.
         let synth = std::mem::replace(&mut self.lambda_methods, saved_lambdas);
         class.members.extend(synth);
+        let locals = std::mem::replace(&mut self.lifted_locals, saved_locals);
+        class.members.extend(locals);
         self.cur_class = saved_class;
+        self.cur_fqn = saved_fqn;
+        self.has_this = saved_has_this;
+        self.cur_method_sig = saved_method_sig;
         // Los inicializadores de **instancia** corren dentro de cada constructor, después del
         // `super()` (§8.6/§12.5): se copian al frente de su cuerpo. Un constructor que delega en
         // `this(...)` **no** los corre — ya los corrió aquel.
@@ -592,7 +836,18 @@ impl Desugarer<'_> {
         // `$VALUES` que las junta, el constructor que las nombra, y `values()`/`valueOf()`.
         if class.kind == TypeKind::Enum {
             if let Some(cid) = self.table.class(&fqn) {
-                let synth = self.enum_members(class, cid);
+                // Un `enum` con **constantes parametrizadas** (`ROJO("rojo")`) trae constructor(es)
+                // propios: se les antepone `(String $name, int $ordinal)` + `super(...)` y cada
+                // constante se construye con sus argumentos. Sin ctor propio va el sintético `(String,
+                // int)` por defecto.
+                let has_ctor = class
+                    .members
+                    .iter()
+                    .any(|m| matches!(m, Member::Method(me) if me.is_constructor));
+                if has_ctor {
+                    self.rewrite_enum_ctors(class, cid);
+                }
+                let synth = self.enum_members(class, cid, has_ctor);
                 class.members.extend(synth);
             }
         }
@@ -637,7 +892,7 @@ impl Desugarer<'_> {
     ///
     /// Los símbolos del constructor, de `values()` y de `valueOf()` se **registran** acá: `enter` no
     /// los vio, y la re-atribución los busca por la tabla, no por el AST.
-    fn enum_members(&mut self, class: &ClassDecl, cid: SymbolId) -> Vec<Member> {
+    fn enum_members(&mut self, class: &ClassDecl, cid: SymbolId, has_user_ctor: bool) -> Vec<Member> {
         let ename = class.name.clone();
         let ety = Type::Class(ename.clone());
         let arr = Type::Array(Box::new(ety.clone()));
@@ -654,6 +909,7 @@ impl Desugarer<'_> {
         for c in &class.enum_constants {
             out.push(Member::Field(FieldDecl {
                 annotations: Vec::new(),
+                type_annos: Vec::new(),
                 pos: Pos::default(),
                 modifiers: vec![Modifier::Public, Modifier::Static, Modifier::Final],
                 ty: ety.clone(),
@@ -675,6 +931,7 @@ impl Desugarer<'_> {
             .set_resolved(fid, Resolved::Field(RType::Array(Box::new(RType::Class(cid)))));
         out.push(Member::Field(FieldDecl {
             annotations: Vec::new(),
+            type_annos: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Private, Modifier::Static, Modifier::Final],
             ty: arr.clone(),
@@ -686,11 +943,13 @@ impl Desugarer<'_> {
         //    juntarlas en `$VALUES`.
         let mut clinit = Vec::new();
         for (i, c) in class.enum_constants.iter().enumerate() {
-            let made = ex(ExprKind::NewObject {
-                ty: ety.clone(),
-                args: vec![ex(ExprKind::StringLit(c.name.clone())), ex(ExprKind::IntLit(i as i64))],
-                body: None,
-            });
+            // `new E("NAME", ordinal, ...args)`: el nombre y el ordinal de cabecera (para `Enum`), y
+            // detrás los **argumentos de la constante** (`ROJO("rojo")` → `new Color("ROJO", 0,
+            // "rojo")`), que resuelven al ctor propio ya con `(String, int)` antepuesto.
+            let mut args =
+                vec![ex(ExprKind::StringLit(c.name.clone())), ex(ExprKind::IntLit(i as i64))];
+            args.extend(c.args.iter().cloned());
+            let made = ex(ExprKind::NewObject { ty: ety.clone(), args, body: None, outer: None });
             clinit.push(st(StmtKind::Expr(assign_expr(name(&c.name), made))));
         }
         let all = ex(ExprKind::NewArray {
@@ -702,31 +961,37 @@ impl Desugarer<'_> {
         out.push(Member::StaticInit(Block(clinit)));
 
         // 4. El constructor. Es lo único que puede darle a `java.lang.Enum` su nombre y su posición,
-        //    y por eso la invocación explícita de `super(...)` era el bloqueante de todo esto.
-        let (pn, po) = ("$name".to_string(), "$ordinal".to_string());
-        let super_call = ex(ExprKind::Call {
-            target: None,
-            name: "super".to_string(),
-            args: vec![name(&pn), name(&po)],
-            type_args: Vec::new(),
-        });
-        let ctor_params = vec![
-            Param { annotations: Vec::new(), ty: string.clone(), name: pn, varargs: false, is_final: false },
-            Param { annotations: Vec::new(), ty: int.clone(), name: po, varargs: false, is_final: false },
-        ];
-        self.register_method(cid, scope, &ename, &ctor_params, &Type::Void, true);
-        out.push(Member::Method(MethodDecl {
-            annotations: Vec::new(),
-            pos: Pos::default(),
-            modifiers: vec![Modifier::Private],
-            type_params: Vec::new(),
-            return_type: Type::Void,
-            name: ename,
-            params: ctor_params,
-            throws: Vec::new(),
-            body: Some(Block(vec![st(StmtKind::Expr(super_call))])),
-            is_constructor: true,
-        }));
+        //    y por eso la invocación explícita de `super(...)` era el bloqueante de todo esto. Solo se
+        //    sintetiza el `(String, int)` por defecto **si el usuario no declaró uno**; si lo hizo,
+        //    `rewrite_enum_ctors` ya le antepuso los mismos parámetros.
+        if !has_user_ctor {
+            let (pn, po) = ("$name".to_string(), "$ordinal".to_string());
+            let super_call = ex(ExprKind::Call {
+                target: None,
+                name: "super".to_string(),
+                args: vec![name(&pn), name(&po)],
+                type_args: Vec::new(),
+            });
+            let ctor_params = vec![
+                Param { annotations: Vec::new(), ty: string.clone(), name: pn, varargs: false, is_final: false, type_annos: Vec::new() },
+                Param { annotations: Vec::new(), ty: int.clone(), name: po, varargs: false, is_final: false, type_annos: Vec::new() },
+            ];
+            self.register_method(cid, scope, &ename, &ctor_params, &Type::Void, true);
+            out.push(Member::Method(MethodDecl {
+                annotations: Vec::new(),
+                pos: Pos::default(),
+                modifiers: vec![Modifier::Private],
+                type_params: Vec::new(),
+                return_annos: Vec::new(),
+                return_type: Type::Void,
+                name: ename.clone(),
+                params: ctor_params,
+                throws: Vec::new(),
+                throws_annos: Vec::new(),
+                body: Some(Block(vec![st(StmtKind::Expr(super_call))])),
+                is_constructor: true,
+            }));
+        }
 
         // 5. `values()`: una copia fresca de `$VALUES` en cada llamada.
         let (r, i) = ("$r".to_string(), "$i".to_string());
@@ -743,6 +1008,7 @@ impl Desugarer<'_> {
                     name: i.clone(),
                     init: Some(ex(ExprKind::IntLit(0))),
                     is_final: false,
+                    type_annos: Vec::new(),
                 })),
                 cond: Some(ex(ExprKind::Binary {
                     op: BinOp::Lt,
@@ -773,10 +1039,12 @@ impl Desugarer<'_> {
             pos: Pos::default(),
             modifiers: vec![Modifier::Public, Modifier::Static],
             type_params: Vec::new(),
+            return_annos: Vec::new(),
             return_type: arr,
             name: "values".to_string(),
             params: Vec::new(),
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(body),
             is_constructor: false,
         }));
@@ -796,18 +1064,21 @@ impl Desugarer<'_> {
             ty: Type::Class("IllegalArgumentException".to_string()),
             args: Vec::new(),
             body: None,
+            outer: None,
         }))));
-        let vo_params = vec![Param { annotations: Vec::new(), ty: string, name: arg, varargs: false, is_final: false }];
+        let vo_params = vec![Param { annotations: Vec::new(), ty: string, name: arg, varargs: false, is_final: false, type_annos: Vec::new() }];
         self.register_method(cid, scope, "valueOf", &vo_params, &ety, false);
         out.push(Member::Method(MethodDecl {
             annotations: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Public, Modifier::Static],
             type_params: Vec::new(),
+            return_annos: Vec::new(),
             return_type: ety,
             name: "valueOf".to_string(),
             params: vo_params,
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(Block(stmts)),
             is_constructor: false,
         }));
@@ -846,6 +1117,70 @@ impl Desugarer<'_> {
         self.table.set_resolved(mid, Resolved::Method { params: rparams, ret: rret, varargs: false, throws: Vec::new() });
     }
 
+    /// Reescribe los constructores **propios** de un `enum` con constantes parametrizadas (§8.9.2): les
+    /// **antepone** `(String $name, int $ordinal)` —los que `java.lang.Enum` necesita— tanto en el AST
+    /// (para el descriptor y las referencias del cuerpo) como en el **`Resolved`** de su símbolo (la
+    /// re-atribución no re-resuelve firmas, y sin eso `new E("A", 0, …)` no encontraría el ctor). En el
+    /// cuerpo inyecta `super($name, $ordinal)` de cabecera —un ctor de `enum` no puede llamar `super`
+    /// explícito—, o, si delega en `this(...)`, le propaga los dos de cabecera.
+    fn rewrite_enum_ctors(&mut self, class: &mut ClassDecl, cid: SymbolId) {
+        let string = Type::Class("String".to_string());
+        let int = Type::Prim(PrimType::Int);
+        let sr = self.rtype(cid, &string);
+        // Símbolo: anteponer `[String, int]` al `Resolved` de cada ctor (se extrae y se re-escribe
+        // fuera del préstamo inmutable).
+        for mid in constructors(self.table, cid) {
+            let updated = match self.table.resolved(mid) {
+                Some(Resolved::Method { params, ret, varargs, throws }) => {
+                    let mut np = vec![sr.clone(), RType::Prim(PrimType::Int)];
+                    np.extend(params.iter().cloned());
+                    Some(Resolved::Method {
+                        params: np,
+                        ret: ret.clone(),
+                        varargs: *varargs,
+                        throws: throws.clone(),
+                    })
+                }
+                _ => None,
+            };
+            if let Some(r) = updated {
+                self.table.set_resolved(mid, r);
+            }
+        }
+        // AST: anteponer los parámetros e inyectar/propagar el `super`/`this`.
+        for m in class.members.iter_mut() {
+            let Member::Method(me) = m else { continue };
+            if !me.is_constructor {
+                continue;
+            }
+            me.params.insert(0, synth_param(int.clone(), "$ordinal".to_string()));
+            me.params.insert(0, synth_param(string.clone(), "$name".to_string()));
+            let Some(body) = &mut me.body else { continue };
+            let delegates = matches!(
+                body.0.first().map(|s| &s.kind),
+                Some(StmtKind::Expr(e))
+                    if matches!(&e.kind, ExprKind::Call { target: None, name, .. } if name == "this")
+            );
+            if delegates {
+                // `this(args)` → `this($name, $ordinal, args)`: el ctor delegado recibe la cabecera.
+                if let Some(StmtKind::Expr(e)) = body.0.first_mut().map(|s| &mut s.kind) {
+                    if let ExprKind::Call { args, .. } = &mut e.kind {
+                        args.insert(0, name("$ordinal"));
+                        args.insert(0, name("$name"));
+                    }
+                }
+            } else {
+                let super_call = ex(ExprKind::Call {
+                    target: None,
+                    name: "super".to_string(),
+                    args: vec![name("$name"), name("$ordinal")],
+                    type_args: Vec::new(),
+                });
+                body.0.insert(0, st(StmtKind::Expr(super_call)));
+            }
+        }
+    }
+
     /// El [`RType`] de los pocos tipos que esta pasada sintetiza: el propio enum, su array, `String`,
     /// `int` y `void`. No pretende ser un resolvedor general — ese vive en `enter`/`attribute`.
     fn rtype(&self, cid: SymbolId, ty: &Type) -> RType {
@@ -876,6 +1211,7 @@ impl Desugarer<'_> {
 
         let decl = Member::Field(FieldDecl {
             annotations: Vec::new(),
+            type_annos: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Static, Modifier::Final],
             ty: Type::Prim(PrimType::Boolean),
@@ -906,7 +1242,7 @@ impl Desugarer<'_> {
                 else {
                     unreachable!()
                 };
-                out.push(st(StmtKind::LocalVar { ty, name: var.clone(), init: None, is_final: false }));
+                out.push(st(StmtKind::LocalVar { ty, name: var.clone(), init: None, is_final: false, type_annos: Vec::new() }));
                 s.kind = self.switch_to_stmt(init.unwrap(), name(&var));
             }
             self.stmt(&mut s); // baja el switch-sentencia resultante (y su azúcar interna)
@@ -974,6 +1310,9 @@ impl Desugarer<'_> {
             StmtKind::Switch { selector, cases } => {
                 self.expr(selector);
                 for c in cases {
+                    for l in c.labels.iter_mut() {
+                        self.fold_case_label(l);
+                    }
                     if let Some(g) = &mut c.guard {
                         self.expr(g);
                     }
@@ -993,8 +1332,16 @@ impl Desugarer<'_> {
             }
             StmtKind::Labeled { body, .. } => self.stmt(body),
             StmtKind::Break(_) | StmtKind::Continue(_) | StmtKind::Empty => {}
-            // La **clase local** no se baja acá: entrarla y compilarla son de una fase posterior.
-            StmtKind::LocalClass(_) => {}
+            // Una **clase local** (§14.3) se **levanta** a tipo anidado del enclosing y se captura sus
+            // locales (`val$`); la sentencia queda vacía. El `new L(...)` de su sitio de uso —que
+            // aparece después en el mismo cuerpo— se reescribe con los locales capturados de cabecera.
+            StmtKind::LocalClass(_) => {
+                let old = std::mem::replace(&mut s.kind, StmtKind::Empty);
+                let StmtKind::LocalClass(lc) = old else { return };
+                if let Some(member) = self.lift_local_class(lc) {
+                    self.lifted_locals.push(member);
+                }
+            }
         }
 
         // 2. Reescribir este nodo si es azúcar.
@@ -1310,6 +1657,7 @@ impl Desugarer<'_> {
                 ty: Type::Class("NullPointerException".into()),
                 args: Vec::new(),
                 body: None,
+                outer: None,
             }))),
         };
         stmts.push(st(StmtKind::If { cond: eq_null(name(&tvar)), then: Box::new(on_null), els: None }));
@@ -1433,6 +1781,7 @@ impl Desugarer<'_> {
                 binary: name.clone(),
                 extends: None,
                 implements: Vec::new(),
+                permits: Vec::new(),
                 members: scope,
             },
             owner: None,
@@ -1442,7 +1791,7 @@ impl Desugarer<'_> {
         self.table.register_class(&name, cid);
         self.table.define(top, &name, cid);
         // La `Resolved::Class` (aunque sin super/interfaces) para que sea una clase "completa".
-        self.table.set_resolved(cid, Resolved::Class { super_type: None, interface_types: Vec::new() });
+        self.table.set_resolved(cid, Resolved::Class { super_type: None, interface_types: Vec::new(), permitted: Vec::new() });
         self.holder = Some(Holder { cid, scope, name, members: Vec::new(), maps: HashMap::new() });
     }
 
@@ -1470,6 +1819,7 @@ impl Desugarer<'_> {
         self.table.set_resolved(fid, Resolved::Field(RType::Array(Box::new(RType::Prim(PrimType::Int)))));
         let field_decl = Member::Field(FieldDecl {
             annotations: Vec::new(),
+            type_annos: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Static, Modifier::Final],
             ty: int_arr,
@@ -1519,7 +1869,7 @@ impl Desugarer<'_> {
     fn hoist_switch(&mut self, e: Expr) -> (Stmt, Stmt, String) {
         let tmp = self.fresh("s");
         let ty = rtype_to_type(self.table, e.ty.as_ref().unwrap());
-        let decl = st(StmtKind::LocalVar { ty, name: tmp.clone(), init: None, is_final: false });
+        let decl = st(StmtKind::LocalVar { ty, name: tmp.clone(), init: None, is_final: false, type_annos: Vec::new() });
         let sw = st(self.switch_to_stmt(e, name(&tmp)));
         (decl, sw, tmp)
     }
@@ -1649,6 +1999,7 @@ impl Desugarer<'_> {
                 name: i.clone(),
                 init: Some(ex(ExprKind::IntLit(0))),
                 is_final: false,
+                type_annos: Vec::new(),
             });
             let cond = ex(ExprKind::Binary {
                 op: BinOp::Lt,
@@ -1705,6 +2056,7 @@ impl Desugarer<'_> {
             ty: Type::Class("AssertionError".into()),
             args,
             body: None,
+            outer: None,
         })));
         let not_cond = ex(ExprKind::Unary { op: UnOp::Not, expr: Box::new(cond), prefix: true });
         let enabled = ex(ExprKind::Unary {
@@ -1870,6 +2222,11 @@ impl Desugarer<'_> {
             self.lower_method_ref(e);
             return;
         }
+        // Dentro de una interna de instancia, un acceso sin cualificar a un miembro de la clase
+        // envolvente (`f`, `m()`) se reescribe a `this$0.f` / `this$0.m()` **antes** de descender.
+        self.rewrite_enclosing_access(e);
+        // Dentro de una clase local, un `Name` a un local capturado → `this.val$nombre`.
+        self.rewrite_captured_local(e);
         match &mut e.kind {
             ExprKind::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
@@ -1897,7 +2254,12 @@ impl Desugarer<'_> {
                 self.expr(index);
             }
             ExprKind::Cast { expr, .. } | ExprKind::InstanceOf { expr, .. } => self.expr(expr),
-            ExprKind::NewObject { args, .. } => args.iter_mut().for_each(|a| self.expr(a)),
+            ExprKind::NewObject { args, outer, .. } => {
+                if let Some(o) = outer {
+                    self.expr(o);
+                }
+                args.iter_mut().for_each(|a| self.expr(a));
+            }
             ExprKind::NewArray { dims, init, .. } => {
                 dims.iter_mut().flatten().for_each(|d| self.expr(d));
                 if let Some(es) = init {
@@ -1918,10 +2280,18 @@ impl Desugarer<'_> {
             }
             _ => {}
         }
-        // Asignación compuesta y varargs: se reescriben **después** de bajar los hijos.
+        // Asignación compuesta, varargs, y el `this` de un `new Inner()`: se reescriben **después**
+        // de bajar los hijos.
         match &e.kind {
             ExprKind::Assign { op, .. } if *op != AssignOp::Assign => self.lower_compound(e),
             ExprKind::Call { .. } => self.lower_varargs(e),
+            ExprKind::QualifiedThis(_) => self.lower_qualified_this(e),
+            ExprKind::NewObject { body: None, .. } => {
+                // Los `val$` primero; el `this` de `this$0` se antepone después, quedando de cabecera
+                // `new L(this, val$…, args)`.
+                self.add_local_captures_arg(e);
+                self.add_outer_arg(e);
+            }
             _ => {}
         }
     }
@@ -1966,12 +2336,12 @@ impl Desugarer<'_> {
         let ty = e.ty.clone();
         let old = std::mem::replace(&mut e.kind, ExprKind::Null);
         let mut operands = Vec::new();
-        self.flatten_concat(Expr { kind: old, pos: e.pos, ty, binding: None }, &mut operands);
+        self.flatten_concat(Expr { kind: old, pos: e.pos, ty, binding: None, type_annos: Vec::new() }, &mut operands);
         // Bajar cada operando (puede tener su propia azúcar anidada).
         operands.iter_mut().for_each(|op| self.expr(op));
 
         let mut recv =
-            ex(ExprKind::NewObject { ty: Type::Class("StringBuilder".into()), args: vec![], body: None });
+            ex(ExprKind::NewObject { ty: Type::Class("StringBuilder".into()), args: vec![], body: None, outer: None });
         for op in operands {
             recv = call(recv, "append", vec![op]);
         }
@@ -2104,6 +2474,7 @@ impl Desugarer<'_> {
         }
         self.lambda_methods.push(Member::Method(MethodDecl {
             annotations: Vec::new(),
+            return_annos: Vec::new(),
             pos: e.pos,
             modifiers,
             type_params: Vec::new(),
@@ -2111,6 +2482,7 @@ impl Desugarer<'_> {
             name: impl_name.clone(),
             params: method_params,
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(method_body),
             is_constructor: false,
         }));
@@ -2392,10 +2764,12 @@ impl Desugarer<'_> {
             pos: Pos::default(),
             modifiers: vec![Modifier::Public, Modifier::Final],
             type_params: Vec::new(),
+            return_annos: Vec::new(),
             return_type: ret,
             name: name.to_string(),
             params,
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(body),
             is_constructor: false,
         })
@@ -2413,6 +2787,448 @@ impl Desugarer<'_> {
             })
             .unwrap_or(RType::Unresolved);
         rtype_desc(self.table, &rt)
+    }
+
+    /// Sintetiza la captura de la instancia envolvente de una interna de instancia `cid` cuyo
+    /// enclosing es `outer` (§8.1.3): el campo `final Outer this$0`, y en cada constructor el
+    /// parámetro de cabecera `Outer this$0` con su asignación `this.this$0 = this$0` (tras el
+    /// `super`/`this` explícito). Si no había constructor, sintetiza el por defecto. Actualiza el
+    /// **símbolo** de cada constructor para que `new Inner(outer)` resuelva en la re-atribución.
+    fn capture_enclosing_instance(&mut self, class: &mut ClassDecl, cid: SymbolId, outer: SymbolId) {
+        let scope = self.member_scope_of(cid);
+        let outer_ty = Type::Class(self.table.symbol(outer).name.clone());
+        // Campo `final Outer this$0;` — símbolo + declaración.
+        let fid = self.table.new_symbol(Symbol {
+            name: "this$0".to_string(),
+            kind: SymbolKind::Field { ty: outer_ty.clone() },
+            owner: Some(cid),
+            modifiers: vec![Modifier::Final],
+        });
+        self.table.define(scope, "this$0", fid);
+        self.table.set_resolved(fid, Resolved::Field(RType::Class(outer)));
+        class.members.insert(
+            0,
+            Member::Field(FieldDecl {
+                annotations: Vec::new(),
+                type_annos: Vec::new(),
+                pos: Pos::default(),
+                modifiers: vec![Modifier::Final],
+                ty: outer_ty.clone(),
+                name: "this$0".to_string(),
+                init: None,
+            }),
+        );
+
+        // A cada constructor: el parámetro de cabecera y la asignación de `this$0`.
+        let mut had_ctor = false;
+        for m in class.members.iter_mut() {
+            let Member::Method(me) = m else { continue };
+            if !me.is_constructor {
+                continue;
+            }
+            had_ctor = true;
+            me.params.insert(0, synth_param(outer_ty.clone(), "this$0".to_string()));
+            if let Some(body) = &mut me.body {
+                let at = usize::from(starts_with_ctor_call(body));
+                body.0.insert(at, this0_assign());
+            }
+        }
+
+        if had_ctor {
+            // Al símbolo de cada constructor se le antepone `Outer` a sus parámetros resueltos. Se
+            // **fija** aunque no exista `Resolved` aún (caso de una anónima, registrada tras la
+            // resolución de Enter): si no, `new $1(this)` no resolvería el ctor y caería al `()V`.
+            for ctor in constructors(self.table, cid) {
+                let (existing, ret, varargs, throws) = match self.table.resolved(ctor) {
+                    Some(Resolved::Method { params, ret, varargs, throws }) => {
+                        (params.clone(), ret.clone(), *varargs, throws.clone())
+                    }
+                    _ => (Vec::new(), RType::Void, false, Vec::new()),
+                };
+                let mut params = vec![RType::Class(outer)];
+                params.extend(existing);
+                self.table.set_resolved(ctor, Resolved::Method { params, ret, varargs, throws });
+            }
+        } else {
+            // Constructor por defecto: `public Inner(Outer this$0) { this.this$0 = this$0; }` (el
+            // emisor le antepone el `super()` implícito).
+            class.members.push(Member::Method(MethodDecl {
+                annotations: Vec::new(),
+                pos: Pos::default(),
+                modifiers: vec![Modifier::Public],
+                type_params: Vec::new(),
+                return_annos: Vec::new(),
+                return_type: Type::Void,
+                name: class.name.clone(),
+                params: vec![synth_param(outer_ty.clone(), "this$0".to_string())],
+                throws: Vec::new(),
+                throws_annos: Vec::new(),
+                body: Some(Block(vec![this0_assign()])),
+                is_constructor: true,
+            }));
+            let mid = self.table.new_symbol(Symbol {
+                name: class.name.clone(),
+                kind: SymbolKind::Method {
+                    params: vec![ParamSig {
+                        ty: outer_ty,
+                        name: "this$0".to_string(),
+                        varargs: false,
+                    }],
+                    return_type: Type::Void,
+                    is_constructor: true,
+                    throws: Vec::new(),
+                },
+                owner: Some(cid),
+                modifiers: vec![Modifier::Public],
+            });
+            self.table.define(scope, &class.name, mid);
+            self.table.set_resolved(
+                mid,
+                Resolved::Method {
+                    params: vec![RType::Class(outer)],
+                    ret: RType::Void,
+                    varargs: false,
+                    throws: Vec::new(),
+                },
+            );
+        }
+    }
+
+    /// Reescribe un acceso **sin cualificar** a un miembro de instancia de una clase envolvente a un
+    /// acceso vía `this$0` (dentro de una interna de instancia, §8.1.3): `f` → `this.this$0.f`,
+    /// `m(args)` → `this.this$0.m(args)`. **Multinivel** (§8.1.3): si el miembro es de un enclosing más
+    /// lejano, encadena tantos `this$0` como niveles (`this.this$0.this$0.f`). La re-atribución los
+    /// vuelve a resolver ya cualificados.
+    fn rewrite_enclosing_access(&mut self, e: &mut Expr) {
+        if self.enclosing_type.is_none() {
+            return;
+        }
+        // Cadena de tipos envolventes por `this$0`: nivel 1 = enclosing directo, nivel 2 = el suyo, …
+        let chain = self.enclosing_chain();
+        enum Act {
+            Field(String, usize),
+            Receiver(usize),
+        }
+        let act = match (&e.kind, &e.binding) {
+            (ExprKind::Name(n), Some(Binding::Field(fid))) if !self.is_static_sym(*fid) => {
+                match self.enclosing_level(&chain, *fid) {
+                    Some(k) => Act::Field(n.clone(), k),
+                    None => return,
+                }
+            }
+            (ExprKind::Call { target: None, .. }, Some(Binding::Method(mid)))
+                if !self.is_static_sym(*mid) =>
+            {
+                match self.enclosing_level(&chain, *mid) {
+                    Some(k) => Act::Receiver(k),
+                    None => return,
+                }
+            }
+            _ => return,
+        };
+        match act {
+            Act::Field(n, k) => {
+                e.kind = ExprKind::Field { expr: Box::new(this0_chain(k)), name: n };
+            }
+            Act::Receiver(k) => {
+                if let ExprKind::Call { target, .. } = &mut e.kind {
+                    *target = Some(Box::new(this0_chain(k)));
+                }
+            }
+        }
+        e.binding = None; // la re-atribución la resuelve de nuevo, ya cualificada
+    }
+
+    /// `new Inner(args)` sobre una interna de **instancia** cuyo enclosing es la clase actual →
+    /// `new Inner(this, args)`. Solo en contexto de instancia (hay `this`); el `outer.new Inner()`
+    /// cualificado y el anidamiento multinivel quedan pendientes.
+    fn add_outer_arg(&mut self, e: &mut Expr) {
+        // `outer.new Inner(...)` **cualificado** (§15.9.2): la instancia envolvente la designa el
+        // calificador, no `this`. Se antepone tal cual —vale incluso en contexto estático, donde no
+        // hay `this`—, siempre que `Inner` sea una interna de instancia.
+        if matches!(&e.kind, ExprKind::NewObject { outer: Some(_), .. }) {
+            let Some(target) = e.ty.as_ref().and_then(types::erased_id) else { return };
+            if !self.is_instance_inner_id(target) {
+                return;
+            }
+            if let ExprKind::NewObject { args, outer, .. } = &mut e.kind {
+                let q = outer.take().expect("outer es Some por el guard");
+                args.insert(0, *q);
+            }
+            return;
+        }
+        if !self.has_this {
+            return;
+        }
+        let Some(target) = e.ty.as_ref().and_then(types::erased_id) else { return };
+        let tname = self.table.symbol(target).name.clone();
+        // Una clase **local** que NO captura la instancia envolvente maneja su captura aparte (`val$`):
+        // no lleva `this$0`. La que sí la captura pasa por acá igual que una interna.
+        if self.local_new_args.contains_key(&tname) && !self.local_uses_this.contains(&tname) {
+            return;
+        }
+        if !self.is_instance_inner_id(target) || self.table.symbol(target).owner != self.cur_class {
+            return;
+        }
+        if let ExprKind::NewObject { args, .. } = &mut e.kind {
+            args.insert(0, ex(ExprKind::This));
+        }
+    }
+
+    /// `Outer.this` (§15.8.4) → la cadena de `this$0` que va del `this` actual a la instancia
+    /// envolvente pedida. Si el calificador **es** la clase actual, es `this` a secas; si es la
+    /// envolvente directa, `this.this$0`; y para niveles más profundos, encadena `this$0` subiendo
+    /// por la cadena de internas de instancia (`this.this$0.this$0…`). La re-atribución resuelve
+    /// cada acceso ya cualificado.
+    fn lower_qualified_this(&mut self, e: &mut Expr) {
+        let ExprKind::QualifiedThis(Type::Class(name)) = &e.kind else { return };
+        // El nombre pedido es simple (`Outer`); se compara contra los nombres simples de la cadena.
+        let target = name.rsplit('.').next().unwrap_or(name).to_string();
+        let Some(mut cur) = self.cur_class else { return };
+        // El calificador ya es la clase actual → `this`.
+        if self.table.symbol(cur).name == target {
+            e.kind = ExprKind::This;
+            e.binding = None;
+            return;
+        }
+        // Sube por la cadena de owners (internas de instancia) acumulando accesos `this$0`.
+        let mut acc = ex(ExprKind::This);
+        while let Some(owner) = self.table.symbol(cur).owner {
+            acc = ex(ExprKind::Field { expr: Box::new(acc), name: "this$0".to_string() });
+            if self.table.symbol(owner).name == target {
+                e.kind = acc.kind;
+                e.binding = None;
+                return;
+            }
+            cur = owner;
+        }
+        // No apareció en la cadena: se deja como estaba y la barrera del emisor lo corta.
+    }
+
+    /// Reescribe, dentro del cuerpo de una clase local, un `Name` a un local **capturado** del método
+    /// envolvente en un acceso al campo sintético `this.val$nombre` (§14.3). La re-atribución lo
+    /// resuelve ya cualificado.
+    fn rewrite_captured_local(&mut self, e: &mut Expr) {
+        if self.captured_locals.is_empty() {
+            return;
+        }
+        let ExprKind::Name(n) = &e.kind else { return };
+        if !matches!(e.binding, Some(Binding::Local { .. })) || !self.captured_locals.contains_key(n) {
+            return;
+        }
+        let field = format!("val${n}");
+        e.kind = ExprKind::Field { expr: Box::new(ex(ExprKind::This)), name: field };
+        e.binding = None;
+    }
+
+    /// `new L(args)` de una clase **local** → `new L(val$capturas…, args)`: empuja los locales que la
+    /// clase captura, en orden, tal como están en scope en el sitio de uso.
+    fn add_local_captures_arg(&mut self, e: &mut Expr) {
+        let Some(target) = e.ty.as_ref().and_then(types::erased_id) else { return };
+        let tname = self.table.symbol(target).name.clone();
+        let Some(caps) = self.local_new_args.get(&tname).cloned() else { return };
+        if let ExprKind::NewObject { args, .. } = &mut e.kind {
+            let mut prefixed: Vec<Expr> = caps.iter().map(|n| name(n)).collect();
+            prefixed.append(args);
+            *args = prefixed;
+        }
+    }
+
+    /// Levanta una clase **local** (§14.3) a tipo anidado del enclosing, capturando sus locales
+    /// effectively-final en campos `val$` y —si se declara en un contexto de instancia— la instancia
+    /// envolvente en `this$0` (reusando el molde de las internas). Devuelve el `Member::Type` a
+    /// agregar a los miembros del enclosing.
+    fn lift_local_class(&mut self, mut lc: ClassDecl) -> Option<Member> {
+        let enclosing = self.cur_class?;
+        let scope = self.member_scope_of(enclosing);
+        let lc_cid = self.table.resolve_type(scope, &lc.name)?;
+        // El método envolvente de esta local/anónima, para su atributo `EnclosingMethod` (§4.7.7).
+        // Si se declaró en un inicializador (`cur_method_sig == None`), no se registra: `method_index`
+        // queda en 0, pero el `class_index` lo pone el emisor igual (la clase envolvente).
+        if let Some((name, desc)) = self.cur_method_sig.clone() {
+            self.table.set_enclosing_method(lc_cid, name, desc);
+        }
+        // Se captura `this$0` cuando el método envolvente tiene instancia: aunque no se use, es válido
+        // (un campo/parámetro de más), y evita un análisis de "usa la instancia envolvente" aparte.
+        let uses_this = self.has_this;
+
+        // Captura de locales: se reusa el análisis de variables libres de las lambdas, ignorando su
+        // `uses_this` (pensado para lambdas —sin `this` propio—; una local sí lo tiene).
+        let mut cap = Captures {
+            table: self.table,
+            declared: HashSet::new(),
+            free: Vec::new(),
+            uses_this: false,
+        };
+        for m in &lc.members {
+            if let Member::Method(me) = m {
+                cap.declared = me.params.iter().map(|p| p.name.clone()).collect();
+                if let Some(body) = &me.body {
+                    cap.block(body);
+                }
+            }
+        }
+        let free = cap.free;
+
+        // Primero los `val$` (parámetros de cola); el `this$0` lo antepone `capture_enclosing_instance`
+        // dentro de `class()` —cuando `enclosing_type` está seteado—, quedando el ctor `[this$0, val$…]`.
+        self.add_val_captures(&mut lc, lc_cid, &free);
+
+        self.captured_locals = free.iter().cloned().collect();
+        let fqn = self.cur_fqn.clone();
+        let saved_encl = self.enclosing_type;
+        self.enclosing_type = if uses_this { Some(enclosing) } else { None };
+        self.class(&mut lc, &fqn);
+        self.enclosing_type = saved_encl;
+        self.captured_locals.clear();
+
+        self.local_new_args.insert(lc.name.clone(), free.iter().map(|(n, _)| n.clone()).collect());
+        if uses_this {
+            self.local_uses_this.insert(lc.name.clone());
+        }
+        Some(Member::Type(lc))
+    }
+
+    /// Sintetiza en la clase local los campos `final T val$x` por cada local capturado y, en su
+    /// constructor (explícito o sintético), los parámetros de cabecera con sus asignaciones. Actualiza
+    /// el símbolo de cada constructor anteponiéndoles los tipos, para que `new L(val$…)` resuelva.
+    fn add_val_captures(&mut self, lc: &mut ClassDecl, lc_cid: SymbolId, free: &[(String, RType)]) {
+        if free.is_empty() {
+            return;
+        }
+        let scope = self.member_scope_of(lc_cid);
+        let mut params: Vec<Param> = Vec::new();
+        let mut assigns: Vec<Stmt> = Vec::new();
+        let mut rparams: Vec<RType> = Vec::new();
+        for (n, rt) in free {
+            let field = format!("val${n}");
+            let ty = rtype_to_type(self.table, rt);
+            let fid = self.table.new_symbol(Symbol {
+                name: field.clone(),
+                kind: SymbolKind::Field { ty: ty.clone() },
+                owner: Some(lc_cid),
+                modifiers: vec![Modifier::Final],
+            });
+            self.table.define(scope, &field, fid);
+            self.table.set_resolved(fid, Resolved::Field(rt.clone()));
+            lc.members.insert(
+                0,
+                Member::Field(FieldDecl {
+                    annotations: Vec::new(),
+                    type_annos: Vec::new(),
+                    pos: Pos::default(),
+                    modifiers: vec![Modifier::Final],
+                    ty: ty.clone(),
+                    name: field.clone(),
+                    init: None,
+                }),
+            );
+            params.push(synth_param(ty, field.clone()));
+            assigns.push(val_assign(&field));
+            rparams.push(rt.clone());
+        }
+
+        // AST: al constructor explícito se le anteponen params + asignaciones; si no hay, se sintetiza.
+        let had_ctor = lc.members.iter().any(|m| matches!(m, Member::Method(me) if me.is_constructor));
+        if had_ctor {
+            for m in lc.members.iter_mut() {
+                let Member::Method(me) = m else { continue };
+                if !me.is_constructor {
+                    continue;
+                }
+                for (i, p) in params.iter().enumerate() {
+                    me.params.insert(i, p.clone());
+                }
+                if let Some(body) = &mut me.body {
+                    let at = usize::from(starts_with_ctor_call(body));
+                    for (i, a) in assigns.iter().enumerate() {
+                        body.0.insert(at + i, a.clone());
+                    }
+                }
+            }
+        } else {
+            lc.members.push(Member::Method(MethodDecl {
+                annotations: Vec::new(),
+                pos: Pos::default(),
+                modifiers: vec![Modifier::Public],
+                type_params: Vec::new(),
+                return_annos: Vec::new(),
+                return_type: Type::Void,
+                name: lc.name.clone(),
+                params: params.clone(),
+                throws: Vec::new(),
+                throws_annos: Vec::new(),
+                body: Some(Block(assigns.clone())),
+                is_constructor: true,
+            }));
+        }
+        // Símbolo: a cada constructor (incluido el default que `enter` sintetizó) se le anteponen los
+        // tipos capturados a sus parámetros resueltos. El ctor de una **anónima** puede no tener
+        // `Resolved` aún (se registra tras la resolución de Enter), así que se **fija** —no solo se
+        // actualiza—: sin esto, `new $1(cap)` no resolvía el ctor `(cap)V` y caía al `()V` por
+        // defecto, empujando un argumento que el descriptor no consumía (el verificador lo rechazaba).
+        for ctor in constructors(self.table, lc_cid) {
+            let (existing, ret, varargs, throws) = match self.table.resolved(ctor) {
+                Some(Resolved::Method { params, ret, varargs, throws }) => {
+                    (params.clone(), ret.clone(), *varargs, throws.clone())
+                }
+                _ => (Vec::new(), RType::Void, false, Vec::new()),
+            };
+            let mut np = rparams.clone();
+            np.extend(existing);
+            self.table.set_resolved(ctor, Resolved::Method { params: np, ret, varargs, throws });
+        }
+    }
+
+    fn member_scope_of(&self, cid: SymbolId) -> ScopeId {
+        match &self.table.symbol(cid).kind {
+            SymbolKind::Class { members, .. } => *members,
+            _ => self.top_scope,
+        }
+    }
+
+    /// Pliega una etiqueta de `case` a un literal entero si es una **expresión constante** (§15.28):
+    /// una `static final int` (`case MAX:`), aritmética entre constantes (`case 1 + 2:`), etc. Así el
+    /// emisor —que solo entiende literales— la acepta. Las que no plegan quedan igual.
+    fn fold_case_label(&self, l: &mut CaseLabel) {
+        let CaseLabel::Constant(e) = l else { return };
+        if matches!(e.kind, ExprKind::IntLit(_)) {
+            return;
+        }
+        let scope = self.cur_class.map_or(self.top_scope, |c| self.member_scope_of(c));
+        if let Some(v) = fold_const_int(self.table, scope, &self.consts, e) {
+            *e = ex(ExprKind::IntLit(v as i64));
+        }
+    }
+    fn member_owner_is(&self, sym: SymbolId, class: SymbolId) -> bool {
+        self.table.symbol(sym).owner == Some(class)
+    }
+    /// La cadena de tipos envolventes alcanzables por `this$0` desde la clase en curso: `[enclosing
+    /// directo, su enclosing, …]`. Se sube mientras cada eslabón sea una **interna de instancia** (la
+    /// única que lleva su propio `this$0` al siguiente).
+    fn enclosing_chain(&self) -> Vec<SymbolId> {
+        let mut chain = Vec::new();
+        let mut cur = self.enclosing_type;
+        while let Some(c) = cur {
+            chain.push(c);
+            cur = if self.is_instance_inner_id(c) { self.table.symbol(c).owner } else { None };
+        }
+        chain
+    }
+    /// El **número de saltos `this$0`** (1-based) hasta el enclosing de la cadena que declara `member`,
+    /// o `None` si no pertenece a ninguno.
+    fn enclosing_level(&self, chain: &[SymbolId], member: SymbolId) -> Option<usize> {
+        chain.iter().position(|&c| self.member_owner_is(member, c)).map(|i| i + 1)
+    }
+    fn is_static_sym(&self, sym: SymbolId) -> bool {
+        self.table.symbol(sym).modifiers.contains(&Modifier::Static)
+    }
+    /// ¿`id` es una interna de **instancia** (una `class` no-estática miembro de otra clase)?
+    fn is_instance_inner_id(&self, id: SymbolId) -> bool {
+        let s = self.table.symbol(id);
+        matches!(s.kind, SymbolKind::Class { kind: TypeKind::Class, .. })
+            && !s.modifiers.contains(&Modifier::Static)
+            && matches!(s.owner.map(|o| &self.table.symbol(o).kind), Some(SymbolKind::Class { .. }))
     }
 }
 
@@ -2462,9 +3278,50 @@ fn metafactory_indy(
     }
 }
 
+/// El acceso `this.this$0` — la instancia envolvente capturada de una interna de instancia.
+fn this0_access() -> Expr {
+    ex(ExprKind::Field { expr: Box::new(ex(ExprKind::This)), name: "this$0".to_string() })
+}
+
+/// `this.this$0.this$0…` con `hops` accesos encadenados — el camino a la instancia envolvente que está
+/// `hops` niveles hacia afuera (§8.1.3). `this0_chain(1)` == [`this0_access`].
+fn this0_chain(hops: usize) -> Expr {
+    let mut e = ex(ExprKind::This);
+    for _ in 0..hops {
+        e = ex(ExprKind::Field { expr: Box::new(e), name: "this$0".to_string() });
+    }
+    e
+}
+
+/// La sentencia `this.this$0 = this$0;` — asigna el parámetro de captura al campo sintético.
+fn this0_assign() -> Stmt {
+    st(StmtKind::Expr(assign_expr(this0_access(), name("this$0"))))
+}
+
+/// La sentencia `this.val$x = val$x;` — asigna el parámetro de captura de un local al campo `val$x`.
+fn val_assign(field: &str) -> Stmt {
+    let target = ex(ExprKind::Field { expr: Box::new(ex(ExprKind::This)), name: field.to_string() });
+    st(StmtKind::Expr(assign_expr(target, name(field))))
+}
+
+/// ¿Es `class` una **interna de instancia** (una `class` no-estática)? Las interfaces, `enum` y
+/// `record` anidados son implícitamente estáticos (§8.1.3/§8.9/§8.10): no capturan el entorno.
+fn is_instance_inner(class: &ClassDecl) -> bool {
+    class.kind == TypeKind::Class && !class.modifiers.contains(&Modifier::Static)
+}
+
+/// ¿El cuerpo de un constructor arranca con un `super(...)`/`this(...)` explícito (§8.8.7.1)?
+fn starts_with_ctor_call(body: &Block) -> bool {
+    matches!(
+        body.0.first().map(|s| &s.kind),
+        Some(StmtKind::Expr(e))
+            if matches!(&e.kind, ExprKind::Call { name, .. } if name == "super" || name == "this")
+    )
+}
+
 /// Un parámetro sintético, sin anotaciones ni `final`/`varargs`.
 fn synth_param(ty: Type, name: String) -> Param {
-    Param { annotations: Vec::new(), ty, name, varargs: false, is_final: false }
+    Param { annotations: Vec::new(), ty, name, varargs: false, is_final: false, type_annos: Vec::new() }
 }
 
 /// El análisis de **variables libres** del cuerpo de una lambda (§15.27.2): qué locales del método
@@ -2793,6 +3650,10 @@ fn rtype_to_type(table: &SymbolTable, t: &RType) -> Type {
         RType::Class(id) | RType::TypeVar(id) => Type::Class(table.symbol(*id).name.clone()),
         RType::Parameterized { base, .. } => Type::Class(table.symbol(*base).name.clone()),
         RType::Array(e) => Type::Array(Box::new(rtype_to_type(table, e))),
+        // Una variable de captura se materializa por su cota superior (su *erasure*).
+        RType::Capture { upper, .. } => rtype_to_type(table, upper),
+        RType::Intersection(ms) => ms.first().map_or(Type::Var, |m| rtype_to_type(table, m)),
+        RType::InferVar(_) => Type::Var,
         RType::Unresolved => Type::Var,
     }
 }
@@ -2827,7 +3688,7 @@ mod tests {
     use crate::javac::{attribute::attribute, enter::enter, flow::flow, lexer::tokenize, parser::parse};
 
     fn desugared(src: &str) -> CompilationUnit {
-        let mut unit = parse(tokenize(src).unwrap()).unwrap();
+        let mut unit = parse(tokenize(src).unwrap()).0;
         let (mut table, _e1) = enter(&unit);
         attribute(&mut unit, &table); // decora (desugar necesita los tipos)
         desugar(&mut unit, &mut table);
@@ -2859,7 +3720,7 @@ mod tests {
 
     /// Verifica que el árbol **bajado** vuelva a tipar y fluir sin errores nuevos.
     fn preserves_semantics(src: &str) {
-        let mut unit = parse(tokenize(src).unwrap()).unwrap();
+        let mut unit = parse(tokenize(src).unwrap()).0;
         let (mut table, e1) = enter(&unit);
         let e2 = attribute(&mut unit, &table);
         assert!(e1.is_empty() && e2.is_empty(), "el fuente ya tenía errores: {e1:?} {e2:?}");

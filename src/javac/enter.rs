@@ -14,13 +14,14 @@
 //! salen sin línea/columna (0:0), con el nombre en el mensaje. Cuando el AST tenga *spans*,
 //! se enriquecen.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use super::ast::{
-    Block, ClassDecl, CompilationUnit, Expr, ExprKind, LambdaBody, MethodRefQualifier, Member,
-    MethodDecl, Modifier, Pattern, Pos, PrimType, Stmt, StmtKind, SwitchBody, Type, TypeArg,
-    TypeKind, TypeParam as AstTypeParam,
+    Block, CaseLabel, ClassDecl, CompilationUnit, Expr, ExprKind, LambdaBody, MethodRefQualifier,
+    Member, MethodDecl, Modifier, Param, Pattern, Pos, PrimType, Stmt, StmtKind, SwitchBody, Type,
+    TypeArg, TypeKind, TypeParam as AstTypeParam,
 };
 use super::classfile::{self, ExternalClass};
 use super::symbol::{
@@ -48,6 +49,11 @@ const JAVA_LANG: &[&str] = &[
 /// compilador ([`classfile`]). Es el reemplazo real del set modelado.
 struct ClassFinder {
     classpath: Vec<PathBuf>,
+    /// **Memoización de misses** (finding #19): nombres internos que ya se buscaron y **no** están en
+    /// ningún directorio del classpath. Un tipo ausente referenciado transitivamente por muchas clases
+    /// (p. ej. `RegexParser`, que no está en el `-cp`) se re-buscaba en disco cada vez —lectura fallida
+    /// por cada directorio—; con esto la segunda búsqueda del mismo nombre es O(1).
+    missed: RefCell<HashSet<String>>,
 }
 
 impl ClassFinder {
@@ -59,19 +65,29 @@ impl ClassFinder {
     /// compilador razonaría sobre una jerarquía falsa y, por ejemplo, el *boxing* de la fase 2
     /// del overload resolution no podría probar `Integer <: Number`. `boot/` es del intérprete,
     /// no del compilador.
-    fn new() -> Self {
-        ClassFinder {
-            classpath: vec![PathBuf::from(".jdk25_tmp/classes/java.base"), PathBuf::from("boot")],
-        }
+    /// `extra` son directorios de `.class` **antepuestos** al classpath por defecto (finding #7):
+    /// se buscan **primero**, así un tipo ahí (KajiLibrary ya compilado) sombrea al del JDK.
+    fn new(extra: &[PathBuf]) -> Self {
+        let mut classpath: Vec<PathBuf> = extra.to_vec();
+        classpath.push(PathBuf::from(".jdk25_tmp/classes/java.base"));
+        classpath.push(PathBuf::from("boot"));
+        ClassFinder { classpath, missed: RefCell::new(HashSet::new()) }
     }
 
-    /// Lee `<internal>.class` (nombre interno con `/`) del primer directorio donde aparezca.
+    /// Lee `<internal>.class` (nombre interno con `/`) del primer directorio donde aparezca. Un miss
+    /// se **memoiza** (finding #19): un nombre ya sabido ausente se descarta sin volver a tocar el
+    /// disco. No se cachean los *hits*: el llamador registra el tipo cargado en la tabla y su guardia
+    /// (`table.external(...)`) evita re-cargarlo, así que el mismo nombre no se re-busca cuando existe.
     fn find(&self, internal: &str) -> Option<ExternalClass> {
+        if self.missed.borrow().contains(internal) {
+            return None;
+        }
         for dir in &self.classpath {
             if let Ok(bytes) = std::fs::read(dir.join(format!("{internal}.class"))) {
                 return classfile::read(&bytes);
             }
         }
+        self.missed.borrow_mut().insert(internal.to_string());
         None
     }
 }
@@ -82,6 +98,10 @@ fn load_externals(table: &mut SymbolTable, finder: &ClassFinder, unit: &Compilat
     let mut names: HashSet<String> = HashSet::new();
     for class in &unit.types {
         collect_type_names(class, &mut names);
+        // Los **tipos de anotación** también se cargan: sin esto, `@Deprecated` (java.lang, externo)
+        // no resolvía y su descriptor salía `LDeprecated;` en vez de `Ljava/lang/Deprecated;` en
+        // `RuntimeVisible[Parameter]Annotations` — un tipo que la reflexión no encuentra.
+        collect_annotation_names(class, &mut names);
     }
     // Los tipos **core** de `java.lang` se cargan siempre, aunque ninguna firma los nombre: el
     // fuente los usa igual sin declararlos (un literal `"x"` es un `String`, `id(1)` boxea a
@@ -92,7 +112,7 @@ fn load_externals(table: &mut SymbolTable, finder: &ClassFinder, unit: &Compilat
         names.insert((*name).to_string());
     }
     for name in names {
-        try_load(table, finder, &name, imports);
+        try_load(table, finder, &name, imports, unit.package.as_deref());
     }
 }
 
@@ -128,6 +148,40 @@ fn collect_type_names(class: &ClassDecl, out: &mut HashSet<String>) {
             }
             Member::Type(nested) => collect_type_names(nested, out),
             Member::StaticInit(b) | Member::InstanceInit(b) => collect_from_block(b, out),
+        }
+    }
+}
+
+/// Los nombres de los **tipos de anotación** usados en las declaraciones (clase, parámetros de tipo,
+/// constantes de `enum`, campos, métodos, parámetros), para que el finder los cargue del classpath —
+/// así `@Deprecated` resuelve a `java.lang.Deprecated` y su descriptor sale cualificado.
+fn collect_annotation_names(class: &ClassDecl, out: &mut HashSet<String>) {
+    fn add(anns: &[super::ast::Annotation], out: &mut HashSet<String>) {
+        for a in anns {
+            out.insert(a.name.clone());
+        }
+    }
+    add(&class.annotations, out);
+    for tp in &class.type_params {
+        add(&tp.annotations, out);
+    }
+    for ec in &class.enum_constants {
+        add(&ec.annotations, out);
+    }
+    for member in &class.members {
+        match member {
+            Member::Field(f) => add(&f.annotations, out),
+            Member::Method(m) => {
+                add(&m.annotations, out);
+                for p in &m.params {
+                    add(&p.annotations, out);
+                }
+                for tp in &m.type_params {
+                    add(&tp.annotations, out);
+                }
+            }
+            Member::Type(nested) => collect_annotation_names(nested, out),
+            _ => {}
         }
     }
 }
@@ -262,6 +316,18 @@ fn collect_from_stmt(s: &Stmt, out: &mut HashSet<String>) {
     }
 }
 
+/// Si `e` es un nombre simple (`Objects`) o una cadena `a.b.C` de puros nombres/campos (el receptor
+/// de una llamada o campo estático), lo devuelve **punteado** como candidato a **tipo**. `None` para
+/// cualquier otra expresión (una llamada, un índice, `this`…). Distinguir tipo de variable es de la
+/// pasada 2; acá solo se decide qué **intentar cargar** del classpath.
+fn qualifier_name(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Name(n) => Some(n.clone()),
+        ExprKind::Field { expr, name } => Some(format!("{}.{name}", qualifier_name(expr)?)),
+        _ => None,
+    }
+}
+
 fn collect_from_expr(e: &Expr, out: &mut HashSet<String>) {
     match &e.kind {
         // Las formas que **introducen** un nombre de tipo.
@@ -274,8 +340,13 @@ fn collect_from_expr(e: &Expr, out: &mut HashSet<String>) {
             collect_from_expr(expr, out);
         }
         ExprKind::ClassLit(ty) => collect_from_type(ty, out),
-        ExprKind::NewObject { ty, args, body } => {
+        // `Outer.this` menciona el tipo de la clase envolvente.
+        ExprKind::QualifiedThis(ty) => collect_from_type(ty, out),
+        ExprKind::NewObject { ty, args, body, outer } => {
             collect_from_type(ty, out);
+            if let Some(o) = outer {
+                collect_from_expr(o, out);
+            }
             args.iter().for_each(|a| collect_from_expr(a, out));
             if let Some(members) = body {
                 for m in members {
@@ -325,12 +396,26 @@ fn collect_from_expr(e: &Expr, out: &mut HashSet<String>) {
         }
         ExprKind::Call { target, args, type_args, .. } => {
             if let Some(t) = target {
+                // El **receptor** de una llamada puede ser un **tipo** (llamada estática:
+                // `Objects.requireNonNull(x)`, `Sib.v()`). Se marca como candidato a cargar — que de
+                // veras sea un tipo lo decide la pasada 2; acá solo hay que intentar traerlo del
+                // classpath. Sin esto, las utilidades de `java.util` (y cualquier tipo referenciado
+                // **solo** por una llamada estática) nunca se cargaban (findings #11 y #7).
+                if let Some(q) = qualifier_name(t) {
+                    out.insert(q);
+                }
                 collect_from_expr(t, out);
             }
             args.iter().for_each(|a| collect_from_expr(a, out));
             type_args.iter().for_each(|a| collect_from_type_arg(a, out));
         }
-        ExprKind::Field { expr, .. } => collect_from_expr(expr, out),
+        // Ídem para un **campo** estático (`Integer.MAX_VALUE`, `System.out`): el receptor es un tipo.
+        ExprKind::Field { expr, .. } => {
+            if let Some(q) = qualifier_name(expr) {
+                out.insert(q);
+            }
+            collect_from_expr(expr, out);
+        }
         ExprKind::Index { array, index } => {
             collect_from_expr(array, out);
             collect_from_expr(index, out);
@@ -360,13 +445,21 @@ fn collect_from_expr(e: &Expr, out: &mut HashSet<String>) {
         | ExprKind::This
         // `Indy` lo produce el desugar, muy posterior a Enter: nunca aparece en esta pasada.
         | ExprKind::Indy { .. }
+        // Un nodo de error no menciona ningún tipo que cargar.
+        | ExprKind::Error
         | ExprKind::Super => {}
     }
 }
 
 /// Intenta cargar `name` desde el classpath (si no es ya del fuente o un externo cargado).
 /// Prueba rutas candidatas: el nombre cualificado, o `java/lang/<simple>` + los imports.
-fn try_load(table: &mut SymbolTable, finder: &ClassFinder, name: &str, imports: &Imports) {
+fn try_load(
+    table: &mut SymbolTable,
+    finder: &ClassFinder,
+    name: &str,
+    imports: &Imports,
+    pkg: Option<&str>,
+) {
     let simple = name.rsplit('.').next().unwrap_or(name);
     if table.class(name).is_some() || table.external(simple).is_some() {
         return;
@@ -379,6 +472,25 @@ fn try_load(table: &mut SymbolTable, finder: &ClassFinder, name: &str, imports: 
         if let Some(fqn) = imports.single.get(name) {
             candidates.push(fqn.replace('.', "/"));
         }
+        // Mismo paquete (§6.5.5.1): un tipo del **paquete actual** en el classpath es visible por su
+        // nombre simple, sin `import` (finding #4). P. ej. `List` desde `package java.util` → busca
+        // `java/util/List`. Antes solo se probaba `java/lang/List`, y quedaba sin resolver.
+        if let Some(p) = pkg {
+            candidates.push(format!("{}/{name}", p.replace('.', "/")));
+        }
+        // Nombre **pelado**: un tipo del **paquete por defecto** en el classpath (su nombre interno
+        // es el simple, sin paquete). Es lo que permite referenciar una clase KajiLibrary-only por
+        // `-cp` (finding #7). Va último: `java.lang` y los imports tienen precedencia.
+        candidates.push(name.to_string());
+    }
+    // **source-shadows-classpath** (findings #5/#7/#19): si **algún** candidato corresponde a un tipo
+    // **fuente** de esta compilación, no se carga nada del classpath —el tipo ya existe—. La guardia de
+    // arriba solo mira el nombre tal cual (`table.class(name)`), que no matchea cuando el fuente está
+    // en un **paquete** y se lo referencia por su nombre simple (`K1` vs el registrado `p.K1`). Sin
+    // esto, compilar con el propio output en el `-cp` cargaba cada clase hermana como un externo
+    // redundante que arrastra su jerarquía — el disparo lento del #19.
+    if candidates.iter().any(|c| table.class(&c.replace('/', ".")).is_some()) {
+        return;
     }
     for internal in candidates {
         if let Some(ext) = finder.find(&internal) {
@@ -412,6 +524,7 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
             binary: ext.name.clone(),
             extends,
             implements,
+            permits: Vec::new(),
             members,
         },
         owner: None,
@@ -462,6 +575,12 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         if m.is_static {
             mmods.push(Modifier::Static);
         }
+        // Un método de **interfaz** externa que no es ni `abstract` ni `static` es un `default` (§9.4):
+        // lleva cuerpo, o sea **implementa**. Marcarlo evita que el chequeo de completitud de
+        // abstractos (§8.1.1.1) lo reclame como pendiente (finding #8). `<init>`/`<clinit>` no cuentan.
+        if ext.is_interface && !m.is_abstract && !m.is_static && !m.name.starts_with('<') {
+            mmods.push(Modifier::Default);
+        }
         let mid = table.new_symbol(Symbol {
             name: m.name.clone(),
             kind: SymbolKind::Method {
@@ -497,7 +616,10 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         ext.super_name.iter().chain(ext.interfaces.iter()).cloned().collect();
     for dotted in supers {
         let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
-        if table.external(simple).is_none() {
+        // No re-cargar un supertipo ya externo, ni uno que es un tipo **fuente** de esta compilación
+        // (source-shadows-classpath, #19: evita arrastrar la jerarquía externa redundante cuando el
+        // propio output está en el `-cp`).
+        if table.external(simple).is_none() && table.class(&dotted).is_none() {
             if let Some(sup) = finder.find(&dotted.replace('.', "/")) {
                 build_external(table, finder, &sup);
             }
@@ -521,6 +643,13 @@ fn define_type_params(table: &mut SymbolTable, scope: ScopeId, owner: SymbolId, 
 /// Corre la pasada 1 completa (Enter + MemberEnter) sobre `unit`, devolviendo la tabla de
 /// símbolos y la lista de errores acumulados.
 pub fn enter(unit: &CompilationUnit) -> (SymbolTable, Vec<Error>) {
+    enter_cp(unit, &[])
+}
+
+/// [`enter`] con un **classpath extra** de directorios de `.class` (finding #7): se **antepone** al
+/// classpath por defecto, así los tipos que estén ahí (p. ej. los ya compilados de KajiLibrary)
+/// **sombrean** a los del JDK. `extra_classpath` vacío = comportamiento por defecto.
+pub fn enter_cp(unit: &CompilationUnit, extra_classpath: &[PathBuf]) -> (SymbolTable, Vec<Error>) {
     let mut table = SymbolTable::new();
     let mut errors = Vec::new();
     let pkg = unit.package.as_deref();
@@ -543,13 +672,18 @@ pub fn enter(unit: &CompilationUnit) -> (SymbolTable, Vec<Error>) {
     for class in &unit.types {
         member_enter_type(&mut table, &mut errors, class, base);
     }
+    // Las clases **locales** (§14.3) no se registran acá: viven en cuerpos de método y su registro
+    // pide **renombrarlas** a un nombre único (`1L`, `2L`…) para que dos homónimas en distintos
+    // bloques del mismo enclosing no colisionen (la tabla clavea el tipo por nombre y el codegen deriva
+    // el binary de él). Eso muta el AST, así que va en la pasada `register_local_classes`, que corre
+    // con `&mut unit` justo después de `enter`.
 
     // Resolución — cierra la pasada 1: carga tipos externos, procesa imports y valida que los
     // tipos de supertipos y firmas existan, reportando los que no se encuentran.
     let imports = Imports::from_unit(unit);
     // **Class finder real**: carga desde el classpath los tipos externos referenciados, con
     // sus miembros leídos del `.class`.
-    let finder = ClassFinder::new();
+    let finder = ClassFinder::new(extra_classpath);
     load_externals(&mut table, &finder, unit, &imports);
     // Respaldo: stubs modelados de `java.lang` para lo que no se encontró en disco.
     for &name in JAVA_LANG {
@@ -583,7 +717,7 @@ fn resolve_symbols(table: &mut SymbolTable) {
     for id in 0..table.symbol_count() {
         // Clonamos el kind para no sostener el borrow mientras resolvemos y escribimos.
         let resolved = match table.symbol(id).kind.clone() {
-            SymbolKind::Class { kind, extends, implements, members, .. } => {
+            SymbolKind::Class { kind, extends, implements, permits, members, .. } => {
                 // Los supertipos se guardan **con sus argumentos** (`extends Base<T>`): el
                 // subtipado genérico los sustituye al subir por la jerarquía. Se resuelven en el
                 // scope de la clase, que es donde están sus propios parámetros de tipo.
@@ -594,11 +728,32 @@ fn resolve_symbols(table: &mut SymbolTable) {
                     None if kind == TypeKind::Enum => {
                         Some(resolve_rtype(table, members, &Type::Class("Enum".into())))
                     }
+                    // Un `record` extiende implícitamente `java.lang.Record` (§8.10) — es lo que la
+                    // reflexión chequea para `isRecord()`, junto al atributo `Record` y el `final`.
+                    None if kind == TypeKind::Record => {
+                        Some(resolve_rtype(table, members, &Type::Class("Record".into())))
+                    }
+                    // Una **clase** sin `extends` explícito hereda de `java.lang.Object` (§8.1.4): sin
+                    // esto, `super_class` quedaba `None` y la resolución de miembros sobre `this` no
+                    // alcanzaba los métodos de `Object` (`getClass`/`hashCode`/`toString`) — finding #22.
+                    // Se enlaza solo si `Object` resolvió a una clase concreta **distinta de esta misma**
+                    // (evita el ciclo de la propia `Object`, y no cambia nada si `Object` no está cargado —
+                    // p.ej. tests sin classpath—). Las **interfaces** no tienen superclase.
+                    None if kind == TypeKind::Class => {
+                        match resolve_rtype(table, members, &Type::Class("Object".into())) {
+                            RType::Class(c) if c != id => Some(RType::Class(c)),
+                            _ => None,
+                        }
+                    }
                     None => None,
                 };
                 let interface_types =
                     implements.iter().map(|t| resolve_rtype(table, members, t)).collect();
-                Some(Resolved::Class { super_type, interface_types })
+                // Los subtipos de `permits` se resuelven en el scope de la clase (donde viven sus
+                // parámetros de tipo). El chequeo de buena formación (§8.1.6) lo hace la pasada 3.
+                let permitted =
+                    permits.iter().map(|t| resolve_rtype(table, members, t)).collect();
+                Some(Resolved::Class { super_type, interface_types, permitted })
             }
             SymbolKind::Field { ty } => {
                 let scope = owner_scope(table, id);
@@ -631,6 +786,35 @@ fn resolve_symbols(table: &mut SymbolTable) {
             table.set_resolved(id, r);
         }
     }
+    fill_implicit_permits(table);
+}
+
+/// El `permits` **implícito** (§8.1.6): un tipo `sealed` que no escribió `permits` autoriza a los
+/// subtipos **directos** declarados en la misma unidad. Se rellena el `permitted` resuelto con ellos
+/// para que el chequeo de exhaustividad y el de las reglas de sealed vean el conjunto completo. Corre
+/// al final de cada `resolve_symbols` (idempotente): así una re-resolución no lo pierde.
+fn fill_implicit_permits(table: &mut SymbolTable) {
+    // Subtipos directos por supertipo (erasure), sobre todas las clases conocidas.
+    let mut subs: std::collections::HashMap<SymbolId, Vec<SymbolId>> = std::collections::HashMap::new();
+    for id in 0..table.symbol_count() {
+        if !matches!(table.symbol(id).kind, SymbolKind::Class { .. }) {
+            continue;
+        }
+        if let Some(s) = table.super_class(id) {
+            subs.entry(s).or_default().push(id);
+        }
+        for i in table.interfaces(id) {
+            subs.entry(i).or_default().push(id);
+        }
+    }
+    for id in 0..table.symbol_count() {
+        if table.is_sealed(id) && table.permitted(id).is_empty() {
+            if let Some(children) = subs.get(&id) {
+                let rts = children.iter().map(|&c| RType::Class(c)).collect();
+                table.set_permitted(id, rts);
+            }
+        }
+    }
 }
 
 /// El scope donde se resuelven los tipos de un miembro: el de su clase dueña.
@@ -646,6 +830,10 @@ fn owner_scope(table: &SymbolTable, id: SymbolId) -> ScopeId {
     match table.symbol(id).owner {
         Some(owner) => match &table.symbol(owner).kind {
             SymbolKind::Class { members, .. } => *members,
+            // Un parámetro de tipo de un **método** (`<L extends Lst<T>>`) resuelve su cota en el
+            // scope propio del método: ahí viven los params **hermanos** (`T`) y, encadenando hacia
+            // arriba, las clases del paquete (`Lst`). Con `global` ni uno ni otro se veían.
+            SymbolKind::Method { .. } => table.own_scope(owner).unwrap_or(table.global),
             _ => table.global,
         },
         None => table.global,
@@ -691,7 +879,12 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
     // normaliza a puntos para tratarlo igual que uno del fuente.
     let dotted = name.replace('/', ".");
     if let Some(rest) = dotted.strip_prefix("java.lang.") {
-        return table.external(rest).map(|id| (id, false));
+        // **Shadowing** del fuente (semántica `--patch-module`, finding #5): si esta compilación
+        // **declara** `java.lang.X` (p. ej. se está compilando `java.lang.String` en sí), ese tipo
+        // del fuente gana sobre el externo del classpath. Sin esto, el `String` que devuelve
+        // `Object.toString()` (leído del `.class`) ligaba al `String` **externo**, distinto del que se
+        // compila, y el override covariante los veía como dos tipos distintos.
+        return table.class(&dotted).or_else(|| table.external(rest)).map(|id| (id, false));
     }
     if dotted.contains('.') {
         // Cualificado: una clase del **fuente** (por su nombre completo) o un **externo** por su
@@ -883,7 +1076,7 @@ fn qualify(enclosing: &str, name: &str) -> String {
 
 /// Reporta un error de la pasada 1 en la posición de la declaración culpable.
 fn error(errors: &mut Vec<Error>, pos: Pos, message: String) {
-    errors.push(Error { message, line: pos.line, col: pos.col });
+    errors.push(Error::new(message, pos.line, pos.col));
 }
 
 /// **Enter** de un tipo: crea su `ClassSymbol` (dueño = `owner`, en `owner_scope`) y recurre
@@ -919,6 +1112,7 @@ fn enter_type(
             binary: binary.clone(),
             extends: class.extends.clone(),
             implements: class.implements.clone(),
+            permits: class.permits.clone(),
             members,
         },
         owner: Some(owner),
@@ -1071,6 +1265,889 @@ fn member_enter_type(table: &mut SymbolTable, errors: &mut Vec<Error>, class: &C
     synth_implicit_methods(table, class, cid, scope);
 }
 
+/// Transforma cada **clase anónima** (`new Tipo(){ miembros }`, §15.9.5) en una clase **local**
+/// sintética `$N` + un `new $N()`, para que recorra el mismo camino que una local (registro, tipado
+/// in situ, levantado, captura). Corre **después** de `enter` —los tipos ya están resueltos, para
+/// decidir `extends` (clase) vs `implements` (interfaz)— y antes de Attribute. Este incremento cubre
+/// las anónimas **sin argumentos de super** (`new Tipo(){…}`); las que los llevan quedan para el
+/// emisor (barrera).
+pub fn hoist_anonymous(unit: &mut CompilationUnit, table: &mut SymbolTable, errors: &mut Vec<Error>) {
+    let base = unit.package.as_deref().unwrap_or("").to_string();
+    {
+        let mut h = Hoister { table: &mut *table, errors };
+        for class in &mut unit.types {
+            h.class(class, &base);
+        }
+    }
+    // Las clases anónimas sintéticas se registran **después** del último `resolve_symbols` (el de
+    // `enter` y el de `register_local_classes`), así que sus miembros quedan **sin resolver**. Se
+    // re-resuelve (idempotente) para que un campo propio de una anónima tenga su `Resolved::Field`
+    // — sin esto una referencia **pelada** a ese campo (`c`, no `this.c`) no se encontraba.
+    resolve_symbols(table);
+}
+
+struct Hoister<'a> {
+    table: &'a mut SymbolTable,
+    errors: &'a mut Vec<Error>,
+}
+
+impl Hoister<'_> {
+    fn class(&mut self, class: &mut ClassDecl, enclosing_fqn: &str) {
+        let fqn = qualify(enclosing_fqn, &class.name);
+        let Some(cid) = self.table.class(&fqn) else { return };
+        let (scope, binary) = match &self.table.symbol(cid).kind {
+            SymbolKind::Class { members, binary, .. } => (*members, binary.clone()),
+            _ => return,
+        };
+        let mut counter = 0u32;
+        for member in &mut class.members {
+            match member {
+                Member::Method(m) => {
+                    if let Some(body) = &mut m.body {
+                        self.block(body, cid, scope, &binary, &fqn, &mut counter);
+                    }
+                }
+                Member::StaticInit(b) | Member::InstanceInit(b) => {
+                    self.block(b, cid, scope, &binary, &fqn, &mut counter);
+                }
+                Member::Type(nested) => self.class(nested, &fqn),
+                Member::Field(_) => {}
+            }
+        }
+    }
+
+    /// Reescribe un bloque intercalando, **antes** de cada sentencia, las `LocalClass` sintéticas de
+    /// las anónimas que aparezcan en sus expresiones (así los locales capturados están en scope).
+    fn block(
+        &mut self,
+        block: &mut Block,
+        owner: SymbolId,
+        scope: ScopeId,
+        binary: &str,
+        fqn: &str,
+        counter: &mut u32,
+    ) {
+        let mut out: Vec<Stmt> = Vec::with_capacity(block.0.len());
+        for mut stmt in block.0.drain(..) {
+            let mut decls: Vec<Stmt> = Vec::new();
+            self.stmt(&mut stmt, owner, scope, binary, fqn, counter, &mut decls);
+            out.append(&mut decls);
+            out.push(stmt);
+        }
+        block.0 = out;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn stmt(
+        &mut self,
+        stmt: &mut Stmt,
+        owner: SymbolId,
+        scope: ScopeId,
+        binary: &str,
+        fqn: &str,
+        counter: &mut u32,
+        decls: &mut Vec<Stmt>,
+    ) {
+        match &mut stmt.kind {
+            StmtKind::LocalVar { init: Some(e), .. }
+            | StmtKind::Return(Some(e))
+            | StmtKind::Expr(e)
+            | StmtKind::Throw(e)
+            | StmtKind::Yield(e) => self.expr(e, owner, scope, binary, fqn, counter, decls),
+            StmtKind::If { cond, then, els } => {
+                self.expr(cond, owner, scope, binary, fqn, counter, decls);
+                self.stmt(then, owner, scope, binary, fqn, counter, decls);
+                if let Some(e) = els {
+                    self.stmt(e, owner, scope, binary, fqn, counter, decls);
+                }
+            }
+            StmtKind::While { cond, body } | StmtKind::Do { body, cond } => {
+                self.expr(cond, owner, scope, binary, fqn, counter, decls);
+                self.stmt(body, owner, scope, binary, fqn, counter, decls);
+            }
+            StmtKind::For { init, cond, update, body } => {
+                if let Some(i) = init {
+                    self.stmt(i, owner, scope, binary, fqn, counter, decls);
+                }
+                if let Some(c) = cond {
+                    self.expr(c, owner, scope, binary, fqn, counter, decls);
+                }
+                for u in update.iter_mut() {
+                    self.expr(u, owner, scope, binary, fqn, counter, decls);
+                }
+                self.stmt(body, owner, scope, binary, fqn, counter, decls);
+            }
+            StmtKind::ForEach { iterable, body, .. } => {
+                self.expr(iterable, owner, scope, binary, fqn, counter, decls);
+                self.stmt(body, owner, scope, binary, fqn, counter, decls);
+            }
+            // Un bloque anidado maneja sus propias anónimas (con su propio scope de locales).
+            StmtKind::Block(b) => self.block(b, owner, scope, binary, fqn, counter),
+            StmtKind::Synchronized { lock, body } => {
+                self.expr(lock, owner, scope, binary, fqn, counter, decls);
+                self.block(body, owner, scope, binary, fqn, counter);
+            }
+            StmtKind::Try { resources, body, catches, finally } => {
+                for r in resources.iter_mut() {
+                    self.stmt(r, owner, scope, binary, fqn, counter, decls);
+                }
+                self.block(body, owner, scope, binary, fqn, counter);
+                for c in catches.iter_mut() {
+                    self.block(&mut c.body, owner, scope, binary, fqn, counter);
+                }
+                if let Some(f) = finally {
+                    self.block(f, owner, scope, binary, fqn, counter);
+                }
+            }
+            StmtKind::Switch { selector, cases } => {
+                self.expr(selector, owner, scope, binary, fqn, counter, decls);
+                for c in cases.iter_mut() {
+                    if let Some(g) = &mut c.guard {
+                        self.expr(g, owner, scope, binary, fqn, counter, decls);
+                    }
+                    match &mut c.body {
+                        SwitchBody::Arrow(s) => self.stmt(s, owner, scope, binary, fqn, counter, decls),
+                        SwitchBody::Colon(ss) => {
+                            for s in ss.iter_mut() {
+                                self.stmt(s, owner, scope, binary, fqn, counter, decls);
+                            }
+                        }
+                    }
+                }
+            }
+            StmtKind::Labeled { body, .. } => {
+                self.stmt(body, owner, scope, binary, fqn, counter, decls)
+            }
+            _ => {}
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn expr(
+        &mut self,
+        e: &mut Expr,
+        owner: SymbolId,
+        scope: ScopeId,
+        binary: &str,
+        fqn: &str,
+        counter: &mut u32,
+        decls: &mut Vec<Stmt>,
+    ) {
+        match &mut e.kind {
+            ExprKind::Binary { lhs, rhs, .. } => {
+                self.expr(lhs, owner, scope, binary, fqn, counter, decls);
+                self.expr(rhs, owner, scope, binary, fqn, counter, decls);
+            }
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Field { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::InstanceOf { expr, .. } => {
+                self.expr(expr, owner, scope, binary, fqn, counter, decls)
+            }
+            ExprKind::Assign { target, value, .. } => {
+                self.expr(target, owner, scope, binary, fqn, counter, decls);
+                self.expr(value, owner, scope, binary, fqn, counter, decls);
+            }
+            ExprKind::Ternary { cond, then, els } => {
+                self.expr(cond, owner, scope, binary, fqn, counter, decls);
+                self.expr(then, owner, scope, binary, fqn, counter, decls);
+                self.expr(els, owner, scope, binary, fqn, counter, decls);
+            }
+            ExprKind::Call { target, args, .. } => {
+                if let Some(t) = target {
+                    self.expr(t, owner, scope, binary, fqn, counter, decls);
+                }
+                for a in args.iter_mut() {
+                    self.expr(a, owner, scope, binary, fqn, counter, decls);
+                }
+            }
+            ExprKind::Index { array, index } => {
+                self.expr(array, owner, scope, binary, fqn, counter, decls);
+                self.expr(index, owner, scope, binary, fqn, counter, decls);
+            }
+            ExprKind::NewArray { dims, init, .. } => {
+                for d in dims.iter_mut().flatten() {
+                    self.expr(d, owner, scope, binary, fqn, counter, decls);
+                }
+                if let Some(es) = init {
+                    for e in es.iter_mut() {
+                        self.expr(e, owner, scope, binary, fqn, counter, decls);
+                    }
+                }
+            }
+            ExprKind::NewObject { args, body, ty, outer } => {
+                if let Some(o) = outer {
+                    self.expr(o, owner, scope, binary, fqn, counter, decls);
+                }
+                for a in args.iter_mut() {
+                    self.expr(a, owner, scope, binary, fqn, counter, decls);
+                }
+                // Anónima → local sintética `$N`. Los **argumentos de super** (`new Base(10){…}`) se
+                // conservan en el `new $N(10)`: `make_anon` sintetiza en `$N` un constructor que los
+                // reenvía a `super(...)`.
+                if body.is_some() {
+                    let members = body.take().unwrap();
+                    let ty_clone = ty.clone();
+                    let arity = args.len();
+                    if let Some((name, decl)) =
+                        self.make_anon(&ty_clone, members, arity, owner, scope, binary, fqn, counter)
+                    {
+                        decls.push(Stmt::new(Pos::default(), StmtKind::LocalClass(decl)));
+                        *ty = Type::Class(name);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Sintetiza y **registra** la clase local `$N` de una anónima: su supertipo sale de `ty`
+    /// (`extends` si es clase, `implements` si es interfaz) y sus miembros son el cuerpo. Devuelve su
+    /// nombre y su `ClassDecl` (para el `LocalClass` que la declara).
+    #[allow(clippy::too_many_arguments)]
+    fn make_anon(
+        &mut self,
+        ty: &Type,
+        members: Vec<Member>,
+        arity: usize,
+        owner: SymbolId,
+        scope: ScopeId,
+        binary: &str,
+        fqn: &str,
+        counter: &mut u32,
+    ) -> Option<(String, ClassDecl)> {
+        // Supertipo: si `ty` es una **interfaz**, la anónima extiende `Object` y la implementa; si es
+        // una **clase**, la extiende. El grafo **resuelto** (`super_type`/`interface_types`) se fija
+        // explícitamente porque `$N` se registra después de la resolución de Enter —sin él, un
+        // `Base b = new Base(){…}` no vería `$N <: Base`—.
+        let ty_sym = self.type_symbol(ty, scope);
+        let object = self.table.external("Object").map(RType::Class);
+        let is_iface = ty_sym.is_some_and(|id| {
+            matches!(&self.table.symbol(id).kind, SymbolKind::Class { kind: TypeKind::Interface, .. })
+        });
+
+        // **Argumentos de super** (`new Base(10){…}`): se sintetiza en `$N` un constructor de reenvío
+        // `$N(params) { super(params); }`, con los parámetros del constructor del supertipo elegido
+        // por **aridad**. Sin un constructor que encaje, no se baja (lo corta la barrera del emisor).
+        let mut members = members;
+        let mut fwd_resolved: Option<Vec<RType>> = None;
+        if arity > 0 {
+            let sup = ty_sym.filter(|_| !is_iface)?;
+            let ctor = super::attribute::constructors(self.table, sup)
+                .into_iter()
+                .find(|&c| matches!(&self.table.symbol(c).kind, SymbolKind::Method { params, .. } if params.len() == arity))?;
+            let syn: Vec<Param> = match &self.table.symbol(ctor).kind {
+                SymbolKind::Method { params, .. } => params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| Param {
+                        annotations: Vec::new(),
+                        ty: p.ty.clone(),
+                        name: format!("$a{i}"),
+                        varargs: false,
+                        is_final: false,
+                        type_annos: Vec::new(),
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            fwd_resolved = Some(match self.table.resolved(ctor) {
+                Some(Resolved::Method { params, .. }) => params.clone(),
+                _ => vec![RType::Unresolved; arity],
+            });
+            let super_args: Vec<Expr> = (0..arity)
+                .map(|i| Expr::new(Pos::default(), ExprKind::Name(format!("$a{i}"))))
+                .collect();
+            let super_call = Expr::new(
+                Pos::default(),
+                ExprKind::Call { target: None, name: "super".to_string(), args: super_args, type_args: Vec::new() },
+            );
+            members.push(Member::Method(MethodDecl {
+                annotations: Vec::new(),
+                return_annos: Vec::new(),
+                throws_annos: Vec::new(),
+                pos: Pos::default(),
+                modifiers: Vec::new(),
+                type_params: Vec::new(),
+                return_type: Type::Void,
+                name: String::new(), // se completa abajo con el nombre `$N`
+                params: syn,
+                throws: Vec::new(),
+                body: Some(Block(vec![Stmt::new(Pos::default(), StmtKind::Expr(super_call))])),
+                is_constructor: true,
+            }));
+        }
+
+        *counter += 1;
+        let name = format!("${}", *counter);
+        let anon_fqn = qualify(fqn, &name);
+        let anon_binary = format!("{binary}${}", *counter);
+        // Completar el nombre del constructor de reenvío con el nombre real de la clase.
+        for m in members.iter_mut() {
+            if let Member::Method(me) = m {
+                if me.is_constructor && me.name.is_empty() {
+                    me.name = name.clone();
+                }
+            }
+        }
+
+        let (extends, implements, super_rt, iface_rts) = if is_iface {
+            (None, vec![ty.clone()], object, ty_sym.map(RType::Class).into_iter().collect())
+        } else {
+            (Some(ty.clone()), Vec::new(), ty_sym.map(RType::Class).or(object), Vec::new())
+        };
+
+        let members_scope = self.table.new_scope(Some(scope), None);
+        let sym = self.table.new_symbol(Symbol {
+            name: name.clone(),
+            kind: SymbolKind::Class {
+                kind: TypeKind::Class,
+                binary: anon_binary,
+                extends: extends.clone(),
+                implements: implements.clone(),
+                permits: Vec::new(),
+                members: members_scope,
+            },
+            owner: Some(owner),
+            modifiers: Vec::new(),
+        });
+        self.table.set_scope_owner(members_scope, sym);
+        self.table.register_class(&anon_fqn, sym);
+        self.table.define(scope, &name, sym);
+        self.table
+            .set_resolved(sym, Resolved::Class { super_type: super_rt, interface_types: iface_rts, permitted: Vec::new() });
+
+        let decl = ClassDecl {
+            pos: Pos::default(),
+            annotations: Vec::new(),
+            modifiers: Vec::new(),
+            kind: TypeKind::Class,
+            name: name.clone(),
+            type_params: Vec::new(),
+            components: Vec::new(),
+            extends,
+            extends_annos: Vec::new(),
+            implements,
+            implements_annos: Vec::new(),
+            permits: Vec::new(),
+            enum_constants: Vec::new(),
+            members,
+            annotation_defaults: Vec::new(),
+        };
+        member_enter_type(self.table, self.errors, &decl, fqn);
+        // El constructor de reenvío quedó registrado por `member_enter` **sin `Resolved`** (la anónima
+        // se registra después de la resolución de Enter): se lo fijamos con los parámetros del
+        // constructor del supertipo, para que `new $N(args)` resuelva y el desugar le anteponga las
+        // capturas.
+        if let Some(rparams) = fwd_resolved {
+            if let Some(ctor) = super::attribute::constructors(self.table, sym)
+                .into_iter()
+                .find(|&c| matches!(&self.table.symbol(c).kind, SymbolKind::Method { params, .. } if params.len() == arity))
+            {
+                self.table.set_resolved(
+                    ctor,
+                    Resolved::Method { params: rparams, ret: RType::Void, varargs: false, throws: Vec::new() },
+                );
+            }
+        }
+        Some((name, decl))
+    }
+
+    /// El símbolo al que resuelve un `Type` (clase del fuente o externo), o `None`.
+    fn type_symbol(&self, ty: &Type, scope: ScopeId) -> Option<SymbolId> {
+        let name = match ty {
+            Type::Class(n) | Type::Parameterized { base: n, .. } => n.as_str(),
+            _ => return None,
+        };
+        self.table.resolve_type(scope, name).or_else(|| self.table.external(name))
+    }
+}
+
+/// **Registra las clases locales** (§14.3) tras `enter`, con `&mut unit`/`&mut table`. Hace lo que
+/// `enter` no puede porque muta el AST: además de crear el símbolo de cada local, la **renombra** a un
+/// nombre único por unidad —`L` → `1L`, `2L`…— y **reescribe sus referencias** dentro del bloque donde
+/// es visible, de modo que dos locales homónimas en distintos bloques del mismo enclosing dejen de
+/// colisionar río abajo (la tabla clavea el tipo por nombre y el codegen deriva el binary de él).
+///
+/// El alcance es **léxico por bloque** (§14.3: visible de su declaración al fin del bloque): un stack
+/// de `(nombre_fuente → nombre_único)` se empuja al declarar y se descarta al cerrar el bloque, y una
+/// referencia a un nombre visible toma el de la local **más cercana**. Resuelta la reescritura, el
+/// resto del pipeline ve nombres únicos en un scope plano y es ajeno a la colisión. El anidamiento
+/// **local-en-local** queda pendiente: una local dentro de otra no se registra (aunque sus referencias
+/// a las visibles sí se reescriben).
+pub fn register_local_classes(
+    unit: &mut CompilationUnit,
+    table: &mut SymbolTable,
+    errors: &mut Vec<Error>,
+) {
+    let base = unit.package.as_deref().unwrap_or("").to_string();
+    {
+        let mut namer = LocalNamer { table, errors, n: 0 };
+        for class in &mut unit.types {
+            namer.class(class, &base);
+        }
+    }
+    // Las locales recién registradas traen sus firmas **sintácticas**: `resolve_symbols` ya corrió en
+    // `enter` (antes que esta pasada), así que se re-corre para decorar sus métodos/campos con su
+    // `Resolved` —sin él, `resolve_overload` no encuentra una firma aplicable y `l.m()` no resuelve—.
+    resolve_symbols(table);
+}
+
+/// El contexto de la clase **enclosing** donde se registran las locales de un cuerpo de método: su
+/// símbolo, su scope de miembros y su FQN/binary para derivar los de cada local.
+struct LocalCtx {
+    cid: SymbolId,
+    scope: ScopeId,
+    fqn: String,
+    binary: String,
+}
+
+struct LocalNamer<'a> {
+    table: &'a mut SymbolTable,
+    errors: &'a mut Vec<Error>,
+    /// Contador **global a la unidad**: da el prefijo único (`1L`, `2L`…), al estilo de javac.
+    n: u32,
+}
+
+impl LocalNamer<'_> {
+    fn class(&mut self, class: &mut ClassDecl, enclosing_fqn: &str) {
+        let fqn = qualify(enclosing_fqn, &class.name);
+        let Some(cid) = self.table.class(&fqn) else { return };
+        let (scope, binary) = match &self.table.symbol(cid).kind {
+            SymbolKind::Class { members, binary, .. } => (*members, binary.clone()),
+            _ => return,
+        };
+        let ctx = LocalCtx { cid, scope, fqn: fqn.clone(), binary };
+        for member in &mut class.members {
+            match member {
+                Member::Method(m) => {
+                    if let Some(body) = &mut m.body {
+                        // Cada cuerpo de método arranca con un scope de locales **fresco**: una local no
+                        // escapa a otro método.
+                        self.block(&mut body.0, &ctx, true, &mut Vec::new());
+                    }
+                }
+                Member::StaticInit(b) | Member::InstanceInit(b) => {
+                    self.block(&mut b.0, &ctx, true, &mut Vec::new());
+                }
+                Member::Type(nested) => self.class(nested, &fqn),
+                Member::Field(_) => {}
+            }
+        }
+    }
+
+    /// Recorre un bloque manteniendo el **scope léxico**: lo que declara se descarta al cerrarlo. Con
+    /// `reg` en `true` registra las locales que aparecen; en `false` (dentro del cuerpo de otra clase)
+    /// solo reescribe referencias.
+    fn block(
+        &mut self,
+        stmts: &mut [Stmt],
+        ctx: &LocalCtx,
+        reg: bool,
+        stack: &mut Vec<(String, String)>,
+    ) {
+        let mark = stack.len();
+        for s in stmts.iter_mut() {
+            self.stmt(s, ctx, reg, stack);
+        }
+        stack.truncate(mark);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn stmt(&mut self, s: &mut Stmt, ctx: &LocalCtx, reg: bool, stack: &mut Vec<(String, String)>) {
+        match &mut s.kind {
+            StmtKind::LocalClass(lc) => {
+                if reg {
+                    self.register_local(lc, ctx, stack);
+                } else {
+                    // Local-en-local (cola aparte): no se registra; solo se reescribe con lo visible.
+                    self.rewrite_class(lc, ctx, stack);
+                }
+            }
+            StmtKind::LocalVar { ty, init, .. } => {
+                rewrite_type(ty, stack);
+                if let Some(e) = init {
+                    self.expr(e, ctx, reg, stack);
+                }
+            }
+            StmtKind::ForEach { ty, iterable, body, .. } => {
+                rewrite_type(ty, stack);
+                self.expr(iterable, ctx, reg, stack);
+                self.stmt(body, ctx, reg, stack);
+            }
+            StmtKind::Return(Some(e))
+            | StmtKind::Expr(e)
+            | StmtKind::Throw(e)
+            | StmtKind::Yield(e) => self.expr(e, ctx, reg, stack),
+            StmtKind::Assert { cond, message } => {
+                self.expr(cond, ctx, reg, stack);
+                if let Some(m) = message {
+                    self.expr(m, ctx, reg, stack);
+                }
+            }
+            StmtKind::If { cond, then, els } => {
+                self.expr(cond, ctx, reg, stack);
+                self.stmt(then, ctx, reg, stack);
+                if let Some(e) = els {
+                    self.stmt(e, ctx, reg, stack);
+                }
+            }
+            StmtKind::While { cond, body } | StmtKind::Do { body, cond } => {
+                self.expr(cond, ctx, reg, stack);
+                self.stmt(body, ctx, reg, stack);
+            }
+            StmtKind::For { init, cond, update, body } => {
+                // El `for` abre su propio scope: un tipo declarado en el `init` no escapa al bucle.
+                let mark = stack.len();
+                if let Some(i) = init {
+                    self.stmt(i, ctx, reg, stack);
+                }
+                if let Some(c) = cond {
+                    self.expr(c, ctx, reg, stack);
+                }
+                for u in update.iter_mut() {
+                    self.expr(u, ctx, reg, stack);
+                }
+                self.stmt(body, ctx, reg, stack);
+                stack.truncate(mark);
+            }
+            StmtKind::Block(b) => self.block(&mut b.0, ctx, reg, stack),
+            StmtKind::Synchronized { lock, body } => {
+                self.expr(lock, ctx, reg, stack);
+                self.block(&mut body.0, ctx, reg, stack);
+            }
+            StmtKind::Try { resources, body, catches, finally } => {
+                self.block(resources, ctx, reg, stack); // los recursos son declaraciones de variable
+                self.block(&mut body.0, ctx, reg, stack);
+                for c in catches.iter_mut() {
+                    for t in c.types.iter_mut() {
+                        rewrite_type(t, stack);
+                    }
+                    self.block(&mut c.body.0, ctx, reg, stack);
+                }
+                if let Some(f) = finally {
+                    self.block(&mut f.0, ctx, reg, stack);
+                }
+            }
+            StmtKind::Switch { selector, cases } => {
+                self.expr(selector, ctx, reg, stack);
+                for c in cases.iter_mut() {
+                    for l in c.labels.iter_mut() {
+                        rewrite_case_label(l, stack);
+                    }
+                    if let Some(g) = &mut c.guard {
+                        self.expr(g, ctx, reg, stack);
+                    }
+                    match &mut c.body {
+                        SwitchBody::Arrow(st) => self.stmt(st, ctx, reg, stack),
+                        SwitchBody::Colon(ss) => {
+                            for st in ss.iter_mut() {
+                                self.stmt(st, ctx, reg, stack);
+                            }
+                        }
+                    }
+                }
+            }
+            StmtKind::Labeled { body, .. } => self.stmt(body, ctx, reg, stack),
+            _ => {}
+        }
+    }
+
+    /// Registra una clase local: la **renombra** a única (`1L`), la hace visible en el `stack`,
+    /// reescribe sus **firmas** (antes de `member_enter_type`, que las guarda sintácticas), la entra a
+    /// la tabla como tipo anidado del enclosing, y **recorre su cuerpo con `reg=true`** tomándola a
+    /// ella como nuevo enclosing — así una **local dentro de otra** (§14.3) también se registra, como
+    /// tipo anidado suyo (`Outer$1L1$2L2`).
+    fn register_local(&mut self, lc: &mut ClassDecl, ctx: &LocalCtx, stack: &mut Vec<(String, String)>) {
+        self.n += 1;
+        let unique = format!("{}{}", self.n, lc.name);
+        let source = std::mem::replace(&mut lc.name, unique.clone());
+        // Visible (nombre_fuente → único) para su propio cuerpo y el resto del bloque.
+        stack.push((source, unique.clone()));
+        // Firmas antes de `member_enter_type`; los cuerpos van después (necesitan el símbolo creado).
+        self.rewrite_signatures(lc, stack);
+        let lc_fqn = qualify(&ctx.fqn, &unique);
+        let lc_binary = format!("{}${}", ctx.binary, unique);
+        let members = self.table.new_scope(Some(ctx.scope), None);
+        let sym = self.table.new_symbol(Symbol {
+            name: unique.clone(),
+            kind: SymbolKind::Class {
+                kind: lc.kind,
+                binary: lc_binary.clone(),
+                extends: lc.extends.clone(),
+                implements: lc.implements.clone(),
+                permits: lc.permits.clone(),
+                members,
+            },
+            owner: Some(ctx.cid),
+            modifiers: lc.modifiers.clone(),
+        });
+        self.table.set_scope_owner(members, sym);
+        self.table.register_class(&lc_fqn, sym);
+        self.table.define(ctx.scope, &unique, sym);
+        self.table.set_pos(sym, lc.pos.line, lc.pos.col);
+        define_type_params(self.table, members, sym, &lc.type_params);
+        member_enter_type(self.table, self.errors, lc, &ctx.fqn);
+        // El cuerpo de la local se recorre **con ella misma como enclosing** (`reg=true`): una local
+        // anidada se registra como su tipo anidado; las referencias siguen usando el `stack` común.
+        let sub = LocalCtx { cid: sym, scope: members, fqn: lc_fqn, binary: lc_binary };
+        for ec in lc.enum_constants.iter_mut() {
+            for a in ec.args.iter_mut() {
+                self.expr(a, &sub, true, stack);
+            }
+        }
+        self.walk_bodies(&mut lc.members, &sub, true, stack);
+    }
+
+    /// Reescribe las **firmas** de una clase (extends/implements/componentes/cotas y, por miembro, el
+    /// tipo de cada campo y la firma de cada método) con las locales visibles — sin tocar los cuerpos.
+    fn rewrite_signatures(&mut self, lc: &mut ClassDecl, stack: &[(String, String)]) {
+        if let Some(e) = &mut lc.extends {
+            rewrite_type(e, stack);
+        }
+        for i in lc.implements.iter_mut() {
+            rewrite_type(i, stack);
+        }
+        for c in lc.components.iter_mut() {
+            rewrite_type(&mut c.ty, stack);
+        }
+        for tp in lc.type_params.iter_mut() {
+            for b in tp.bounds.iter_mut() {
+                rewrite_type(b, stack);
+            }
+        }
+        rewrite_member_sigs(&mut lc.members, stack);
+    }
+
+    /// Reescribe **solo** los tipos del subárbol de una clase (una anónima, o una local dentro del
+    /// cuerpo de otra clase) sin registrar nada — `reg=false` en los cuerpos.
+    fn rewrite_class(&mut self, lc: &mut ClassDecl, ctx: &LocalCtx, stack: &mut Vec<(String, String)>) {
+        self.rewrite_signatures(lc, stack);
+        for ec in lc.enum_constants.iter_mut() {
+            for a in ec.args.iter_mut() {
+                self.expr(a, ctx, false, stack);
+            }
+        }
+        self.walk_bodies(&mut lc.members, ctx, false, stack);
+    }
+
+    /// Recorre los **cuerpos** de los miembros (inicializadores de campo, cuerpos de método, `static`/
+    /// instance init) — las firmas ya las hizo [`rewrite_signatures`]—, propagando `reg`: con `true` se
+    /// registran las locales que aparezcan; con `false` solo se reescribe.
+    fn walk_bodies(
+        &mut self,
+        members: &mut [Member],
+        ctx: &LocalCtx,
+        reg: bool,
+        stack: &mut Vec<(String, String)>,
+    ) {
+        for m in members.iter_mut() {
+            match m {
+                Member::Field(f) => {
+                    if let Some(e) = &mut f.init {
+                        self.expr(e, ctx, reg, stack);
+                    }
+                }
+                Member::Method(me) => {
+                    if let Some(b) = &mut me.body {
+                        self.block(&mut b.0, ctx, reg, stack);
+                    }
+                }
+                // Una clase **miembro** de una local (no una local anidada): fuera de alcance de esta
+                // cola; se reescriben sus tipos pero no se registra.
+                Member::Type(nested) => self.rewrite_class(nested, ctx, stack),
+                Member::StaticInit(b) | Member::InstanceInit(b) => {
+                    self.block(&mut b.0, ctx, reg, stack)
+                }
+            }
+        }
+    }
+
+    fn expr(&mut self, e: &mut Expr, ctx: &LocalCtx, reg: bool, stack: &mut Vec<(String, String)>) {
+        match &mut e.kind {
+            ExprKind::Binary { lhs, rhs, .. } => {
+                self.expr(lhs, ctx, reg, stack);
+                self.expr(rhs, ctx, reg, stack);
+            }
+            ExprKind::Unary { expr, .. } => self.expr(expr, ctx, reg, stack),
+            ExprKind::Assign { target, value, .. } => {
+                self.expr(target, ctx, reg, stack);
+                self.expr(value, ctx, reg, stack);
+            }
+            ExprKind::Ternary { cond, then, els } => {
+                self.expr(cond, ctx, reg, stack);
+                self.expr(then, ctx, reg, stack);
+                self.expr(els, ctx, reg, stack);
+            }
+            ExprKind::Call { target, args, type_args, .. } => {
+                if let Some(t) = target {
+                    self.expr(t, ctx, reg, stack);
+                }
+                for a in args.iter_mut() {
+                    self.expr(a, ctx, reg, stack);
+                }
+                for ta in type_args.iter_mut() {
+                    rewrite_type_arg(ta, stack);
+                }
+            }
+            ExprKind::Field { expr, .. } => self.expr(expr, ctx, reg, stack),
+            ExprKind::Index { array, index } => {
+                self.expr(array, ctx, reg, stack);
+                self.expr(index, ctx, reg, stack);
+            }
+            ExprKind::Cast { ty, expr } => {
+                rewrite_type(ty, stack);
+                self.expr(expr, ctx, reg, stack);
+            }
+            ExprKind::InstanceOf { expr, ty, .. } => {
+                rewrite_type(ty, stack);
+                self.expr(expr, ctx, reg, stack);
+            }
+            ExprKind::ClassLit(ty) | ExprKind::QualifiedThis(ty) => rewrite_type(ty, stack),
+            ExprKind::NewObject { ty, args, body, outer } => {
+                rewrite_type(ty, stack);
+                if let Some(o) = outer {
+                    self.expr(o, ctx, reg, stack);
+                }
+                for a in args.iter_mut() {
+                    self.expr(a, ctx, reg, stack);
+                }
+                if let Some(members) = body {
+                    // Cuerpo de una anónima: sus tipos ven las locales visibles; sus propias anónimas las
+                    // baja `hoist_anonymous` aparte, así que acá solo se reescribe (`reg=false`).
+                    rewrite_member_sigs(members, stack);
+                    self.walk_bodies(members, ctx, false, stack);
+                }
+            }
+            ExprKind::NewArray { elem, dims, init } => {
+                rewrite_type(elem, stack);
+                for d in dims.iter_mut().flatten() {
+                    self.expr(d, ctx, reg, stack);
+                }
+                if let Some(es) = init {
+                    for x in es.iter_mut() {
+                        self.expr(x, ctx, reg, stack);
+                    }
+                }
+            }
+            ExprKind::Switch { selector, cases } => {
+                self.expr(selector, ctx, reg, stack);
+                for c in cases.iter_mut() {
+                    for l in c.labels.iter_mut() {
+                        rewrite_case_label(l, stack);
+                    }
+                    if let Some(g) = &mut c.guard {
+                        self.expr(g, ctx, reg, stack);
+                    }
+                    match &mut c.body {
+                        SwitchBody::Arrow(st) => self.stmt(st, ctx, reg, stack),
+                        SwitchBody::Colon(ss) => {
+                            for st in ss.iter_mut() {
+                                self.stmt(st, ctx, reg, stack);
+                            }
+                        }
+                    }
+                }
+            }
+            ExprKind::Lambda { params, body } => {
+                for p in params.iter_mut() {
+                    rewrite_type(&mut p.ty, stack);
+                }
+                // El cuerpo de una lambda es un bloque nuevo; una local declarada adentro pertenece al
+                // método sintético de la lambda (cola aparte), así que no se registra (`reg=false`).
+                match body.as_mut() {
+                    LambdaBody::Expr(x) => self.expr(x, ctx, false, stack),
+                    LambdaBody::Block(b) => self.block(&mut b.0, ctx, false, stack),
+                }
+            }
+            ExprKind::MethodRef { qualifier, type_args, .. } => {
+                match qualifier.as_mut() {
+                    MethodRefQualifier::Expr(x) => self.expr(x, ctx, reg, stack),
+                    MethodRefQualifier::Type(t) => rewrite_type(t, stack),
+                }
+                for ta in type_args.iter_mut() {
+                    rewrite_type_arg(ta, stack);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Reescribe un tipo si nombra una clase local **visible**: `L` → su nombre único (`1L`). Recurre por
+/// los argumentos de tipo y el tipo elemento de un array.
+fn rewrite_type(ty: &mut Type, stack: &[(String, String)]) {
+    match ty {
+        Type::Class(name) => {
+            if let Some(u) = visible(stack, name) {
+                *name = u;
+            }
+        }
+        Type::Parameterized { base, args } => {
+            if let Some(u) = visible(stack, base) {
+                *base = u;
+            }
+            for a in args.iter_mut() {
+                rewrite_type_arg(a, stack);
+            }
+        }
+        Type::Array(inner) => rewrite_type(inner, stack),
+        _ => {}
+    }
+}
+
+/// Reescribe las firmas (tipo de campo, retorno/parámetros/`throws` de método) de una lista de
+/// miembros — el cuerpo de una clase local o anónima— con las locales visibles.
+fn rewrite_member_sigs(members: &mut [Member], stack: &[(String, String)]) {
+    for m in members.iter_mut() {
+        match m {
+            Member::Field(f) => rewrite_type(&mut f.ty, stack),
+            Member::Method(me) => {
+                rewrite_type(&mut me.return_type, stack);
+                for p in me.params.iter_mut() {
+                    rewrite_type(&mut p.ty, stack);
+                }
+                for t in me.throws.iter_mut() {
+                    rewrite_type(t, stack);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn rewrite_type_arg(a: &mut TypeArg, stack: &[(String, String)]) {
+    match a {
+        TypeArg::Type(t) => rewrite_type(t, stack),
+        TypeArg::Extends(t) | TypeArg::Super(t) => rewrite_type(t, stack),
+        TypeArg::Wildcard => {}
+    }
+}
+
+fn rewrite_case_label(l: &mut CaseLabel, stack: &[(String, String)]) {
+    if let CaseLabel::Pattern(p) = l {
+        rewrite_pattern(p, stack);
+    }
+}
+
+fn rewrite_pattern(p: &mut Pattern, stack: &[(String, String)]) {
+    match p {
+        Pattern::Type { ty, .. } => rewrite_type(ty, stack),
+        Pattern::Record { ty, components } => {
+            rewrite_type(ty, stack);
+            for c in components.iter_mut() {
+                rewrite_pattern(c, stack);
+            }
+        }
+    }
+}
+
+/// El nombre único de la local **visible** más cercana con nombre fuente `name` (la última empujada),
+/// o `None` si `name` no es una local en scope.
+fn visible(stack: &[(String, String)], name: &str) -> Option<String> {
+    stack.iter().rev().find(|(src, _)| src == name).map(|(_, u)| u.clone())
+}
+
 /// Sintetiza los métodos que la spec agrega implícitamente a enums y records (los que el
 /// usuario no haya declarado).
 fn synth_implicit_methods(table: &mut SymbolTable, class: &ClassDecl, cid: SymbolId, scope: ScopeId) {
@@ -1158,7 +2235,7 @@ mod tests {
     use crate::javac::{lexer::tokenize, parser::parse};
 
     fn enter_src(src: &str) -> (SymbolTable, Vec<Error>) {
-        enter(&parse(tokenize(src).unwrap()).unwrap())
+        enter(&parse(tokenize(src).unwrap()).0)
     }
 
     #[test]
@@ -1370,6 +2447,27 @@ mod tests {
         );
         assert_eq!(t.static_single.get("max").map(String::as_str), Some("java.lang.Math"));
         assert!(t.static_on_demand.iter().any(|s| s == "java.lang.Math"));
+    }
+
+    #[test]
+    fn a_plain_class_inherits_object_implicitly() {
+        // Finding #22: una clase sin `extends` explícito debe enlazar a `java.lang.Object` en el grafo
+        // de símbolos, para que la resolución de miembros sobre `this` alcance los métodos heredados
+        // (`getClass`/`hashCode`/`toString`). Antes quedaba `super_class = None`.
+        let (t, _e) = enter_src("class A {}");
+        let a = t.class("A").expect("clase A");
+        let object = t.external("Object").expect("Object cargado del classpath");
+        assert_eq!(t.super_class(a), Some(object), "A hereda de Object implícitamente");
+        // La propia `Object` no se hereda a sí misma (sin ciclo).
+        assert_ne!(t.super_class(object), Some(object), "Object no es su propia superclase");
+    }
+
+    #[test]
+    fn an_interface_has_no_implicit_object_superclass() {
+        // Una interfaz **no** tiene superclase (§9.1.3): el default de Object es solo para clases.
+        let (t, _e) = enter_src("interface I {}");
+        let i = t.class("I").expect("interfaz I");
+        assert_eq!(t.super_class(i), None, "una interfaz no hereda de Object como superclase");
     }
 
     #[test]

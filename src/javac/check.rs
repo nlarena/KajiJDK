@@ -60,6 +60,9 @@ use super::Error;
 pub fn check(unit: &CompilationUnit, table: &SymbolTable) -> Vec<Error> {
     let mut cx = Checker { table, errors: Vec::new() };
     let base = unit.package.as_deref().unwrap_or("");
+    if let Some(module) = &unit.module {
+        cx.module_decl(module);
+    }
     for class in &unit.types {
         cx.class(class, base);
     }
@@ -82,6 +85,25 @@ fn erased_params(table: &SymbolTable, m: SymbolId) -> Option<Vec<RType>> {
     }
 }
 
+/// Los parámetros del método `m` **como se los ve desde una subclase** (§8.4.8.1): se aplica la
+/// sustitución `subst` (los args de tipo del supertipo) y **después** se borra. Es lo que hace que un
+/// `compareTo(T)` heredado de `Comparable<Foo>` matchee con `compareTo(Foo)` en la subclase.
+fn erased_params_as_seen(
+    table: &SymbolTable,
+    m: SymbolId,
+    subst: &types::Subst,
+) -> Option<Vec<RType>> {
+    match table.resolved(m) {
+        Some(Resolved::Method { params, .. }) => Some(
+            params
+                .iter()
+                .map(|p| types::erasure(table, &types::substitute(p, subst)))
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
 fn ret_of(table: &SymbolTable, m: SymbolId) -> Option<RType> {
     match table.resolved(m) {
         Some(Resolved::Method { ret, .. }) => Some(ret.clone()),
@@ -91,6 +113,18 @@ fn ret_of(table: &SymbolTable, m: SymbolId) -> Option<RType> {
 
 fn is_static(table: &SymbolTable, m: SymbolId) -> bool {
     table.symbol(m).modifiers.contains(&Modifier::Static)
+}
+
+/// ¿El método lleva la anotación `@Override` (§9.6.4.4)? Se compara por nombre **simple**.
+fn has_override(annotations: &[Annotation]) -> bool {
+    annotations.iter().any(|a| a.name == "Override")
+}
+
+/// ¿El nombre corresponde a un método **sobrescribible de `Object`**? Se usa para no reportar un
+/// `@Override` sobre `toString`/`equals`/`hashCode`/… como si no sobrescribiera nada cuando el único
+/// ancestro externo es `Object` (cuyos miembros no siempre están todos cargados).
+fn is_object_method(name: &str) -> bool {
+    matches!(name, "toString" | "hashCode" | "equals" | "clone" | "finalize")
 }
 
 /// El nivel de acceso, ordenado de menos a más visible — así «reducir» es simplemente bajar.
@@ -136,7 +170,60 @@ fn access_name(level: u8) -> &'static str {
 
 impl Checker<'_> {
     fn error(&mut self, pos: Pos, message: String) {
-        self.errors.push(Error { message, line: pos.line, col: pos.col });
+        self.errors.push(Error::new(message, pos.line, pos.col));
+    }
+
+    /// Buena formación de una declaración de **módulo** (§7.7): sin directivas **duplicadas** para el
+    /// mismo módulo/paquete/servicio, y sin auto-`requires`. La resolución del grafo (que los módulos
+    /// requeridos existan y sean legibles) es de tiempo de ejecución (JPMS), sesión aparte.
+    fn module_decl(&mut self, m: &ModuleDecl) {
+        use std::collections::HashSet;
+        let pos = m.pos;
+        let (mut req, mut exp, mut opn, mut uses, mut prov) = (
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+        );
+        for d in &m.directives {
+            match d {
+                ModuleDirective::Requires { name, .. } => {
+                    if *name == m.name {
+                        self.error(pos, format!("el módulo `{name}` no puede requerirse a sí mismo"));
+                    }
+                    if !req.insert(name) {
+                        self.error(pos, format!("`requires` duplicado del módulo `{name}`"));
+                    }
+                }
+                ModuleDirective::Exports { package, .. } => {
+                    if !exp.insert(package) {
+                        self.error(pos, format!("`exports` duplicado del paquete `{package}`"));
+                    }
+                }
+                ModuleDirective::Opens { package, .. } => {
+                    if !opn.insert(package) {
+                        self.error(pos, format!("`opens` duplicado del paquete `{package}`"));
+                    }
+                }
+                ModuleDirective::Uses { service } => {
+                    if !uses.insert(service) {
+                        self.error(pos, format!("`uses` duplicado del servicio `{service}`"));
+                    }
+                }
+                ModuleDirective::Provides { service, with } => {
+                    if !prov.insert(service) {
+                        self.error(pos, format!("`provides` duplicado del servicio `{service}`"));
+                    }
+                    let mut seen = HashSet::new();
+                    for imp in with {
+                        if !seen.insert(imp) {
+                            self.error(pos, format!("implementación repetida en `provides`: `{imp}`"));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn class(&mut self, class: &ClassDecl, enclosing: &str) {
@@ -158,6 +245,7 @@ impl Checker<'_> {
                 self.method(m, cid, nth);
             }
             self.abstracts(class, cid);
+            self.sealed_rules(class, cid);
             // Control de acceso (§6.6): cada **uso** de un miembro tiene que ser accesible desde
             // esta clase. Se recorre el cuerpo de cada método/inicializador y se mira el binding que
             // dejó Attribute. Corre sobre el árbol **fuente** (antes del desugar) a propósito: el
@@ -410,11 +498,14 @@ impl Checker<'_> {
             | ExprKind::BoolLit(_)
             | ExprKind::Null
             | ExprKind::This
+            | ExprKind::QualifiedThis(_)
             | ExprKind::Super
             | ExprKind::ClassLit(_)
             | ExprKind::MethodRef { .. }
             // `Indy` lo produce el desugar, después de esta pasada: nunca llega acá.
-            | ExprKind::Indy { .. } => {}
+            | ExprKind::Indy { .. }
+            // Un nodo de error no lanza nada: ya se reportó su error de sintaxis.
+            | ExprKind::Error => {}
         }
     }
 
@@ -539,6 +630,7 @@ impl Checker<'_> {
                 }
             }
             StmtKind::Switch { selector, cases } => {
+                self.exhaustive_switch(from, selector, cases, false);
                 self.walk_expr(from, selector);
                 for c in cases {
                     if let Some(g) = &c.guard {
@@ -608,6 +700,7 @@ impl Checker<'_> {
                 }
             }
             ExprKind::Switch { selector, cases } => {
+                self.exhaustive_switch(from, selector, cases, true);
                 self.walk_expr(from, selector);
                 for c in cases {
                     if let Some(g) = &c.guard {
@@ -635,10 +728,12 @@ impl Checker<'_> {
             | ExprKind::BoolLit(_)
             | ExprKind::Null
             | ExprKind::This
+            | ExprKind::QualifiedThis(_)
             | ExprKind::Super
             | ExprKind::ClassLit(_)
             | ExprKind::MethodRef { .. }
-            | ExprKind::Indy { .. } => {}
+            | ExprKind::Indy { .. }
+            | ExprKind::Error => {}
         }
     }
 
@@ -646,7 +741,27 @@ impl Checker<'_> {
     fn method(&mut self, decl: &MethodDecl, cid: SymbolId, nth: usize) {
         let Some(mine) = self.find_own(cid, decl, nth) else { return };
         let Some(sig) = erased_params(self.table, mine) else { return };
-        let Some(parent) = self.overridden(cid, &decl.name, &sig) else { return };
+        let parent = self.overridden(cid, &decl.name, &sig);
+
+        // `@Override` (§9.6.4.4): la anotación exige que el método **sobrescriba o implemente** algo.
+        // Reportar que no lo hace es **sound** solo si podemos descartar que sobrescriba un método
+        // externo que no cargamos: se pide que los únicos ancestros externos sean `Object` —cuyo set de
+        // métodos es fijo y conocido— y que el método no sea uno de los suyos (`toString`, `equals`…).
+        // Con un supertipo del JDK (`extends ArrayList`) se calla, como el chequeo de abstractos.
+        if parent.is_none() && has_override(&decl.annotations) {
+            let externals_only_object = self
+                .ancestors(cid)
+                .iter()
+                .filter(|&&a| self.is_external(a))
+                .all(|&a| self.table.symbol(a).name == "Object");
+            if externals_only_object && !is_object_method(&decl.name) {
+                let msg =
+                    format!("`{}` lleva `@Override` pero no sobrescribe ningún método", decl.name);
+                self.error(decl.pos, msg);
+            }
+        }
+
+        let Some(parent) = parent else { return };
 
         let owner = self.table.symbol(parent).owner;
         let owner_name = owner.map_or("?".to_string(), |o| self.table.symbol(o).name.clone());
@@ -680,6 +795,32 @@ impl Checker<'_> {
         }
 
         self.return_type(decl, mine, parent, &owner_name);
+        self.throws_wider(decl, cid, parent, &owner_name);
+    }
+
+    /// Un override **no puede declarar `throws` más ancho** (§8.4.8.3): cada excepción **chequeada**
+    /// que lanza tiene que ser subtipo de alguna que declare el método sobrescrito. Las no-chequeadas
+    /// (`RuntimeException`/`Error`) no cuentan.
+    fn throws_wider(&mut self, decl: &MethodDecl, cid: SymbolId, parent: SymbolId, owner: &str) {
+        let allowed: Vec<RType> = match self.table.resolved(parent) {
+            Some(Resolved::Method { throws, .. }) => throws.clone(),
+            _ => return,
+        };
+        for ty in &decl.throws {
+            let Some(t) = self.resolve_exc(cid, ty) else { continue };
+            if !self.is_checked(&t) {
+                continue;
+            }
+            if allowed.iter().any(|a| types::is_subtype(self.table, &t, a)) {
+                continue;
+            }
+            let name = self.name_of(&t);
+            let msg = format!(
+                "`{}` declara lanzar `{name}`, más ancho que lo que permite `{owner}` (§8.4.8.3)",
+                decl.name
+            );
+            self.error(decl.pos, msg);
+        }
     }
 
     /// El retorno es **covariante** para referencias e **idéntico** para primitivos y `void`
@@ -710,20 +851,42 @@ impl Checker<'_> {
         }
     }
 
-    /// El tipo de retorno heredado, con los argumentos de tipo del supertipo **sustituidos**.
-    /// `mine` es **mi** método (el que sobrescribe); su dueña es el subtipo desde donde se mira.
+    /// El tipo de retorno heredado, **como se lo ve desde la clase que hace el override** (§8.4.8.1):
+    /// se sustituyen los parámetros de tipo del supertipo por los argumentos con que **esta** clase lo
+    /// extiende/implementa. Para `class MyList<E> implements List<E>` con `E get(int)`, el `E` de
+    /// `List.get` (el parámetro de `List`) se sustituye por el `E` de `MyList`, así el retorno del
+    /// padre queda `E` (el de MyList) y el override covariante chequea idéntico en vez de comparar dos
+    /// variables `E` distintas. También cubre el caso no genérico (`extends Caja<String>` → `String`).
+    ///
+    /// El bug previo (finding #9) buscaba el supertipo entre los supertipos del **tipo de retorno**
+    /// (una variable de tipo, cuyos supertipos son sus cotas) en vez de entre los de la **clase**, así
+    /// que nunca hallaba `List<E>` y no sustituía nada.
     fn as_seen_from(&self, mine: SymbolId, parent: SymbolId, ret: &RType) -> RType {
-        let Some(owner) = self.table.symbol(parent).owner else { return ret.clone() };
-        let Some(sub) = self.table.symbol(mine).owner else { return ret.clone() };
-        // Se sube por los supertipos del **subtipo** (no del retorno: `T` solo llega a sus cotas)
-        // hasta el supertipo cuya erasure es la clase dueña del método heredado, y se toman sus
-        // argumentos de tipo: `SB extends Box<String>` da `{T ↦ String}`, y `T get()` se ve `String`.
-        for sup in types::supertypes_of(self.table, &RType::Class(sub)) {
-            if types::erased_id(&sup) == Some(owner) {
-                return types::substitute(ret, &types::subst_of(self.table, &sup));
-            }
+        let mut result = ret.clone();
+        // (1) Parámetros de tipo de **clase** del supertipo (finding #9): el self-type de la clase
+        //     (`MyList<E>`) → su supertipo `owner` (`List<E>`) da la sustitución `{parámetro de List →
+        //     E}`, que se aplica al retorno heredado. También el caso no genérico (`Caja<String>`).
+        if let (Some(owner), Some(my_class)) =
+            (self.table.symbol(parent).owner, self.table.symbol(mine).owner)
+        {
+            let self_ty = types::self_type(self.table, my_class);
+            let subst = types::subst_for(self.table, &self_ty, owner);
+            result = types::substitute(&result, &subst);
         }
-        ret.clone()
+        // (2) Parámetros de tipo de **método** (finding #17): los del método del padre corresponden
+        //     **posicionalmente** con los del override (§8.4.2), así que el `R` del padre se reescribe
+        //     al `R` de la impl — si no, un retorno `R` pelado compararía dos variables distintas.
+        let parent_tps = super::infer::method_type_params(self.table, parent);
+        let mine_tps = super::infer::method_type_params(self.table, mine);
+        if !parent_tps.is_empty() && parent_tps.len() == mine_tps.len() {
+            let msubst: types::Subst = parent_tps
+                .iter()
+                .zip(&mine_tps)
+                .map(|(&p, &m)| (p, RType::TypeVar(m)))
+                .collect();
+            result = types::substitute(&result, &msubst);
+        }
+        result
     }
 
     /// El símbolo de **este** método: el `nth`-ésimo con su nombre y aridad.
@@ -791,32 +954,39 @@ impl Checker<'_> {
             return;
         }
         let ancestors = self.ancestors(cid);
-        if ancestors.iter().any(|&a| self.is_external(a)) {
+        // Se exime solo si algún ancestro es una **clase externa distinta de `Object`**: de una clase
+        // externa (p. ej. `AbstractList`) podríamos no ver todas las implementaciones concretas que
+        // hereda, y falso-reclamaríamos. Cuando los ancestros externos son **interfaces**, el finder
+        // ya cargó sus métodos —abstractos + `default` marcados— transitivamente, así que el chequeo
+        // es confiable (finding #8: `implements List` sin implementar sus métodos ahora sí se reporta).
+        // `Object` siempre está y sus métodos son concretos/conocidos: no exime.
+        let externally_extends_a_class = ancestors.iter().any(|&a| {
+            self.is_external(a)
+                && !self.is_interface(a)
+                && self.binary(a).replace('/', ".") != "java.lang.Object"
+        });
+        if externally_extends_a_class {
             return;
         }
         // Se recorre la jerarquía juntando las dos listas por **firma borrada**, y al final se
-        // reclama lo que quedó abstracto sin una implementación que lo tape.
+        // reclama lo que quedó abstracto sin una implementación que lo tape. La firma se computa
+        // **como se ve desde la clase** (§8.4.8.1): los parámetros de tipo del supertipo se sustituyen
+        // por sus argumentos antes de borrar. Sin esto, `Comparable<Foo>.compareTo(T)` borraría a
+        // `(Object)` y `Foo.compareTo(Foo)` a `(Foo)`, no matchearían, y se reclamaría un método ya
+        // implementado (el puente `compareTo(Object)` se sintetiza recién en codegen).
+        let self_ty = types::self_type(self.table, cid);
         let mut implemented: Vec<(String, Vec<RType>)> = Vec::new();
         let mut pending: Vec<(String, Vec<RType>, String)> = Vec::new();
         for &c in std::iter::once(&cid).chain(ancestors.iter()) {
             let cname = self.table.symbol(c).name.clone();
             let in_interface = self.is_interface(c);
-            // Los argumentos que `cid` le pasa a este ancestro (`implements Cmp<C>` ⇒ `{T ↦ C}`):
-            // sin sustituir, el `cmp(T)` de la interfaz quedaría `cmp(Object)` y no lo taparía el
-            // `cmp(C)` de la clase. Vacío si el ancestro no es genérico o es `cid` mismo.
-            let subst = types::subst_for(self.table, &RType::Class(cid), c);
+            let subst = types::subst_for(self.table, &self_ty, c);
             for id in self.table.members_of(c) {
                 let sym = self.table.symbol(id);
                 if !matches!(sym.kind, SymbolKind::Method { .. }) {
                     continue;
                 }
-                let sig = match self.table.resolved(id) {
-                    Some(Resolved::Method { params, .. }) => params
-                        .iter()
-                        .map(|p| types::erasure(self.table, &types::substitute(p, &subst)))
-                        .collect::<Vec<_>>(),
-                    _ => continue,
-                };
+                let Some(sig) = erased_params_as_seen(self.table, id, &subst) else { continue };
                 let key = (sym.name.clone(), sig);
                 // En una interfaz, `abstract` es implícito: lo que **no** es abstracto es lo que
                 // trae `default` o `static`.
@@ -843,6 +1013,246 @@ impl Checker<'_> {
         }
     }
 
+    /// Las reglas de buena formación de `sealed` (§8.1.1.2 / §9.1.1.4 / §8.1.6). El `permits`
+    /// resuelto (incluido el **implícito**) ya vive en el grafo, así que acá solo se contrastan
+    /// modificadores y la relación de subtipado **directo**.
+    fn sealed_rules(&mut self, class: &ClassDecl, cid: SymbolId) {
+        let is_sealed = class.modifiers.contains(&Modifier::Sealed);
+        let is_non_sealed = class.modifiers.contains(&Modifier::NonSealed);
+
+        // Combinaciones contradictorias de modificadores.
+        if is_sealed && class.modifiers.contains(&Modifier::Final) {
+            self.error(class.pos, format!("`{}` no puede ser `sealed` y `final` a la vez", class.name));
+        }
+        if is_sealed && is_non_sealed {
+            self.error(class.pos, format!("`{}` no puede ser `sealed` y `non-sealed`", class.name));
+        }
+
+        // Supertipos **directos** de este tipo.
+        let mut supers = Vec::new();
+        if let Some(s) = self.table.super_class(cid) {
+            supers.push(s);
+        }
+        supers.extend(self.table.interfaces(cid));
+
+        // §8.1.1.2: `non-sealed` exige un supertipo directo `sealed`.
+        if is_non_sealed && !supers.iter().any(|&s| self.table.is_sealed(s)) {
+            self.error(
+                class.pos,
+                format!("`non-sealed` en `{}` sin un supertipo directo `sealed`", class.name),
+            );
+        }
+
+        // Este tipo como **subtipo** de un `sealed`: debe cerrar su extensión (final/sealed/
+        // non-sealed —o ser implícitamente final: enum/record—) y estar en su `permits`.
+        let ok_modifier = is_sealed
+            || is_non_sealed
+            || class.modifiers.contains(&Modifier::Final)
+            || matches!(class.kind, TypeKind::Enum | TypeKind::Record);
+        for &s in &supers {
+            if !self.table.is_sealed(s) {
+                continue;
+            }
+            let sname = self.table.symbol(s).name.clone();
+            if !ok_modifier {
+                self.error(class.pos, format!(
+                    "`{}` extiende el tipo `sealed` `{sname}`: debe ser `final`, `sealed` o `non-sealed`",
+                    class.name,
+                ));
+            }
+            let permitted: Vec<SymbolId> =
+                self.table.permitted(s).iter().filter_map(types::erased_id).collect();
+            if !permitted.contains(&cid) {
+                self.error(class.pos, format!(
+                    "`{}` no está autorizada a extender `{sname}` (falta en su `permits`)",
+                    class.name,
+                ));
+            }
+        }
+
+        if is_sealed {
+            // §8.1.6: un `sealed` necesita al menos un subtipo autorizado.
+            if self.table.permitted(cid).is_empty() {
+                self.error(
+                    class.pos,
+                    format!("el tipo `sealed` `{}` no declara subtipos permitidos", class.name),
+                );
+            }
+            // Con `permits` **explícito**, cada tipo listado debe ser subtipo **directo**.
+            if !class.permits.is_empty() {
+                let listed: Vec<SymbolId> =
+                    self.table.permitted(cid).iter().filter_map(types::erased_id).collect();
+                for pid in listed {
+                    let mut psupers = Vec::new();
+                    if let Some(ps) = self.table.super_class(pid) {
+                        psupers.push(ps);
+                    }
+                    psupers.extend(self.table.interfaces(pid));
+                    if !psupers.contains(&cid) {
+                        let pname = self.table.symbol(pid).name.clone();
+                        self.error(
+                            class.pos,
+                            format!("`permits` de `{}`: `{pname}` no es un subtipo directo", class.name),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- exhaustividad de `switch` (§14.11.1.1) ----
+
+    /// Un `switch`-**expresión** (siempre) y un `switch`-**sentencia con patterns**/`case null` deben
+    /// cubrir todos los valores posibles. Se comprueba para `sealed` (recursivo hasta las hojas),
+    /// `enum` (todas las constantes) y `boolean` (`true`/`false`). Un `default` cubre por definición.
+    fn exhaustive_switch(&mut self, from: SymbolId, selector: &Expr, cases: &[SwitchCase], is_expr: bool) {
+        if cases.iter().any(|c| c.is_default) {
+            return;
+        }
+        // Un `switch`-sentencia "clásico" (solo constantes, sin patterns) no exige exhaustividad
+        // (§14.11.1.1): puede no cubrir todo y simplemente no hacer nada.
+        let uses_patterns = cases
+            .iter()
+            .flat_map(|c| &c.labels)
+            .any(|l| matches!(l, CaseLabel::Pattern(_) | CaseLabel::Null));
+        if !is_expr && !uses_patterns {
+            return;
+        }
+        // Sin tipo de selector resuelto no se opina (indulgencia, como en el resto del chequeo).
+        let Some(sel) = selector.ty.as_ref() else { return };
+        if self.switch_covers(from, sel, cases) {
+            return;
+        }
+        let what = if is_expr { "la expresión `switch`" } else { "el `switch`" };
+        self.error(
+            selector.pos,
+            format!("{what} no es exhaustivo: no cubre todos los valores posibles"),
+        );
+    }
+
+    /// ¿Los brazos cubren todo el tipo del selector?
+    fn switch_covers(&self, from: SymbolId, sel: &RType, cases: &[SwitchCase]) -> bool {
+        // `boolean`: hacen falta `true` y `false` (patrones de primitivo, §14.11.1.1 con JEP 455).
+        if matches!(sel, RType::Prim(PrimType::Boolean)) {
+            let (mut t, mut f) = (false, false);
+            for l in cases.iter().flat_map(|c| &c.labels) {
+                if let CaseLabel::Constant(e) = l {
+                    match &e.kind {
+                        ExprKind::BoolLit(true) => t = true,
+                        ExprKind::BoolLit(false) => f = true,
+                        _ => {}
+                    }
+                }
+            }
+            return t && f;
+        }
+        let total = self.total_pattern_types(from, cases);
+        let Some(id) = types::erased_id(sel) else { return false };
+        // `enum`: un patrón total que lo cubra, o todas sus constantes presentes.
+        if self.is_enum(id) {
+            if total.iter().any(|p| types::is_subtype(self.table, sel, p)) {
+                return true;
+            }
+            return self.enum_constants_covered(id, cases);
+        }
+        // `sealed`/referencia: cobertura por tipos totales, recursiva sobre la jerarquía sellada.
+        self.covers_type(sel, &total)
+    }
+
+    /// `T` está cubierto si algún patrón **total** lo abarca (`T <: patrón`), o si `T` es `sealed` y
+    /// **cada** subtipo autorizado está cubierto (recursión hasta las hojas `final`/`non-sealed`).
+    fn covers_type(&self, t: &RType, total: &[RType]) -> bool {
+        if total.iter().any(|p| types::is_subtype(self.table, t, p)) {
+            return true;
+        }
+        if let Some(id) = types::erased_id(t) {
+            if self.table.is_sealed(id) {
+                let perm = self.table.permitted(id);
+                if !perm.is_empty() && perm.iter().all(|s| self.covers_type(s, total)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Los tipos de los patrones **totales**: patrones sin `when` (una guarda puede fallar, así que
+    /// no cubre). Un patrón de `record` se toma como total para su tipo (aproximación suficiente para
+    /// las jerarquías selladas de records).
+    fn total_pattern_types(&self, from: SymbolId, cases: &[SwitchCase]) -> Vec<RType> {
+        let mut out = Vec::new();
+        for c in cases {
+            if c.guard.is_some() {
+                continue;
+            }
+            for l in &c.labels {
+                if let CaseLabel::Pattern(p) = l {
+                    let ty = match p {
+                        Pattern::Type { ty, .. } | Pattern::Record { ty, .. } => ty,
+                    };
+                    if let Some(id) = self.resolve_type_id(from, ty) {
+                        out.push(RType::Class(id));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Resuelve un nombre de tipo (de un patrón) a su `SymbolId`, en el scope de la clase o entre los
+    /// tipos externos.
+    fn resolve_type_id(&self, from: SymbolId, ty: &Type) -> Option<SymbolId> {
+        let name = match ty {
+            Type::Class(n) | Type::Parameterized { base: n, .. } => n,
+            _ => return None,
+        };
+        let scope = match &self.table.symbol(from).kind {
+            SymbolKind::Class { members, .. } => *members,
+            _ => return None,
+        };
+        self.table.resolve_type(scope, name).or_else(|| self.table.external(name))
+    }
+
+    fn is_enum(&self, cid: SymbolId) -> bool {
+        matches!(&self.table.symbol(cid).kind, SymbolKind::Class { kind: TypeKind::Enum, .. })
+    }
+
+    /// Los nombres de las constantes de un `enum`: sus campos `static` cuyo tipo es el propio `enum`
+    /// (así se descartan el `$VALUES` sintético y cualquier otro campo).
+    fn enum_constant_names(&self, enum_id: SymbolId) -> Vec<String> {
+        self.table
+            .members_of(enum_id)
+            .into_iter()
+            .filter_map(|m| {
+                let sym = self.table.symbol(m);
+                if !matches!(sym.kind, SymbolKind::Field { .. }) {
+                    return None;
+                }
+                match self.table.resolved(m) {
+                    Some(Resolved::Field(RType::Class(fid))) if *fid == enum_id => Some(sym.name.clone()),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
+    /// ¿Están **todas** las constantes del `enum` como etiquetas `case NAME`?
+    fn enum_constants_covered(&self, enum_id: SymbolId, cases: &[SwitchCase]) -> bool {
+        let consts = self.enum_constant_names(enum_id);
+        if consts.is_empty() {
+            return false;
+        }
+        let mut covered = std::collections::HashSet::new();
+        for l in cases.iter().flat_map(|c| &c.labels) {
+            if let CaseLabel::Constant(e) = l {
+                if let ExprKind::Name(n) = &e.kind {
+                    covered.insert(n.as_str());
+                }
+            }
+        }
+        consts.iter().all(|c| covered.contains(c.as_str()))
+    }
+
     fn is_interface(&self, cid: SymbolId) -> bool {
         matches!(&self.table.symbol(cid).kind, SymbolKind::Class { kind: TypeKind::Interface, .. })
     }
@@ -859,6 +1269,9 @@ impl Checker<'_> {
             RType::Array(e) => format!("{}[]", self.name_of(e)),
             RType::Class(id) | RType::TypeVar(id) => self.table.symbol(*id).name.clone(),
             RType::Parameterized { base, .. } => self.table.symbol(*base).name.clone(),
+            RType::Capture { upper, .. } => self.name_of(upper),
+            RType::Intersection(ms) => ms.first().map_or_else(|| "?".to_string(), |m| self.name_of(m)),
+            RType::InferVar(_) => "?".to_string(),
             RType::Unresolved => "?".to_string(),
         }
     }
@@ -919,6 +1332,123 @@ mod tests {
             "class A { int f() { return 0; } }              class B extends A { long f() { return 0; } }",
             "no es compatible",
         );
+    }
+
+    #[test]
+    fn a_generic_covariant_override_substitutes_the_type_variable() {
+        // finding #9: `class MyBox<E> implements Box<E>` con `E get()` — el `T` del padre (parámetro
+        // de `Box`) se sustituye por el `E` de `MyBox`, así el retorno chequea idéntico en vez de
+        // comparar dos variables de tipo distintas.
+        ok("interface Box<T> { T get(); } \
+            class MyBox<E> implements Box<E> { public E get() { return null; } }");
+    }
+
+    #[test]
+    fn a_generic_override_with_a_bare_method_type_variable_return_is_accepted() {
+        // finding #17: `<R> R foo(R x)` en la impl contra `<R> R foo(R x)` en la interfaz — los `R` de
+        // **método** corresponden posicionalmente (§8.4.2), no se comparan como variables distintas.
+        // Es el análogo a nivel método del #9 (que arregló las de clase).
+        ok("interface I<T> { <R> R foo(R x); } \
+            class C<T> implements I<T> { public <R> R foo(R x) { return x; } }");
+    }
+
+    #[test]
+    fn a_generic_override_with_a_concrete_type_argument_is_accepted() {
+        // `class StringBox implements Box<String>` con `String get()`: el `T` de `Box` es `String`.
+        ok("interface Box<T> { T get(); } \
+            class StringBox implements Box<String> { public String get() { return null; } }");
+    }
+
+    #[test]
+    fn a_same_package_classpath_type_resolves_by_simple_name() {
+        // finding #4: `List` desde `package java.util` resuelve por su nombre simple (busca
+        // `java/util/List` en el classpath), sin `import`. Antes daba "no se encuentra el símbolo: List".
+        let e = errors("package java.util; public class P { List<Object> f() { return null; } }");
+        assert!(
+            !e.iter().any(|m| m.contains("símbolo") && m.contains("List")),
+            "`List` debe resolver por nombre simple en su paquete: {e:?}",
+        );
+    }
+
+    #[test]
+    fn a_static_call_on_a_java_util_utility_resolves() {
+        // finding #11: `Objects.requireNonNull(x)` — el receptor `Objects` (utilidad de java.util) se
+        // carga del classpath porque ahora se **recolecta** el receptor de la llamada estática, y su
+        // método resuelve. Antes fallaba con "no se encuentra el símbolo: Objects".
+        ok("import java.util.Objects; \
+            public class M { void r(Object x) { Objects.requireNonNull(x); } }");
+    }
+
+    #[test]
+    fn a_source_core_type_shadows_the_external_one_in_the_override_check() {
+        // finding #5: al compilar `java.lang.String` en sí, su `toString()` que devuelve `String` no
+        // debe chocar con el `String` **externo** del classpath — el tipo del fuente lo sombrea
+        // (semántica `--patch-module`), así que ambos lados del override son el mismo `String`.
+        ok("package java.lang; \
+            public class String implements CharSequence { \
+                public String toString() { return this; } \
+                public int length() { return 0; } \
+                public char charAt(int i) { return 'a'; } \
+                public CharSequence subSequence(int a, int b) { return this; } }");
+    }
+
+    #[test]
+    fn a_generic_override_returning_the_wrong_type_is_still_rejected() {
+        // El fix no debe volverse permisivo: si el retorno no matchea el parámetro sustituido, error.
+        one(
+            "interface Box<T> { T get(); } \
+             class BadBox implements Box<String> { public Integer get() { return null; } }",
+            "no es compatible",
+        );
+    }
+
+    // ---- `@Override` (§9.6.4.4) ----
+
+    #[test]
+    fn override_on_a_real_override_is_fine() {
+        ok("class A { void m() {} } class B extends A { @Override void m() {} }");
+    }
+
+    #[test]
+    fn override_implementing_an_interface_method_is_fine() {
+        ok("interface I { void m(); } class A implements I { @Override public void m() {} }");
+    }
+
+    #[test]
+    fn override_on_a_method_that_overrides_nothing_is_rejected() {
+        one(
+            "class A {} class B extends A { @Override void g() {} }",
+            "no sobrescribe",
+        );
+    }
+
+    #[test]
+    fn override_on_an_object_method_is_not_second_guessed() {
+        // `Object` es externo y sus miembros no siempre están cargados: un `@Override` sobre uno de sus
+        // métodos (`toString`) no se reporta como si no sobrescribiera nada.
+        ok("class A { @Override public String toString() { return \"\"; } }");
+    }
+
+    // ---- `throws` más ancho (§8.4.8.3) ----
+
+    #[test]
+    fn a_wider_throws_in_an_override_is_rejected() {
+        one(
+            "class A { void m() {} } class B extends A { void m() throws Exception {} }",
+            "más ancho",
+        );
+    }
+
+    #[test]
+    fn a_narrower_throws_in_an_override_is_fine() {
+        // `Exception` <: `Throwable`: estrechar el `throws` es legal.
+        ok("class A { void m() throws Throwable {} } class B extends A { void m() throws Exception {} }");
+    }
+
+    #[test]
+    fn an_unchecked_throws_in_an_override_is_fine() {
+        // `RuntimeException` no es chequeada: no cuenta para la regla del `throws`.
+        ok("class A { void m() {} } class B extends A { void m() throws RuntimeException {} }");
     }
 
     // ---- visibilidad (§8.4.8.3) ----
@@ -1016,11 +1546,46 @@ mod tests {
     }
 
     #[test]
-    fn an_external_supertype_exempts_the_class() {
-        // De un tipo externo solo conocemos los miembros que aparecieron en alguna firma: reclamar
-        // lo que «falta» sería inventar errores.
-        // `Runnable` es de `java.lang`: se modela como externo, con sus miembros parciales.
-        ok("class B implements Runnable { }");
+    fn an_external_interface_no_longer_exempts_an_unimplemented_method() {
+        // finding #8: el finder carga los métodos de una **interfaz** externa, así que implementar
+        // `Runnable` sin su `run()` abstracto **sí** se reporta (antes se eximía toda la jerarquía).
+        one("class B implements Runnable { }", "no implementa `run`");
+    }
+
+    #[test]
+    fn an_external_class_ancestor_still_exempts() {
+        // De una **clase** externa (`Thread`) podríamos no ver sus implementaciones concretas
+        // heredadas: se sigue eximiendo el chequeo, para no inventar errores.
+        ok("abstract class Base extends Thread { abstract void extra(); } class B extends Base { }");
+    }
+
+    #[test]
+    fn not_implementing_an_external_interfaces_methods_is_reported() {
+        // finding #8, caso de KajiLibrary: `implements List` con solo `size()` reclama el resto.
+        let e = errors(
+            "package java.util; import java.util.List; \
+             public class P<E> implements List<E> { public int size() { return 0; } }",
+        );
+        assert!(
+            e.iter().any(|m| m.contains("no implementa")),
+            "debe reclamar métodos abstractos de List sin implementar: {e:?}",
+        );
+    }
+
+    #[test]
+    fn fully_implementing_an_external_interface_is_fine() {
+        // Contraprueba (sin falso positivo): implementar del todo `Runnable` compila.
+        ok("class C implements Runnable { public void run() {} }");
+    }
+
+    #[test]
+    fn default_methods_of_an_external_interface_need_not_be_overridden() {
+        // Los `default` externos (`Iterator.remove`/`forEachRemaining`) NO se reclaman — se marcan al
+        // cargar la interfaz. Solo hacen falta los abstractos (`hasNext`/`next`). (finding #8.)
+        ok("import java.util.Iterator; \
+            public class It implements Iterator<Object> { \
+                public boolean hasNext() { return false; } \
+                public Object next() { return null; } }");
     }
 
     // ---- control de acceso (§6.6) ----
@@ -1119,5 +1684,198 @@ mod tests {
              void c() { try { m(); } catch (Exception e) { m(); } } }",
             "sin capturar ni declarar",
         );
+    }
+
+    // ---- sealed (§8.1.1.2 / §9.1.1.4 / §8.1.6) ----
+
+    /// Que **algún** error mencione `needle` (los casos de sealed pueden dar más de uno).
+    fn some(src: &str, needle: &str) {
+        let e = errors(src);
+        assert!(e.iter().any(|m| m.contains(needle)), "ningún error menciona `{needle}`: {e:?}");
+    }
+
+    #[test]
+    fn a_well_formed_sealed_hierarchy_is_accepted() {
+        ok("sealed interface Shape permits Circle, Square {} \
+            final class Circle implements Shape {} \
+            final class Square implements Shape {}");
+    }
+
+    #[test]
+    fn an_implicit_permits_from_unit_subtypes_is_accepted() {
+        // Sin `permits`: los subtipos directos de la misma unidad son los autorizados.
+        ok("sealed interface Shape {} \
+            final class Circle implements Shape {} \
+            final class Square implements Shape {}");
+    }
+
+    #[test]
+    fn a_non_sealed_subtype_reopens_extension() {
+        ok("sealed class Base permits Sub {} \
+            non-sealed class Sub extends Base {}");
+    }
+
+    #[test]
+    fn a_subtype_of_a_sealed_type_must_close_its_extension() {
+        // `Sub` no es `final`/`sealed`/`non-sealed`: ilegal.
+        some(
+            "sealed class Base permits Sub {} class Sub extends Base {}",
+            "debe ser `final`, `sealed` o `non-sealed`",
+        );
+    }
+
+    #[test]
+    fn an_unlisted_subtype_of_an_explicit_permits_is_rejected() {
+        some(
+            "sealed interface Shape permits Circle {} \
+             final class Circle implements Shape {} \
+             final class Triangle implements Shape {}",
+            "no está autorizada a extender",
+        );
+    }
+
+    #[test]
+    fn a_permits_entry_that_is_not_a_direct_subtype_is_rejected() {
+        some(
+            "sealed interface Shape permits Stranger {} final class Stranger {}",
+            "no es un subtipo directo",
+        );
+    }
+
+    #[test]
+    fn a_non_sealed_without_a_sealed_supertype_is_rejected() {
+        some("non-sealed class Lonely {}", "sin un supertipo directo `sealed`");
+    }
+
+    #[test]
+    fn a_sealed_type_without_subtypes_is_rejected() {
+        some("sealed interface Empty {}", "no declara subtipos permitidos");
+    }
+
+    // ---- exhaustividad de switch (§14.11.1.1) ----
+
+    const SHAPES: &str = "sealed interface Shape permits Circle, Square {} \
+        final class Circle implements Shape {} \
+        final class Square implements Shape {} ";
+
+    #[test]
+    fn a_sealed_switch_expression_covering_all_subtypes_is_exhaustive() {
+        ok(&format!(
+            "{SHAPES} class U {{ int f(Shape s) {{ \
+             return switch (s) {{ case Circle c -> 1; case Square q -> 2; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn a_sealed_switch_missing_a_subtype_is_rejected() {
+        some(
+            &format!(
+                "{SHAPES} class U {{ int f(Shape s) {{ \
+                 return switch (s) {{ case Circle c -> 1; }}; }} }}"
+            ),
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn a_total_pattern_on_the_selector_type_is_exhaustive() {
+        ok(&format!(
+            "{SHAPES} class U {{ int f(Shape s) {{ \
+             return switch (s) {{ case Shape any -> 0; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn a_guarded_pattern_does_not_count_towards_coverage() {
+        some(
+            &format!(
+                "{SHAPES} class U {{ int f(Shape s, int k) {{ \
+                 return switch (s) {{ case Circle c when k > 0 -> 1; case Square q -> 2; }}; }} }}"
+            ),
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn a_default_makes_a_switch_expression_exhaustive() {
+        ok(&format!(
+            "{SHAPES} class U {{ int f(Shape s) {{ \
+             return switch (s) {{ case Circle c -> 1; default -> 0; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn a_pattern_switch_statement_must_be_exhaustive() {
+        some(
+            &format!(
+                "{SHAPES} class U {{ void f(Shape s) {{ \
+                 switch (s) {{ case Circle c -> {{}} }} }} }}"
+            ),
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn an_enum_switch_expression_covering_all_constants_is_exhaustive() {
+        ok("enum Color { RED, GREEN } \
+            class U { int f(Color c) { return switch (c) { case RED -> 1; case GREEN -> 2; }; } }");
+    }
+
+    #[test]
+    fn an_enum_switch_expression_missing_a_constant_is_rejected() {
+        some(
+            "enum Color { RED, GREEN } \
+             class U { int f(Color c) { return switch (c) { case RED -> 1; }; } }",
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn a_legacy_enum_switch_statement_needs_no_exhaustiveness() {
+        // Un `switch`-sentencia clásico (solo constantes) puede no cubrir todo: no se exige.
+        ok("enum Color { RED, GREEN } \
+            class U { void f(Color c) { switch (c) { case RED: break; } } }");
+    }
+
+    #[test]
+    fn a_boolean_switch_expression_covering_both_values_is_exhaustive() {
+        ok("class U { int f(boolean b) { \
+            return switch (b) { case true -> 1; case false -> 0; }; } }");
+    }
+
+    #[test]
+    fn a_boolean_switch_expression_missing_a_value_is_rejected() {
+        some(
+            "class U { int f(boolean b) { return switch (b) { case true -> 1; }; } }",
+            "no es exhaustivo",
+        );
+    }
+
+    // ---- módulos (§7.7) ----
+
+    #[test]
+    fn a_well_formed_module_is_accepted() {
+        ok("module m { requires java.base; exports p.api; opens p.impl; uses p.S; provides p.S with p.Impl; }");
+    }
+
+    #[test]
+    fn a_duplicate_requires_is_rejected() {
+        one("module m { requires a.b; requires a.b; }", "`requires` duplicado");
+    }
+
+    #[test]
+    fn a_self_requires_is_rejected() {
+        one("module m.foo { requires m.foo; }", "no puede requerirse a sí mismo");
+    }
+
+    #[test]
+    fn a_duplicate_exports_is_rejected() {
+        // El mismo paquete no puede exportarse dos veces, aunque cambie el `to`.
+        one("module m { exports p.api; exports p.api to other; }", "`exports` duplicado");
+    }
+
+    #[test]
+    fn a_repeated_provides_implementation_is_rejected() {
+        one("module m { provides p.S with p.A, p.A; }", "implementación repetida");
     }
 }

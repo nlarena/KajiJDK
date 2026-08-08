@@ -162,7 +162,7 @@ fn block_node(block: &Block) -> Node {
 
 fn stmt_node(stmt: &Stmt) -> Node {
     match &stmt.kind {
-        StmtKind::LocalVar { ty, name, init, is_final } => {
+        StmtKind::LocalVar { ty, name, init, is_final, .. } => {
             let kw = if *is_final { "final " } else { "" };
             let label = format!("LocalVar {kw}{name}: {}", type_str(ty));
             match init {
@@ -249,6 +249,7 @@ fn stmt_node(stmt: &Stmt) -> Node {
 
 fn expr_node(expr: &Expr) -> Node {
     match &expr.kind {
+        ExprKind::Error => leaf("«error»"),
         ExprKind::IntLit(v) => leaf(format!("IntLit {v}")),
         ExprKind::LongLit(v) => leaf(format!("LongLit {v}")),
         ExprKind::FloatLit(v) => leaf(format!("FloatLit {v}")),
@@ -259,6 +260,7 @@ fn expr_node(expr: &Expr) -> Node {
         ExprKind::Null => leaf("Null"),
         ExprKind::Name(n) => leaf(format!("Name {n}")),
         ExprKind::This => leaf("This"),
+        ExprKind::QualifiedThis(ty) => leaf(format!("QualifiedThis {}.this", type_str(ty))),
         ExprKind::Super => leaf("Super"),
         ExprKind::Binary { op, lhs, rhs } => {
             branch(format!("Binary {}", bin_op(*op)), vec![expr_node(lhs), expr_node(rhs)])
@@ -294,8 +296,12 @@ fn expr_node(expr: &Expr) -> Node {
             branch(format!("InstanceOf {}{b}", type_str(ty)), vec![expr_node(expr)])
         }
         ExprKind::ClassLit(ty) => leaf(format!("ClassLit {}.class", type_str(ty))),
-        ExprKind::NewObject { ty, args, body } => {
-            let mut ch: Vec<Node> = args.iter().map(expr_node).collect();
+        ExprKind::NewObject { ty, args, body, outer } => {
+            let mut ch: Vec<Node> = Vec::new();
+            if let Some(o) = outer {
+                ch.push(role("outer", expr_node(o)));
+            }
+            ch.extend(args.iter().map(expr_node));
             if let Some(members) = body {
                 ch.push(branch("body", members.iter().map(member_node).collect()));
             }
@@ -416,6 +422,8 @@ fn modifier_str(m: Modifier) -> &'static str {
         Modifier::Volatile => "volatile",
         Modifier::Strictfp => "strictfp",
         Modifier::Default => "default",
+        Modifier::Sealed => "sealed",
+        Modifier::NonSealed => "non-sealed",
     }
 }
 
@@ -532,7 +540,7 @@ mod tests {
     use crate::javac::{lexer::tokenize, parser::parse};
 
     fn tree_of(src: &str) -> String {
-        tree(&parse(tokenize(src).unwrap()).unwrap())
+        tree(&parse(tokenize(src).unwrap()).0)
     }
 
     #[test]

@@ -51,11 +51,9 @@ fn main() -> ExitCode {
 
     // Fase 2 — Parser.
     screen(1, "tokens → AST");
-    let mut unit = match parser::parse(tokens) {
-        Ok(u) => u,
-        Err(e) => return fail(&path, e),
-    };
+    let (mut unit, parse_errs) = parser::parse(tokens);
     print!("{}", ast_view::tree(&unit));
+    print_errors(&path, "parser", &parse_errs);
     pause();
 
     // Fase 3 — Enter (pasada 1).

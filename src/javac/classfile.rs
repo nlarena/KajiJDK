@@ -368,7 +368,7 @@ fn sig_type_params(r: &mut SigReader) -> Option<Vec<TypeParam>> {
                 bounds.push(b);
             }
         }
-        out.push(TypeParam { name, bounds });
+        out.push(TypeParam { annotations: Vec::new(), name, bounds, bound_annos: Vec::new() });
         if r.peek().is_none() {
             return None; // truncada
         }

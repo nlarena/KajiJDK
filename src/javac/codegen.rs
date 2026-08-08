@@ -27,8 +27,9 @@
 //!   `jsr`/`ret` — y `synchronized` con el mismo patrón: `monitorexit` en las dos salidas, para que
 //!   una excepción no deje el monitor tomado.
 //! - **`StackMapTable`** (§4.7.4): el frame de cada destino de salto, calculado como el **merge** de
-//!   los estados que llegan ahí. Se emite siempre `full_frame`: legal en cualquier posición y evita
-//!   las formas comprimidas. El emisor lleva la pila de operandos **tipada**, no solo su altura —
+//!   los estados que llegan ahí, y serializado en la forma **más compacta** según el frame anterior
+//!   (`same`/`same_locals_1`/`append`/`chop`, con `full_frame` de respaldo). El emisor lleva la pila
+//!   de operandos **tipada**, no solo su altura —
 //!   que es lo que un frame tiene que declarar—, así que un destino alcanzado con algo ya empujado
 //!   (`f(a, b > 0 ? 1 : 2)`) lo declara bien. Eso incluye el tipo `uninitialized` (tag 8): un objeto
 //!   recién creado se identifica por el **offset de su `new`**, y cuando corre su `<init>` todas sus
@@ -43,14 +44,17 @@
 //! `static final int` como etiqueta de `case`.
 
 use super::ast::{
-    AssignOp, BinOp, Binding, BootstrapArg, Block, CaseLabel, CatchClause, Expr, ExprKind, Member,
-    MethodDecl, Modifier, Pos, PrimType, Stmt, StmtKind, SwitchBody, SwitchCase, Type, UnOp,
+    Annotation, AnnotationValue, AssignOp, BinOp, Binding, BootstrapArg, Block, CaseLabel,
+    CatchClause, ClassDecl, CompilationUnit, Expr, ExprKind, Member, MethodDecl, Modifier, Pos,
+    Param, PrimType, Stmt, StmtKind, SwitchBody, SwitchCase, Type, TypeArg, TypeKind, TypeParam,
+    TypePathStep, TypeUseAnnot, UnOp,
 };
 use super::Error;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::class_writer::{
-    BootstrapMethod, ClassFile, ConstantPool, ExceptionEntry, FieldInfo, MethodInfo,
+    BootstrapMethod, ClassFile, ConstantPool, ExceptionEntry, FieldInfo, InnerClassEntry, MethodInfo,
+    ParamInfo, RecordComponent,
 };
 use super::symbol::{RType, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable};
 use super::types;
@@ -62,9 +66,17 @@ const ACC_PROTECTED: u16 = 0x0004;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_FINAL: u16 = 0x0010;
 const ACC_SUPER: u16 = 0x0020;
+const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
-const ACC_BRIDGE: u16 = 0x0040; // método puente sintético (JVMS §4.6, tabla 4.6-A)
-const ACC_SYNTHETIC: u16 = 0x1000; // no está en el fuente: lo generó el compilador
+const ACC_NATIVE: u16 = 0x0100; // método implementado por el VM, sin `Code` (§4.6)
+const ACC_BRIDGE: u16 = 0x0040; // método puente sintetizado (§4.6)
+const ACC_SYNTHETIC: u16 = 0x1000; // no aparece en el fuente (§4.6)
+const ACC_ENUM: u16 = 0x4000; // tipo/campo `enum` (§4.1/§4.5)
+const ACC_MODULE: u16 = 0x8000; // el `.class` es un descriptor de módulo (§4.1)
+const ACC_OPEN: u16 = 0x0020; // `open module` (§4.7.25)
+const ACC_TRANSITIVE: u16 = 0x0020; // `requires transitive` (§4.7.25)
+const ACC_STATIC_PHASE: u16 = 0x0040; // `requires static` (§4.7.25)
+const ACC_MANDATED: u16 = 0x8000; // implícito, no escrito en el fuente (el `requires java.base`)
 
 /// Compila **cada tipo** de `unit` a su propio `.class` — top-level y anidados (§7.6, §8.1.3): una
 /// unidad puede declarar varios tipos, y cada clase interna, la anónima `C$1` del `switch`-enum, etc.
@@ -81,14 +93,144 @@ pub fn generate(
     let mut errors: Vec<Error> = Vec::new();
     let mut out: Vec<(String, Vec<u8>)> = Vec::new();
     let base = unit.package.as_deref().unwrap_or("");
+    // Los tipos de anotación **retenidos en runtime** (§9.6.4.2): los `@interface` del fuente con
+    // `@Retention(RUNTIME)` más las conocidas del JDK. Solo esas van a `RuntimeVisibleAnnotations`.
+    let rt = runtime_retained_annotations(unit);
+    // Qué anotaciones son type annotations por su `@Target` (§9.6.4.1) — para rutearlas a
+    // `RuntimeVisibleTypeAnnotations` en vez de (o además de) `RuntimeVisibleAnnotations`.
+    let tu = type_use_info(unit);
     for class in &unit.types {
-        gen_type(class, base, table, &mut out, &mut errors);
+        gen_type(class, base, table, &rt, &tu, &mut out, &mut errors);
+    }
+    // Un `module-info.java` (§7.7) produce un `module-info.class` con el atributo `Module`.
+    if let Some(module) = &unit.module {
+        out.push(("module-info".to_string(), gen_module_info(module)));
     }
     // Si algo no se pudo emitir, **no** se devuelve un `.class` a medias.
     match errors.into_iter().next() {
         Some(first) => Err(first),
         None => Ok(out),
     }
+}
+
+/// Emite el `module-info.class` (§4.1/§4.7.25): `ACC_MODULE`, `this_class = module-info`, sin
+/// super/campos/métodos, y el atributo **`Module`** con las directivas. Se agrega el `requires
+/// java.base` **mandated** implícito (salvo que el módulo sea `java.base` o ya lo requiera).
+fn gen_module_info(module: &super::ast::ModuleDecl) -> Vec<u8> {
+    let mut cf = ClassFile::new();
+    cf.access_flags = ACC_MODULE;
+    cf.this_class = cf.pool.class("module-info");
+    cf.super_class = 0;
+    cf.source_file = Some(cf.pool.utf8("module-info.java"));
+    cf.module = Some(build_module_attr(&mut cf.pool, module));
+    cf.to_bytes()
+}
+
+/// Serializa el **cuerpo** del atributo `Module` (§4.7.25): nombre + flags + versión, y las cinco
+/// listas de directivas. Los nombres de módulo van con **puntos**; los de paquete/servicio, en
+/// forma interna (con `/`), que ponen `pool.package`/`pool.class`.
+fn build_module_attr(pool: &mut ConstantPool, module: &super::ast::ModuleDecl) -> Vec<u8> {
+    use super::ast::ModuleDirective as D;
+    let mut b = Vec::new();
+    b.extend_from_slice(&pool.module(&module.name).to_be_bytes());
+    b.extend_from_slice(&(if module.open { ACC_OPEN } else { 0 }).to_be_bytes());
+    b.extend_from_slice(&0u16.to_be_bytes()); // module_version_index
+
+    // requires — con el `java.base` mandated implícito al frente.
+    let mut requires: Vec<(u16, u16)> = Vec::new();
+    let mut has_java_base = false;
+    for d in &module.directives {
+        if let D::Requires { transitive, is_static, name } = d {
+            if name == "java.base" {
+                has_java_base = true;
+            }
+            let mut f = 0u16;
+            if *transitive {
+                f |= ACC_TRANSITIVE;
+            }
+            if *is_static {
+                f |= ACC_STATIC_PHASE;
+            }
+            requires.push((pool.module(name), f));
+        }
+    }
+    if !has_java_base && module.name != "java.base" {
+        let jb = pool.module("java.base");
+        requires.insert(0, (jb, ACC_MANDATED));
+    }
+    b.extend_from_slice(&(requires.len() as u16).to_be_bytes());
+    for (m, f) in &requires {
+        b.extend_from_slice(&m.to_be_bytes());
+        b.extend_from_slice(&f.to_be_bytes());
+        b.extend_from_slice(&0u16.to_be_bytes()); // requires_version_index
+    }
+
+    // exports / opens — misma forma (§4.7.25): paquete + flags + lista `to` de módulos.
+    let emit_qualified = |b: &mut Vec<u8>, pool: &mut ConstantPool, pkgs: &[(&String, &Vec<String>)]| {
+        b.extend_from_slice(&(pkgs.len() as u16).to_be_bytes());
+        for (pkg, to) in pkgs {
+            b.extend_from_slice(&pool.package(pkg).to_be_bytes());
+            b.extend_from_slice(&0u16.to_be_bytes()); // flags
+            b.extend_from_slice(&(to.len() as u16).to_be_bytes());
+            for t in to.iter() {
+                b.extend_from_slice(&pool.module(t).to_be_bytes());
+            }
+        }
+    };
+    let exports: Vec<(&String, &Vec<String>)> = module
+        .directives
+        .iter()
+        .filter_map(|d| match d {
+            D::Exports { package, to } => Some((package, to)),
+            _ => None,
+        })
+        .collect();
+    emit_qualified(&mut b, pool, &exports);
+    let opens: Vec<(&String, &Vec<String>)> = module
+        .directives
+        .iter()
+        .filter_map(|d| match d {
+            D::Opens { package, to } => Some((package, to)),
+            _ => None,
+        })
+        .collect();
+    emit_qualified(&mut b, pool, &opens);
+
+    // uses — lista de `Class` de servicios.
+    let uses: Vec<&String> = module
+        .directives
+        .iter()
+        .filter_map(|d| match d {
+            D::Uses { service } => Some(service),
+            _ => None,
+        })
+        .collect();
+    b.extend_from_slice(&(uses.len() as u16).to_be_bytes());
+    for s in &uses {
+        let c = pool.class(&s.replace('.', "/"));
+        b.extend_from_slice(&c.to_be_bytes());
+    }
+
+    // provides — servicio (`Class`) + lista de implementaciones (`Class`).
+    let provides: Vec<(&String, &Vec<String>)> = module
+        .directives
+        .iter()
+        .filter_map(|d| match d {
+            D::Provides { service, with } => Some((service, with)),
+            _ => None,
+        })
+        .collect();
+    b.extend_from_slice(&(provides.len() as u16).to_be_bytes());
+    for (service, with) in &provides {
+        let c = pool.class(&service.replace('.', "/"));
+        b.extend_from_slice(&c.to_be_bytes());
+        b.extend_from_slice(&(with.len() as u16).to_be_bytes());
+        for w in with.iter() {
+            let wc = pool.class(&w.replace('.', "/"));
+            b.extend_from_slice(&wc.to_be_bytes());
+        }
+    }
+    b
 }
 
 /// Emite `class` y, **recursivamente**, sus tipos anidados (`Member::Type`) — cada uno como su propio
@@ -98,17 +240,19 @@ fn gen_type(
     class: &super::ast::ClassDecl,
     enclosing: &str,
     table: &SymbolTable,
+    rt: &std::collections::HashSet<String>,
+    tu: &TypeUseInfo,
     out: &mut Vec<(String, Vec<u8>)>,
     errors: &mut Vec<Error>,
 ) {
     let fqn = if enclosing.is_empty() { class.name.clone() } else { format!("{enclosing}.{}", class.name) };
     if let Some(cid) = table.class(&fqn) {
-        let bytes = gen_class(class, cid, table, errors);
+        let bytes = gen_class(class, cid, table, rt, tu, errors);
         out.push((internal_name(table, cid), bytes));
     }
     for member in &class.members {
         if let Member::Type(nested) = member {
-            gen_type(nested, &fqn, table, out, errors);
+            gen_type(nested, &fqn, table, rt, tu, out, errors);
         }
     }
 }
@@ -118,6 +262,8 @@ fn gen_class(
     class: &super::ast::ClassDecl,
     cid: SymbolId,
     table: &SymbolTable,
+    rt: &std::collections::HashSet<String>,
+    tu: &TypeUseInfo,
     errors: &mut Vec<Error>,
 ) -> Vec<u8> {
     let scope = member_scope(table, cid);
@@ -126,9 +272,100 @@ fn gen_class(
     let this_internal = internal_name(table, cid);
     cf.this_class = cf.pool.class(&this_internal);
     let super_internal = super_internal(table, cid, class, scope);
-    cf.super_class = cf.pool.class(&super_internal);
-    cf.access_flags = class_flags(&class.modifiers) | ACC_SUPER;
+    // `java.lang.Object` es la **única** clase sin superclase (JVMS §4.1): su `super_class` es `0`.
+    // Cualquier otra —incluida una que por defecto extiende Object— lleva el índice `Class`. Sin este
+    // caso, Object salía con `super_class` apuntándose a sí mismo y el intérprete entraba en bucle al
+    // armar la vtable (Object → Object → …).
+    cf.super_class =
+        if this_internal == "java/lang/Object" { 0 } else { cf.pool.class(&super_internal) };
+    // Una **interfaz** (o `@interface`) es `ACC_INTERFACE | ACC_ABSTRACT`, **sin** `ACC_SUPER` (§4.1);
+    // una clase lleva `ACC_SUPER`.
+    let is_interface = matches!(class.kind, TypeKind::Interface | TypeKind::Annotation);
+    cf.access_flags = if is_interface {
+        class_flags(&class.modifiers) | ACC_INTERFACE | ACC_ABSTRACT
+    } else {
+        class_flags(&class.modifiers) | ACC_SUPER
+    };
+    // Un `record` es implícitamente `final` (§8.10) — lo que la reflexión exige para `isRecord()`.
+    if class.kind == TypeKind::Record {
+        cf.access_flags |= ACC_FINAL;
+    }
+    // Un `enum` (§8.9) lleva `ACC_ENUM`, y es implícitamente `final` salvo que declare un método
+    // `abstract` (que obligaría a cuerpos de constante). Real javac: enum simple = `FINAL|SUPER|ENUM`.
+    // Sin esto, la reflexión no lo ve como enum (`Class.isEnum()`) y falta el `final`.
+    if class.kind == TypeKind::Enum {
+        cf.access_flags |= ACC_ENUM;
+        let has_abstract_method = class.members.iter().any(|m| {
+            matches!(m, Member::Method(me) if me.modifiers.contains(&Modifier::Abstract))
+        });
+        cf.access_flags |= if has_abstract_method { ACC_ABSTRACT } else { ACC_FINAL };
+    }
     cf.source_file = Some(cf.pool.utf8(&format!("{}.java", class.name)));
+    cf.annotations = build_annotations(&mut cf.pool, table, scope, &class.annotations, rt, tu);
+    // `RuntimeVisibleTypeAnnotations` (§4.7.20) de la clase, juntando: parámetros de tipo
+    // (`class C<@Foo T>`, target 0x00), sus **cotas** (`<T extends @A A>`, 0x11), el `extends`
+    // (`extends @A Base`, 0x10 con `supertype_index = 0xFFFF`) y cada interfaz de `implements`
+    // (`implements @A I`, 0x10 con el índice de la interfaz). Cada uno con su `type_path`.
+    let mut class_ta = type_param_entries(&mut cf.pool, table, scope, &class.type_params, false, rt);
+    class_ta.extend(type_use_bound_entries(&mut cf.pool, table, scope, &class.type_params, false, rt));
+    class_ta.extend(type_use_nested_entries(
+        &mut cf.pool, table, scope, &class.extends_annos, 0x10, &0xFFFFu16.to_be_bytes(), rt,
+    ));
+    for (i, iface_annos) in class.implements_annos.iter().enumerate() {
+        class_ta.extend(type_use_nested_entries(
+            &mut cf.pool, table, scope, iface_annos, 0x10, &(i as u16).to_be_bytes(), rt,
+        ));
+    }
+    cf.type_annotations = wrap_type_annotations(&class_ta);
+    // `Signature` (§4.7.9) de la clase: sus parámetros de tipo + super/interfaces genéricos.
+    cf.signature = class_signature(table, scope, class).map(|s| cf.pool.utf8(&s));
+    // `InnerClasses` (§4.7.6): la cadena de enclosing de esta clase + las que contiene.
+    cf.inner_classes = build_inner_classes(&mut cf.pool, table, cid);
+    // `EnclosingMethod` (§4.7.7): solo si es local/anónima.
+    cf.enclosing_method = enclosing_method_attr(&mut cf.pool, table, cid);
+    // `Record` (§4.7.30): los componentes de un `record` (aunque sea de cero componentes).
+    if class.kind == TypeKind::Record {
+        cf.record_components =
+            Some(build_record_components(&mut cf.pool, table, scope, &class.components));
+    }
+    // `NestHost`/`NestMembers` (§4.7.28/§4.7.29): el *nest* que da acceso privado entre anidadas.
+    match nest_host_of(table, cid) {
+        Some(host) => {
+            let hb = internal_name(table, host);
+            cf.nest_host = Some(cf.pool.class(&hb));
+        }
+        None => {
+            // Es top-level: hostea a todas sus anidadas (transitivas).
+            cf.nest_members = nest_members_of(table, cid)
+                .into_iter()
+                .map(|m| {
+                    let mb = internal_name(table, m);
+                    cf.pool.class(&mb)
+                })
+                .collect();
+        }
+    }
+    // Super-interfaces: el `implements` de una clase, y el `extends` de una interfaz —el parser lo
+    // guarda también en `implements`—.
+    for imp in &class.implements {
+        if let Type::Class(n) | Type::Parameterized { base: n, .. } = imp {
+            if let Some(id) = resolve_type_id(table, scope, n) {
+                let idx = cf.pool.class(&internal_name(table, id));
+                cf.interfaces.push(idx);
+            }
+        }
+    }
+    // `PermittedSubclasses` (§4.7.31): un tipo `sealed` graba en el `.class` sus subtipos
+    // autorizados (el `permits` explícito o el implícito de la misma unidad). Sin esto, el tipo no
+    // quedaría realmente sellado para la JVM.
+    if table.is_sealed(cid) {
+        for perm in table.permitted(cid) {
+            if let Some(id) = super::types::erased_id(perm) {
+                let idx = cf.pool.class(&internal_name(table, id));
+                cf.permitted_subclasses.push(idx);
+            }
+        }
+    }
 
     // Los *bootstrap methods* de todos los `invokedynamic` de la clase: se acumulan a medida que se
     // emite cada método (el índice que referencia el pool es su posición aquí) y se vuelcan al final.
@@ -141,16 +378,26 @@ fn gen_class(
                 if m.is_constructor {
                     has_ctor = true;
                 }
-                let mi = gen_method(
+                let mut mi = gen_method(
                     &mut cf.pool,
                     table,
                     scope,
                     m,
                     &this_internal,
                     &super_internal,
+                    is_interface,
+                    rt,
+                    tu,
                     &mut bootstraps,
                     errors,
                 );
+                // `AnnotationDefault` (§4.7.22): si `m` es un elemento de `@interface` con un `default`,
+                // su valor va como `element_value` en el atributo del método.
+                if let Some((_, value)) =
+                    class.annotation_defaults.iter().find(|(n, _)| *n == m.name)
+                {
+                    mi.annotation_default = encode_value(&mut cf.pool, table, scope, value);
+                }
                 cf.methods.push(mi);
             }
             // Los campos **declarados**: sin esta sección el `.class` referencia un `getfield` a un
@@ -158,10 +405,52 @@ fn gen_class(
             Member::Field(f) => {
                 let name_index = cf.pool.utf8(&f.name);
                 let descriptor_index = cf.pool.utf8(&type_desc(table, scope, &f.ty));
+                let annotations = build_annotations(&mut cf.pool, table, scope, &f.annotations, rt, tu);
+                let signature = field_signature(table, scope, &f.ty).map(|s| cf.pool.utf8(&s));
+                // `RuntimeVisibleTypeAnnotations` del campo (target `0x13`): las anotaciones **líder**
+                // que son `@Target(TYPE_USE)` sobre el tipo del campo (`@NonNull String x`), path vacío.
+                let mut field_ta =
+                    type_use_lead_entries(&mut cf.pool, table, scope, &f.annotations, 0x13, &[], rt, tu);
+                field_ta.extend(type_use_nested_entries(
+                    &mut cf.pool, table, scope, &f.type_annos, 0x13, &[], rt,
+                ));
+                let type_annotations = wrap_type_annotations(&field_ta);
+                // `ConstantValue` (§4.7.2): un `static final` con inicializador de expresión constante.
+                // El desugar lo dejó sin bajar al `<clinit>` (dejó `f.init` en su lugar), justamente
+                // para que se emita acá; los que no son constantes tienen `f.init == None`.
+                let is_const_field = f.modifiers.contains(&Modifier::Static)
+                    && f.modifiers.contains(&Modifier::Final);
+                let constant_value = f
+                    .init
+                    .as_ref()
+                    .filter(|_| is_const_field)
+                    .and_then(|init| const_field_value(&f.ty, init))
+                    .map(|v| match v {
+                        ConstVal::Int(n) => cf.pool.integer(n),
+                        ConstVal::Long(n) => cf.pool.long(n),
+                        ConstVal::Float(n) => cf.pool.float(n),
+                        ConstVal::Double(n) => cf.pool.double(n),
+                        ConstVal::Str(s) => cf.pool.string(&s),
+                    });
+                // Flags del campo, con los extras de `enum` (§4.5): una **constante** lleva `ACC_ENUM`
+                // (lo que la reflexión usa para `Field.isEnumConstant()`), y el arreglo sintético
+                // `$VALUES` lleva `ACC_SYNTHETIC`. Real javac: constante = `0x4019`, `$VALUES` = `0x101a`.
+                let mut field_flags = class_flags(&f.modifiers);
+                if class.kind == TypeKind::Enum {
+                    if class.enum_constants.iter().any(|c| c.name == f.name) {
+                        field_flags |= ACC_ENUM;
+                    } else if f.name == "$VALUES" {
+                        field_flags |= ACC_SYNTHETIC;
+                    }
+                }
                 cf.fields.push(FieldInfo {
-                    access_flags: class_flags(&f.modifiers),
+                    access_flags: field_flags,
                     name_index,
                     descriptor_index,
+                    annotations,
+                    signature,
+                    constant_value,
+                    type_annotations,
                 });
             }
             _ => {}
@@ -184,6 +473,7 @@ fn gen_class(
     if !statics.is_empty() {
         let clinit = MethodDecl {
             annotations: Vec::new(),
+            return_annos: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Static],
             type_params: Vec::new(),
@@ -191,6 +481,7 @@ fn gen_class(
             name: "<clinit>".to_string(),
             params: Vec::new(),
             throws: Vec::new(),
+            throws_annos: Vec::new(),
             body: Some(Block(statics)),
             is_constructor: false,
         };
@@ -201,27 +492,223 @@ fn gen_class(
             &clinit,
             &this_internal,
             &super_internal,
+            false,
+            rt,
+            tu,
             &mut bootstraps,
             errors,
         );
         cf.methods.push(mi);
     }
 
-    // Sin constructor explícito, se sintetiza el por defecto: `super()` + `return`.
-    if !has_ctor {
+    // Sin constructor explícito, se sintetiza el por defecto: `super()` + `return`. Una **interfaz**
+    // no tiene constructor.
+    if !has_ctor && !is_interface {
         let ctor = default_ctor(&mut cf.pool, &super_internal);
         cf.methods.push(ctor);
     }
 
-    // Bridges: un override concreto que ve un método heredado con un descriptor borrado distinto
-    // (por un type-var del supertipo, `Box<String>`/`Cmp<C>`) necesita un puente con el descriptor
-    // heredado que reenvía al método específico, o el dispatch dinámico no lo encuentra.
-    for bridge in gen_bridges(&mut cf.pool, table, cid, &this_internal) {
-        cf.methods.push(bridge);
+    // **Métodos puente** (§8.4.8.3 / §15.12.4.5): sintéticos, con el descriptor **borrado del
+    // supertipo**, que reenvían al override real. Sin ellos la sobrescritura no funciona a nivel de
+    // bytecode cuando la *erasure* difiere (parámetro genérico o retorno covariante).
+    for br in bridge_methods(&mut cf.pool, table, class, cid, &this_internal) {
+        cf.methods.push(br);
     }
 
     cf.bootstrap_methods = bootstraps;
     cf.to_bytes()
+}
+
+/// La firma **resuelta** (sin borrar) de un método: `(params, retorno)`.
+fn method_sig(table: &SymbolTable, m: SymbolId) -> Option<(Vec<RType>, RType)> {
+    match table.resolved(m) {
+        Some(Resolved::Method { params, ret, .. }) => Some((params.clone(), ret.clone())),
+        _ => None,
+    }
+}
+
+/// El descriptor `(p…)ret` de una firma ya en [`RType`] (se le aplica su *erasure*).
+fn sig_desc(table: &SymbolTable, params: &[RType], ret: &RType) -> String {
+    let ps: String = params.iter().map(|p| rtype_desc(table, p)).collect();
+    format!("({ps}){}", rtype_desc(table, ret))
+}
+
+/// El *offset* dentro de una familia de opcodes (`ILOAD`/`IRETURN`, consecutivas i/l/f/d/a).
+fn cat_offset(rt: &RType) -> u8 {
+    match rt {
+        RType::Prim(PrimType::Long) => 1,
+        RType::Prim(PrimType::Float) => 2,
+        RType::Prim(PrimType::Double) => 3,
+        RType::Prim(_) => 0,
+        _ => 4, // referencia (clase/array/var/captura)
+    }
+}
+
+/// El ancho en slots/categoría de un tipo: 2 para `long`/`double`, 1 para el resto.
+fn cat_width(rt: &RType) -> u16 {
+    matches!(rt, RType::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
+}
+
+/// El nombre para un `CHECKCAST` sobre `rt`: el interno de la clase, o el descriptor de un array.
+fn checkcast_name(table: &SymbolTable, rt: &RType) -> String {
+    match rt {
+        RType::Array(_) => rtype_desc(table, rt), // `[Ljava/lang/String;`
+        _ => match types::erased_id(rt) {
+            Some(id) => internal_name(table, id),
+            None => "java/lang/Object".to_string(),
+        },
+    }
+}
+
+/// Los **métodos puente** que `cid` necesita (§8.4.8.3 / §15.12.4.5). Por cada método propio
+/// concreto de instancia que **sobrescribe** uno de un supertipo cuya *erasure* difiere —por un
+/// parámetro **genérico** borrado (`Node<Integer>.setData(T)` → `setData(Object)`), o por un
+/// **retorno covariante** (`A.f():Object` → `B.f():String`)—, se sintetiza un método con el
+/// descriptor **borrado del supertipo** que reenvía al real. Solo clases (en una interfaz el puente
+/// sería un `default`, aparte).
+fn bridge_methods(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    class: &ClassDecl,
+    cid: SymbolId,
+    this_internal: &str,
+) -> Vec<MethodInfo> {
+    if matches!(class.kind, TypeKind::Interface | TypeKind::Annotation) {
+        return Vec::new();
+    }
+    let supers = types::supertypes_of(table, &RType::Class(cid));
+    // Descriptores **ya presentes** como métodos reales: un puente no debe pisar ninguno.
+    let mut present: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    for id in table.members_of(cid) {
+        if let Some((ps, ret)) = method_sig(table, id) {
+            let ep: Vec<RType> = ps.iter().map(|p| types::erasure(table, p)).collect();
+            present.insert((table.symbol(id).name.clone(), sig_desc(table, &ep, &types::erasure(table, &ret))));
+        }
+    }
+    let mut out = Vec::new();
+    let mut emitted: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    for m in table.members_of(cid) {
+        let sym = table.symbol(m);
+        if !matches!(sym.kind, SymbolKind::Method { is_constructor: false, .. }) {
+            continue;
+        }
+        if sym.modifiers.contains(&Modifier::Static) || sym.modifiers.contains(&Modifier::Abstract) {
+            continue;
+        }
+        let name = sym.name.clone();
+        let Some((m_raw_params, m_raw_ret)) = method_sig(table, m) else { continue };
+        let m_params: Vec<RType> = m_raw_params.iter().map(|p| types::erasure(table, p)).collect();
+        let m_ret = types::erasure(table, &m_raw_ret);
+        let m_desc = sig_desc(table, &m_params, &m_ret);
+
+        for sup in &supers {
+            let Some(sup_id) = types::erased_id(sup) else { continue };
+            if sup_id == cid {
+                continue;
+            }
+            let subst = types::subst_of(table, sup);
+            for sm in table.members_of(sup_id) {
+                if table.symbol(sm).name != name {
+                    continue;
+                }
+                let Some((sm_params, sm_ret)) = method_sig(table, sm) else { continue };
+                if sm_params.len() != m_params.len() {
+                    continue;
+                }
+                // ¿`m` sobrescribe a `sm`? Los params de `sm` **sustituidos** por el supertipo
+                // (`T := Integer`) y **borrados** tienen que coincidir con los de `m` (§8.4.2).
+                let sm_over: Vec<RType> =
+                    sm_params.iter().map(|p| types::erasure(table, &types::substitute(p, &subst))).collect();
+                if sm_over != m_params {
+                    continue;
+                }
+                // La firma del puente: la *erasure* de `sm` **sin** sustituir (lo que ve el llamador
+                // por el supertipo).
+                let br_params: Vec<RType> = sm_params.iter().map(|p| types::erasure(table, p)).collect();
+                let br_ret = types::erasure(table, &sm_ret);
+                let br_desc = sig_desc(table, &br_params, &br_ret);
+                if br_desc == m_desc {
+                    continue; // misma erasure: no hace falta puente
+                }
+                let key = (name.clone(), br_desc.clone());
+                if present.contains(&key) || !emitted.insert(key) {
+                    continue;
+                }
+                out.push(emit_bridge(
+                    pool, table, this_internal, &name, &br_params, &br_ret, &m_params, &m_ret, &m_desc,
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// Emite el método puente: `this` + los argumentos (con `checkcast` al tipo del método real cuando
+/// difieren) + `invokevirtual` al real + `return` del valor (su subtipo es asignable al retorno del
+/// puente). Sin saltos: no lleva `StackMapTable`.
+#[allow(clippy::too_many_arguments)]
+fn emit_bridge(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    this_internal: &str,
+    name: &str,
+    br_params: &[RType],
+    br_ret: &RType,
+    m_params: &[RType],
+    m_ret: &RType,
+    m_desc: &str,
+) -> MethodInfo {
+    let name_index = pool.utf8(name);
+    let descriptor_index = pool.utf8(&sig_desc(table, br_params, br_ret));
+    let target = pool.methodref(this_internal, name, m_desc);
+
+    let mut code = vec![ALOAD_0];
+    let mut slot = 1u16;
+    let mut on_stack = 1u16; // this
+    for (i, bp) in br_params.iter().enumerate() {
+        code.push(ILOAD + cat_offset(bp));
+        code.push(slot as u8);
+        slot += cat_width(bp);
+        on_stack += cat_width(bp);
+        // El método real toma un tipo más **angosto** (`Integer` vs `Object`): castear.
+        let mp = &m_params[i];
+        if mp != bp && cat_offset(mp) == 4 {
+            let cc = pool.class(&checkcast_name(table, mp));
+            code.push(CHECKCAST);
+            code.push((cc >> 8) as u8);
+            code.push(cc as u8);
+        }
+    }
+    let max_stack = on_stack.max(cat_width(m_ret));
+    code.push(INVOKEVIRTUAL);
+    code.push((target >> 8) as u8);
+    code.push(target as u8);
+    if matches!(m_ret, RType::Void) {
+        code.push(RETURN);
+    } else {
+        code.push(IRETURN + cat_offset(m_ret));
+    }
+
+    MethodInfo {
+        access_flags: ACC_PUBLIC | ACC_BRIDGE | ACC_SYNTHETIC,
+        name_index,
+        descriptor_index,
+        max_stack,
+        max_locals: slot,
+        code,
+        stack_map: None,
+        exceptions: Vec::new(),
+        annotations: None,
+        signature: None, // un puente es la firma **borrada**: sin `Signature`
+        parameters: Vec::new(),
+        thrown_exceptions: Vec::new(), // un puente no declara `throws`
+        line_numbers: Vec::new(),      // sintético: sin líneas de fuente
+        local_vars: Vec::new(),
+        type_annotations: None,
+        code_type_annotations: None,
+        parameter_annotations: None,
+        annotation_default: None,
+    }
 }
 
 fn member_scope(table: &SymbolTable, cid: SymbolId) -> ScopeId {
@@ -282,6 +769,7 @@ fn modifier_flag(m: Modifier) -> u16 {
         Modifier::Static => ACC_STATIC,
         Modifier::Final => ACC_FINAL,
         Modifier::Abstract => ACC_ABSTRACT,
+        Modifier::Native => ACC_NATIVE,
         _ => 0,
     }
 }
@@ -310,10 +798,10 @@ fn type_desc(table: &SymbolTable, scope: ScopeId, ty: &Type) -> String {
         Type::Var => "Ljava/lang/Object;".to_string(),
         Type::Class(name) | Type::Parameterized { base: name, .. } => {
             match resolve_type_id(table, scope, name) {
-                // Un parámetro de tipo **de clase** (`Box<T>`) llega acá como `Type::Class("T")`
-                // y resuelve a un símbolo `TypeVar`; se borra a su cota, igual que en `rtype_desc`
-                // (un `<T>` de método ya cae en `Type::Var` de arriba).
-                Some(id) if matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. }) => {
+                // Una **variable de tipo** (`T`) se **borra** a su cota (§4.6): su descriptor es el de
+                // la erasure (`Object`, o la primera cota), **no** `LT;` —que referenciaría una clase
+                // inexistente y no verificaría—.
+                Some(id) if is_type_var(table, id) => {
                     rtype_desc(table, &super::types::erasure(table, &RType::TypeVar(id)))
                 }
                 Some(id) => format!("L{};", internal_name(table, id)),
@@ -330,23 +818,348 @@ pub(crate) fn rtype_desc(table: &SymbolTable, rt: &RType) -> String {
         RType::Prim(p) => prim_desc(*p).to_string(),
         RType::Array(inner) => format!("[{}", rtype_desc(table, inner)),
         RType::Class(id) => format!("L{};", internal_name(table, *id)),
-        // Una variable de tipo se **borra a su cota** (`Object` si no tiene): el descriptor
-        // de un call-site debe coincidir con el de la definición, que ya erasa. `erasure`
-        // baja el `TypeVar` a un `Class`/`Unresolved`, así que esto nunca recursiona en vano.
+        // Una **variable de tipo** se **borra** a su cota (§4.6): `T` → `Ljava/lang/Object;` (o la
+        // primera cota), no `LT;` —que referenciaría una clase inexistente—.
         RType::TypeVar(_) => rtype_desc(table, &super::types::erasure(table, rt)),
         RType::Parameterized { base, .. } => format!("L{};", internal_name(table, *base)),
-        RType::Unresolved => "Ljava/lang/Object;".to_string(),
+        // Una variable de captura se emite por su cota superior (su *erasure*).
+        RType::Capture { upper, .. } => rtype_desc(table, upper),
+        // La intersección se emite por su primer miembro (su *erasure*, §4.6).
+        RType::Intersection(ms) => ms.first().map_or_else(|| "Ljava/lang/Object;".to_string(), |m| rtype_desc(table, m)),
+        // Una variable de inferencia no debería emitirse (se resuelve antes); fallback a `Object`.
+        RType::InferVar(_) | RType::Unresolved => "Ljava/lang/Object;".to_string(),
     }
 }
 
-fn method_descriptor(table: &SymbolTable, scope: ScopeId, m: &MethodDecl) -> String {
+pub(crate) fn method_descriptor(table: &SymbolTable, scope: ScopeId, m: &MethodDecl) -> String {
     let params: String = m.params.iter().map(|p| type_desc(table, scope, &p.ty)).collect();
     let ret = if m.is_constructor { "V".to_string() } else { type_desc(table, scope, &m.return_type) };
     format!("({params}){ret}")
 }
 
+/// Los parámetros formales para `MethodParameters` (§4.7.24): el nombre + `ACC_FINAL` si se declaró
+/// `final`, y `ACC_SYNTHETIC` para los **sintéticos** (las capturas `this$0`/`val$x` que inyecta el
+/// desugar, reconocibles por el `$` en el nombre).
+fn build_method_parameters(pool: &mut ConstantPool, m: &MethodDecl) -> Vec<ParamInfo> {
+    m.params
+        .iter()
+        .map(|p| {
+            let mut flags = 0u16;
+            if p.is_final {
+                flags |= ACC_FINAL;
+            }
+            if p.name.contains('$') {
+                flags |= ACC_SYNTHETIC;
+            }
+            ParamInfo { name: pool.utf8(&p.name), flags }
+        })
+        .collect()
+}
+
+// ---- atributo Signature (§4.7.9): la firma **genérica** que la erasure borra del descriptor ----
+
+fn is_type_var(table: &SymbolTable, id: SymbolId) -> bool {
+    matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. })
+}
+
+/// La firma (`§4.7.9.1`) de un tipo. `tvars` son los nombres de las variables de tipo **en alcance**
+/// (parámetros de la clase y/o del método): un `Type::Class` que sea una de ellas es una
+/// `TypeVariableSignature` (`TX;`), no una clase (`LX;`).
+fn sig_type(table: &SymbolTable, scope: ScopeId, tvars: &HashSet<String>, ty: &Type) -> String {
+    match ty {
+        Type::Prim(p) => prim_desc(*p).to_string(),
+        Type::Void => "V".to_string(),
+        Type::Array(e) => format!("[{}", sig_type(table, scope, tvars, e)),
+        Type::Var => "Ljava/lang/Object;".to_string(),
+        Type::Class(name) => {
+            if tvars.contains(name) {
+                format!("T{name};")
+            } else if let Some(id) = resolve_type_id(table, scope, name) {
+                if is_type_var(table, id) {
+                    format!("T{};", table.symbol(id).name)
+                } else {
+                    format!("L{};", internal_name(table, id))
+                }
+            } else {
+                format!("L{};", name.replace('.', "/"))
+            }
+        }
+        Type::Parameterized { base, args } => {
+            let internal = match resolve_type_id(table, scope, base) {
+                Some(id) => internal_name(table, id),
+                None => base.replace('.', "/"),
+            };
+            let a: String = args.iter().map(|x| sig_type_arg(table, scope, tvars, x)).collect();
+            format!("L{internal}<{a}>;")
+        }
+    }
+}
+
+/// La firma de un argumento de tipo: `+T` (`extends`), `-T` (`super`), `*` (wildcard) o el tipo.
+fn sig_type_arg(table: &SymbolTable, scope: ScopeId, tvars: &HashSet<String>, arg: &TypeArg) -> String {
+    match arg {
+        TypeArg::Type(t) => sig_type(table, scope, tvars, t),
+        TypeArg::Wildcard => "*".to_string(),
+        TypeArg::Extends(t) => format!("+{}", sig_type(table, scope, tvars, t)),
+        TypeArg::Super(t) => format!("-{}", sig_type(table, scope, tvars, t)),
+    }
+}
+
+/// ¿El tipo **usa genéricos** (una variable de tipo o un parametrizado)? Solo entonces hace falta un
+/// `Signature`: si no, el descriptor borrado ya lo describe entero.
+fn sig_is_generic(table: &SymbolTable, scope: ScopeId, tvars: &HashSet<String>, ty: &Type) -> bool {
+    match ty {
+        Type::Parameterized { .. } => true,
+        Type::Array(e) => sig_is_generic(table, scope, tvars, e),
+        Type::Class(name) => {
+            tvars.contains(name)
+                || resolve_type_id(table, scope, name).is_some_and(|id| is_type_var(table, id))
+        }
+        _ => false,
+    }
+}
+
+/// ¿La cota resuelve a una **interfaz**? En la firma de un parámetro de tipo, una cota de interfaz va
+/// tras un `:` **extra** (la cota de clase queda vacía): `<T::LComparable<TT;>;>`.
+fn bound_is_interface(table: &SymbolTable, scope: ScopeId, ty: &Type) -> bool {
+    let name = match ty {
+        Type::Class(n) | Type::Parameterized { base: n, .. } => n,
+        _ => return false,
+    };
+    resolve_type_id(table, scope, name)
+        .is_some_and(|id| matches!(table.symbol(id).kind, SymbolKind::Class { kind: TypeKind::Interface, .. }))
+}
+
+/// La parte `<T:cota…>` de una `ClassSignature`/`MethodSignature` (§4.7.9.1). Vacía si no hay
+/// parámetros de tipo. Sin cota declarada, la cota de clase es `Object`.
+fn sig_type_params(table: &SymbolTable, scope: ScopeId, tvars: &HashSet<String>, tps: &[TypeParam]) -> String {
+    if tps.is_empty() {
+        return String::new();
+    }
+    let mut s = String::from("<");
+    for tp in tps {
+        s.push_str(&tp.name);
+        if tp.bounds.is_empty() {
+            s.push_str(":Ljava/lang/Object;");
+        } else {
+            // La **primera** cota, si es interfaz, deja la cota de clase vacía (un `:` extra).
+            if bound_is_interface(table, scope, &tp.bounds[0]) {
+                s.push(':');
+            }
+            for b in &tp.bounds {
+                s.push(':');
+                s.push_str(&sig_type(table, scope, tvars, b));
+            }
+        }
+    }
+    s.push('>');
+    s
+}
+
+/// Los nombres de los parámetros de tipo de una clase (para el conjunto `tvars`).
+fn class_tvar_names(class: &ClassDecl) -> HashSet<String> {
+    class.type_params.iter().map(|tp| tp.name.clone()).collect()
+}
+
+/// La `ClassSignature` (§4.7.9.1) de una clase, o `None` si no usa genéricos (ni parámetros de tipo,
+/// ni super/interfaces parametrizados).
+fn class_signature(table: &SymbolTable, scope: ScopeId, class: &ClassDecl) -> Option<String> {
+    let tvars = class_tvar_names(class);
+    let super_generic = class.extends.as_ref().is_some_and(|t| sig_is_generic(table, scope, &tvars, t));
+    let iface_generic = class.implements.iter().any(|t| sig_is_generic(table, scope, &tvars, t));
+    if class.type_params.is_empty() && !super_generic && !iface_generic {
+        return None;
+    }
+    let mut s = sig_type_params(table, scope, &tvars, &class.type_params);
+    match &class.extends {
+        Some(t) => s.push_str(&sig_type(table, scope, &tvars, t)),
+        None => s.push_str("Ljava/lang/Object;"),
+    }
+    for i in &class.implements {
+        s.push_str(&sig_type(table, scope, &tvars, i));
+    }
+    Some(s)
+}
+
+/// La `MethodSignature` (§4.7.9.1) de un método, o `None` si no usa genéricos. Las variables de tipo
+/// de la **clase** resuelven por el `scope`; solo las **propias** del método (que viven en otro
+/// scope) se pasan explícitas en `tvars`.
+fn method_signature(table: &SymbolTable, scope: ScopeId, m: &MethodDecl) -> Option<String> {
+    let tvars: HashSet<String> = m.type_params.iter().map(|tp| tp.name.clone()).collect();
+
+    let params_g = m.params.iter().any(|p| sig_is_generic(table, scope, &tvars, &p.ty));
+    let ret_g = !m.is_constructor && sig_is_generic(table, scope, &tvars, &m.return_type);
+    let throws_g = m.throws.iter().any(|t| sig_is_generic(table, scope, &tvars, t));
+    if m.type_params.is_empty() && !params_g && !ret_g && !throws_g {
+        return None;
+    }
+    let mut s = sig_type_params(table, scope, &tvars, &m.type_params);
+    s.push('(');
+    for p in &m.params {
+        s.push_str(&sig_type(table, scope, &tvars, &p.ty));
+    }
+    s.push(')');
+    if m.is_constructor {
+        s.push('V');
+    } else {
+        s.push_str(&sig_type(table, scope, &tvars, &m.return_type));
+    }
+    // Solo se listan las excepciones en `throws` si **alguna** es genérica (§4.7.9.1).
+    if throws_g {
+        for t in &m.throws {
+            s.push('^');
+            s.push_str(&sig_type(table, scope, &tvars, t));
+        }
+    }
+    Some(s)
+}
+
+/// La `FieldSignature` (§4.7.9.1) de un campo, o `None` si su tipo no usa genéricos. Las variables de
+/// tipo de la clase resuelven por el `scope`, así que no hace falta pasarlas.
+fn field_signature(table: &SymbolTable, scope: ScopeId, ty: &Type) -> Option<String> {
+    let none = HashSet::new();
+    sig_is_generic(table, scope, &none, ty).then(|| sig_type(table, scope, &none, ty))
+}
+
+// ---- atributo InnerClasses (§4.7.6): la relación de anidamiento ----
+
+/// El dueño de `id` **si es una clase** (o sea, `id` es un tipo anidado); `None` si es top-level
+/// (dueño = paquete) o no tiene dueño.
+fn class_owner(table: &SymbolTable, id: SymbolId) -> Option<SymbolId> {
+    let owner = table.symbol(id).owner?;
+    matches!(table.symbol(owner).kind, SymbolKind::Class { .. }).then_some(owner)
+}
+
+/// Las entradas `InnerClasses` (§4.7.6) que el `.class` de `cid` debe listar: su **cadena de
+/// enclosing** (él mismo si es anidado + sus ancestros anidados) y las clases que **contiene** (las
+/// de dueño `cid`). Es lo que menciona el `.class` — lo que necesita la reflexión para reconstruir
+/// `getEnclosingClass`/`getDeclaringClass`/`isAnonymousClass`.
+fn build_inner_classes(pool: &mut ConstantPool, table: &SymbolTable, cid: SymbolId) -> Vec<InnerClassEntry> {
+    let mut ids: Vec<SymbolId> = Vec::new();
+    // Cadena de enclosing: `cid` y sus ancestros que sean anidados.
+    let mut c = Some(cid);
+    while let Some(cur) = c {
+        match class_owner(table, cur) {
+            Some(o) => {
+                if !ids.contains(&cur) {
+                    ids.push(cur);
+                }
+                c = Some(o);
+            }
+            None => c = None,
+        }
+    }
+    // Clases contenidas directamente (dueño = `cid`): miembros, locales y anónimas ya levantadas.
+    for id in 0..table.symbol_count() {
+        if matches!(table.symbol(id).kind, SymbolKind::Class { .. })
+            && class_owner(table, id) == Some(cid)
+            && !ids.contains(&id)
+        {
+            ids.push(id);
+        }
+    }
+    ids.iter().map(|&id| inner_entry(pool, table, id)).collect()
+}
+
+/// Una entrada `InnerClasses` para `id`, clasificando por el sufijo del *binary name*: `Outer$Inner`
+/// (**miembro**: con dueño y nombre), `Outer$1L` (**local**: sin dueño, con nombre), `Outer$1`
+/// (**anónima**: sin dueño ni nombre).
+fn inner_entry(pool: &mut ConstantPool, table: &SymbolTable, id: SymbolId) -> InnerClassEntry {
+    let binary = internal_name(table, id);
+    let inner = pool.class(&binary);
+    let simple = binary.rsplit(['$', '/']).next().unwrap_or(&binary).to_string();
+    let starts_digit = simple.chars().next().is_some_and(|c| c.is_ascii_digit());
+    let all_digits = !simple.is_empty() && simple.chars().all(|c| c.is_ascii_digit());
+
+    let sym = table.symbol(id);
+    let mut flags = 0u16;
+    for m in &sym.modifiers {
+        flags |= modifier_flag(*m);
+    }
+    if matches!(sym.kind, SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }) {
+        flags |= ACC_INTERFACE | ACC_ABSTRACT;
+    }
+
+    let (outer, name) = if all_digits {
+        (0, 0) // anónima: sin dueño ni nombre
+    } else if starts_digit {
+        (0, pool.utf8(&simple)) // local: sin dueño, con nombre
+    } else {
+        // miembro: dueño = su clase envolvente, nombre = el simple
+        let outer = class_owner(table, id)
+            .map(|o| {
+                let ob = internal_name(table, o);
+                pool.class(&ob)
+            })
+            .unwrap_or(0);
+        (outer, pool.utf8(&simple))
+    };
+    InnerClassEntry { inner, outer, name, flags }
+}
+
+/// El atributo `EnclosingMethod` (§4.7.7): obligatorio **solo** para clases **local/anónimas**
+/// (sufijo del binary con dígito). `class_index` = la clase envolvente; `method_index` = el
+/// `NameAndType` del método que la declara (0 si se declaró en un inicializador, o si no se sabe).
+fn enclosing_method_attr(pool: &mut ConstantPool, table: &SymbolTable, cid: SymbolId) -> Option<(u16, u16)> {
+    let binary = internal_name(table, cid);
+    let simple = binary.rsplit(['$', '/']).next().unwrap_or(&binary);
+    if !simple.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        return None; // no es local/anónima → no lleva EnclosingMethod
+    }
+    let owner = class_owner(table, cid)?;
+    let owner_binary = internal_name(table, owner);
+    let class_index = pool.class(&owner_binary);
+    let method_index = match table.enclosing_method(cid) {
+        Some((name, desc)) => pool.name_and_type(name, desc),
+        None => 0,
+    };
+    Some((class_index, method_index))
+}
+
+/// El **nest host** de `cid` (§4.7.28): la clase **top-level** de su cadena de dueños. `None` si
+/// `cid` ya es top-level (es su propio host, no lleva `NestHost`).
+fn nest_host_of(table: &SymbolTable, cid: SymbolId) -> Option<SymbolId> {
+    let mut host = None;
+    let mut cur = cid;
+    while let Some(owner) = class_owner(table, cur) {
+        host = Some(owner);
+        cur = owner;
+    }
+    host
+}
+
+/// Los **nest members** de una clase top-level `host` (§4.7.29): todas las clases anidadas cuyo nest
+/// host es `host` (transitivo: miembros, locales y anónimas a cualquier profundidad).
+fn nest_members_of(table: &SymbolTable, host: SymbolId) -> Vec<SymbolId> {
+    (0..table.symbol_count())
+        .filter(|&id| {
+            matches!(table.symbol(id).kind, SymbolKind::Class { .. })
+                && nest_host_of(table, id) == Some(host)
+        })
+        .collect()
+}
+
+/// Los componentes del atributo `Record` (§4.7.30): nombre + descriptor, y una `Signature` por
+/// componente si su tipo usa genéricos (`record Box<T>(T val)` → componente `val` con firma `TT;`).
+fn build_record_components(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    components: &[Param],
+) -> Vec<RecordComponent> {
+    components
+        .iter()
+        .map(|p| RecordComponent {
+            name: pool.utf8(&p.name),
+            descriptor: pool.utf8(&type_desc(table, scope, &p.ty)),
+            signature: field_signature(table, scope, &p.ty).map(|s| pool.utf8(&s)),
+        })
+        .collect()
+}
+
 // ---- generación de un método ----
 
+#[allow(clippy::too_many_arguments)]
 fn gen_method(
     pool: &mut ConstantPool,
     table: &SymbolTable,
@@ -354,12 +1167,91 @@ fn gen_method(
     m: &MethodDecl,
     this_internal: &str,
     super_internal: &str,
+    is_interface: bool,
+    rt: &std::collections::HashSet<String>,
+    tu: &TypeUseInfo,
     bootstraps: &mut Vec<BootstrapMethod>,
     errors: &mut Vec<Error>,
 ) -> MethodInfo {
     let name = if m.is_constructor { "<init>" } else { &m.name };
     let name_index = pool.utf8(name);
     let descriptor_index = pool.utf8(&method_descriptor(table, scope, m));
+    let annotations = build_annotations(pool, table, scope, &m.annotations, rt, tu);
+    // `Signature` (§4.7.9): parámetros de tipo del método + params/retorno/throws genéricos.
+    let signature = method_signature(table, scope, m).map(|s| pool.utf8(&s));
+    // `MethodParameters` (§4.7.24): los nombres (+ flags) de los parámetros formales.
+    let parameters = build_method_parameters(pool, m);
+    // `RuntimeVisibleTypeAnnotations` (§4.7.20) del método, juntando: parámetros de tipo (`<@Foo T>`,
+    // target 0x01), el **retorno** (`@NonNull String m()`, 0x14) y cada **parámetro formal**
+    // (`m(@NonNull String s)`, 0x16, con su índice). Para cada uno, tanto la anotación **líder**
+    // (path vacío) como los usos **anidados** dentro del tipo (`List<@A String>`, `int @A []`,
+    // wildcards), cada uno con su `type_path` reconstruido por el parser.
+    let mut method_ta = type_param_entries(pool, table, scope, &m.type_params, true, rt);
+    // Cotas de los parámetros de tipo del método (`<T extends @A A> void m()`, target 0x12).
+    method_ta.extend(type_use_bound_entries(pool, table, scope, &m.type_params, true, rt));
+    if !m.is_constructor {
+        method_ta.extend(type_use_lead_entries(pool, table, scope, &m.annotations, 0x14, &[], rt, tu));
+        method_ta.extend(type_use_nested_entries(pool, table, scope, &m.return_annos, 0x14, &[], rt));
+    }
+    for (i, p) in m.params.iter().enumerate() {
+        method_ta.extend(type_use_lead_entries(pool, table, scope, &p.annotations, 0x16, &[i as u8], rt, tu));
+        method_ta.extend(type_use_nested_entries(pool, table, scope, &p.type_annos, 0x16, &[i as u8], rt));
+    }
+    // Tipos de la cláusula `throws` (`throws @A E`, target 0x17 con el índice en la cláusula).
+    for (i, throw_annos) in m.throws_annos.iter().enumerate() {
+        method_ta.extend(type_use_nested_entries(
+            pool, table, scope, throw_annos, 0x17, &(i as u16).to_be_bytes(), rt,
+        ));
+    }
+    let type_annotations = wrap_type_annotations(&method_ta);
+    // `RuntimeVisibleParameterAnnotations` (§4.7.18): las anotaciones de **declaración** de los params.
+    let parameter_annotations = build_parameter_annotations(pool, table, scope, &m.params, rt, tu);
+    // `Exceptions` (§4.7.5): las clases de la cláusula `throws` (excepciones **chequeadas**). Se
+    // resuelve cada tipo a su nombre interno y se lo agrega como `Class` al pool. Una variable de
+    // tipo en `throws` (`throws X`) se borra a su cota (lo hace `vtype_of_type`).
+    let thrown_exceptions: Vec<u16> = m
+        .throws
+        .iter()
+        .filter_map(|t| match vtype_of_type(table, scope, t) {
+            VType::Object(n) => Some(pool.class(&n)),
+            _ => None,
+        })
+        .collect();
+
+    // Un método **sin cuerpo** no lleva `Code` (§4.6). Dos formas bien distintas: `native` —lo
+    // implementa el VM (`ACC_NATIVE`), legal en una clase concreta— y `abstract` —la firma de una
+    // interfaz o de un método abstracto de una clase (`ACC_ABSTRACT`)—. `class_flags` ya aporta el
+    // `ACC_NATIVE` desde el modificador; solo al abstracto hay que ponérselo. Confundirlos emitía un
+    // `native` como `abstract`, dejando una clase concreta con métodos abstractos: un `.class` roto.
+    if m.body.is_none() && !m.is_constructor {
+        let mut flags = class_flags(&m.modifiers);
+        if !m.modifiers.contains(&Modifier::Native) {
+            flags |= ACC_ABSTRACT;
+        }
+        if is_interface {
+            flags |= ACC_PUBLIC;
+        }
+        return MethodInfo {
+            access_flags: flags,
+            name_index,
+            descriptor_index,
+            max_stack: 0,
+            max_locals: 0,
+            code: Vec::new(),
+            stack_map: None,
+            exceptions: Vec::new(),
+            annotations,
+            signature,
+            parameters,
+            thrown_exceptions,
+            line_numbers: Vec::new(), // un método sin `Code` no lleva `LineNumberTable`
+            local_vars: Vec::new(),
+            type_annotations,
+            code_type_annotations: None, // sin `Code`, no hay posiciones de bytecode que anotar
+            parameter_annotations,
+            annotation_default: None,
+        };
+    }
 
     let mut e = Emitter::new(
         pool,
@@ -369,6 +1261,8 @@ fn gen_method(
         super_internal.to_string(),
         bootstraps,
         errors,
+        rt,
+        tu,
     );
     // `this` (slot 0) en los métodos de instancia y constructores; luego los parámetros. Se anotan
     // también sus **tipos de verificación**: son los locales ya asignados al entrar, y de ahí parte
@@ -391,6 +1285,19 @@ fn gen_method(
     }
     e.max_locals = slot;
 
+    // `LocalVariableTable`: el scope del método envuelve `this` y los parámetros —vivos [0, code_len)—.
+    // Los locales del cuerpo van en scopes anidados (bloques), que reflejan el reuso de slots.
+    e.open_scope();
+    let mut lv_slot = 0u16;
+    if !is_static || m.is_constructor {
+        e.open_local(0, "this", &format!("L{this_internal};"), &[]);
+        lv_slot = 1;
+    }
+    for p in &m.params {
+        e.open_local(lv_slot, &p.name, &type_desc(table, scope, &p.ty), &[]);
+        lv_slot += type_width(&p.ty);
+    }
+
     // Un constructor arranca invocando a **otro** constructor (§8.8.7): el de su superclase o, con
     // `this(...)`, uno de los suyos. Sin ese `invokespecial` el `this` queda **sin inicializar** y
     // el verificador rechaza cualquier `putfield` sobre él.
@@ -398,25 +1305,37 @@ fn gen_method(
     // Si el cuerpo ya arranca con un `super(...)`/`this(...)` **explícito**, ese es el que va: el
     // implícito se omite, porque inicializar dos veces el mismo objeto es ilegal (§8.8.7.1).
     if m.is_constructor && !m.body.as_ref().is_some_and(explicit_ctor_call) {
-        let super_init = e.pool.methodref(super_internal, "<init>", "()V");
-        e.load_this(); // todavía `UninitThis`
-        e.op(INVOKESPECIAL);
-        e.u16(super_init);
-        e.pop(1);
-        e.init_this(); // ya inicializado
+        if this_internal == "java/lang/Object" {
+            // `java.lang.Object` no tiene superclase: su `<init>` **no** llama a `super()` (sería a
+            // sí mismo → recursión infinita al construir). El `this` se considera inicializado al
+            // entrar (JVMS §4.10.2.4), así que solo lo marcamos; el cuerpo (vacío) y el `return` siguen.
+            e.init_this();
+        } else {
+            // El `super()` implícito va en pc 0: se le mapea la línea de la declaración del
+            // constructor, así el `LineNumberTable` no deja el arranque sin línea (como javac).
+            e.mark_line(m.pos.line);
+            let super_init = e.pool.methodref(super_internal, "<init>", "()V");
+            e.load_this(); // todavía `UninitThis`
+            e.op(INVOKESPECIAL);
+            e.u16(super_init);
+            e.pop(1);
+            e.init_this(); // ya inicializado
+        }
     }
 
     if let Some(body) = &m.body {
-        for s in &body.0 {
-            e.stmt(s);
-        }
+        e.block_scoped(&body.0);
     }
     // Un `void`/constructor puede omitir el `return` final; lo agregamos.
     if m.is_constructor || matches!(m.return_type, Type::Void) {
         e.op(RETURN);
     }
+    e.close_scope(); // cierra el scope del método: `this`/parámetros toman su rango [0, code_len)
     e.patch(); // resolver los saltos ahora que se conocen todos los offsets
     let stack_map = e.stack_map();
+    // `RuntimeVisibleTypeAnnotations` **dentro del `Code`** (§4.7.20): los targets de posición-bytecode
+    // (cast/`instanceof`/`new`) que el emisor fue anotando con el offset de cada opcode.
+    let code_type_annotations = wrap_type_annotations(&e.code_type_annotations);
 
     MethodInfo {
         access_flags: class_flags(&m.modifiers),
@@ -427,6 +1346,16 @@ fn gen_method(
         code: e.bytes,
         stack_map,
         exceptions: e.exceptions,
+        annotations,
+        signature,
+        parameters,
+        thrown_exceptions,
+        line_numbers: e.line_numbers,
+        local_vars: e.local_vars,
+        type_annotations,
+        code_type_annotations,
+        parameter_annotations,
+        annotation_default: None,
     }
 }
 
@@ -474,212 +1403,460 @@ fn default_ctor(pool: &mut ConstantPool, super_internal: &str) -> MethodInfo {
         code,
         stack_map: None, // sin saltos: no lleva tabla
         exceptions: Vec::new(),
+        annotations: None,
+        signature: None,
+        parameters: Vec::new(), // el ctor por defecto no tiene parámetros
+        thrown_exceptions: Vec::new(),
+        line_numbers: Vec::new(), // sintético: sin líneas de fuente
+        local_vars: Vec::new(),
+        type_annotations: None,
+        code_type_annotations: None,
+        parameter_annotations: None,
+        annotation_default: None,
     }
 }
 
-fn type_width(ty: &Type) -> u16 {
-    matches!(ty, Type::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
-}
+// ---- RuntimeVisibleAnnotations (§4.7.16) ----
 
-// ---- bridge methods (§8.4.8.3, JVMS §4.6) ----
-
-/// La *categoría* de carga/retorno de un [`RType`]: `0=int 1=long 2=float 3=double 4=ref`, el
-/// desplazamiento sobre las familias `iload/lload/.../aload` e `ireturn/.../areturn`.
-fn rtype_cat(rt: &RType) -> u8 {
-    match rt {
-        RType::Prim(PrimType::Long) => 1,
-        RType::Prim(PrimType::Float) => 2,
-        RType::Prim(PrimType::Double) => 3,
-        RType::Prim(_) => 0,
-        _ => 4, // toda referencia (un type-var siempre erasa a una clase)
-    }
-}
-
-/// Cuántos slots ocupa (categoría 2 = `long`/`double`).
-fn rtype_width(rt: &RType) -> u16 {
-    matches!(rt, RType::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
-}
-
-/// El nombre interno para un `checkcast`, si es un tipo de referencia con clase conocida.
-fn rtype_internal(table: &SymbolTable, rt: &RType) -> Option<String> {
-    match rt {
-        RType::Class(id) | RType::Parameterized { base: id, .. } => Some(internal_name(table, *id)),
-        RType::Array(_) => Some(rtype_desc(table, rt)), // `checkcast` a un array usa su descriptor
-        _ => None,
-    }
-}
-
-/// Un descriptor `(...)R` a partir de tipos ya resueltos (borrados).
-fn desc_from(table: &SymbolTable, params: &[RType], ret: &RType) -> String {
-    let mut s = String::from("(");
-    for p in params {
-        s.push_str(&rtype_desc(table, p));
-    }
-    s.push(')');
-    s.push_str(&rtype_desc(table, ret));
-    s
-}
-
-/// Los **bridge methods** que esta clase necesita. Se genera uno cuando un método concreto
-/// declarado acá sobrescribe uno heredado cuyo descriptor **borrado crudo** difiere del propio
-/// —porque el supertipo lo declaró con un parámetro de tipo (`Box<T>`, `Cmp<C>`)—. El puente
-/// lleva el descriptor heredado, castea cada argumento al tipo específico y reenvía al método
-/// real; sin él, un `invokevirtual` contra el descriptor del supertipo no lo encuentra.
-fn gen_bridges(
-    pool: &mut ConstantPool,
-    table: &SymbolTable,
-    cid: SymbolId,
-    this_internal: &str,
-) -> Vec<MethodInfo> {
-    // Métodos concretos de instancia declarados por esta clase, con su firma borrada propia.
-    let own: Vec<(SymbolId, String, Vec<RType>, RType)> = table
-        .members_of(cid)
-        .into_iter()
-        .filter(|&id| {
-            matches!(table.symbol(id).kind, SymbolKind::Method { is_constructor: false, .. })
-                && !table.symbol(id).modifiers.contains(&Modifier::Static)
-                && !table.symbol(id).modifiers.contains(&Modifier::Abstract)
-        })
-        .filter_map(|id| match table.resolved(id) {
-            Some(Resolved::Method { params, ret, .. }) => {
-                let pe: Vec<RType> = params.iter().map(|p| types::erasure(table, p)).collect();
-                Some((id, table.symbol(id).name.clone(), pe, types::erasure(table, ret)))
-            }
-            _ => None,
-        })
-        .collect();
-
-    // (nombre, descriptor) que ya son métodos reales: un puente no puede pisarlos.
-    let real: Vec<(String, String)> =
-        own.iter().map(|(_, n, pe, re)| (n.clone(), desc_from(table, pe, re))).collect();
-
-    let mut out: Vec<MethodInfo> = Vec::new();
-    let mut emitted: Vec<(String, String)> = Vec::new();
-
-    for (_mid, name, m_params_er, m_ret_er) in &own {
-        let target_desc = desc_from(table, m_params_er, m_ret_er);
-
-        for sup in types::supertypes_of(table, &RType::Class(cid)) {
-            let Some(base) = types::erased_id(&sup) else { continue };
-            if base == cid {
-                continue;
-            }
-            let subst = types::subst_of(table, &sup);
-            for pid in table.members_of(base) {
-                if table.symbol(pid).name != *name {
-                    continue;
-                }
-                let Some(Resolved::Method { params: p_params, ret: p_ret, .. }) = table.resolved(pid)
-                else {
-                    continue;
-                };
-                if p_params.len() != m_params_er.len() {
-                    continue;
-                }
-                // ¿override-equivalente **visto desde el subtipo**? Se sustituyen los argumentos
-                // del supertipo (`T ↦ String`) y recién ahí se borra.
-                let p_sub_er: Vec<RType> = p_params
-                    .iter()
-                    .map(|p| types::erasure(table, &types::substitute(p, &subst)))
-                    .collect();
-                if p_sub_er != *m_params_er {
-                    continue;
-                }
-                // El descriptor heredado **crudo** (sus type-vars borran a su cota, sin sustituir).
-                let p_params_er: Vec<RType> =
-                    p_params.iter().map(|p| types::erasure(table, p)).collect();
-                let p_ret_er = types::erasure(table, p_ret);
-                let bridge_desc = desc_from(table, &p_params_er, &p_ret_er);
-
-                // Mismo descriptor → es un override normal, no hace falta puente.
-                if bridge_desc == target_desc {
-                    continue;
-                }
-                let key = (name.clone(), bridge_desc.clone());
-                if real.contains(&key) || emitted.contains(&key) {
-                    continue;
-                }
-                emitted.push(key);
-                out.push(build_bridge(
-                    pool,
-                    table,
-                    this_internal,
-                    name,
-                    &p_params_er,
-                    m_params_er,
-                    &p_ret_er,
-                    &target_desc,
-                ));
+/// Los nombres **simples** de los tipos de anotación **retenidos en runtime** (§9.6.4.2): los
+/// `@interface` del fuente con `@Retention(RUNTIME)`, más las conocidas del JDK (`@Deprecated`,
+/// `@FunctionalInterface`). Solo esas van a `RuntimeVisibleAnnotations`; las de retención
+/// `SOURCE`/`CLASS` (como `@Override`) no.
+fn runtime_retained_annotations(unit: &CompilationUnit) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    out.insert("Deprecated".to_string());
+    out.insert("FunctionalInterface".to_string());
+    fn scan(class: &ClassDecl, out: &mut std::collections::HashSet<String>) {
+        if class.kind == TypeKind::Annotation && is_runtime_retention(&class.annotations) {
+            out.insert(class.name.clone());
+        }
+        for m in &class.members {
+            if let Member::Type(nested) = m {
+                scan(nested, out);
             }
         }
+    }
+    for class in &unit.types {
+        scan(class, &mut out);
     }
     out
 }
 
-/// Emite un bridge: `aload_0`, carga cada parámetro (con `checkcast` al tipo específico donde el
-/// heredado era más ancho), `invokevirtual` al método real y retorna. Sin saltos: sin `StackMapTable`.
-#[allow(clippy::too_many_arguments)]
-fn build_bridge(
+/// ¿La declaración lleva `@Retention(RetentionPolicy.RUNTIME)`? Se detecta por un valor cuyo nombre
+/// termina en `RUNTIME` (la constante del enum `RetentionPolicy`).
+fn is_runtime_retention(annotations: &[Annotation]) -> bool {
+    annotations.iter().any(|a| {
+        a.name == "Retention" && a.args.iter().any(|arg| value_names_runtime(&arg.value))
+    })
+}
+
+fn value_names_runtime(v: &AnnotationValue) -> bool {
+    let AnnotationValue::Expr(e) = v else { return false };
+    match &e.kind {
+        ExprKind::Field { name, .. } => name == "RUNTIME",
+        ExprKind::Name(n) => n == "RUNTIME",
+        _ => false,
+    }
+}
+
+/// Serializa el **cuerpo** del atributo `RuntimeVisibleAnnotations` (§4.7.16) —`num_annotations` + los
+/// `annotation`— para las anotaciones de `annos` que estén **retenidas en runtime** (`rt`), o `None`
+/// si no queda ninguna. Una anotación con un valor que no sabemos codificar se **descarta entera**
+/// (mejor no emitirla que emitir bytes inválidos).
+fn build_annotations(
     pool: &mut ConstantPool,
     table: &SymbolTable,
-    this_internal: &str,
-    name: &str,
-    bridge_params: &[RType], // descriptor del puente (tipos heredados, más anchos)
-    own_params: &[RType],    // tipos específicos a los que castear
-    bridge_ret: &RType,      // retorno **heredado** (el del descriptor del puente)
-    target_desc: &str,
-) -> MethodInfo {
-    let bridge_desc = desc_from(table, bridge_params, bridge_ret);
-    let name_index = pool.utf8(name);
-    let descriptor_index = pool.utf8(&bridge_desc);
-    let target = pool.methodref(this_internal, name, target_desc);
-
-    let mut code = vec![ALOAD_0];
-    let mut slot = 1u16; // 0 es `this`
-    for (bp, op_) in bridge_params.iter().zip(own_params) {
-        let cat = rtype_cat(bp);
-        if slot < 4 {
-            code.push(ILOAD_0 + cat * 4 + slot as u8);
-        } else {
-            code.push(ILOAD + cat);
-            code.push(slot as u8);
+    scope: ScopeId,
+    annos: &[Annotation],
+    rt: &std::collections::HashSet<String>,
+    tu: &TypeUseInfo,
+) -> Option<Vec<u8>> {
+    let mut encoded: Vec<Vec<u8>> = Vec::new();
+    for a in annos {
+        let simple = a.name.rsplit('.').next().unwrap_or(&a.name);
+        if !rt.contains(simple) {
+            continue;
         }
-        // El heredado ve el argumento más ancho (p. ej. `Object`); castear al específico.
-        if rtype_cat(op_) == 4 {
-            if let (Some(from), Some(to)) = (rtype_internal(table, bp), rtype_internal(table, op_)) {
-                if from != to {
-                    let ci = pool.class(&to);
-                    code.push(CHECKCAST);
-                    code.push((ci >> 8) as u8);
-                    code.push(ci as u8);
+        // Una anotación **solo** `@Target(TYPE_USE)` no es de declaración: va únicamente al
+        // `RuntimeVisibleTypeAnnotations`, no acá (finding de fidelidad de type annotations).
+        if tu.type_use_only.contains(simple) {
+            continue;
+        }
+        if let Some(bytes) = encode_annotation(pool, table, scope, a) {
+            encoded.push(bytes);
+        }
+    }
+    if encoded.is_empty() {
+        return None;
+    }
+    let mut body = Vec::new();
+    body.extend_from_slice(&(encoded.len() as u16).to_be_bytes());
+    for e in &encoded {
+        body.extend_from_slice(e);
+    }
+    Some(body)
+}
+
+/// El nombre **simple** de una anotación (`java.lang.Foo` → `Foo`).
+fn anno_simple(a: &Annotation) -> &str {
+    a.name.rsplit('.').next().unwrap_or(&a.name)
+}
+
+/// Cuerpo del atributo `RuntimeVisibleParameterAnnotations` (§4.7.18): `num_parameters` (u1) y, por
+/// cada parámetro formal, `num_annotations` (u2) + sus `annotation` (lo que produce
+/// [`build_annotations`]: las de **declaración** retenidas en runtime, excluyendo las `TYPE_USE`-only
+/// —que van al `RuntimeVisibleTypeAnnotations`—). Un parámetro sin anotaciones aporta `num_annotations
+/// = 0`. `None` si **ningún** parámetro tiene una anotación (javac omite el atributo entero).
+fn build_parameter_annotations(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    params: &[Param],
+    rt: &std::collections::HashSet<String>,
+    tu: &TypeUseInfo,
+) -> Option<Vec<u8>> {
+    let mut per_param: Vec<Vec<u8>> = Vec::new();
+    let mut any = false;
+    for p in params {
+        match build_annotations(pool, table, scope, &p.annotations, rt, tu) {
+            Some(body) => {
+                any = true;
+                per_param.push(body);
+            }
+            None => per_param.push(vec![0, 0]), // num_annotations = 0
+        }
+    }
+    if !any {
+        return None;
+    }
+    let mut out = Vec::new();
+    out.push(params.len() as u8); // num_parameters (u1)
+    for e in &per_param {
+        out.extend_from_slice(e);
+    }
+    Some(out)
+}
+
+/// Qué anotaciones del fuente son **type annotations** por su `@Target` (§9.6.4.1). `type_use`: su
+/// `@Target` incluye `TYPE_USE` (van al `RuntimeVisibleTypeAnnotations`). `type_use_only`: además no
+/// tiene ningún target de **declaración**, así que **no** va al `RuntimeVisibleAnnotations`. Una
+/// anotación sin `@Target`, o externa, no se considera TYPE_USE (default seguro: queda de declaración).
+struct TypeUseInfo {
+    type_use: std::collections::HashSet<String>,
+    type_use_only: std::collections::HashSet<String>,
+}
+
+/// Recolecta los nombres de constante `ElementType.X` de un valor de `@Target` (un `ElementType.X`
+/// suelto o un arreglo `{ … }`).
+fn element_type_names(v: &AnnotationValue, out: &mut Vec<String>) {
+    match v {
+        AnnotationValue::Array(items) => items.iter().for_each(|i| element_type_names(i, out)),
+        AnnotationValue::Expr(e) => match &e.kind {
+            ExprKind::Field { name, .. } => out.push(name.clone()),
+            ExprKind::Name(n) => out.push(n.clone()),
+            _ => {}
+        },
+        AnnotationValue::Nested(_) => {}
+    }
+}
+
+fn type_use_info(unit: &CompilationUnit) -> TypeUseInfo {
+    let mut type_use = std::collections::HashSet::new();
+    let mut type_use_only = std::collections::HashSet::new();
+    fn scan(
+        class: &ClassDecl,
+        tu: &mut std::collections::HashSet<String>,
+        tuo: &mut std::collections::HashSet<String>,
+    ) {
+        if class.kind == TypeKind::Annotation {
+            let mut targets = Vec::new();
+            for a in &class.annotations {
+                if anno_simple(a) == "Target" {
+                    for arg in &a.args {
+                        element_type_names(&arg.value, &mut targets);
+                    }
+                }
+            }
+            if targets.iter().any(|t| t == "TYPE_USE") {
+                tu.insert(class.name.clone());
+                // Un target que no es TYPE_USE ni TYPE_PARAMETER es de **declaración**.
+                let has_decl = targets.iter().any(|t| t != "TYPE_USE" && t != "TYPE_PARAMETER");
+                if !has_decl {
+                    tuo.insert(class.name.clone());
                 }
             }
         }
-        slot += rtype_width(bp);
+        for m in &class.members {
+            if let Member::Type(n) = m {
+                scan(n, tu, tuo);
+            }
+        }
     }
-    code.push(INVOKEVIRTUAL);
-    code.push((target >> 8) as u8);
-    code.push(target as u8);
-    if matches!(bridge_ret, RType::Void) {
-        code.push(RETURN);
-    } else {
-        code.push(IRETURN + rtype_cat(bridge_ret));
+    for c in &unit.types {
+        scan(c, &mut type_use, &mut type_use_only);
     }
+    TypeUseInfo { type_use, type_use_only }
+}
 
-    // Pico de pila: `this` + todos los argumentos, justo antes del invoke.
-    let args_slots: u16 = bridge_params.iter().map(|p| rtype_width(p)).sum();
-    let max_stack = (1 + args_slots).max(rtype_width(bridge_ret)) as u16;
+/// Un `type_annotation` (§4.7.20): `target_type` (u1) + `target_info` + `type_path` + el `annotation`.
+fn type_annotation_entry(target_type: u8, target_info: &[u8], type_path: &[u8], ann: &[u8]) -> Vec<u8> {
+    let mut e = Vec::with_capacity(1 + target_info.len() + type_path.len() + ann.len());
+    e.push(target_type);
+    e.extend_from_slice(target_info);
+    e.extend_from_slice(type_path);
+    e.extend_from_slice(ann);
+    e
+}
 
-    MethodInfo {
-        access_flags: ACC_PUBLIC | ACC_BRIDGE | ACC_SYNTHETIC,
-        name_index,
-        descriptor_index,
-        max_stack,
-        max_locals: 1 + args_slots,
-        code,
-        stack_map: None, // sin saltos
-        exceptions: Vec::new(),
+/// Envuelve las `entries` en el **cuerpo** del atributo (`num_annotations` + las entradas), o `None`.
+fn wrap_type_annotations(entries: &[Vec<u8>]) -> Option<Vec<u8>> {
+    if entries.is_empty() {
+        return None;
     }
+    let mut body = Vec::new();
+    body.extend_from_slice(&(entries.len() as u16).to_be_bytes());
+    for e in entries {
+        body.extend_from_slice(e);
+    }
+    Some(body)
+}
+
+/// Entradas para las anotaciones sobre **parámetros de tipo** (target `0x00` clase / `0x01` método):
+/// `target_info` = `type_parameter_index`, `type_path` vacío.
+fn type_param_entries(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    type_params: &[TypeParam],
+    on_method: bool,
+    rt: &std::collections::HashSet<String>,
+) -> Vec<Vec<u8>> {
+    let target_type = if on_method { 0x01u8 } else { 0x00u8 };
+    let mut entries = Vec::new();
+    for (i, tp) in type_params.iter().enumerate() {
+        for a in &tp.annotations {
+            if !rt.contains(anno_simple(a)) {
+                continue;
+            }
+            if let Some(ann) = encode_annotation(pool, table, scope, a) {
+                entries.push(type_annotation_entry(target_type, &[i as u8], &[0u8], &ann));
+            }
+        }
+    }
+    entries
+}
+
+/// Entradas para las anotaciones **líder** que son TYPE_USE (§9.7.4), en la posición `target_type`
+/// (`0x13` campo, `0x14` retorno, `0x16` parámetro) con el `target_info` dado y `type_path` vacío.
+/// Solo las que estén en `tu.type_use` y retenidas en runtime (`rt`).
+fn type_use_lead_entries(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    annos: &[Annotation],
+    target_type: u8,
+    target_info: &[u8],
+    rt: &std::collections::HashSet<String>,
+    tu: &TypeUseInfo,
+) -> Vec<Vec<u8>> {
+    let mut entries = Vec::new();
+    for a in annos {
+        let simple = anno_simple(a);
+        if !tu.type_use.contains(simple) || !rt.contains(simple) {
+            continue;
+        }
+        if let Some(ann) = encode_annotation(pool, table, scope, a) {
+            entries.push(type_annotation_entry(target_type, target_info, &[0u8], &ann));
+        }
+    }
+    entries
+}
+
+/// Serializa un `type_path` (§4.7.20.2): `path_length` (u1) seguido de ese número de pares
+/// `{type_path_kind (u1), type_argument_index (u1)}`. Los *kinds*: `0` array, `1` nested (`Outer.Inner`),
+/// `2` cota de wildcard, `3` argumento de tipo (con su índice). El path vacío (`[0]`) es la posición
+/// del tipo entero; cada paso baja un nivel hacia el tipo anotado.
+fn serialize_type_path(path: &[TypePathStep]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(1 + path.len() * 2);
+    out.push(path.len() as u8);
+    for step in path {
+        let (kind, arg) = match step {
+            TypePathStep::Array => (0u8, 0u8),
+            TypePathStep::Nested => (1u8, 0u8),
+            TypePathStep::WildcardBound => (2u8, 0u8),
+            TypePathStep::TypeArgument(i) => (3u8, *i),
+        };
+        out.push(kind);
+        out.push(arg);
+    }
+    out
+}
+
+/// Entradas para las anotaciones TYPE_USE en posiciones **anidadas** del tipo (`List<@A String>`,
+/// `int @A []`, `Map<String, @A ? extends Number>`), cada una con su `type_path` reconstruido por el
+/// parser. `target_type`/`target_info` son los del elemento que declara el tipo (`0x13` campo,
+/// `0x14` retorno, `0x16` parámetro). Solo las retenidas en runtime (`rt`).
+fn type_use_nested_entries(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    tas: &[TypeUseAnnot],
+    target_type: u8,
+    target_info: &[u8],
+    rt: &std::collections::HashSet<String>,
+) -> Vec<Vec<u8>> {
+    let mut entries = Vec::new();
+    for ta in tas {
+        if !rt.contains(anno_simple(&ta.annotation)) {
+            continue;
+        }
+        if let Some(ann) = encode_annotation(pool, table, scope, &ta.annotation) {
+            let path = serialize_type_path(&ta.path);
+            entries.push(type_annotation_entry(target_type, target_info, &path, &ann));
+        }
+    }
+    entries
+}
+
+/// Entradas para las anotaciones sobre las **cotas** de los parámetros de tipo (`<T extends @A A & @B B>`),
+/// target `0x11` (clase) / `0x12` (método). `target_info` = `{type_parameter_index, bound_index}`.
+/// El `bound_index` sigue a real javac: si la **primera** cota escrita es una interfaz, hay una cota de
+/// clase implícita `Object` en el índice 0, así que las escritas arrancan en 1; si es una clase, en 0.
+fn type_use_bound_entries(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    type_params: &[TypeParam],
+    on_method: bool,
+    rt: &std::collections::HashSet<String>,
+) -> Vec<Vec<u8>> {
+    let target_type = if on_method { 0x12u8 } else { 0x11u8 };
+    let mut entries = Vec::new();
+    for (tpi, tp) in type_params.iter().enumerate() {
+        // Si la primera cota es una interfaz, javac cuenta desde 1 (el 0 lo ocupa el `Object` implícito).
+        let base = match tp.bounds.first() {
+            Some(b) if !bound_is_interface(table, scope, b) => 0usize,
+            _ => 1usize,
+        };
+        for (bi, bound_annos) in tp.bound_annos.iter().enumerate() {
+            if bound_annos.is_empty() {
+                continue;
+            }
+            let target_info = [tpi as u8, (base + bi) as u8];
+            entries.extend(type_use_nested_entries(
+                pool, table, scope, bound_annos, target_type, &target_info, rt,
+            ));
+        }
+    }
+    entries
+}
+
+/// Una `annotation` (§4.7.16): `type_index` (descriptor del tipo) + `num_element_value_pairs` + los
+/// pares `nombre → element_value`. `None` si algún valor no se sabe codificar.
+fn encode_annotation(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    a: &Annotation,
+) -> Option<Vec<u8>> {
+    let type_index = pool.utf8(&annotation_descriptor(table, scope, &a.name));
+    let mut pairs = Vec::new();
+    for arg in &a.args {
+        // La forma de **valor único** (`@Ann(x)`) nombra el elemento implícito `value`.
+        let elem = arg.name.clone().unwrap_or_else(|| "value".to_string());
+        let name_index = pool.utf8(&elem);
+        let value = encode_value(pool, table, scope, &arg.value)?;
+        pairs.extend_from_slice(&name_index.to_be_bytes());
+        pairs.extend_from_slice(&value);
+    }
+    let mut out = Vec::new();
+    out.extend_from_slice(&type_index.to_be_bytes());
+    out.extend_from_slice(&(a.args.len() as u16).to_be_bytes());
+    out.extend_from_slice(&pairs);
+    Some(out)
+}
+
+/// El descriptor de campo del tipo de anotación: `Ljava/lang/Deprecated;`. Se resuelve por la tabla;
+/// si no está, cae a `Lnombre/con/barras;`.
+fn annotation_descriptor(table: &SymbolTable, scope: ScopeId, name: &str) -> String {
+    let simple = name.rsplit('.').next().unwrap_or(name);
+    match resolve_type_id(table, scope, simple) {
+        Some(id) => format!("L{};", internal_name(table, id)),
+        None => format!("L{};", name.replace('.', "/")),
+    }
+}
+
+/// Un `element_value` (§4.7.16.1) con su `tag`: `s`/`I`/`Z`/…, `c` (literal de clase), `e` (constante
+/// de enum), `@` (anotación anidada) o `[` (arreglo). `None` si no se sabe codificar (el llamador
+/// descarta la anotación entera). Un entero sin el tipo del elemento a mano se etiqueta como `I`.
+fn encode_value(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    v: &AnnotationValue,
+) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    match v {
+        AnnotationValue::Array(items) => {
+            out.push(b'[');
+            out.extend_from_slice(&(items.len() as u16).to_be_bytes());
+            for it in items {
+                out.extend_from_slice(&encode_value(pool, table, scope, it)?);
+            }
+        }
+        AnnotationValue::Nested(a) => {
+            out.push(b'@');
+            out.extend_from_slice(&encode_annotation(pool, table, scope, a)?);
+        }
+        AnnotationValue::Expr(e) => match &e.kind {
+            ExprKind::StringLit(s) => {
+                out.push(b's');
+                out.extend_from_slice(&pool.utf8(s).to_be_bytes());
+            }
+            ExprKind::IntLit(n) => {
+                out.push(b'I');
+                out.extend_from_slice(&pool.integer(*n as i32).to_be_bytes());
+            }
+            ExprKind::BoolLit(b) => {
+                out.push(b'Z');
+                out.extend_from_slice(&pool.integer(*b as i32).to_be_bytes());
+            }
+            ExprKind::CharLit(c) => {
+                out.push(b'C');
+                out.extend_from_slice(&pool.integer(*c as i32).to_be_bytes());
+            }
+            ExprKind::LongLit(n) => {
+                out.push(b'J');
+                out.extend_from_slice(&pool.long(*n).to_be_bytes());
+            }
+            ExprKind::DoubleLit(d) => {
+                out.push(b'D');
+                out.extend_from_slice(&pool.double(*d).to_be_bytes());
+            }
+            ExprKind::FloatLit(f) => {
+                out.push(b'F');
+                out.extend_from_slice(&pool.float(*f as f32).to_be_bytes());
+            }
+            ExprKind::ClassLit(ty) => {
+                out.push(b'c');
+                out.extend_from_slice(&pool.utf8(&type_desc(table, scope, ty)).to_be_bytes());
+            }
+            // `Tipo.CONST` (constante de enum): descriptor del tipo + nombre. Best-effort: solo la
+            // forma cualificada por un nombre simple.
+            ExprKind::Field { expr, name } => {
+                let ExprKind::Name(tn) = &expr.kind else { return None };
+                out.push(b'e');
+                out.extend_from_slice(&pool.utf8(&annotation_descriptor(table, scope, tn)).to_be_bytes());
+                out.extend_from_slice(&pool.utf8(name).to_be_bytes());
+            }
+            _ => return None,
+        },
+    }
+    Some(out)
+}
+
+fn type_width(ty: &Type) -> u16 {
+    matches!(ty, Type::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
 }
 
 // ---- opcodes (JVMS §6) ----
@@ -756,6 +1933,7 @@ const IRETURN: u8 = 0xac; // base i/l/f/d/a
 const RETURN: u8 = 0xb1;
 const INVOKESPECIAL: u8 = 0xb7;
 const INVOKESTATIC: u8 = 0xb8;
+const INVOKEINTERFACE: u8 = 0xb9; // método de interfaz: índice + `count` + un byte cero
 const INVOKEDYNAMIC: u8 = 0xba; // call site dinámico: índice InvokeDynamic + dos bytes cero
 
 /// El *reference kind* `REF_invokeStatic` (§5.4.3.5): todo *bootstrap method* (`LambdaMetafactory` u
@@ -835,10 +2013,13 @@ fn vtype_of(table: &SymbolTable, rt: &RType) -> VType {
         RType::Prim(PrimType::Float) => VType::Float,
         RType::Prim(PrimType::Double) => VType::Double,
         RType::Prim(_) => VType::Int,
-        RType::Void | RType::Unresolved => VType::Top,
+        RType::Void | RType::Unresolved | RType::InferVar(_) => VType::Top,
         RType::Array(_) => VType::Object(rtype_desc(table, rt)),
         RType::Class(id) | RType::TypeVar(id) => VType::Object(internal_name(table, *id)),
         RType::Parameterized { base, .. } => VType::Object(internal_name(table, *base)),
+        // El verificador ve una variable de captura por su cota superior (su *erasure*).
+        RType::Capture { upper, .. } => vtype_of(table, upper),
+        RType::Intersection(ms) => ms.first().map_or(VType::Top, |m| vtype_of(table, m)),
     }
 }
 
@@ -873,6 +2054,85 @@ fn const_int(e: &Expr) -> Option<i32> {
         ExprKind::Unary { op: UnOp::Plus, expr, .. } => const_int(expr),
         ExprKind::Cast { expr, .. } => const_int(expr),
         _ => None,
+    }
+}
+
+/// El valor constante de un campo, ya tipado para el atributo `ConstantValue` (§4.7.2): la variante
+/// determina qué entrada del pool se emite (`Integer`/`Long`/`Float`/`Double`/`String`).
+pub(crate) enum ConstVal {
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    Str(String),
+}
+
+/// Un valor **numérico** constante de compilación (§15.29), leído de un literal con `+`/`-` unario.
+/// Se deja **sin coercionar**: la coerción al tipo del campo la hace [`const_field_value`].
+enum Num {
+    Int(i64),
+    Flt(f64),
+}
+
+fn const_num(e: &Expr) -> Option<Num> {
+    match &e.kind {
+        ExprKind::IntLit(n) | ExprKind::LongLit(n) => Some(Num::Int(*n)),
+        ExprKind::CharLit(c) => Some(Num::Int(*c as i64)),
+        ExprKind::FloatLit(f) => Some(Num::Flt(*f as f64)),
+        ExprKind::DoubleLit(d) => Some(Num::Flt(*d)),
+        ExprKind::Unary { op: UnOp::Neg, expr, .. } => const_num(expr).map(|n| match n {
+            Num::Int(v) => Num::Int(v.wrapping_neg()),
+            Num::Flt(v) => Num::Flt(-v),
+        }),
+        ExprKind::Unary { op: UnOp::Plus, expr, .. } => const_num(expr),
+        _ => None,
+    }
+}
+
+/// El valor del atributo `ConstantValue` de un campo con inicializador de **expresión constante**
+/// (§15.29), coercionado a su tipo declarado. `None` si no es un literal primitivo/`String` que
+/// sepamos plegar —una expresión aritmética compleja cae al `<clinit>` (correcto, solo no *inlineada*)—.
+/// El mismo predicado lo usa el desugar para **no** bajar la init al `<clinit>` si va a `ConstantValue`.
+pub(crate) fn const_field_value(field_ty: &Type, init: &Expr) -> Option<ConstVal> {
+    let p = match field_ty {
+        Type::Prim(p) => *p,
+        Type::Class(n) if n == "String" || n == "java.lang.String" => {
+            return match &init.kind {
+                ExprKind::StringLit(s) => Some(ConstVal::Str(s.clone())),
+                _ => None,
+            };
+        }
+        _ => return None,
+    };
+    match p {
+        PrimType::Boolean => match &init.kind {
+            ExprKind::BoolLit(b) => Some(ConstVal::Int(*b as i32)),
+            _ => None,
+        },
+        // Los enteros angostos se guardan como `Integer`, truncados a su rango (§5.1.3).
+        PrimType::Int => num_int(init).map(|v| ConstVal::Int(v as i32)),
+        PrimType::Short => num_int(init).map(|v| ConstVal::Int(v as i16 as i32)),
+        PrimType::Byte => num_int(init).map(|v| ConstVal::Int(v as i8 as i32)),
+        PrimType::Char => num_int(init).map(|v| ConstVal::Int(v as u16 as i32)),
+        PrimType::Long => num_int(init).map(ConstVal::Long),
+        PrimType::Float => const_num(init).map(|n| ConstVal::Float(num_f64(n) as f32)),
+        PrimType::Double => const_num(init).map(|n| ConstVal::Double(num_f64(n))),
+    }
+}
+
+/// El valor entero de una constante numérica (un `float`/`double` no encaja en un campo entero sin un
+/// *cast* explícito, que no plegamos, así que ahí devuelve `None`).
+fn num_int(e: &Expr) -> Option<i64> {
+    match const_num(e)? {
+        Num::Int(v) => Some(v),
+        Num::Flt(_) => None,
+    }
+}
+
+fn num_f64(n: Num) -> f64 {
+    match n {
+        Num::Int(v) => v as f64,
+        Num::Flt(v) => v,
     }
 }
 
@@ -944,8 +2204,29 @@ struct Emitter<'a> {
     targets: HashSet<Label>,
     /// La tabla de excepciones que se irá llenando con cada `try`.
     exceptions: Vec<ExceptionEntry>,
+    /// Pares `(start_pc, line)` para el `LineNumberTable` (§4.7.12): se anota la línea del fuente al
+    /// entrar a cada sentencia. `mark_line` deduplica por pc y por línea.
+    line_numbers: Vec<(u16, u16)>,
+    /// Entradas ya cerradas del `LocalVariableTable` (§4.7.13): `(start_pc, length, name_idx,
+    /// desc_idx, slot)`.
+    local_vars: Vec<(u16, u16, u16, u16, u16)>,
+    /// Pila de scopes de locales **abiertos**: cada scope guarda `(slot, name_idx, desc_idx,
+    /// start_pc, type_annos)`; al cerrarlo, cada uno se vuelca a `local_vars` con su rango de vida
+    /// `[start, pc)`, y si lleva type annotations, al `RuntimeVisibleTypeAnnotations` del `Code` como
+    /// target `0x40`. La estructura de scopes **espeja** la de la pasada 2 (que reusa slots al salir de
+    /// un bloque), para que dos locales que comparten slot no den rangos solapados.
+    open_locals: Vec<Vec<(u16, u16, u16, u16, Vec<TypeUseAnnot>)>>,
     /// Si el código puede **caer** hasta el punto actual (falso tras un `goto`/`return`).
     reachable: bool,
+    /// Anotaciones de tipo **retenidas en runtime** (por nombre simple): filtro para las de posición-Code.
+    rt: &'a std::collections::HashSet<String>,
+    /// Clasificación TYPE_USE de las anotaciones (por `@Target`): para un local, solo las de tipo van al
+    /// target `0x40`; una anotación de declaración pura (`@Deprecated int x`) en esa posición **no**.
+    tu: &'a TypeUseInfo,
+    /// Entradas del `RuntimeVisibleTypeAnnotations` que va **dentro del `Code`** (§4.7.20): los targets
+    /// de posición-bytecode (cast 0x47, `instanceof` 0x43, `new` 0x44, local 0x40), cada uno con el
+    /// offset del opcode como `target_info`. Se llenan al emitir cada instrucción.
+    code_type_annotations: Vec<Vec<u8>>,
 }
 
 /// Un destino de salto todavía sin dirección: se resuelve al final, parcheando los operandos.
@@ -972,6 +2253,8 @@ impl<'a> Emitter<'a> {
         super_class: String,
         bootstraps: &'a mut Vec<BootstrapMethod>,
         errors: &'a mut Vec<Error>,
+        rt: &'a std::collections::HashSet<String>,
+        tu: &'a TypeUseInfo,
     ) -> Self {
         Emitter {
             pool,
@@ -981,6 +2264,9 @@ impl<'a> Emitter<'a> {
             super_class,
             errors,
             bootstraps,
+            rt,
+            tu,
+            code_type_annotations: Vec::new(),
             bytes: Vec::new(),
             stack: Vec::new(),
             max_stack: 0,
@@ -995,7 +2281,87 @@ impl<'a> Emitter<'a> {
             frames: BTreeMap::new(),
             targets: HashSet::new(),
             exceptions: Vec::new(),
+            line_numbers: Vec::new(),
+            local_vars: Vec::new(),
+            open_locals: Vec::new(),
             reachable: true,
+        }
+    }
+
+    // ---- LocalVariableTable (§4.7.13): scopes de variables locales ----
+
+    /// Abre un scope de locales (espejo de un `env.push()` de la pasada 2).
+    fn open_scope(&mut self) {
+        self.open_locals.push(Vec::new());
+    }
+
+    /// Cierra el scope corriente: cada local abierto se vuelca a `local_vars` con su rango de vida
+    /// `[start, pc_actual)` (se descartan los de largo 0: se declararon pero no vivieron sobre código).
+    fn close_scope(&mut self) {
+        let pc = self.bytes.len() as u16;
+        if let Some(scope) = self.open_locals.pop() {
+            for (slot, name, desc, start, type_annos) in scope {
+                if pc > start {
+                    self.local_vars.push((start, pc - start, name, desc, slot));
+                    // `LOCAL_VARIABLE` (target 0x40): el `target_info` es la tabla de rangos de vida
+                    // `{ start_pc, length, index }` (aquí un único rango), y el offset **no** entra —
+                    // el rango sí. Solo las de tipo (`@Target(TYPE_USE)`) y retenidas en runtime.
+                    for ta in &type_annos {
+                        let simple = anno_simple(&ta.annotation);
+                        if !self.tu.type_use.contains(simple) || !self.rt.contains(simple) {
+                            continue;
+                        }
+                        if let Some(ann) =
+                            encode_annotation(self.pool, self.table, self.scope, &ta.annotation)
+                        {
+                            let mut ti = Vec::with_capacity(8);
+                            ti.extend_from_slice(&1u16.to_be_bytes()); // table_length = 1
+                            ti.extend_from_slice(&start.to_be_bytes());
+                            ti.extend_from_slice(&(pc - start).to_be_bytes());
+                            ti.extend_from_slice(&slot.to_be_bytes());
+                            let path = serialize_type_path(&ta.path);
+                            self.code_type_annotations
+                                .push(type_annotation_entry(0x40, &ti, &path, &ann));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Registra una variable local, viva desde el offset actual, en el scope corriente. `type_annos`
+    /// son las anotaciones de tipo del local (target 0x40); vacío para `this`, parámetros y `catch`.
+    fn open_local(&mut self, slot: u16, name: &str, desc: &str, type_annos: &[TypeUseAnnot]) {
+        let name_idx = self.pool.utf8(name);
+        let desc_idx = self.pool.utf8(desc);
+        let start = self.bytes.len() as u16;
+        if let Some(scope) = self.open_locals.last_mut() {
+            scope.push((slot, name_idx, desc_idx, start, type_annos.to_vec()));
+        }
+    }
+
+    /// Emite una secuencia de sentencias como un **bloque con scope** de locales.
+    fn block_scoped(&mut self, stmts: &[Stmt]) {
+        self.open_scope();
+        for s in stmts {
+            self.stmt(s);
+        }
+        self.close_scope();
+    }
+
+    /// Anota, para el `LineNumberTable`, que en el offset actual arranca la línea `line` del fuente.
+    /// Deduplica: si el último par ya está en este mismo pc, lo **reemplaza** (la sentencia previa no
+    /// emitió código); si ya está en esta misma línea, no repite. Ignora `line == 0` (sin posición).
+    fn mark_line(&mut self, line: u32) {
+        if line == 0 {
+            return;
+        }
+        let pc = self.bytes.len() as u16;
+        let line = line as u16;
+        match self.line_numbers.last_mut() {
+            Some((last_pc, last_line)) if *last_pc == pc => *last_line = line,
+            Some((_, last_line)) if *last_line == line => {}
+            _ => self.line_numbers.push((pc, line)),
         }
     }
 
@@ -1071,10 +2437,11 @@ impl<'a> Emitter<'a> {
         self.pending.entry(l).or_default().push((self.locals_t.clone(), self.stack.clone()));
     }
 
-    /// Serializa el `StackMapTable` (JVMS §4.7.4). Se usa **siempre `full_frame`** (tag 255): es
-    /// legal en cualquier posición y evita el zoo de formas comprimidas (`same`/`chop`/`append`), a
-    /// costa de unos bytes más. El `offset_delta` del primer frame es su offset; los siguientes van
-    /// **menos uno** respecto del anterior (así un delta de 0 sigue siendo un avance real).
+    /// Serializa el `StackMapTable` (JVMS §4.7.4) eligiendo la forma **más compacta** de cada frame
+    /// según el anterior: `same_frame`/`same_frame_extended` (locales iguales, pila vacía),
+    /// `same_locals_1_stack_item` (un ítem de pila), `append`/`chop` (1–3 locales de más/de menos al
+    /// final), o `full_frame` cuando no encaja ninguna. El `offset_delta` del primer frame es su
+    /// offset; los siguientes van **menos uno** respecto del anterior (así un delta 0 sigue avanzando).
     fn stack_map(&mut self) -> Option<Vec<u8>> {
         // Solo los offsets a los que **apunta algún salto** (ya resueltos todos, incluidos los de
         // vuelta atrás de los bucles).
@@ -1091,25 +2458,90 @@ impl<'a> Emitter<'a> {
         }
         let mut out = Vec::new();
         out.extend_from_slice(&(frames.len() as u16).to_be_bytes());
-        let mut prev: Option<usize> = None;
+        let mut prev_off: Option<usize> = None;
+        // El primer frame no tiene un frame previo **en la tabla** contra el que comprimir (compararlo
+        // con el frame inicial del método daría algún byte más, pero pide reconstruir sus locales): va
+        // como `full_frame`. El resto se comprime contra su antecesor.
+        let mut prev_locals: Option<Vec<VType>> = None;
         for (off, locals, stack) in frames {
-            let delta = match prev {
+            let delta = match prev_off {
                 None => off,
                 Some(p) => off - p - 1,
-            };
-            prev = Some(off);
-            out.push(255); // full_frame
-            out.extend_from_slice(&(delta as u16).to_be_bytes());
-            out.extend_from_slice(&(locals.len() as u16).to_be_bytes());
-            for t in &locals {
-                self.write_vtype(&mut out, t);
-            }
-            out.extend_from_slice(&(stack.len() as u16).to_be_bytes());
-            for t in &stack {
-                self.write_vtype(&mut out, t);
-            }
+            } as u16;
+            prev_off = Some(off);
+            self.write_frame(&mut out, delta, &locals, &stack, prev_locals.as_deref());
+            prev_locals = Some(locals);
         }
         Some(out)
+    }
+
+    /// Escribe un frame en la forma **más compacta** válida respecto de `prev` (los locales del frame
+    /// anterior), cayendo a `full_frame` (tag 255) cuando ninguna comprimida aplica.
+    fn write_frame(
+        &mut self,
+        out: &mut Vec<u8>,
+        delta: u16,
+        locals: &[VType],
+        stack: &[VType],
+        prev: Option<&[VType]>,
+    ) {
+        if let Some(prev) = prev {
+            if stack.is_empty() {
+                if locals == prev {
+                    if delta <= 63 {
+                        out.push(delta as u8); // same_frame (0–63)
+                    } else {
+                        out.push(251); // same_frame_extended
+                        out.extend_from_slice(&delta.to_be_bytes());
+                    }
+                    return;
+                }
+                // `append_frame` (252–254): `prev` seguido de 1–3 locales nuevos.
+                if locals.len() > prev.len()
+                    && locals.len() - prev.len() <= 3
+                    && &locals[..prev.len()] == prev
+                {
+                    let k = locals.len() - prev.len();
+                    out.push((251 + k) as u8);
+                    out.extend_from_slice(&delta.to_be_bytes());
+                    for t in &locals[prev.len()..] {
+                        self.write_vtype(out, t);
+                    }
+                    return;
+                }
+                // `chop_frame` (248–250): `prev` con 1–3 locales **de menos** al final.
+                if prev.len() > locals.len()
+                    && prev.len() - locals.len() <= 3
+                    && &prev[..locals.len()] == locals
+                {
+                    let k = prev.len() - locals.len();
+                    out.push((251 - k) as u8);
+                    out.extend_from_slice(&delta.to_be_bytes());
+                    return;
+                }
+            } else if stack.len() == 1 && locals == prev {
+                // `same_locals_1_stack_item_frame` (64–127) / su forma _extended (247).
+                if delta <= 63 {
+                    out.push(64 + delta as u8);
+                } else {
+                    out.push(247);
+                    out.extend_from_slice(&delta.to_be_bytes());
+                }
+                self.write_vtype(out, &stack[0]);
+                return;
+            }
+        }
+        // full_frame (255): todo explícito.
+        out.push(255);
+        out.extend_from_slice(&delta.to_be_bytes());
+        out.extend_from_slice(&(locals.len() as u16).to_be_bytes());
+        for t in locals {
+            self.write_vtype(out, t);
+        }
+        out.extend_from_slice(&(stack.len() as u16).to_be_bytes());
+        for t in stack {
+            self.write_vtype(out, t);
+        }
     }
 
     fn write_vtype(&mut self, out: &mut Vec<u8>, t: &VType) {
@@ -1236,11 +2668,11 @@ impl<'a> Emitter<'a> {
     /// construcción no cubierta es la clase de bug que ya nos mordió dos veces (el `if` descartado y
     /// el `++` en posición de valor): mejor fallar fuerte.
     fn unsupported(&mut self, pos: Pos, what: &str) {
-        self.errors.push(Error {
-            message: format!("el generador de bytecode todavía no soporta {what}"),
-            line: pos.line,
-            col: pos.col,
-        });
+        self.errors.push(Error::new(
+            format!("el generador de bytecode todavía no soporta {what}"),
+            pos.line,
+            pos.col,
+        ));
     }
 
     fn ty_of(&self, e: &Expr) -> RType {
@@ -1250,18 +2682,29 @@ impl<'a> Emitter<'a> {
     // ---- sentencias ----
 
     fn stmt(&mut self, s: &Stmt) {
+        // `LineNumberTable` (§4.7.12): al entrar a la sentencia, mapear el offset actual a su línea.
+        // Un `Block` no aporta línea propia (delega en sus hijas); el resto sí.
+        if !matches!(s.kind, StmtKind::Block(_)) {
+            self.mark_line(s.pos.line);
+        }
         // La etiqueta que dejó un `Labeled` es de **esta** sentencia; se consume al entrar para que
         // no se filtre a una anidada.
         let lbl = self.pending_label.take();
         match &s.kind {
-            StmtKind::Block(b) => b.0.iter().for_each(|s| self.stmt(s)),
-            StmtKind::LocalVar { init, .. } => {
-                if let (Some(e), Some(local)) = (init, &s.local) {
-                    self.expr(e);
-                    let cat = category(&local.ty);
-                    let vt = vtype_of(self.table, &local.ty);
-                    self.set_local(local.slot, vt);
-                    self.store(cat, local.slot);
+            StmtKind::Block(b) => self.block_scoped(&b.0),
+            StmtKind::LocalVar { name, init, type_annos, .. } => {
+                if let Some(local) = &s.local {
+                    if let Some(e) = init {
+                        self.expr(e);
+                        let cat = category(&local.ty);
+                        let vt = vtype_of(self.table, &local.ty);
+                        self.set_local(local.slot, vt);
+                        self.store(cat, local.slot);
+                    }
+                    // `LocalVariableTable`: la variable vive desde acá hasta el fin de su bloque. Y sus
+                    // type annotations (`@A int x`) van al `Code` como target 0x40 con ese rango.
+                    let desc = rtype_desc(self.table, &local.ty);
+                    self.open_local(local.slot, name, &desc, type_annos);
                 }
             }
             StmtKind::Return(e) => {
@@ -1318,6 +2761,9 @@ impl<'a> Emitter<'a> {
                 self.bind(end);
             }
             StmtKind::For { init, cond, update, body } => {
+                // Scope para la variable del `init` (§14.14.1): su slot se libera al salir del `for`,
+                // así que su rango en el `LocalVariableTable` no debe pasarse de acá (espeja la pasada 2).
+                self.open_scope();
                 if let Some(i) = init {
                     self.stmt(i);
                 }
@@ -1338,6 +2784,7 @@ impl<'a> Emitter<'a> {
                 self.jump(GOTO, top);
                 self.reachable = false;
                 self.bind(end);
+                self.close_scope(); // cierra el scope de la variable del `for`
             }
             StmtKind::Break(label) => match self.break_target(label.as_deref()) {
                 Some(t) => {
@@ -1496,6 +2943,9 @@ impl<'a> Emitter<'a> {
         self.reachable = false; // del switch no se **cae** al primer grupo: se salta
 
         // Los grupos, en orden de fuente — de ahí sale el *fall-through* de la forma de dos puntos.
+        // Los locales declarados en un `case:` viven en el bloque del `switch` (§14.11.2), un solo
+        // scope que envuelve todos los grupos; una flecha con `{ }` abre además su propio bloque.
+        self.open_scope();
         self.blocks.push(Breakable { label: lbl, brk: end, cont: None });
         for (i, c) in cases.iter().enumerate() {
             self.bind(arms[i]);
@@ -1513,6 +2963,7 @@ impl<'a> Emitter<'a> {
         }
         self.blocks.pop();
         self.bind(end);
+        self.close_scope();
     }
 
     /// Relleno hasta el próximo múltiplo de 4 **desde el arranque del método** (JVMS §6,
@@ -1543,9 +2994,7 @@ impl<'a> Emitter<'a> {
         self.pop(1);
 
         let start = self.bytes.len();
-        for s in &body.0 {
-            self.stmt(s);
-        }
+        self.block_scoped(&body.0);
         let end = self.bytes.len();
         let after = self.new_label();
         if self.reachable {
@@ -1587,16 +3036,12 @@ impl<'a> Emitter<'a> {
     fn try_stmt(&mut self, body: &Block, catches: &[CatchClause], finally: &Option<Block>) {
         let entry_locals = self.locals_t.clone();
         let start = self.bytes.len();
-        for s in &body.0 {
-            self.stmt(s);
-        }
+        self.block_scoped(&body.0);
         let end = self.bytes.len();
         let after = self.new_label();
         if self.reachable {
             if let Some(f) = finally {
-                for s in &f.0 {
-                    self.stmt(s);
-                }
+                self.block_scoped(&f.0);
             }
             self.jump(GOTO, after);
             self.reachable = false;
@@ -1617,9 +3062,12 @@ impl<'a> Emitter<'a> {
             self.stack = vec![VType::Object(exc.clone())];
             self.max_stack = self.max_stack.max(1);
             self.locals_t = entry_locals.clone();
+            // Scope del `catch`: la variable de la excepción vive en el handler (§14.20).
+            self.open_scope();
             if let Some(slot) = c.slot {
                 self.set_local(slot, VType::Object(exc.clone()));
                 self.store(4, slot); // astore: la excepción es una referencia
+                self.open_local(slot, &c.name, &format!("L{exc};"), &[]);
             } else {
                 self.op(POP);
                 self.pop(1);
@@ -1629,13 +3077,12 @@ impl<'a> Emitter<'a> {
             }
             if self.reachable {
                 if let Some(f) = finally {
-                    for s in &f.0 {
-                        self.stmt(s);
-                    }
+                    self.block_scoped(&f.0);
                 }
                 self.jump(GOTO, after);
                 self.reachable = false;
             }
+            self.close_scope(); // cierra el scope del `catch`
             let ct = self.pool.class(&exc);
             self.exceptions.push(ExceptionEntry {
                 start_pc: start as u16,
@@ -1652,9 +3099,7 @@ impl<'a> Emitter<'a> {
             self.stack = vec![VType::Object("java/lang/Throwable".to_string())];
             self.max_stack = self.max_stack.max(1);
             self.locals_t = entry_locals.clone();
-            for s in &f.0 {
-                self.stmt(s);
-            }
+            self.block_scoped(&f.0);
             self.op(ATHROW);
             self.pop(1);
             self.reachable = false;
@@ -1702,6 +3147,8 @@ impl<'a> Emitter<'a> {
 
     fn expr(&mut self, e: &Expr) {
         match &e.kind {
+            // Un nodo de error nunca llega al codegen: la compilación aborta si hubo errores.
+            ExprKind::Error => unreachable!("ExprKind::Error en el codegen (la compilación debió abortar)"),
             ExprKind::IntLit(n) => self.push_int(*n as i32),
             ExprKind::CharLit(c) => self.push_int(*c as i32),
             ExprKind::BoolLit(b) => self.push_int(*b as i32),
@@ -1720,6 +3167,11 @@ impl<'a> Emitter<'a> {
                 self.push(VType::Object("java/lang/Object".to_string()));
             }
             ExprKind::This => self.load_this(),
+            // `Outer.this` lo baja el desugar a la cadena de `this$0` (`this.this$0…`); si llega
+            // hasta acá es que no se resolvió su clase envolvente.
+            ExprKind::QualifiedThis(_) => {
+                self.unsupported(e.pos, "un `Clase.this` que el desugar debía haber bajado")
+            }
             // Un nombre suelto: un local (slot de la frame) o un campo **implícito** de `this`.
             ExprKind::Name(_) => match e.binding {
                 Some(Binding::Local { slot }) => {
@@ -1865,10 +3317,12 @@ impl<'a> Emitter<'a> {
                     _ => "java/lang/Object".to_string(),
                 };
                 let idx = self.pool.class(&internal);
+                let off = self.bytes.len() as u16; // offset del `instanceof` (target 0x43)
                 self.op(INSTANCEOF);
                 self.u16(idx);
                 self.pop(1);
                 self.push(VType::Int); // el 0/1 del resultado
+                self.code_type_annos(0x43, &off.to_be_bytes(), &e.type_annos);
             }
             ExprKind::Super => self.unsupported(e.pos, "`super`"),
             // `c ? a : b` es un `if/else` que deja **un** valor en la pila. Cada rama se promueve al
@@ -1963,24 +3417,43 @@ impl<'a> Emitter<'a> {
         let class_internal = internal_name(self.table, owner);
         let is_ctor = matches!(self.table.symbol(mid).kind, SymbolKind::Method { is_constructor: true, .. });
         let mname = if is_ctor { "<init>".to_string() } else { self.table.symbol(mid).name.clone() };
-        let (desc, ret) = match self.table.resolved(mid) {
-            Some(Resolved::Method { params, ret, .. }) => {
-                let ps: String = params.iter().map(|t| rtype_desc(self.table, t)).collect();
-                (format!("({ps}){}", rtype_desc(self.table, ret)), ret.clone())
-            }
-            _ => ("()V".to_string(), RType::Void),
+        let (params, ret) = match self.table.resolved(mid) {
+            Some(Resolved::Method { params, ret, .. }) => (params.clone(), ret.clone()),
+            _ => (Vec::new(), RType::Void),
         };
-        let mref = self.pool.methodref(&class_internal, &mname, &desc);
+        let ps: String = params.iter().map(|t| rtype_desc(self.table, t)).collect();
+        let desc = format!("({ps}){}", rtype_desc(self.table, &ret));
+        let owner_is_interface = matches!(
+            &self.table.symbol(owner).kind,
+            SymbolKind::Class { kind: TypeKind::Interface, .. }
+        );
 
-        // `invokestatic` sin receptor; `invokespecial` para un constructor; si no, despacho virtual.
-        self.op(if is_static {
-            INVOKESTATIC
+        // `invokestatic` sin receptor; `invokespecial` para un constructor; `invokeinterface` si el
+        // método pertenece a una **interfaz** (§6.5, con `count` = slots del receptor + argumentos);
+        // si no, despacho virtual.
+        if is_static {
+            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            self.op(INVOKESTATIC);
+            self.u16(mref);
         } else if is_ctor {
-            INVOKESPECIAL
+            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            self.op(INVOKESPECIAL);
+            self.u16(mref);
+        } else if owner_is_interface {
+            let imref = self.pool.interface_methodref(&class_internal, &mname, &desc);
+            self.op(INVOKEINTERFACE);
+            self.u16(imref);
+            let count: u16 = 1 + params
+                .iter()
+                .map(|t| u16::from(matches!(t, RType::Prim(PrimType::Long | PrimType::Double))) + 1)
+                .sum::<u16>();
+            self.op(count as u8);
+            self.op(0);
         } else {
-            INVOKEVIRTUAL
-        });
-        self.u16(mref);
+            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            self.op(INVOKEVIRTUAL);
+            self.u16(mref);
+        }
         // Consume los argumentos (y el receptor, si lo hubo) y deja el retorno si no es `void`.
         self.pop(args.len() + usize::from(!is_static));
         if !matches!(ret, RType::Void) {
@@ -2204,6 +3677,8 @@ impl<'a> Emitter<'a> {
         self.pop(args.len() + 1); // los argumentos y la referencia duplicada
         // Corrido el constructor, el objeto **ya está inicializado** en todas partes (§4.10.2.4).
         self.initialized(at, &cls);
+        // `new @A Foo()` — target 0x44, con el offset del `new` como identidad.
+        self.code_type_annos(0x44, &(at as u16).to_be_bytes(), &e.type_annos);
     }
 
     /// `new T[n]` o `new T[]{a, b, c}`. El inicializador se emite elemento por elemento sobre el
@@ -2215,6 +3690,9 @@ impl<'a> Emitter<'a> {
             return;
         };
         let kind = array_kind(&elem);
+        // El target `0x44` de un array apunta al **inicio** de la creación (donde arranca el cálculo de
+        // la dimensión), no al `newarray`/`anewarray` en sí — así lo hace javac.
+        let off = self.bytes.len() as u16;
 
         // La longitud: la del inicializador, o la dimensión pedida.
         match init {
@@ -2245,6 +3723,7 @@ impl<'a> Emitter<'a> {
         let desc = rtype_desc(self.table, &RType::Array(elem.clone()));
         self.pop(1); // la longitud
         self.push(VType::Object(desc));
+        self.code_type_annos(0x44, &off.to_be_bytes(), &e.type_annos);
 
         if let Some(es) = init {
             for (i, v) in es.iter().enumerate() {
@@ -2253,6 +3732,23 @@ impl<'a> Emitter<'a> {
                 self.expr(v);
                 self.op(IASTORE + kind);
                 self.pop(3); // arrayref, índice y valor
+            }
+        }
+    }
+
+    /// Registra las type annotations de una expresión de **posición-Code** (§4.7.20) en el buffer que
+    /// irá al `RuntimeVisibleTypeAnnotations` **dentro del `Code`**: `target_type` (0x43 `instanceof`,
+    /// 0x44 `new`, 0x47 cast) con el `target_info` ya armado (el offset del opcode, más el
+    /// `type_argument_index` en el cast). Solo las retenidas en runtime (`rt`), con su `type_path`.
+    fn code_type_annos(&mut self, target_type: u8, target_info: &[u8], annos: &[TypeUseAnnot]) {
+        for ta in annos {
+            if !self.rt.contains(anno_simple(&ta.annotation)) {
+                continue;
+            }
+            if let Some(ann) = encode_annotation(self.pool, self.table, self.scope, &ta.annotation) {
+                let path = serialize_type_path(&ta.path);
+                self.code_type_annotations
+                    .push(type_annotation_entry(target_type, target_info, &path, &ann));
             }
         }
     }
@@ -2268,10 +3764,18 @@ impl<'a> Emitter<'a> {
             if let RType::Class(id) | RType::Parameterized { base: id, .. } = &to {
                 let cls = internal_name(self.table, *id);
                 let cidx = self.pool.class(&cls);
+                let off = self.bytes.len() as u16; // offset del `checkcast` (target 0x47)
                 self.op(CHECKCAST);
                 self.u16(cidx);
                 self.pop(1);
                 self.push(VType::Object(cls));
+                if !e.type_annos.is_empty() {
+                    // `type_argument_target`: offset + `type_argument_index` (0 en un cast simple; solo
+                    // un cast a tipo intersección `(A & B)` usaría otros índices, que no modelamos).
+                    let mut ti = off.to_be_bytes().to_vec();
+                    ti.push(0);
+                    self.code_type_annos(0x47, &ti, &e.type_annos);
+                }
             }
             return;
         }
@@ -2701,75 +4205,6 @@ mod tests {
         assert_eq!(run_int(src, "M", "big", vec![]), 1_000_000);
     }
 
-    // ---- genéricos: el loop cerrado (erasure + checkcast en el uso) ----
-
-    #[test]
-    fn compiles_and_runs_a_generic_method() {
-        // `<T> T id(T x)` erase su descriptor a `(Ljava/lang/Object;)Ljava/lang/Object;`.
-        // Al asignar `String s = id("abc")` el emisor debe insertar un `checkcast String`
-        // sobre el `Object` que devuelve, y recién ahí `s.length()` resuelve. Si la erasure
-        // de la variable de tipo saliera como `LT;`, el `.class` ni verificaría.
-        let src = "public class M {
-            static <T> T id(T x) { return x; }
-            public static int use() { String s = id(\"abc\"); return s.length(); }
-        }";
-        assert_eq!(run_int(src, "M", "use", vec![]), 3);
-    }
-
-    #[test]
-    fn compiles_and_runs_a_generic_instance_class() {
-        // Clase genérica de instancia: el campo `T v` erasa a `Object`, el constructor a
-        // `(Ljava/lang/Object;)V` y `T get()` a `()Ljava/lang/Object;`. Con type-args
-        // explícitos (sin diamante todavía) para aislar la erasure de la inferencia.
-        // `b.get()` devuelve `Object`; usado como `String` necesita un `checkcast String`
-        // antes de `.length()`.
-        let src = "class Box<T> { T v; Box(T v) { this.v = v; } T get() { return this.v; } }
-                   public class M {
-                       public static int test() { Box<String> b = new Box<String>(\"xyz\"); return b.get().length(); }
-                   }";
-        assert_eq!(run_int(src, "M", "test", vec![]), 3);
-    }
-
-    #[test]
-    fn compiles_and_runs_a_diamond() {
-        // Igual que el anterior pero con el **diamante** `new Box<>(...)`: el tipo del target
-        // (`Box<String> b = ...`) le da el argumento de tipo, y la erasure emite el mismo
-        // `.class` que la forma explícita.
-        let src = "class Box<T> { T v; Box(T v) { this.v = v; } T get() { return this.v; } }
-                   public class M {
-                       public static int test() { Box<String> b = new Box<>(\"xyz\"); return b.get().length(); }
-                   }";
-        assert_eq!(run_int(src, "M", "test", vec![]), 3);
-    }
-
-    #[test]
-    fn a_covariant_override_needs_a_bridge_method() {
-        // `SB.get()` erasa a `()Ljava/lang/String;`, pero el llamado por `Box<String>` va contra
-        // `Box.get:()Ljava/lang/Object;`. Para que el dispatch dinámico llegue a `SB.get`, el
-        // emisor debe generar en `SB` un **bridge** `()Ljava/lang/Object;` que delega en el
-        // `()Ljava/lang/String;` real. Sin el bridge, cae en el `Box.get` heredado (→ null → NPE).
-        let src = "class Box<T> { T get() { return null; } }
-                   class SB extends Box<String> { String get() { return \"hi\"; } }
-                   public class M {
-                       public static int test() { Box<String> b = new SB(); return b.get().length(); }
-                   }";
-        assert_eq!(run_int(src, "M", "test", vec![]), 2);
-    }
-
-    #[test]
-    fn implementing_a_generic_interface_needs_a_bridge_method() {
-        // `C implements Cmp<C>` con `int cmp(C o)`: el llamado por `Cmp<C>` va contra el descriptor
-        // borrado de la interfaz, `cmp(Ljava/lang/Object;)I`. `C` necesita un **bridge** con ese
-        // descriptor que castea el arg a `C` y reenvía a `cmp(LC;)I`. Sin el puente, el
-        // `invokeinterface` no encuentra el método en `C`.
-        let src = "interface Cmp<T> { int cmp(T o); }
-                   class C implements Cmp<C> { public int cmp(C o) { return 42; } }
-                   public class M {
-                       public static int test() { Cmp<C> c = new C(); C x = new C(); return c.cmp(x); }
-                   }";
-        assert_eq!(run_int(src, "M", "test", vec![]), 42);
-    }
-
     // ---- tipos anchos (categoría 2) y `String` ----
 
     #[test]
@@ -2963,6 +4398,493 @@ mod tests {
         verify_all(src, "P");
     }
 
+    // ---- clases internas de instancia (captura de `this$0`) ----
+
+    #[test]
+    fn an_inner_class_reads_an_enclosing_field() {
+        // `Inner.get()` lee `f` de `Outer` vía el `this$0` sintético; `new Inner()` en un método de
+        // instancia de `Outer` pasa `this`.
+        let src = "public class Outer { int f; Outer() { f = 7; } \
+                   class Inner { int get() { return f; } } \
+                   int use() { return new Inner().get(); } \
+                   public static int test() { return new Outer().use(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 7);
+    }
+
+    #[test]
+    fn an_inner_class_calls_an_enclosing_method() {
+        let src = "public class Outer { int base() { return 10; } \
+                   class Inner { int get() { return base() + 5; } } \
+                   int use() { return new Inner().get(); } \
+                   public static int test() { return new Outer().use(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 15);
+    }
+
+    #[test]
+    fn an_inner_class_passes_the_strict_verifier() {
+        let src = "public class Outer { int f; Outer() { f = 3; } \
+                   class Inner { int get() { return f; } } \
+                   int use() { return new Inner().get(); } }";
+        verify_all(src, "Outer");
+        verify_all(src, "Outer$Inner");
+    }
+
+    #[test]
+    fn qualified_this_reads_the_enclosing_field() {
+        // `Outer.this.f` desde la interna → `this.this$0.f` (§15.8.4). Aunque `f` no está sombreado
+        // acá, el `Outer.this` explícito debe bajar a la cadena de `this$0` igual que el acceso
+        // implícito.
+        let src = "public class Outer { int f; Outer() { f = 9; } \
+                   class Inner { int get() { return Outer.this.f; } } \
+                   int use() { return new Inner().get(); } \
+                   public static int test() { return new Outer().use(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 9);
+        verify_all(src, "Outer$Inner");
+    }
+
+    #[test]
+    fn qualified_this_disambiguates_a_shadowed_field() {
+        // `f` está sombreado por el campo de `Inner`; `Outer.this.f` alcanza el del enclosing (8),
+        // mientras `this.f` es el de `Inner` (3). La suma comprueba que cada `this` va a su clase.
+        let src = "public class Outer { int f; Outer() { f = 8; } \
+                   class Inner { int f; Inner() { f = 3; } \
+                       int get() { return Outer.this.f * 10 + this.f; } } \
+                   int use() { return new Inner().get(); } \
+                   public static int test() { return new Outer().use(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 83);
+    }
+
+    #[test]
+    fn a_qualified_new_creates_an_inner_from_an_explicit_enclosing() {
+        // `o.new Inner()` (§15.9.2): la instancia envolvente es el calificador `o`, no `this`. Se
+        // construye desde un método **estático**, donde no hay `this` que pasar.
+        let src = "public class Outer { int f; Outer() { f = 6; } \
+                   class Inner { int get() { return f; } } \
+                   public static int test() { Outer o = new Outer(); return o.new Inner().get(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 6);
+        verify_all(src, "Outer$Inner");
+    }
+
+    #[test]
+    fn a_two_level_inner_reads_a_grandparent_field() {
+        // `C` (interna de `B`, interna de `A`) lee `f` de `A` **sin cualificar** (§8.1.3): el desugar
+        // encadena dos `this$0` → `this.this$0.this$0.f`. `new C()`/`new B()` construyen la cadena.
+        let src = "public class A { int f; A() { f = 42; } \
+                   class B { class C { int get() { return f; } } \
+                       int useC() { return new C().get(); } } \
+                   int useB() { return new B().useC(); } \
+                   public static int test() { return new A().useB(); } }";
+        assert_eq!(run_int(src, "A", "test", vec![]), 42);
+        verify_all(src, "A$B");
+        verify_all(src, "A$B$C");
+    }
+
+    #[test]
+    fn a_two_level_inner_calls_a_grandparent_method() {
+        // Igual que el anterior pero con una **llamada** a un método de `A` desde `C`: el receptor
+        // implícito se reescribe a `this.this$0.this$0.base()`.
+        let src = "public class A { int base() { return 100; } \
+                   class B { class C { int get() { return base() + 7; } } \
+                       int useC() { return new C().get(); } } \
+                   int useB() { return new B().useC(); } \
+                   public static int test() { return new A().useB(); } }";
+        assert_eq!(run_int(src, "A", "test", vec![]), 107);
+    }
+
+    // ---- clases locales (captura de locales `val$`) ----
+
+    #[test]
+    fn a_local_class_captures_an_effectively_final_local() {
+        // `L` captura el local `c`: se baja a un campo `val$c` + parámetro de constructor; `new L()`
+        // lo pasa. Corre en la JVM propia.
+        let src = "public class M { public static int test() { \
+                   int c = 5; \
+                   class L { int get() { return c + 1; } } \
+                   return new L().get(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 6);
+    }
+
+    #[test]
+    fn a_local_class_captures_multiple_locals() {
+        let src = "public class M { public static int test() { \
+                   int a = 3; int b = 4; \
+                   class L { int sum() { return a * 10 + b; } } \
+                   return new L().sum(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 34);
+    }
+
+    #[test]
+    fn a_local_class_passes_the_strict_verifier() {
+        let src = "public class M { public static int test() { \
+                   int base = 10; \
+                   class L { int add(int x) { return base + x; } } \
+                   return new L().add(3); } }";
+        verify_all(src, "M");
+        verify_all(src, "M$1L");
+    }
+
+    #[test]
+    fn a_local_class_captures_both_the_enclosing_instance_and_a_local() {
+        // En un método de **instancia**, `L.get()` lee `f` (campo del enclosing, vía `this$0`) y
+        // `local` (capturado, vía `val$local`): el ctor es `L(Outer this$0, int val$local)`.
+        let src = "public class Outer { int f; Outer() { f = 100; } \
+                   int use() { int local = 5; \
+                   class L { int get() { return f + local; } } \
+                   return new L().get(); } \
+                   public static int test() { return new Outer().use(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 105);
+        verify_all(src, "Outer");
+        verify_all(src, "Outer$1L");
+    }
+
+    #[test]
+    fn two_local_classes_with_the_same_name_do_not_collide() {
+        // Dos `L` homónimas en métodos distintos del mismo enclosing: el registro las renombra a
+        // únicas (`1L`, `2L`) con binarios `M$1L`/`M$2L`, y cada `new L()` resuelve a la suya —antes se
+        // descartaba la segunda en silencio y ambas caían en la primera—.
+        let src = "public class M { \
+                   static int a() { class L { int v() { return 1; } } return new L().v(); } \
+                   static int b() { class L { int v() { return 2; } } return new L().v(); } \
+                   public static int test() { return a() * 10 + b(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 12);
+        verify_all(src, "M$1L");
+        verify_all(src, "M$2L");
+    }
+
+    #[test]
+    fn same_named_local_classes_in_sibling_blocks_are_distinct() {
+        // Bloques **hermanos** de un mismo método (§14.3): cada `L` vive solo en su bloque, así que
+        // comparten nombre fuente pero son tipos distintos (`1L`/`2L`). Comprueba el alcance léxico
+        // por bloque, no solo por método.
+        let src = "public class M { public static int test() { \
+                   int r = 0; \
+                   { class L { int v() { return 3; } } r += new L().v(); } \
+                   { class L { int v() { return 40; } } r += new L().v(); } \
+                   return r; } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 43);
+    }
+
+    #[test]
+    fn a_local_class_inside_another_local_class() {
+        // `L2` es una local dentro del método de otra local `L1` (§14.3): se registra como tipo
+        // anidado de `L1` (`Outer$1L1$2L2`) y ambas corren. Sin captura (valor constante).
+        let src = "public class Outer { public static int test() { \
+                   class L1 { int a() { \
+                       class L2 { int v() { return 7; } } \
+                       return new L2().v(); } } \
+                   return new L1().a(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 7);
+        verify_all(src, "Outer$1L1");
+        verify_all(src, "Outer$1L1$2L2");
+    }
+
+    #[test]
+    fn a_local_in_local_reads_the_outer_local_field() {
+        // `L2` lee `f` de la local **externa** `L1` (§14.3): captura la instancia de `L1` en su
+        // `this$0`, y el acceso sin cualificar se reescribe a `this$0.f`.
+        let src = "public class Outer { public static int test() { \
+                   class L1 { int f; L1() { f = 10; } \
+                       int a() { \
+                           class L2 { int v() { return f + 5; } } \
+                           return new L2().v(); } } \
+                   return new L1().a(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 15);
+    }
+
+    // ---- boxing / unboxing dirigido por tipo (TransTypes, §5.1.7/§5.1.8) ----
+    // El oráculo es el **verificador estricto**: TransTypes inserta `Integer.valueOf`/`x.intValue`, el
+    // emisor los baja a `invokestatic`/`invokevirtual`, y el verificador confirma que la pila queda
+    // consistente (`int` → `Integer` y viceversa). La **ejecución** de esos métodos vive en la JVM
+    // (KajiJDK), track aparte.
+
+    #[test]
+    fn boxes_an_int_into_an_integer_local() {
+        // `Integer i = 5` → `Integer.valueOf(5)`; `return i` en contexto `int` → `i.intValue()`.
+        let src = "public class M { public static int test() { Integer i = 5; return i; } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn unboxes_in_arithmetic() {
+        // `i + 1` con `i` de tipo `Integer`: se desempaqueta a `int` antes de sumar, y el resultado se
+        // devuelve como `int`.
+        let src = "public class M { public static int test() { Integer i = 5; return i + 1; } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn boxes_a_call_argument() {
+        // `f(5)` con `f(Integer)`: el `int` se boxea a `Integer` en el sitio de la llamada.
+        let src = "public class M { static int f(Integer n) { return n.intValue(); } \
+                   public static int test() { return f(5); } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn boxes_the_result_of_arithmetic_into_a_wrapper() {
+        // `Integer r = a + b`: la suma es `int`, y el resultado se boxea al asignar a `Integer`.
+        let src = "public class M { public static Integer test() { int a = 2; int b = 3; \
+                   Integer r = a + b; return r; } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn unboxing_to_a_wider_primitive_widens() {
+        // `long l = anInteger` / `double d = anInteger`: unbox al primitivo del wrapper (`intValue()`,
+        // `int`) y **widening** al target más ancho (`i2l`/`i2d`). Sin el widening la pila quedaría un
+        // `int` sobre un slot ancho y el verificador lo rechazaría.
+        let long_src =
+            "public class M { public static long test() { Integer i = 5; long l = i; return l; } }";
+        verify_all(long_src, "M");
+        let dbl_src =
+            "public class M { public static double test() { Integer i = 5; double d = i; return d; } }";
+        verify_all(dbl_src, "M");
+    }
+
+    #[test]
+    fn a_generic_lambda_boxes_its_body_end_to_end() {
+        // El caso insignia: `Function<Integer,Integer> f = x -> x + 1`. El cuerpo `x + 1` desempaqueta
+        // `x` (Integer→int), suma, y el resultado `int` se boxea al `Integer` del retorno del SAM.
+        let src = "import java.util.function.Function; \
+                   public class M { public static Function<Integer,Integer> make() { return x -> x + 1; } }";
+        verify_all(src, "M");
+    }
+
+    // ---- plegado de constantes en `case` (§15.28) ----
+
+    #[test]
+    fn a_static_final_int_folds_as_a_case_label() {
+        // `case LOW`/`case HIGH` (una `static final int` referida a otra) y `case 1 + 4` (aritmética
+        // constante) se **pliegan** a literales, y el switch corre.
+        let src = "public class C { \
+                   static final int LOW = 1; \
+                   static final int HIGH = LOW + 2; \
+                   public static int test(int x) { \
+                       switch (x) { case LOW: return 10; case HIGH: return 30; \
+                                    case 1 + 4: return 50; default: return 0; } } }";
+        assert_eq!(run_int(src, "C", "test", vec![3]), 30);
+        assert_eq!(run_int(src, "C", "test", vec![5]), 50);
+        assert_eq!(run_int(src, "C", "test", vec![1]), 10);
+    }
+
+    #[test]
+    fn a_qualified_static_final_int_folds_as_a_case_label() {
+        // `case K.A` (constante cualificada de otra clase): se pliega a `7` e **inlinea**, así `C`
+        // corre sin depender de `K` en runtime.
+        let src = "class K { static final int A = 7; } \
+                   public class C { public static int test(int x) { \
+                       switch (x) { case K.A: return 42; default: return 0; } } }";
+        assert_eq!(run_int(src, "C", "test", vec![7]), 42);
+    }
+
+    // ---- RuntimeVisibleAnnotations (§4.7.16) ----
+
+    #[test]
+    fn runtime_visible_annotations_are_emitted() {
+        // `@Deprecated` (retención RUNTIME) sobre clase/campo/método → el atributo
+        // `RuntimeVisibleAnnotations` aparece en cada uno; `@Override` (SOURCE) **no** se emite.
+        let src = "@Deprecated public class C { \
+                   @Deprecated int f; \
+                   @Deprecated void m() {} \
+                   @Override public String toString() { return \"\"; } }";
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_rva_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        write_classes(src, &dir);
+        let cf = ClassFile::from_path(dir.join("C.class").to_str().unwrap()).expect("parsea");
+        let rva = Some("RuntimeVisibleAnnotations");
+        let on_class = cf.attributes.iter().any(|a| cf.utf8(a.name_index) == rva);
+        let on_field = cf
+            .fields
+            .iter()
+            .any(|f| f.attributes.iter().any(|a| cf.utf8(a.name_index) == rva));
+        let on_m = cf
+            .methods
+            .iter()
+            .filter(|m| cf.utf8(m.name_index) == Some("m"))
+            .any(|m| m.attributes.iter().any(|a| cf.utf8(a.name_index) == rva));
+        let on_ts = cf
+            .methods
+            .iter()
+            .filter(|m| cf.utf8(m.name_index) == Some("toString"))
+            .any(|m| m.attributes.iter().any(|a| cf.utf8(a.name_index) == rva));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(on_class, "RVA en la clase");
+        assert!(on_field, "RVA en el campo");
+        assert!(on_m, "RVA en el método `m`");
+        assert!(!on_ts, "`@Override` (SOURCE) no emite RVA");
+    }
+
+    // ---- enum con constantes parametrizadas (§8.9.2) ----
+
+    #[test]
+    fn an_enum_with_parameterized_constants_runs() {
+        // `SMALL(1)`/`LARGE(3)` con un ctor propio `Size(int n)`: el desugar le antepone
+        // `(String, int)` + `super(...)`, y cada constante se construye con su argumento.
+        let src = "public enum Size { SMALL(1), LARGE(3); \
+                   int n; Size(int n) { this.n = n; } \
+                   int val() { return n; } \
+                   public static int test() { return SMALL.val() + LARGE.val(); } }";
+        assert_eq!(run_int(src, "Size", "test", vec![]), 4);
+    }
+
+    #[test]
+    fn an_enum_with_a_string_constant_argument_verifies() {
+        // El caso clásico `ROJO("rojo")` con un campo `String`: se compila y verifica (ejecutar el
+        // `String` es igual que cualquier objeto).
+        let src = "public enum Color { ROJO(\"rojo\"), VERDE(\"verde\"); \
+                   private final String label; Color(String label) { this.label = label; } \
+                   public String get() { return label; } }";
+        verify_all(src, "Color");
+    }
+
+    // ---- inferencia en posición de argumento (§15.12.2.6, fase 2) ----
+
+    #[test]
+    fn a_lambda_as_a_call_argument_is_typed_and_lowered() {
+        // `call(x -> x + 1)`: la fase 2 re-atribuye la lambda con el tipo del parámetro (`F`) como
+        // target — recién ahí tipa su cuerpo y se puede bajar a `invokedynamic`. Sin fase 2 quedaba
+        // `Unresolved` y la barrera del emisor la cortaba.
+        let src = "interface F { int apply(int x); } \
+                   public class M { static int call(F f) { return f.apply(3); } \
+                   public static int use() { return call(x -> x + 1); } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn a_method_ref_as_a_call_argument_is_typed_and_lowered() {
+        // `call(M::inc)` contra el parámetro `F`: igual que la lambda, la fase 2 le da el target.
+        let src = "interface F { int apply(int x); } \
+                   public class M { static int inc(int x) { return x + 1; } \
+                   static int call(F f) { return f.apply(3); } \
+                   public static int use() { return call(M::inc); } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn a_diamond_as_a_call_argument_infers_its_type_arguments() {
+        // `take(new Box<>())` contra `take(Box<String>)`: el diamante infiere `String` del parámetro.
+        let src = "class Box<T> {} \
+                   public class M { static void take(Box<String> b) {} \
+                   public static void use() { take(new Box<>()); } }";
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn a_lambda_arg_disambiguates_overloads_by_shape() {
+        // `f(x -> x + 1)` con `f(Fn)` (SAM que **devuelve valor**) y `f(Cons)` (SAM `void`): la lambda
+        // produce un valor, así que se elige `Fn`. Sin la desambiguación quedaba **ambiguo**; si se
+        // eligiera `Cons` (void), el cuerpo con valor **no compilaría**. Que verifique prueba `Fn`.
+        let src = "interface Fn { int apply(int x); } \
+                   interface Cons { void accept(int x); } \
+                   public class M { static int f(Fn g) { return g.apply(2); } \
+                   static int f(Cons c) { c.accept(2); return 0; } \
+                   public static int use() { return f(x -> x + 1); } }";
+        verify_all(src, "M");
+    }
+
+    // ---- clases anónimas (§15.9.5, bajadas a clase local sintética) ----
+
+    #[test]
+    fn an_anonymous_class_extends_a_class_and_overrides() {
+        // `new Base(){ … }` → una clase local sintética `M$1 extends Base` que sobrescribe `val()`.
+        let src = "public class M { static class Base { int val() { return 7; } } \
+                   public static int test() { \
+                   Base b = new Base() { int val() { return 42; } }; \
+                   return b.val(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 42);
+        verify_all(src, "M$1");
+    }
+
+    #[test]
+    fn an_anonymous_class_captures_a_local() {
+        // La anónima captura `c` en un campo `val$c` + parámetro de constructor; `new $1(c)` lo pasa.
+        let src = "public class M { static class Base { int val() { return 0; } } \
+                   public static int test() { int c = 42; \
+                   Base b = new Base() { int val() { return c; } }; \
+                   return b.val(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 42);
+        verify_all(src, "M$1");
+    }
+
+    // ---- anónimas con argumentos de super (§15.9.5) ----
+
+    #[test]
+    fn an_anonymous_class_forwards_super_arguments() {
+        // `new Base(42){…}`: el constructor sintético de `$1` reenvía `42` a `super(int)`.
+        let src = "public class M { static class Base { int v; Base(int x) { v = x; } int get() { return v; } } \
+                   static Base make() { return new Base(42) { int get() { return v + 1; } }; } \
+                   public static int test() { return make().get(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 43);
+        verify_all(src, "M$1");
+    }
+
+    #[test]
+    fn an_anonymous_class_forwards_super_args_and_captures_a_local() {
+        // El ctor sintético es `$1(int val$c, int $a0)`: primero la captura, después el super-arg.
+        let src = "public class M { static class Base { int v; Base(int x) { v = x; } int get() { return v; } } \
+                   public static int test() { int c = 5; \
+                   Base b = new Base(c * 2) { int get() { return v + c; } }; \
+                   return b.get(); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 15);
+        verify_all(src, "M$1");
+    }
+
+    // ---- emisión de interfaces propias ----
+
+    #[test]
+    fn an_interface_and_an_implementing_class_verify() {
+        // La interfaz `M$F` se emite con `ACC_INTERFACE` y su método `g` **abstracto sin `Code`**.
+        let src = "public class M { interface F { int g(); } \
+                   static class Impl implements F { public int g() { return 7; } } }";
+        verify_all(src, "M$F");
+        verify_all(src, "M$Impl");
+    }
+
+    #[test]
+    fn an_interface_method_is_called_via_invokeinterface() {
+        let src = "public class M { interface F { int g(); } \
+                   static class Impl implements F { public int g() { return 7; } } \
+                   public static int test() { F f = new Impl(); return f.g(); } }";
+        assert!(
+            code_of(src, "M", "test").0.contains(&super::INVOKEINTERFACE),
+            "una llamada sobre un receptor de interfaz usa invokeinterface"
+        );
+        assert_eq!(run_int(src, "M", "test", vec![]), 7);
+    }
+
+    #[test]
+    fn an_anonymous_class_implementing_an_interface_runs() {
+        // El caso más común de anónima, ahora desbloqueado: `new F(){…}` sobre una interfaz propia.
+        let src = "public class M { interface F { int g(int x); } \
+                   static F make() { return new F() { public int g(int x) { return x + 1; } }; } \
+                   public static int test() { return make().g(41); } }";
+        assert_eq!(run_int(src, "M", "test", vec![]), 42);
+        verify_all(src, "M$1");
+    }
+
+    #[test]
+    fn a_lambda_against_an_own_functional_interface_verifies() {
+        // Con la emisión de interfaces propias, una lambda se tipa y emite contra una interfaz
+        // funcional **nuestra** (la ejecución del `invokedynamic` vive en KajiJDK).
+        let src = "public class M { interface F { int g(int x); } \
+                   static F make() { return x -> x + 1; } }";
+        verify_all(src, "M");
+        verify_all(src, "M$F");
+    }
+
+    #[test]
+    fn an_anonymous_class_captures_the_enclosing_instance() {
+        // En un método de instancia, la anónima lee `f` del enclosing → captura `this$0`; su ctor es
+        // `$1(Outer this$0)` y el sitio pasa `new $1(this)`.
+        let src = "public class Outer { static class Base { int val() { return 0; } } \
+                   int f; Outer() { f = 100; } \
+                   Base make() { return new Base() { int val() { return f; } }; } \
+                   public static int test() { return new Outer().make().val(); } }";
+        assert_eq!(run_int(src, "Outer", "test", vec![]), 100);
+        verify_all(src, "Outer$1");
+    }
+
     // ---- barrera de seguridad ----
 
     /// Compila esperando que el emisor **rechace** la construcción, y devuelve el mensaje.
@@ -3016,12 +4938,13 @@ mod tests {
     }
 
     #[test]
-    fn a_case_label_that_is_not_a_constant_is_rejected() {
-        // Una `static final int` como etiqueta necesita **plegado de constantes**, que todavía no
-        // hay: la barrera avisa en vez de emitir un `case` con basura.
+    fn a_non_constant_case_label_is_rejected() {
+        // Un `static` **no final** no es una constante de compilación (§15.28): no se pliega, y la
+        // barrera del emisor avisa (la `static final int` **sí** se pliega — ver
+        // `a_static_final_int_folds_as_a_case_label`).
         let msg = rejected(
-            "public class M { static final int K = 1; \
-             public static int f(int n) { switch (n) { case K: return 1; default: return 0; } } }",
+            "public class M { static int k = 1; \
+             public static int f(int n) { switch (n) { case k: return 1; default: return 0; } } }",
         );
         assert!(msg.contains("constante entera"), "{msg}");
     }
@@ -3594,5 +5517,1269 @@ mod tests {
                    public class M { public M() {} public static Supplier<M> make() { return M::new; } }";
         assert!(code_of(src, "M", "make").0.contains(&INVOKEDYNAMIC));
         verify_all(src, "M");
+    }
+
+    #[test]
+    fn a_new_with_a_fully_qualified_class_name_resolves_and_emits() {
+        // Finding #20: `new java.lang.Object()` (nombre **cualificado**) resolvía a `Unresolved`, y el
+        // codegen no podía emitir el `new` + `invokespecial <init>` (fallaba con "tipo que no se pudo
+        // resolver"). Ahora el FQN se resuelve por su último segmento entre los externos. Compila,
+        // emite el `new`, y **verifica**.
+        let src = "public class Z { public static Object make() { return new java.lang.Object(); } }";
+        assert!(code_of(src, "Z", "make").0.contains(&0xbb), "debe emitir el opcode `new` (0xbb)");
+        verify_all(src, "Z");
+    }
+
+    #[test]
+    fn a_lambda_argument_to_a_generic_constructor_lowers_to_invokedynamic() {
+        // Finding #16: la lambda infiere su target (`Supplier<long[]>`) **a través** del type-param del
+        // constructor (`Box<A>(Supplier<A>)` con `Box<long[]>`). Antes quedaba sin target (`Unresolved`)
+        // y el emisor no podía bajarla —"necesita invokedynamic"—; ahora la **fase 2** del constructor le
+        // da el target del parámetro y baja a `invokedynamic`.
+        let src = "import java.util.function.Supplier; \
+                   public class M { static final class Box<A> { Box(Supplier<A> s) {} } \
+                                    static Box<long[]> make() { return new Box<long[]>(() -> new long[1]); } }";
+        assert!(code_of(src, "M", "make").0.contains(&INVOKEDYNAMIC), "la lambda debe bajar a invokedynamic");
+        verify_all(src, "M");
+    }
+
+    #[test]
+    fn a_bare_reference_to_an_anonymous_class_own_field_resolves() {
+        // Un campo propio de una clase **anónima** referenciado **pelado** (`c`, no `this.c`) debe
+        // resolver. La anónima se hoistea a una local sintética **después** del último
+        // `resolve_symbols`, así que sus campos quedaban sin `Resolved::Field` y el nombre pelado —que
+        // lo exige— fallaba con "no se encuentra: c"; `this.c` (que tolera `Unresolved`) sí pasaba.
+        // `hoist_anonymous` re-resuelve ahora.
+        let src = "public class C { interface I { int f(); } \
+                   I it() { return new I() { int c = 5; public int f() { return c; } }; } }";
+        verify_all(src, "C");
+        verify_all(src, "C$1");
+    }
+
+    #[test]
+    fn an_anonymous_class_in_a_generic_enclosing_class_captures_this0() {
+        // Finding #13: una clase **anónima** dentro de una clase **genérica** que llama métodos del
+        // envolvente debe capturar `this$0`. Antes, con la envolvente genérica, no se generaba el
+        // campo/param `this$0` (y la anónima ni se emitía). El `.class` de la anónima **verifica** —una
+        // llamada sin receptor, o sin el `this$0`, no pasaría el verificador—.
+        let src = "public class Gen<E> { interface Iter<T> { boolean hasNext(); } \
+                   int size() { return 0; } \
+                   Iter<E> it() { return new Iter<E>() { public boolean hasNext() { return size() > 0; } }; } }";
+        verify_all(src, "Gen");
+        verify_all(src, "Gen$1");
+    }
+
+    #[test]
+    fn a_text_block_compiles_and_verifies_as_a_string_constant() {
+        // Un text block se decodifica en el parser a un `String` común; el emisor lo baja a un `ldc`.
+        let src = "public class T { public static String s() { return \"\"\"\n            hola\n            mundo\n            \"\"\"; } }";
+        verify_all(src, "T");
+    }
+
+    // ---- métodos puente (§8.4.8.3 / §15.12.4.5) ----
+
+    const ACC_BRIDGE: u16 = 0x0040;
+    const ACC_SYNTHETIC: u16 = 0x1000;
+
+    /// Compila `src` y re-parsea la clase `simple` con la JVM propia.
+    fn compiled_class(src: &str, simple: &str) -> ClassFile {
+        let (_, bytes) = compile_all(src)
+            .into_iter()
+            .find(|(n, _)| n.rsplit('/').next() == Some(simple))
+            .unwrap_or_else(|| panic!("la clase {simple}"));
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_bridge_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{simple}.class"));
+        std::fs::write(&path, &bytes).unwrap();
+        let jvm = ClassFile::from_path(path.to_str().unwrap()).expect("el .class debe parsear");
+        let _ = std::fs::remove_dir_all(&dir);
+        jvm
+    }
+
+    /// ¿La clase tiene un método `name` con descriptor `desc` y los flags dados prendidos?
+    fn has_method(jvm: &ClassFile, name: &str, desc: &str, flags: u16) -> bool {
+        jvm.methods.iter().any(|m| {
+            jvm.utf8(m.name_index) == Some(name)
+                && jvm.utf8(m.descriptor_index) == Some(desc)
+                && m.access_flags & flags == flags
+        })
+    }
+
+    #[test]
+    fn an_enum_in_a_named_package_keeps_its_machinery() {
+        // Finding #21 (regresión): un `enum` en un paquete **nombrado** perdía TODA la maquinaria
+        // —constantes, `$VALUES`, `values()`, `valueOf()`, `<clinit>`, y hasta el ctor `(String,int)`—
+        // porque el FQN que el desugar usaba para `table.class(fqn)` no llevaba el paquete, así que la
+        // síntesis se salteaba y salía un `final class extends Enum` vacío. Un enum en el paquete por
+        // defecto no se veía afectado (de ahí que ningún test lo cazara).
+        let jvm = compiled_class("package pk; public enum E { A, B, C }", "E");
+        for c in ["A", "B", "C", "$VALUES"] {
+            assert!(
+                jvm.fields.iter().any(|f| jvm.utf8(f.name_index) == Some(c)),
+                "falta el campo `{c}`",
+            );
+        }
+        for meth in ["values", "valueOf", "<init>", "<clinit>"] {
+            assert!(
+                jvm.methods.iter().any(|m| jvm.utf8(m.name_index) == Some(meth)),
+                "falta el método `{meth}`",
+            );
+        }
+    }
+
+    // ---- atributo MethodParameters (§4.7.24) ----
+
+    /// `(nombre?, flags)` de cada parámetro formal del método `name` (`parameters_count` es un `u1`).
+    fn method_params(jvm: &ClassFile, name: &str) -> Option<Vec<(Option<String>, u16)>> {
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(name))?;
+        let a = m.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("MethodParameters"))?;
+        let b = &a.info;
+        let n = b[0] as usize; // ¡u1!
+        let mut out = Vec::new();
+        for i in 0..n {
+            let off = 1 + i * 4;
+            let name_idx = u16::from_be_bytes([b[off], b[off + 1]]);
+            let flags = u16::from_be_bytes([b[off + 2], b[off + 3]]);
+            let pname = (name_idx != 0).then(|| jvm.utf8(name_idx).map(str::to_string)).flatten();
+            out.push((pname, flags));
+        }
+        Some(out)
+    }
+
+    #[test]
+    fn a_method_records_its_parameter_names_and_final_flag() {
+        let jvm = compiled_class("class C { int f(int x, final String y) { return x; } }", "C");
+        assert_eq!(
+            method_params(&jvm, "f"),
+            Some(vec![(Some("x".to_string()), 0u16), (Some("y".to_string()), 0x0010)]), // `y` es final
+        );
+    }
+
+    #[test]
+    fn a_no_arg_method_has_no_method_parameters() {
+        let jvm = compiled_class("class C { int f() { return 0; } }", "C");
+        assert_eq!(method_params(&jvm, "f"), None);
+    }
+
+    #[test]
+    fn a_record_canonical_constructor_keeps_the_component_names() {
+        let jvm = compiled_class("public record P(int a, String b) {}", "P");
+        assert_eq!(
+            method_params(&jvm, "<init>"),
+            Some(vec![(Some("a".to_string()), 0u16), (Some("b".to_string()), 0u16)]),
+        );
+    }
+
+    #[test]
+    fn a_synthetic_captured_parameter_is_marked_synthetic() {
+        // El `this$0` que el desugar inyecta en el ctor de una interna de instancia va `ACC_SYNTHETIC`.
+        let jvm = compiled_class("class Outer { int v; class Inner { int g() { return v; } } }", "Outer$Inner");
+        let params = method_params(&jvm, "<init>").expect("el ctor tiene parámetros");
+        assert!(
+            params.iter().any(|(_, f)| f & 0x1000 != 0),
+            "algún parámetro sintético (`this$0`): {params:?}",
+        );
+    }
+
+    // ---- atributo Exceptions (§4.7.5) ----
+
+    /// Las clases de la cláusula `throws` del método `name`, vía el atributo `Exceptions` (o `None`
+    /// si el método no lleva el atributo, es decir no declara `throws`).
+    fn thrown_exceptions(jvm: &ClassFile, name: &str) -> Option<Vec<String>> {
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(name))?;
+        let a = m.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("Exceptions"))?;
+        let b = &a.info;
+        let n = u16::from_be_bytes([b[0], b[1]]) as usize;
+        Some(
+            (0..n)
+                .filter_map(|i| {
+                    let idx = u16::from_be_bytes([b[2 + i * 2], b[3 + i * 2]]);
+                    jvm.class_name(idx).map(str::to_string)
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_throws_clause_emits_the_exceptions_attribute_in_order() {
+        let jvm = compiled_class("class C { void f() throws Exception, RuntimeException {} }", "C");
+        assert_eq!(
+            thrown_exceptions(&jvm, "f"),
+            Some(vec!["java/lang/Exception".to_string(), "java/lang/RuntimeException".to_string()]),
+            "las clases del `throws`, en orden",
+        );
+    }
+
+    #[test]
+    fn a_method_without_throws_has_no_exceptions_attribute() {
+        let jvm = compiled_class("class C { void f() {} }", "C");
+        assert_eq!(thrown_exceptions(&jvm, "f"), None);
+    }
+
+    #[test]
+    fn an_abstract_method_keeps_its_throws() {
+        // Un método sin `Code` (abstracto) igual lleva `Exceptions` como atributo del método.
+        let jvm =
+            compiled_class("abstract class C { abstract void f() throws RuntimeException; }", "C");
+        assert_eq!(
+            thrown_exceptions(&jvm, "f"),
+            Some(vec!["java/lang/RuntimeException".to_string()]),
+        );
+    }
+
+    // ---- atributo LineNumberTable (§4.7.12) ----
+
+    /// Los pares `(start_pc, line)` del `LineNumberTable` del método `name` (`None` si no lo lleva).
+    fn line_number_table(jvm: &ClassFile, name: &str) -> Option<Vec<(u16, u16)>> {
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(name))?;
+        let code = jvm.member_code(m)?;
+        let a = code.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("LineNumberTable"))?;
+        let b = &a.info;
+        let n = u16::from_be_bytes([b[0], b[1]]) as usize;
+        Some(
+            (0..n)
+                .map(|i| {
+                    let o = 2 + i * 4;
+                    (u16::from_be_bytes([b[o], b[o + 1]]), u16::from_be_bytes([b[o + 2], b[o + 3]]))
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_method_body_maps_bytecode_offsets_to_source_lines() {
+        // Cada sentencia en su propia línea (la `\` continúa la string sin meter un `\n` de más).
+        let src = "class C {\n\
+                   int f(int n) {\n\
+                   int a = n + 1;\n\
+                   int b = a * 2;\n\
+                   return b;\n\
+                   }\n\
+                   }";
+        let jvm = compiled_class(src, "C");
+        let lnt = line_number_table(&jvm, "f").expect("f tiene LineNumberTable");
+        let lines: Vec<u16> = lnt.iter().map(|&(_, l)| l).collect();
+        assert_eq!(lines, vec![3, 4, 5], "una entrada por sentencia, en orden de línea");
+        assert!(
+            lnt.windows(2).all(|w| w[0].0 < w[1].0),
+            "start_pc estrictamente creciente y sin repetir: {lnt:?}",
+        );
+    }
+
+    #[test]
+    fn a_constructor_maps_the_implicit_super_call_to_its_declaration_line() {
+        // El `super()` implícito (pc 0) se mapea a la línea del ctor, no queda sin línea.
+        let src = "class C {\n\
+                   C() {\n\
+                   }\n\
+                   }";
+        let jvm = compiled_class(src, "C");
+        let lnt = line_number_table(&jvm, "<init>").expect("el ctor tiene LineNumberTable");
+        assert_eq!(lnt.first().map(|&(pc, l)| (pc, l)), Some((0, 2)), "pc 0 → línea 2: {lnt:?}");
+    }
+
+    // ---- atributo LocalVariableTable (§4.7.13) ----
+
+    /// Las entradas del `LocalVariableTable` del método `name`: `(start_pc, length, nombre, desc,
+    /// slot)`. `None` si el método no lleva el atributo.
+    fn local_var_table(jvm: &ClassFile, name: &str) -> Option<Vec<(u16, u16, String, String, u16)>> {
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(name))?;
+        let code = jvm.member_code(m)?;
+        let a =
+            code.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("LocalVariableTable"))?;
+        let b = &a.info;
+        let n = u16::from_be_bytes([b[0], b[1]]) as usize;
+        Some(
+            (0..n)
+                .map(|i| {
+                    let o = 2 + i * 10;
+                    let rd = |k: usize| u16::from_be_bytes([b[o + k], b[o + k + 1]]);
+                    let name = jvm.utf8(rd(4)).unwrap_or("?").to_string();
+                    let desc = jvm.utf8(rd(6)).unwrap_or("?").to_string();
+                    (rd(0), rd(2), name, desc, rd(8))
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn records_this_params_and_locals_with_names_descriptors_and_slots() {
+        let jvm =
+            compiled_class("class C { int f(int n, String s) { int a = n + 1; return a; } }", "C");
+        let lvt = local_var_table(&jvm, "f").expect("f tiene LocalVariableTable");
+        let by_name: std::collections::HashMap<String, (String, u16)> =
+            lvt.iter().map(|(_, _, n, d, s)| (n.clone(), (d.clone(), *s))).collect();
+        assert_eq!(by_name.get("this"), Some(&("LC;".to_string(), 0)), "`this` en slot 0");
+        assert_eq!(by_name.get("n"), Some(&("I".to_string(), 1)));
+        assert_eq!(by_name.get("s"), Some(&("Ljava/lang/String;".to_string(), 2)));
+        assert_eq!(by_name.get("a"), Some(&("I".to_string(), 3)));
+    }
+
+    #[test]
+    fn a_static_method_has_no_this_in_the_local_variable_table() {
+        let jvm = compiled_class("class C { static int f(int n) { return n; } }", "C");
+        let lvt = local_var_table(&jvm, "f").expect("tiene LVT");
+        assert!(lvt.iter().all(|(_, _, n, _, _)| n != "this"), "un `static` no tiene `this`: {lvt:?}");
+        assert!(lvt.iter().any(|(_, _, n, _, s)| n == "n" && *s == 0), "`n` en slot 0: {lvt:?}");
+    }
+
+    #[test]
+    fn reused_slots_get_disjoint_ranges() {
+        // Dos locales **vivos** en bloques disjuntos comparten slot; sus rangos NO deben solaparse.
+        // (Deben estar vivos: un local muerto lo descarta el largo-0, igual que javac.)
+        let jvm = compiled_class("class C { void m() { { int a = 1; a++; } { int b = 2; b++; } } }", "C");
+        let lvt = local_var_table(&jvm, "m").expect("tiene LVT");
+        let a = lvt.iter().find(|e| e.2 == "a").expect("a");
+        let b = lvt.iter().find(|e| e.2 == "b").expect("b");
+        assert_eq!(a.4, b.4, "a y b reusan el mismo slot: {lvt:?}");
+        for i in 0..lvt.len() {
+            for j in i + 1..lvt.len() {
+                let (si, li, _, _, sa) = &lvt[i];
+                let (sj, lj, _, _, sb) = &lvt[j];
+                if sa == sb {
+                    let overlap = si < &(sj + lj) && sj < &(si + li);
+                    assert!(!overlap, "rangos solapados en slot {sa}: {:?} vs {:?}", lvt[i], lvt[j]);
+                }
+            }
+        }
+    }
+
+    // ---- atributo ConstantValue (§4.7.2) ----
+
+    /// Describe el `ConstantValue` del campo `name` como texto normalizado (`None` si no lo lleva).
+    fn constant_value(jvm: &ClassFile, name: &str) -> Option<String> {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        let f = jvm.fields.iter().find(|f| jvm.utf8(f.name_index) == Some(name))?;
+        let a = f.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("ConstantValue"))?;
+        let idx = u16::from_be_bytes([a.info[0], a.info[1]]);
+        Some(match jvm.constant_pool.get((idx - 1) as usize)? {
+            CP::Integer(v) => format!("int:{v}"),
+            CP::Long(v) => format!("long:{v}"),
+            CP::Float(v) => format!("float:{v}"),
+            CP::Double(v) => format!("double:{v}"),
+            CP::String { string_index } => format!("String:{}", jvm.utf8(*string_index)?),
+            _ => return None,
+        })
+    }
+
+    #[test]
+    fn static_final_constant_fields_get_a_constant_value_attribute() {
+        let src = "class C { \
+            static final int I = 42; \
+            static final long L = 7; \
+            static final float F = 1.5f; \
+            static final double D = 3.5; \
+            static final boolean B = true; \
+            static final byte BY = 5; \
+            static final String S = \"hi\"; \
+        }";
+        let jvm = compiled_class(src, "C");
+        assert_eq!(constant_value(&jvm, "I").as_deref(), Some("int:42"));
+        assert_eq!(constant_value(&jvm, "L").as_deref(), Some("long:7"));
+        assert_eq!(constant_value(&jvm, "F").as_deref(), Some("float:1.5"));
+        assert_eq!(constant_value(&jvm, "D").as_deref(), Some("double:3.5"));
+        assert_eq!(constant_value(&jvm, "B").as_deref(), Some("int:1"), "boolean true = 1");
+        assert_eq!(constant_value(&jvm, "BY").as_deref(), Some("int:5"));
+        assert_eq!(constant_value(&jvm, "S").as_deref(), Some("String:hi"));
+    }
+
+    #[test]
+    fn non_final_or_non_constant_static_fields_have_no_constant_value() {
+        let src = "class C { \
+            static int x = 1; \
+            static final int y = f(); \
+            static int f() { return 2; } \
+        }";
+        let jvm = compiled_class(src, "C");
+        assert_eq!(constant_value(&jvm, "x"), None, "no-`final`: se inicializa en `<clinit>`");
+        assert_eq!(constant_value(&jvm, "y"), None, "init no-constante: se inicializa en `<clinit>`");
+    }
+
+    #[test]
+    fn a_constant_field_is_not_also_stored_in_clinit() {
+        // Con `ConstantValue`, javac **no** emite el store en `<clinit>`: una clase con solo un campo
+        // constante no lleva `<clinit>` en absoluto.
+        let jvm = compiled_class("class C { static final int X = 42; }", "C");
+        assert!(constant_value(&jvm, "X").is_some(), "X lleva ConstantValue");
+        assert!(
+            jvm.methods.iter().all(|m| jvm.utf8(m.name_index) != Some("<clinit>")),
+            "no debería haber `<clinit>` para un campo puramente constante",
+        );
+    }
+
+    // ---- java.lang.Object: super_class = 0 y <init> sin super() (finding #6) ----
+
+    #[test]
+    fn object_gets_super_class_zero_and_an_init_without_self_super_call() {
+        // Solo `java.lang.Object` no tiene superclase: `super_class = 0` y su `<init>` no llama a
+        // `super()` (sería a sí mismo). El resto de las clases sí llevan super_class y super() implícito.
+        let jvm =
+            compiled_class("package java.lang; public class Object { public Object() {} }", "Object");
+        assert_eq!(jvm.super_class, 0, "solo java.lang.Object tiene super_class = 0");
+        let init = jvm
+            .methods
+            .iter()
+            .find(|m| jvm.utf8(m.name_index) == Some("<init>"))
+            .expect("Object tiene <init>");
+        let code = jvm.member_code(init).expect("<init> tiene Code");
+        const INVOKESPECIAL: u8 = 0xb7;
+        assert!(
+            !code.code.contains(&INVOKESPECIAL),
+            "Object.<init> no debe llamar a super() (self-call): {:?}",
+            code.code,
+        );
+    }
+
+    #[test]
+    fn an_ordinary_class_still_has_a_real_super_class_and_super_call() {
+        // Contraprueba: una clase común mantiene super_class = Object y el `super()` implícito.
+        let jvm = compiled_class("public class C {}", "C");
+        assert_ne!(jvm.super_class, 0, "una clase común sí tiene super_class");
+        assert_eq!(jvm.class_name(jvm.super_class), Some("java/lang/Object"));
+        let init = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("<init>")).unwrap();
+        let code = jvm.member_code(init).expect("Code");
+        assert!(code.code.contains(&0xb7), "el ctor por defecto llama a super()");
+    }
+
+    // ---- RuntimeVisibleTypeAnnotations (§4.7.20): parámetros de tipo ----
+
+    #[test]
+    fn a_class_type_parameter_annotation_is_emitted() {
+        // `class C<@Foo T>` → RuntimeVisibleTypeAnnotations con target_type 0x00 (param de tipo de
+        // clase), type_parameter_index 0, type_path vacío. `@Foo` es `@Retention(RUNTIME)`.
+        let src = "import java.lang.annotation.*; \
+                   @Retention(RetentionPolicy.RUNTIME) @interface Foo {} \
+                   public class C<@Foo T> {}";
+        let jvm = compiled_class(src, "C");
+        let a = jvm
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations"))
+            .expect("C tiene RuntimeVisibleTypeAnnotations");
+        let b = &a.info;
+        assert_eq!(u16::from_be_bytes([b[0], b[1]]), 1, "una type annotation");
+        assert_eq!(b[2], 0x00, "target_type 0x00 = parámetro de tipo de clase");
+        assert_eq!(b[3], 0, "type_parameter_index 0");
+        assert_eq!(b[4], 0, "type_path vacío (path_length 0)");
+    }
+
+    #[test]
+    fn a_method_type_parameter_annotation_uses_target_0x01() {
+        let src = "import java.lang.annotation.*; \
+                   @Retention(RetentionPolicy.RUNTIME) @interface Foo {} \
+                   public class C { <@Foo T> void m() {} }";
+        let jvm = compiled_class(src, "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).expect("m");
+        let a = m
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations"))
+            .expect("m tiene RuntimeVisibleTypeAnnotations");
+        assert_eq!(a.info[2], 0x01, "target_type 0x01 = parámetro de tipo de método");
+    }
+
+    #[test]
+    fn a_type_use_annotation_on_a_field_is_a_type_annotation_not_a_declaration_one() {
+        let src = "import java.lang.annotation.*; \
+                   @Target(ElementType.TYPE_USE) @Retention(RetentionPolicy.RUNTIME) @interface Tu {} \
+                   public class C { @Tu String f; }";
+        let jvm = compiled_class(src, "C");
+        let f = jvm.fields.iter().find(|f| jvm.utf8(f.name_index) == Some("f")).unwrap();
+        let ta = f
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations"))
+            .expect("el campo tiene RuntimeVisibleTypeAnnotations");
+        assert_eq!(ta.info[2], 0x13, "target_type 0x13 = tipo del campo");
+        assert!(
+            !f.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleAnnotations")),
+            "una anotación TYPE_USE-only NO va a las anotaciones de declaración",
+        );
+    }
+
+    #[test]
+    fn a_cast_type_annotation_goes_inside_the_code_attribute_as_target_0x47() {
+        // `(@Tu String) o` → RuntimeVisibleTypeAnnotations **dentro del Code**, target 0x47 (CAST),
+        // con el offset del `checkcast` (tras el `aload_0`, offset 1) y `type_argument_index` 0.
+        let src = "import java.lang.annotation.*; \
+                   @Target(ElementType.TYPE_USE) @Retention(RetentionPolicy.RUNTIME) @interface Tu {} \
+                   public class C { Object m(Object o) { return (@Tu String) o; } }";
+        let jvm = compiled_class(src, "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).expect("m");
+        let code = jvm.member_code(m).expect("Code");
+        let ta = code
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations"))
+            .expect("el Code tiene RuntimeVisibleTypeAnnotations");
+        assert_eq!(u16::from_be_bytes([ta.info[0], ta.info[1]]), 1, "una type annotation");
+        assert_eq!(ta.info[2], 0x47, "target_type 0x47 = cast");
+        assert_eq!(u16::from_be_bytes([ta.info[3], ta.info[4]]), 1, "offset del checkcast");
+        assert_eq!(ta.info[5], 0, "type_argument_index 0 (cast simple)");
+    }
+
+    #[test]
+    fn a_local_variable_type_annotation_uses_target_0x40_with_a_live_range() {
+        // `@Tu String s = ...;` → target 0x40 (LOCAL_VARIABLE) en el Code, con `target_info` = una
+        // tabla de un rango `{start_pc, length, index}` (el mismo rango que el LocalVariableTable).
+        let src = "import java.lang.annotation.*; \
+                   @Target(ElementType.TYPE_USE) @Retention(RetentionPolicy.RUNTIME) @interface Tu {} \
+                   public class C { int m() { @Tu String s = \"hi\"; return s.length(); } }";
+        let jvm = compiled_class(src, "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).expect("m");
+        let code = jvm.member_code(m).expect("Code");
+        let ta = code
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations"))
+            .expect("el Code tiene RuntimeVisibleTypeAnnotations");
+        assert_eq!(u16::from_be_bytes([ta.info[0], ta.info[1]]), 1, "una type annotation");
+        assert_eq!(ta.info[2], 0x40, "target_type 0x40 = variable local");
+        assert_eq!(u16::from_be_bytes([ta.info[3], ta.info[4]]), 1, "table_length = 1 (un rango)");
+        // ...seguido de {start_pc(2), length(2), index(2)} y luego el type_path (path_length 0).
+        assert_eq!(ta.info[9], 0, "type_path vacío tras la tabla de rangos");
+    }
+
+    #[test]
+    fn a_type_use_annotation_on_a_return_and_a_parameter() {
+        let src = "import java.lang.annotation.*; \
+                   @Target(ElementType.TYPE_USE) @Retention(RetentionPolicy.RUNTIME) @interface Tu {} \
+                   public class C { @Tu String m(@Tu String s) { return s; } }";
+        let jvm = compiled_class(src, "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).unwrap();
+        let ta = m
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations"))
+            .expect("el método tiene RuntimeVisibleTypeAnnotations");
+        let b = &ta.info;
+        // Dos type_annotations: el retorno (0x14) y el parámetro 0 (0x16).
+        assert_eq!(u16::from_be_bytes([b[0], b[1]]), 2, "retorno + parámetro");
+        let targets: Vec<u8> = {
+            // primera entrada arranca en b[2]; retorno (0x14, sin target_info) tiene largo 1+0+1+ann;
+            // en vez de parsear largos, basta con que ambos targets 0x14 y 0x16 aparezcan.
+            b.iter().copied().filter(|&x| x == 0x14 || x == 0x16).collect()
+        };
+        assert!(targets.contains(&0x14), "retorno target 0x14: {b:?}");
+        assert!(targets.contains(&0x16), "parámetro target 0x16: {b:?}");
+    }
+
+    #[test]
+    fn a_source_retention_type_parameter_annotation_is_not_emitted() {
+        // Sin `@Retention(RUNTIME)` la anotación no va al atributo *visible* (igual que las normales).
+        let jvm = compiled_class("@interface Bar {} public class C<@Bar T> {}", "C");
+        assert!(
+            !jvm.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleTypeAnnotations")),
+            "una anotación de retención SOURCE/CLASS no emite RuntimeVisibleTypeAnnotations",
+        );
+    }
+
+    // ---- AnnotationDefault (§4.7.22) ----
+
+    #[test]
+    fn an_annotation_element_default_string_is_emitted() {
+        let jvm = compiled_class("public @interface Foo { String value() default \"hi\"; }", "Foo");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("value")).unwrap();
+        let a = m
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("AnnotationDefault"))
+            .expect("el elemento `value` tiene AnnotationDefault");
+        // element_value: tag 's' (String) + const_value_index (Utf8 "hi").
+        assert_eq!(a.info[0], b's', "tag 's' (String)");
+        let idx = u16::from_be_bytes([a.info[1], a.info[2]]);
+        assert_eq!(jvm.utf8(idx), Some("hi"), "el valor por defecto es \"hi\"");
+    }
+
+    #[test]
+    fn an_annotation_element_without_default_has_no_attribute() {
+        let jvm = compiled_class("public @interface Foo { String value(); }", "Foo");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("value")).unwrap();
+        assert!(
+            !m.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("AnnotationDefault")),
+            "un elemento sin `default` no lleva AnnotationDefault",
+        );
+    }
+
+    // ---- RuntimeVisibleParameterAnnotations (§4.7.18) ----
+
+    #[test]
+    fn a_parameter_declaration_annotation_is_emitted() {
+        // `@Deprecated` es retenida en runtime y no es TYPE_USE → va al RuntimeVisibleParameterAnnotations.
+        let jvm = compiled_class("public class C { void m(@Deprecated String s) {} }", "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).unwrap();
+        let a = m
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleParameterAnnotations"))
+            .expect("el método tiene RuntimeVisibleParameterAnnotations");
+        let b = &a.info;
+        assert_eq!(b[0], 1, "num_parameters = 1");
+        assert_eq!(u16::from_be_bytes([b[1], b[2]]), 1, "el parámetro 0 tiene 1 anotación");
+    }
+
+    #[test]
+    fn parameters_without_annotations_get_empty_entries() {
+        let jvm = compiled_class("public class C { void m(int a, @Deprecated int b) {} }", "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).unwrap();
+        let b = &m
+            .attributes
+            .iter()
+            .find(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleParameterAnnotations"))
+            .unwrap()
+            .info;
+        assert_eq!(b[0], 2, "num_parameters = 2");
+        assert_eq!(u16::from_be_bytes([b[1], b[2]]), 0, "param 0 (`a`) sin anotaciones");
+        // Tras la entrada vacía del param 0 (2 bytes), la del param 1 (`b`) tiene 1 anotación.
+        assert_eq!(u16::from_be_bytes([b[3], b[4]]), 1, "param 1 (`b`) con 1 anotación");
+    }
+
+    #[test]
+    fn a_jdk_annotation_gets_a_fully_qualified_descriptor() {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        // `@Deprecated` (java.lang, externo) se carga → su descriptor sale cualificado
+        // (`Ljava/lang/Deprecated;`), no `LDeprecated;` (que la reflexión no encontraría).
+        let jvm = compiled_class("public class C { @Deprecated void m() {} }", "C");
+        let has = |s: &str| {
+            jvm.constant_pool.iter().any(|e| matches!(e, CP::Utf8(u) if u == s))
+        };
+        assert!(has("Ljava/lang/Deprecated;"), "descriptor cualificado de @Deprecated");
+        assert!(!has("LDeprecated;"), "no el descriptor sin paquete");
+    }
+
+    #[test]
+    fn a_method_without_parameter_annotations_has_no_such_attribute() {
+        let jvm = compiled_class("public class C { void m(int a) {} }", "C");
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("m")).unwrap();
+        assert!(
+            !m.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("RuntimeVisibleParameterAnnotations")),
+            "sin anotaciones de parámetro, no se emite el atributo",
+        );
+    }
+
+    // ---- flags de enum (§4.1/§4.5) y enum anidado en interfaz (finding #12) ----
+
+    #[test]
+    fn an_enum_gets_enum_and_final_flags_with_enum_constant_fields() {
+        let jvm = compiled_class("public enum E { A, B }", "E");
+        const ACC_FINAL: u16 = 0x0010;
+        const ACC_ENUM: u16 = 0x4000;
+        const ACC_SYNTHETIC: u16 = 0x1000;
+        assert!(jvm.access_flags & ACC_ENUM != 0, "la clase enum lleva ACC_ENUM: {:#x}", jvm.access_flags);
+        assert!(jvm.access_flags & ACC_FINAL != 0, "un enum simple es final: {:#x}", jvm.access_flags);
+        let flags = |name: &str| {
+            jvm.fields.iter().find(|f| jvm.utf8(f.name_index) == Some(name)).map(|f| f.access_flags)
+        };
+        assert!(flags("A").unwrap() & ACC_ENUM != 0, "la constante `A` lleva ACC_ENUM");
+        assert!(flags("$VALUES").unwrap() & ACC_SYNTHETIC != 0, "`$VALUES` es sintético");
+    }
+
+    #[test]
+    fn an_enum_nested_in_an_interface_gets_the_full_machinery() {
+        // finding #12: un `enum` anidado en una **interfaz** ya no sale degenerado — misma maquinaria
+        // y flags que uno anidado en una clase (constantes, `$VALUES`, `values`/`valueOf`, `<clinit>`).
+        let jvm = compiled_class("public interface I { enum E { A, B } }", "I$E");
+        const ACC_ENUM: u16 = 0x4000;
+        assert!(jvm.access_flags & ACC_ENUM != 0, "el enum en interfaz lleva ACC_ENUM: {:#x}", jvm.access_flags);
+        let has_method = |n: &str| jvm.methods.iter().any(|m| jvm.utf8(m.name_index) == Some(n));
+        assert!(has_method("values"), "tiene `values()`");
+        assert!(has_method("valueOf"), "tiene `valueOf()`");
+        assert!(has_method("<clinit>"), "tiene `<clinit>`");
+        assert!(
+            jvm.fields.iter().any(|f| jvm.utf8(f.name_index) == Some("A")),
+            "declara la constante `A`",
+        );
+    }
+
+    // ---- classpath / -cp (finding #7) ----
+
+    #[test]
+    fn a_classpath_dir_lets_a_file_reference_a_separately_compiled_type() {
+        // Compilar `Sib` a `.class` en un dir, luego analizar `User` que lo referencia con ese dir en
+        // el classpath: `Sib` (que no está ni en la unidad ni en el JDK) resuelve.
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_cp_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sib =
+            crate::javac::compile("public class Sib { public static int v() { return 42; } }").unwrap();
+        for (internal, bytes) in &sib {
+            let simple = internal.rsplit('/').next().unwrap_or(internal);
+            std::fs::write(dir.join(format!("{simple}.class")), bytes).unwrap();
+        }
+        let (_u, _t, errors) = crate::javac::analyze_cp(
+            "public class User { int r() { return Sib.v(); } }",
+            &[dir.clone()],
+        )
+        .unwrap();
+        let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!msgs.iter().any(|m| m.contains("Sib")), "`Sib` debe resolver vía classpath: {msgs:?}");
+    }
+
+    #[test]
+    fn a_method_inherited_from_a_classpath_superinterface_resolves() {
+        // Finding #14: con `-cp`, un método **heredado** de una superinterfaz cargada por `-cp`
+        // (`size()` de `Collection`, con `List extends Collection`, **ambas** en el classpath) debe
+        // resolver sobre un `List`. Antes daba "no se encuentra el método: size" — el finder cargaba
+        // el tipo nombrado pero no caminaba sus superinterfaces del `-cp`. El fix de #15 (candidates
+        // camina el grafo **completo** de supertipos) lo cubre también para las externas del `-cp`.
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_f14_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |classes: &[(String, Vec<u8>)]| {
+            for (internal, b) in classes {
+                let simple = internal.rsplit('/').next().unwrap_or(internal);
+                std::fs::write(dir.join(format!("{simple}.class")), b).unwrap();
+            }
+        };
+        write(&crate::javac::compile("public interface Collection<E> { int size(); }").unwrap());
+        write(
+            &crate::javac::compile_cp(
+                "public interface List<E> extends Collection<E> {}",
+                &[dir.clone()],
+            )
+            .unwrap(),
+        );
+        let (_u, _t, errors) = crate::javac::analyze_cp(
+            "public class User { int f(List<String> l) { return l.size(); } }",
+            &[dir.clone()],
+        )
+        .unwrap();
+        let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !msgs.iter().any(|m| m.contains("size")),
+            "`size` heredado de Collection vía -cp debe resolver: {msgs:?}"
+        );
+    }
+
+    #[test]
+    fn without_the_classpath_a_cross_file_reference_is_unresolved() {
+        // Contraprueba: sin `-cp`, un tipo que no está en la unidad ni en el JDK no resuelve.
+        let (_u, _t, errors) =
+            crate::javac::analyze("public class User2 { int r() { return Zzq.v(); } }").unwrap();
+        let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        assert!(msgs.iter().any(|m| m.contains("Zzq")), "sin classpath `Zzq` no resuelve: {msgs:?}");
+    }
+
+    #[test]
+    fn a_source_type_shadowed_on_the_classpath_is_not_loaded_as_a_redundant_external() {
+        // Finding #19 (source-shadows-classpath): compilar un tipo **empaquetado** cuyo propio `.class`
+        // está en el `-cp` (p. ej. su output previo) NO debe cargarlo como un externo **redundante** —
+        // el fuente sombrea—. Antes, un fuente `p.A` referenciado por su nombre simple `A` no matcheaba
+        // `table.class("A")` (registrado como `p.A`) y se cargaba del `-cp`, arrastrando su jerarquía:
+        // el disparo del hang del #19. Se comprueba que **no** quede un externo `A`.
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_f19_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(dir.join("p")).unwrap();
+        let a = crate::javac::compile("package p; public class A {}").unwrap();
+        for (internal, bytes) in &a {
+            let simple = internal.rsplit('/').next().unwrap_or(internal);
+            std::fs::write(dir.join("p").join(format!("{simple}.class")), bytes).unwrap();
+        }
+        // El fuente referencia `A` por su nombre simple (retorno), lo que dispara el intento de carga.
+        let (_u, t, _e) = crate::javac::analyze_cp(
+            "package p; public class A { A self() { return this; } }",
+            &[dir.clone()],
+        )
+        .unwrap();
+        let external_a = t.external("A").is_some();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!external_a, "el fuente `p.A` sombrea el `-cp`: no debe cargarse un externo `A`");
+    }
+
+    // ---- atributos NestHost / NestMembers (§4.7.28 / §4.7.29) ----
+
+    fn nest_host(jvm: &ClassFile) -> Option<String> {
+        let a = jvm.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("NestHost"))?;
+        let idx = u16::from_be_bytes([a.info[0], a.info[1]]);
+        jvm.class_name(idx).map(str::to_string)
+    }
+    fn nest_members(jvm: &ClassFile) -> Vec<String> {
+        let Some(a) = jvm.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("NestMembers"))
+        else {
+            return Vec::new();
+        };
+        let b = &a.info;
+        let n = u16::from_be_bytes([b[0], b[1]]) as usize;
+        (0..n)
+            .filter_map(|i| {
+                let idx = u16::from_be_bytes([b[2 + i * 2], b[3 + i * 2]]);
+                jvm.class_name(idx).map(str::to_string)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_nest_host_lists_its_member_and_the_member_points_back() {
+        let src = "class Outer { class Inner {} }";
+        let outer = compiled_class(src, "Outer");
+        assert!(nest_host(&outer).is_none(), "una top-level es su propio host");
+        assert!(nest_members(&outer).contains(&"Outer$Inner".to_string()), "el host lista al miembro");
+        let inner = compiled_class(src, "Outer$Inner");
+        assert_eq!(nest_host(&inner).as_deref(), Some("Outer"), "el miembro apunta al host");
+        assert!(nest_members(&inner).is_empty(), "un miembro no hostea nada");
+    }
+
+    #[test]
+    fn the_nest_is_flat_and_transitive() {
+        // Todo el árbol de anidamiento cae en **un** nest, hosteado por la top-level: un `Deep`
+        // apunta a `Outer`, no a `Inner`, y `Outer` lista a los dos.
+        let src = "class Outer { class Inner { class Deep {} } }";
+        let outer = compiled_class(src, "Outer");
+        let members = nest_members(&outer);
+        assert!(members.contains(&"Outer$Inner".to_string()));
+        assert!(members.contains(&"Outer$Inner$Deep".to_string()), "transitivo: {members:?}");
+        let deep = compiled_class(src, "Outer$Inner$Deep");
+        assert_eq!(nest_host(&deep).as_deref(), Some("Outer"), "el host es la top-level");
+    }
+
+    #[test]
+    fn a_local_class_is_a_nestmate() {
+        let src = "class M { Object f() { class L {} return new L(); } }";
+        let m = compiled_class(src, "M");
+        assert!(nest_members(&m).contains(&"M$1L".to_string()), "la local es nestmate: {:?}", nest_members(&m));
+        let l = compiled_class(src, "M$1L");
+        assert_eq!(nest_host(&l).as_deref(), Some("M"));
+    }
+
+    #[test]
+    fn a_top_level_class_without_nested_has_no_nest_attributes() {
+        let jvm = compiled_class("class C {}", "C");
+        assert!(nest_host(&jvm).is_none());
+        assert!(nest_members(&jvm).is_empty());
+    }
+
+    // ---- atributo Record (§4.7.30) ----
+
+    /// `(nombre, descriptor, signature?)` de cada componente del atributo `Record`, o `None` si no lo
+    /// lleva.
+    fn record_components(jvm: &ClassFile) -> Option<Vec<(String, String, Option<String>)>> {
+        let a = jvm.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("Record"))?;
+        let b = &a.info;
+        let rd = |k: usize| u16::from_be_bytes([b[k], b[k + 1]]);
+        let n = rd(0) as usize;
+        let mut off = 2;
+        let mut out = Vec::new();
+        for _ in 0..n {
+            let name = jvm.utf8(rd(off))?.to_string();
+            let desc = jvm.utf8(rd(off + 2))?.to_string();
+            let attrs = rd(off + 4) as usize;
+            off += 6;
+            let mut sig = None;
+            for _ in 0..attrs {
+                let aname = jvm.utf8(rd(off)).map(str::to_string);
+                let alen = u32::from_be_bytes([b[off + 2], b[off + 3], b[off + 4], b[off + 5]]) as usize;
+                if aname.as_deref() == Some("Signature") {
+                    sig = jvm.utf8(rd(off + 6)).map(str::to_string);
+                }
+                off += 6 + alen;
+            }
+            out.push((name, desc, sig));
+        }
+        Some(out)
+    }
+
+    #[test]
+    fn a_record_emits_its_components_super_and_final() {
+        let jvm = compiled_class("public record P(int a, String b) {}", "P");
+        assert_eq!(
+            record_components(&jvm),
+            Some(vec![
+                ("a".to_string(), "I".to_string(), None),
+                ("b".to_string(), "Ljava/lang/String;".to_string(), None),
+            ]),
+        );
+        assert_eq!(jvm.class_name(jvm.super_class), Some("java/lang/Record"), "extiende Record");
+        assert!(jvm.access_flags & 0x0010 != 0, "un record es `final`: flags {:#x}", jvm.access_flags);
+    }
+
+    #[test]
+    fn a_generic_record_component_gets_a_signature() {
+        let jvm = compiled_class("public record Box<T>(T val) {}", "Box");
+        let comps = record_components(&jvm).expect("atributo Record");
+        assert_eq!(comps.len(), 1);
+        assert_eq!(comps[0].0, "val");
+        assert_eq!(comps[0].1, "Ljava/lang/Object;", "descriptor **borrado**");
+        assert_eq!(comps[0].2.as_deref(), Some("TT;"), "la firma genérica del componente");
+    }
+
+    #[test]
+    fn a_non_record_class_has_no_record_attribute() {
+        let jvm = compiled_class("class C { int a; }", "C");
+        assert!(record_components(&jvm).is_none());
+    }
+
+    #[test]
+    fn a_generic_record_compiles_and_verifies_end_to_end() {
+        // Con la erasure del descriptor de la variable de tipo, un record genérico verifica: sus
+        // campo/accessor/ctor usan `Object` borrado, y su firma genérica va en `Signature`/`Record`.
+        verify_all("public record Box<T>(T val) {}", "Box");
+    }
+
+    // ---- atributo EnclosingMethod (§4.7.7) ----
+
+    /// `(clase_envolvente, (nombre, descriptor)?)` del atributo `EnclosingMethod`, o `None` si no lo
+    /// lleva. El método es `None` cuando `method_index` es 0 (no está en un método).
+    fn enclosing_method(jvm: &ClassFile) -> Option<(String, Option<(String, String)>)> {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        let a = jvm.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("EnclosingMethod"))?;
+        let b = &a.info;
+        let class_idx = u16::from_be_bytes([b[0], b[1]]);
+        let method_idx = u16::from_be_bytes([b[2], b[3]]);
+        let class = jvm.class_name(class_idx)?.to_string();
+        let method = if method_idx == 0 {
+            None
+        } else {
+            match jvm.constant_pool.get((method_idx - 1) as usize)? {
+                CP::NameAndType { name_index, descriptor_index } => {
+                    Some((jvm.utf8(*name_index)?.to_string(), jvm.utf8(*descriptor_index)?.to_string()))
+                }
+                _ => return None,
+            }
+        };
+        Some((class, method))
+    }
+
+    #[test]
+    fn a_local_class_in_a_method_records_its_enclosing_method() {
+        let src = "class M { Object f() { class L {} return new L(); } }";
+        let jvm = compiled_class(src, "M$1L");
+        assert_eq!(
+            enclosing_method(&jvm),
+            Some(("M".to_string(), Some(("f".to_string(), "()Ljava/lang/Object;".to_string())))),
+        );
+    }
+
+    #[test]
+    fn an_anonymous_class_in_a_method_records_its_enclosing_method() {
+        let src = "class Base {} class M { Object f() { return new Base(){}; } }";
+        let jvm = compiled_class(src, "M$1");
+        assert_eq!(
+            enclosing_method(&jvm),
+            Some(("M".to_string(), Some(("f".to_string(), "()Ljava/lang/Object;".to_string())))),
+        );
+    }
+
+    #[test]
+    fn an_anonymous_class_in_a_static_initializer_has_no_method() {
+        // En un inicializador (no un método): `class_index` sí, `method_index` = 0.
+        let src = "class Base {} class M { static { Object x = new Base(){}; } }";
+        let jvm = compiled_class(src, "M$1");
+        assert_eq!(enclosing_method(&jvm), Some(("M".to_string(), None)));
+    }
+
+    #[test]
+    fn a_member_class_has_no_enclosing_method() {
+        // `EnclosingMethod` es **solo** para local/anónimas (§4.7.7).
+        let jvm = compiled_class("class Outer { class Inner {} }", "Outer$Inner");
+        assert_eq!(enclosing_method(&jvm), None);
+    }
+
+    // ---- atributo InnerClasses (§4.7.6) ----
+
+    /// `(inner_binary, outer_binary?, inner_name?, flags)` de cada entrada `InnerClasses`.
+    fn inner_classes(jvm: &ClassFile) -> Vec<(String, Option<String>, Option<String>, u16)> {
+        let Some(a) = jvm.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("InnerClasses"))
+        else {
+            return Vec::new();
+        };
+        let b = &a.info;
+        let n = u16::from_be_bytes([b[0], b[1]]) as usize;
+        let mut out = Vec::new();
+        for i in 0..n {
+            let o = 2 + i * 8;
+            let rd = |k: usize| u16::from_be_bytes([b[o + k], b[o + k + 1]]);
+            let (inner, outer, name, flags) = (rd(0), rd(2), rd(4), rd(6));
+            let cname = |idx: u16| jvm.class_name(idx).map(str::to_string);
+            out.push((
+                cname(inner).unwrap_or_default(),
+                (outer != 0).then(|| cname(outer)).flatten(),
+                (name != 0).then(|| jvm.utf8(name).map(str::to_string)).flatten(),
+                flags,
+            ));
+        }
+        out
+    }
+
+    #[test]
+    fn a_member_class_is_listed_in_both_class_files() {
+        let src = "class Outer { class Inner {} }";
+        let expected = ("Outer$Inner".to_string(), Some("Outer".to_string()), Some("Inner".to_string()));
+        for name in ["Outer", "Outer$Inner"] {
+            let jvm = compiled_class(src, name);
+            let has = inner_classes(&jvm)
+                .iter()
+                .any(|(i, o, n, _)| (i.clone(), o.clone(), n.clone()) == expected);
+            assert!(has, "`{name}.class` debe listar `Inner` como miembro: {:?}", inner_classes(&jvm));
+        }
+    }
+
+    #[test]
+    fn a_static_nested_class_carries_acc_static() {
+        let jvm = compiled_class("class Outer { static class Inner {} }", "Outer");
+        let e = inner_classes(&jvm).into_iter().find(|(i, ..)| i == "Outer$Inner").expect("Inner");
+        assert_eq!(e.1.as_deref(), Some("Outer"), "outer");
+        assert!(e.3 & 0x0008 != 0, "ACC_STATIC en un nested estático: flags {:#x}", e.3);
+    }
+
+    #[test]
+    fn a_local_class_has_a_name_but_no_outer() {
+        // Una local: sin `outer` (no es miembro), con nombre (el renombrado `1L`).
+        let src = "class M { Object f() { class L {} return new L(); } }";
+        let jvm = compiled_class(src, "M$1L");
+        let e = inner_classes(&jvm).into_iter().find(|(i, ..)| i == "M$1L").expect("la local");
+        assert_eq!(e.1, None, "una local no tiene outer");
+        assert_eq!(e.2.as_deref(), Some("1L"), "una local tiene nombre");
+    }
+
+    #[test]
+    fn an_anonymous_class_has_neither_outer_nor_name() {
+        let src = "class Base {} class M { Object f() { return new Base(){}; } }";
+        let jvm = compiled_class(src, "M$1");
+        let e = inner_classes(&jvm).into_iter().find(|(i, ..)| i == "M$1").expect("la anónima");
+        assert_eq!(e.1, None, "una anónima no tiene outer");
+        assert_eq!(e.2, None, "una anónima no tiene nombre");
+    }
+
+    #[test]
+    fn a_top_level_class_has_no_inner_classes() {
+        let jvm = compiled_class("class C {}", "C");
+        assert!(inner_classes(&jvm).is_empty(), "una clase top-level sin anidadas no lleva InnerClasses");
+    }
+
+    #[test]
+    fn a_native_method_emits_acc_native_not_abstract() {
+        // Un `native` en una clase **concreta** debe salir `ACC_NATIVE` (0x0100), **no** `ACC_ABSTRACT`
+        // (0x0400): si no, una clase no-abstracta quedaría con métodos abstractos — un `.class`
+        // inválido. Es el primer bug que destapó el dogfooding de KajiLibrary (los `native` de
+        // `Object`/`String`).
+        let jvm = compiled_class(
+            "final class S { public native int len(); public int two() { return 2; } }",
+            "S",
+        );
+        let native = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("len")).unwrap();
+        assert!(native.access_flags & 0x0100 != 0, "`len` debe ser ACC_NATIVE");
+        assert!(native.access_flags & 0x0400 == 0, "`len` no debe ser ACC_ABSTRACT");
+        // Un método normal sigue con su `Code`, sin ninguno de esos flags.
+        let normal = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("two")).unwrap();
+        assert!(normal.access_flags & (0x0100 | 0x0400) == 0, "`two` es un método normal");
+    }
+
+    // ---- atributo Signature (§4.7.9) ----
+
+    fn sig_string(jvm: &ClassFile, attrs: &[crate::jvm::parser::AttributeInfo]) -> Option<String> {
+        let a = attrs.iter().find(|a| jvm.utf8(a.name_index) == Some("Signature"))?;
+        let idx = crate::jvm::parser::attributes::signature::index(&a.info)?;
+        jvm.utf8(idx).map(str::to_string)
+    }
+    fn class_sig(jvm: &ClassFile) -> Option<String> {
+        sig_string(jvm, &jvm.attributes)
+    }
+    fn method_sig(jvm: &ClassFile, name: &str) -> Option<String> {
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(name))?;
+        sig_string(jvm, &m.attributes)
+    }
+    fn field_sig(jvm: &ClassFile, name: &str) -> Option<String> {
+        let f = jvm.fields.iter().find(|f| jvm.utf8(f.name_index) == Some(name))?;
+        sig_string(jvm, &f.attributes)
+    }
+
+    #[test]
+    fn a_generic_class_gets_a_class_signature() {
+        let box_ = compiled_class("class Box<T> {}", "Box");
+        assert_eq!(class_sig(&box_).as_deref(), Some("<T:Ljava/lang/Object;>Ljava/lang/Object;"));
+    }
+
+    #[test]
+    fn a_generic_superclass_is_in_the_class_signature() {
+        let src = "class Base<T> {} class Node<T> extends Base<T> {}";
+        let node = compiled_class(src, "Node");
+        assert_eq!(class_sig(&node).as_deref(), Some("<T:Ljava/lang/Object;>LBase<TT;>;"));
+    }
+
+    #[test]
+    fn a_bounded_type_parameter_uses_its_bound() {
+        let box_ = compiled_class("class Box<T extends Number> {}", "Box");
+        assert_eq!(class_sig(&box_).as_deref(), Some("<T:Ljava/lang/Number;>Ljava/lang/Object;"));
+    }
+
+    #[test]
+    fn an_interface_bound_leaves_the_class_bound_empty() {
+        // Una cota de interfaz va tras un `:` extra (la cota de clase vacía).
+        let box_ = compiled_class("class Box<T extends Comparable<T>> {}", "Box");
+        assert_eq!(
+            class_sig(&box_).as_deref(),
+            Some("<T::Ljava/lang/Comparable<TT;>;>Ljava/lang/Object;"),
+        );
+    }
+
+    #[test]
+    fn a_generic_method_gets_a_method_signature() {
+        let c = compiled_class("class C { <T> T id(T x) { return x; } }", "C");
+        assert_eq!(method_sig(&c, "id").as_deref(), Some("<T:Ljava/lang/Object;>(TT;)TT;"));
+    }
+
+    #[test]
+    fn a_type_variable_field_gets_a_field_signature() {
+        let box_ = compiled_class("class Box<T> { T val; }", "Box");
+        assert_eq!(field_sig(&box_, "val").as_deref(), Some("TT;"));
+    }
+
+    #[test]
+    fn a_parameterized_field_gets_a_field_signature() {
+        let c = compiled_class("class Box<T> {} class C { Box<String> b; }", "C");
+        assert_eq!(field_sig(&c, "b").as_deref(), Some("LBox<Ljava/lang/String;>;"));
+    }
+
+    #[test]
+    fn a_wildcard_field_signature_uses_plus_for_extends() {
+        let c = compiled_class("class Box<T> {} class C { Box<? extends Number> b; }", "C");
+        assert_eq!(field_sig(&c, "b").as_deref(), Some("LBox<+Ljava/lang/Number;>;"));
+    }
+
+    #[test]
+    fn a_non_generic_element_gets_no_signature() {
+        let c = compiled_class("class C { int f() { return 0; } }", "C");
+        assert_eq!(class_sig(&c), None, "clase sin genéricos: sin Signature");
+        assert_eq!(method_sig(&c, "f"), None, "método sin genéricos: sin Signature");
+    }
+
+    // ---- módulos (§7.7 / §4.7.25) ----
+
+    #[test]
+    fn emits_a_module_info_class_with_the_module_attribute() {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        let src = "open module com.example.foo { \
+                     requires transitive com.example.bar; \
+                     exports com.example.foo.api; \
+                     uses com.example.spi.Service; \
+                     provides com.example.spi.Service with com.example.foo.Impl; }";
+        let jvm = compiled_class(src, "module-info");
+        assert!(jvm.access_flags & 0x8000 != 0, "ACC_MODULE");
+        assert!(
+            jvm.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("Module")),
+            "atributo Module presente",
+        );
+        let modules: Vec<String> = jvm
+            .constant_pool
+            .iter()
+            .filter_map(|e| match e {
+                CP::Module { name_index } => jvm.utf8(*name_index).map(str::to_string),
+                _ => None,
+            })
+            .collect();
+        assert!(modules.contains(&"com.example.foo".to_string()), "el módulo propio");
+        assert!(modules.contains(&"com.example.bar".to_string()), "el requires");
+        assert!(modules.contains(&"java.base".to_string()), "`java.base` mandated implícito");
+        let pkgs: Vec<String> = jvm
+            .constant_pool
+            .iter()
+            .filter_map(|e| match e {
+                CP::Package { name_index } => jvm.utf8(*name_index).map(str::to_string),
+                _ => None,
+            })
+            .collect();
+        assert!(pkgs.contains(&"com/example/foo/api".to_string()), "el paquete exportado en forma interna");
+    }
+
+    #[test]
+    fn java_base_is_not_duplicated_when_required_explicitly() {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        let jvm = compiled_class("module m { requires java.base; }", "module-info");
+        let count = jvm
+            .constant_pool
+            .iter()
+            .filter(|e| matches!(e, CP::Module { name_index } if jvm.utf8(*name_index) == Some("java.base")))
+            .count();
+        assert_eq!(count, 1, "`java.base` no se duplica");
+    }
+
+    #[test]
+    fn a_covariant_return_synthesizes_a_bridge() {
+        // `B.get():String` sobre `A.get():Object` → puente `Object get()` marcado `ACC_BRIDGE`
+        // `ACC_SYNTHETIC`, junto al `get` real `()Ljava/lang/String;`.
+        let src = "class A { Object get() { return null; } } \
+                   class B extends A { String get() { return null; } }";
+        let b = compiled_class(src, "B");
+        assert!(
+            has_method(&b, "get", "()Ljava/lang/Object;", ACC_BRIDGE | ACC_SYNTHETIC),
+            "falta el puente `Object get()`",
+        );
+        assert!(has_method(&b, "get", "()Ljava/lang/String;", 0), "falta el `get` real");
+    }
+
+    #[test]
+    fn a_generic_parameter_override_synthesizes_a_bridge() {
+        // `INode.set(Integer)` sobre `Node<Integer>` (`set(T)` → `set(Object)`) → puente
+        // `set(Object)`. Verifica de punta a punta.
+        let src = "class Node<T> { void set(T v) {} } \
+                   class INode extends Node<Integer> { void set(Integer v) {} }";
+        let n = compiled_class(src, "INode");
+        assert!(
+            has_method(&n, "set", "(Ljava/lang/Object;)V", ACC_BRIDGE | ACC_SYNTHETIC),
+            "falta el puente `set(Object)`",
+        );
+        verify_all(src, "INode");
+    }
+
+    #[test]
+    fn implementing_a_generic_interface_synthesizes_a_bridge() {
+        // El caso clásico: `Foo implements Comparable<Foo>` → puente `compareTo(Object)`.
+        let src = "class Foo implements Comparable<Foo> { public int compareTo(Foo o) { return 0; } }";
+        let foo = compiled_class(src, "Foo");
+        assert!(
+            has_method(&foo, "compareTo", "(Ljava/lang/Object;)I", ACC_BRIDGE | ACC_SYNTHETIC),
+            "falta el puente `compareTo(Object)`",
+        );
+        verify_all(src, "Foo");
+    }
+
+    #[test]
+    fn a_bridge_dispatches_through_the_supertype_reference() {
+        // Prueba de **despacho**: `a.pick()` (visto como `A.pick():Object`) sobre un `B` corre el
+        // puente, que reenvía a `B.pick():String` — sin puente daría `null` (0); con puente, `1`.
+        let src = "class A { Object pick() { return null; } } \
+                   class B extends A { String pick() { return \"hi\"; } } \
+                   class M { static int f() { A a = new B(); Object o = a.pick(); return o == null ? 0 : 1; } }";
+        assert_eq!(run_int(src, "M", "f", vec![]), 1, "el puente debería reenviar a B.pick()");
+    }
+
+    #[test]
+    fn no_bridge_when_the_erasure_already_matches() {
+        // `B.get():Object` (mismo retorno) **no** genera puente: solo está el `get` real.
+        let src = "class A { Object get() { return null; } } \
+                   class B extends A { Object get() { return null; } }";
+        let b = compiled_class(src, "B");
+        let gets = b
+            .methods
+            .iter()
+            .filter(|m| b.utf8(m.name_index) == Some("get"))
+            .count();
+        assert_eq!(gets, 1, "no debería haber puente redundante");
+    }
+
+    #[test]
+    fn a_sealed_type_emits_the_permitted_subclasses_attribute() {
+        // El pipeline completo compila una jerarquía sellada y el `.class` de `Shape` lleva su
+        // `PermittedSubclasses` (§4.7.31), re-parseado con la JVM propia.
+        let src = "sealed interface Shape permits Circle, Square {} \
+                   final class Circle implements Shape {} final class Square implements Shape {}";
+        let (_, bytes) = compile_all(src)
+            .into_iter()
+            .find(|(n, _)| n.ends_with("Shape"))
+            .expect("la clase Shape");
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_sealed_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("Shape.class");
+        std::fs::write(&path, &bytes).unwrap();
+        let jvm = ClassFile::from_path(path.to_str().unwrap()).expect("el .class debe parsear");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            jvm.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("PermittedSubclasses")),
+            "`Shape` debe llevar el atributo PermittedSubclasses",
+        );
     }
 }
