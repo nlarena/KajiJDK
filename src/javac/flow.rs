@@ -154,7 +154,7 @@ fn slot_width(ty: &Type) -> u16 {
 
 impl Analyzer {
     fn error(&mut self, pos: Pos, message: impl Into<String>) {
-        self.errors.push(Error { message: message.into(), line: pos.line, col: pos.col });
+        self.errors.push(Error::new(message, pos.line, pos.col));
     }
     fn uninit(&mut self, pos: Pos, name: &str) {
         self.error(pos, format!("la variable `{name}` puede no haber sido inicializada"));
@@ -661,7 +661,10 @@ impl Analyzer {
             | ExprKind::BoolLit(_)
             | ExprKind::Null
             | ExprKind::This
-            | ExprKind::Super => both(flow.clone()),
+            | ExprKind::QualifiedThis(_)
+            | ExprKind::Super
+            // Un nodo de error no aporta al flujo: ya se reportó su error de sintaxis.
+            | ExprKind::Error => both(flow.clone()),
             // El cuerpo de una **lambda** se ejecuta **diferido**, no acá: no aporta al flujo del
             // método que la construye (§16.1 no lo atraviesa). La regla que sí falta —que las
             // variables **capturadas** sean *effectively final*— es de cuando la lambda se compile
@@ -697,7 +700,7 @@ mod tests {
     use crate::javac::{attribute::attribute, enter::enter, lexer::tokenize, parser::parse};
 
     fn flow_errs(src: &str) -> Vec<Error> {
-        let mut unit = parse(tokenize(src).unwrap()).unwrap();
+        let mut unit = parse(tokenize(src).unwrap()).0;
         let (table, _e1) = enter(&unit);
         let _e2 = attribute(&mut unit, &table);
         flow(&unit)

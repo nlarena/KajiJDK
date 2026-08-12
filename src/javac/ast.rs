@@ -17,12 +17,42 @@
 use super::symbol::{RType, SymbolId};
 
 /// Una unidad de compilación: un archivo `.java` — `package` opcional, `import`s y las
-/// declaraciones de tipo de nivel superior.
+/// declaraciones de tipo de nivel superior. Un `module-info.java` no lleva tipos: su declaración de
+/// **módulo** (§7.7) va en `module`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompilationUnit {
     pub package: Option<String>,
     pub imports: Vec<Import>,
     pub types: Vec<ClassDecl>,
+    /// La declaración de módulo de un `module-info.java` (§7.7); `None` en una unidad ordinaria.
+    pub module: Option<ModuleDecl>,
+}
+
+/// La declaración de un **módulo** (§7.7): `[open] module nombre.cualificado { directivas }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleDecl {
+    pub pos: Pos,
+    pub annotations: Vec<Annotation>,
+    /// `open module` (§7.7): abre **todos** los paquetes a la reflexión en tiempo de ejecución.
+    pub open: bool,
+    /// El nombre cualificado del módulo (`com.example.foo`), con los puntos tal cual.
+    pub name: String,
+    pub directives: Vec<ModuleDirective>,
+}
+
+/// Una **directiva** del cuerpo de un módulo (§7.7.1–§7.7.4).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModuleDirective {
+    /// `requires [transitive] [static] otro.modulo;` — dependencia (§7.7.1).
+    Requires { transitive: bool, is_static: bool, name: String },
+    /// `exports paquete [to m1, m2];` — hace público un paquete (§7.7.2). `to` vacío = a todos.
+    Exports { package: String, to: Vec<String> },
+    /// `opens paquete [to m1, m2];` — lo abre a la reflexión (§7.7.2).
+    Opens { package: String, to: Vec<String> },
+    /// `uses tipo.Servicio;` — declara consumir un servicio (§7.7.3).
+    Uses { service: String },
+    /// `provides tipo.Servicio with Impl1, Impl2;` — provee implementaciones (§7.7.4).
+    Provides { service: String, with: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,14 +95,31 @@ pub struct ClassDecl {
     pub components: Vec<Param>,
     pub extends: Option<Type>,
     pub implements: Vec<Type>,
+    /// Anotaciones de tipo sobre el `extends` (`class C extends @A Base`), con su `type_path`. Target
+    /// `0x10`, `supertype_index = 0xFFFF`. Vacío si no hay `extends` o no lleva anotaciones.
+    pub extends_annos: Vec<TypeUseAnnot>,
+    /// Anotaciones de tipo sobre cada interfaz de `implements` (`implements @A I1, @B I2`), **en
+    /// paralelo** a `implements`. Target `0x10`, `supertype_index` = índice en la lista. Cada sublista
+    /// puede estar vacía.
+    pub implements_annos: Vec<Vec<TypeUseAnnot>>,
+    /// La cláusula `permits` de un tipo `sealed` (§8.1.6): los subtipos autorizados. Vacío si no se
+    /// escribió (implícita: los subtipos declarados en la misma unidad) o si el tipo no es `sealed`.
+    pub permits: Vec<Type>,
     /// Constantes de un `enum`; vacío para los demás.
     pub enum_constants: Vec<EnumConstant>,
     pub members: Vec<Member>,
+    /// Los valores **por defecto** de los elementos de un `@interface` (`String value() default "x";`),
+    /// como pares `(nombre del elemento, valor)`. Vacío salvo en un tipo de anotación con defaults. Se
+    /// retienen para el atributo `AnnotationDefault` (§4.7.22) del método del elemento.
+    pub annotation_defaults: Vec<(String, AnnotationValue)>,
 }
 
 /// Una constante de `enum`: `NAME` o `NAME(args)`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumConstant {
+    /// Anotaciones sobre la constante (`@Deprecated FOO`); se retienen aunque el emisor todavía no
+    /// las escriba.
+    pub annotations: Vec<Annotation>,
     pub name: String,
     pub args: Vec<Expr>,
 }
@@ -91,6 +138,10 @@ pub enum Modifier {
     Volatile,
     Strictfp,
     Default,
+    /// `sealed` (§8.1.1.2 / §9.1.1.4): la clase/interfaz restringe sus subtipos a los de `permits`.
+    Sealed,
+    /// `non-sealed`: reabre a la extensión un subtipo de un tipo `sealed`.
+    NonSealed,
 }
 
 /// Una **anotación** de uso (§9.7): `@Name`, `@Name(v)` o `@Name(a = 1, b = {…})`. Se retiene en el
@@ -119,6 +170,26 @@ pub enum AnnotationValue {
     Nested(Box<Annotation>),
 }
 
+/// Un paso del `type_path` de una **type annotation** (§4.7.20.2): cómo llegar, desde el tipo raíz de
+/// una posición, al componente anotado. Los `kind`s del JVMS: `0` array, `1` tipo anidado, `2` cota de
+/// wildcard, `3` argumento de tipo (con su índice).
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypePathStep {
+    Array,
+    Nested,
+    WildcardBound,
+    TypeArgument(u8),
+}
+
+/// Una anotación sobre un **uso de tipo** (§9.7.4), con el `type_path` desde el tipo raíz de su
+/// posición (vacío = el tipo de arriba de todo). El **target** (campo/retorno/param/…) lo da el lugar
+/// donde se guarda. Retenida por el parser para el atributo `RuntimeVisibleTypeAnnotations` (§4.7.20).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeUseAnnot {
+    pub path: Vec<TypePathStep>,
+    pub annotation: Annotation,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Member {
     Field(FieldDecl),
@@ -141,6 +212,10 @@ pub struct FieldDecl {
     pub ty: Type,
     pub name: String,
     pub init: Option<Expr>,
+    /// Anotaciones sobre **usos de tipo anidados** dentro del tipo del campo (`List<@A String> f`),
+    /// con su `type_path`. Las **líder** (`@A String f`) las rutea el emisor por `@Target`; estas son
+    /// las que el parser recolecta al descender por el tipo. Target `0x13`. Vacío si no hay.
+    pub type_annos: Vec<TypeUseAnnot>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -160,6 +235,13 @@ pub struct MethodDecl {
     /// Cuerpo, o `None` para métodos `abstract`/`native` (declarados con `;`).
     pub body: Option<Block>,
     pub is_constructor: bool,
+    /// Anotaciones sobre usos de tipo anidados en el **tipo de retorno** (`List<@A X> m()`), con su
+    /// `type_path`. Target `0x14`. Vacío si no hay.
+    pub return_annos: Vec<TypeUseAnnot>,
+    /// Anotaciones de tipo sobre cada tipo de la cláusula `throws` (`throws @A E1, @B E2`), **en
+    /// paralelo** a `throws`. Target `0x17` (con el índice en la cláusula). Cada sublista puede estar
+    /// vacía.
+    pub throws_annos: Vec<Vec<TypeUseAnnot>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -169,6 +251,9 @@ pub struct Param {
     pub name: String,
     pub varargs: bool,
     pub is_final: bool,
+    /// Anotaciones sobre usos de tipo anidados en el tipo del **parámetro** (`m(List<@A X> p)`), con
+    /// su `type_path`. Target `0x16` (con el índice del parámetro). Vacío si no hay.
+    pub type_annos: Vec<TypeUseAnnot>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -203,9 +288,16 @@ pub enum TypeArg {
 /// Un **parámetro de tipo** de una clase o método genérico (JLS §4.4): `<T extends A & B>`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeParam {
+    /// Anotaciones sobre el parámetro (§9.7.4: `<@Foo T>`); se retienen aunque el emisor todavía no
+    /// las escriba.
+    pub annotations: Vec<Annotation>,
     pub name: String,
     /// Las cotas (`extends A & B`); vacío si no se declararon (cota implícita `Object`).
     pub bounds: Vec<Type>,
+    /// Anotaciones de tipo sobre cada cota (`<T extends @A A & @B B>`), **en paralelo** a `bounds`.
+    /// Target `0x11` (parámetro de clase) / `0x12` (de método), con `{type_parameter_index,
+    /// bound_index}`. Cada sublista puede estar vacía.
+    pub bound_annos: Vec<Vec<TypeUseAnnot>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -281,8 +373,11 @@ impl Stmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StmtKind {
-    /// `[final] Type name [= init];`
-    LocalVar { ty: Type, name: String, init: Option<Expr>, is_final: bool },
+    /// `[final] Type name [= init];`. `type_annos` son las anotaciones sobre **usos de tipo** en el
+    /// tipo del local (`@A int x`, `List<@A X> xs`), con su `type_path`. El emisor las escribe como
+    /// target `0x40` (LOCAL_VARIABLE) en el `RuntimeVisibleTypeAnnotations` del `Code`, con el **rango
+    /// de vida** del local como `target_info`. Vacío en los locales sintéticos del desugar.
+    LocalVar { ty: Type, name: String, init: Option<Expr>, is_final: bool, type_annos: Vec<TypeUseAnnot> },
     /// `return [expr];`
     Return(Option<Expr>),
     /// Una expresión usada como sentencia (llamada, asignación, `++`…).
@@ -334,12 +429,24 @@ pub struct Expr {
     /// Decoración (pasada 2): a qué **resolvió** el nombre/llamada/campo. `None` si no aplica
     /// (un literal no vincula a nada).
     pub binding: Option<Binding>,
+    /// Anotaciones de tipo sobre el tipo **escrito** en una expresión de posición-Code: el destino de
+    /// un `(@A T) e` (target `0x47`), un `e instanceof @A T` (`0x43`), un `new @A T(...)` (`0x44`) o un
+    /// `new @A T[]` (`0x44`), con su `type_path`. El emisor las escribe en el `RuntimeVisibleType-
+    /// Annotations` **dentro del `Code`**, con el offset del bytecode como `target_info`. Vacío en toda
+    /// otra expresión (y en las sintéticas del desugar).
+    pub type_annos: Vec<TypeUseAnnot>,
 }
 
 impl Expr {
     /// Una expresión recién parseada: **sin decorar** (la pasada 2 rellena `ty`/`binding`).
     pub fn new(pos: Pos, kind: ExprKind) -> Self {
-        Expr { kind, pos, ty: None, binding: None }
+        Expr { kind, pos, ty: None, binding: None, type_annos: Vec::new() }
+    }
+
+    /// La misma expresión con sus anotaciones de tipo de posición-Code adjuntas (ver [`Expr::type_annos`]).
+    pub fn with_type_annos(mut self, type_annos: Vec<TypeUseAnnot>) -> Self {
+        self.type_annos = type_annos;
+        self
     }
 }
 
@@ -376,12 +483,17 @@ pub enum ExprKind {
     InstanceOf { expr: Box<Expr>, ty: Type, binding: Option<String>, slot: Option<u16> },
     /// Un **literal de clase**, `C.class` (§15.8.2): su valor es el `Class<C>` del tipo.
     ClassLit(Type),
+    /// `Outer.this` (§15.8.4): la **instancia envolvente** cualificada de una clase interna — el
+    /// `this` de la clase `Type` que encierra a la actual. El desugar la reescribe a `this.this$0`.
+    QualifiedThis(Type),
     /// `new Type(args)`, o con `body` una **clase anónima** (§15.9.5): `new Type(args) { members }`.
     /// El `body` son los miembros del cuerpo `{ … }`; `None` en el caso corriente. Una clase anónima
     /// no puede declarar constructores (§15.9.5.1), así que sus miembros son campos, métodos e
     /// inicializadores — nunca un `<init>` propio. Sigue el patrón de la lambda: se parsea, pero
     /// **compilarla** (una clase sintética anidada) es de una fase posterior.
-    NewObject { ty: Type, args: Vec<Expr>, body: Option<Vec<Member>> },
+    /// `outer` es la **instancia envolvente** cualificada de un `outer.new Inner(args)` (§15.9.2):
+    /// se pasa como `this$0` de la interna en vez del `this` actual. `None` en el `new` corriente.
+    NewObject { ty: Type, args: Vec<Expr>, body: Option<Vec<Member>>, outer: Option<Box<Expr>> },
     /// `new Elem[len]` o `new Elem[]{...}`. `dims` lleva las longitudes dadas (una por `[]`,
     /// `None` si el corchete va vacío); `init` es el `{...}` opcional.
     NewArray { elem: Type, dims: Vec<Option<Expr>>, init: Option<Vec<Expr>> },
@@ -403,6 +515,11 @@ pub enum ExprKind {
     /// lleva ya armados los descriptores y el *method handle* de la implementación (§15.27 → §4.10.1.9).
     /// No lo produce el parser: solo existe entre el desugar y el codegen.
     Indy { info: Box<IndyCall>, captures: Vec<Expr> },
+    /// Un **nodo de error**: el placeholder de una expresión que no parseó (recuperación a nivel
+    /// expresión). El parser ya reportó el error de sintaxis y sigue; la atribución lo tipa
+    /// [`RType::Unresolved`] **sin** emitir un error nuevo, para no encadenar diagnósticos derivados
+    /// de una parte ya rota. Nunca llega al codegen: la compilación aborta si hubo errores.
+    Error,
 }
 
 /// Los datos ya resueltos de un *call site* de `invokedynamic` (§4.7.23 / §5.4.3.6), que el desugar

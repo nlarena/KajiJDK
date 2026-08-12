@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use super::ast::PrimType;
+use super::ast::{PrimType, TypeKind};
 use super::symbol::{RType, RTypeArg, SymbolId, SymbolKind, SymbolTable};
 
 /// Un mapa de sustitución: parámetro de tipo (`SymbolId` de un `TypeVar`) → argumento.
@@ -37,6 +37,16 @@ pub fn erasure(table: &SymbolTable, ty: &RType) -> RType {
                 Some(obj) => RType::Class(obj),
                 None => RType::Unresolved,
             },
+        },
+        // La *erasure* de una variable de captura es la de su cota superior (§4.6 sobre §5.1.10).
+        RType::Capture { upper, .. } => erasure(table, upper),
+        // La *erasure* de una intersección es la de su **primer** miembro (§4.6).
+        RType::Intersection(ms) => ms.first().map_or(RType::Unresolved, |m| erasure(table, m)),
+        // Una variable de inferencia no debería llegar acá (se resuelve antes); si llega, su erasure
+        // es `Object`, como la de una variable sin cota.
+        RType::InferVar(_) => match table.external("Object") {
+            Some(obj) => RType::Class(obj),
+            None => RType::Unresolved,
         },
         RType::Prim(_) | RType::Void | RType::Class(_) | RType::Unresolved => ty.clone(),
     }
@@ -62,7 +72,17 @@ pub fn substitute(ty: &RType, subst: &Subst) -> RType {
             base: *base,
             args: args.iter().map(|a| substitute_arg(a, subst)).collect(),
         },
-        RType::Prim(_) | RType::Void | RType::Class(_) | RType::Unresolved => ty.clone(),
+        // Una variable de captura ya es un tipo cerrado (sus cotas no llevan los parámetros que se
+        // están sustituyendo): se clona tal cual.
+        RType::Intersection(ms) => RType::Intersection(ms.iter().map(|m| substitute(m, subst)).collect()),
+        // Una variable de inferencia no la sustituye este `Subst` (que es por `SymbolId`): la mueve la
+        // propia inferencia, con su mapa por `id`. Acá se clona intacta.
+        RType::Prim(_)
+        | RType::Void
+        | RType::Class(_)
+        | RType::Capture { .. }
+        | RType::InferVar(_)
+        | RType::Unresolved => ty.clone(),
     }
 }
 
@@ -114,8 +134,76 @@ pub fn subst_for(table: &SymbolTable, ty: &RType, owner: SymbolId) -> Subst {
         .unwrap_or_default()
 }
 
+/// El **self-type** de una clase: ella misma parametrizada con sus **propias** variables de tipo
+/// (`MyList` → `MyList<E>`), o el tipo crudo si no es genérica. Es el punto de partida para mirar la
+/// clase *como* uno de sus supertipos (`subst_for`) sin perder los parámetros — p.ej. para el
+/// chequeo de override genérico: `class MyList<E> implements List<E>` ve `List` como `List<E>`.
+pub fn self_type(table: &SymbolTable, class: SymbolId) -> RType {
+    let params = type_params_of(table, class);
+    if params.is_empty() {
+        RType::Class(class)
+    } else {
+        RType::Parameterized {
+            base: class,
+            args: params.into_iter().map(|p| RTypeArg::Type(RType::TypeVar(p))).collect(),
+        }
+    }
+}
+
+/// **Capture conversion** (§5.1.10): un tipo parametrizado `G<T1..Tn>` con *wildcards* se convierte
+/// a `G<S1..Sn>` reemplazando cada *wildcard* por una **variable de captura fresca** con sus cotas,
+/// dejando intactos los argumentos concretos. Un tipo sin *wildcards* (o no parametrizado) se
+/// devuelve tal cual. Es lo que hace que `list.get(0)` sobre `List<?>` tipe a la variable capturada
+/// (usable como `Object`), y que pasar un `List<?>` a `<T> m(List<T>)` **infiera** `T` = la captura.
+///
+/// Para el i-ésimo argumento, con `Ui` = la cota superior declarada del i-ésimo parámetro de `G`:
+/// - `?` → captura de cota superior `Ui`, sin cota inferior;
+/// - `? extends Bi` → cota superior `glb(Bi, Ui)`, sin inferior;
+/// - `? super Bi` → cota superior `Ui`, cota **inferior** `Bi`.
+pub fn capture(table: &SymbolTable, ty: &RType) -> RType {
+    let RType::Parameterized { base, args } = ty else { return ty.clone() };
+    let has_wildcard = args
+        .iter()
+        .any(|a| matches!(a, RTypeArg::Wildcard | RTypeArg::Extends(_) | RTypeArg::Super(_)));
+    if !has_wildcard {
+        return ty.clone();
+    }
+    let params = type_params_of(table, *base);
+    let new_args = args
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let ui = param_upper_bound(table, &params, i);
+            match a {
+                RTypeArg::Type(_) => a.clone(),
+                RTypeArg::Wildcard => RTypeArg::Type(fresh_capture(table, ui, None)),
+                RTypeArg::Extends(b) => {
+                    let upper = glb(table, &[(**b).clone(), ui]);
+                    RTypeArg::Type(fresh_capture(table, upper, None))
+                }
+                RTypeArg::Super(b) => RTypeArg::Type(fresh_capture(table, ui, Some((**b).clone()))),
+            }
+        })
+        .collect();
+    RType::Parameterized { base: *base, args: new_args }
+}
+
+/// Una nueva variable de captura con `id` fresco y las cotas dadas.
+fn fresh_capture(table: &SymbolTable, upper: RType, lower: Option<RType>) -> RType {
+    RType::Capture { id: table.fresh_capture_id(), upper: Box::new(upper), lower: lower.map(Box::new) }
+}
+
+/// La cota superior declarada del i-ésimo parámetro de tipo, o `Object` si no declaró ninguna.
+fn param_upper_bound(table: &SymbolTable, params: &[SymbolId], i: usize) -> RType {
+    params
+        .get(i)
+        .and_then(|&p| first_bound(table, p))
+        .or_else(|| object_id(table).map(RType::Class))
+        .unwrap_or(RType::Unresolved)
+}
+
 /// El tipo que aporta un argumento para sustituir. Un wildcard no es un tipo: se usa su cota
-/// (aproximación — el *capture conversion* real (§5.1.10) es cola larga).
+/// (aproximación — la *capture conversion* de §5.1.10 la aplica [`capture`] en los sitios de uso).
 fn arg_as_type(arg: &RTypeArg) -> RType {
     match arg {
         RTypeArg::Type(t) => t.clone(),
@@ -166,6 +254,19 @@ pub fn is_subtype(table: &SymbolTable, s: &RType, t: &RType) -> bool {
         (RType::Array(a), RType::Array(b)) => is_subtype(table, a, b),
         // Una variable de tipo es subtipo de sus cotas.
         (RType::TypeVar(v), _) => bounds_of(table, *v).iter().any(|b| is_subtype(table, b, t)),
+        // Una variable de **captura** (§5.1.10) es subtipo de su cota **superior** (y de sus
+        // supertipos): `CAP <: t` sii `upper(CAP) <: t`.
+        (RType::Capture { upper, .. }, _) => is_subtype(table, upper, t),
+        // Y algo es subtipo de una captura **solo** por su cota **inferior** (`? super B`):
+        // `s <: CAP` sii `s <: lower(CAP)` (transitivo por `lower <: CAP`). Sin cota inferior, nada
+        // salvo la propia captura (que ya cubrió el `s == t` de arriba).
+        (_, RType::Capture { lower, .. }) => {
+            lower.as_ref().is_some_and(|lo| is_subtype(table, s, lo))
+        }
+        // Una intersección es subtipo de `t` si **algún** miembro lo es (`A & B <: A`).
+        (RType::Intersection(ms), _) => ms.iter().any(|m| is_subtype(table, m, t)),
+        // Y `s` es subtipo de una intersección si lo es de **todos** sus miembros.
+        (_, RType::Intersection(ms)) => ms.iter().all(|m| is_subtype(table, s, m)),
         _ => {
             let (Some(sb), Some(tb)) = (erased_id(s), erased_id(t)) else { return false };
             if object_id(table) == Some(tb) {
@@ -205,6 +306,10 @@ fn same_base_ok(table: &SymbolTable, s: &RType, t: &RType) -> bool {
 fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg) -> bool {
     match t {
         RTypeArg::Wildcard => true,
+        // `? extends T` / `? super T` con `T` una **variable de inferencia** (var de tipo de método sin
+        // sustituir): indulgente, igual que el `Box<T>` pelado — la fija la inferencia (Cap. 18). Es lo
+        // que hace aplicable un `<T> m(List<? extends T>)` a un `List<Integer>`.
+        RTypeArg::Extends(tb) | RTypeArg::Super(tb) if is_inference_var(table, tb) => true,
         RTypeArg::Extends(tb) => match s {
             RTypeArg::Type(st) => is_subtype(table, st, tb),
             RTypeArg::Extends(sb) => is_subtype(table, sb, tb),
@@ -215,11 +320,26 @@ fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg) -> bool {
             RTypeArg::Super(sb) => is_subtype(table, tb, sb),
             _ => false,
         },
+        // Un argumento **concreto** solo se contiene a sí mismo (invariancia) — **salvo** que sea una
+        // variable de tipo **de un método** (una var de inferencia sin sustituir): ahí se es
+        // indulgente y se deja que la inferencia (Cap. 18) la fije. Es lo que hace aplicable un
+        // `<T> m(Box<T>)` a un `Box<CAP>`/`Box<String>` (incl. el caso de captura `swap`).
+        RTypeArg::Type(tt) if is_inference_var(table, tt) => true,
         RTypeArg::Type(tt) => match s {
             RTypeArg::Type(st) => st == tt,
             _ => false,
         },
     }
+}
+
+/// ¿`t` es una variable de tipo declarada por un **método** (una variable de inferencia), y no por
+/// una clase? Solo aparecen sin sustituir durante la aplicabilidad de un método genérico.
+fn is_inference_var(table: &SymbolTable, t: &RType) -> bool {
+    let RType::TypeVar(v) = t else { return false };
+    table
+        .symbol(*v)
+        .owner
+        .is_some_and(|o| matches!(table.symbol(o).kind, SymbolKind::Method { .. }))
 }
 
 /// Las cotas resueltas de un parámetro de tipo; `Object` si no declaró ninguna.
@@ -313,32 +433,56 @@ pub fn supertypes_of(table: &SymbolTable, ty: &RType) -> Vec<RType> {
     out
 }
 
-/// El **lub** (*least upper bound*, §4.10.4): el tipo más específico que es supertipo de todos.
+/// El **lub** (*least upper bound*, §4.10.4): el supertipo común más específico, o —cuando hay
+/// varios **incomparables** (p. ej. `Number` y `Comparable` de `Integer`/`Long`)— su **intersección**
+/// `A & B`. Lo usan el ternario (§15.25) y la resolución de la inferencia (§18.4).
 ///
-/// Lo usan el ternario (§15.25) y la resolución de la inferencia (§18.4). Esta es la versión
-/// *práctica*: busca el supertipo común más profundo. La del JLS construye una intersección
-/// (`lub(A,B) = X & Y`) y aplica *lub con recursión infinita acotada*; eso es cola larga.
+/// La determinación de qué supertipos son comunes se hace por **erasure** (`SymbolId`): así una
+/// interfaz común (`Comparable`) no se pierde por invariancia (`Comparable<Integer>` vs
+/// `Comparable<Long>`). Con un **único** supertipo mínimo se **recupera** su forma parametrizada
+/// (`List<String>`) para no perder precisión. El *lub* recursivo de los argumentos de tipo de la
+/// intersección (§4.10.4, con recursión acotada) es cola larga: los miembros van **crudos**.
 pub fn lub(table: &SymbolTable, types: &[RType]) -> RType {
-    let mut it = types.iter().filter(|t| !matches!(t, RType::Unresolved));
-    let Some(first) = it.next() else { return RType::Unresolved };
-    // Solo tipos referencia **resueltos**: un supertipo cuyo `.class` no cargamos queda como
-    // `Unresolved`, y si entrara acá ningún candidato podría probar ser subtipo de *todos* —
-    // el `lub` se desplomaría a `Object` aun para un único tipo.
-    let mut candidates: Vec<RType> =
-        supertypes_of(table, first).into_iter().filter(|c| erased_id(c).is_some()).collect();
-    for t in it {
-        // Quedarse solo con los supertipos que también lo son de `t`.
-        candidates.retain(|c| is_subtype(table, t, c));
+    let resolved: Vec<&RType> =
+        types.iter().filter(|t| !matches!(t, RType::Unresolved) && erased_id(t).is_some()).collect();
+    let Some(&first) = resolved.first() else { return RType::Unresolved };
+
+    // Supertipos comunes por **erasure**: los de `first` que también lo son de todos los demás.
+    let mut common: Vec<SymbolId> = supertypes_of(table, first).iter().filter_map(erased_id).collect();
+    for &t in &resolved[1..] {
+        let set: Vec<SymbolId> = supertypes_of(table, t).iter().filter_map(erased_id).collect();
+        common.retain(|id| set.contains(id));
     }
-    // El más específico de los que quedan: el que es subtipo de todos los demás.
-    candidates
+    // **Mínimos** (los más específicos): descartar todo el que sea supertipo **estricto** de otro
+    // común (p. ej. `Object`, o `Serializable` cuando `Number` está).
+    let mut minimal: Vec<SymbolId> = common
         .iter()
-        .find(|c| candidates.iter().all(|o| is_subtype(table, c, o)))
-        .cloned()
-        .unwrap_or_else(|| match object_id(table) {
-            Some(o) => RType::Class(o),
-            None => RType::Unresolved,
+        .copied()
+        .filter(|&c| {
+            !common
+                .iter()
+                .any(|&d| d != c && is_subtype(table, &RType::Class(d), &RType::Class(c)))
         })
+        .collect();
+    // La(s) clase(s) antes que las interfaces: la *erasure* de la intersección es su primer miembro.
+    minimal.sort_by_key(|&id| matches!(table.symbol(id).kind, SymbolKind::Class { kind: TypeKind::Interface, .. }));
+
+    match minimal.as_slice() {
+        [] => object_id(table).map_or(RType::Unresolved, RType::Class),
+        [single] => {
+            // Un único supertipo mínimo: recuperar su forma **parametrizada** si la hay
+            // (`List<String>`), no la cruda `List`.
+            let mut cands: Vec<RType> = supertypes_of(table, first)
+                .into_iter()
+                .filter(|c| erased_id(c) == Some(*single))
+                .collect();
+            for &t in &resolved[1..] {
+                cands.retain(|c| is_subtype(table, t, c));
+            }
+            cands.into_iter().next().unwrap_or(RType::Class(*single))
+        }
+        _ => RType::Intersection(minimal.into_iter().map(RType::Class).collect()),
+    }
 }
 
 /// El **glb** (*greatest lower bound*, §5.1.10): el tipo más general que es subtipo de todos.
@@ -377,7 +521,7 @@ mod tests {
     use crate::javac::{enter::enter, lexer::tokenize, parser::parse};
 
     fn table_of(src: &str) -> SymbolTable {
-        let unit = parse(tokenize(src).unwrap()).unwrap();
+        let unit = parse(tokenize(src).unwrap()).0;
         let (t, errs) = enter(&unit);
         assert!(errs.is_empty(), "la pasada 1 no debería fallar: {errs:?}");
         t
@@ -501,6 +645,21 @@ mod tests {
         let t = table_of("class A {} class Probe { A a; }");
         let a = field_ty(&t, "Probe", "a");
         assert_eq!(lub(&t, &[a.clone(), a.clone()]), a);
+    }
+
+    #[test]
+    fn lub_of_types_sharing_several_supertypes_is_an_intersection() {
+        // `Integer` y `Long` comparten `Number` (clase) **y** `Comparable` (interfaz): su lub es la
+        // **intersección** `Number & Comparable`, usable como cualquiera de los dos (§4.10.4).
+        let t = table_of("class Probe { Integer i; Long l; }");
+        let result = lub(&t, &[field_ty(&t, "Probe", "i"), field_ty(&t, "Probe", "l")]);
+        assert!(matches!(result, RType::Intersection(_)), "es una intersección: {result:?}");
+        let number = RType::Class(t.external("Number").expect("Number cargado"));
+        let comparable = RType::Class(t.external("Comparable").expect("Comparable cargado"));
+        assert!(is_subtype(&t, &result, &number), "el lub <: Number");
+        assert!(is_subtype(&t, &result, &comparable), "el lub <: Comparable");
+        // La *erasure* es el primer miembro: la **clase** `Number`, no una interfaz.
+        assert_eq!(erasure(&t, &result), number, "la erasure es la clase");
     }
 
     #[test]

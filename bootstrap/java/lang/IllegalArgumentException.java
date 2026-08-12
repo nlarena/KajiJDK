@@ -1,11 +1,8 @@
 package java.lang;
 
-// Thrown to indicate that a method was passed an illegal or inappropriate argument.
+// Minimal IllegalArgumentException — thrown by an enum's synthetic `valueOf(String)`
+// when the given name matches no constant (JLS §8.9.3).
 public class IllegalArgumentException extends RuntimeException {
-    public IllegalArgumentException(String message) {
-        super(message);
-    }
-
     public IllegalArgumentException() {
     }
 }

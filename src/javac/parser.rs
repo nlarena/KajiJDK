@@ -75,13 +75,14 @@
 //!
 //! ## Lo que falta
 //!
-//! Cerrado el grueso del lenguaje, quedan tres bordes menores:
+//! El lenguaje está **completo** en el parser. Los antiguos bordes menores ya están:
 //!
-//! - Las anotaciones en **posiciones de borde**: sobre un parámetro de tipo (`<@Foo T>`) o una
-//!   constante de `enum` — ahí [`Parser::skip_annotation`] todavía las salta (no hay dónde colgarlas).
-//! - Las **anotaciones de tipo/uso** (§9.7.4: `List<@NonNull String>`, `@Foo int[]`) — un mecanismo
-//!   aparte del de las declaraciones.
-//! - El **type witness de constructor** (`new <T>Foo()`) — forma rarísima, todavía da error.
+//! - Las anotaciones sobre un **parámetro de tipo** (`<@Foo T>`) y sobre una **constante de `enum`**
+//!   se **retienen** (en `TypeParam.annotations`/`EnumConstant.annotations`), ya no se descartan.
+//! - Las **anotaciones de tipo/uso** (§9.7.4: `List<@NonNull String>`, `@Foo int`) se **aceptan**
+//!   ([`Parser::skip_type_annotations`]); se descartan por ser metadata ajena a la *erasure* y a la
+//!   emisión (la variante de **nivel de array** `String @A []` queda como cola menor).
+//! - El **type witness de constructor** (`new <T>Foo()`) se **acepta** (ya no da error).
 //!
 //! ## Una lección que dejó una auditoría
 //!
@@ -94,9 +95,19 @@ use super::ast::*;
 use super::token::{Token, TokenKind};
 use super::{Error, Result};
 
-/// Parsea una lista de tokens (terminada en `Eof`) a una unidad de compilación.
-pub fn parse(tokens: Vec<Token>) -> Result<CompilationUnit> {
-    Parser { tokens, pos: 0, gt_splits: Vec::new() }.compilation_unit()
+/// Parsea una lista de tokens (terminada en `Eof`) a una unidad de compilación, con **recuperación
+/// de errores** (§ panic-mode): en vez de abortar en el primer error de sintaxis, sincroniza en el
+/// borde de sentencia/miembro/tipo y sigue, así devuelve **todos** los errores en una pasada.
+pub fn parse(tokens: Vec<Token>) -> (CompilationUnit, Vec<Error>) {
+    let mut p = Parser {
+        tokens,
+        pos: 0,
+        gt_splits: Vec::new(),
+        errors: Vec::new(),
+        pending_type_annos: Vec::new(),
+    };
+    let unit = p.compilation_unit();
+    (unit, p.errors)
 }
 
 struct Parser {
@@ -104,6 +115,12 @@ struct Parser {
     pos: usize,
     /// *Undo log* de los cortes de `>>`/`>>>` (ver [`Parser::eat_gt`]): posición y kind original.
     gt_splits: Vec<(usize, TokenKind)>,
+    /// Los errores de sintaxis acumulados: la recuperación los junta en vez de abortar en el primero.
+    errors: Vec<Error>,
+    /// Las **type annotations** (§9.7.4) recolectadas al parsear el último tipo, con su `type_path`.
+    /// Cada `parse_type` las acumula; la declaración que lo llama las **drena** ([`Parser::take_type_annos`])
+    /// y las guarda con su target. Se vacía al drenar.
+    pending_type_annos: Vec<TypeUseAnnot>,
 }
 
 /// Un punto al que volver en el *backtracking*: el cursor **y** cuántos cortes de `>` llevábamos.
@@ -203,7 +220,7 @@ impl Parser {
 
     fn error(&self, message: impl Into<String>) -> Error {
         let t = self.peek();
-        Error { message: message.into(), line: t.line, col: t.col }
+        Error::new(message, t.line, t.col)
     }
 
     /// La posición del token actual — para adjuntar a las declaraciones del AST.
@@ -214,29 +231,266 @@ impl Parser {
 
     // ---- unidad de compilación ----
 
-    fn compilation_unit(&mut self) -> Result<CompilationUnit> {
+    fn compilation_unit(&mut self) -> CompilationUnit {
         let package = if self.eat(TokenKind::Package) {
-            let name = self.qualified_name()?;
-            self.expect(TokenKind::Semi)?;
-            Some(name)
+            match self.package_clause() {
+                Ok(n) => Some(n),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.sync_top_level();
+                    None
+                }
+            }
         } else {
             None
         };
 
         let mut imports = Vec::new();
         while self.at(TokenKind::Import) {
-            imports.push(self.import()?);
+            match self.import() {
+                Ok(i) => imports.push(i),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.sync_top_level();
+                }
+            }
         }
 
         let mut types = Vec::new();
+        let mut module = None;
         while !self.at(TokenKind::Eof) {
             if self.eat(TokenKind::Semi) {
                 continue; // `;` suelto entre tipos
             }
-            let (modifiers, annotations) = self.modifiers()?;
+            // Recuperación: si una declaración de tipo/módulo falla, se registra el error y se
+            // **sincroniza** al comienzo de la próxima, en vez de abortar la unidad entera.
+            if let Err(e) = self.top_decl(&mut types, &mut module) {
+                self.errors.push(e);
+                self.sync_top_level();
+            }
+        }
+        CompilationUnit { package, imports, types, module }
+    }
+
+    /// El nombre de un `package` + su `;`.
+    fn package_clause(&mut self) -> Result<String> {
+        let name = self.qualified_name()?;
+        self.expect(TokenKind::Semi)?;
+        Ok(name)
+    }
+
+    /// Parsea **una** declaración de nivel superior (tipo o módulo) y la agrega.
+    fn top_decl(&mut self, types: &mut Vec<ClassDecl>, module: &mut Option<ModuleDecl>) -> Result<()> {
+        let (modifiers, annotations) = self.modifiers()?;
+        // `module-info.java` (§7.7): una **declaración de módulo** en vez de tipos. `module`/`open`
+        // son keywords **restringidas** (identificadores); no llevan modificadores.
+        if module.is_none() && modifiers.is_empty() && self.at_module_decl() {
+            *module = Some(self.module_decl(annotations)?);
+        } else {
             types.push(self.class_decl(modifiers, annotations)?);
         }
-        Ok(CompilationUnit { package, imports, types })
+        Ok(())
+    }
+
+    // ---- recuperación de errores (panic-mode, §ninguno del JLS: es del compilador) ----
+
+    /// Salta al comienzo de la próxima **declaración de tipo** (o EOF), rastreando llaves para no
+    /// confundirse con un `{ … }` de un cuerpo a medio parsear. Consume **≥1** token (garantiza avance).
+    fn sync_top_level(&mut self) {
+        use TokenKind as T;
+        let start = self.pos;
+        let mut depth = 0usize;
+        while !self.at(T::Eof) {
+            if depth == 0 && self.pos > start && self.at_type_start() {
+                break;
+            }
+            match self.peek_kind() {
+                T::LBrace => depth += 1,
+                T::RBrace if depth > 0 => depth -= 1,
+                _ => {}
+            }
+            self.bump();
+        }
+    }
+
+    /// Salta (rastreando llaves) hasta el próximo `;` (que se **consume**) o el `}` que cierra el
+    /// cuerpo actual (clase o bloque), que **no** se consume —lo cierra el llamador—. Es la
+    /// sincronización a nivel **miembro** y **sentencia**. Avanza ≥1 o el loop del llamador termina.
+    fn sync_to_body_boundary(&mut self) {
+        use TokenKind as T;
+        let mut depth = 0usize;
+        loop {
+            match self.peek_kind() {
+                T::Eof => break,
+                T::RBrace if depth == 0 => break, // cierra el cuerpo: se lo deja al llamador
+                T::RBrace => {
+                    depth -= 1;
+                    self.bump();
+                }
+                T::LBrace => {
+                    depth += 1;
+                    self.bump();
+                }
+                T::Semi if depth == 0 => {
+                    self.bump();
+                    break;
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+        }
+    }
+
+    /// Sincroniza a un límite de **expresión** para la recuperación a nivel expresión: salta
+    /// (rastreando `()`/`[]`/`{}`) hasta el próximo `,` `;` `)` `]` `}` de profundidad 0, o EOF —
+    /// **sin consumirlo**, para que lo vea el llamador (la lista de argumentos, el `;` del local)—.
+    fn sync_to_expr_boundary(&mut self) {
+        use TokenKind as T;
+        let mut depth = 0usize;
+        loop {
+            match self.peek_kind() {
+                T::Eof => break,
+                T::Comma | T::Semi | T::RParen | T::RBracket | T::RBrace if depth == 0 => break,
+                T::LParen | T::LBracket | T::LBrace => {
+                    depth += 1;
+                    self.bump();
+                }
+                T::RParen | T::RBracket | T::RBrace => {
+                    depth -= 1;
+                    self.bump();
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+        }
+    }
+
+    /// **Recuperación a nivel expresión**: registra `err`, sincroniza hasta un límite de expresión
+    /// ([`sync_to_expr_boundary`](Self::sync_to_expr_boundary)) y devuelve un nodo [`ExprKind::Error`]
+    /// en `pos`. Así la **estructura de alrededor sobrevive** —el local se sigue declarando, los otros
+    /// argumentos se siguen parseando— y la atribución no encadena diagnósticos sobre lo ya roto.
+    fn recover_expr(&mut self, pos: Pos, err: Error) -> Expr {
+        self.errors.push(err);
+        self.sync_to_expr_boundary();
+        Expr::new(pos, ExprKind::Error)
+    }
+
+    /// ¿El token actual puede **comenzar** una declaración de tipo? (Para sincronizar en top-level.)
+    fn at_type_start(&self) -> bool {
+        use TokenKind as T;
+        matches!(
+            self.peek_kind(),
+            T::Public
+                | T::Private
+                | T::Protected
+                | T::Static
+                | T::Final
+                | T::Abstract
+                | T::Class
+                | T::Interface
+                | T::Enum
+                | T::MonkeysAt
+        ) || (self.at(T::Identifier)
+            && matches!(self.peek().text.as_str(), "record" | "module" | "open" | "sealed" | "non"))
+    }
+
+    /// ¿Estamos ante una declaración de módulo? `module nombre` o `open module nombre` (§7.7).
+    fn at_module_decl(&self) -> bool {
+        use TokenKind as T;
+        if self.at(T::Identifier) && self.peek().text == "open" {
+            self.kind_at(1) == T::Identifier && self.text_at(1) == "module"
+        } else {
+            self.at(T::Identifier) && self.peek().text == "module" && self.kind_at(1) == T::Identifier
+        }
+    }
+
+    /// `[open] module nombre.cualificado { directivas }` (§7.7).
+    fn module_decl(&mut self, annotations: Vec<Annotation>) -> Result<ModuleDecl> {
+        use TokenKind as T;
+        let pos = self.pos();
+        let open = self.at(T::Identifier) && self.peek().text == "open";
+        if open {
+            self.bump();
+        }
+        if !(self.at(T::Identifier) && self.peek().text == "module") {
+            return Err(self.error("se esperaba `module`"));
+        }
+        self.bump();
+        let name = self.qualified_name()?;
+        self.expect(T::LBrace)?;
+        let mut directives = Vec::new();
+        while !self.at(T::RBrace) && !self.at(T::Eof) {
+            directives.push(self.module_directive()?);
+        }
+        self.expect(T::RBrace)?;
+        Ok(ModuleDecl { pos, annotations, open, name, directives })
+    }
+
+    /// Una directiva `requires`/`exports`/`opens`/`uses`/`provides` (§7.7.1–§7.7.4). Todas las
+    /// palabras clave (incluidas `transitive`/`to`/`with`) son **restringidas** salvo `static`.
+    fn module_directive(&mut self) -> Result<ModuleDirective> {
+        use TokenKind as T;
+        if !self.at(T::Identifier) {
+            return Err(self.error("se esperaba una directiva de módulo"));
+        }
+        let kw = self.peek().text.clone();
+        self.bump();
+        let d = match kw.as_str() {
+            "requires" => {
+                // `requires [transitive] [static] modulo;` — los modificadores en cualquier orden.
+                // `transitive` seguido de `;` es en cambio el **nombre** del módulo (`requires transitive;`).
+                let (mut transitive, mut is_static) = (false, false);
+                loop {
+                    if self.at(T::Static) {
+                        is_static = true;
+                        self.bump();
+                    } else if self.at(T::Identifier)
+                        && self.peek().text == "transitive"
+                        && self.kind_at(1) != T::Semi
+                    {
+                        transitive = true;
+                        self.bump();
+                    } else {
+                        break;
+                    }
+                }
+                ModuleDirective::Requires { transitive, is_static, name: self.qualified_name()? }
+            }
+            "exports" | "opens" => {
+                let package = self.qualified_name()?;
+                let mut to = Vec::new();
+                if self.at(T::Identifier) && self.peek().text == "to" {
+                    self.bump();
+                    to.push(self.qualified_name()?);
+                    while self.eat(T::Comma) {
+                        to.push(self.qualified_name()?);
+                    }
+                }
+                if kw == "exports" {
+                    ModuleDirective::Exports { package, to }
+                } else {
+                    ModuleDirective::Opens { package, to }
+                }
+            }
+            "uses" => ModuleDirective::Uses { service: self.qualified_name()? },
+            "provides" => {
+                let service = self.qualified_name()?;
+                if !(self.at(T::Identifier) && self.peek().text == "with") {
+                    return Err(self.error("se esperaba `with` en un `provides`"));
+                }
+                self.bump();
+                let mut with = vec![self.qualified_name()?];
+                while self.eat(T::Comma) {
+                    with.push(self.qualified_name()?);
+                }
+                ModuleDirective::Provides { service, with }
+            }
+            other => return Err(self.error(format!("directiva de módulo desconocida: `{other}`"))),
+        };
+        self.expect(T::Semi)?;
+        Ok(d)
     }
 
     fn import(&mut self) -> Result<Import> {
@@ -271,6 +525,28 @@ impl Parser {
             // `@interface` es una **declaración** de tipo, no una anotación de uso: no la comas.
             while self.at(T::MonkeysAt) && self.kind_at(1) != T::Interface {
                 annotations.push(self.annotation()?);
+            }
+            // `sealed` / `non-sealed` son keywords **restringidas** (§3.9): sólo modifican una
+            // declaración de tipo. El lookahead evita confundir un tipo/campo llamado `sealed`
+            // (`sealed x;`) con el modificador. `non-sealed` lo lexea el scanner como `non` `-`
+            // `sealed`; acá se reconstruye.
+            if self.at(T::Identifier) && self.peek().text == "sealed" && self.type_decl_ahead(1) {
+                self.bump();
+                mods.push(Modifier::Sealed);
+                continue;
+            }
+            if self.at(T::Identifier)
+                && self.peek().text == "non"
+                && self.kind_at(1) == T::Sub
+                && self.kind_at(2) == T::Identifier
+                && self.text_at(2) == "sealed"
+                && self.type_decl_ahead(3)
+            {
+                self.bump(); // non
+                self.bump(); // -
+                self.bump(); // sealed
+                mods.push(Modifier::NonSealed);
+                continue;
             }
             let m = match self.peek_kind() {
                 T::Public => Modifier::Public,
@@ -353,13 +629,6 @@ impl Parser {
         }
     }
 
-    /// Salta una anotación **sin retenerla** — solo donde todavía no la colgamos de nada (parámetros
-    /// de tipo, constantes de `enum`).
-    fn skip_annotation(&mut self) -> Result<()> {
-        self.annotation()?;
-        Ok(())
-    }
-
     /// Consume un par balanceado `open`…`close` (para saltar el cuerpo de una anotación).
     fn skip_balanced(&mut self, open: TokenKind, close: TokenKind) -> Result<()> {
         self.expect(open)?;
@@ -405,42 +674,118 @@ impl Parser {
         let components = if kind == TypeKind::Record { self.params()? } else { Vec::new() };
 
         let mut extends = None;
+        let mut extends_annos = Vec::new();
         let mut implements = Vec::new();
+        let mut implements_annos: Vec<Vec<TypeUseAnnot>> = Vec::new();
         if kind != TypeKind::Record && self.eat(T::Extends) {
             let first = self.parse_type()?;
+            let first_annos = self.take_type_annos();
             if kind == TypeKind::Interface {
+                // Un `interface` no tiene superclase: su `extends` son super-interfaces, que van a la
+                // lista de `implements` (target `0x10` con `supertype_index` 0-based).
                 implements.push(first);
+                implements_annos.push(first_annos);
                 while self.eat(T::Comma) {
                     implements.push(self.parse_type()?);
+                    implements_annos.push(self.take_type_annos());
                 }
             } else {
                 extends = Some(first);
+                extends_annos = first_annos;
             }
         }
         if self.eat(T::Implements) {
             implements.push(self.parse_type()?);
+            implements_annos.push(self.take_type_annos());
             while self.eat(T::Comma) {
                 implements.push(self.parse_type()?);
+                implements_annos.push(self.take_type_annos());
             }
         }
+
+        // `permits A, B` — los subtipos autorizados de un tipo `sealed` (§8.1.6). `permits` es una
+        // keyword contextual (un identificador); sólo cuenta acá, antes del cuerpo.
+        let mut permits = Vec::new();
+        if self.at(T::Identifier) && self.peek().text == "permits" {
+            self.bump();
+            permits.push(self.parse_type()?);
+            while self.eat(T::Comma) {
+                permits.push(self.parse_type()?);
+            }
+        }
+        // `permits` no es una posición de type annotation (no hay target JVMS); si alguna quedó en el
+        // buffer, se descarta para no filtrarla al primer miembro.
+        self.pending_type_annos.clear();
 
         self.expect(T::LBrace)?;
         // Un `enum` lleva sus constantes antes de los miembros.
         let enum_constants = if kind == TypeKind::Enum { self.enum_constants()? } else { Vec::new() };
         let mut members = Vec::new();
+        let mut annotation_defaults = Vec::new();
         while !self.at(T::RBrace) && !self.at(T::Eof) {
-            self.member(&name, &mut members)?;
+            // Recuperación: un miembro mal formado se registra y se sincroniza al próximo `;`/borde,
+            // sin abortar el resto del cuerpo de la clase.
+            if let Err(e) = self.member(&name, &mut members, &mut annotation_defaults) {
+                self.errors.push(e);
+                self.sync_to_body_boundary();
+            }
         }
         self.expect(T::RBrace)?;
-        Ok(ClassDecl { pos, annotations, modifiers, kind, name, type_params, components, extends, implements, enum_constants, members })
+        Ok(ClassDecl { pos, annotations, modifiers, kind, name, type_params, components, extends, extends_annos, implements, implements_annos, permits, enum_constants, members, annotation_defaults })
     }
 
     /// ¿Estamos ante `record Nombre(`? (`record` es keyword contextual — un identificador).
     fn is_record_decl(&self) -> bool {
+        // `record Nombre(` o —para uno **genérico**— `record Nombre<`. En posición de declaración
+        // de tipo no hay ambigüedad con un campo de tipo `record` (`record x;`, `<` no lo sigue).
         self.at(TokenKind::Identifier)
             && self.peek().text == "record"
             && self.kind_at(1) == TokenKind::Identifier
-            && self.kind_at(2) == TokenKind::LParen
+            && matches!(self.kind_at(2), TokenKind::LParen | TokenKind::Lt)
+    }
+
+    /// El texto del token en `pos + offset` (para lookahead de keywords contextuales).
+    fn text_at(&self, offset: usize) -> &str {
+        &self.tokens[(self.pos + offset).min(self.tokens.len() - 1)].text
+    }
+
+    /// Mirando desde `pos + start` y **saltando** más modificadores (incluidas otras keywords
+    /// restringidas y anotaciones), ¿lo que sigue es una declaración de tipo? Es lo que distingue
+    /// `sealed class C` (modificador) de `sealed x;` (un tipo/campo llamado `sealed`).
+    fn type_decl_ahead(&self, start: usize) -> bool {
+        use TokenKind as T;
+        let mut i = self.pos + start;
+        let last = self.tokens.len() - 1;
+        loop {
+            let k = self.tokens[i.min(last)].kind;
+            let is_mod = matches!(
+                k,
+                T::Public
+                    | T::Private
+                    | T::Protected
+                    | T::Static
+                    | T::Final
+                    | T::Abstract
+                    | T::Native
+                    | T::Synchronized
+                    | T::Transient
+                    | T::Volatile
+                    | T::Strictfp
+                    | T::Default
+                    | T::MonkeysAt
+            );
+            let txt = &self.tokens[i.min(last)].text;
+            let is_restricted = k == T::Identifier && (txt == "sealed" || txt == "non");
+            if is_mod || is_restricted {
+                if i >= last {
+                    return false;
+                }
+                i += 1;
+                continue;
+            }
+            return matches!(k, T::Class | T::Interface | T::Enum)
+                || (k == T::Identifier && txt == "record");
+        }
     }
 
     /// ¿El token actual inicia una **declaración de tipo** (para un tipo anidado)?
@@ -463,19 +808,25 @@ impl Parser {
         }
         self.bump(); // <
         loop {
+            // Anotaciones sobre el parámetro de tipo (§9.7.4: `<@Foo T>`): ahora se **retienen**.
+            let mut annotations = Vec::new();
             while self.at(T::MonkeysAt) {
-                self.skip_annotation()?;
+                annotations.push(self.annotation()?);
             }
             let name = self.expect_ident()?;
-            // `extends A & B` — la primera cota puede ser una clase; las demás, interfaces.
+            // `extends A & B` — la primera cota puede ser una clase; las demás, interfaces. Las type
+            // annotations de cada cota (`<T extends @A A & @B B>`) se drenan **en paralelo** a `bounds`.
             let mut bounds = Vec::new();
+            let mut bound_annos: Vec<Vec<TypeUseAnnot>> = Vec::new();
             if self.eat(T::Extends) {
                 bounds.push(self.parse_type()?);
+                bound_annos.push(self.take_type_annos());
                 while self.eat(T::Amp) {
                     bounds.push(self.parse_type()?);
+                    bound_annos.push(self.take_type_annos());
                 }
             }
-            params.push(TypeParam { name, bounds });
+            params.push(TypeParam { annotations, name, bounds, bound_annos });
             if self.eat(T::Comma) {
                 continue;
             }
@@ -491,6 +842,12 @@ impl Parser {
     /// (JLS §4.5.1). `None` si no hay `<`; `Some(vec![])` es el **diamante** `<>`, que no es lo
     /// mismo que un tipo crudo: pide inferir (§15.9.1).
     fn type_args(&mut self) -> Result<Option<Vec<TypeArg>>> {
+        self.type_args_at(&[])
+    }
+
+    /// [`type_args`] sabiendo el `type_path` del tipo dueño: el i-ésimo argumento está en
+    /// `path + [TypeArgument i]` (para sus type annotations).
+    fn type_args_at(&mut self, path: &[TypePathStep]) -> Result<Option<Vec<TypeArg>>> {
         use TokenKind as T;
         if !self.at(T::Lt) {
             return Ok(None);
@@ -501,7 +858,9 @@ impl Parser {
             return Ok(Some(args)); // diamante `<>`
         }
         loop {
-            args.push(self.type_arg()?);
+            let mut arg_path = path.to_vec();
+            arg_path.push(TypePathStep::TypeArgument(args.len() as u8));
+            args.push(self.type_arg_at(arg_path)?);
             if self.eat(T::Comma) {
                 continue;
             }
@@ -513,19 +872,24 @@ impl Parser {
         Ok(Some(args))
     }
 
-    /// Un argumento de tipo: un tipo, o un *wildcard* (`?`, `? extends T`, `? super T`).
-    fn type_arg(&mut self) -> Result<TypeArg> {
+    /// Un argumento de tipo (`type_arg`) con el `type_path` de este argumento. La cota de un wildcard añade un paso
+    /// `WildcardBound` (`List<? extends @A T>` → `@A` en `path + [WildcardBound]`).
+    fn type_arg_at(&mut self, path: Vec<TypePathStep>) -> Result<TypeArg> {
         use TokenKind as T;
         if self.eat(T::Ques) {
             if self.eat(T::Extends) {
-                return Ok(TypeArg::Extends(Box::new(self.parse_type()?)));
+                let mut p = path;
+                p.push(TypePathStep::WildcardBound);
+                return Ok(TypeArg::Extends(Box::new(self.parse_type_at(p)?)));
             }
             if self.eat(T::Super) {
-                return Ok(TypeArg::Super(Box::new(self.parse_type()?)));
+                let mut p = path;
+                p.push(TypePathStep::WildcardBound);
+                return Ok(TypeArg::Super(Box::new(self.parse_type_at(p)?)));
             }
             return Ok(TypeArg::Wildcard);
         }
-        Ok(TypeArg::Type(self.parse_type()?))
+        Ok(TypeArg::Type(self.parse_type_at(path)?))
     }
 
     /// Las constantes de un `enum` al inicio de su cuerpo: `A, B(args), C { body } ;`.
@@ -537,8 +901,10 @@ impl Parser {
             return Ok(constants);
         }
         loop {
+            // Anotaciones sobre la constante (`@Deprecated FOO`): ahora se **retienen**.
+            let mut annotations = Vec::new();
             while self.at(T::MonkeysAt) {
-                self.skip_annotation()?;
+                annotations.push(self.annotation()?);
             }
             let name = self.expect_ident()?;
             let args = if self.at(T::LParen) { self.args()? } else { Vec::new() };
@@ -546,7 +912,7 @@ impl Parser {
             if self.at(T::LBrace) {
                 self.skip_balanced(T::LBrace, T::RBrace)?;
             }
-            constants.push(EnumConstant { name, args });
+            constants.push(EnumConstant { annotations, name, args });
             if !self.eat(T::Comma) || self.at(T::Semi) || self.at(T::RBrace) {
                 break;
             }
@@ -555,7 +921,12 @@ impl Parser {
         Ok(constants)
     }
 
-    fn member(&mut self, class_name: &str, members: &mut Vec<Member>) -> Result<()> {
+    fn member(
+        &mut self,
+        class_name: &str,
+        members: &mut Vec<Member>,
+        defaults: &mut Vec<(String, AnnotationValue)>,
+    ) -> Result<()> {
         let (modifiers, annotations) = self.modifiers()?;
         let pos = self.pos();
 
@@ -579,7 +950,9 @@ impl Parser {
             return Ok(());
         }
 
-        // Parámetros de tipo de un método/constructor genérico (`<T> ...`).
+        // Parámetros de tipo de un método/constructor genérico (`<T> ...`). `type_params` ya drenó las
+        // type annotations de las **cotas** (`<T extends @A Number>`, target 0x11/0x12) a
+        // `TypeParam::bound_annos`; el buffer queda limpio para el tipo del miembro.
         let type_params = self.type_params()?;
 
         // Constructor: `Nombre(` con Nombre == la clase.
@@ -589,7 +962,7 @@ impl Parser {
         {
             self.bump(); // nombre
             let params = self.params()?;
-            let throws = self.throws_clause()?;
+            let (throws, throws_annos) = self.throws_clause()?;
             let body = self.method_body()?;
             members.push(Member::Method(MethodDecl {
                 pos,
@@ -602,19 +975,26 @@ impl Parser {
                 throws,
                 body,
                 is_constructor: true,
+                return_annos: Vec::new(),
+                throws_annos,
             }));
             return Ok(());
         }
 
         let ty = self.parse_type()?;
+        // Las type annotations del tipo del miembro (retorno de un método, o tipo de un campo).
+        let type_annos = self.take_type_annos();
         let name = self.expect_ident()?;
 
         if self.at(TokenKind::LParen) {
             let params = self.params()?;
-            let throws = self.throws_clause()?;
-            // Elemento de `@interface` con valor por defecto: `Tipo nombre() default valor;`.
+            let (throws, throws_annos) = self.throws_clause()?;
+            // Elemento de `@interface` con valor por defecto: `Tipo nombre() default valor;`. El valor
+            // se retiene (como `AnnotationValue`, igual que un argumento de anotación) para el atributo
+            // `AnnotationDefault` (§4.7.22) — la reflexión lee estos defaults.
             if self.eat(TokenKind::Default) {
-                let _ = self.expr()?;
+                let value = self.annotation_value()?;
+                defaults.push((name.clone(), value));
             }
             let body = self.method_body()?;
             members.push(Member::Method(MethodDecl {
@@ -628,6 +1008,8 @@ impl Parser {
                 throws,
                 body,
                 is_constructor: false,
+                return_annos: type_annos,
+                throws_annos,
             }));
         } else {
             // Campo(s): uno o más declaradores separados por coma.
@@ -636,7 +1018,7 @@ impl Parser {
                 // anotaciones se replican a cada declarador (`@Foo int a, b;` anota los dos).
                 let fty = p.extra_array_dims(ty.clone())?;
                 let init = if p.eat(TokenKind::Eq) { Some(p.var_init(&fty)?) } else { None };
-                Ok(FieldDecl { pos, annotations: annotations.clone(), modifiers: modifiers.clone(), ty: fty, name: nm, init })
+                Ok(FieldDecl { pos, annotations: annotations.clone(), modifiers: modifiers.clone(), ty: fty, name: nm, init, type_annos: type_annos.clone() })
             };
             let first = declare(self, name)?;
             members.push(Member::Field(first));
@@ -661,16 +1043,20 @@ impl Parser {
     }
 
     /// La cláusula `throws E1, E2, …` (§8.4.6); vacía si no está. Ya **no se descarta**: el chequeo
-    /// de excepciones chequeadas la necesita.
-    fn throws_clause(&mut self) -> Result<Vec<Type>> {
+    /// de excepciones chequeadas la necesita. Devuelve además, **en paralelo**, las type annotations de
+    /// cada tipo (`throws @A E1, @B E2` → target `0x17` con el índice en la cláusula).
+    fn throws_clause(&mut self) -> Result<(Vec<Type>, Vec<Vec<TypeUseAnnot>>)> {
         let mut types = Vec::new();
+        let mut annos: Vec<Vec<TypeUseAnnot>> = Vec::new();
         if self.eat(TokenKind::Throws) {
             types.push(self.parse_type()?);
+            annos.push(self.take_type_annos());
             while self.eat(TokenKind::Comma) {
                 types.push(self.parse_type()?);
+                annos.push(self.take_type_annos());
             }
         }
-        Ok(types)
+        Ok((types, annos))
     }
 
     fn params(&mut self) -> Result<Vec<Param>> {
@@ -691,6 +1077,7 @@ impl Parser {
                     }
                 }
                 let mut ty = self.parse_type()?;
+                let type_annos = self.take_type_annos();
                 // El tipo declarado de un varargs **es el array** (JLS §8.4.1): `int... xs` es un
                 // `int[]` dentro del método, y su descriptor es `[I`. El flag solo recuerda que
                 // se escribió con `...` (para el overload resolution y `ACC_VARARGS`).
@@ -705,7 +1092,7 @@ impl Parser {
                     self.bump();
                     ty = Type::Array(Box::new(ty));
                 }
-                params.push(Param { annotations, ty, name, varargs, is_final });
+                params.push(Param { annotations, ty, name, varargs, is_final, type_annos });
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
@@ -717,17 +1104,87 @@ impl Parser {
 
     // ---- tipos ----
 
+    /// Drena las type annotations recolectadas al parsear el último tipo (con su `type_path`), para
+    /// que la declaración las guarde con su target. Vacía el buffer.
+    fn take_type_annos(&mut self) -> Vec<TypeUseAnnot> {
+        std::mem::take(&mut self.pending_type_annos)
+    }
+
     fn parse_type(&mut self) -> Result<Type> {
-        let mut base = self.base_type()?;
-        while self.at(TokenKind::LBracket) && self.kind_at(1) == TokenKind::RBracket {
-            self.bump();
-            self.bump();
-            base = Type::Array(Box::new(base));
+        self.parse_type_at(Vec::new())
+    }
+
+    /// Como [`parse_type`], sabiendo el `type_path` de **esta** posición. Recolecta las type
+    /// annotations (§9.7.4) en `pending_type_annos`: las **líder** (`@A String`) sobre el tipo base, y
+    /// las de **nivel de array** (`String @A []`). El k-ésimo `[` (desde afuera) queda en
+    /// `path + [Array × k]`; el tipo base, bajo N arrays, en `path + [Array × N]`. Los argumentos de
+    /// tipo los recolecta [`Parser::type_args_at`] con `path + [TypeArgument i]`.
+    fn parse_type_at(&mut self, path: Vec<TypePathStep>) -> Result<Type> {
+        let leading = self.take_type_annotations()?;
+        // Los argumentos de tipo del base (`List<@A String>`) se recolectan **ya**, con path
+        // `path + [TypeArgument i]`, sin saber todavía cuántos `[]` lo envuelven. Se marca hasta dónde
+        // llega el buffer para, sabido `level`, intercalarles los pasos `Array` que faltan.
+        let mark = self.pending_type_annos.len();
+        let mut base = self.base_type_at(&path)?;
+        let mut arr: Vec<(usize, Annotation)> = Vec::new();
+        let mut level = 0usize;
+        loop {
+            let anns = self.take_type_annotations()?;
+            let is_array =
+                self.at(TokenKind::LBracket) && self.kind_at(1) == TokenKind::RBracket;
+            for a in anns {
+                arr.push((level, a));
+            }
+            if is_array {
+                self.bump();
+                self.bump();
+                base = Type::Array(Box::new(base));
+                level += 1;
+            } else {
+                break;
+            }
+        }
+        // `List<@A String> []` → `@A` en `[ARRAY, TYPE_ARGUMENT(0)]`, no `[TYPE_ARGUMENT(0)]`: el
+        // elemento del array está un nivel más abajo. Se inserta `Array × level` justo tras el prefijo
+        // `path` (compartido) y antes de los pasos propios del argumento.
+        if level > 0 {
+            let insert = vec![TypePathStep::Array; level];
+            for entry in &mut self.pending_type_annos[mark..] {
+                entry.path.splice(path.len()..path.len(), insert.iter().cloned());
+            }
+        }
+        let at = |p: &[TypePathStep], k: usize| -> Vec<TypePathStep> {
+            let mut v = p.to_vec();
+            v.extend(std::iter::repeat(TypePathStep::Array).take(k));
+            v
+        };
+        let base_path = at(&path, level); // el base está bajo `level` arrays
+        for a in leading {
+            self.pending_type_annos.push(TypeUseAnnot { path: base_path.clone(), annotation: a });
+        }
+        for (k, a) in arr {
+            self.pending_type_annos.push(TypeUseAnnot { path: at(&path, k), annotation: a });
         }
         Ok(base)
     }
 
+    /// Parsea (y **retiene**) las type annotations líder que preceden a un tipo o a un `[`,
+    /// devolviéndolas. Antes se descartaban; ahora van al atributo `RuntimeVisibleTypeAnnotations`.
+    fn take_type_annotations(&mut self) -> Result<Vec<Annotation>> {
+        let mut anns = Vec::new();
+        while self.at(TokenKind::MonkeysAt) {
+            anns.push(self.annotation()?);
+        }
+        Ok(anns)
+    }
+
     fn base_type(&mut self) -> Result<Type> {
+        self.base_type_at(&[])
+    }
+
+    /// [`base_type`] sabiendo el `type_path` de esta posición, para pasarle a [`Parser::type_args_at`]
+    /// el prefijo `path + [TypeArgument i]` de cada argumento.
+    fn base_type_at(&mut self, path: &[TypePathStep]) -> Result<Type> {
         use TokenKind as T;
         let ty = match self.peek_kind() {
             T::Int => Type::Prim(PrimType::Int),
@@ -746,7 +1203,7 @@ impl Parser {
                 }
                 let name = self.qualified_name()?;
                 // Con argumentos es un tipo parametrizado; sin `<`, uno crudo.
-                return Ok(match self.type_args()? {
+                return Ok(match self.type_args_at(path)? {
                     Some(args) => Type::Parameterized { base: name, args },
                     None => Type::Class(name),
                 });
@@ -773,7 +1230,12 @@ impl Parser {
         self.expect(TokenKind::LBrace)?;
         let mut stmts = Vec::new();
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
-            self.block_stmt(&mut stmts)?;
+            // Recuperación: una sentencia mal formada se registra y se sincroniza al próximo `;`/`}`,
+            // sin abortar el resto del bloque.
+            if let Err(e) = self.block_stmt(&mut stmts) {
+                self.errors.push(e);
+                self.sync_to_body_boundary();
+            }
         }
         self.expect(TokenKind::RBrace)?;
         Ok(Block(stmts))
@@ -814,16 +1276,23 @@ impl Parser {
     /// (p.ej. `x = 5`, `foo()`), restaura la posición y devuelve `None`.
     fn try_local_decls(&mut self) -> Result<Option<Vec<Stmt>>> {
         let save = self.mark();
+        // `parse_type` empuja las type annotations al buffer; con backtracking hay que devolverlo.
+        let annos_mark = self.pending_type_annos.len();
         // Un local puede declararse `final` (JLS §14.4); es el único modificador que admite.
         let is_final = self.eat(TokenKind::Final);
         let Ok(ty) = self.parse_type() else {
+            self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
             return Ok(None);
         };
         if !self.at(TokenKind::Identifier) {
+            self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
             return Ok(None);
         }
+        // Las anotaciones de tipo del tipo declarado (`@A int x`), compartidas por todos los
+        // declaradores (`@A int a, b`). Target 0x40; el emisor filtra por `@Target(TYPE_USE)`.
+        let type_annos = self.pending_type_annos.split_off(annos_mark);
         let mut decls = Vec::new();
         loop {
             let pos = self.pos();
@@ -831,8 +1300,18 @@ impl Parser {
             // Declarador **al estilo C**: `int y[]` es lo mismo que `int[] y` (§10.2), y los `[]`
             // van por variable, no por declaración: en `int a[], b;` solo `a` es array.
             let vty = self.extra_array_dims(ty.clone())?;
-            let init = if self.eat(TokenKind::Eq) { Some(self.var_init(&vty)?) } else { None };
-            decls.push(Stmt::new(pos, StmtKind::LocalVar { ty: vty, name, init, is_final }));
+            // Un inicializador que no parsea se recupera con un nodo de error: el local **igual queda
+            // declarado**, así que los usos posteriores de la variable no cascadean «no se encuentra».
+            let init = if self.eat(TokenKind::Eq) {
+                let ipos = self.pos();
+                Some(self.var_init(&vty).unwrap_or_else(|err| self.recover_expr(ipos, err)))
+            } else {
+                None
+            };
+            decls.push(Stmt::new(
+                pos,
+                StmtKind::LocalVar { ty: vty, name, init, is_final, type_annos: type_annos.clone() },
+            ));
             if !self.eat(TokenKind::Comma) {
                 break;
             }
@@ -1118,7 +1597,10 @@ impl Parser {
             } else if let Some(pat) = self.try_case_pattern()? {
                 labels.push(pat);
             } else {
-                labels.push(CaseLabel::Constant(self.expr()?));
+                // Una etiqueta constante es una *conditional-expression* (§14.11.1), **no** una
+                // *assignment-expression*: usar `expr()` haría que `case RED -> 1` se lea como la
+                // lambda `RED -> 1`. `ternary()` corta justo debajo de lambda/asignación.
+                labels.push(CaseLabel::Constant(self.ternary()?));
             }
             if !self.eat(T::Comma) {
                 break;
@@ -1352,7 +1834,7 @@ impl Parser {
         let params = if self.at(T::Identifier) {
             // `x -> …`: un único parámetro **de tipo inferido** (sin paréntesis).
             let name = self.bump().text;
-            vec![Param { annotations: Vec::new(), ty: Type::Var, name, varargs: false, is_final: false }]
+            vec![Param { annotations: Vec::new(), ty: Type::Var, name, varargs: false, is_final: false, type_annos: Vec::new() }]
         } else {
             self.expect(T::LParen)?;
             let mut params = Vec::new();
@@ -1386,11 +1868,11 @@ impl Parser {
         let is_final = self.eat(T::Final);
         if self.at(T::Identifier) && matches!(self.kind_at(1), T::Comma | T::RParen) {
             let name = self.bump().text;
-            return Ok(Param { annotations: Vec::new(), ty: Type::Var, name, varargs: false, is_final });
+            return Ok(Param { annotations: Vec::new(), ty: Type::Var, name, varargs: false, is_final, type_annos: Vec::new() });
         }
         let ty = self.parse_type()?;
         let name = self.expect_ident()?;
-        Ok(Param { annotations: Vec::new(), ty, name, varargs: false, is_final })
+        Ok(Param { annotations: Vec::new(), ty, name, varargs: false, is_final, type_annos: Vec::new() })
     }
 
     fn ternary(&mut self) -> Result<Expr> {
@@ -1415,6 +1897,7 @@ impl Parser {
             if self.at(TokenKind::Instanceof) && 9 >= min_prec {
                 self.bump();
                 let ty = self.parse_type()?;
+                let type_annos = self.take_type_annos(); // `e instanceof @A T` — target 0x43
                 // `e instanceof T v` — *pattern* (§14.30.2): el identificador que sigue bindea.
                 let binding = if self.at(TokenKind::Identifier) {
                     Some(self.bump().text)
@@ -1425,7 +1908,8 @@ impl Parser {
                 lhs = Expr::new(
                     pos,
                     ExprKind::InstanceOf { expr: Box::new(lhs), ty, binding, slot: None },
-                );
+                )
+                .with_type_annos(type_annos);
                 continue;
             }
             let Some((op, prec)) = bin_op(self.peek_kind()) else { break };
@@ -1523,24 +2007,35 @@ impl Parser {
         }
         let cast_pos = self.pos();
         let save = self.mark();
+        // `parse_type` empuja las type annotations al buffer; si el intento de cast se descarta
+        // (backtracking), hay que devolver el buffer a como estaba para no filtrarlas.
+        let annos_mark = self.pending_type_annos.len();
         self.bump(); // (
         let Ok(ty) = self.parse_type() else {
+            self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
             return Ok(None);
         };
         if !self.at(TokenKind::RParen) {
+            self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
             return Ok(None);
         }
         let is_prim_or_array = matches!(ty, Type::Prim(_) | Type::Array(_));
         let ok = is_prim_or_array || cast_operand_start(self.kind_at(1));
         if !ok {
+            self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
             return Ok(None);
         }
         self.bump(); // )
+        // Las anotaciones del tipo destino (`(@A T) e`, target 0x47) — se sacan **antes** de parsear el
+        // operando, que puede tener sus propias (otro cast/`new` anidado).
+        let type_annos = self.pending_type_annos.split_off(annos_mark);
         let expr = self.unary()?;
-        Ok(Some(Expr::new(cast_pos, ExprKind::Cast { ty, expr: Box::new(expr) })))
+        Ok(Some(
+            Expr::new(cast_pos, ExprKind::Cast { ty, expr: Box::new(expr) }).with_type_annos(type_annos),
+        ))
     }
 
     fn postfix(&mut self) -> Result<Expr> {
@@ -1560,6 +2055,29 @@ impl Parser {
                         return Err(self.error("`.class` necesita un nombre de tipo".to_string()));
                     };
                     e = Expr::new(pos, ExprKind::ClassLit(Type::Class(name)));
+                }
+                // `Outer.this` (§15.8.4): el `this` **cualificado** de la clase envolvente. `this` es
+                // keyword, así que —como `.class`— se reconoce acá, reconstruyendo el tipo del nombre.
+                TokenKind::Dot if self.kind_at(1) == TokenKind::This => {
+                    self.bump(); // '.'
+                    self.bump(); // 'this'
+                    let Some(name) = Self::type_name_of(&e) else {
+                        return Err(self.error("`.this` necesita un nombre de tipo".to_string()));
+                    };
+                    e = Expr::new(pos, ExprKind::QualifiedThis(Type::Class(name)));
+                }
+                // `outer.new Inner(args)` (§15.9.2): creación **cualificada** de una interna, con
+                // `outer` de instancia envolvente. `new` es keyword: se reconoce acá.
+                TokenKind::Dot if self.kind_at(1) == TokenKind::New => {
+                    self.bump(); // '.'
+                    self.bump(); // 'new'
+                    let ty = self.base_type()?;
+                    let args = self.args()?;
+                    let body = if self.at(TokenKind::LBrace) { Some(self.class_body("")?) } else { None };
+                    e = Expr::new(
+                        pos,
+                        ExprKind::NewObject { ty, args, body, outer: Some(Box::new(e)) },
+                    );
                 }
                 TokenKind::Dot => {
                     self.bump();
@@ -1705,11 +2223,31 @@ impl Parser {
     fn new_expr(&mut self) -> Result<Expr> {
         let pos = self.pos();
         self.expect(TokenKind::New)?;
-        let elem = self.base_type()?;
+        // *Type witness* de constructor `new <T>Foo()` (§15.9): fija los parámetros de tipo del
+        // constructor. Se **acepta** (ya no da error); no afecta la erasure ni la emisión, así que
+        // no se retiene — es una forma rarísima.
+        if self.at(TokenKind::Lt) {
+            self.type_args()?;
+        }
+        // Anotaciones sobre el tipo creado (`new @A Foo(...)`, `new @A int[]`), target 0x44. El buffer
+        // se marca para sacar **solo** las de este `new` (los args/dims anidados empujan las suyas).
+        let annos_mark = self.pending_type_annos.len();
+        let leading = self.take_type_annotations()?; // `new @A Foo` — sobre el tipo elemento
+        let elem = self.base_type_at(&[])?; // args de tipo del elemento → buffer, con su path
         if self.at(TokenKind::LBracket) {
+            // `new Elem @A [n] @B []` — cada `[` puede llevar anotaciones sobre esa dimensión de array.
             let mut dims = Vec::new();
-            while self.at(TokenKind::LBracket) {
-                self.bump();
+            let mut dim_annos: Vec<(usize, Annotation)> = Vec::new();
+            loop {
+                let anns = self.take_type_annotations()?;
+                if !self.at(TokenKind::LBracket) {
+                    // Anotaciones sueltas que no preceden a un `[`: no es una posición válida; se sueltan.
+                    break;
+                }
+                for a in anns {
+                    dim_annos.push((dims.len(), a));
+                }
+                self.bump(); // [
                 if self.eat(TokenKind::RBracket) {
                     dims.push(None);
                 } else {
@@ -1718,9 +2256,34 @@ impl Parser {
                     dims.push(Some(len));
                 }
             }
+            let ndims = dims.len();
+            // El tipo creado es `Elem[]…[]` (`ndims` arrays). El elemento está bajo `ndims` pasos
+            // `Array`; la k-ésima dimensión (desde afuera) bajo `k`. Los args de tipo del elemento, que
+            // `base_type_at` dejó con path `[TypeArgument…]`, se prefijan con `Array × ndims`.
+            let nested = self.pending_type_annos.split_off(annos_mark);
+            let mut type_annos: Vec<TypeUseAnnot> = Vec::new();
+            let array_prefix = |k: usize| vec![TypePathStep::Array; k];
+            for a in leading {
+                type_annos.push(TypeUseAnnot { path: array_prefix(ndims), annotation: a });
+            }
+            for (k, a) in dim_annos {
+                type_annos.push(TypeUseAnnot { path: array_prefix(k), annotation: a });
+            }
+            for mut ta in nested {
+                let mut path = array_prefix(ndims);
+                path.append(&mut ta.path);
+                type_annos.push(TypeUseAnnot { path, annotation: ta.annotation });
+            }
             let init = if self.at(TokenKind::LBrace) { Some(self.array_init()?) } else { None };
-            Ok(Expr::new(pos, ExprKind::NewArray { elem, dims, init }))
+            Ok(Expr::new(pos, ExprKind::NewArray { elem, dims, init }).with_type_annos(type_annos))
         } else {
+            // `new @A Foo(...)`: la anotación líder va con path vacío; las anidadas del tipo elemento
+            // (`new Map<@A K, V>()`) con su path. Se sacan **antes** de los args (que pueden anidar).
+            let mut type_annos: Vec<TypeUseAnnot> = leading
+                .into_iter()
+                .map(|a| TypeUseAnnot { path: Vec::new(), annotation: a })
+                .collect();
+            type_annos.extend(self.pending_type_annos.split_off(annos_mark));
             let args = self.args()?;
             // `new Type(args) { … }` — **clase anónima** (§15.9.5). El cuerpo se parsea con la misma
             // maquinaria que el de una clase; el nombre vacío la marca (y hace que ningún método se
@@ -1730,7 +2293,8 @@ impl Parser {
             } else {
                 None
             };
-            Ok(Expr::new(pos, ExprKind::NewObject { ty: elem, args, body }))
+            Ok(Expr::new(pos, ExprKind::NewObject { ty: elem, args, body, outer: None })
+                .with_type_annos(type_annos))
         }
     }
 
@@ -1740,8 +2304,9 @@ impl Parser {
         use TokenKind as T;
         self.expect(T::LBrace)?;
         let mut members = Vec::new();
+        let mut defaults = Vec::new();
         while !self.at(T::RBrace) && !self.at(T::Eof) {
-            self.member(name, &mut members)?;
+            self.member(name, &mut members, &mut defaults)?;
         }
         self.expect(T::RBrace)?;
         Ok(members)
@@ -1769,13 +2334,21 @@ impl Parser {
         self.expect(TokenKind::LParen)?;
         let mut args = Vec::new();
         if !self.at(TokenKind::RParen) {
-            args.push(self.expr()?);
+            args.push(self.arg_or_recover());
             while self.eat(TokenKind::Comma) {
-                args.push(self.expr()?);
+                args.push(self.arg_or_recover());
             }
         }
         self.expect(TokenKind::RParen)?;
         Ok(args)
+    }
+
+    /// Un argumento de llamada, con **recuperación a nivel expresión**: si no parsea, se registra el
+    /// error y queda un nodo de error, así los **demás** argumentos se siguen parseando (`f(bad, ok)`
+    /// no pierde `ok`, y una sobrecarga puede seguir resolviéndose por los argumentos buenos).
+    fn arg_or_recover(&mut self) -> Expr {
+        let pos = self.pos();
+        self.expr().unwrap_or_else(|err| self.recover_expr(pos, err))
     }
 }
 
@@ -1845,12 +2418,16 @@ fn cast_operand_start(kind: TokenKind) -> bool {
 fn parse_int_literal(text: &str) -> Option<i64> {
     let clean: String = text.chars().filter(|&c| c != '_').collect();
     let t = clean.trim_end_matches(['l', 'L']);
+    // Los literales **hex/binario/octal** se interpretan como el patrón de bits **sin signo** y se
+    // reinterpretan al ancho del tipo (§3.10.1): `0x8000000000000000L` es `Long.MIN_VALUE`, no un
+    // overflow. Por eso se parsean como `u64` y se transmutan a `i64` (el emisor los trunca a `int`
+    // si el literal era `int`). Solo el **decimal** es un valor con signo directo.
     if let Some(hex) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
-        i64::from_str_radix(hex, 16).ok()
+        u64::from_str_radix(hex, 16).ok().map(|v| v as i64)
     } else if let Some(bin) = t.strip_prefix("0b").or_else(|| t.strip_prefix("0B")) {
-        i64::from_str_radix(bin, 2).ok()
+        u64::from_str_radix(bin, 2).ok().map(|v| v as i64)
     } else if t.len() > 1 && t.starts_with('0') && t.bytes().all(|b| (b'0'..=b'7').contains(&b)) {
-        i64::from_str_radix(&t[1..], 8).ok()
+        u64::from_str_radix(&t[1..], 8).ok().map(|v| v as i64)
     } else {
         t.parse::<i64>().ok()
     }
@@ -1884,10 +2461,7 @@ fn decode_char(text: &str) -> Option<char> {
 fn decode_string(text: &str) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() >= 6 && chars[0] == '"' && chars[1] == '"' && chars[2] == '"' {
-        // Text block: quitamos las triples comillas (sin el destripado de indentación real).
-        let inner = &chars[3..chars.len() - 3];
-        let start = if inner.first() == Some(&'\n') { 1 } else { 0 };
-        return unescape(&inner[start..]);
+        return decode_text_block(&chars[3..chars.len() - 3]);
     }
     if chars.len() < 2 {
         return None;
@@ -1895,8 +2469,94 @@ fn decode_string(text: &str) -> Option<String> {
     unescape(&chars[1..chars.len() - 1])
 }
 
+/// ¿Es *white space* horizontal a efectos del destripado de un text block (§3.10.6)? Los
+/// terminadores de línea ya se normalizaron a `\n` antes de contar, así que no cuentan acá.
+fn is_tb_space(c: char) -> bool {
+    c == ' ' || c == '\t' || c == '\u{c}'
+}
+
+/// Decodifica el **contenido** de un text block (§3.10.6), sin los `"""` de apertura/cierre. El
+/// algoritmo del JLS, en orden: (1) normalizar los terminadores de línea a `\n`; (2) descartar la
+/// línea de apertura (tras `"""` solo puede haber *white space* y un terminador); (3) quitar la
+/// **indentación incidental** —el mínimo de sangría de las líneas no-blancas **y** la del cierre— y
+/// los blancos **finales** de cada línea; (4) recién entonces procesar los escapes (con la
+/// **continuación de línea** `\<LF>` y `\s`, que ya no se ve afectada por el destripado).
+fn decode_text_block(inner: &[char]) -> Option<String> {
+    // (1) Normalizar `\r\n` y `\r` a `\n`.
+    let mut norm: Vec<char> = Vec::with_capacity(inner.len());
+    let mut i = 0;
+    while i < inner.len() {
+        if inner[i] == '\r' {
+            norm.push('\n');
+            if inner.get(i + 1) == Some(&'\n') {
+                i += 1;
+            }
+        } else {
+            norm.push(inner[i]);
+        }
+        i += 1;
+    }
+    // (2) La línea de apertura: `"""` debe ir seguido de white space y un terminador de línea.
+    let nl = norm.iter().position(|&c| c == '\n')?;
+    if norm[..nl].iter().any(|&c| !is_tb_space(c)) {
+        return None; // caracteres no-blancos tras el delimitador de apertura
+    }
+    let body = &norm[nl + 1..];
+
+    // Partir el cuerpo en líneas por `\n` (la última es la del delimitador de cierre).
+    let mut lines: Vec<&[char]> = Vec::new();
+    let mut start = 0;
+    for (j, &c) in body.iter().enumerate() {
+        if c == '\n' {
+            lines.push(&body[start..j]);
+            start = j + 1;
+        }
+    }
+    lines.push(&body[start..]);
+
+    // (3a) Indentación mínima: las líneas en blanco no cuentan, **salvo la última** (la del cierre).
+    let count = lines.len();
+    let mut min = usize::MAX;
+    for (idx, line) in lines.iter().enumerate() {
+        let is_last = idx == count - 1;
+        let blank = line.iter().all(|&c| is_tb_space(c));
+        if blank && !is_last {
+            continue;
+        }
+        let indent = line.iter().take_while(|&&c| is_tb_space(c)).count();
+        min = min.min(indent);
+    }
+    let min = if min == usize::MAX { 0 } else { min };
+
+    // (3b) Quitar `min` de sangría por la izquierda y **todos** los blancos finales de cada línea.
+    let stripped: Vec<String> = lines
+        .iter()
+        .map(|line| {
+            let mut lo = 0;
+            while lo < min && lo < line.len() && is_tb_space(line[lo]) {
+                lo += 1;
+            }
+            let mut hi = line.len();
+            while hi > lo && is_tb_space(line[hi - 1]) {
+                hi -= 1;
+            }
+            line[lo..hi].iter().collect::<String>()
+        })
+        .collect();
+    let joined: Vec<char> = stripped.join("\n").chars().collect();
+
+    // (4) Escapes, ya con el destripado hecho: `\s` sobrevive como espacio y `\<LF>` une líneas.
+    unescape_impl(&joined, true)
+}
+
 /// Decodifica las secuencias de escape de Java en `chars` a un `String`.
 fn unescape(chars: &[char]) -> Option<String> {
+    unescape_impl(chars, false)
+}
+
+/// Como [`unescape`], pero con `text_block` habilita la **continuación de línea** (§3.10.6): una
+/// barra al final de una línea (`\` seguido de `\n`) **suprime** ese salto de línea.
+fn unescape_impl(chars: &[char], text_block: bool) -> Option<String> {
     let mut out = String::new();
     let mut i = 0;
     while i < chars.len() {
@@ -1914,6 +2574,7 @@ fn unescape(chars: &[char]) -> Option<String> {
                 '\\' => out.push('\\'),
                 '\'' => out.push('\''),
                 '"' => out.push('"'),
+                '\n' if text_block => {} // continuación de línea: se traga el `\n`
                 'u' => {
                     let hex: String = chars.get(i + 1..i + 5)?.iter().collect();
                     let code = u32::from_str_radix(&hex, 16).ok()?;
@@ -1936,7 +2597,9 @@ mod tests {
     use crate::javac::lexer::tokenize;
 
     fn parse_src(src: &str) -> CompilationUnit {
-        parse(tokenize(src).unwrap()).unwrap()
+        let (cu, errors) = parse(tokenize(src).unwrap());
+        assert!(errors.is_empty(), "errores de parseo inesperados: {errors:?}");
+        cu
     }
 
     /// Parsea el cuerpo de un método envuelto en una clase, devolviendo sus sentencias.
@@ -1954,6 +2617,138 @@ mod tests {
             panic!("estructura inesperada: {:?}", stmts[0])
         };
         e.clone()
+    }
+
+    /// Parsea permitiendo errores, devolviendo la unidad recuperada **y** la lista de errores.
+    fn parse_recover(src: &str) -> (CompilationUnit, Vec<Error>) {
+        parse(tokenize(src).unwrap())
+    }
+
+    // ---- recuperación de errores (panic-mode del parser) ----
+
+    #[test]
+    fn recovers_from_bad_member_and_keeps_the_rest() {
+        // El primer miembro está roto (falta el tipo de retorno / basura); el segundo es válido.
+        let (cu, errors) = parse_recover("class C { void () @@@ ; int ok() { return 1; } }");
+        assert!(!errors.is_empty(), "se reporta al menos un error del miembro roto");
+        // Se recupera y se sigue parseando: el método válido queda en el AST.
+        let names: Vec<_> = cu.types[0]
+            .members
+            .iter()
+            .filter_map(|m| match m {
+                Member::Method(m) => Some(m.name.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(names.contains(&"ok".to_string()), "el miembro válido `ok` se recupera: {names:?}");
+    }
+
+    #[test]
+    fn recovers_from_bad_statement_and_keeps_the_rest() {
+        // Sentencia rota en el medio; las de alrededor deben sobrevivir.
+        let stmts = {
+            let (cu, errors) = parse_recover(
+                "class T { void m() { int a = 1; @@ ??? ; int b = 2; } }",
+            );
+            assert!(!errors.is_empty(), "se reporta el error de la sentencia rota");
+            let Member::Method(m) = &cu.types[0].members[0] else { panic!() };
+            m.body.clone().unwrap().0
+        };
+        // Deben quedar al menos las dos declaraciones válidas (a y b).
+        let decls = stmts
+            .iter()
+            .filter(|s| matches!(&s.kind, StmtKind::LocalVar { .. }))
+            .count();
+        assert!(decls >= 2, "se recuperan las sentencias válidas de alrededor: {decls}");
+    }
+
+    #[test]
+    fn recovers_a_bad_initializer_with_an_error_node_keeping_the_local() {
+        // Recuperación a nivel **expresión**: un inicializador roto se vuelve un `ExprKind::Error`,
+        // pero el local `x` **igual queda declarado** (el nodo `LocalVar` sobrevive).
+        let (cu, errors) = parse_recover("class C { void m() { int x = @@@; int y = 2; } }");
+        assert!(!errors.is_empty());
+        let Member::Method(m) = &cu.types[0].members[0] else { panic!() };
+        let stmts = m.body.clone().unwrap().0;
+        let StmtKind::LocalVar { name, init, .. } = &stmts[0].kind else {
+            panic!("esperaba un LocalVar: {:?}", stmts[0].kind)
+        };
+        assert_eq!(name, "x");
+        assert!(
+            matches!(init.as_ref().map(|e| &e.kind), Some(ExprKind::Error)),
+            "el init debe ser un nodo de error: {init:?}"
+        );
+        // Y la declaración siguiente (`y`) también se parsea.
+        assert!(matches!(&stmts[1].kind, StmtKind::LocalVar { name, .. } if name == "y"));
+    }
+
+    #[test]
+    fn recovers_a_bad_call_argument_keeping_the_others() {
+        // Un argumento roto se vuelve un nodo de error; los **demás** argumentos sobreviven.
+        let (cu, errors) = parse_recover("class C { void m() { f(@@@, 5, x); } }");
+        assert!(!errors.is_empty());
+        let Member::Method(m) = &cu.types[0].members[0] else { panic!() };
+        let stmts = m.body.clone().unwrap().0;
+        let StmtKind::Expr(e) = &stmts[0].kind else { panic!("{:?}", stmts[0].kind) };
+        let ExprKind::Call { args, .. } = &e.kind else { panic!("{:?}", e.kind) };
+        assert_eq!(args.len(), 3, "los tres argumentos quedan (el 1º como error): {args:?}");
+        assert!(matches!(&args[0].kind, ExprKind::Error));
+        assert!(matches!(&args[1].kind, ExprKind::IntLit(5)));
+        assert!(matches!(&args[2].kind, ExprKind::Name(n) if n == "x"));
+    }
+
+    #[test]
+    fn recovers_across_top_level_types() {
+        // Primer tipo roto (llave sin cerrar de un miembro basura), segundo tipo válido.
+        let (cu, errors) = parse_recover("class Bad { void x( } class Good { }");
+        assert!(!errors.is_empty(), "se reporta el error del primer tipo");
+        let type_names: Vec<_> = cu.types.iter().map(|t| t.name.clone()).collect();
+        assert!(
+            type_names.contains(&"Good".to_string()),
+            "el segundo tipo se recupera: {type_names:?}",
+        );
+    }
+
+    #[test]
+    fn reports_multiple_errors_in_one_pass() {
+        // Dos miembros rotos: el parser debe reportar ambos, no cortar en el primero.
+        // (Basura que **lexea** bien pero no parsea: `,` donde se espera un parámetro.)
+        let (_cu, errors) = parse_recover("class C { void a( , ; void b( , ; int ok() {} }");
+        assert!(errors.len() >= 2, "se acumulan varios errores: {}", errors.len());
+    }
+
+    // ---- bordes de B1: anotaciones de tipo/uso y type witness de constructor ----
+
+    #[test]
+    fn type_param_annotations_are_retained() {
+        let cu = parse_src("class C<@Foo T> { }");
+        let tp = &cu.types[0].type_params[0];
+        assert_eq!(tp.name, "T");
+        assert_eq!(tp.annotations.len(), 1, "la anotación `@Foo` se retiene");
+        assert_eq!(tp.annotations[0].name, "Foo");
+    }
+
+    #[test]
+    fn enum_constant_annotations_are_retained() {
+        let cu = parse_src("enum E { @Deprecated A, B }");
+        let cs = &cu.types[0].enum_constants;
+        assert_eq!(cs[0].name, "A");
+        assert_eq!(cs[0].annotations.len(), 1, "la anotación `@Deprecated` se retiene");
+        assert_eq!(cs[0].annotations[0].name, "Deprecated");
+        assert!(cs[1].annotations.is_empty(), "`B` no lleva anotación");
+    }
+
+    #[test]
+    fn type_use_annotations_are_accepted() {
+        // §9.7.4: se aceptan sin error (se descartan). Cubre el argumento de tipo y el tipo suelto.
+        parse_src("class C { java.util.List<@NonNull String> f; @Foo int g() { return 0; } }");
+    }
+
+    #[test]
+    fn a_constructor_type_witness_is_accepted() {
+        // §15.9: `new <T>Foo()` ya no da error.
+        let e = parse_init("new <String>Foo()");
+        assert!(matches!(e.kind, ExprKind::NewObject { .. }), "sigue siendo un `new`");
     }
 
     // ---- lambdas (§15.27) ----
@@ -2213,7 +3008,7 @@ mod tests {
 
     #[test]
     fn an_anonymous_class_implementing_an_interface() {
-        let ExprKind::NewObject { ty, args, body } =
+        let ExprKind::NewObject { ty, args, body, .. } =
             parse_init("new Runnable() { public void run() {} }").kind
         else {
             panic!("esperaba un new con cuerpo")
@@ -2442,6 +3237,37 @@ mod tests {
     }
 
     #[test]
+    fn switch_arrow_with_identifier_constant_is_not_a_lambda() {
+        // `case RED -> 1` es una etiqueta constante + brazo flecha, **no** la lambda `RED -> 1`.
+        let stmts = parse_body("switch (c) { case RED -> 1; case GREEN -> 2; }");
+        let StmtKind::Switch { cases, .. } = &stmts[0].kind else { panic!("esperaba Switch") };
+        assert_eq!(cases.len(), 2);
+        assert!(matches!(cases[0].labels[0], CaseLabel::Constant(_)));
+        assert!(matches!(cases[0].body, SwitchBody::Arrow(_)));
+    }
+
+    #[test]
+    fn sealed_interface_with_permits_parses() {
+        let cu = parse_src("sealed interface Shape permits Circle, Square {}");
+        assert!(cu.types[0].modifiers.contains(&Modifier::Sealed));
+        assert_eq!(cu.types[0].permits.len(), 2, "permits Circle, Square");
+    }
+
+    #[test]
+    fn non_sealed_class_parses() {
+        let cu = parse_src("sealed class B permits S {} non-sealed class S extends B {}");
+        assert!(cu.types[1].modifiers.contains(&Modifier::NonSealed));
+    }
+
+    #[test]
+    fn sealed_as_a_type_name_is_not_a_modifier() {
+        // `sealed` fuera de posición de declaración de tipo sigue siendo un identificador: un campo
+        // de tipo `sealed` no debe leerse como el modificador.
+        let cu = parse_src("class C { sealed foo; }");
+        assert!(cu.types[0].modifiers.is_empty());
+    }
+
+    #[test]
     fn switch_expression_with_yield() {
         let stmts = parse_body("int r = switch (x) { case 1 -> 10; default -> { yield 0; } };");
         let StmtKind::LocalVar { init: Some(init), .. } = &stmts[0].kind else { panic!() };
@@ -2492,6 +3318,23 @@ mod tests {
         let stmts = parse_body("int a[] = null, b = 1;");
         assert!(matches!(&stmts[0].kind, StmtKind::LocalVar { ty: Type::Array(_), .. }), "{:?}", stmts[0].kind);
         assert!(matches!(&stmts[1].kind, StmtKind::LocalVar { ty: Type::Prim(_), .. }), "{:?}", stmts[1].kind);
+    }
+
+    #[test]
+    fn an_array_level_type_annotation_is_accepted() {
+        // `String @A []` (§9.7.4): la anotación de **nivel de array** va entre el tipo elemento y el
+        // `[`. Se acepta y se descarta (metadata ajena a la *erasure*); el tipo queda `String[]`.
+        let stmts = parse_body("String @A [] a = null;");
+        let StmtKind::LocalVar { ty, .. } = &stmts[0].kind else { panic!("{:?}", stmts[0].kind) };
+        assert_eq!(*ty, Type::Array(Box::new(Type::Class("String".into()))));
+    }
+
+    #[test]
+    fn an_array_level_annotation_per_dimension() {
+        // `int @A [] @B []` — una anotación por dimensión; todas se descartan, el tipo es `int[][]`.
+        let stmts = parse_body("int @A [] @B [] m = null;");
+        let StmtKind::LocalVar { ty, .. } = &stmts[0].kind else { panic!("{:?}", stmts[0].kind) };
+        assert_eq!(*ty, Type::Array(Box::new(Type::Array(Box::new(Type::Prim(PrimType::Int))))));
     }
 
     #[test]
@@ -2674,5 +3517,121 @@ mod tests {
         assert!(matches!(cases[0].labels[0], CaseLabel::Pattern { .. }));
         assert!(cases[0].guard.is_some());
         assert!(matches!(cases[2].labels[0], CaseLabel::Null));
+    }
+
+    // ---- text blocks (§3.10.6) ----
+
+    /// El valor decodificado del text block `src` (usado como inicializador).
+    fn tb(src: &str) -> String {
+        match parse_init(src).kind {
+            ExprKind::StringLit(s) => s,
+            other => panic!("esperaba un StringLit, salió {other:?}"),
+        }
+    }
+
+    #[test]
+    fn text_block_strips_incidental_indentation() {
+        // La sangría común (la de las líneas y la del cierre) se quita; el cierre en su línea deja
+        // un `\n` final.
+        assert_eq!(tb("\"\"\"\n    Hello\n    World\n    \"\"\""), "Hello\nWorld\n");
+    }
+
+    #[test]
+    fn text_block_closing_on_the_content_line_has_no_trailing_newline() {
+        assert_eq!(tb("\"\"\"\n    Hello\n    World\"\"\""), "Hello\nWorld");
+    }
+
+    #[test]
+    fn text_block_preserves_relative_indentation() {
+        // Solo se quita el mínimo común: la sangría **extra** de `b` se conserva.
+        assert_eq!(tb("\"\"\"\n    a\n      b\n    \"\"\""), "a\n  b\n");
+    }
+
+    #[test]
+    fn text_block_closing_delimiter_sets_the_minimum() {
+        // El cierre menos sangrado que el contenido fija el mínimo (2), dejando 6 espacios en `a`.
+        assert_eq!(tb("\"\"\"\n        a\n  \"\"\""), "      a\n");
+    }
+
+    #[test]
+    fn text_block_trailing_whitespace_is_stripped_but_escape_s_survives() {
+        // Los blancos finales se quitan; `\s` (que se procesa **después**) preserva el espacio.
+        assert_eq!(tb("\"\"\"\n    a   \n    b\\s\n    \"\"\""), "a\nb \n");
+    }
+
+    #[test]
+    fn text_block_line_continuation_joins_lines() {
+        // `\` al final de línea se traga el salto (§3.10.6).
+        assert_eq!(tb("\"\"\"\n    a\\\n    b\n    \"\"\""), "ab\n");
+    }
+
+    #[test]
+    fn text_block_processes_escapes_and_keeps_literal_quotes() {
+        // Un `"` suelto es literal; los escapes normales siguen valiendo.
+        assert_eq!(tb("\"\"\"\n    a\"b\\tc\n    \"\"\""), "a\"b\tc\n");
+    }
+
+    #[test]
+    fn text_block_blank_lines_do_not_affect_the_minimum() {
+        assert_eq!(tb("\"\"\"\n    a\n\n    b\n    \"\"\""), "a\n\nb\n");
+    }
+
+    #[test]
+    fn text_block_normalizes_crlf_line_terminators() {
+        assert_eq!(tb("\"\"\"\r\n    a\r\n    b\r\n    \"\"\""), "a\nb\n");
+    }
+
+    // ---- módulos (§7.7) ----
+
+    #[test]
+    fn parses_a_module_with_all_directives() {
+        let cu = parse_src(
+            "open module com.example.foo { \
+               requires java.base; \
+               requires transitive com.example.bar; \
+               requires static com.example.opt; \
+               exports com.example.foo.api; \
+               exports com.example.foo.internal to com.trusted, com.other; \
+               opens com.example.foo.impl; \
+               uses com.example.spi.Service; \
+               provides com.example.spi.Service with com.example.foo.Impl1, com.example.foo.Impl2; \
+             }",
+        );
+        let m = cu.module.expect("hay declaración de módulo");
+        assert!(m.open);
+        assert_eq!(m.name, "com.example.foo");
+        assert_eq!(m.directives.len(), 8);
+        assert!(matches!(&m.directives[1], ModuleDirective::Requires { transitive: true, name, .. } if name == "com.example.bar"));
+        assert!(matches!(&m.directives[2], ModuleDirective::Requires { is_static: true, .. }));
+        assert!(matches!(&m.directives[4], ModuleDirective::Exports { to, .. } if to.len() == 2));
+        assert!(matches!(&m.directives[7], ModuleDirective::Provides { with, .. } if with.len() == 2));
+        assert!(cu.types.is_empty());
+    }
+
+    #[test]
+    fn requires_transitive_as_a_module_name() {
+        // `requires transitive;` — `transitive` seguido de `;` es el **nombre**, no el modificador.
+        let cu = parse_src("module m { requires transitive; }");
+        let m = cu.module.unwrap();
+        assert!(matches!(&m.directives[0], ModuleDirective::Requires { transitive: false, name, .. } if name == "transitive"));
+    }
+
+    #[test]
+    fn a_plain_module_is_not_open() {
+        let cu = parse_src("module m { }");
+        let m = cu.module.unwrap();
+        assert!(!m.open);
+        assert!(m.directives.is_empty());
+    }
+
+    // ---- literales enteros (§3.10.1) ----
+
+    #[test]
+    fn hex_long_literal_with_the_high_bit_is_a_bit_pattern() {
+        // Los literales hex/bin/octal son el **patrón de bits** sin signo, reinterpretado al ancho
+        // del tipo: `0x8000000000000000L` es `Long.MIN_VALUE`, no un overflow (lo destapó KajiLibrary).
+        assert!(matches!(parse_init("0x8000000000000000L").kind, ExprKind::LongLit(v) if v == i64::MIN));
+        assert!(matches!(parse_init("0xFFFFFFFFFFFFFFFFL").kind, ExprKind::LongLit(v) if v == -1));
+        assert!(matches!(parse_init("0x7fffffffffffffffL").kind, ExprKind::LongLit(v) if v == i64::MAX));
     }
 }

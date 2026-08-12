@@ -1,0 +1,132 @@
+package java.util;
+
+// Compiled with `-cp KajiLibrary` so Map binds to KajiLibrary's own (subset) type.
+import java.util.Map;
+
+// KajiLibrary's java.util.HashMap<K,V> — a hash table keyed by `hashCode`/`equals`. This
+// implementation uses open addressing with linear probing over two parallel Object[] arrays
+// (keys and values), doubling and rehashing past a ~50% load factor. A `null` slot in `keys`
+// marks an empty bucket; removal re-inserts the trailing cluster to preserve the probe
+// invariant. (Null keys are not supported, unlike the JDK.) Map has no iteration in our subset,
+// so no helper class is needed.
+public class HashMap<K, V> implements Map<K, V> {
+
+    private Object[] keys;
+    private Object[] values;
+    private int size;
+
+    public HashMap() {
+        this.keys = new Object[16];
+        this.values = new Object[16];
+        this.size = 0;
+    }
+
+    public int size() {
+        return this.size;
+    }
+
+    public boolean isEmpty() {
+        return this.size == 0;
+    }
+
+    // The index of `key`'s bucket: the slot holding it, or the first empty slot on its
+    // probe sequence if absent.
+    private int slotFor(Object key) {
+        int cap = this.keys.length;
+        int i = key.hashCode() & (cap - 1);
+        while (this.keys[i] != null) {
+            if (this.keys[i].equals(key)) {
+                return i;
+            }
+            i = (i + 1) & (cap - 1);
+        }
+        return i;
+    }
+
+    public V get(Object key) {
+        return (V) this.values[this.slotFor(key)];
+    }
+
+    public boolean containsKey(Object key) {
+        return this.keys[this.slotFor(key)] != null;
+    }
+
+    public V put(K key, V value) {
+        if (this.size * 2 >= this.keys.length) {
+            this.resize();
+        }
+        int i = this.slotFor(key);
+        V old = (V) this.values[i];
+        if (this.keys[i] == null) {
+            this.size = this.size + 1;
+        }
+        this.keys[i] = key;
+        this.values[i] = value;
+        return old;
+    }
+
+    public V remove(Object key) {
+        int cap = this.keys.length;
+        int i = this.slotFor(key);
+        if (this.keys[i] == null) {
+            return null;
+        }
+        V old = (V) this.values[i];
+        this.keys[i] = null;
+        this.values[i] = null;
+        this.size = this.size - 1;
+        // Re-insert the rest of this probe cluster so no lookup is cut short.
+        int j = (i + 1) & (cap - 1);
+        while (this.keys[j] != null) {
+            K k = (K) this.keys[j];
+            V v = (V) this.values[j];
+            this.keys[j] = null;
+            this.values[j] = null;
+            this.size = this.size - 1;
+            this.put(k, v);
+            j = (j + 1) & (cap - 1);
+        }
+        return old;
+    }
+
+    public boolean containsValue(Object value) {
+        for (int i = 0; i < this.values.length; i++) {
+            if (this.keys[i] != null) {
+                Object v = this.values[i];
+                if (value == null) {
+                    if (v == null) {
+                        return true;
+                    }
+                } else {
+                    if (value.equals(v)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public void clear() {
+        for (int i = 0; i < this.keys.length; i++) {
+            this.keys[i] = null;
+            this.values[i] = null;
+        }
+        this.size = 0;
+    }
+
+    // Double the table and re-insert every live entry into the fresh, larger arrays.
+    private void resize() {
+        Object[] oldKeys = this.keys;
+        Object[] oldValues = this.values;
+        int newCap = oldKeys.length * 2;
+        this.keys = new Object[newCap];
+        this.values = new Object[newCap];
+        this.size = 0;
+        for (int i = 0; i < oldKeys.length; i++) {
+            if (oldKeys[i] != null) {
+                this.put((K) oldKeys[i], (V) oldValues[i]);
+            }
+        }
+    }
+}

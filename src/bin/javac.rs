@@ -14,19 +14,35 @@ use std::fs;
 use std::process;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let (mode, path) = match args.get(1).map(String::as_str) {
-        Some("--tokens") => (Mode::Tokens, args.get(2)),
-        Some("--symbols") => (Mode::Symbols, args.get(2)),
-        Some("--check") => (Mode::Check, args.get(2)),
-        Some("--desugar") => (Mode::Desugar, args.get(2)),
-        Some("--emit") => (Mode::Emit, args.get(2)),
-        Some("--ast-raw") => (Mode::AstRaw, args.get(2)),
-        Some(_) => (Mode::AstTree, args.get(1)),
+    // Se extrae primero un `-cp`/`--classpath <dirs>` (finding #7): directorios de `.class`
+    // **antepuestos** al classpath por defecto, para que los tipos ahí (KajiLibrary ya compilado)
+    // sombreen al JDK. Los dirs van separados por el separador del SO (`;` en Windows). Lo que queda
+    // tras sacarlos se parsea como `[modo] <archivo>`, igual que antes.
+    let raw: Vec<String> = env::args().skip(1).collect();
+    let mut extra_classpath: Vec<std::path::PathBuf> = Vec::new();
+    let mut args: Vec<String> = Vec::new();
+    let mut it = raw.into_iter();
+    while let Some(a) = it.next() {
+        if a == "-cp" || a == "--classpath" {
+            if let Some(val) = it.next() {
+                extra_classpath.extend(env::split_paths(&val));
+            }
+        } else {
+            args.push(a);
+        }
+    }
+    let (mode, path) = match args.first().map(String::as_str) {
+        Some("--tokens") => (Mode::Tokens, args.get(1)),
+        Some("--symbols") => (Mode::Symbols, args.get(1)),
+        Some("--check") => (Mode::Check, args.get(1)),
+        Some("--desugar") => (Mode::Desugar, args.get(1)),
+        Some("--emit") => (Mode::Emit, args.get(1)),
+        Some("--ast-raw") => (Mode::AstRaw, args.get(1)),
+        Some(_) => (Mode::AstTree, args.first()),
         None => (Mode::AstTree, None),
     };
     let Some(input) = path else {
-        eprintln!("uso: javac [--tokens | --symbols | --check | --desugar | --emit | --ast-raw] <archivo.java>");
+        eprintln!("uso: javac [-cp <dirs>] [--tokens | --symbols | --check | --desugar | --emit | --ast-raw] <archivo.java>");
         process::exit(2);
     };
 
@@ -38,50 +54,46 @@ fn main() {
     match mode {
         Mode::Tokens => match jvm::javac::lexer::tokenize(&source) {
             Ok(tokens) => print_token_table(&tokens),
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
         Mode::AstTree => match jvm::javac::parse(&source) {
             Ok(unit) => print!("{}", jvm::javac::ast_view::tree(&unit)),
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
         Mode::Symbols => match jvm::javac::parse(&source) {
             Ok(unit) => {
-                let (table, errors) = jvm::javac::enter::enter(&unit);
-                for err in &errors {
-                    eprintln!("{input}: {err}");
-                }
+                let (table, errors) = jvm::javac::enter::enter_cp(&unit, &extra_classpath);
+                eprint!("{}", jvm::javac::render_diagnostics(&errors, &source, input));
                 print!("{}", table.dump());
             }
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
         Mode::AstRaw => match jvm::javac::parse(&source) {
             Ok(unit) => println!("{unit:#?}"),
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
-        Mode::Check => match jvm::javac::check(&source) {
+        Mode::Check => match jvm::javac::check_cp(&source, &extra_classpath) {
             Ok(errors) if errors.is_empty() => println!("javac: {input} sin errores"),
             Ok(errors) => {
-                for err in &errors {
-                    eprintln!("{input}:{err}");
-                }
+                eprint!("{}", jvm::javac::render_diagnostics(&errors, &source, input));
                 process::exit(1);
             }
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
         // Baja el azúcar (tras atribuir, que es de donde saca los tipos) y dibuja el AST resultante.
         Mode::Desugar => match jvm::javac::parse(&source) {
             Ok(mut unit) => {
-                let (mut table, _errors) = jvm::javac::enter::enter(&unit);
+                let (mut table, _errors) = jvm::javac::enter::enter_cp(&unit, &extra_classpath);
                 jvm::javac::attribute::attribute(&mut unit, &table);
                 jvm::javac::desugar::desugar(&mut unit, &mut table);
                 print!("{}", jvm::javac::ast_view::tree(&unit));
             }
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
         // Compila y **escribe un `.class` por clase**, cada uno con el nombre de **su** clase (no el
         // del archivo), en el mismo directorio que el fuente. Una unidad con varios tipos, o con
         // clases sintéticas (`C$1` del `switch`-enum), produce varios archivos.
-        Mode::Emit => match jvm::javac::compile(&source) {
+        Mode::Emit => match jvm::javac::compile_cp(&source, &extra_classpath) {
             Ok(classes) => {
                 for (internal, bytes) in &classes {
                     // El nombre de archivo es el último segmento del nombre interno (`com/foo/A$B`
@@ -95,7 +107,7 @@ fn main() {
                     println!("javac: escrito {} ({} bytes)", out.display(), bytes.len());
                 }
             }
-            Err(err) => fail(input, err),
+            Err(err) => fail(input, &source, err),
         },
     }
 }
@@ -135,7 +147,7 @@ enum Mode {
     AstRaw,
 }
 
-fn fail(input: &str, err: jvm::javac::Error) -> ! {
-    eprintln!("{input}:{err}");
+fn fail(input: &str, source: &str, err: jvm::javac::Error) -> ! {
+    eprint!("{}", jvm::javac::render_diagnostics(std::slice::from_ref(&err), source, input));
     process::exit(1);
 }
