@@ -2420,7 +2420,7 @@ mod tests {
         let mut interp = JVM::new(ms, Frame::for_call(id, max_locals, args, &widths));
 
         for _ in 0..100_000 {
-            if let Step::Return(v) = interp.step() {
+            if let Step::Return(v) = interp.exec().step() {
                 let _ = std::fs::remove_dir_all(&dir);
                 return v;
             }

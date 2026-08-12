@@ -74,7 +74,15 @@ pub fn load_class(metaspace: &mut MetaspaceService, heap: &mut HeapService, name
 /// against the current frame's class) and push a reference to it. Loads the class
 /// first, sizes the object from its field layout, `malloc`s it, writes the header
 /// `[class_id | mark]`, and pushes the offset as a `Value::Reference`.
-pub fn new(metaspace: &mut MetaspaceService, heap: &mut HeapService, frame: &mut Frame, cp_index: u16) {
+///
+/// `Err` when the heap is exhausted — the dispatch loop throws it as a catchable
+/// `java.lang.OutOfMemoryError` (JVMS §6.3) instead of panicking the VM.
+pub fn new(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    frame: &mut Frame,
+    cp_index: u16,
+) -> Result<(), &'static str> {
     // Resolution: `cp_index` is a `Class` entry in the *current* class's pool —
     // resolve it to the target's binary name (e.g. "Point"). The caller's class is
     // already loaded (we're running its bytecode), so the lookup can't miss.
@@ -91,9 +99,13 @@ pub fn new(metaspace: &mut MetaspaceService, heap: &mut HeapService, frame: &mut
 
     // Allocate the instance on the heap and push its reference. Per the JVM, `new`
     // only allocates (zeroed fields); the following `dup`/`invokespecial <init>`
-    // run the constructor.
-    let offset = objects_operations::allocate(metaspace, heap, &class_name);
+    // run the constructor. A `None` here is true heap exhaustion (the GC already had
+    // its chances at earlier safepoints and nothing more is reclaimable) → OOM.
+    let Some(offset) = objects_operations::try_allocate(metaspace, heap, &class_name) else {
+        return Err("java/lang/OutOfMemoryError");
+    };
     frame.push(Value::Reference(offset));
+    Ok(())
 }
 
 /// `getstatic` (0xb2): push the value of a *static* field. Unlike `getfield`, there

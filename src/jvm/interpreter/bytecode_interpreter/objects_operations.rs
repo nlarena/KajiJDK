@@ -64,6 +64,83 @@ pub fn allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: 
     offset
 }
 
+/// Fallible twin of [`allocate`] for the `new` **opcode**: `None` when the heap is
+/// exhausted (neither Eden nor Old within `JVM_GC_MAX_HEAP` can fit the instance),
+/// so the opcode can throw a catchable `java.lang.OutOfMemoryError` (JVMS §6.3)
+/// instead of panicking the VM. Internal VM allocations (exception objects, interned
+/// strings, mirrors, `Thread` objects) keep the panicking [`allocate`] — their failure
+/// paths aren't cleanly recoverable mid-operation, so exhaustion there stays fatal.
+pub fn try_allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> Option<usize> {
+    let slots = instance_field_slots(metaspace, name);
+    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let offset = heap.try_malloc(size)?;
+    let uuid = metaspace.class_id(name).to_string();
+    let class_id = metaspace.class_object(&uuid).unwrap_or(0) as u32;
+    heap.write_u32(offset, class_id);
+    Some(offset)
+}
+
+/// Like [`allocate`], but in the **Old** generation (`malloc_old`) — for objects the VM builds
+/// while holding *young* references in Rust locals it can't root (a condy's target `MethodHandle`,
+/// its `Object[]` args). Old allocation never triggers a minor GC and Old objects don't move, so
+/// those Rust-held references stay valid across the build. Callers must store references into the
+/// resulting object with the write barrier ([`HeapService::store_reference`]) so an Old→young
+/// pointer is remembered.
+pub fn allocate_old(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {
+    let slots = instance_field_slots(metaspace, name);
+    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let offset = heap.malloc_old(size);
+    let uuid = metaspace.class_id(name).to_string();
+    let class_id = metaspace.class_object(&uuid).unwrap_or(0) as u32;
+    heap.write_u32(offset, class_id);
+    offset
+}
+
+/// `Object.clone()`'s copy step: allocates a fresh instance of `class` and copies every
+/// instance field of `source` into it verbatim — the **shallow** copy of JLS §10.7 (reference
+/// fields copy the reference, so original and clone share the pointees). The Cloneable check
+/// happens at the call site (the invoke interception, which can throw); this is just the copy.
+///
+/// Old-allocated (see [`allocate_old`]): `source` is held in a Rust local across this
+/// allocation, and an Eden allocation could trigger a minor GC that moves it. Old allocation
+/// never GCs and Old objects don't move, so `source` stays valid for the whole copy. Reference
+/// fields go in through the write barrier ([`HeapService::store_reference`]) so the clone's
+/// Old→young pointers land in the remembered set.
+pub fn clone_instance(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    source: usize,
+    class: &str,
+) -> usize {
+    let clone = allocate_old(metaspace, heap, class);
+    // Fold the single placement rule over the super-first layout — the same walk the
+    // field offsets use, so every field (and its alignment padding) lands where it came from.
+    let mut slots = 0;
+    for (descriptor, _) in layout_fields_mut(metaspace, class) {
+        let (start, next) = place_field(slots, &descriptor);
+        let at = HEADER_SIZE + start * SLOT_SIZE;
+        match descriptor.as_bytes().first() {
+            // Category-2 (long/double): one 8-byte copy.
+            Some(b'J') | Some(b'D') => {
+                let value = heap.read_u64(source + at);
+                heap.write_u64(clone + at, value);
+            }
+            // Reference: copy the pointer through the barrier gateway (shallow — shared pointee).
+            Some(b'L') | Some(b'[') => {
+                let value = heap.read_u32(source + at) as usize;
+                heap.store_reference(clone, clone + at, value);
+            }
+            // Everything else is one 4-byte slot.
+            _ => {
+                let value = heap.read_u32(source + at);
+                heap.write_u32(clone + at, value);
+            }
+        }
+        slots = next;
+    }
+    clone
+}
+
 /// `putfield` (0xb5): pop a value and an object reference, and write the value into
 /// the object's field on the heap. The field is named by `cp_index` (a `FieldRef`
 /// in the current method's class); its byte offset inside the object comes from the
@@ -410,6 +487,50 @@ pub fn allocate_read(
 /// Read-only twin of [`instance_field_slots`] (uses `get`; stops at any unloaded super).
 fn instance_field_slots_read(metaspace: &MetaspaceService, name: &str) -> usize {
     total_slots(&layout_fields_ref(metaspace, name))
+}
+
+/// Read-path (lock-free) `AtomicInteger`/`AtomicLong.compareAndSet` (H5, widened like W3): when the
+/// receiver is an **Eden** object, do a real atomic `compare_exchange` on its `value` field under
+/// the shared `.read()` lock — no VM write lock. `Some(())` = did the CAS and pushed the boolean;
+/// `None` = escalate to the locked native (an Old receiver, or the class isn't loaded). The stack
+/// top is `[receiver, expected, new]`; on escalation it's left untouched. (`AtomicReference` is
+/// never intercepted — its store needs the GC write barrier, which the write path owns.)
+pub fn atomic_cas_read(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    frame: &mut Frame,
+    class: &str,
+    is_long: bool,
+) -> Option<()> {
+    let field_off = field_offset_read(metaspace, class, "value")?;
+    // Peek `[receiver, expected, new]` (owned copies) so the stack borrow ends before we mutate it.
+    let (receiver, expected, new) = {
+        let stack = frame.stack();
+        let top = stack.len();
+        if top < 3 {
+            return None;
+        }
+        let receiver = match stack[top - 3] {
+            Value::Reference(0) => return None, // null → escalate (the native throws NPE)
+            Value::Reference(offset) => offset,
+            _ => return None,
+        };
+        (receiver, stack[top - 2], stack[top - 1])
+    };
+    let at = receiver + field_off;
+    let swapped = if is_long {
+        let (Value::Long(expected), Value::Long(new)) = (expected, new) else { return None };
+        heap.cas_u64_eden(at, expected as u64, new as u64)? // None (Old) → escalate
+    } else {
+        let (Value::Int(expected), Value::Int(new)) = (expected, new) else { return None };
+        heap.cas_u32_eden(at, expected as u32, new as u32)?
+    };
+    // The CAS ran (Eden): drop the three arguments and push the boolean result.
+    frame.pop();
+    frame.pop();
+    frame.pop();
+    frame.push(Value::Int(swapped as i32));
+    Some(())
 }
 
 #[cfg(test)]

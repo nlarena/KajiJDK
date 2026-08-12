@@ -174,6 +174,32 @@ impl EdenArena {
         unsafe { self.region.store_u64(offset, value, order) };
     }
 
+    /// Lock-free **compare-and-set** of a `u32` field (H5): if it holds `expected`, set it to
+    /// `new` and return `true`. `AcqRel` on success (acquire the read, release the write),
+    /// `Acquire` on failure — volatile-CAS semantics.
+    ///
+    /// # Safety
+    /// `[offset, offset+4)` in bounds and 4-aligned.
+    pub unsafe fn cas_u32(&self, offset: usize, expected: u32, new: u32) -> bool {
+        unsafe {
+            self.region
+                .compare_exchange_u32(offset, expected, new, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        }
+    }
+
+    /// Lock-free compare-and-set of a `u64` field (`AtomicLong`). See [`Self::cas_u32`].
+    ///
+    /// # Safety
+    /// `[offset, offset+8)` in bounds and 8-aligned.
+    pub unsafe fn cas_u64(&self, offset: usize, expected: u64, new: u64) -> bool {
+        unsafe {
+            self.region
+                .compare_exchange_u64(offset, expected, new, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        }
+    }
+
     /// Copy `len` bytes from `[offset, offset+len)` into an owned `Vec` (Relaxed, byte-by-byte).
     ///
     /// # Safety
@@ -313,5 +339,161 @@ mod tests {
         let sum = b.join().unwrap();
         // The published tags survived untouched (A only wrote its own fresh blocks).
         assert_eq!(sum, (0..N as u64).sum());
+    }
+
+    /// **Miri harness for the rare os-parallel stale-reference bug** —
+    /// `cargo +nightly miri test miri_os_parallel_heap`.
+    ///
+    /// The isolated `AtomicRegion`/`EdenArena` tests above only ever cover a single arena with no
+    /// generational move and no reuse. The real bug lives in the *integrated* os-parallel heap, so
+    /// this harness rebuilds that path in miniature and hands it to Miri's data-race detector to
+    /// rule on the three low-level suspects recorded in the investigation:
+    ///   1. the lock-free Eden bump cursor (`alloc`, `&self`, atomic `fetch_add`) vs. `reset`
+    ///      (`&mut`, non-atomic `get_mut`) on the collector,
+    ///   2. an object's header word read (`Relaxed`) while it is written during alloc/evacuation,
+    ///   3. a *published* reference read across the Eden→Old move **and** the following Eden reuse.
+    ///
+    /// Shape mirrors `HeapService` behind `SharedVm`'s `RwLock`: `Heap { eden, old }` under one
+    /// `RwLock`. Mutator threads take the **read** guard to allocate + tag objects lock-free
+    /// (concurrent, disjoint Eden ranges) and to read back references from a shared root array; a
+    /// coordinator takes the **write** guard for a stop-the-world collect that evacuates every
+    /// rooted Eden object to Old (atomic Eden read → plain Old write — the H4 mixed-access case),
+    /// remaps the roots, and `reset`s Eden so the next round reuses the same offsets. Root
+    /// publication uses `Release`/`Acquire` — the ordered-visibility the real read/write locks
+    /// carry from a header write to a later header read. Every tag word is unique per
+    /// `(thread, round, slot)`, so a torn, zeroed, stale or aliased word trips an assertion even if
+    /// Miri's race detector stays silent.
+    #[test]
+    fn miri_os_parallel_heap() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::{Arc, Barrier, RwLock};
+
+        const THREADS: usize = 2;
+        const ROUNDS: usize = 3;
+        const SLOTS: usize = 2; // roots (live references) owned per thread
+        const BLOCK: usize = 16; // bytes per object; word 0 is the header/tag
+
+        // Reference encoding (like `heap.read_u32`'s `in_eden` routing): NULL, or a generation bit
+        // plus the offset within that generation. EDEN_BIT keeps Eden offset 0 distinct from NULL.
+        const NULL: u32 = 0;
+        const EDEN_BIT: u32 = 0x4000_0000;
+        const OLD_BIT: u32 = 0x8000_0000;
+        const OFF_MASK: u32 = 0x3FFF_FFFF;
+
+        struct Heap {
+            eden: EdenArena,
+            old: Vec<u8>,
+            old_cursor: usize,
+        }
+
+        // Eden holds exactly one round's objects; the collect recycles it each round. Old grows by
+        // one round's worth of survivors per round.
+        let per_round = THREADS * SLOTS * BLOCK;
+        let heap = Arc::new(RwLock::new(Heap {
+            eden: EdenArena::new(per_round),
+            old: vec![0u8; per_round * ROUNDS],
+            old_cursor: 0,
+        }));
+        // Shared root array — models live array/field slots holding references. Slot `t*SLOTS+s` is
+        // written only by thread `t` but read by everyone.
+        let roots: Arc<Vec<AtomicU32>> =
+            Arc::new((0..THREADS * SLOTS).map(|_| AtomicU32::new(NULL)).collect());
+        let gate = Arc::new(Barrier::new(THREADS + 1)); // mutate | collect phases, per round
+
+        // Unique non-zero header tag per (thread, round, slot); high byte 0x01 marks a valid tag.
+        let tag_of = |t: usize, round: usize, s: usize| -> u32 {
+            0x0100_0000 | ((t as u32) << 12) | ((round as u32) << 4) | (s as u32)
+        };
+
+        let handles: Vec<_> = (0..THREADS)
+            .map(|t| {
+                let heap = Arc::clone(&heap);
+                let roots = Arc::clone(&roots);
+                let gate = Arc::clone(&gate);
+                std::thread::spawn(move || {
+                    for round in 0..ROUNDS {
+                        // ---- MUTATE: read guard, all mutators concurrent ----
+                        {
+                            let h = heap.read().unwrap();
+                            for s in 0..SLOTS {
+                                // lock-free `new`: fresh, disjoint Eden offset + header write.
+                                let off = h.eden.alloc(BLOCK).expect("eden sized for one round");
+                                let tag = tag_of(t, round, s);
+                                unsafe { h.eden.write_u32(off, tag) };
+                                // publish the reference (like `aastore` into a live slot).
+                                roots[t * SLOTS + s]
+                                    .store(EDEN_BIT | off as u32, Ordering::Release);
+                            }
+                            // read every published root and check its header — models another thread
+                            // doing `aaload` + `getfield` on a shared reference, concurrently with
+                            // the other mutators' allocations. A root may point into Eden (this
+                            // round) or Old (a survivor of the prior collect); both are valid.
+                            for (i, r) in roots.iter().enumerate() {
+                                let rf = r.load(Ordering::Acquire);
+                                if rf == NULL {
+                                    continue;
+                                }
+                                let off = (rf & OFF_MASK) as usize;
+                                let got = if rf & OLD_BIT != 0 {
+                                    let b = &h.old[off..off + 4];
+                                    u32::from_le_bytes([b[0], b[1], b[2], b[3]])
+                                } else {
+                                    unsafe { h.eden.read_u32(off) }
+                                };
+                                assert_eq!(
+                                    got & 0xFF00_0000,
+                                    0x0100_0000,
+                                    "slot {i}: torn/stale/aliased header {got:#010x}"
+                                );
+                            }
+                        }
+                        gate.wait(); // mutators reached the safepoint → coordinator collects
+                        gate.wait(); // collect done → next round reuses the reset Eden
+                    }
+                })
+            })
+            .collect();
+
+        // ---- Coordinator: one stop-the-world collect per round (write guard) ----
+        for _round in 0..ROUNDS {
+            gate.wait(); // all mutators parked
+            {
+                let mut h = heap.write().unwrap();
+                for i in 0..roots.len() {
+                    let rf = roots[i].load(Ordering::Acquire);
+                    if rf == NULL || rf & OLD_BIT != 0 {
+                        continue; // null, or already evacuated in a prior round
+                    }
+                    let from = (rf & OFF_MASK) as usize;
+                    let dest = h.old_cursor;
+                    h.old_cursor += BLOCK;
+                    for k in 0..BLOCK {
+                        // atomic read from Eden → plain byte write to Old (the mixed-access case).
+                        let b = unsafe { h.eden.read_u8(from + k) };
+                        h.old[dest + k] = b;
+                    }
+                    roots[i].store(OLD_BIT | dest as u32, Ordering::Release);
+                }
+                h.eden.reset(); // recycle Eden; next round hands the same offsets back out
+            }
+            gate.wait(); // release mutators
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Every surviving root now resolves, from Old, to its owner's *last* published tag — no
+        // remap was missed and no reused Eden offset leaked through.
+        let h = heap.read().unwrap();
+        for t in 0..THREADS {
+            for s in 0..SLOTS {
+                let rf = roots[t * SLOTS + s].load(Ordering::Acquire);
+                assert!(rf & OLD_BIT != 0, "root ({t},{s}) was not evacuated to Old");
+                let off = (rf & OFF_MASK) as usize;
+                let b = &h.old[off..off + 4];
+                let got = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+                assert_eq!(got, tag_of(t, ROUNDS - 1, s), "root ({t},{s}) lost its final tag");
+            }
+        }
     }
 }

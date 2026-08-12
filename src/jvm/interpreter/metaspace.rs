@@ -47,6 +47,9 @@ pub enum InitState {
     InProgress,
     /// `<clinit>` has completed.
     Done,
+    /// `<clinit>` completed abruptly (threw). The class is unusable: every subsequent active use
+    /// throws `NoClassDefFoundError` (JVMS §5.5, the erroneous state).
+    Erroneous,
 }
 
 /// One slot of a class's **virtual method table**: the method to run for a given
@@ -126,15 +129,6 @@ pub struct MetaspaceService {
     /// from a Class ID found in the wild (an object header, say) back to the class,
     /// without scanning. Kept in sync inside [`Self::class_id`].
     names_by_id: HashMap<String, String>,
-    /// Reference-slot layout of **synthetic** classes — the ones the VM mints itself,
-    /// which have no `.class` file to read a field layout from. Today that means lambda
-    /// objects, whose captured values sit right after the header.
-    ///
-    /// It lives here, rather than with the lambda machinery, because this is where the
-    /// **GC already looks**: the collector finds an object's outgoing references through
-    /// the metaspace, so a layout registered here is traced without threading anything
-    /// new through the collector.
-    synthetic_reference_slots: HashMap<String, Vec<usize>>,
     /// The source of those UUIDs, seeded once for the whole metaspace (so ids never
     /// collide from reseeding — see [`UuidGenerator`]).
     uuid_gen: UuidGenerator,
@@ -160,7 +154,6 @@ impl MetaspaceService {
             class_objects: HashMap::new(),
             class_ids: HashMap::new(),
             names_by_id: HashMap::new(),
-            synthetic_reference_slots: HashMap::new(),
             uuid_gen: UuidGenerator::new(),
             vtables: HashMap::new(),
             init_states: HashMap::new(),
@@ -199,6 +192,26 @@ impl MetaspaceService {
     /// dispatch: pass the receiver's runtime class and the slot from the static type.
     pub fn vtable_method(&mut self, class: &str, slot: usize) -> Option<MethodId> {
         self.vtable(class).get(slot).map(|e| e.method)
+    }
+
+    /// Whether `(name, descriptor)` declared in `class` is `private`. `javac` (since
+    /// nestmates, Java 11) emits `invokevirtual` for a same-class private instance call,
+    /// but a private method has **no vtable slot** and isn't overridable — per JVMS §6.5
+    /// selection, a `private` resolved method *is* the selected method, so `invokevirtual`
+    /// must invoke it directly on the declaring class rather than through the receiver's
+    /// table. `false` if the class or member can't be found (fall back to virtual dispatch).
+    pub fn method_is_private(&mut self, class: &str, name: &str, descriptor: &str) -> bool {
+        self.get_or_load(class)
+            .and_then(|cf| {
+                cf.methods
+                    .iter()
+                    .find(|m| {
+                        cf.utf8(m.name_index) == Some(name)
+                            && cf.utf8(m.descriptor_index) == Some(descriptor)
+                    })
+                    .map(|m| m.is_private())
+            })
+            .unwrap_or(false)
     }
 
     /// `class`'s virtual method table, building (and caching) it on first use.
@@ -246,6 +259,61 @@ impl MetaspaceService {
             match entries.iter().position(|e| e.name == name && e.descriptor == descriptor) {
                 Some(slot) => entries[slot].method = method,
                 None => entries.push(VtableEntry { name, descriptor, method }),
+            }
+        }
+
+        // JSR 335: fold in the **default methods** of the superinterfaces. A signature the class
+        // hierarchy already provides keeps its slot (a class method always beats a default); for
+        // the rest, walk breadth-first from the direct interfaces so a more-specific interface is
+        // visited before the ones it extends — its default shadows theirs (the maximally-specific
+        // rule for every shape javac emits; the unrelated-diamond conflict, ICCE per JVMS §5.4.6,
+        // can't reach us because javac refuses to compile the implementor without an override).
+        // The superclass's interfaces need no walk here: they're already in its inherited table.
+        // An *abstract* interface method has no Code, so `resolve_method` returns `None` and it
+        // never lands a slot — only real defaults do.
+        let mut queue: Vec<String> = match self.get_or_load(class) {
+            Some(cf) => {
+                cf.interfaces.iter().filter_map(|&i| cf.class_name(i).map(str::to_string)).collect()
+            }
+            None => Vec::new(),
+        };
+        let mut seen: std::collections::HashSet<String> = queue.iter().cloned().collect();
+        let mut at = 0;
+        while at < queue.len() {
+            let iface = queue[at].clone();
+            at += 1;
+            let (candidates, supers) = match self.get_or_load(&iface) {
+                Some(cf) => (
+                    cf.methods
+                        .iter()
+                        .filter(|m| !m.is_static() && !m.is_private())
+                        .filter_map(|m| {
+                            let name = cf.utf8(m.name_index)?;
+                            let descriptor = cf.utf8(m.descriptor_index)?;
+                            (!name.starts_with('<'))
+                                .then(|| (name.to_string(), descriptor.to_string()))
+                        })
+                        .collect::<Vec<_>>(),
+                    cf.interfaces
+                        .iter()
+                        .filter_map(|&i| cf.class_name(i).map(str::to_string))
+                        .collect::<Vec<_>>(),
+                ),
+                None => continue,
+            };
+            for (name, descriptor) in candidates {
+                if entries.iter().any(|e| e.name == name && e.descriptor == descriptor) {
+                    continue; // already provided by the class hierarchy or a more-specific default
+                }
+                let Some(method) = self.resolve_method(&iface, &name, &descriptor) else {
+                    continue; // abstract (no Code) — declares the signature, provides nothing
+                };
+                entries.push(VtableEntry { name, descriptor, method });
+            }
+            for s in supers {
+                if seen.insert(s.clone()) {
+                    queue.push(s);
+                }
             }
         }
         entries
@@ -504,17 +572,6 @@ impl MetaspaceService {
         &self.methods[method].descriptor
     }
 
-    /// Declares where a synthetic class keeps its references, as byte offsets **within
-    /// an instance**. Idempotent: the same class always has the same layout.
-    pub fn set_synthetic_reference_slots(&mut self, class: &str, offsets: Vec<usize>) {
-        self.synthetic_reference_slots.entry(class.to_string()).or_insert(offsets);
-    }
-
-    /// The reference-slot layout of a synthetic class, or `None` for an ordinary one
-    /// (whose layout the GC reads off its class file instead).
-    pub fn synthetic_reference_slots(&self, class: &str) -> Option<&[usize]> {
-        self.synthetic_reference_slots.get(class).map(Vec::as_slice)
-    }
 
     /// Searches the classpath for `<name>.class` and parses the first hit. The
     /// binary name's `/`s map straight onto path separators

@@ -16,6 +16,20 @@ public class Thread {
     // isInterrupted() must still report true). `volatile` for cross-thread visibility —
     // decorative under the GIL today, load-bearing once the GIL is gone.
     private volatile boolean interrupted;
+    // Scheduling priority hint (1..10). Stored and reported per the API; our scheduler treats it
+    // as advisory with no effect — priority is a hint even on real JVMs.
+    private int priority = NORM_PRIORITY;
+    // Daemon flag. The VM ends the program when `main` returns (it does not wait for background
+    // threads), so this is a stored attribute that honors the lifecycle rule — it can't change
+    // after the thread starts — rather than a driver of shutdown.
+    private boolean daemon;
+    // Head of this thread's ThreadLocal association list (see java.lang.ThreadLocal). Only this
+    // thread touches its own list (always via currentThread()), so no synchronization is needed.
+    ThreadLocal.Entry threadLocals;
+
+    public static final int MIN_PRIORITY = 1;
+    public static final int NORM_PRIORITY = 5;
+    public static final int MAX_PRIORITY = 10;
 
     public Thread() {
         this.tid = nextThreadNum();
@@ -52,6 +66,31 @@ public class Thread {
 
     public final void setName(String name) {
         this.name = name;
+    }
+
+    public final int getPriority() {
+        return priority;
+    }
+
+    // Set the priority, clamped to the [MIN, MAX] range (an out-of-range value is rejected).
+    public final void setPriority(int newPriority) {
+        if (newPriority < MIN_PRIORITY || newPriority > MAX_PRIORITY) {
+            throw new IllegalArgumentException();
+        }
+        this.priority = newPriority;
+    }
+
+    public final boolean isDaemon() {
+        return daemon;
+    }
+
+    // Mark this thread daemon/non-daemon. Only legal before the thread starts (JVMS lifecycle
+    // rule); after that it throws IllegalThreadStateException.
+    public final void setDaemon(boolean on) {
+        if (isAlive()) {
+            throw new IllegalThreadStateException();
+        }
+        this.daemon = on;
     }
 
     // Set this thread's interrupt status and, if it's parked in an interruptible wait

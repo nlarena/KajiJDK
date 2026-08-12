@@ -49,6 +49,9 @@ impl Exec<'_> {
         // First active use of the callee's class triggers its initialization.
         let callee_class = self.shared.metaspace.class_of(callee).to_string();
         self.ensure_initialized(&callee_class);
+        if let Some(step) = self.take_pending_throw() {
+            return step; // <clinit> failed → throw instead of entering the callee
+        }
 
         // `System.gc()`: an *explicit* GC request. Flag it and consume the call — it's
         // serviced at the next safepoint (the real VM also defers, never runs it
@@ -99,6 +102,26 @@ impl Exec<'_> {
             self.top().push(crate::jvm::interpreter::frame::Value::Reference(offset));
             self.advance_past_call();
             return Step::Continue;
+        }
+
+        // `LockSupport.park()` / `unpark(Thread)`: the block/wake primitive AQS is built on.
+        // Scheduler ops (they suspend/wake a thread), so handled here, not the native bridge.
+        // `park`/`park(Object blocker)` block the current thread (the blocker is ignored);
+        // `unpark` hands its `Thread` argument a permit.
+        if callee_class == "java/util/concurrent/locks/LockSupport" {
+            match self.shared.metaspace.name(callee) {
+                "park" => return self.thread_park(),
+                "unpark" => {
+                    let target = match args.first() {
+                        Some(crate::jvm::interpreter::frame::Value::Reference(offset)) => *offset,
+                        _ => 0,
+                    };
+                    self.thread_unpark(target);
+                    self.advance_past_call();
+                    return Step::Continue;
+                }
+                _ => {}
+            }
         }
 
         // `Thread.sleep(ms)`: park the current thread (scheduler op) — handled here, not

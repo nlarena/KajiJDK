@@ -16,6 +16,10 @@ public class System {
 
     public static native int identityHashCode(Object x);
 
+    // Monotonic timer in nanoseconds with an arbitrary origin (per the spec — good only for
+    // measuring *elapsed* time, e.g. scheduling delays). The VM reads a real clock.
+    public static native long nanoTime();
+
     // Requests a garbage collection. The VM intercepts this call and services the
     // request at its next safepoint (it never runs the collector inline).
     public static native void gc();

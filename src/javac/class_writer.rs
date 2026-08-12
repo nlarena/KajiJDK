@@ -333,6 +333,9 @@ pub struct ClassFile {
     pub access_flags: u16,
     pub this_class: u16,
     pub super_class: u16,
+    /// Constant-pool indices (each a `Class` entry) of the directly implemented interfaces.
+    /// Empty for an ordinary class; a spun lambda class lists its functional interface here.
+    pub interfaces: Vec<u16>,
     pub fields: Vec<FieldInfo>,
     pub methods: Vec<MethodInfo>,
     /// Índice Utf8 del nombre del fuente (`Add.java`), para el atributo `SourceFile`.
@@ -367,6 +370,7 @@ impl ClassFile {
             access_flags: 0,
             this_class: 0,
             super_class: 0,
+            interfaces: Vec::new(),
             fields: Vec::new(),
             methods: Vec::new(),
             source_file: None,
@@ -388,7 +392,10 @@ impl ClassFile {
         out.extend_from_slice(&self.access_flags.to_be_bytes());
         out.extend_from_slice(&self.this_class.to_be_bytes());
         out.extend_from_slice(&self.super_class.to_be_bytes());
-        out.extend_from_slice(&0u16.to_be_bytes()); // interfaces_count
+        out.extend_from_slice(&(self.interfaces.len() as u16).to_be_bytes()); // interfaces_count
+        for &iface in &self.interfaces {
+            out.extend_from_slice(&iface.to_be_bytes());
+        }
         out.extend_from_slice(&(self.fields.len() as u16).to_be_bytes());
         for f in &self.fields {
             out.extend_from_slice(&f.access_flags.to_be_bytes());

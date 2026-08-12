@@ -5,6 +5,10 @@ package java.lang;
 // IllegalArgumentException; flattened to RuntimeException here, which is enough for it to
 // be caught by RuntimeException/Exception/Throwable.)
 public class IllegalThreadStateException extends RuntimeException {
+    public IllegalThreadStateException(String message) {
+        super(message);
+    }
+
     public IllegalThreadStateException() {
     }
 }

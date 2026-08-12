@@ -407,6 +407,38 @@ impl HeapService {
         Some(offset)
     }
 
+    /// Fallible [`Self::malloc`] for **bytecode** allocations (`new` / `newarray` /
+    /// `anewarray` / `multianewarray`): same Eden-then-Old policy, but when the request
+    /// fits neither Eden nor Old within the pre-reserved max heap it returns `None`
+    /// instead of the "heap exhausted" panic — the opcode turns that into a catchable
+    /// `java.lang.OutOfMemoryError` (JVMS §6.3). Internal VM allocations (interned
+    /// strings, mirrors, promotions) keep the panicking `malloc`/`malloc_old` path.
+    pub fn try_malloc(&mut self, n: usize) -> Option<usize> {
+        if let Some(local) = self.eden.alloc(n) {
+            let offset = local + NULL_PAGE;
+            self.pending[self.current_thread]
+                .lock()
+                .unwrap()
+                .push(Allocation { offset, size: n, gen: Gen::Young, age: 0 });
+            return Some(offset);
+        }
+        if self.can_alloc_old(n) {
+            Some(self.malloc_old(n))
+        } else {
+            None // truly exhausted: Old would have to grow past JVM_GC_MAX_HEAP
+        }
+    }
+
+    /// Whether an **Old** allocation of `n` bytes can be satisfied without growing the
+    /// region past its pre-reserved max capacity: a free-list hole big enough, or a
+    /// bump that stays within `JVM_GC_MAX_HEAP`. Mirrors [`Self::bump_old`]'s two paths,
+    /// so `can_alloc_old(n) == true` guarantees `malloc_old(n)` won't hit the
+    /// "heap exhausted" panic in [`Self::resize`].
+    pub fn can_alloc_old(&self, n: usize) -> bool {
+        self.free_list.iter().any(|b| b.size >= n)
+            || self.old_cursor.checked_add(n).is_some_and(|end| end <= self.memory.capacity())
+    }
+
     /// Allocates `n` bytes directly in the **Old** generation and logs it as `Old`.
     /// Used for permanent objects (`Class<…>` mirrors) and Eden overflow — anything
     /// that should skip the young generation.
@@ -601,6 +633,20 @@ impl HeapService {
         }
     }
 
+    /// Bounds-checked [`Self::read_u32`] — `None` if `offset` isn't a readable 4-byte word (out of
+    /// range in Old/survivor, or past Eden). For diagnostics over *untrusted* offsets (e.g. a
+    /// possibly-dangling reference in [`super::gc::verify_heap`]), where a raw read could panic.
+    pub fn try_read_u32(&self, offset: usize) -> Option<u32> {
+        match self.in_eden(offset) {
+            Some(a) if a + 4 <= self.eden.capacity() => Some(unsafe { self.eden.read_u32(a) }),
+            Some(_) => None,
+            None if offset + 4 <= self.memory.len() => {
+                Some(u32::from_le_bytes(self.memory[offset..offset + 4].try_into().unwrap()))
+            }
+            None => None,
+        }
+    }
+
     /// Writes a 64-bit value at `offset`, little-endian — for **category-2** values
     /// (`long`/`double`), 8 bytes wide.
     pub fn write_u64(&mut self, offset: usize, value: u64) {
@@ -666,6 +712,19 @@ impl HeapService {
             }
             None => false,
         }
+    }
+
+    /// Lock-free **compare-and-set** of a `u32` field if the object is in Eden (H5): `Some(swapped)`
+    /// with the atomic CAS done, `None` if it's in Old (the caller escalates to the locked native).
+    /// Takes `&self`, so concurrent CASes on young `AtomicInteger`s never touch the VM write lock.
+    pub fn cas_u32_eden(&self, offset: usize, expected: u32, new: u32) -> Option<bool> {
+        self.in_eden(offset).map(|a| unsafe { self.eden.cas_u32(a, expected, new) })
+    }
+
+    /// Lock-free compare-and-set of a `u64` field (an `AtomicLong`) if in Eden. See
+    /// [`Self::cas_u32_eden`].
+    pub fn cas_u64_eden(&self, offset: usize, expected: u64, new: u64) -> Option<bool> {
+        self.in_eden(offset).map(|a| unsafe { self.eden.cas_u64(a, expected, new) })
     }
 
     /// Writes a single byte — for `byte[]`/`boolean[]` elements (1 byte wide).

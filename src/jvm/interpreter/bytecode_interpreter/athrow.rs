@@ -12,6 +12,7 @@ use super::{class_operations, objects_operations};
 use super::{Exec, Step};
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::metaspace::MethodId;
+use crate::jvm::interpreter::strings;
 
 impl Exec<'_> {
     pub(super) fn athrow(&mut self) -> Step {
@@ -46,6 +47,11 @@ impl Exec<'_> {
             .expect("throw: cannot resolve the thrown object's class")
             .to_string();
 
+        // Record the call stack into the exception's `backtrace` field before we start popping
+        // frames (both implicit faults and explicit `throw` funnel through here). `exception` may
+        // move if interning triggers a GC, so `capture_backtrace` returns its current location.
+        let exception = self.capture_backtrace(exception, &exc_class);
+
         loop {
             let method = self.frame().method();
             let pc = self.frame().pc();
@@ -58,13 +64,138 @@ impl Exec<'_> {
                 frame.jump(handler_pc);
                 return Step::Continue;
             }
-            // Not handled in this frame — discard it (releasing its monitor if it ran a
-            // synchronized method) and try the caller.
+            // Not handled here. If this frame is a `call_java` boundary (a `<clinit>` or intrinsic
+            // callback the VM drove), stop: surface the exception to the VM via `pending_exception`
+            // instead of unwinding through the code that made the call. `call_java` observes it.
+            let top_index = self.running.frames.len() - 1;
+            if self.running.exception_floor.last() == Some(&top_index) {
+                self.running.pending_exception = Some(exception);
+                self.pop_frame(); // drop the synthetic boundary frame; the VM takes over
+                return Step::Continue;
+            }
+            // Otherwise discard the frame (releasing its monitor if it ran a synchronized
+            // method) and try the caller.
             self.pop_frame();
             if self.running.frames.is_empty() {
-                panic!("uncaught exception: {exc_class}");
+                // Uncaught (JVMS §2.10): print `Exception in thread "..." <toString>` + the
+                // captured stack trace, then terminate the thread. `Step::Return` here is
+                // exactly a thread's final return: the scheduler marks a worker Terminated
+                // (waking its joiners), and ends the program when it's the main thread.
+                self.report_uncaught(exception, &exc_class);
+                return Step::Return(None);
             }
         }
+    }
+
+    /// Prints the uncaught-exception report to the program's console: the JVMS-shaped header
+    /// (thread name + class + detail message) and the backtrace captured at throw time. All
+    /// reads are plain field reads — no Java re-entry with an empty stack.
+    fn report_uncaught(&mut self, exception: usize, exc_class: &str) {
+        use std::fmt::Write;
+        let thread_name = self.current_thread_name();
+        let dotted = exc_class.replace('/', ".");
+        let msg_off =
+            objects_operations::field_offset(&mut self.shared.metaspace, exc_class, "message");
+        let msg_ref = self.shared.heap.read_u32(exception + msg_off) as usize;
+        let header = if msg_ref == 0 {
+            dotted
+        } else {
+            format!("{dotted}: {}", strings::read(&self.shared.heap, msg_ref))
+        };
+        let _ = writeln!(self.shared.console, "Exception in thread \"{thread_name}\" {header}");
+        let bt_off =
+            objects_operations::field_offset(&mut self.shared.metaspace, exc_class, "backtrace");
+        let bt_ref = self.shared.heap.read_u32(exception + bt_off) as usize;
+        if bt_ref != 0 {
+            let _ = writeln!(self.shared.console, "{}", strings::read(&self.shared.heap, bt_ref));
+        }
+    }
+
+    /// The current thread's Java name ("main" for the entry thread, whose `Thread` object is
+    /// lazily built and may not exist yet).
+    fn current_thread_name(&mut self) -> String {
+        let obj = self
+            .shared
+            .threads
+            .get(self.running.current)
+            .map(|t| t.thread_obj)
+            .unwrap_or(0);
+        if obj == 0 {
+            return "main".to_string();
+        }
+        let name_off =
+            objects_operations::field_offset(&mut self.shared.metaspace, "java/lang/Thread", "name");
+        let name_ref = self.shared.heap.read_u32(obj + name_off) as usize;
+        if name_ref == 0 {
+            "main".to_string()
+        } else {
+            strings::read(&self.shared.heap, name_ref)
+        }
+    }
+
+    /// If an exception unwound out of a `call_java` boundary and is waiting in
+    /// `pending_exception`, take it and deliver it into the **current** frame (the code that made
+    /// the call) — resuming the ordinary unwind, now with no floor in the way. Returns the throw
+    /// `Step` for the opcode to return, or `None` if nothing is pending.
+    pub(super) fn take_pending_throw(&mut self) -> Option<Step> {
+        let exception = self.running.pending_exception.take()?;
+        Some(self.unwind_with(exception))
+    }
+
+    /// Loads and allocates a bare exception/error instance of `class` (no `<init>` run) — the same
+    /// object the VM synthesizes for an implicit fault, used here to build the wrappers that class
+    /// initialization failures need.
+    pub(super) fn new_exception_object(&mut self, class: &str) -> usize {
+        class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, class);
+        objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, class)
+    }
+
+    /// The binary name of the class of the throwable at heap `offset`.
+    pub(super) fn exception_class_name(&self, offset: usize) -> String {
+        self.shared.metaspace
+            .class_name_at_mirror(self.shared.heap.read_u32(offset) as usize)
+            .expect("exception object has a class")
+            .to_string()
+    }
+
+    /// Renders and stores the current call stack into the exception's `backtrace` field (a
+    /// pre-formatted `"\tat pkg.Class.method"` text, innermost frame first). Interning the text
+    /// allocates, which may trigger a moving GC, so we **park the exception reference on the
+    /// operand stack** (a GC root the collector scans and forwards) across the intern and read it
+    /// back at its possibly-new location. Returns that up-to-date offset.
+    fn capture_backtrace(&mut self, exception: usize, exc_class: &str) -> usize {
+        let trace = self.render_backtrace();
+        self.top().push(Value::Reference(exception));
+        let interned = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &trace);
+        let exception = match self.top().pop() {
+            Value::Reference(offset) => offset,
+            _ => exception,
+        };
+        // Every thrown object is a Throwable subtype (the verifier guarantees it), so it inherits
+        // the `backtrace` field; no further allocation happens before the write, so both offsets
+        // stay valid.
+        let off = objects_operations::field_offset(&mut self.shared.metaspace, exc_class, "backtrace");
+        self.shared.heap.write_u32(exception + off, interned as u32);
+        exception
+    }
+
+    /// The stack-trace text: one `"\tat pkg.Class.method"` line per live frame, top of stack
+    /// (innermost call) first — the order a real trace prints.
+    fn render_backtrace(&self) -> String {
+        let mut trace = String::new();
+        for (i, frame) in self.running.frames.iter().rev().enumerate() {
+            let method = frame.method();
+            let class = self.shared.metaspace.class_of(method).replace('/', ".");
+            let name = self.shared.metaspace.name(method);
+            if i > 0 {
+                trace.push('\n');
+            }
+            trace.push_str("\tat ");
+            trace.push_str(&class);
+            trace.push('.');
+            trace.push_str(name);
+        }
+        trace
     }
 
     /// Searches `method`'s exception table for a handler covering `pc` whose

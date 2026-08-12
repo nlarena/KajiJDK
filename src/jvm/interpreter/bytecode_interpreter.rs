@@ -39,6 +39,9 @@ pub mod stack_operations;
 pub mod objects_operations;
 pub mod variable_operations;
 
+/// Spins the implementing class a `LambdaMetafactory` call site produces (via the `.class` writer).
+pub mod lambda_factory;
+
 /// The four invoke opcodes — one module each. Unlike the per-family helpers above
 /// (which act on a single `&mut Frame`), these drive the whole call stack, so each
 /// contributes an `impl JVM` method that `step()` dispatches to.
@@ -189,32 +192,16 @@ pub struct GreenThread {
     /// non-terminated thread is *safe* (`status != Runnable || at_safepoint`) before moving
     /// objects, then unparks the safepoint-parked ones. See `os_parallel_loop`.
     pub at_safepoint: bool,
+    /// `LockSupport.unpark` **permit** (binary): set when unparked while *not* parked, so the next
+    /// `park()` returns immediately instead of blocking — the token semantics that makes an
+    /// unpark-before-park not get lost. `park()` consumes it.
+    pub park_permit: bool,
+    /// Whether this thread is currently blocked in `LockSupport.park()` (as opposed to a monitor
+    /// `wait` or `sleep`). `unpark` uses it to decide between waking the thread and just leaving a
+    /// permit.
+    pub parked: bool,
 }
 
-/// What a lambda call site produced: everything needed to run the interface method on
-/// the object it created.
-///
-/// A real JVM answers `LambdaMetafactory` by **spinning a class** at runtime that
-/// implements the functional interface and forwards to the implementation method. We
-/// don't have to: we own the dispatch, so a synthetic class name plus this record is
-/// enough — `invokeinterface` recognises the receiver and jumps straight to
-/// `implementation`, prepending the values the lambda captured.
-///
-/// That is the one place our design is *simpler* than HotSpot's rather than a
-/// compromise: class generation exists in the JDK because the JVM interface is fixed
-/// from the outside, and ours isn't.
-/// One shape per **call site**, not per instance: the captured *values* live in each
-/// lambda object (a closure created in a loop must not share them), while everything
-/// static about the site lives here.
-pub struct LambdaShape {
-    /// The method the lambda body compiled to — for a lambda, javac's synthetic
-    /// `lambda$…` static; for a method reference, the referenced method itself.
-    pub implementation: MethodId,
-    /// Descriptors of the captured values, in the order the implementation takes them:
-    /// they are its **leading** parameters, ahead of the interface method's arguments.
-    /// Doubles as the object's field layout, since each is read back at its own width.
-    pub captures: Vec<String>,
-}
 
 /// A read-only snapshot of one thread for the visualizer: its id, scheduling state,
 /// the method it's currently in, and whether it's the running thread.
@@ -248,6 +235,16 @@ struct RunningCtx {
     code: Vec<u8>,
     /// The `MethodId` whose bytecode currently lives in `code` (`None` before the first fill).
     code_method: Option<MethodId>,
+    /// Floors for exception unwinding: while a `call_java`-driven nested execution runs (a
+    /// `<clinit>`, an intrinsic callback), its synthetic base frame index sits here. An exception
+    /// that reaches a floor with no handler stops there — surfacing to the VM via
+    /// `pending_exception` — instead of tearing through the code that made the call. A stack,
+    /// because such calls nest.
+    exception_floor: Vec<usize>,
+    /// An exception that unwound out of a `call_java` boundary (heap offset of the throwable),
+    /// waiting for the caller to re-deliver it — e.g. a `<clinit>` failure re-thrown by the
+    /// opcode that triggered initialization.
+    pending_exception: Option<usize>,
 }
 
 /// The **shared VM state** — everything that is *not* private to a single thread. In OS mode
@@ -270,10 +267,6 @@ struct SharedVm {
     /// Object monitors for `synchronized`, keyed by the lock object's heap offset.
     /// Created lazily on first `monitorenter`.
     monitors: std::collections::HashMap<usize, Monitor>,
-    /// Synthetic classes minted for lambda call sites, keyed by class name. A real JVM
-    /// *generates a class* here; we don't need to, because we own the dispatch — see
-    /// [`LambdaShape`].
-    lambdas: std::collections::HashMap<String, LambdaShape>,
     /// Resolved **dynamic constants** (condy), keyed by the class and pool index that
     /// named them. Caching is not an optimisation here: a condy is a *constant*, so it
     /// must be computed once — and the same one is routinely shared, as when every case
@@ -360,11 +353,12 @@ impl JVM {
                     os_handle: None,
                     os_spawned: true, // the main thread is driven by execute_os_gil's own thread
                     at_safepoint: false,
+                    park_permit: false,
+                    parked: false,
                 }],
                 next_thread_id: 1,
                 java_thread_counter: 1, // main's lazily-built object takes 0; first `new Thread()` takes 1
                 monitors: std::collections::HashMap::new(),
-                lambdas: std::collections::HashMap::new(),
                 condy: std::collections::HashMap::new(),
                 condy_in_progress: std::collections::HashSet::new(),
                 heap: HeapService::new(),
@@ -418,13 +412,15 @@ impl Exec<'_> {
     /// what came out live vs garbage. Mark-only for now — nothing is freed; the
     /// visualizer triggers this (on `espacio`) to *show* reachability.
     pub fn gc_mark(&mut self) -> gc::MarkReport {
-        self.parked(|m, h, t| gc::mark(m, h, t))
+        let (_keys, refs) = self.condy_roots();
+        self.parked(|m, h, t| gc::mark(m, h, t, &refs))
     }
 
     /// Runs a full GC cycle — mark **and sweep**: reclaims every unreachable object
     /// into the heap's free list. Returns the report (its `garbage` = what was freed).
     pub fn gc_sweep(&mut self) -> gc::MarkReport {
-        self.parked(|m, h, t| gc::sweep(m, h, t))
+        let (_keys, refs) = self.condy_roots();
+        self.parked(|m, h, t| gc::sweep(m, h, t, &refs))
     }
 
     /// The GC compaction policy in effect (read from the environment at startup),
@@ -436,7 +432,9 @@ impl Exec<'_> {
     /// Runs a **mark-compact**: relocates live objects into one contiguous run and
     /// fixes the references to them. Returns what moved / how much was reclaimed.
     pub fn gc_compact(&mut self) -> gc::CompactReport {
-        let report = self.parked(|m, h, t| gc::compact(m, h, t));
+        let (keys, mut refs) = self.condy_roots();
+        let report = self.parked(|m, h, t| gc::compact(m, h, t, &mut refs));
+        self.restore_condy_roots(&keys, &refs);
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
         report
@@ -458,6 +456,32 @@ impl Exec<'_> {
             .collect();
     }
 
+    /// The condy cache's live references, as parallel `(key, offset)` lists. A resolved dynamic
+    /// constant lives for the program but is reachable only from this VM table — not any frame or
+    /// mirror — so a moving GC must be told to keep it alive and to remap it. Non-reference
+    /// constants (e.g. an `int` condy) are neither a root nor movable, so they're skipped.
+    fn condy_roots(&self) -> (Vec<(String, u16)>, Vec<usize>) {
+        let mut keys = Vec::new();
+        let mut refs = Vec::new();
+        for (key, value) in &self.shared.condy {
+            if let Value::Reference(offset) = value {
+                if *offset != 0 {
+                    keys.push(key.clone());
+                    refs.push(*offset);
+                }
+            }
+        }
+        (keys, refs)
+    }
+
+    /// Writes the GC-remapped condy references back into the cache (the collector rewrote the
+    /// `refs` list in place through its forwarding map).
+    fn restore_condy_roots(&mut self, keys: &[(String, u16)], refs: &[usize]) {
+        for (key, &offset) in keys.iter().zip(refs) {
+            self.shared.condy.insert(key.clone(), Value::Reference(offset));
+        }
+    }
+
     /// Drop monitors whose lock object is no longer allocated (it was collected), so a
     /// later allocation reusing that offset can't inherit a stale monitor.
     fn prune_dead_monitors(&mut self) {
@@ -471,7 +495,9 @@ impl Exec<'_> {
     /// frequent; the visualizer can trigger it, and the safepoint runs it when Eden fills.
     pub fn gc_minor(&mut self) -> gc::MinorReport {
         let tenure = self.shared.gc_policy.tenure;
-        let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
+        let (keys, mut refs) = self.condy_roots();
+        let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure, &mut refs));
+        self.restore_condy_roots(&keys, &refs);
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
         report
@@ -523,7 +549,9 @@ impl Exec<'_> {
         // gate the old `JVM_GC_AUTO` guarded was about an incomplete mark, long fixed).
         if self.shared.heap.eden_used() * 10 >= self.shared.heap.eden_capacity() * 9 {
             let tenure = self.shared.gc_policy.tenure;
-            let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
+            let (keys, mut refs) = self.condy_roots();
+            let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure, &mut refs));
+            self.restore_condy_roots(&keys, &refs);
             self.remap_monitor_keys(&report.relocations); // young objects moved → fix monitor keys
             self.prune_dead_monitors();
             let _ = writeln!(
@@ -547,6 +575,12 @@ impl Exec<'_> {
         if let Some(cause) = cause {
             self.collect(cause);
         }
+        // Opt-in (`JVM_GC_VERIFY`) post-GC consistency check: assert no reference dangles. Runs
+        // inside `parked` so the running thread's stack is in its slot and the scan spans every
+        // frame. Off by default (a full-heap walk); a stress/CI safety net for moving-GC remap bugs.
+        if self.shared.gc_policy.verify {
+            self.parked(|m, h, t| gc::verify_heap(m, h, t));
+        }
     }
 
     /// Runs one collection cycle: mark-and-sweep, then compact if the heap is
@@ -558,17 +592,22 @@ impl Exec<'_> {
         // A full collection is generational: a minor first (evacuate/promote the young),
         // then the major over Old (sweep, and compact if fragmented). All over every
         // thread's roots, so it runs inside `parked`.
+        let (keys, mut refs) = self.condy_roots();
         let (live, garbage, compacted, minor_reloc, compact_reloc) = self.parked(|m, h, t| {
-            let minor = gc::minor(m, h, t, policy.tenure);
-            let report = gc::sweep(m, h, t);
+            // `refs` (the condy roots) is threaded through and rewritten in place by each moving
+            // phase, so it stays current: minor evacuates+remaps, sweep keeps it alive, compact
+            // remaps again. Written back to the cache below.
+            let minor = gc::minor(m, h, t, policy.tenure, &mut refs);
+            let report = gc::sweep(m, h, t, &refs);
             let (compacted, compact_reloc) = if gc::should_compact(h, &policy) {
-                let c = gc::compact(m, h, t);
+                let c = gc::compact(m, h, t, &mut refs);
                 (c.reclaimed, c.relocations)
             } else {
                 (0, std::collections::HashMap::new())
             };
             (report.live.len(), report.garbage.len(), compacted, minor.relocations, compact_reloc)
         });
+        self.restore_condy_roots(&keys, &refs);
         // Objects moved (minor evacuation, then compaction) → relocate the monitor map keys,
         // applied minor-then-compact (the composition), then drop monitors on dead objects.
         self.remap_monitor_keys(&minor_reloc);
@@ -945,6 +984,8 @@ impl Exec<'_> {
             os_handle: None,
             os_spawned: false, // the OS driver launches this slot's std::thread on the next tick
             at_safepoint: false,
+            park_permit: false,
+            parked: false,
         });
     }
 
@@ -1050,6 +1091,16 @@ impl Exec<'_> {
         Step::Continue
     }
 
+    /// The most frames a thread's call stack may hold before the VM throws
+    /// `StackOverflowError` (JVMS §6.3). Every `invoke*` funnels through
+    /// [`Self::push_frame_locked`], so this one bound covers all Java-to-Java calls;
+    /// [`Self::call_java`] applies it to VM-pushed synthetic frames too. 2000 is far more
+    /// than any legitimate call chain in this project needs, yet small enough that an
+    /// infinite recursion overflows (and the test runs) quickly. Throwing never pushes a
+    /// frame (`throw_exception` allocates a bare object and unwinds), so the throw itself
+    /// cannot re-overflow.
+    const MAX_FRAMES: usize = 2000;
+
     /// Builds and pushes the callee's frame, **taking its monitor first** when `lock` is
     /// `Some` — a `synchronized` method, whose lock object is the receiver (instance) or the
     /// `Class` mirror (static). The frame remembers the monitor so `pop_frame` releases it on
@@ -1065,6 +1116,12 @@ impl Exec<'_> {
         widths: &[usize],
         lock: Option<usize>,
     ) -> Step {
+        // Depth limit first (JVMS §6.3) — before any monitor work, so an overflow can't
+        // acquire a lock it would then leak. The popped operands are simply discarded:
+        // the unwind clears the caller's stack anyway on its way to the handler.
+        if self.running.frames.len() >= Self::MAX_FRAMES {
+            return self.throw_exception("java/lang/StackOverflowError");
+        }
         if let Some(obj) = lock {
             if !self.acquire_monitor(obj) {
                 // Contended: undo the operand pop so the invoke replays cleanly on retry.
@@ -1234,6 +1291,44 @@ impl Exec<'_> {
         self.shared.threads[current].sleep_until = Some(self.shared.steps + ms.max(0) as usize);
         self.advance_past_call();
         Step::Continue
+    }
+
+    /// `LockSupport.park()`: block the current thread until unparked — unless it already holds a
+    /// **permit** (an `unpark` that arrived first), which it consumes and returns at once. `park`
+    /// and `unpark` both escalate to the write path, so they're serialised: the permit check and
+    /// the block happen atomically, so an unpark can't be lost between them. Spurious wakeups are
+    /// allowed (a caller loops on its condition), which is what makes this safe to build AQS on.
+    fn thread_park(&mut self) -> Step {
+        let current = self.running.current;
+        if self.shared.threads[current].park_permit {
+            self.shared.threads[current].park_permit = false;
+            self.advance_past_call();
+            return Step::Continue;
+        }
+        self.shared.threads[current].block_call_pc = self.frame().pc();
+        self.shared.threads[current].parked = true;
+        self.block(current, ThreadStatus::Waiting);
+        self.advance_past_call();
+        Step::Continue
+    }
+
+    /// `LockSupport.unpark(thread)`: hand `thread_obj` a permit. If it's parked in `park()`, wake
+    /// it; otherwise store the permit so its next `park()` returns immediately. `unpark(null)` and
+    /// unparking a thread with no slot (not started / terminated) are no-ops.
+    fn thread_unpark(&mut self, thread_obj: usize) {
+        if thread_obj == 0 {
+            return;
+        }
+        let idx = match self.shared.threads.iter().position(|t| t.thread_obj == thread_obj) {
+            Some(i) => i,
+            None => return,
+        };
+        if self.shared.threads[idx].parked {
+            self.shared.threads[idx].parked = false;
+            self.make_runnable(idx);
+        } else {
+            self.shared.threads[idx].park_permit = true;
+        }
     }
 
     /// A timed block (`Thread.sleep` or `Object.wait(ms)`) reached its deadline: clear it
@@ -1926,10 +2021,18 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_class_at(cp_index); // first active use: run <clinit>
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of allocating
+                }
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
-                class_operations::new(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
-                self.top().advance(3);
-                Step::Continue
+                // A full heap returns Err → the VM throws a catchable OutOfMemoryError.
+                match class_operations::new(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index) {
+                    Ok(()) => {
+                        self.top().advance(3);
+                        Step::Continue
+                    }
+                    Err(exc) => self.throw_exception(exc),
+                }
             }
 
             // getstatic (0xb2) / putstatic (0xb3): read/write a *static* field in the
@@ -1941,6 +2044,9 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_field_owner_at(cp_index); // first active use: run <clinit>
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of touching the static field
+                }
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 class_operations::getstatic(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
@@ -1953,6 +2059,9 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_field_owner_at(cp_index); // first active use: run <clinit>
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of touching the static field
+                }
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 class_operations::putstatic(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
@@ -2084,7 +2193,7 @@ impl Exec<'_> {
             }
             0x53 => {
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::aastore(&mut self.shared.heap, frame);
+                let r = array_operations::aastore(&mut self.shared.metaspace, &mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
 
@@ -2207,20 +2316,51 @@ impl Exec<'_> {
     fn ensure_initialized(&mut self, class: &str) {
         match self.shared.metaspace.init_state(class) {
             InitState::Done | InitState::InProgress => return,
+            InitState::Erroneous => {
+                // A prior initialization threw: the class is permanently unusable — every active
+                // use now fails with NoClassDefFoundError (JVMS §5.5).
+                let ncdfe = self.new_exception_object("java/lang/NoClassDefFoundError");
+                self.running.pending_exception = Some(ncdfe);
+                return;
+            }
             InitState::NotStarted => {}
         }
         self.shared.metaspace.set_init_state(class, InitState::InProgress);
 
-        // Superclass first — initializing Dog initializes Animal (then Object).
+        // Superclass first — initializing Dog initializes Animal (then Object). If the superclass
+        // fails to initialize, this class can't either; it becomes erroneous and the failure
+        // propagates unchanged.
         if let Some(superclass) = self.shared.metaspace.superclass_name(class) {
             self.ensure_initialized(&superclass);
+            if self.running.pending_exception.is_some() {
+                self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                return;
+            }
         }
 
         // Run the class's `<clinit>` (if it has one) to completion. It is the
         // argument-less, result-less case of [`Self::call_java`] — the same VM-pushed
-        // frame driven by the same nested loop.
+        // frame driven by the same nested loop. If it completes abruptly, mark the class
+        // erroneous and, unless the exception is already an Error, wrap it in
+        // ExceptionInInitializerError (JVMS §5.5) before it reaches the triggering code.
         if let Some(clinit) = self.shared.metaspace.resolve_method(class, "<clinit>", "()V") {
             self.call_java(clinit, Vec::new(), &[]);
+            if let Some(exc) = self.running.pending_exception.take() {
+                self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                let exc_class = self.exception_class_name(exc);
+                let is_error = class_operations::is_subtype(
+                    &mut self.shared.metaspace,
+                    &exc_class,
+                    "java/lang/Error",
+                );
+                let delivered = if is_error {
+                    exc
+                } else {
+                    self.new_exception_object("java/lang/ExceptionInInitializerError")
+                };
+                self.running.pending_exception = Some(delivered);
+                return;
+            }
         }
         self.shared.metaspace.set_init_state(class, InitState::Done);
     }
@@ -2249,6 +2389,15 @@ impl Exec<'_> {
         args: Vec<Value>,
         widths: &[usize],
     ) -> Option<Value> {
+        // VM-pushed synthetic frames count against the same depth limit (JVMS §6.3).
+        // `call_java` reports failure through `pending_exception` (see the return below),
+        // so the overflow surfaces the same way any exception escaping the callee would —
+        // as a bare object, like the NoClassDefFoundError in `ensure_initialized`.
+        if self.running.frames.len() >= Self::MAX_FRAMES {
+            let soe = self.new_exception_object("java/lang/StackOverflowError");
+            self.running.pending_exception = Some(soe);
+            return None;
+        }
         let max_locals = self.shared.metaspace.max_locals(method);
         let base = self.running.frames.len();
         // The caller's stack is where a returning value lands, so its depth before the
@@ -2258,11 +2407,21 @@ impl Exec<'_> {
         let mut frame = Frame::for_call(method, max_locals, args, widths);
         frame.mark_synthetic();
         self.running.frames.push(frame);
+        // Mark this call's boundary: an exception that reaches `base` with no handler stops there
+        // (see `unwind_with`) and surfaces via `pending_exception` rather than unwinding further.
+        self.running.exception_floor.push(base);
 
         // Drive it on the *current* thread — `run_one`, not `step`, so the scheduler
         // can't interleave another thread in the middle of a VM-initiated call.
         while self.running.frames.len() > base {
             self.run_one();
+        }
+        self.running.exception_floor.pop();
+
+        // The callee threw and it unwound out to our boundary: there is no return value, and the
+        // exception stays pending for our caller to re-deliver.
+        if self.running.pending_exception.is_some() {
+            return None;
         }
 
         let grew = self.running.frames.last().is_some_and(|f| f.stack().len() > depth_before);
@@ -2367,9 +2526,34 @@ impl Exec<'_> {
             return;
         }
 
+        // A **MethodType** constant → materialise a `MethodType` carrying the descriptor. `javac`
+        // never emits an `ldc` of one (they live in the pool only as bootstrap arguments), so this
+        // path is reached only through hand-written class files — the `.class` writer.
+        let method_type = self
+            .shared.metaspace
+            .get(&caller)
+            .and_then(|cf| cf.method_type_descriptor(cp_index))
+            .map(str::to_string);
+        if let Some(descriptor) = method_type {
+            let object = self.materialize_method_type(&descriptor);
+            self.top().push(Value::Reference(object));
+            return;
+        }
+
+        // A **MethodHandle** constant → materialise a `MethodHandle` naming its target (kind, class,
+        // member, descriptor). Same "hand-written only" story as `MethodType`.
+        let method_handle = self.shared.metaspace.get(&caller).and_then(|cf| cf.method_handle(cp_index)).map(
+            |h| (h.kind.to_byte() as i32, h.class.to_string(), h.name.to_string(), h.descriptor.to_string()),
+        );
+        if let Some((kind, class, name, descriptor)) = method_handle {
+            let object = self.materialize_method_handle(kind, &class, &name, &descriptor);
+            self.top().push(Value::Reference(object));
+            return;
+        }
+
         panic!(
-            "ldc: unsupported constant at #{cp_index} (String/Integer/Float/Class modelled; \
-             MethodHandle/MethodType/Dynamic still pending — see docs/invokedynamic-ruta.md)"
+            "ldc: unsupported constant at #{cp_index} (String/Integer/Float/Class/MethodType/\
+             MethodHandle modelled; Dynamic still pending — see docs/invokedynamic-ruta.md)"
         );
     }
 
@@ -2994,6 +3178,32 @@ fn run_read_shared(shared: &SharedVm, ctx: &mut RunningCtx) -> Option<Step> {
             frame.advance(3);
             Some(Step::Continue)
         }
+        // invokevirtual — only `AtomicInteger`/`AtomicLong.compareAndSet` is handled here, as a
+        // **lock-free CAS** on an Eden field (H5 widened, like W3's reads). Every other virtual
+        // call escalates to the write path; so does a CAS on an Old receiver (the locked native).
+        0xb6 => {
+            let cp_index = u16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+            let method = ctx.frames.last()?.method();
+            let is_long = {
+                let caller = shared.metaspace.class_of(method);
+                let (class, name, _descriptor) =
+                    shared.metaspace.get(caller)?.methodref_target(cp_index)?;
+                match (class, name) {
+                    ("java/util/concurrent/atomic/AtomicInteger", "compareAndSet") => false,
+                    ("java/util/concurrent/atomic/AtomicLong", "compareAndSet") => true,
+                    _ => return None, // any other virtual call → escalate
+                }
+            };
+            let class = if is_long {
+                "java/util/concurrent/atomic/AtomicLong"
+            } else {
+                "java/util/concurrent/atomic/AtomicInteger"
+            };
+            let frame = ctx.frames.last_mut().unwrap();
+            objects_operations::atomic_cas_read(&shared.metaspace, &shared.heap, frame, class, is_long)?;
+            frame.advance(3);
+            Some(Step::Continue)
+        }
         // arraylength — push the array's length. Escalates on a null array.
         0xbe => {
             let frame = ctx.frames.last_mut().unwrap();
@@ -3180,22 +3390,37 @@ fn os_parallel_loop(
 /// Reach a GC safepoint: sync our frames into our slot (so the collector can walk and remap
 /// them), mark ourselves safe, park until the coordinator clears `gc_pending`, then reload the
 /// (possibly remapped) frames.
+///
+/// The first swap is **guarded** by `had_local_frames`: only deactivate into the slot when our
+/// frames are actually local. A thread that entered here already deactivated (it blocked in
+/// `join`/`wait`, so its frames are already in its slot and `running.frames` is empty) must LEAVE
+/// them in the slot — an unconditional swap would pull them back out, empty the slot, and hide our
+/// roots from the very collect we are stopping for (the collector scans slots, not our local
+/// `running`). Symmetrically we only reload what we swapped out; if we never swapped, the frames
+/// stay in the slot and the write-path reload (`if running.frames.is_empty()`) picks them up when
+/// the thread next becomes `Runnable`.
 fn reach_safepoint(
     shared_arc: &Arc<RwLock<SharedVm>>,
     gc_pending: &Arc<AtomicBool>,
     running: &mut RunningCtx,
     idx: usize,
 ) {
+    let had_local_frames;
     {
         let mut g = shared_arc.write().unwrap();
-        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+        had_local_frames = !running.frames.is_empty();
+        if had_local_frames {
+            std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+        }
         g.threads[idx].at_safepoint = true;
     }
     while gc_pending.load(Ordering::Acquire) {
         thread::park();
     }
     let mut g = shared_arc.write().unwrap();
-    std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+    if had_local_frames {
+        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+    }
     g.threads[idx].at_safepoint = false;
 }
 

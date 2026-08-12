@@ -22,17 +22,35 @@ impl Exec<'_> {
         };
         let caller_class = self.shared.metaspace.class_of(caller).to_string();
 
-        // The descriptor (from the caller's pool) tells us how many operands to
-        // move/drop — available even when the callee's class can't be resolved.
-        let descriptor = {
+        // The name + descriptor (from the caller's pool): the descriptor tells us how many
+        // operands to move/drop — available even when the callee's class can't be resolved —
+        // and the name lets us spot `super.clone()` below.
+        let (name, descriptor) = {
             let cf = self.shared.metaspace.get(&caller_class).expect("caller class is loaded");
-            let (_, _, d) = cf.methodref_target(cp_index).expect("invokespecial: bad methodref");
-            d.to_string()
+            let (_, n, d) = cf.methodref_target(cp_index).expect("invokespecial: bad methodref");
+            (n.to_string(), d.to_string())
         };
         let arg_count = MetaspaceService::descriptor_arg_count(&descriptor);
         let total = arg_count + 1; // + the receiver
 
         match self.shared.metaspace.resolve_call(&caller_class, cp_index) {
+            // `super.clone()` resolving to `Object.clone` (JLS §10.7): the statically-bound
+            // call an override makes to get the field-copied object. Object.clone is native
+            // (no Code to frame) and must be able to throw CloneNotSupportedException, so it
+            // runs in the interpreter — same interception as invokevirtual's (see
+            // `object_clone`). Pop the receiver and hand it over.
+            Some(callee)
+                if self.shared.metaspace.class_of(callee) == "java/lang/Object"
+                    && name == "clone"
+                    && descriptor == "()Ljava/lang/Object;" =>
+            {
+                let receiver = match self.top().pop() {
+                    Value::Reference(0) => return self.throw_exception("java/lang/NullPointerException"),
+                    Value::Reference(offset) => offset,
+                    _ => panic!("invokespecial clone: receiver is not an object reference"),
+                };
+                self.object_clone(receiver)
+            }
             // The constructor has a body: push a frame with [receiver, args...] as
             // its leading locals, just like invokestatic but receiver-first.
             Some(callee) => {

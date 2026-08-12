@@ -183,7 +183,16 @@ Explicit) sobre un safepoint. Lo que falta, por orden de impacto:
   ahorrar la asignación del set por colección.
 - [ ] **Política de expansión de heap / OOM real**: cuando el *live set* supera
   `capacity`, hoy no se agranda formalmente ni se lanza `OutOfMemoryError`.
-- [ ] **Modo "verify heap"** post-GC (aserciones de consistencia para debug).
+- [x] **Modo "verify heap"** post-GC (aserciones de consistencia para debug). `JVM_GC_VERIFY`
+  (off por defecto): tras cada colecta, `gc::verify_heap` escanea **todo** referente vivo —cada
+  frame de cada hilo (pila+locales) y cada slot de referencia de cada objeto vivo— y exige que
+  apunte a una asignación viva, un mirror, o null. Una referencia colgante ⇒ panic con holder y
+  target nombrados (clase inferida del header vía lectura *chequeada*), atrapando la colecta que
+  rompió el invariante en vez de un `could not resolve the receiver` diferido y lejano. Corre dentro
+  de `parked` (todos los frames en sus slots); scan O(live) por GC, para stress/CI. Sin falsos
+  positivos con `JVM_GC_VERIFY=1` sobre la suite de concurrencia/GC; test `should_panic`
+  (`verify_heap_catches_a_dangling_frame_reference`) prueba que **sí dispara**. Motivación: la
+  carrera rara de os-parallel (ref stale en un frame).
 
 ### Disparadores
 
@@ -384,23 +393,43 @@ el JDK real):
 | Materializar el `ldc` | Rust | Leer el pool y armar el objeto es trabajo de VM. |
 | Polimorfia de firma | Rust | No vive en ninguna clase: es lógica del verificador y del dispatch. |
 
-- [ ] **Mitad con oráculo — se puede hacer ya.** `MethodType`, `Lookup.findStatic` y
-  `MethodHandle.invoke` son alcanzables desde **Java corriente**, así que hay bytecode de
-  `javac` con el que contrastar:
+- [x] **Mitad con oráculo — hecha (enfoque A).** `MethodType`, `MethodHandles`/`Lookup` y
+  `MethodHandle` viven como clases Java en `bootstrap/java/lang/invoke/` (estado puro);
+  `Class.descriptorString()` es un nativo chico que lee el nombre del mirror, con el que
+  `MethodType` arma el descriptor. `MethodHandle.invoke`/`invokeExact` se interceptan en
+  `invokevirtual` **antes** de la resolución normal (`invoke_method_handle`): leen `owner`/
+  `name`/`descriptor`/`kind` del handle en el heap, resuelven el target y pushean el frame —
+  la polimorfia de firma (JVMS §2.9.3) resuelta sin pasar por el vtable. Test end-to-end
+  `java/MHInvoke.java` (`findStatic("id",(String)->String).invoke("hello")` → `.length()` = 5)
+  verde **y** contrastado contra `java` real (`method_handle_find_static_and_invoke`).
   ```java
   MethodHandle h = lookup().findStatic(C.class, "twice", methodType(int.class, int.class));
   return (int) h.invoke(21);            // java real → 42
   ```
-  Y ahí está la parte difícil servida: `javac` emite
-  `invokevirtual java/lang/invoke/MethodHandle.invoke:(I)I` — **con el descriptor real del
-  call site, no `(Object...)Object`**. Eso *es* la polimorfia de firma (JVMS §2.9.3), y el
-  verificador tiene que saber no resolverla por el camino normal.
-- [ ] **Mitad sin oráculo — necesita B3.** Medido sobre JDK 25: `javac` **nunca** emite un
-  `ldc` de `MethodHandle`/`MethodType` (esas constantes viven en el pool sólo como
-  argumentos de bootstrap, igual que los condy), y un bootstrap method escrito por el
-  usuario **no se puede invocar desde Java** — no hay forma de escribir `invokedynamic` en
-  el lenguaje. Probar cualquiera de las dos exige **producir class files que `javac` no
-  produce**, o sea el escritor de `.class` de la Fase B.
+  > Kinds y primitivos: ver **MH-d** abajo.
+- [x] **MH-d — primitivos + kinds de invocación.** Mirrors de primitivos: `Class.getPrimitiveClass`
+  (nativo, mirror header-only cacheado por nombre, con el `class_id` apuntando a `java/lang/Class`)
+  + `Integer.TYPE`/`Void.TYPE` en `bootstrap/`, y `descriptorString` mapea `int`→`I`, `void`→`V`, …
+  Así `int.class` (→ `getstatic Integer.TYPE`) anda: `java/MHInt.java`
+  (`methodType(int.class,int.class).findStatic("twice").invoke(21)` → **42**, sin boxing — call site
+  `(I)I`). Kinds de `invoke_method_handle`: **6** static, **5** virtual (dispatch por vtable del
+  receptor), **7** special (método exacto), **8** newInvokeSpecial (aloca + corre `<init>`, devuelve
+  el objeto). Además chequea `is_native` (un handle sobre `String.length` va por el bridge).
+  `Lookup` sumó `findVirtual`/`findConstructor`. Tests `MHVirtual` (→5), `MHCtor` (→42),
+  `MHInt` (→42), todos vs `java` real.
+  > Falta sólo: los kinds de **campo** (1–4: get/put field/static) — otra operación (leer/escribir,
+  > no invocar).
+- [x] **Mitad sin oráculo (MH-b) — `ldc` de `MethodHandle`/`MethodType`, hecha.** `javac`
+  **nunca** las emite (viven en el pool sólo como argumentos de bootstrap), así que se probaron
+  con **class files hechos a mano por el escritor de `.class`** — el estreno de esa herramienta.
+  En la VM, `ldc` (0x12/0x13) ahora las materializa: `MethodType` desde su descriptor
+  (`materialize_method_type` + accessor `method_type_descriptor`), y `MethodHandle` desde su
+  `MethodHandleRef` (reusa `materialize_method_handle`; `MethodHandleKind::to_byte` lleva el kind).
+  Test `ldc_of_method_type_and_method_handle_constants`: arma una clase con `crate::javac::
+  class_writer` que hace `ldc MethodType "(I)I"`.descriptorString().length() (=4) + `ldc
+  MethodHandle(invokeStatic id)`.invoke("hello").length() (=5) → **9**, corre en nuestra VM.
+  > El bootstrap method escrito por el usuario (invocar un `invokedynamic` con BSM propio) sigue
+  > pendiente — mismo camino (el escritor de `.class`), pero es otra pieza.
 
 > **El premio, y la razón para priorizarlo.** Hoy `ConstantBootstraps.invoke` es un
 > intrínseco en Rust y **no debería serlo**: es código de biblioteca corriente que sólo
@@ -411,3 +440,21 @@ el JDK real):
 
 Nótese la ironía útil para planificar: **la mitad testeable es la difícil** (la que de
 verdad desbloquea mover intrínsecos a Java); la que espera al compilador es la cosmética.
+
+- [x] **MH-c — el premio: `ConstantBootstraps.invoke` ahora es Java.** El condy ya no llama al
+  target handle con un intrínseco de Rust: `dynamic_constant` materializa el handle
+  (`materialize_method_handle`, en **Old**), empaqueta un `Object[]` (`build_object_array`, Old +
+  write barrier), y llama al `ConstantBootstraps.invoke` de `bootstrap/` — cuyo cuerpo entero es
+  `return handle.invokeWithArguments(args);`. `MethodHandle.invokeWithArguments` es el intrínseco
+  (spreadea el array, reusa `invoke_method_handle`). Test `java/MHSpread.java` (`invokeWithArguments`
+  → 7) verde contra `java` real.
+  - **Prerequisito resuelto — el cache de condy es raíz de GC.** Enrutar por Java aloca por condy,
+    lo que bajo el Eden de 256 B dispara un minor GC que movía los valores **cacheados** del condy
+    (`self.shared.condy`), que no era raíz → quedaban *stale* (bug latente que el camino directo
+    viejo no pegaba por quedar bajo el umbral). Fix: los refs del condy se pasan como **raíces
+    extra** a `minor`/`sweep`/`mark`/`compact`/`roots` (los mantienen vivos) y se **remapean
+    in-place** con el `forward` de cada fase que mueve; el driver los extrae de `condy` antes y los
+    reescribe después (`condy_roots`/`restore_condy_roots`). `enum_pattern_switch_resolves_its_
+    dynamic_labels` verde bajo Eden default. 519 tests, sin regresiones.
+  - Falta (menor): otros kinds de handle (virtual/special) y `methodType(int.class,…)` → mirrors de
+    primitivos (MH-d). Luego, mover `LambdaMetafactory` a Java por el mismo camino.
