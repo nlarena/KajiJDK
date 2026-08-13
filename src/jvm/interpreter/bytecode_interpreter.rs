@@ -301,6 +301,11 @@ struct SharedVm {
     /// at the top of their loop and exit (mirrors the green scheduler abandoning workers
     /// when `main` ends).
     halt: bool,
+    /// Set by `System.exit(status)` — the VM's **exit status**, and the fact that the program
+    /// was terminated deliberately rather than by `main` returning. Every driver reads it: the
+    /// green scheduler stops even when a *worker* called `exit`, and an OS-mode main thread woken
+    /// by the `halt` above returns this status as the program's result. `None` = no `exit` call.
+    exit_status: Option<i32>,
     /// **`os` parallel driver only.** When set, [`Exec::safepoint`] *defers* collection to the
     /// driver's stop-the-world handshake instead of collecting inline. The serialised paths
     /// (green, `os-gil`, and the `os` serialised fallback) leave it `false` and collect inline.
@@ -370,6 +375,7 @@ impl JVM {
                 gc_requested: false,
                 mode: ThreadMode::from_env(),
                 halt: false,
+                exit_status: None,
                 gc_by_driver: false,
             },
         }
@@ -598,7 +604,14 @@ impl Exec<'_> {
             // phase, so it stays current: minor evacuates+remaps, sweep keeps it alive, compact
             // remaps again. Written back to the cache below.
             let minor = gc::minor(m, h, t, policy.tenure, &mut refs);
-            let report = gc::sweep(m, h, t, &refs);
+            // Soft references are given back only under **memory pressure**: a collection the
+            // heap asked for (occupancy / out-of-space / allocation rate) clears them, an
+            // explicit `System.gc()` does not — see `gc::SoftPolicy`.
+            let report = if cause == gc::GcCause::Explicit {
+                gc::sweep(m, h, t, &refs)
+            } else {
+                gc::sweep_under_pressure(m, h, t, &refs)
+            };
             let (compacted, compact_reloc) = if gc::should_compact(h, &policy) {
                 let c = gc::compact(m, h, t, &mut refs);
                 (c.reclaimed, c.relocations)
@@ -742,6 +755,12 @@ impl Exec<'_> {
     /// `run_one` directly so a `<clinit>` runs to completion without yielding.
     pub fn step(&mut self) -> Step {
         if let Step::Return(value) = self.run_one() {
+            // `System.exit` ends the **VM**, not just the calling thread: report its status as
+            // the program's result no matter which thread ran it (a worker's ordinary return
+            // would only terminate that thread — see below).
+            if self.shared.exit_status.is_some() {
+                return Step::Return(value);
+            }
             // The current thread's last frame returned.
             if self.running.current == 0 {
                 return Step::Return(value); // the main thread finished → program result
@@ -848,6 +867,30 @@ impl Exec<'_> {
                 handle.unpark();
             }
         }
+    }
+
+    /// `System.exit(status)` (JLS §12.8): terminate the **whole VM** right now, from whichever
+    /// thread called it. Not a return and not a throw — the JVM does *not* unwind: no `finally`
+    /// runs, no `catch` sees anything, no caller resumes. So we simply **drop this thread's whole
+    /// frame stack** and report `Step::Return(Some(status))`, which every driver already reads as
+    /// "this stack is done"; `exit_status` (+ `halt` in OS mode) carries the same decision to the
+    /// other threads, so the *program* result is `status` even when a worker called `exit`.
+    ///
+    /// Out of scope: **shutdown hooks**. They would have to run Java code on the termination path
+    /// — the one path that must not execute bytecode — so `exit` here is unconditionally final.
+    /// For the same reason, calling `exit` from inside a VM-driven callback (a `<clinit>`, a
+    /// `MethodHandle` intrinsic) is not supported: those drive `run_one` against a frame floor
+    /// this bypasses.
+    pub(super) fn vm_exit(&mut self, status: i32) -> Step {
+        self.shared.exit_status = Some(status);
+        self.shared.halt = true; // OS mode: workers see it at the top of their loop and exit
+        // No `pop_frame` loop: that would release monitors and run the unwind bookkeeping, which
+        // is exactly the "orderly shutdown" `exit` is defined *not* to do.
+        self.running.frames.clear();
+        if self.shared.mode.uses_os_threads() {
+            self.unpark_all(); // wake parked threads (including main) so they see `halt`
+        }
+        Step::Return(Some(Value::Int(status)))
     }
 
     /// Spawns a green thread for `Thread.start()`: it runs the receiver's `run()`
@@ -2309,7 +2352,8 @@ impl Exec<'_> {
     }
 
     /// Ensures `class` is **initialized** before its first active use (JVMS §5.5):
-    /// runs its `<clinit>` exactly once, *after* its superclass is initialized. The
+    /// runs its `<clinit>` exactly once, *after* its superclass and the superinterfaces
+    /// that declare default methods are initialized (see below, and JVMS §5.5). The
     /// `<clinit>` runs synchronously — pushed as a synthetic frame and stepped to
     /// completion — so it finishes before the triggering instruction proceeds.
     /// `InProgress` short-circuits re-entrant uses (a class touching itself mid-init).
@@ -2332,6 +2376,21 @@ impl Exec<'_> {
         // propagates unchanged.
         if let Some(superclass) = self.shared.metaspace.superclass_name(class) {
             self.ensure_initialized(&superclass);
+            if self.running.pending_exception.is_some() {
+                self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                return;
+            }
+        }
+
+        // Then the superinterfaces that declare **default methods** — and only those (JVMS §5.5).
+        // Merely implementing an interface is not an active use of it: an interface holding just
+        // constants and abstract methods stays uninitialized until someone reads one of its own
+        // non-constant static fields. A default method, though, is code the instance can run, so
+        // the interface has to be initialized alongside the class. Symmetrically, initializing an
+        // *interface* initializes none of its superinterfaces — `default_method_superinterfaces`
+        // returns nothing for one. A failure propagates exactly like the superclass's.
+        for iface in self.shared.metaspace.default_method_superinterfaces(class) {
+            self.ensure_initialized(&iface);
             if self.running.pending_exception.is_some() {
                 self.shared.metaspace.set_init_state(class, InitState::Erroneous);
                 return;
@@ -2736,7 +2795,10 @@ fn os_thread_loop(shared_arc: &Arc<Mutex<SharedVm>>, idx: usize) -> Option<Value
         let tick = {
             let mut guard = shared_arc.lock().unwrap();
             if guard.halt {
-                return None; // main has finished — workers exit
+                // Main has finished — workers exit. When the halt came from `System.exit`,
+                // main itself lands here too (a worker raised it), so hand back the status:
+                // it is the program's result. A plain main-returned halt leaves it `None`.
+                return guard.exit_status.map(Value::Int);
             }
             match guard.threads[idx].status {
                 ThreadStatus::Terminated => return None,
@@ -3325,7 +3387,7 @@ fn os_parallel_loop(
         let tick: OsTick = {
             let mut g = shared_arc.write().unwrap();
             if g.halt {
-                return None;
+                return g.exit_status.map(Value::Int); // `System.exit` status, else a plain halt
             }
             match g.threads[idx].status {
                 ThreadStatus::Terminated => return None,

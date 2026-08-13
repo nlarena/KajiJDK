@@ -10,6 +10,8 @@
 
 use std::fmt::Write;
 
+use crate::jvm::class_file::ClassFile;
+
 use super::bytecode_interpreter::class_operations;
 use super::bytecode_interpreter::objects_operations::{field_offset, HEADER_SIZE};
 use super::frame::Value;
@@ -89,6 +91,13 @@ pub fn dispatch(
             Some(Value::Long(start.elapsed().as_nanos() as i64))
         }
 
+        // Runtime.availableProcessors(): how many CPUs the VM can actually use — the host's
+        // parallelism, which only the OS can answer. Falls back to 1 (the value the JVMS
+        // permits when the count is unavailable) rather than failing.
+        ("java/lang/Runtime", "availableProcessors", "()I") => Some(Value::Int(
+            std::thread::available_parallelism().map_or(1, |n| n.get() as i32),
+        )),
+
         // --- Math (would map to CPU instructions under a JIT) --------------------
         ("java/lang/Math", "abs", "(I)I") => Some(Value::Int(int(&args[0]).abs())),
         ("java/lang/Math", "max", "(II)I") => Some(Value::Int(int(&args[0]).max(int(&args[1])))),
@@ -134,6 +143,34 @@ pub fn dispatch(
                 _ => false,
             };
             Some(Value::Int(is as i32))
+        }
+        // --- Class.isAnnotationPresent: JSR 175 reflection over §4.7.16 ----------
+        // Both the receiver and the argument are Class mirrors, so both heap offsets key
+        // `class_name_at_mirror`. The receiver's class file holds its `RuntimeVisibleAnnotations`
+        // (only RUNTIME-retention annotations are written there — that's javac's job, so the
+        // retention rule falls out for free); each entry names its annotation type by *descriptor*,
+        // which is what the argument's name becomes as `L…;`. A mirror with no class file behind
+        // it (a primitive, an array) has no attributes → false.
+        //
+        // Only *directly present* class-level annotations count: no @Inherited walk up the
+        // superclass chain, and no field/method/parameter annotations (we have no Field/Method
+        // model to hang them on). `getAnnotation` is deliberately absent — returning an annotation
+        // *object* would mean synthesising a proxy class implementing the @interface, as the JDK
+        // does; presence is the part of the API that needs no such object.
+        ("java/lang/Class", "isAnnotationPresent", "(Ljava/lang/Class;)Z") => {
+            let this = metaspace
+                .class_name_at_mirror(reference(&args[0]))
+                .expect("Class.isAnnotationPresent: no class at this mirror")
+                .to_string();
+            let wanted = metaspace
+                .class_name_at_mirror(reference(&args[1]))
+                .map(|name| format!("L{name};"))
+                .expect("Class.isAnnotationPresent: no class at the argument mirror");
+            let present = metaspace
+                .get_or_load(&this)
+                .map(ClassFile::runtime_visible_annotation_types)
+                .is_some_and(|types| types.contains(&wanted));
+            Some(Value::Int(present as i32))
         }
         ("java/lang/Class", "descriptorString", "()Ljava/lang/String;") => {
             // The field descriptor of the class this mirror names. A **primitive** mirror is named

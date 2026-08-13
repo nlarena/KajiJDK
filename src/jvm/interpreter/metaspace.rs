@@ -179,6 +179,61 @@ impl MetaspaceService {
             .and_then(|cf| cf.class_name(cf.super_class).map(str::to_string))
     }
 
+    /// The superinterfaces of `class` — direct **and** indirect — that declare at least one
+    /// **default** method, in breadth-first order. These are exactly the interfaces JVMS §5.5
+    /// makes part of a class's initialization: implementing an interface does *not* initialize
+    /// it, unless it contributes a default method the instance can actually run.
+    ///
+    /// A default is a non-`static`, non-`private` interface method with a body — the same test
+    /// [`Self::build_vtable`] uses to decide what lands in the table, since [`Self::resolve_method`]
+    /// only succeeds for a *declared* method that has `Code` (an abstract one yields `None`).
+    ///
+    /// **Empty when `class` is itself an interface**: initializing an interface never initializes
+    /// its superinterfaces, not even ones declaring defaults (JVMS §5.5). The superclass's own
+    /// interfaces are absent too — its initialization brings them in.
+    pub fn default_method_superinterfaces(&mut self, class: &str) -> Vec<String> {
+        let mut queue: Vec<String> = match self.get_or_load(class) {
+            Some(cf) if !cf.is_interface() => {
+                cf.interfaces.iter().filter_map(|&i| cf.class_name(i).map(str::to_string)).collect()
+            }
+            _ => return Vec::new(),
+        };
+        let mut seen: std::collections::HashSet<String> = queue.iter().cloned().collect();
+        let (mut at, mut with_defaults) = (0, Vec::new());
+        while at < queue.len() {
+            let iface = queue[at].clone();
+            at += 1;
+            let (declared, supers) = match self.get_or_load(&iface) {
+                Some(cf) => (
+                    cf.methods
+                        .iter()
+                        .filter(|m| !m.is_static() && !m.is_private())
+                        .filter_map(|m| {
+                            let name = cf.utf8(m.name_index)?;
+                            let descriptor = cf.utf8(m.descriptor_index)?;
+                            (!name.starts_with('<'))
+                                .then(|| (name.to_string(), descriptor.to_string()))
+                        })
+                        .collect::<Vec<_>>(),
+                    cf.interfaces
+                        .iter()
+                        .filter_map(|&i| cf.class_name(i).map(str::to_string))
+                        .collect::<Vec<_>>(),
+                ),
+                None => continue,
+            };
+            if declared.iter().any(|(n, d)| self.resolve_method(&iface, n, d).is_some()) {
+                with_defaults.push(iface);
+            }
+            for s in supers {
+                if seen.insert(s.clone()) {
+                    queue.push(s);
+                }
+            }
+        }
+        with_defaults
+    }
+
     /// The slot index of `(name, descriptor)` in `class`'s virtual table, or `None`
     /// if it has no such virtual method. The slot is computed from the **static**
     /// type at a call site; it indexes the *receiver's* table at dispatch time.

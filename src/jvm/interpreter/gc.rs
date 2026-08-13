@@ -41,6 +41,19 @@ pub fn mark(
     threads: &[GreenThread],
     condy_roots: &[usize],
 ) -> MarkReport {
+    mark_with(metaspace, heap, threads, condy_roots, SoftPolicy::Retain)
+}
+
+/// [`mark`], with an explicit **soft-reference** policy ([`SoftPolicy`]): under `Retain`
+/// a `SoftReference`'s referent is traced as an ordinary strong edge (so it survives);
+/// under `Clear` it is traced weakly, exactly like a `WeakReference`'s.
+fn mark_with(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+    soft: SoftPolicy,
+) -> MarkReport {
     // 1. Start from a clean slate — last pass's marks are stale.
     heap.clear_all_marks();
 
@@ -56,7 +69,7 @@ pub fn mark(
         // Follow each outgoing *strong* reference: `strong_reference_slots` gives the
         // heap addresses of this object's reference words, **minus** the weak `referent`
         // of a `java.lang.ref.Reference` — so a weakly-referenced object isn't kept alive.
-        for slot in strong_reference_slots(metaspace, heap, offset) {
+        for slot in strong_reference_slots(metaspace, heap, offset, soft) {
             worklist.push(heap.read_u32(slot) as usize);
         }
     }
@@ -80,7 +93,32 @@ pub fn sweep(
     threads: &[GreenThread],
     condy_roots: &[usize],
 ) -> MarkReport {
-    let report = mark(metaspace, heap, threads, condy_roots);
+    sweep_with(metaspace, heap, threads, condy_roots, SoftPolicy::Retain)
+}
+
+/// [`sweep`] for a heap **under memory pressure** — the collection that is allowed to
+/// give soft caches back. Identical to `sweep` except that `SoftReference` referents are
+/// traced weakly, so an otherwise-unreachable one is cleared, enqueued and reclaimed just
+/// like a weak referent. See [`SoftPolicy`] for which trigger picks which.
+pub fn sweep_under_pressure(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+) -> MarkReport {
+    sweep_with(metaspace, heap, threads, condy_roots, SoftPolicy::Clear)
+}
+
+/// The shared body of [`sweep`] / [`sweep_under_pressure`], parameterised by the
+/// soft-reference policy.
+fn sweep_with(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+    soft: SoftPolicy,
+) -> MarkReport {
+    let report = mark_with(metaspace, heap, threads, condy_roots, soft);
     // Clear weakly-reachable referents and enqueue their references — *before* freeing,
     // while the dead referents are still identifiable.
     process_weak_references(metaspace, heap);
@@ -764,17 +802,73 @@ fn roots(
 
 // --- weak references (`java.lang.ref`) ------------------------------------------
 
+/// Whether a collection may clear **soft** references — our memory-pressure policy for
+/// `java.lang.ref.SoftReference`.
+///
+/// A soft referent is supposed to survive "while there is room" and be dropped only when
+/// the heap is tight. Rather than imitate HotSpot's clock/free-space heuristic, we make
+/// the rule deterministic and observable: the *cause* of the collection decides.
+///
+///  - [`SoftPolicy::Retain`] — the mark traces a soft referent as an ordinary **strong**
+///    edge. It is therefore marked, so [`process_weak_references`] skips it and the sweep
+///    never frees it: a soft referent always survives.
+///  - [`SoftPolicy::Clear`] — the mark traces it **weakly**, exactly like a
+///    `WeakReference`'s, so an otherwise-unreachable referent is cleared, enqueued and
+///    reclaimed in the same pass.
+///
+/// The wiring lives in the interpreter's `collect`: a collection caused by memory pressure
+/// ([`GcCause::OutOfSpace`] / [`GcCause::Occupancy`] / [`GcCause::AllocationRate`]) clears;
+/// an explicit [`GcCause::Explicit`] `System.gc()` retains — as does a standalone
+/// [`compact`], which runs after the sweep in the same cycle and must not second-guess it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SoftPolicy {
+    /// There is room: soft referents are kept alive.
+    Retain,
+    /// The heap is under pressure: soft referents die like weak ones.
+    Clear,
+}
+
 /// The strong outgoing references of an object — [`reference_slots`] minus the **weak**
 /// `referent` of a `java.lang.ref.Reference`. The major **mark** uses this so an object
 /// isn't kept alive merely because a weak reference points at it. (Compaction and the
 /// minor still use the full slot set: compaction must relocate a *surviving* referent,
 /// and the minor deliberately keeps young referents alive — see the module note.)
-fn strong_reference_slots(metaspace: &MetaspaceService, heap: &HeapService, offset: usize) -> Vec<usize> {
+fn strong_reference_slots(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    offset: usize,
+    soft: SoftPolicy,
+) -> Vec<usize> {
     let mut slots = reference_slots(metaspace, heap, offset);
-    if let Some(referent) = referent_slot(metaspace, heap, offset) {
+    if let Some(referent) = weak_referent_slot(metaspace, heap, offset, soft) {
         slots.retain(|&s| s != referent);
     }
     slots
+}
+
+/// The referent slot this collection treats as **weak**: every `Reference`'s — except a
+/// `SoftReference`'s while the policy is [`SoftPolicy::Retain`], which stays a strong edge.
+/// That single exception *is* the soft-reference policy; everything downstream (clearing,
+/// enqueueing, freeing) then follows from the mark bits.
+fn weak_referent_slot(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    offset: usize,
+    soft: SoftPolicy,
+) -> Option<usize> {
+    if soft == SoftPolicy::Retain && is_soft_reference(metaspace, heap, offset) {
+        return None;
+    }
+    referent_slot(metaspace, heap, offset)
+}
+
+/// Whether the object at `offset` is a `java.lang.ref.SoftReference` (or a subclass).
+fn is_soft_reference(metaspace: &MetaspaceService, heap: &HeapService, offset: usize) -> bool {
+    let Some(class) = metaspace.class_name_at_mirror(heap.read_u32(offset) as usize) else {
+        return false;
+    };
+    let class = class.to_string();
+    is_subclass_of(metaspace, &class, "java/lang/ref/SoftReference")
 }
 
 /// The heap address of the `referent` field, if `offset` is a `java.lang.ref.Reference`
@@ -787,12 +881,18 @@ fn referent_slot(metaspace: &MetaspaceService, heap: &HeapService, offset: usize
     Some(offset + field_byte_offset(metaspace, &class, "referent")?)
 }
 
-/// Whether `class` is `java.lang.ref.Reference` or a subclass — walking the superclass
-/// chain (immutably).
+/// Whether `class` is `java.lang.ref.Reference` or a subclass — i.e. whether its
+/// `referent` field is the GC-managed one.
 fn is_reference_subclass(metaspace: &MetaspaceService, class: &str) -> bool {
+    is_subclass_of(metaspace, class, "java/lang/ref/Reference")
+}
+
+/// Whether `class` is `ancestor` or a subclass of it — walking the superclass chain
+/// (immutably).
+fn is_subclass_of(metaspace: &MetaspaceService, class: &str, ancestor: &str) -> bool {
     let mut current = Some(class.to_string());
     while let Some(name) = current {
-        if name == "java/lang/ref/Reference" {
+        if name == ancestor {
             return true;
         }
         current = metaspace.get(&name).and_then(|cf| cf.class_name(cf.super_class).map(str::to_string));
@@ -1586,6 +1686,20 @@ mod tests {
     }
 
     #[test]
+    fn class_is_annotation_present_reads_runtime_visible_annotations() {
+        // A7 #9: runtime annotations (JSR 175) — Class.isAnnotationPresent. @AnMark is declared
+        // @Retention(RUNTIME), so javac writes a RuntimeVisibleAnnotations attribute (§4.7.16)
+        // holding "LAnMark;" into AnMarked.class; the native reads that attribute off the mirror's
+        // class file and matches descriptors. Score 20 (present on AnMarked) + 12 (absent on the
+        // unannotated AnPlain) + 10 (absent on int.class, a mirror with no class file) = 42.
+        assert_eq!(run_int("java/AnTest.class"), 42); // green
+        assert_eq!(run_int_os("java/AnTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/AnTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
     fn class_get_name_reports_dotted_names() {
         // A7 #8: Class.getName()/getSimpleName() — minimal reflection. getClass() hands back the
         // mirror; getName() reads the class name off it in JDK format (dotted binary name), so the
@@ -1662,6 +1776,22 @@ mod tests {
     }
 
     #[test]
+    fn phantom_and_soft_references_follow_their_strengths() {
+        // The two reference strengths above `WeakReference`. A `PhantomReference`'s `get()`
+        // is null **always** — even while the referent is strongly reachable — and the
+        // reference lands on its `ReferenceQueue` only once the referent dies. A
+        // `SoftReference`'s referent, by contrast, **survives** an ordinary `System.gc()`:
+        // our policy (`SoftPolicy`) only clears soft referents on a collection the heap
+        // itself asked for (occupancy / out-of-space / allocation rate). 42 = all six
+        // observations held.
+        assert_eq!(run_int("java/RfTest.class"), 42);
+        assert_eq!(run_int_os("java/RfTest.class"), 42);
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/RfTest.class"), 42);
+        }
+    }
+
+    #[test]
     fn interface_default_methods_resolve_and_dispatch() {
         // A7 (JSR 335): default methods. DefA inherits f/g as defaults (DefSub's f shadows DefI's —
         // maximally-specific); DefB's class override beats both. Dispatched via invokeinterface
@@ -1685,6 +1815,21 @@ mod tests {
         assert_eq!(run_int_os("java/SoTest.class"), 42); // os-gil
         for _ in 0..10 {
             assert_eq!(run_int_os_parallel("java/SoTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn system_exit_terminates_the_vm_with_its_status() {
+        // A7 #11 (JLS §12.8): `System.exit(42)` ends the VM *at the call*. It is not a return
+        // and not a throw, so nothing unwinds: the `return 1` after it, the enclosing `finally`
+        // (which would set ExMarker.value = 7), and the caller's `100 + value + ExMarker.value`
+        // are all dead code. The program's result is the exit status itself — 42, not 108.
+        // `Runtime.getRuntime().availableProcessors()` guards the call, so the singleton and its
+        // native are exercised on the way in. Before: no `exit` at all (NoSuchMethodError).
+        assert_eq!(run_int("java/ExTest.class"), 42); // green
+        assert_eq!(run_int_os("java/ExTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/ExTest.class"), 42); // os (parallel)
         }
     }
 
@@ -1734,6 +1879,23 @@ mod tests {
     }
 
     #[test]
+    fn uncaught_exception_handler_runs_in_java() {
+        // A7 #12: Thread.setUncaughtExceptionHandler. An exception escaping run() is no longer
+        // just printed — the VM calls the handler back **in Java**, on the dying thread, with the
+        // stack already unwound (the last frame is kept alive one moment longer precisely so the
+        // exception has a GC root while that Java call allocates). Handler ran exactly once (10)
+        // with the right Thread (8) and the very Throwable that escaped (8), message intact (6),
+        // thread still TERMINATED afterwards (4), ThreadGroup inherited from the creator (3), and
+        // sleep(long,int)/onSpinWait not faulting (3) = 42 — the same 42 a real JDK returns for
+        // this file, which is what pins the semantics.
+        assert_eq!(run_int("java/UhTest.class"), 42); // green
+        assert_eq!(run_int_os("java/UhTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/UhTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
     fn thread_local_isolates_values_per_thread() {
         // A6 loose ends: Thread peripherals. Four OS threads each store id*7 into the SAME
         // ThreadLocal, interleave, then read it back — each sees only its own value (per-thread
@@ -1758,6 +1920,24 @@ mod tests {
         assert_eq!(run_int_os("java/OmTest.class"), 42); // os-gil
         for _ in 0..10 {
             assert_eq!(run_int_os_parallel("java/OmTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn class_init_pulls_in_only_default_declaring_superinterfaces() {
+        // A7 #13 (JVMS §5.5): implementing an interface is not, by itself, an active use of it.
+        // Initializing a class runs the `<clinit>` of its superinterfaces — direct *and* indirect —
+        // that declare a **default** method (+8 direct, +4 indirect: their code can run on the
+        // instance), and of no others (+8: a constants-and-abstracts interface stays untouched).
+        // Initializing an *interface* runs its own `<clinit>` (+4) but never a superinterface's,
+        // not even one declaring a default (+8). The skipped ones are merely deferred, not broken:
+        // reading their own non-constant static field initializes them on the spot (+5 +5) = 42.
+        // Before the fix `ensure_initialized` walked only `superclass_name`, so a default-method
+        // interface's `<clinit>` never ran (the measured score was 30).
+        assert_eq!(run_int("java/IiTest.class"), 42); // green
+        assert_eq!(run_int_os("java/IiTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/IiTest.class"), 42); // os (parallel)
         }
     }
 
@@ -2036,6 +2216,7 @@ mod tests {
             code,
             stack_map: None,
             exceptions: Vec::new(),
+            ..Default::default() // hand-built class file: only `Code`
         });
         // static String id(String s) { return s; }  — the MethodHandle's target.
         cf.methods.push(MethodInfo {
@@ -2047,6 +2228,7 @@ mod tests {
             code: vec![0x2a, 0xb0], // aload_0; areturn
             stack_map: None,
             exceptions: Vec::new(),
+            ..Default::default() // hand-built class file: only `Code`
         });
 
         // Write the hand-built class to a temp file and run it (loads MethodType/MethodHandle from boot/).

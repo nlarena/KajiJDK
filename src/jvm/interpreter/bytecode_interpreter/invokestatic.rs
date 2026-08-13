@@ -78,6 +78,21 @@ impl Exec<'_> {
             args.reverse();
         }
 
+        // `System.exit(status)`: end the VM. Handled here and **not** in the native bridge for a
+        // structural reason: `natives::dispatch` returns an `Option<Value>` — a value to push —
+        // so it can only ever *continue* execution. Terminating means answering with a `Step`,
+        // and only an interception on this side of the bridge (with `&mut self`, i.e. the frame
+        // stack) can do that. `vm_exit` drops every frame and returns `Step::Return(status)`, so
+        // nothing after the call runs — not the rest of the method, not its `finally`, not the
+        // caller. See `Exec::vm_exit` for the semantics (and for why shutdown hooks are out).
+        if callee_class == "java/lang/System" && self.shared.metaspace.name(callee) == "exit" {
+            let status = match args.first() {
+                Some(crate::jvm::interpreter::frame::Value::Int(v)) => *v,
+                _ => 0,
+            };
+            return self.vm_exit(status);
+        }
+
         // `String.valueOf(Object)`: the text of anything. Handled here rather than in the
         // native bridge for the same reason as the scheduler ops — it isn't a leaf. It
         // has to call the object's *own* `toString()`, which is a virtual call back into

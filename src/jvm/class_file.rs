@@ -1,6 +1,6 @@
 //! The in-memory model of a parsed `.class` file.
 
-use super::parser::attributes::bootstrap_methods;
+use super::parser::attributes::{annotations, bootstrap_methods};
 use super::parser::{
     attribute, code, constant_pool, member, AttributeInfo, ClassReader, Code, ConstantPoolEntry,
     MemberInfo, ParseError,
@@ -371,6 +371,18 @@ impl ClassFile {
             .iter()
             .find(|a| self.utf8(a.name_index) == Some("BootstrapMethods"))
             .map(|a| bootstrap_methods::parse(&a.info))
+            .unwrap_or_default()
+    }
+
+    /// The type descriptors (`Lpkg/Name;`) of the class's `RuntimeVisibleAnnotations`
+    /// (§4.7.16) — the annotations written on the class itself that survive to
+    /// runtime (`RetentionPolicy.RUNTIME`). Empty when the class carries none.
+    /// Backs `Class.isAnnotationPresent`.
+    pub fn runtime_visible_annotation_types(&self) -> Vec<String> {
+        self.attributes
+            .iter()
+            .find(|a| self.utf8(a.name_index) == Some("RuntimeVisibleAnnotations"))
+            .map(|a| annotations::type_descriptors(self, &a.info))
             .unwrap_or_default()
     }
 

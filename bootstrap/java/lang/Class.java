@@ -28,4 +28,19 @@ public final class Class<T> {
     // for nested classes); arrays get the component's simple name + "[]". Native — our String
     // has no lastIndexOf yet, so the VM slices the name it already holds.
     public native String getSimpleName();
+
+    // isAnnotationPresent(annotationClass): is that annotation *directly present* on this class?
+    // (JSR 175 / JVMS §4.7.16.) Native: the VM reads this mirror's class name, finds its
+    // RuntimeVisibleAnnotations attribute in the class file, and compares the type descriptors
+    // it holds against "L<annotationClass name>;". Only RUNTIME-retention annotations are in
+    // that attribute, which is exactly the JDK's rule. Inherited (@Inherited) annotations and
+    // annotations on fields/methods/parameters are NOT considered: only what is written on this
+    // class itself. A mirror with no class file behind it (a primitive or an array) reports false.
+    //
+    // NOT implemented — and deliberately so: getAnnotation()/getAnnotations(), which must hand
+    // back an *object* implementing the @interface. The JDK does that by synthesising a proxy
+    // class per annotation type whose methods replay the element_value pairs; we have neither
+    // dynamic proxies nor a Method model, so there is nothing to return. isAnnotationPresent is
+    // the part of the reflective annotation API that needs no such object.
+    public native boolean isAnnotationPresent(Class<?> annotationClass);
 }

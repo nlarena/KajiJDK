@@ -77,31 +77,70 @@ arrays `[Ljava.lang.String;` / `String[]`/`int[]` con dimensiones). Test `GnTest
 `String.class.getName()` vía ldc de Class), oráculo completo.
 `forName`/`newInstance`/`java.lang.reflect.*` siguen pendientes (otra liga — Fase C).
 
-### 9. Anotaciones en runtime — JSR 175 (Java 5) · **PARCIAL** [inspección]
-`RuntimeVisibleAnnotations` se **parsea** (A0/javap la muestra) pero no hay API runtime
-(`Class.getAnnotation(...)`). Sin reflexión (#8 versión completa) no tiene consumidor — anotar
-como dependiente de Fase C.
+### 9. Anotaciones en runtime — JSR 175 · ~~PARCIAL~~ → **✅ ACOTADO Y CERRADO** (2026-08-12)
+`Class.isAnnotationPresent(Class)` nativo: mirror del receptor → `RuntimeVisibleAnnotations` →
+comparación de descriptores contra el mirror del argumento. Reusa el parser que ya existía
+(nueva vista `type_descriptors` junto a los renderers de javap) + `ClassFile::
+runtime_visible_annotation_types()`. Hubo que sumar `java/lang/annotation/Annotation` al boot
+classpath: sin ella el `.class` de una anotación **ni carga** (la nombra en su tabla de interfaces).
+Test `AnTest` → 42, con scoring que un nativo trabado no puede fingir (siempre-false da 22,
+siempre-true da 10; incluye un mirror primitivo). **Fuera de alcance, deliberado:**
+`getAnnotation()` devolvería un *objeto* anotación, que exige sintetizar una clase proxy por
+`@interface` (lo que el JDK hace con `AnnotationInvocationHandler` + dynamic proxies) — sin
+proxies ni modelo de `Method` no hay nada que devolver; tampoco anotaciones de campos/métodos,
+`@Inherited`, ni `RuntimeInvisibleAnnotations` (que es justo la regla de `RetentionPolicy.CLASS`).
+No se inventó API no estándar como sustituto.
 
-### 10. `java.lang.ref` parcial — Soft/Phantom/Cleaner · **PARCIAL** [inspección]
-`WeakReference` + `ReferenceQueue` hechos (A6). Faltan `SoftReference` (semántica de presión de
-memoria — decisión de política de GC), `PhantomReference` y `Cleaner`. `finalize()` está
-deprecado-for-removal en el JDK real: **razonable no implementarlo nunca** (documentar la decisión).
+### 10. `java.lang.ref` — Soft/Phantom · ~~PARCIAL~~ → **✅ ARREGLADO** (2026-08-12)
+`PhantomReference`: `get()` sobrescrito a `null` siempre, pero el campo `referent` heredado sigue
+apuntando al objeto — así el GC detecta la muerte y encola igual, mientras el override impide
+resucitar nada (como el JDK). `SoftReference`: la política vive en el **GC**, no en Java — un
+`SoftPolicy::{Retain, Clear}` la concentra en un punto. Regla: el referent se traza como arista
+**fuerte** en toda colecta mayor **salvo** cuando la colecta la pidió el heap por presión
+(ocupancia / out-of-space / tasa de alocación), donde se traza débil y muere como un weak. Todo lo
+demás (limpiar, encolar, liberar) se deriva de los bits de marca. Verificado en ambas direcciones:
+por defecto `RfTest` → 42; forzando presión (`JVM_GC_CAPACITY=64 JVM_GC_OCCUPANCY=0.1`) → 36,
+exactamente los 6 puntos del chequeo `sr.get() != null`. **`Cleaner` fuera de alcance.**
+`finalize()` **no se implementa por decisión** (deprecado-for-removal en el JDK real).
 
-### 11. Ciclo de vida de la VM — `System.exit`/`Runtime` · **AUSENTE** [inspección]
-No hay `System.exit(int)`, `Runtime.getRuntime()`, shutdown hooks. La VM termina cuando `main`
-retorna. Para el modelo actual (tests `run() -> int`) alcanza; para el lanzador `java` real
-(Fase D) hará falta `exit` como mínimo.
+### 11. Ciclo de vida de la VM — `System.exit`/`Runtime` · ~~AUSENTE~~ → **✅ ARREGLADO** (2026-08-12)
+`System.exit(int)` interceptado en `invokestatic.rs` (tras el pop de argumentos, antes del bridge
+de nativos) por una razón estructural: `natives::dispatch` devuelve `Option<Value>` —un valor para
+apilar—, así que solo puede *continuar* la ejecución; terminar exige responder con un `Step`.
+`vm_exit(status)` limpia la pila de frames **sin** `pop_frame` (nada de liberar monitores ni
+desenrollar: justamente el apagado ordenado que `exit` no debe hacer), despierta a los threads
+parkeados y propaga el status como resultado del programa desde cualquier thread (3 sitios del
+driver: green, os-gil, os-parallel). `Runtime` con `getRuntime()`/`exit`/`availableProcessors()`.
+Test `ExTest` → 42, contrastado con el `java` real del JDK 25 (mismo class file → exit code 42, sin
+imprimir: ni el `finally` ni el `return` posterior corren). **Shutdown hooks fuera de alcance:** un
+hook es un `Thread` que la VM debería *correr* justo en el camino que tiene que dejar de ejecutar
+bytecode.
 
-### 12. Periféricos de `Thread` restantes · **AUSENTE** [inspección]
-`ThreadGroup`, `sleep(long,int)`, `onSpinWait()`, `setUncaughtExceptionHandler`. Todos de baja
-prioridad; `daemon`/`priority`/`ThreadLocal` ya están (2026-08-12).
+### 12. Periféricos de `Thread` restantes · ~~AUSENTE~~ → **✅ ARREGLADO** (2026-08-12)
+**`UncaughtExceptionHandler` se invoca de verdad en Java** (no queda solo almacenado): interface
+anidada + handler por-thread + default estático, y `athrow.rs::dispatch_uncaught` lo llama con
+`call_virtual`. El detalle fino: el lookup **aloca** (el `Thread` de `main` se fabrica al vuelo), y
+con la pila ya vacía no quedaría ninguna raíz de GC sosteniendo la excepción — así que el dispatch
+corre **antes** de popear el último frame, con la excepción parkeada en su operand stack (el mismo
+truco de `capture_backtrace`). Un handler que lanza queda contenido por el `exception_floor` ya
+existente: se descarta y se imprime el reporte por defecto de la excepción **original** — no hay
+recursión posible. Además `sleep(long,int)` (con el redondeo del JDK), `onSpinWait()` (no-op
+documentado) y `ThreadGroup` (registro **enteramente en Java**, cero bookkeeping en el VM;
+aproximación documentada: los miembros no se desenlazan, así que `activeCount()` cuenta los vivos —
+lo que coincide con el contrato de "estimate" del JDK). Test `UhTest` → 42, contrastado con el JDK
+real (que también da 42).
 
-### 13. Regla fina de init de interfaces — JVMS §5.5 · **SIN VERIFICAR** [inspección]
-La spec dice: inicializar una clase NO inicializa sus superinterfaces (salvo que declaren
-defaults), y una interface solo se inicializa por el primer uso de *sus propios* statics.
-Nuestro `ensure_initialized` recorre solo la cadena de superclases — probablemente correcto por
-accidente para interfaces sin `<clinit>` encadenado, pero la regla de los defaults (cuando se
-arregle #1) hay que modelarla. Verificar junto con #1.
+### 13. Regla fina de init de interfaces — JVMS §5.5 · ~~SIN VERIFICAR~~ → **✅ BUG ENCONTRADO Y ARREGLADO** (2026-08-12)
+Había un desvío real: `ensure_initialized` recorría solo la cadena de superclases, así que el
+`<clinit>` de una interface **con default methods nunca corría** — algo que recién importa ahora
+que los defaults funcionan (#1). Medido con probes de contadores y campos no-constantes (un
+`static final int X = 5` lo inlinea javac y no dispara init): fallaban el caso directo y el
+**indirecto**; los otros ya eran correctos. Fix: `default_method_superinterfaces()` hace BFS sobre
+superinterfaces directas e indirectas quedándose con las que declaran un método no-static/
+no-private **con `Code`** (el mismo test de "default" que usa `build_vtable`), y **devuelve vacío
+si la clase es ella misma una interface** — así "inicializar una interface nunca inicializa sus
+superinterfaces" queda codificado en el tipo de retorno, no en un `if` suelto. Test `IiTest` → 42
+(4 casos + 2 controles).
 
 ## ✅ Cubierto (verificado, para contexto)
 
@@ -128,4 +167,12 @@ arregle #1) hay que modelarla. Verificar junto con #1.
 6. ~~**#6 `clone()`/`Cloneable`**~~ ✅ hecho (2026-08-12, `CnTest` → 42, arrays incluidos).
 7. ~~**#7 `OutOfMemoryError`**~~ ✅ hecho (2026-08-12, `OmTest` → 42).
 8. ~~**#8 `Class.getName()`**~~ ✅ hecho (2026-08-12, `GnTest` → 42; `forName`/reflect → Fase C).
-9. El resto (#9–#13: anotaciones runtime, Soft/Phantom/Cleaner, `System.exit`/`Runtime`, periféricos de `Thread`, regla fina de init de interfaces) según demanda, o post-JIT.
+9. ~~**#9 anotaciones runtime**~~ ✅ hecho (2026-08-12, `AnTest` → 42; `getAnnotation` fuera de alcance).
+10. ~~**#10 Soft/Phantom refs**~~ ✅ hecho (2026-08-12, `RfTest` → 42; `Cleaner` fuera de alcance).
+11. ~~**#11 `System.exit`/`Runtime`**~~ ✅ hecho (2026-08-12, `ExTest` → 42; shutdown hooks fuera de alcance).
+12. ~~**#12 periféricos de `Thread`**~~ ✅ hecho (2026-08-12, `UhTest` → 42; handler invocado en Java de verdad).
+13. ~~**#13 init de interfaces §5.5**~~ ✅ hecho (2026-08-12, `IiTest` → 42; era un bug real).
+
+**Auditoría A7 CERRADA: 13/13.** Lo único que queda son las piezas marcadas *fuera de alcance* con
+su razón (`getAnnotation` sin dynamic proxies, `Cleaner`, shutdown hooks, `finalize()` por decisión)
+y lo que depende de reflexión completa → Fase C. Suite: **820 passed, 0 failed**.

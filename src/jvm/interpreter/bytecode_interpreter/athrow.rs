@@ -73,18 +73,96 @@ impl Exec<'_> {
                 self.pop_frame(); // drop the synthetic boundary frame; the VM takes over
                 return Step::Continue;
             }
+            if self.running.frames.len() == 1 {
+                // Uncaught (JVMS §2.10): nothing above this frame can catch it. Offer it to the
+                // thread's `UncaughtExceptionHandler` first; if there is none (or it blew up),
+                // print `Exception in thread "..." <toString>` + the captured stack trace.
+                //
+                // Note the order: the dispatch runs *before* the last frame is popped, because
+                // that frame's operand stack is the only GC root left that can hold the exception
+                // across the allocations running Java does. Then the thread ends. `Step::Return`
+                // here is exactly a thread's final return: the scheduler marks a worker Terminated
+                // (waking its joiners), and ends the program when it's the main thread.
+                if let Some(exception) = self.dispatch_uncaught(exception) {
+                    self.report_uncaught(exception, &exc_class);
+                }
+                self.pop_frame();
+                return Step::Return(None);
+            }
             // Otherwise discard the frame (releasing its monitor if it ran a synchronized
             // method) and try the caller.
             self.pop_frame();
-            if self.running.frames.is_empty() {
-                // Uncaught (JVMS §2.10): print `Exception in thread "..." <toString>` + the
-                // captured stack trace, then terminate the thread. `Step::Return` here is
-                // exactly a thread's final return: the scheduler marks a worker Terminated
-                // (waking its joiners), and ends the program when it's the main thread.
-                self.report_uncaught(exception, &exc_class);
-                return Step::Return(None);
-            }
         }
+    }
+
+    /// Hands an uncaught `exception` to the handler that should see it: this thread's
+    /// `UncaughtExceptionHandler` if it has one, else `Thread`'s static default. Returns `None`
+    /// when a handler ran — reporting is its job now — and `Some(exception)`, at its possibly
+    /// **moved** location, when the VM must fall back to printing its own report.
+    ///
+    /// Called with the thread's bottom frame still on the stack, and that is load-bearing: the
+    /// exception is parked on that frame's operand stack, a root the collector scans and forwards,
+    /// so everything below is free to allocate — `main`'s `Thread` object is built on demand here,
+    /// and the handler itself is arbitrary Java.
+    ///
+    /// A handler that throws is deliberately swallowed: it unwinds only as far as the `call_java`
+    /// boundary (which parks it in `pending_exception`), we drop it, and the default report goes
+    /// out for the *original* exception. A broken handler cannot silence the failure it was meant
+    /// to report, and cannot re-enter this path either.
+    fn dispatch_uncaught(&mut self, exception: usize) -> Option<usize> {
+        // Park the exception before anything else can allocate.
+        let frame = self.top();
+        frame.clear_stack();
+        frame.push(Value::Reference(exception));
+
+        // The `Thread` argument the handler receives. For `main` this is where its object gets
+        // fabricated (an allocation — hence the parking above).
+        self.thread_current();
+        let handler_at = objects_operations::field_offset(
+            &mut self.shared.metaspace,
+            "java/lang/Thread",
+            "uncaughtExceptionHandler",
+        );
+        let mut handler = self.shared.heap.read_u32(self.current_thread_obj() + handler_at) as usize;
+        if handler == 0 {
+            // No per-thread handler: fall back to the process-wide default, read straight out of
+            // `Thread`'s mirror. (`static_reference` can allocate that mirror, so `handler` is
+            // read *after* it — and the thread object is re-read below.)
+            handler = class_operations::static_reference(
+                &mut self.shared.metaspace,
+                &mut self.shared.heap,
+                "java/lang/Thread",
+                "defaultUncaughtExceptionHandler",
+            );
+        }
+        let exception = self.parked_exception(exception);
+        if handler == 0 {
+            return Some(exception); // nobody wants it → the VM's own report
+        }
+        let args = vec![Value::Reference(self.current_thread_obj()), Value::Reference(exception)];
+        // `void`, so there is no result to read — but `call_virtual` reports a *throw* through
+        // `pending_exception`, and that we do care about.
+        let _ = self.call_virtual(handler, "uncaughtException", "(Ljava/lang/Thread;Ljava/lang/Throwable;)V", args);
+        if self.running.pending_exception.take().is_some() {
+            return Some(self.parked_exception(exception));
+        }
+        None
+    }
+
+    /// The exception parked on the current frame's operand stack, read back at its **current**
+    /// location — a GC that ran in the meantime forwarded it. `fallback` covers the impossible
+    /// case of an empty stack.
+    fn parked_exception(&mut self, fallback: usize) -> usize {
+        match self.top().stack().last() {
+            Some(Value::Reference(offset)) => *offset,
+            _ => fallback,
+        }
+    }
+
+    /// The current thread's `Thread` object (`0` when it has none — only `main`, and only before
+    /// anything asks for it).
+    fn current_thread_obj(&self) -> usize {
+        self.shared.threads.get(self.running.current).map_or(0, |t| t.thread_obj)
     }
 
     /// Prints the uncaught-exception report to the program's console: the JVMS-shaped header
@@ -114,12 +192,7 @@ impl Exec<'_> {
     /// The current thread's Java name ("main" for the entry thread, whose `Thread` object is
     /// lazily built and may not exist yet).
     fn current_thread_name(&mut self) -> String {
-        let obj = self
-            .shared
-            .threads
-            .get(self.running.current)
-            .map(|t| t.thread_obj)
-            .unwrap_or(0);
+        let obj = self.current_thread_obj();
         if obj == 0 {
             return "main".to_string();
         }

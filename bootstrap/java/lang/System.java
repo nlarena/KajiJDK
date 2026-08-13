@@ -23,4 +23,11 @@ public class System {
     // Requests a garbage collection. The VM intercepts this call and services the
     // request at its next safepoint (it never runs the collector inline).
     public static native void gc();
+
+    // Terminates the VM with `status` as its exit code. Unlike a `return` or a `throw`,
+    // this does *not* unwind: the call never comes back, no `finally` runs, and no other
+    // thread executes another opcode. The VM intercepts it before the native bridge (only
+    // the interpreter can end execution) — see `invokestatic`. Shutdown hooks are not
+    // modelled, so termination is unconditional.
+    public static native void exit(int status);
 }

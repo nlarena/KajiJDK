@@ -342,6 +342,11 @@ impl ConstantPool {
 }
 
 /// Un campo listo para serializar (JVMS §4.5).
+///
+/// `Default` deja todo atributo opcional en `None`/vacío, así un productor que solo necesita el
+/// trío obligatorio (flags, nombre, descriptor) escribe `..Default::default()` y no se rompe cuando
+/// se suma un atributo nuevo — es lo que hace la VM al hilar clases al vuelo (`lambda_factory`).
+#[derive(Default)]
 pub struct FieldInfo {
     pub access_flags: u16,
     pub name_index: u16,
@@ -362,7 +367,9 @@ pub struct FieldInfo {
 }
 
 /// El cuerpo de un método listo para serializar: sus flags, nombre/descriptor (índices al pool) y
-/// el atributo `Code`.
+/// el atributo `Code`. Igual que [`FieldInfo`], deriva `Default` para que quien solo emita `Code`
+/// pueda cerrar con `..Default::default()`.
+#[derive(Default)]
 pub struct MethodInfo {
     pub access_flags: u16,
     pub name_index: u16,

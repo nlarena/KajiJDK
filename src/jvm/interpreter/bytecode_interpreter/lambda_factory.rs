@@ -50,7 +50,12 @@ pub fn generate_lambda_class(
     for (name, descriptor) in field_names.iter().zip(captures) {
         let name_index = cf.pool.utf8(name);
         let descriptor_index = cf.pool.utf8(descriptor);
-        cf.fields.push(FieldInfo { access_flags: ACC_PRIVATE | ACC_FINAL, name_index, descriptor_index });
+        cf.fields.push(FieldInfo {
+            access_flags: ACC_PRIVATE | ACC_FINAL,
+            name_index,
+            descriptor_index,
+            ..Default::default() // a spun capture field carries no annotations/signature/constant
+        });
     }
 
     let object_init = cf.pool.methodref("java/lang/Object", "<init>", "()V");
@@ -85,6 +90,7 @@ pub fn generate_lambda_class(
         code: ctor,
         stack_map: None,
         exceptions: Vec::new(),
+        ..Default::default() // spun code: only `Code`, no debug/annotation attributes
     });
 
     // --- SAM method: load captures (from fields) then arguments, forward to the impl, return. ---
@@ -119,6 +125,7 @@ pub fn generate_lambda_class(
         code: sam,
         stack_map: None,
         exceptions: Vec::new(),
+        ..Default::default() // spun code: only `Code`, no debug/annotation attributes
     });
 
     cf.to_bytes()
