@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::jvm::class_file::ClassFile;
 use crate::jvm::parser::code::ExceptionTableEntry;
@@ -51,6 +52,115 @@ pub enum InitState {
     /// throws `NoClassDefFoundError` (JVMS §5.5, the erroneous state).
     Erroneous,
 }
+
+/// A method the VM **intercepts** instead of (or before) running its body — `System.gc()`,
+/// `Thread.start()`, `Object.wait()` and friends. Every one of them used to be recognised by a
+/// chain of `class == "…" && name == "…" && descriptor == "…"` string compares run *on every
+/// call*; a user call failed all ~7 of them before reaching the normal path.
+///
+/// The decision is a pure function of the method's own `(class, name, descriptor)`, so it is
+/// **a property of the callee**, not of the call site: it is computed once in
+/// [`MetaspaceService::resolve_method`] and read back as a `Copy` tag. That also means a
+/// *subclass override* of, say, `Thread.start()` is naturally [`Intrinsic::None`] — its
+/// `MethodBody` is a different one — which is exactly the old `class_of(callee) == …` test.
+///
+/// Storing it on the callee rather than per call site is what keeps `invokestatic` and
+/// `invokevirtual` from each needing their own copy of the table: the same `Thread.join`
+/// body is recognised identically wherever it is reached from (including through a vtable,
+/// where the call site can't know the answer).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Intrinsic {
+    /// Not intercepted — run the method normally.
+    None,
+    /// `System.gc()` — request a collection at the next safepoint.
+    SystemGc,
+    /// `System.exit(status)` — end the VM.
+    SystemExit,
+    /// `String.valueOf(Object)` — calls back into the object's own `toString()`.
+    StringValueOfObject,
+    /// `LockSupport.park()` / `park(Object)` — block the current thread.
+    LockSupportPark,
+    /// `LockSupport.unpark(Thread)` — hand a thread a permit.
+    LockSupportUnpark,
+    /// `Thread.sleep(ms)`.
+    ThreadSleep,
+    /// `Thread.yield()`.
+    ThreadYield,
+    /// `Thread.holdsLock(o)`.
+    ThreadHoldsLock,
+    /// `Thread.currentThread()`.
+    ThreadCurrentThread,
+    /// `Thread.nextThreadNum()`.
+    ThreadNextThreadNum,
+    /// `Thread.start()`.
+    ThreadStart,
+    /// `Thread.join()`.
+    ThreadJoin,
+    /// `Thread.interrupt()`.
+    ThreadInterrupt,
+    /// `Thread.getState()`.
+    ThreadGetState,
+    /// `Object.wait()`.
+    ObjectWait,
+    /// `Object.wait(long)`.
+    ObjectWaitTimed,
+    /// `Object.notify()`.
+    ObjectNotify,
+    /// `Object.notifyAll()`.
+    ObjectNotifyAll,
+    /// `Object.clone()` — reached by `invokevirtual` (no override) and by an override's
+    /// `super.clone()` (`invokespecial`).
+    ObjectClone,
+}
+
+/// Which [`Intrinsic`] a `(class, name, descriptor)` names — the ~7 string-compare chain the
+/// invoke opcodes used to run per call, hoisted to method-resolution time. The tests mirror the
+/// old ones exactly, including which of them ignored the descriptor.
+fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
+    match class {
+        "java/lang/System" => match name {
+            "gc" => Intrinsic::SystemGc,
+            "exit" => Intrinsic::SystemExit,
+            _ => Intrinsic::None,
+        },
+        "java/lang/String" if name == "valueOf" && descriptor == "(Ljava/lang/Object;)Ljava/lang/String;" => {
+            Intrinsic::StringValueOfObject
+        }
+        "java/util/concurrent/locks/LockSupport" => match name {
+            "park" => Intrinsic::LockSupportPark,
+            "unpark" => Intrinsic::LockSupportUnpark,
+            _ => Intrinsic::None,
+        },
+        "java/lang/Thread" => match (name, descriptor) {
+            ("sleep", _) => Intrinsic::ThreadSleep,
+            ("yield", _) => Intrinsic::ThreadYield,
+            ("holdsLock", _) => Intrinsic::ThreadHoldsLock,
+            ("currentThread", _) => Intrinsic::ThreadCurrentThread,
+            ("nextThreadNum", _) => Intrinsic::ThreadNextThreadNum,
+            ("start", "()V") => Intrinsic::ThreadStart,
+            ("join", "()V") => Intrinsic::ThreadJoin,
+            ("interrupt", "()V") => Intrinsic::ThreadInterrupt,
+            ("getState", "()Ljava/lang/Thread$State;") => Intrinsic::ThreadGetState,
+            _ => Intrinsic::None,
+        },
+        "java/lang/Object" => match (name, descriptor) {
+            ("wait", "()V") => Intrinsic::ObjectWait,
+            ("wait", "(J)V") => Intrinsic::ObjectWaitTimed,
+            ("notify", "()V") => Intrinsic::ObjectNotify,
+            ("notifyAll", "()V") => Intrinsic::ObjectNotifyAll,
+            ("clone", "()Ljava/lang/Object;") => Intrinsic::ObjectClone,
+            _ => Intrinsic::None,
+        },
+        _ => Intrinsic::None,
+    }
+}
+
+/// An interned `(name, descriptor)` pair — a **call-site signature**, handed out by
+/// [`MetaspaceService::intern_signature`]. `invokeinterface` has no stable interface slot to
+/// cache (each implementor numbers its own table), so what its site caches instead is this
+/// id: the signature it must look up in whatever the receiver's runtime class turns out to be.
+/// One `u32` replaces the two `String` allocations the lookup used to need per call.
+pub type SignatureId = u32;
 
 /// One slot of a class's **virtual method table**: the method to run for a given
 /// `(name, descriptor)` signature. A subclass inherits its super's slots in the
@@ -90,6 +200,36 @@ struct MethodBody {
     /// it — the VM takes the receiver's (or `Class`'s) monitor when it pushes the frame
     /// and releases it when the frame is popped. See `JVM::push_frame_locked`.
     synchronized_: bool,
+    /// The **field-site cache** (F0 quickening): one cell per code byte, so the
+    /// `getfield`/`putfield` at `pc` reads its already-resolved field with a single
+    /// indexed load — no `String`, no hash, no layout rebuild. The payload is opaque
+    /// here (`objects_operations` packs offset + descriptor kind + volatility into the
+    /// `u64`); `0` means "not resolved yet". Empty for a method whose code contains no
+    /// `0xb4`/`0xb5` byte at all, which makes every lookup miss harmlessly.
+    ///
+    /// `AtomicU64` (not plain `u64`) because the H3 W3 lock-free read path holds only
+    /// `&MetaspaceService` and must be able to fill a cell too — see
+    /// `objects_operations::resolve_field_site_read` for why that race is benign.
+    field_sites: Vec<AtomicU64>,
+    /// The **call-site cache** (F0 quickening, part 2): the twin of [`Self::field_sites`] for the
+    /// four `invoke*` opcodes — one cell per code byte, so the call at `pc` reads its resolved
+    /// target with a single indexed load. The payload is opaque here (`call_site::CallSite` packs
+    /// the target handle, the site kind and the argument count into the `u64`); `0` means "not
+    /// resolved yet". Empty for a method whose code contains no `0xb6`–`0xb9` byte.
+    ///
+    /// Separate from `field_sites` on purpose: a `pc` is one opcode, so the two tables can never
+    /// contend for the same cell, and keeping them apart means the field cache's payload layout
+    /// and this one's stay independent.
+    call_sites: Vec<AtomicU64>,
+    /// The slot width of the callee's own arguments, **receiver-first**: `[1, param widths…]`.
+    /// Parsed once here instead of by a fresh `param_slot_widths` `Vec` on every call — laying a
+    /// call's operands into the callee's locals is the last thing every invoke does, and it used
+    /// to re-parse the descriptor and allocate for it each time. An instance call reads the whole
+    /// slice ([`MetaspaceService::receiver_slot_widths`]); a static call reads `[1..]`
+    /// ([`MetaspaceService::param_slot_widths_of`]).
+    slot_widths: Vec<usize>,
+    /// Whether the VM intercepts this method instead of running it — see [`Intrinsic`].
+    intrinsic: Intrinsic,
 }
 
 /// The Method Area: loaded classes, resolved method bodies, the per-index call
@@ -121,6 +261,21 @@ pub struct MetaspaceService {
     /// the heap; this map locates that mirror so `getstatic`/`putstatic` (and the
     /// GC) can reach the statics. Filled during Preparation when the class loads.
     class_objects: HashMap<String, usize>,
+    /// The reverse of [`Self::class_objects`], composed with [`Self::names_by_id`]: **mirror
+    /// heap offset → binary name**. Every object's header carries its class's *mirror offset*
+    /// as the `class_id` word, so recovering the class from an object (`invokevirtual`'s
+    /// dispatch, the GC's slot walk) is a lookup by offset. Without this index that is a
+    /// linear scan of `class_objects` on *every* virtual call; with it, [`Self::class_name_at_mirror`]
+    /// is a single hash lookup — and the name is stored resolved, so the hot path never
+    /// hashes a UUID string. Kept in sync inside [`Self::set_class_object`], the single point
+    /// that mutates `class_objects`.
+    ///
+    /// Sound because **mirrors never move**: they are `malloc_old`-allocated (see
+    /// `class_operations::load_class`, `array_operations::array_class_mirror` and the
+    /// primitive mirror in `natives.rs`), the major collector pins them out of compaction
+    /// (`gc::compact`'s `pinned` set), and they are permanent GC roots, so a sweep never
+    /// frees one. An entry can therefore never go stale behind our back.
+    mirror_names: HashMap<usize, String>,
     /// Each class's identity **UUID** (its "Class ID"): binary name → UUID string.
     /// Minted once on first sight and cached here — the dedup point, so a class
     /// always resolves to the same id no matter where it's referenced from.
@@ -137,6 +292,10 @@ pub struct MetaspaceService {
     vtables: HashMap<String, Vec<VtableEntry>>,
     /// Each class's initialization state, keyed by binary name. Absent = `NotStarted`.
     init_states: HashMap<String, InitState>,
+    /// The interned call-site signatures — see [`SignatureId`]. Indexed by the id.
+    signatures: Vec<(String, String)>,
+    /// The reverse of [`Self::signatures`], so interning the same pair twice yields one id.
+    signature_ids: HashMap<(String, String), SignatureId>,
 }
 
 impl MetaspaceService {
@@ -152,11 +311,14 @@ impl MetaspaceService {
             resolved: HashMap::new(),
             resolved_calls: HashMap::new(),
             class_objects: HashMap::new(),
+            mirror_names: HashMap::new(),
             class_ids: HashMap::new(),
             names_by_id: HashMap::new(),
             uuid_gen: UuidGenerator::new(),
             vtables: HashMap::new(),
             init_states: HashMap::new(),
+            signatures: Vec::new(),
+            signature_ids: HashMap::new(),
         }
     }
 
@@ -377,9 +539,11 @@ impl MetaspaceService {
     /// The class name whose `Class<…>` mirror sits at heap `offset` — the reverse of
     /// the mirror index, used to recover an object's class from the `class_id` in its
     /// header (e.g. for `invokevirtual`'s dynamic dispatch).
+    /// O(1) via [`Self::mirror_names`] — this sits on the `invokevirtual` /
+    /// `invokeinterface` hot path, where the scan it replaces cost one comparison per
+    /// loaded class *per call*.
     pub fn class_name_at_mirror(&self, offset: usize) -> Option<&str> {
-        let uuid = self.class_objects.iter().find(|&(_, &o)| o == offset).map(|(u, _)| u)?;
-        self.names_by_id.get(uuid).map(String::as_str)
+        self.mirror_names.get(&offset).map(String::as_str)
     }
 
     /// The class's identity **UUID** ("Class ID"), minting and caching one the
@@ -433,8 +597,20 @@ impl MetaspaceService {
 
     /// Records that the `Class<…>` object for Class ID `uuid` lives at `offset` —
     /// called by Preparation once the mirror has been allocated.
+    /// Also maintains the reverse index [`Self::mirror_names`], which the hot
+    /// [`Self::class_name_at_mirror`] reads — this is the **only** mutation point of
+    /// `class_objects`, so the two cannot drift apart. Re-registering a Class ID at a new
+    /// offset (never happens today — every caller dedups on [`Self::class_object`] first)
+    /// retires the old offset's entry rather than leaving it stale.
     pub fn set_class_object(&mut self, uuid: &str, offset: usize) {
-        self.class_objects.insert(uuid.to_string(), offset);
+        if let Some(previous) = self.class_objects.insert(uuid.to_string(), offset) {
+            if previous != offset {
+                self.mirror_names.remove(&previous);
+            }
+        }
+        if let Some(name) = self.names_by_id.get(uuid) {
+            self.mirror_names.insert(offset, name.clone());
+        }
     }
 
     /// The whole mirror index as `(Class ID, class name, offset)` rows, sorted by
@@ -529,6 +705,25 @@ impl MetaspaceService {
             }
         };
         let id = self.methods.len();
+        // Only methods that *might* contain a field access get a site table (a naive byte
+        // scan: a `0xb4`/`0xb5` appearing as an operand only costs an unused table, while a
+        // real one is never missed). Everything else keeps an empty `Vec` — no per-method
+        // allocation for the majority of methods that never touch an instance field.
+        let field_sites = match code.iter().any(|&b| b == 0xb4 || b == 0xb5) {
+            true => (0..code.len()).map(|_| AtomicU64::new(0)).collect(),
+            false => Vec::new(),
+        };
+        // Same deal for the call sites: only a method whose bytes contain an `invoke*`
+        // (`0xb6`–`0xb9`) pays for a table. `invokedynamic` (`0xba`) is deliberately out — its
+        // call sites are resolved through the condy/lambda machinery, not this cache.
+        let call_sites = match code.iter().any(|&b| (0xb6..=0xb9).contains(&b)) {
+            true => (0..code.len()).map(|_| AtomicU64::new(0)).collect(),
+            false => Vec::new(),
+        };
+        // `[1, param widths…]` — receiver-first, so an instance call takes the whole slice and a
+        // static one takes `[1..]`. Parsed here, once, instead of per call.
+        let mut slot_widths = vec![1];
+        slot_widths.extend(Self::param_slot_widths(descriptor));
         self.methods.push(MethodBody {
             class: class.to_string(),
             name: name.to_string(),
@@ -539,6 +734,10 @@ impl MetaspaceService {
             exceptions,
             native_,
             synchronized_,
+            field_sites,
+            call_sites,
+            slot_widths,
+            intrinsic: classify_intrinsic(class, name, descriptor),
         });
         self.resolved.insert(key, id);
         Some(id)
@@ -625,6 +824,132 @@ impl MetaspaceService {
     /// already been resolved (`valueOf(Object)` from `valueOf(int)`, say).
     pub fn descriptor(&self, method: MethodId) -> &str {
         &self.methods[method].descriptor
+    }
+
+    /// The **field-site cache** entry for the field access at `pc` of `method`, or `0`
+    /// ("not resolved yet") — also what an out-of-range `pc` or a method with no site
+    /// table yields, so a miss is always just the slow path. `&self`: the lock-free read
+    /// path reads it too. The payload is packed by `objects_operations`.
+    pub fn field_site(&self, method: MethodId, pc: usize) -> u64 {
+        match self.methods[method].field_sites.get(pc) {
+            Some(cell) => cell.load(Ordering::Relaxed),
+            None => 0,
+        }
+    }
+
+    /// Fills the field-site cache entry for `(method, pc)`. Takes `&self` (the cells are
+    /// atomic) so the H3 W3 lock-free **read** path can populate the cache as well as the
+    /// write path — two threads resolving the same site compute the *same* `packed`, so
+    /// the race is benign and `Relaxed` suffices (the word is self-contained; it publishes
+    /// no other memory). A `pc` with no cell (unresolvable site table) is a silent no-op.
+    pub fn set_field_site(&self, method: MethodId, pc: usize, packed: u64) {
+        if let Some(cell) = self.methods[method].field_sites.get(pc) {
+            cell.store(packed, Ordering::Relaxed);
+        }
+    }
+
+    /// The **call-site cache** entry for the `invoke*` at `pc` of `method`, or `0` ("not resolved
+    /// yet") — also what an out-of-range `pc` or a method with no site table yields, so a miss is
+    /// always just the slow path. Twin of [`Self::field_site`]; the payload is packed by
+    /// `bytecode_interpreter::call_site`.
+    pub fn call_site(&self, method: MethodId, pc: usize) -> u64 {
+        match self.methods[method].call_sites.get(pc) {
+            Some(cell) => cell.load(Ordering::Relaxed),
+            None => 0,
+        }
+    }
+
+    /// Fills the call-site cache entry for `(method, pc)`. `&self` and `Relaxed` for the same
+    /// reasons as [`Self::set_field_site`]: two threads resolving the same site compute the
+    /// *same* word (resolution is a pure function of the site), so the race is benign and the
+    /// word publishes no other memory. A `pc` with no cell is a silent no-op.
+    pub fn set_call_site(&self, method: MethodId, pc: usize, packed: u64) {
+        if let Some(cell) = self.methods[method].call_sites.get(pc) {
+            cell.store(packed, Ordering::Relaxed);
+        }
+    }
+
+    /// A resolved method's argument slot widths **with the receiver's slot in front**
+    /// (`[1, param widths…]`) — what an instance call (`invokevirtual`/`invokespecial`/
+    /// `invokeinterface`) lays its `[receiver, args…]` out by. Precomputed at resolution.
+    pub fn receiver_slot_widths(&self, method: MethodId) -> &[usize] {
+        &self.methods[method].slot_widths
+    }
+
+    /// The same table without the receiver's slot — what a `static` call lays its arguments out
+    /// by. It is literally the tail of [`Self::receiver_slot_widths`], so both share one `Vec`.
+    pub fn param_slot_widths_of(&self, method: MethodId) -> &[usize] {
+        &self.methods[method].slot_widths[1..]
+    }
+
+    /// Whether the VM intercepts this method rather than running its body — see [`Intrinsic`].
+    pub fn intrinsic(&self, method: MethodId) -> Intrinsic {
+        self.methods[method].intrinsic
+    }
+
+    /// Whether the class declaring `method` has **finished** initializing (`Done`). This is the
+    /// only initialization state a call site may cache: `Done` is terminal (JVMS §5.5 has no
+    /// transition out of it), whereas `NotStarted`/`InProgress` still have work to do and
+    /// `Erroneous` must keep throwing `NoClassDefFoundError` on *every* use. Borrows the class
+    /// name from the method body, so the check costs no allocation.
+    pub fn declaring_class_initialized(&self, method: MethodId) -> bool {
+        matches!(self.init_states.get(self.methods[method].class.as_str()), Some(InitState::Done))
+    }
+
+    /// Interns a `(name, descriptor)` call-site signature and hands back its [`SignatureId`].
+    /// Called once per `invokeinterface` site, on its first execution.
+    pub fn intern_signature(&mut self, name: &str, descriptor: &str) -> SignatureId {
+        let key = (name.to_string(), descriptor.to_string());
+        if let Some(&id) = self.signature_ids.get(&key) {
+            return id;
+        }
+        let id = self.signatures.len() as SignatureId;
+        self.signatures.push(key.clone());
+        self.signature_ids.insert(key, id);
+        id
+    }
+
+    /// Dynamic dispatch **without naming the receiver's class**: the method at `slot` of the
+    /// vtable of whichever class owns the `Class` mirror at heap offset `mirror`. Folding the
+    /// `class_name_at_mirror` → `vtable_method` pair into one call is what removes the
+    /// `runtime_class.to_string()` every `invokevirtual` used to pay — the borrow of the name
+    /// never has to escape the metaspace.
+    pub fn vtable_method_at_mirror(&mut self, mirror: usize, slot: usize) -> Option<MethodId> {
+        self.build_vtable_at_mirror(mirror)?;
+        let name = self.class_name_at_mirror(mirror)?;
+        self.vtables.get(name)?.get(slot).map(|e| e.method)
+    }
+
+    /// The `invokeinterface` twin of [`Self::vtable_method_at_mirror`]: an interface call has no
+    /// stable slot, so it searches the receiver's own table for the interned `signature` instead.
+    pub fn vtable_method_at_mirror_by_signature(
+        &mut self,
+        mirror: usize,
+        signature: SignatureId,
+    ) -> Option<MethodId> {
+        self.build_vtable_at_mirror(mirror)?;
+        let name = self.class_name_at_mirror(mirror)?;
+        let (want_name, want_descriptor) = self.signatures.get(signature as usize)?;
+        self.vtables
+            .get(name)?
+            .iter()
+            .find(|e| e.name == *want_name && e.descriptor == *want_descriptor)
+            .map(|e| e.method)
+    }
+
+    /// Makes sure the vtable of the class whose mirror sits at `mirror` is built, so the two
+    /// lookups above can then read it through a shared borrow. `None` if the offset names no class.
+    fn build_vtable_at_mirror(&mut self, mirror: usize) -> Option<()> {
+        let built = {
+            let name = self.class_name_at_mirror(mirror)?;
+            self.vtables.contains_key(name)
+        };
+        if !built {
+            let name = self.class_name_at_mirror(mirror)?.to_string();
+            let table = self.build_vtable(&name);
+            self.vtables.insert(name, table);
+        }
+        Some(())
     }
 
 

@@ -42,6 +42,9 @@ pub mod variable_operations;
 /// Spins the implementing class a `LambdaMetafactory` call site produces (via the `.class` writer).
 pub mod lambda_factory;
 
+/// The per-call-site resolution cache the four invoke modules below share (F0 quickening).
+mod call_site;
+
 /// The four invoke opcodes — one module each. Unlike the per-family helpers above
 /// (which act on a single `&mut Frame`), these drive the whole call stack, so each
 /// contributes an `impl JVM` method that `step()` dispatches to.
@@ -245,6 +248,93 @@ struct RunningCtx {
     /// waiting for the caller to re-deliver it — e.g. a `<clinit>` failure re-thrown by the
     /// opcode that triggered initialization.
     pending_exception: Option<usize>,
+    /// **Frame pool** (Fase F): retired frames, kept for the next call instead of being dropped.
+    /// A method call used to allocate two `Vec`s (the callee's `locals` and its operand stack)
+    /// and free them again on `return`; that is ~72 ns of pure allocator traffic on a call that
+    /// does nothing else, and it is the single biggest cost `BmInvoke` measures. Recycling the
+    /// frame keeps both buffers *at the capacity the last call grew them to*, so the steady state
+    /// is zero allocation per call — which also subsumes the older "reserve the exact capacity"
+    /// idea, since the capacity is simply inherited.
+    ///
+    /// **It is not a GC root, and it must never become one.** The collector's roots are the
+    /// frames in `threads[*].frames` (see `gc::roots`, `gc::minor`, `gc::compact` and
+    /// `gc::verify_heap`, which all walk exactly that); this pool lives in the per-thread
+    /// `RunningCtx`, which none of them can see, and no path swaps a pooled frame into a thread
+    /// slot — the swaps in `parked`/`activate`/`deactivate`/`switch_to`/`reach_safepoint` move
+    /// the whole `frames` `Vec`, never a single frame, and never touch this field. That is safe
+    /// only because every frame is [`Frame::scrub`]bed on its way in: a pooled frame holds no
+    /// `Value::Reference` for the collector to miss (no leak) and none for a reuse to inherit
+    /// (no stale reference). [`RunningCtx::recycle`] is the one door in, and it enforces that.
+    ///
+    /// The same scrubbing is what makes the pool safe to *share*. In OS mode each thread owns its
+    /// `RunningCtx`, but in green mode one `RunningCtx` serves every green thread, so a frame
+    /// retired by one thread is routinely handed to another. Nothing crosses with it: a pooled
+    /// frame is an empty buffer, not a frame — no locals, no operands, no monitor, no method.
+    ///
+    /// Bounded: the pool is a cache, not a graveyard. Past `FRAME_POOL_CAP` frames the extra ones
+    /// are simply dropped — a call chain deeper than that pays the old allocation price at its
+    /// tip, while the hot, shallow part of every stack stays pooled.
+    frame_pool: Vec<Frame>,
+    /// **The JIT's code cache** (Fase F, F3): this thread's compiled methods, their invocation
+    /// counters and the marshalling buffer. See [`crate::burst::code_cache`] for why both the code
+    /// *and* the counter live per-thread rather than on `MethodBody` — the short version is that
+    /// `ExecMem` is not `Send`, so the code cannot be shared, and a counter that lived apart from
+    /// the code it decides about would give two threads two different answers to "is this method
+    /// compiled?".
+    ///
+    /// This is also what keeps the JIT off the `os` parallel substrate: the two dispatch points
+    /// ([`Exec::try_compiled_call`] and [`Exec::try_osr`]) check the mode before touching this
+    /// field, so compiled code never runs where a stop-the-world handshake could be waiting on it.
+    jit: crate::burst::code_cache::JitCache,
+    /// Whether a **back-edge** in `code_method` is worth reporting to the JIT — refreshed with the
+    /// bytecode cache (they are keyed by the same method) and cleared the moment the JIT's answer
+    /// about this method becomes final.
+    ///
+    /// It exists to keep the overwhelmingly common case free. Almost every loop in a real program
+    /// is in a method the JIT will never compile, and that loop's back-edge must not pay a hash
+    /// probe per iteration to be told so again. `JitCache::watches_back_edges` returns `false`
+    /// permanently for such a method, so caching the `false` is sound; the `true` direction is
+    /// only ever an *extra* probe, never a wrong one.
+    osr_watch: bool,
+}
+
+impl RunningCtx {
+    /// How many retired frames one thread keeps. A stack may be `MAX_FRAMES` (2000) deep and,
+    /// in green mode, one `RunningCtx` serves *every* green thread, so an unbounded pool would
+    /// hold on to the high-water mark of the whole program's stack usage. 128 covers ordinary
+    /// call depth (the deepest recursion in the suite and the benchmarks is well under it) at a
+    /// negligible resident cost.
+    const FRAME_POOL_CAP: usize = 128;
+
+    /// A frame for `method`, armed with `args` — recycled from the pool when one is available,
+    /// freshly allocated when it is empty. The two paths must produce *identical* frames; they
+    /// share [`Frame::reset_for_call`] so they cannot drift.
+    fn new_frame(
+        &mut self,
+        method: MethodId,
+        max_locals: usize,
+        args: Vec<Value>,
+        slot_widths: &[usize],
+    ) -> Frame {
+        match self.frame_pool.pop() {
+            Some(mut frame) => {
+                debug_assert!(frame.is_scrubbed(), "a pooled frame must hold no values");
+                frame.reset_for_call(method, max_locals, args, slot_widths);
+                frame
+            }
+            None => Frame::for_call(method, max_locals, args, slot_widths),
+        }
+    }
+
+    /// Returns a retired frame to the pool, **scrubbed** — the single door in, so "a pooled frame
+    /// holds no reference" is a property of this function rather than of every call site. Frames
+    /// beyond the cap are dropped.
+    fn recycle(&mut self, mut frame: Frame) {
+        if self.frame_pool.len() < Self::FRAME_POOL_CAP {
+            frame.scrub();
+            self.frame_pool.push(frame);
+        }
+    }
 }
 
 /// The **shared VM state** — everything that is *not* private to a single thread. In OS mode
@@ -332,6 +422,23 @@ pub struct JVM {
 pub struct Exec<'a> {
     shared: &'a mut SharedVm,
     running: &'a mut RunningCtx,
+}
+
+/// Where [`Exec::push_frame_locked`] gets the callee's argument **slot widths** from.
+///
+/// Every invoke ends by laying `[receiver?, args…]` into the callee's locals, a `long`/`double`
+/// taking two slots. That used to mean `param_slot_widths(descriptor)` — a fresh `Vec` and a
+/// re-parse of the descriptor — on *every* call. The widths only depend on the callee's
+/// descriptor, though, so [`MetaspaceService`] now parses them once at method resolution and
+/// [`Self::OfCallee`] just borrows that table. [`Self::Slice`] stays for the callers whose
+/// descriptor is *not* the callee's declared one: a spun lambda's constructor, and a
+/// `MethodHandle` invocation (where kind 6, static, has no receiver slot at all).
+enum Widths<'a> {
+    /// Widths the caller built itself, from a descriptor it owns.
+    Slice(&'a [usize]),
+    /// The callee's own precomputed table — with the receiver's leading slot for an instance
+    /// call (`invokevirtual`/`invokespecial`/`invokeinterface`), without it for a `static` one.
+    OfCallee { receiver: bool },
 }
 
 impl JVM {
@@ -676,6 +783,9 @@ impl Exec<'_> {
         if self.running.code_method != Some(method) {
             self.running.code = self.shared.metaspace.code(method).to_vec();
             self.running.code_method = Some(method);
+            // The JIT's back-edge verdict is keyed by the same method, so it is refreshed by the
+            // same compare — see `RunningCtx::osr_watch`.
+            self.running.osr_watch = self.running.jit.watches_back_edges(method);
         }
     }
 
@@ -886,6 +996,14 @@ impl Exec<'_> {
         self.shared.halt = true; // OS mode: workers see it at the top of their loop and exit
         // No `pop_frame` loop: that would release monitors and run the unwind bookkeeping, which
         // is exactly the "orderly shutdown" `exit` is defined *not* to do.
+        //
+        // So these frames are **dropped, not pooled** (Fase F) — the one place a frame leaves the
+        // stack without passing through `pop_frame`. Both reasons point the same way. Correctness:
+        // pooling them would mean scrubbing them, and `clear()` on the whole `Vec` already
+        // destroys every reference just as completely, with no way for a live one to slip into the
+        // pool. Value: the pool exists to make the *next* call cheap, and on this path there is no
+        // next call — the VM is over. Recycling up to 2000 frames on the termination path would be
+        // pure work for a pool nobody will read.
         self.running.frames.clear();
         if self.shared.mode.uses_os_threads() {
             self.unpark_all(); // wake parked threads (including main) so they see `halt`
@@ -1151,12 +1269,25 @@ impl Exec<'_> {
     /// are restored to the caller's stack and the thread is parked, so the scheduler reruns
     /// this same invoke — and retries the acquire — once the thread is woken. `lock` is
     /// `None` for the common, unsynchronized case (a plain push, no monitor work).
+    ///
+    /// **Deliberately not done — the third `Vec`.** With the frame pooled (Fase F), the one
+    /// allocation a call still makes is the `operands` buffer each invoke fills before calling
+    /// here. Popping the operands *directly* into the pooled frame's `locals` would remove it,
+    /// and it was measured as the smaller half of the win — but that buffer is not merely a
+    /// carrier. `invokestatic` hands the same values to `natives::dispatch` and to the intrinsic
+    /// arms, both of which run *before* any callee frame exists; and the contended-monitor path
+    /// below pushes them back onto the caller's operand stack so the invoke can replay
+    /// unchanged. Both would then have to read their arguments back out of a half-built callee
+    /// frame, at the category-2 slot offsets rather than in argument order, on a path that must
+    /// also stay re-entrant (an intrinsic can `call_java` straight back into another invoke).
+    /// That is a far wider blast radius than the pool itself, for less of the gain, so it stays
+    /// a note here instead of a change.
     fn push_frame_locked(
         &mut self,
         callee: MethodId,
         max_locals: usize,
         operands: Vec<Value>,
-        widths: &[usize],
+        widths: Widths<'_>,
         lock: Option<usize>,
     ) -> Step {
         // Depth limit first (JVMS §6.3) — before any monitor work, so an overflow can't
@@ -1176,33 +1307,250 @@ impl Exec<'_> {
                 return Step::Continue;
             }
         }
-        let mut frame = Frame::for_call(callee, max_locals, operands, widths);
+        // The widths either come from the caller (a descriptor it built itself — a lambda's
+        // constructor, a `MethodHandle`'s target) or straight off the callee's precomputed table,
+        // which is the F0-quickened path: no `Vec`, no descriptor re-parse. The frame itself comes
+        // from this thread's pool (Fase F) whenever one is parked there — same frame, no
+        // allocation. The metaspace borrow (`shared`) and the pool (`running`) are disjoint
+        // fields, so the widths can be read straight into `new_frame`.
+        let mut frame = match widths {
+            Widths::Slice(widths) => self.running.new_frame(callee, max_locals, operands, widths),
+            Widths::OfCallee { receiver: true } => {
+                let widths = self.shared.metaspace.receiver_slot_widths(callee);
+                self.running.new_frame(callee, max_locals, operands, widths)
+            }
+            Widths::OfCallee { receiver: false } => {
+                let widths = self.shared.metaspace.param_slot_widths_of(callee);
+                self.running.new_frame(callee, max_locals, operands, widths)
+            }
+        };
         if let Some(obj) = lock {
             frame.set_monitor(obj);
+        }
+        // ---- The JIT's one dispatch point (Fase F, F3) ------------------------------------
+        // Here and nowhere else. Everything a compiled call needs is already true at this line:
+        // the frame exists, so the arguments are laid out in the callee's locals at their
+        // category-2 offsets — the compiled code marshals exactly what the interpreter would
+        // have read. A method that runs natively never becomes a frame at all; its value goes
+        // straight onto the caller's operand stack and the caller steps past the invoke, which
+        // is precisely what the matching `ireturn` would have done.
+        //
+        // A `synchronized` callee is excluded: its monitor was acquired just above and releasing
+        // it is `pop_frame`'s job, so a call that never pushes a frame would leak the lock. (No
+        // method in the compiled subset can be synchronized in practice — the subset has no way
+        // to observe a lock — but the exclusion is structural rather than incidental.)
+        if lock.is_none() {
+            if let Some(value) = self.try_compiled_call(callee, &frame) {
+                self.running.recycle(frame);
+                self.advance_past_call();
+                self.top().push(value);
+                return Step::Continue;
+            }
         }
         self.running.frames.push(frame);
         Step::Continue
     }
 
+    /// Runs `callee` as **native code** if the JIT has it, compiling it first if this call is the
+    /// one that makes it hot. `None` means "interpret it" — and every path that says so is safe
+    /// for the same reason: a compiled method writes nothing observable, so an abandoned attempt
+    /// is indistinguishable from never having tried.
+    ///
+    /// There are four such paths, and they are worth naming because together they are the whole
+    /// fallback story:
+    ///
+    /// 1. **The `os` parallel substrate.** The safepoint poll now exists (F3 step 3), but the JIT
+    ///    is still switched off there — see [`Self::try_osr`] for what is missing and why. In
+    ///    `green` and `os-gil` the guarantee compiled code needs holds trivially: no interpreter
+    ///    opcode (and therefore no GC) runs anywhere while the native call is on this thread's
+    ///    stack.
+    /// 2. **Not hot yet, or not eligible.** One `HashMap` probe, then straight back.
+    /// 3. **A local that cannot be marshalled** — a slot the code reads holds something that is
+    ///    not a `Value::Int`.
+    /// 4. **A deopt** — today only a zero divisor, which the interpreter then re-runs and turns
+    ///    into a proper `ArithmeticException`.
+    fn try_compiled_call(&mut self, callee: MethodId, frame: &Frame) -> Option<Value> {
+        use crate::burst::code_cache::Decision;
+
+        if self.shared.mode == ThreadMode::OsParallel {
+            return None;
+        }
+        match self.running.jit.on_entry(callee) {
+            Decision::Interpret => return None,
+            Decision::Ready => {}
+            Decision::Compile => self.compile_method(callee),
+        }
+        let value = self.running.jit.run(callee, |slot| match frame.load(slot as usize) {
+            Value::Int(v) => Some(v as i64),
+            _ => None,
+        });
+        value.map(Value::Int)
+    }
+
+    /// Scans `method` once and hands the result to the code cache — the answer to a
+    /// `Decision::Compile`, whichever counter asked for it (invocations or back-edges).
+    ///
+    /// The compiler needs the bytecode, a way to resolve an `ldc` to an integer constant, a way to
+    /// resolve a `getstatic` to an address, and the address of this thread's safepoint poll word —
+    /// and *only* those, which is why `burst` needs to know nothing about constant pools, mirrors
+    /// or class initialisation: each unresolvable index is simply a `None` and the method is
+    /// refused.
+    ///
+    /// Both resolvers take `&` borrows of the metaspace and the heap, so **compiling cannot change
+    /// the VM's state**: no class is loaded, no mirror allocated, no `<clinit>` run on the way to a
+    /// decision. That is deliberate — compilation is triggered from an invocation counter or a
+    /// back-edge counter, i.e. at moments the interpreter has not chosen for their side effects.
+    fn compile_method(&mut self, method: MethodId) {
+        let max_locals = self.shared.metaspace.max_locals(method);
+        let poll = self.running.jit.poll_address();
+        let result = {
+            let metaspace = &self.shared.metaspace;
+            let heap = &self.shared.heap;
+            let class = metaspace.class_of(method);
+            let class_file = metaspace.get(class);
+            crate::burst::compile::compile(
+                metaspace.code(method),
+                max_locals,
+                &|index| class_file.and_then(|cf| cf.integer_constant(index)),
+                &|index| class_operations::static_int_address(metaspace, heap, class, index),
+                poll,
+            )
+        };
+        self.running.jit.install(method, result, max_locals);
+    }
+
+    /// The **back-edge hook** (F3 step 3): called after every backward branch, with the pc the
+    /// branch landed on. It counts the loop, compiles the method if this is the iteration that
+    /// makes it hot, and — if the compiled code has an entry point *at this very pc* — enters
+    /// native code **on-stack**, in the middle of a method the interpreter is already running.
+    ///
+    /// `Some(step)` means native code ran the method to its `ireturn` and the frame is gone;
+    /// `None` means carry on interpreting, which is what every refusal amounts to.
+    ///
+    /// # Why the state transfer is only the locals and a pc
+    ///
+    /// The compiler offers entry points **only at back-edge targets where the operand stack is
+    /// provably empty** (see [`burst::compile`][crate::burst::compile]). So there is no operand
+    /// stack to rebuild in either direction: going in, the locals are marshalled into the JIT's
+    /// flat buffer exactly as an ordinary compiled call marshals them — same contract, same
+    /// `Value::Int` guard, same fallback if a slot holds anything else; coming out, that buffer
+    /// already *is* the current locals (compiled `istore`/`iinc` write straight through it) and
+    /// they are copied back into this frame. The runtime `stack().is_empty()` check below is the
+    /// belt to the compiler's braces — one comparison, and it makes the contract checkable at the
+    /// boundary rather than only provable away from it.
+    ///
+    /// # The three ways back
+    ///
+    /// - **Returned** — the loop ran on to the method's `ireturn`. Push the value and let
+    ///   [`Self::ireturn`] do the rest, so an OSR return and a bytecode return are literally the
+    ///   same code path (including "was this the entry frame?" and "step past the invoke").
+    /// - **Safepoint** — the poll fired. Write the locals back, jump to the pc it reports, and
+    ///   keep interpreting; the thread then reaches its safepoint by the ordinary route, which is
+    ///   why nothing about the GC has to be reachable from native code. If the method gets hot
+    ///   again afterwards it simply re-enters here.
+    /// - **Nothing** — not compiled, no entry point at this pc, an unmarshallable local, or a
+    ///   deopt. All are safe for one reason: the compiled subset writes nothing observable and
+    ///   this `Frame` was not touched, so carrying on interpreting from this pc is
+    ///   indistinguishable from never having tried.
+    ///
+    /// # Why this is still off on `os` (parallel)
+    ///
+    /// The poll is exactly the mechanism that substrate was waiting for — a compiled loop can now
+    /// be pulled out for a stop-the-world handshake. Two things are still missing, and the second
+    /// is a judgement rather than code: the lock-free fast path ([`run_frame_local`]) would need
+    /// its own hook, since it never reaches `run_one` and a compiled loop would therefore never be
+    /// *entered* there; and the poll word — one per thread — would have to be raised for all of
+    /// them by [`coordinate_gc`]. Neither is hard. But that substrate has an open stale-reference
+    /// bug of its own, and putting native frames into its stop-the-world handshake while that is
+    /// unresolved would confound two investigations at once. It stays off until that one closes.
+    fn try_osr(&mut self, target_pc: usize) -> Option<Step> {
+        use crate::burst::code_cache::{Decision, OsrResult};
+
+        // The cheap gate: one boolean, refreshed by `sync_code_cache`. A loop inside a method the
+        // JIT has already refused — which is nearly every loop in a real program — never gets past
+        // this line, so it costs a comparison per iteration rather than a hash probe.
+        if !self.running.osr_watch || self.shared.mode == ThreadMode::OsParallel {
+            return None;
+        }
+        let method = self.frame().method();
+        match self.running.jit.on_back_edge(method) {
+            Decision::Interpret => {
+                // Not warm yet, or refused for good; `watches_back_edges` tells the two apart and
+                // a `false` from it is permanent.
+                self.running.osr_watch = self.running.jit.watches_back_edges(method);
+                return None;
+            }
+            Decision::Compile => {
+                self.compile_method(method);
+                self.running.osr_watch = self.running.jit.watches_back_edges(method);
+            }
+            Decision::Ready => {}
+        }
+        if !self.frame().stack().is_empty() {
+            return None;
+        }
+        let outcome = {
+            // `jit` and `frames` are disjoint fields of one context; splitting the borrow here is
+            // what lets the marshalling closure read the very frame the cache is about to run
+            // native code for.
+            let RunningCtx { jit, frames, .. } = &mut *self.running;
+            let frame = frames.last_mut().expect("a back-edge implies a running frame");
+            let outcome = jit.run_osr(method, target_pc as u32, |slot| match frame.load(slot as usize) {
+                Value::Int(v) => Some(v as i64),
+                _ => None,
+            });
+            if let Some(OsrResult::Safepoint(pc)) = outcome {
+                for (slot, value) in jit.osr_writeback(method) {
+                    frame.store(slot as usize, Value::Int(value as i32));
+                }
+                frame.jump(pc as usize);
+            }
+            outcome
+        };
+        // That call may have closed OSR for this method (a deopt from a loop header does), so
+        // re-read the verdict instead of carrying a stale `true` into the next iteration.
+        self.running.osr_watch = self.running.jit.watches_back_edges(method);
+        match outcome {
+            None | Some(OsrResult::Safepoint(_)) => None,
+            Some(OsrResult::Returned(value)) => {
+                debug_assert!(self.frame().stack().is_empty(), "the entry contract is an empty stack");
+                self.top().push(Value::Int(value));
+                Some(self.ireturn())
+            }
+        }
+    }
+
     /// Pops the current (top) frame, **releasing its monitor first** if it ran a
-    /// `synchronized` method. Returns the popped frame (so callers can read e.g.
-    /// `is_synthetic`).
+    /// `synchronized` method, then **recycles it into this thread's frame pool**. Returns
+    /// whether the frame was *synthetic* — the one thing the callers still need to know
+    /// (`return_void`/`ireturn` must not advance a caller that never executed an `invoke`).
+    ///
+    /// It returns that flag rather than the `Frame` itself precisely so the frame can go to the
+    /// pool here: handing it back would put its lifetime — and therefore its stale references —
+    /// in the caller's hands, at four call sites, on the two hottest paths in the interpreter.
+    /// One owner, one scrub. (`false` for a pop off an empty stack, which cannot happen: every
+    /// caller has just looked at the top frame.)
     ///
     /// All frame removal — normal `return` *and* exception unwind — funnels through here so
     /// a synchronized method's lock can never leak: there is no `monitorexit` opcode to drop
-    /// it, so the VM must, on whichever exit path the frame leaves by.
+    /// it, so the VM must, on whichever exit path the frame leaves by. `vm_exit` is the sole
+    /// exception, and deliberately so — see there.
     ///
     /// Performance note: this puts a monitor check on the `return` path, which *every* call
     /// traverses though the overwhelming majority are not synchronized — we pay one branch
     /// (`frame.monitor().is_some()`) per return to keep the release in a single, unbypassable
     /// place. A production VM keeps the synchronized path off the hot return path (and uses
     /// biased/thin locks); here we trade a little speed for one obvious release site.
-    fn pop_frame(&mut self) -> Option<Frame> {
-        let popped = self.running.frames.pop();
-        if let Some(obj) = popped.as_ref().and_then(Frame::monitor) {
+    fn pop_frame(&mut self) -> bool {
+        let Some(frame) = self.running.frames.pop() else {
+            return false;
+        };
+        if let Some(obj) = frame.monitor() {
             self.release_monitor(obj);
         }
-        popped
+        let synthetic = frame.is_synthetic();
+        self.running.recycle(frame);
+        synthetic
     }
 
     /// `Object.wait()`: release the monitor **fully** (saving the recursion count), park
@@ -1468,8 +1816,9 @@ impl Exec<'_> {
         // Keep the code cache current with the top frame before dispatch — a no-op compare
         // unless a frame change (invoke/return/unwind) landed us in a different method.
         self.sync_code_cache();
+        let pc_before = self.pc();
         let opcode = self.current_code()[self.pc()];
-        match opcode {
+        let step = match opcode {
             // iadd / isub / imul — integer arithmetic
             0x60 => {
                 arithmetic_operations::iadd(self.top());
@@ -2332,20 +2681,39 @@ impl Exec<'_> {
             0xc3 => self.monitor_exit(),
 
             other => todo!("opcode 0x{other:02x} not implemented yet"),
+        };
+
+        // ---- The back-edge hook (Fase F, F3 step 3) ---------------------------------------
+        // A **backward** branch is the interpreter's evidence that a loop is hot, and the one
+        // place a compiled version of *this* method could be entered mid-flight. It is recognised
+        // here rather than in each of the eleven branch arms: a branch opcode neither pushes nor
+        // pops a frame, so "the top frame's pc moved backwards" is exactly a back-edge and nothing
+        // else. `Step::Continue` and a non-empty stack are both implied by that, and both are
+        // checked anyway — the second inside `try_osr`, whose entry contract needs it.
+        if matches!(step, Step::Continue) && is_branch(opcode) {
+            if let Some(frame) = self.running.frames.last() {
+                let target = frame.pc();
+                if target < pc_before {
+                    if let Some(step) = self.try_osr(target) {
+                        return step; // native code ran the method to its `ireturn`
+                    }
+                }
+            }
         }
+        step
     }
 
     /// `return` (0xb1): end a `void` method (a constructor here). Pop the frame; if
     /// it was the entry the program is done (with no value), else the caller resumes
     /// — nothing is handed back, unlike `ireturn`.
     fn return_void(&mut self) -> Step {
-        let popped = self.pop_frame();
+        let synthetic = self.pop_frame();
         if self.running.frames.is_empty() {
             return Step::Return(None);
         }
         // A synthetic `<clinit>` frame wasn't reached via an invoke, so the caller's
         // pc must NOT advance — the instruction that triggered init resumes as-is.
-        if !popped.is_some_and(|f| f.is_synthetic()) {
+        if !synthetic {
             self.advance_past_call();
         }
         Step::Continue
@@ -2463,7 +2831,11 @@ impl Exec<'_> {
         // call is what tells us afterwards whether anything came back.
         let depth_before = self.running.frames.last().map_or(0, |f| f.stack().len());
 
-        let mut frame = Frame::for_call(method, max_locals, args, widths);
+        // Pooled like any other call (Fase F). A synthetic frame leaves the stack the same two
+        // ways an ordinary one does — a `return`/`ireturn`, or the unwind stopping at this call's
+        // `exception_floor` — and both go through `pop_frame`, so it is recycled and scrubbed on
+        // exactly the same path. `mark_synthetic` comes *after* the reset, which clears the flag.
+        let mut frame = self.running.new_frame(method, max_locals, args, widths);
         frame.mark_synthetic();
         self.running.frames.push(frame);
         // Mark this call's boundary: an exception that reaches `base` with no handler stops there
@@ -2660,14 +3032,14 @@ impl Exec<'_> {
     /// otherwise the value lands on the caller's operand stack and it resumes.
     fn ireturn(&mut self) -> Step {
         let value = self.top().pop();
-        let popped = self.pop_frame();
+        let synthetic = self.pop_frame();
         if self.running.frames.is_empty() {
             return Step::Return(Some(value));
         }
         // Same rule as `return_void`: a frame the VM pushed itself wasn't reached through
         // an invoke, so there is no call instruction to step over — advancing would move
         // the caller's pc by the width of whatever opcode happens to sit there.
-        if !popped.is_some_and(|f| f.is_synthetic()) {
+        if !synthetic {
             self.advance_past_call();
         }
         self.top().push(value);
@@ -2702,6 +3074,18 @@ impl Exec<'_> {
     }
 }
 
+/// The **branch family**: the opcodes that set the pc themselves, and therefore the only ones
+/// whose execution can leave a frame at a *lower* pc than it started at. That is what makes
+/// "opcode is a branch **and** the pc went backwards" an exact test for a loop back-edge, which is
+/// what [`Exec::try_osr`] is hung on.
+///
+/// `jsr`/`ret` and the two `switch`es are deliberately excluded. They can jump backwards too, but
+/// none of them is in the compiled subset, so counting their jumps would buy nothing but hash
+/// probes in methods that can never be compiled.
+fn is_branch(opcode: u8) -> bool {
+    matches!(opcode, 0x99..=0xa7 | 0xc6 | 0xc7 | 0xc8)
+}
+
 /// Runs the entry method to completion, returning its result. Thin driver over
 /// [`JVM::step`] — the same loop the visualizer runs, minus the pausing.
 pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
@@ -2719,6 +3103,62 @@ pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
         ThreadMode::OsGil => execute_os_gil(metaspace, entry),
         // Real OS threads without the GIL (H3, in progress — still shares the os-gil engine).
         ThreadMode::OsParallel => execute_os_parallel(metaspace, entry),
+    }
+}
+
+/// Like [`execute`] but on the **green** engine unconditionally (ignoring `JVM_THREADS`), and
+/// hands back the **opcode count** alongside the result: `self.shared.steps`, the logical clock
+/// `run_one` ticks once per instruction, read after the program returns.
+///
+/// This is measurement plumbing, not a second engine — the loop body is `execute`'s green arm,
+/// verbatim. It exists because absolute times say nothing on their own: a workload's *time /
+/// opcodes* (ns per opcode) is the figure that survives a change of workload size, and the
+/// counter it needs is private to [`SharedVm`] and dropped when `execute` returns.
+pub fn execute_counting(metaspace: MetaspaceService, entry: Frame) -> (Option<Value>, usize) {
+    let (value, steps, _) = execute_counting_with_jit(metaspace, entry, None);
+    (value, steps)
+}
+
+/// [`execute_counting`] with the JIT forced on (`Some(true)`), forced off (`Some(false)`) or left
+/// to `JVM_JIT` (`None`), and the JIT's counters handed back alongside the opcode count.
+///
+/// Two jobs, one function. The **differential tests** run a workload twice — once each way — and
+/// assert the same answer; the **benchmark** needs the counters to prove a workload actually
+/// compiled something before any timing it reports means anything. Both use the programmatic
+/// switch rather than `JVM_JIT=0` because `cargo test` runs its tests in threads of one process,
+/// where mutating the environment would mutate it for every test running at that moment.
+pub fn execute_counting_with_jit(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    jit: Option<bool>,
+) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
+    execute_counting_with_jit_and_poll(metaspace, entry, jit, |_| {})
+}
+
+/// [`execute_counting_with_jit`] that first hands `observe` this run's **safepoint poll word**.
+///
+/// It is the only way in from outside: the word belongs to the `JitCache` inside the interpreter
+/// this function builds, and — deliberately — is *not* process-global, so no other run can see it
+/// (see [`JitCache::poll_word`][crate::burst::code_cache::JitCache::poll_word]). Raising it makes
+/// every compiled loop in *this* run leave native code at its next loop header, which is what the
+/// safepoint half of F3 step 3 has to be tested against: `observe` may keep the `Arc` and raise it
+/// from another OS thread while the program runs.
+pub fn execute_counting_with_jit_and_poll(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    jit: Option<bool>,
+    observe: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
+) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
+    let mut interp = JVM::new(metaspace, entry);
+    interp.shared.mode = ThreadMode::Green; // measure the deterministic substrate, whatever the env says
+    if let Some(enabled) = jit {
+        interp.running.jit.set_enabled(enabled);
+    }
+    observe(interp.running.jit.poll_word());
+    loop {
+        if let Step::Return(value) = interp.exec().step() {
+            return (value, interp.shared.steps, interp.running.jit.stats());
+        }
     }
 }
 
@@ -3543,5 +3983,84 @@ fn spawn_pending_parallel(
             os_parallel_loop(&child_shared, &child_gc, i);
         });
         shared.threads[i].os_handle = Some(handle.thread().clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The frame pool's one rule (Fase F): **a frame in the pool holds no reference.** If one
+    /// did, the collector would never see it (the pool is not a root — `gc::roots`, `gc::minor`,
+    /// `gc::compact` and `gc::verify_heap` all walk `threads[*].frames`), so a moving collection
+    /// would leave it un-remapped and the next call to reuse that frame would read a pointer to
+    /// where the object used to be. This is the same failure shape as the stale-frame bug
+    /// `verify_heap_catches_a_dangling_frame_reference` guards against, arrived at from the
+    /// other side.
+    #[test]
+    fn a_recycled_frame_carries_no_value_into_the_pool() {
+        let mut ctx = RunningCtx::default();
+        let mut frame = Frame::for_call(0, 3, vec![Value::Reference(0x1000)], &[1]);
+        frame.store(1, Value::Reference(0x2000));
+        frame.push(Value::Reference(0x3000));
+        frame.push(Value::Int(7));
+        frame.set_monitor(0x4000);
+
+        ctx.recycle(frame);
+
+        let pooled = ctx.frame_pool.last().expect("the frame went into the pool");
+        assert!(pooled.locals().is_empty(), "a pooled frame must expose no locals");
+        assert!(pooled.stack().is_empty(), "a pooled frame must expose no operands");
+        assert_eq!(pooled.monitor(), None, "a pooled frame must hold no monitor");
+        assert!(pooled.is_scrubbed());
+        // And nothing the collector could reach: `remap_references` visits every value a frame
+        // exposes, so a scrubbed frame must offer it none.
+        let seen = std::cell::Cell::new(0);
+        ctx.frame_pool[0].remap_references(|off| {
+            seen.set(seen.get() + 1);
+            off
+        });
+        assert_eq!(seen.get(), 0, "a pooled frame must offer the collector nothing to remap");
+    }
+
+    /// Reuse must be indistinguishable from a fresh allocation: same locals (arguments laid out
+    /// at their category-2 offsets, the rest `Int(0)`), empty operand stack, pc 0, not synthetic,
+    /// no monitor — nothing inherited from the frame's previous occupant.
+    #[test]
+    fn a_reused_frame_is_identical_to_a_fresh_one() {
+        let mut ctx = RunningCtx::default();
+        let mut dirty = Frame::for_call(7, 4, vec![Value::Reference(0x1000)], &[1]);
+        dirty.store(3, Value::Reference(0x2000));
+        dirty.push(Value::Reference(0x3000));
+        dirty.set_monitor(0x4000);
+        dirty.mark_synthetic();
+        dirty.advance(42);
+        ctx.recycle(dirty);
+
+        // Same arguments through the pooled path and the fresh path.
+        let args = vec![Value::Long(9), Value::Int(5)];
+        let widths = [2, 1];
+        let reused = ctx.new_frame(3, 5, args.clone(), &widths);
+        assert!(ctx.frame_pool.is_empty(), "the pooled frame was taken, not copied");
+        let fresh = Frame::for_call(3, 5, args, &widths);
+
+        assert_eq!(reused.locals(), fresh.locals());
+        assert_eq!(reused.locals(), &[Value::Long(9), Value::Int(0), Value::Int(5), Value::Int(0), Value::Int(0)]);
+        assert_eq!(reused.stack(), fresh.stack());
+        assert_eq!(reused.pc(), fresh.pc());
+        assert_eq!(reused.method(), fresh.method());
+        assert_eq!(reused.is_synthetic(), fresh.is_synthetic());
+        assert_eq!(reused.monitor(), fresh.monitor());
+    }
+
+    /// The pool is a cache, not a graveyard: past its cap the extra frames are dropped, so a
+    /// pathologically deep call chain can't leave a `MAX_FRAMES`-sized pool behind.
+    #[test]
+    fn the_frame_pool_is_bounded() {
+        let mut ctx = RunningCtx::default();
+        for _ in 0..(RunningCtx::FRAME_POOL_CAP + 50) {
+            ctx.recycle(Frame::new(0, 2, Vec::new()));
+        }
+        assert_eq!(ctx.frame_pool.len(), RunningCtx::FRAME_POOL_CAP);
     }
 }

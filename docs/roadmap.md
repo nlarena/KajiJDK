@@ -378,26 +378,34 @@ El momento épico: las tres piezas funcionando juntas.
 > Importante: un optimizador **no necesita JIT** — el intérprete tiene su propia
 > caja de herramientas (típico 2–10× sin compilar a nativo).
 
-### Hito F0 · Quickening 🔵
-- [ ] Resolver refs del constant pool **una sola vez** y reescribir el opcode a su
-      variante "resuelta" (como las JVM reales) → saltar la resolución repetida.
-- **✅ Éxito:** un método que invoca en bucle no re-resuelve en cada vuelta.
+### Hito F-bench · Infraestructura de medición 🔵 — ✅ hecha (2026-08-13)
+- [x] `bench_baseline` (`#[ignore]`): 5 workloads en `java/Bm*.java` que aíslan una dimensión cada uno — `BmLoop` (aritmética frame-local = el piso), `BmArray`, `BmInvoke`, `BmVirtual`, `BmField`. Conteos de opcodes exactos y reproducibles → **ns/opcode** compara entre workloads. Valores esperados contrastados contra el `java` real del JDK 25, con un test no-ignorado que los verifica
+- [x] **Protocolo de medición** (aprendido a los golpes): el ruido de *code layout* de esta máquina es **±3-12%, mayor que el efecto de casi cualquier cambio** — demostrado con un experimento nulo (agregar un campo `HashMap` **sin usar** movió un control +3.4%). Por eso: workloads de **control de efecto-cero** verificados *contando* la operación, **cuadrado latino** con binarios pre-compilados, medianas y mínimos
+- **✅ Éxito:** dos cuellos "obvios" resultaron falsos y la medición los desmintió — el GC parecía culpable de que `BmField` fuera 8.6× el piso (era ≤5%) y el scan O(#clases) de `class_name_at_mirror` parecía la gran palanca de `BmVirtual` (valía ~3%: hay **5** mirrors, no cientos)
 
-### Hito F1 · Superinstrucciones / fusión 🔵
-- [ ] Fusionar secuencias calientes (`iload, iload, iadd`) en un solo handler →
-      menos overhead de despacho. (Primo del *operator fusion* de los compiladores
-      de ML — p. ej. FlashAttention.)
+### Hito F0 · Quickening 🔵 — ✅ hecho (2026-08-13)
+- [x] Resolución del constant pool **una sola vez por call site**, cacheada por `(MethodId, pc)` en una celda `AtomicU64` por byte de código (sin hash ni strings). Se eligió **tabla lateral** en vez de reescribir el opcode: el costo medido no estaba en el despacho sino en el trabajo redundante, y mutar bytecode compartido habría tocado el barrio del heisenbug de `os-parallel`
+- [x] **Campos** (`field_sites`) — `field_offset` **reconstruía el layout entero de la clase** en cada acceso: **−86%**. Cerró además un peligro real: `layout_fields_ref` truncaba en silencio ante una superclase no cargada devolviendo offsets demasiado chicos; sin cache era una escalación inofensiva, **con** cache habría inmortalizado un offset incorrecto
+- [x] **Llamadas** (`call_sites`) — callee resuelto, `vtable_slot` estático, anchos de slots, y la cadena de ~7 comparaciones de string reemplazada por un enum `Intrinsic` en el `MethodBody` **del callee** (por vtable el sitio no puede saber la respuesta: depende del receptor): `invokestatic` **−40%**, `invokevirtual` **−45%**
+- [x] **Pool de frames** — reusar `Frame`s y la capacidad de sus `Vec`: **−11/12%** más en llamadas (~72 ns/llamada). Blindado contra el riesgo de GC con una sola puerta de entrada (`scrub` incondicional), `debug_assert!` en cada reuso con la suite corrida en **modo debug**, y verificación de que el pool no está en ningún camino de raíces
+- **✅ Éxito superado:** el criterio era "no re-resolver en cada vuelta"; la medición mostró que el mismo patrón —*un cache keyeado por `&str` alcanzado alocando un `String`, recomputado por ejecución*— estaba en **tres** opcodes, y que esas alocaciones eran **impuesto del borrow checker**, no necesidad semántica
+
+### Hito F1 · Superinstrucciones / fusión 🔵 — ⏭️ salteado a propósito
+- **Decisión, no omisión:** fusionar `iload,iload,iadd` atacaría el piso de despacho (~28-30 ns/opcode) con una mejora estimada de 10-20%, **por debajo del ruido de layout de esta máquina (±3-12%)** — no podríamos *demostrar* que funciona. El esfuerzo se redirigió a F3, donde el efecto es de dos órdenes de magnitud. Queda disponible si el piso de despacho vuelve a ser el cuello con mejor instrumentación
 
 ### Hito F2 · Inline caching + stack caching 🟣
-- [ ] Inline cache en sitios de llamada (recordar receptor → método) para acelerar
-      el *dispatch* dinámico.
-- [ ] Mantener el tope de la pila de operandos en registro/variable.
+- [ ] **Inline cache monomórfico** (receptor → método). F0 ya dejó el lugar: cachea el `vtable_slot` del tipo estático y lo único que queda por llamada es `vtable_method(runtime_class, slot)`; `SiteKind::Vtable` está formado para alojarlo
+- [ ] **Stack caching**: tope de la pila de operandos en registro (en el JIT, equivale a asignar registros a la pila de operandos — hoy cada op Java es load/op/store contra L1)
 
-### Hito F3 · JIT (bytecode → nativo) 🟣
-- [ ] Compilar métodos calientes a código nativo (register allocation, etc.).
-- **Nota:** la cumbre lejana. El dueño del proyecto **apuesta a alcanzarla** y
-      queda como **meta real** del track, no descartada. El differential testing
-      la mantiene honesta igual que al resto de `burst`.
+### Hito F3 · JIT (bytecode → nativo) 🟣 — ✅🟡 primer tier corriendo (2026-08-13)
+- [x] **Emisor x86-64 propio** (`src/burst/x64.rs`), **sin dependencias** — las funciones de Windows declaradas a mano con `extern "system"`, igual que en su día se escribió el cursor de bytes en vez de usar `nom`. ALU, `idiv`, `jcc` con labels y parcheo, ABI **Microsoft x64**. Verificado **ejecutando**: bucles, factorial, y código generado **llamando a código generado** (que cubre de una las tres reglas del ABI que solo muerden en un `call`)
+- [x] **Memoria W^X como garantía del tipo** (`exec_mem.rs`): `CodeBuf` → `.make_executable()` **consume `self`** → `ExecMem`. Tras la transición no queda ningún handle escribible — el tipo lo hace imposible, no es convención
+- [x] **Compilador** (`compile.rs`) del subconjunto **frame-local de enteros** (el mismo que ya corría lock-free en W1: sin heap, sin llamadas, sin referencias ⇒ **función pura de sus locales**). La profundidad de pila se recalcula **del CFG**, sin confiar en el `StackMapTable`: un desacuerdo entre ramas se rechaza en vez de generar código sobre una suposición
+- [x] **Las tres trampas de semántica**, con prueba: *normalización* (`movsxd` tras la aritmética pero **no** tras `iand/ior/ixor`, con la demostración de por qué), *shifts* (Java enmascara a 5 bits, x86 a 6 en ops de 64; `iushr` es lógico sobre 32), y *división* (`INT_MIN/-1` trunca por JLS §15.17.2 en vez de fallar con `#DE`). Los 11 operadores binarios contra un modelo en Rust sobre **361 pares de borde**
+- [x] **Deopt por pureza**: sin efectos secundarios, ante lo que el nativo no pueda manejar (divisor cero) se abandona y **el intérprete ejecuta el método desde cero** — indistinguible. Evita emitir manejo de excepciones en nativo
+- [x] **OSR + poll de safepoint**, ambos en back-edges con **pila vacía** ⇒ el estado a transferir es solo *locales + pc*. Sin OSR un bucle largo entrado una sola vez nunca calentaba (el caso de `BmLoop`). El poll **sale hacia el intérprete** en vez de manejar el GC desde el nativo, y usa una palabra estable propia: el `gc_pending` del driver es un `Arc` construido fresco en cada corrida (e inexistente en green), así que hornear su dirección habría sido corrupción silenciosa
+- **✅ Éxito (primer tier):** `BmLoop` **475 ms → 4.1 ms = 116×**, y el número que lo explica no es el tiempo sino los opcodes interpretados: **17.325.011 → 620**. Controles planos. El *differential testing* no hubo que construirlo: con el JIT activo en green/os-gil y apagado en os-parallel, el oráculo `green≡os-gil≡os` **es** la comparación JIT-vs-intérprete sobre el corpus entero (y la suite pasa igual con `JVM_JIT=0`)
+- [ ] **Pendiente, por impacto:** ensanchar el subconjunto (hoy un `+= 256` descalifica un método por `wide iinc`; después `getstatic`/`putstatic` de ints, y llamadas), **registros** para la pila de operandos, y habilitar el JIT en **`os-parallel`** — apagado a propósito: es el único modo con el heisenbug abierto y no se le agrega una variable a un problema con ~17 sesiones de acotamiento
 
 ## FASE G — `plain_data` / value types (modelo de datos)
 

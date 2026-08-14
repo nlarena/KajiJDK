@@ -274,6 +274,38 @@ impl HeapService {
         self.memory.len()
     }
 
+    /// The **machine address** of heap offset `offset`, for the one consumer that needs a raw
+    /// pointer rather than an offset: the JIT, which bakes the address of an `int` static into an
+    /// instruction stream (`burst::compile`'s `getstatic`).
+    ///
+    /// `None` unless the whole `size`-byte span lies in `memory` **outside Eden**, and that
+    /// exclusion is the point rather than an omission. Eden's bytes live in a different buffer
+    /// ([`Self::eden`]) *and* Eden is evacuated by every minor collection, so no address in it can
+    /// be baked into anything. The intended caller only ever asks about a `Class<…>` mirror, which
+    /// `malloc_old` puts in Old and `gc::compact` pins there.
+    ///
+    /// The address is stable for the life of the VM, and so is the bounds check, for two separate
+    /// reasons that are both worth naming because a caller bakes the answer into machine code and
+    /// never asks again:
+    ///
+    ///  - `memory` is **pre-reserved to the maximum heap** at startup and therefore never
+    ///    reallocates (see [`DEFAULT_MAX_HEAP`]), so `as_ptr()` is a constant;
+    ///  - the only caller of [`Self::resize`] is `malloc_old`'s growth path, so `memory.len()` is
+    ///    **monotonically non-decreasing**. A major collection moves `old_cursor` down but never
+    ///    shrinks the region ([`Self::reset_after_compaction`]), so an offset that was in bounds
+    ///    once stays in bounds.
+    ///
+    /// What this function does *not* and cannot promise is that the object at `offset` stays alive
+    /// or stays put — that is the caller's to establish, and for pinned mirrors it is
+    /// `gc::compact`'s pinned set.
+    pub fn address_of(&self, offset: usize, size: usize) -> Option<usize> {
+        let end = offset.checked_add(size)?;
+        if offset < self.eden_end() || end > self.memory.len() {
+            return None;
+        }
+        Some(self.memory.as_ptr() as usize + offset)
+    }
+
     /// Bytes handed out so far across all three regions (Eden + the live survivor +
     /// Old) — the heap's occupancy, for the GC triggers and the visualizer.
     pub fn used(&self) -> usize {

@@ -2,64 +2,54 @@
 //! the target fixed at link time. Lives as an `impl JVM` method (it drives
 //! the whole call stack, not just one frame), dispatched from `step()`.
 
-use super::{Exec, Step};
-use crate::jvm::interpreter::metaspace::MetaspaceService;
+use super::call_site::{CallSite, SiteKind};
+use super::{Exec, Step, Widths};
+use crate::jvm::interpreter::frame::Value;
+use crate::jvm::interpreter::metaspace::{Intrinsic, MethodId};
 use crate::jvm::interpreter::natives;
 
 impl Exec<'_> {
     /// `invokestatic` (0xb8): resolve the target static method through the
     /// metaspace (loading its class if needed), move the caller's top-of-stack
     /// arguments into a fresh callee frame's leading locals, and push it.
+    ///
+    /// The resolution is **quickened** (F0): the target of a given `b8` is fixed for the life of
+    /// the site, so the first execution folds it into the method's call-site cache and every
+    /// later one reads a `MethodId` out of a single indexed atomic load — no `String`, no
+    /// `HashMap`, no intrinsic-name compares. See `super::call_site`.
     pub(super) fn invokestatic(&mut self) -> Step {
         let caller = self.frame().method();
         let pc = self.frame().pc();
 
-        // Read the u2 constant-pool index that follows the opcode (the `00 07`).
-        let cp_index = {
-            let code = self.shared.metaspace.code(caller);
-            u16::from_be_bytes([code[pc + 1], code[pc + 2]])
+        let mut site = match CallSite::unpack(self.shared.metaspace.call_site(caller, pc)) {
+            Some(site) => site,
+            // Cold site: resolve it the long way once, then record it.
+            None => match self.resolve_static_site(caller, pc) {
+                Ok(site) => site,
+                Err(step) => return step, // a linkage error — thrown, not cached
+            },
+        };
+        let callee = match site.kind {
+            SiteKind::Direct(callee) => callee,
+            _ => unreachable!("invokestatic sites are always statically bound"),
         };
 
-        // Resolve the call straight from that code, against the caller's class.
-        // The metaspace reads the (already parsed) Methodref and caches the result
-        // under (class, index) — the JVM's "resolved constant pool": the next time
-        // this same `b8 00 07` runs it's a direct (class, #7) → MethodId lookup.
-        let caller_class = self.shared.metaspace.class_of(caller).to_string();
-        // Resolution can fail — that's a *linkage error*, not a VM crash. If the
-        // target class can't be loaded it's a NoClassDefFoundError; if the class is
-        // there but the method isn't, a NoSuchMethodError. Both are thrown.
-        let callee = match self.shared.metaspace.resolve_call(&caller_class, cp_index) {
-            Some(callee) => callee,
-            None => {
-                let target = self
-                    .shared.metaspace
-                    .get(&caller_class)
-                    .and_then(|cf| cf.methodref_target(cp_index))
-                    .map(|(class, _, _)| class.to_string());
-                let error = match target {
-                    Some(class) if self.shared.metaspace.get_or_load(&class).is_none() => {
-                        "java/lang/NoClassDefFoundError"
-                    }
-                    _ => "java/lang/NoSuchMethodError",
-                };
-                return self.throw_exception(error);
+        // First active use of the callee's class triggers its initialization. Once that class is
+        // `Done` the check can never do anything again (JVMS §5.5 has no transition out of it),
+        // so the site records the fact and stops asking. `Erroneous` deliberately never sets the
+        // bit: it must keep throwing NoClassDefFoundError on every single use.
+        if !site.initialized {
+            if !self.shared.metaspace.declaring_class_initialized(callee) {
+                let callee_class = self.shared.metaspace.class_of(callee).to_string();
+                self.ensure_initialized(&callee_class);
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of entering the callee
+                }
             }
-        };
-
-        // First active use of the callee's class triggers its initialization.
-        let callee_class = self.shared.metaspace.class_of(callee).to_string();
-        self.ensure_initialized(&callee_class);
-        if let Some(step) = self.take_pending_throw() {
-            return step; // <clinit> failed → throw instead of entering the callee
-        }
-
-        // `System.gc()`: an *explicit* GC request. Flag it and consume the call — it's
-        // serviced at the next safepoint (the real VM also defers, never runs it
-        // inline). No args, no return value.
-        if callee_class == "java/lang/System" && self.shared.metaspace.name(callee) == "gc" {
-            self.request_gc();
-            self.advance_past_call();
-            return Step::Continue;
+            if self.shared.metaspace.declaring_class_initialized(callee) {
+                site.initialized = true;
+                self.shared.metaspace.set_call_site(caller, pc, site.pack());
+            }
         }
 
         let arg_count = self.shared.metaspace.arg_count(callee);
@@ -78,125 +68,125 @@ impl Exec<'_> {
             args.reverse();
         }
 
-        // `System.exit(status)`: end the VM. Handled here and **not** in the native bridge for a
-        // structural reason: `natives::dispatch` returns an `Option<Value>` — a value to push —
-        // so it can only ever *continue* execution. Terminating means answering with a `Step`,
-        // and only an interception on this side of the bridge (with `&mut self`, i.e. the frame
-        // stack) can do that. `vm_exit` drops every frame and returns `Step::Return(status)`, so
-        // nothing after the call runs — not the rest of the method, not its `finally`, not the
-        // caller. See `Exec::vm_exit` for the semantics (and for why shutdown hooks are out).
-        if callee_class == "java/lang/System" && self.shared.metaspace.name(callee) == "exit" {
-            let status = match args.first() {
-                Some(crate::jvm::interpreter::frame::Value::Int(v)) => *v,
-                _ => 0,
-            };
-            return self.vm_exit(status);
-        }
-
-        // `String.valueOf(Object)`: the text of anything. Handled here rather than in the
-        // native bridge for the same reason as the scheduler ops — it isn't a leaf. It
-        // has to call the object's *own* `toString()`, which is a virtual call back into
-        // user bytecode, and the bridge has no way to re-enter the interpreter.
-        //
-        // This is what `"x" + obj` needs: javac emits this call *before* the concatenation
-        // call site, so the indy only ever sees Strings.
-        if callee_class == "java/lang/String"
-            && self.shared.metaspace.name(callee) == "valueOf"
-            && self.shared.metaspace.descriptor(callee) == "(Ljava/lang/Object;)Ljava/lang/String;"
-        {
-            let object = match args.first() {
-                Some(crate::jvm::interpreter::frame::Value::Reference(offset)) => *offset,
-                other => panic!("String.valueOf: expected a reference, found {other:?}"),
-            };
-            let text = self.text_of(object);
-            let offset = crate::jvm::interpreter::strings::intern(
-                &mut self.shared.metaspace,
-                &mut self.shared.heap,
-                &text,
-            );
-            self.top().push(crate::jvm::interpreter::frame::Value::Reference(offset));
-            self.advance_past_call();
-            return Step::Continue;
-        }
-
-        // `LockSupport.park()` / `unpark(Thread)`: the block/wake primitive AQS is built on.
-        // Scheduler ops (they suspend/wake a thread), so handled here, not the native bridge.
-        // `park`/`park(Object blocker)` block the current thread (the blocker is ignored);
-        // `unpark` hands its `Thread` argument a permit.
-        if callee_class == "java/util/concurrent/locks/LockSupport" {
-            match self.shared.metaspace.name(callee) {
-                "park" => return self.thread_park(),
-                "unpark" => {
-                    let target = match args.first() {
-                        Some(crate::jvm::interpreter::frame::Value::Reference(offset)) => *offset,
-                        _ => 0,
-                    };
-                    self.thread_unpark(target);
-                    self.advance_past_call();
-                    return Step::Continue;
-                }
-                _ => {}
+        // The methods the VM intercepts instead of running. Which ones those are is a property of
+        // the *callee* — decided once when its body was resolved (see `Intrinsic`) — so what used
+        // to be a chain of ~7 class-name compares that every ordinary call failed is now one
+        // jump table on a `Copy` tag.
+        match self.shared.metaspace.intrinsic(callee) {
+            // `System.gc()`: an *explicit* GC request. Flag it and consume the call — it's
+            // serviced at the next safepoint (the real VM also defers, never runs it
+            // inline). No args, no return value.
+            Intrinsic::SystemGc => {
+                self.request_gc();
+                self.advance_past_call();
+                return Step::Continue;
             }
-        }
-
-        // `Thread.sleep(ms)`: park the current thread (scheduler op) — handled here, not
-        // the native bridge, since it suspends the thread.
-        if callee_class == "java/lang/Thread" && self.shared.metaspace.name(callee) == "sleep" {
-            let ms = match args.first() {
-                Some(crate::jvm::interpreter::frame::Value::Long(v)) => *v,
-                _ => 0,
-            };
-            return self.thread_sleep(ms);
-        }
-
-        // `Thread.currentThread()` / `Thread.nextThreadNum()`: scheduler reads — handled
-        // here because they touch the thread list (and `currentThread` may allocate main's
-        // Thread object), which the native bridge can't do.
-        if callee_class == "java/lang/Thread" {
-            match self.shared.metaspace.name(callee) {
-                // A cooperative scheduler already switches every opcode, so yield() is a
-                // no-op beyond stepping past the call.
-                "yield" => {
-                    self.advance_past_call();
-                    return Step::Continue;
-                }
-                // holdsLock(o): does the current thread own o's monitor?
-                "holdsLock" => {
-                    let obj = match args.first() {
-                        Some(crate::jvm::interpreter::frame::Value::Reference(o)) => *o,
-                        _ => 0,
-                    };
-                    let held = self.owns_monitor(obj);
-                    self.top().push(crate::jvm::interpreter::frame::Value::Int(held as i32));
-                    self.advance_past_call();
-                    return Step::Continue;
-                }
-                "currentThread" => {
-                    let obj = self.thread_current();
-                    self.top().push(crate::jvm::interpreter::frame::Value::Reference(obj));
-                    self.advance_past_call();
-                    return Step::Continue;
-                }
-                "nextThreadNum" => {
-                    let id = self.next_java_thread_num();
-                    self.top().push(crate::jvm::interpreter::frame::Value::Long(id));
-                    self.advance_past_call();
-                    return Step::Continue;
-                }
-                _ => {}
+            // `System.exit(status)`: end the VM. Handled here and **not** in the native bridge for
+            // a structural reason: `natives::dispatch` returns an `Option<Value>` — a value to
+            // push — so it can only ever *continue* execution. Terminating means answering with a
+            // `Step`, and only an interception on this side of the bridge (with `&mut self`, i.e.
+            // the frame stack) can do that. `vm_exit` drops every frame and returns
+            // `Step::Return(status)`, so nothing after the call runs — not the rest of the method,
+            // not its `finally`, not the caller. See `Exec::vm_exit` for the semantics (and for
+            // why shutdown hooks are out).
+            Intrinsic::SystemExit => {
+                let status = match args.first() {
+                    Some(Value::Int(v)) => *v,
+                    _ => 0,
+                };
+                return self.vm_exit(status);
             }
+            // `String.valueOf(Object)`: the text of anything. Handled here rather than in the
+            // native bridge for the same reason as the scheduler ops — it isn't a leaf. It
+            // has to call the object's *own* `toString()`, which is a virtual call back into
+            // user bytecode, and the bridge has no way to re-enter the interpreter.
+            //
+            // This is what `"x" + obj` needs: javac emits this call *before* the concatenation
+            // call site, so the indy only ever sees Strings.
+            Intrinsic::StringValueOfObject => {
+                let object = match args.first() {
+                    Some(Value::Reference(offset)) => *offset,
+                    other => panic!("String.valueOf: expected a reference, found {other:?}"),
+                };
+                let text = self.text_of(object);
+                let offset = crate::jvm::interpreter::strings::intern(
+                    &mut self.shared.metaspace,
+                    &mut self.shared.heap,
+                    &text,
+                );
+                self.top().push(Value::Reference(offset));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            // `LockSupport.park()` / `unpark(Thread)`: the block/wake primitive AQS is built on.
+            // Scheduler ops (they suspend/wake a thread), so handled here, not the native bridge.
+            // `park`/`park(Object blocker)` block the current thread (the blocker is ignored);
+            // `unpark` hands its `Thread` argument a permit.
+            Intrinsic::LockSupportPark => return self.thread_park(),
+            Intrinsic::LockSupportUnpark => {
+                let target = match args.first() {
+                    Some(Value::Reference(offset)) => *offset,
+                    _ => 0,
+                };
+                self.thread_unpark(target);
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            // `Thread.sleep(ms)`: park the current thread (scheduler op) — handled here, not
+            // the native bridge, since it suspends the thread.
+            Intrinsic::ThreadSleep => {
+                let ms = match args.first() {
+                    Some(Value::Long(v)) => *v,
+                    _ => 0,
+                };
+                return self.thread_sleep(ms);
+            }
+            // `Thread.yield()`: a cooperative scheduler already switches every opcode, so this is
+            // a no-op beyond stepping past the call.
+            Intrinsic::ThreadYield => {
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            // `Thread.holdsLock(o)`: does the current thread own o's monitor?
+            Intrinsic::ThreadHoldsLock => {
+                let obj = match args.first() {
+                    Some(Value::Reference(o)) => *o,
+                    _ => 0,
+                };
+                let held = self.owns_monitor(obj);
+                self.top().push(Value::Int(held as i32));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            // `Thread.currentThread()` / `Thread.nextThreadNum()`: scheduler reads — handled
+            // here because they touch the thread list (and `currentThread` may allocate main's
+            // Thread object), which the native bridge can't do.
+            Intrinsic::ThreadCurrentThread => {
+                let obj = self.thread_current();
+                self.top().push(Value::Reference(obj));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            Intrinsic::ThreadNextThreadNum => {
+                let id = self.next_java_thread_num();
+                self.top().push(Value::Long(id));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            _ => {}
         }
 
         // A native static (e.g. `Math.max`, `System.arraycopy`): no bytecode — run
-        // the bridge with the args, push any result, and step past the call.
+        // the bridge with the args, push any result, and step past the call. The name and
+        // descriptor are the *resolved method's own* — which is what the call site named, since
+        // resolution matches on both.
         if self.shared.metaspace.is_native(callee) {
-            let (name, descriptor) = {
-                let cf = self.shared.metaspace.get(&caller_class).expect("caller class is loaded");
-                let (_, n, d) = cf.methodref_target(cp_index).expect("invokestatic: bad methodref");
-                (n.to_string(), d.to_string())
+            let (class, name, descriptor) = {
+                let m = &self.shared.metaspace;
+                (m.class_of(callee).to_string(), m.name(callee).to_string(), m.descriptor(callee).to_string())
             };
             let result = natives::dispatch(
-                &callee_class,
+                &class,
                 &name,
                 &descriptor,
                 &args,
@@ -211,22 +201,61 @@ impl Exec<'_> {
             return Step::Continue;
         }
 
-        // Lay the arguments into the callee's locals by their slot widths, so a
-        // `long`/`double` parameter occupies two slots and the next lands past it.
-        let descriptor = self
-            .shared.metaspace
-            .get(&caller_class)
-            .and_then(|cf| cf.methodref_target(cp_index))
-            .map(|(_, _, d)| d.to_string())
-            .unwrap_or_default();
-        let widths = MetaspaceService::param_slot_widths(&descriptor);
         // A `static synchronized` method locks the class's `Class` mirror (already
         // allocated — `ensure_initialized` ran above). Ordinary statics: no lock.
-        let lock = self.shared.metaspace.is_synchronized(callee).then(|| {
-            self.shared.metaspace
-                .class_mirror(&callee_class)
-                .expect("static synchronized: the Class mirror exists after initialization")
-        });
-        self.push_frame_locked(callee, max_locals, args, &widths, lock)
+        let lock = match self.shared.metaspace.is_synchronized(callee) {
+            true => {
+                let callee_class = self.shared.metaspace.class_of(callee).to_string();
+                Some(self.shared.metaspace.class_mirror(&callee_class).expect(
+                    "static synchronized: the Class mirror exists after initialization",
+                ))
+            }
+            false => None,
+        };
+        // The arguments go into the callee's locals by its own precomputed slot widths, so a
+        // `long`/`double` parameter occupies two slots and the next lands past it.
+        self.push_frame_locked(callee, max_locals, args, Widths::OfCallee { receiver: false }, lock)
+    }
+
+    /// The cold half of [`Self::invokestatic`]: read the `u2` constant-pool index that follows the
+    /// opcode (the `00 07`), resolve the `Methodref` it names, and record the result in the
+    /// call-site cache so no later execution of this `b8` repeats any of it.
+    ///
+    /// Resolution can fail — that's a *linkage error*, not a VM crash. If the target class can't
+    /// be loaded it's a NoClassDefFoundError; if the class is there but the method isn't, a
+    /// NoSuchMethodError. Both are thrown, and **neither is cached**: a failure is not a resolved
+    /// site, and the same class may well load later.
+    fn resolve_static_site(&mut self, caller: MethodId, pc: usize) -> Result<CallSite, Step> {
+        let cp_index = {
+            let code = self.shared.metaspace.code(caller);
+            u16::from_be_bytes([code[pc + 1], code[pc + 2]])
+        };
+        let caller_class = self.shared.metaspace.class_of(caller).to_string();
+        let callee = match self.shared.metaspace.resolve_call(&caller_class, cp_index) {
+            Some(callee) => callee,
+            None => {
+                let target = self
+                    .shared.metaspace
+                    .get(&caller_class)
+                    .and_then(|cf| cf.methodref_target(cp_index))
+                    .map(|(class, _, _)| class.to_string());
+                let error = match target {
+                    Some(class) if self.shared.metaspace.get_or_load(&class).is_none() => {
+                        "java/lang/NoClassDefFoundError"
+                    }
+                    _ => "java/lang/NoSuchMethodError",
+                };
+                return Err(self.throw_exception(error));
+            }
+        };
+        let site = CallSite {
+            kind: SiteKind::Direct(callee),
+            arg_count: self.shared.metaspace.arg_count(callee),
+            // Initialization is *not* part of resolution: the caller runs `ensure_initialized`
+            // right after and upgrades this bit once the class reaches `Done`.
+            initialized: false,
+        };
+        self.shared.metaspace.set_call_site(caller, pc, site.pack());
+        Ok(site)
     }
 }

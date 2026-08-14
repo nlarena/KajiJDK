@@ -201,6 +201,78 @@ fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_c
     mirror + HEADER_SIZE + slots * SLOT_SIZE
 }
 
+/// The **machine address** of the `int` static named by `cp_index` in `caller`'s constant pool —
+/// what the JIT bakes into a compiled `getstatic` (see [`burst::compile`][crate::burst::compile]).
+///
+/// Read-only in every sense, and that is the whole design: it takes `&MetaspaceService` and
+/// `&HeapService`, so it cannot load a class, mint a Class ID, allocate a mirror or run a
+/// `<clinit>` — all of which [`static_slot`] happily does. Compilation must not have side effects
+/// on the VM's state, and the type signature is what enforces it rather than a comment.
+///
+/// `None` — "do not compile this method" — unless **all five** hold:
+///
+///  1. the constant-pool entry is a `FieldRef` whose descriptor is exactly `I`, so the slot is the
+///     4 bytes a compiled `movsxd r, dword [addr]` will read (a `J`/`D` static is 8 and a
+///     reference is a heap offset the JIT has no business dereferencing);
+///  2. some class in the named class's superclass chain — all of them already **loaded** — declares
+///     it `static`;
+///  3. that declaring class is **initialised** (`InitState::Done`). Compiled code cannot trigger a
+///     `<clinit>`, so a static whose class has not run one yet would be read at its default value.
+///     A method refused for this reason is refused permanently, which is the deliberate cost noted
+///     in `burst::compile`'s docs;
+///  4. its `Class<…>` mirror has been prepared, i.e. the mirror offset exists;
+///  5. the mirror is somewhere [`HeapService::address_of`] will vouch for — outside Eden and inside
+///     the byte region. It always is: `load_class` allocates mirrors with `malloc_old` and
+///     `gc::compact` keeps them in its **pinned** set, so the offset never moves; the byte region
+///     is pre-reserved to the max heap and never reallocates, so the address never moves either.
+///     Those two facts together are what make baking the address in sound at all.
+pub fn static_int_address(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    caller: &str,
+    cp_index: u16,
+) -> Option<usize> {
+    let (named, field, descriptor) = metaspace.get(caller)?.fieldref_target(cp_index)?;
+    if descriptor != "I" {
+        return None;
+    }
+    let declaring = static_declaring_class_read(metaspace, named, field)?;
+    if metaspace.init_state(&declaring) != crate::jvm::interpreter::metaspace::InitState::Done {
+        return None;
+    }
+    let mirror = metaspace.class_object(metaspace.class_id_read(&declaring)?)?;
+
+    // The field's byte offset inside the mirror: past the header, then the slots its declaring
+    // class's own static fields occupy before it — the same width-aware walk `static_slot` does,
+    // because the two must agree to the byte or compiled code reads the wrong static.
+    let class = metaspace.get(&declaring)?;
+    let mut acc = 0;
+    let mut start = None;
+    for f in class.fields.iter().filter(|f| f.is_static()) {
+        let (at, next) = objects_operations::place_field(acc, class.utf8(f.descriptor_index).unwrap_or(""));
+        if class.utf8(f.name_index) == Some(field) {
+            start = Some(at);
+            break;
+        }
+        acc = next;
+    }
+    heap.address_of(mirror + HEADER_SIZE + start? * SLOT_SIZE, SLOT_SIZE)
+}
+
+/// [`static_declaring_class`] without the loading — `None` where the other would have pulled a
+/// superclass off the classpath. The read-only half of the pair, for [`static_int_address`].
+fn static_declaring_class_read(metaspace: &MetaspaceService, start: &str, field: &str) -> Option<String> {
+    let mut current = Some(start.to_string());
+    while let Some(class_name) = current.take() {
+        let class = metaspace.get(&class_name)?;
+        if class.fields.iter().filter(|f| f.is_static()).any(|f| class.utf8(f.name_index) == Some(field)) {
+            return Some(class_name);
+        }
+        current = class.class_name(class.super_class).map(|s| s.to_string());
+    }
+    None
+}
+
 /// Finds the class that declares the *static* field `field`, walking up from `start`
 /// through its superclasses (a `FieldRef` may name a subclass that inherits it).
 fn static_declaring_class(metaspace: &mut MetaspaceService, start: &str, field: &str) -> Option<String> {

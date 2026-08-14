@@ -78,15 +78,77 @@ impl Frame {
         args: Vec<Value>,
         slot_widths: &[usize],
     ) -> Self {
-        let mut locals = vec![Value::Int(0); max_locals];
+        let mut frame =
+            Frame { method, pc: 0, stack: Vec::new(), locals: Vec::new(), synthetic: false, monitor: None };
+        frame.reset_for_call(method, max_locals, args, slot_widths);
+        frame
+    }
+
+    /// Re-arms a **pooled** frame for a new call: exactly what [`Frame::for_call`] builds, but
+    /// written into the buffers this frame already owns. That is the whole point of the frame
+    /// pool (Fase F): `locals` and `stack` keep the capacity they grew during the previous call,
+    /// so a call costs no `Vec` allocation at all (and its `return` no free).
+    ///
+    /// Every field is (re)set here — nothing is inherited from the previous occupant. In
+    /// particular `locals` is refilled from index 0 through `max_locals`, so **every slot the
+    /// frame will ever expose is written before it can be read**: `load`/`store` index `locals`,
+    /// which after this call is exactly `max_locals` fresh entries. `stack` starts empty, as a
+    /// method's operand stack must.
+    pub fn reset_for_call(
+        &mut self,
+        method: MethodId,
+        max_locals: usize,
+        args: Vec<Value>,
+        slot_widths: &[usize],
+    ) {
+        self.method = method;
+        self.pc = 0;
+        self.synthetic = false;
+        self.monitor = None;
+        self.stack.clear();
+        self.locals.clear();
+        self.locals.resize(max_locals, Value::Int(0));
         let mut index = 0;
         for (arg, &width) in args.into_iter().zip(slot_widths) {
-            if index < locals.len() {
-                locals[index] = arg;
+            if index < self.locals.len() {
+                self.locals[index] = arg;
             }
             index += width;
         }
-        Frame { method, pc: 0, stack: Vec::new(), locals, synthetic: false, monitor: None }
+    }
+
+    /// **Scrubs a retired frame** so it may sit in the thread's frame pool: empties `locals` and
+    /// the operand stack (keeping their capacity — that capacity *is* the pool's payoff) and
+    /// resets the per-call flags, including the `monitor` its caller has just released.
+    ///
+    /// This is the frame pool's correctness rule, and it is not an optimisation detail: a frame
+    /// that has just returned is full of `Value::Reference`s into the heap, and once it leaves the
+    /// call stack the collector no longer scans it (the GC's roots are `threads[*].frames`, and the
+    /// pool is deliberately not among them — see `RunningCtx::frame_pool`). Keeping those
+    /// references around would be a leak at best — pinning dead objects alive — and a *stale
+    /// reference* at worst: a moving collection would never remap them, so reusing the frame would
+    /// hand the new call a pointer to wherever that object used to live. So: nothing survives the
+    /// trip through the pool.
+    ///
+    /// `clear()` sets the length to zero without touching the backing buffer (`Value` is `Copy`,
+    /// so there is nothing to drop). That is sufficient, and deliberately so: the only ways to see
+    /// a `Value` in a frame — `load`, `stack()`, `locals()`, `operands_mut()`,
+    /// `remap_references()` — all go through the `Vec`'s *length*, so a scrubbed frame yields no
+    /// values to anyone, the collector included; and [`Frame::reset_for_call`] rewrites every slot
+    /// it re-exposes before the new call can read it. Zeroing the spare capacity as well would
+    /// cost O(capacity) per return and change nothing observable.
+    pub fn scrub(&mut self) {
+        self.stack.clear();
+        self.locals.clear();
+        self.pc = 0;
+        self.synthetic = false;
+        self.monitor = None;
+    }
+
+    /// Whether this frame holds no values at all — the invariant every frame in the pool must
+    /// satisfy (see [`Frame::scrub`]). Used by the pool's assertions and its tests.
+    pub fn is_scrubbed(&self) -> bool {
+        self.stack.is_empty() && self.locals.is_empty() && self.monitor.is_none()
     }
 
     /// A frame for a VM-run `<clinit>` (no arguments). Marked synthetic so its

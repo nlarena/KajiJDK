@@ -1863,6 +1863,29 @@ mod tests {
         }
     }
 
+    /// The **measurement workloads** (`java/Bm*.java`), each stressing one dimension of the
+    /// interpreter, with the result the real `java` of JDK 25 gives for the same class file.
+    /// Shared by the cheap correctness check below and by `bench_baseline` at the end of the
+    /// module, so a benchmark can never drift from the value it is supposed to compute.
+    const BENCH_WORKLOADS: [(&str, i32, &str); 5] = [
+        ("java/BmLoop.class", 161265, "frame-local arithmetic + branches"),
+        ("java/BmInvoke.class", 252624, "invokestatic (recursive fib)"),
+        ("java/BmField.class", 973376, "new + getfield/putfield (allocates → GC)"),
+        ("java/BmArray.class", 615180, "iaload/iastore over one array"),
+        ("java/BmVirtual.class", 861237, "invokevirtual, polymorphic receiver"),
+    ];
+
+    #[test]
+    fn benchmark_workloads_return_their_expected_values() {
+        // The guard that keeps the baseline honest. `bench_baseline` is `#[ignore]`, so nothing
+        // in a normal run would notice if one of these workloads started throwing, returning
+        // early, or computing something else entirely — it would still report a tidy ns/opcode,
+        // just for a different program. This runs all five in green and pins their results.
+        for (class_file, expected, dimension) in BENCH_WORKLOADS {
+            assert_eq!(run_int(class_file), expected, "{class_file} ({dimension})");
+        }
+    }
+
     #[test]
     fn nested_array_stores_survive_minor_gc() {
         // Regression for two latent bugs the new aastore check exposed: (1) synthetic array-class
@@ -2422,5 +2445,194 @@ mod tests {
         assert_eq!(base.auto_cause(50, 10, 0, 0), Some(GcCause::AllocationRate));
         // Low and slow → nothing warranted.
         assert_eq!(base.auto_cause(10, 100, 0, 0), None);
+    }
+
+    /// Loads a workload class and builds the frame for its `run()I` — everything that is
+    /// *not* execution, so the benchmark's clock never measures class loading or parsing.
+    fn bench_setup(class_file: &str) -> (MetaspaceService, crate::jvm::interpreter::frame::Frame) {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::frame::Frame;
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let class = ClassFile::from_path(class_file).expect("load class");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        (metaspace, Frame::new(entry, max_locals, Vec::new()))
+    }
+
+    /// One timed **green** run: the workload's result, the number of opcodes it executed, and
+    /// the wall time of the execution alone.
+    fn bench_green(class_file: &str) -> (i32, usize, std::time::Duration) {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_counting;
+        let (metaspace, frame) = bench_setup(class_file);
+        let start = std::time::Instant::now();
+        let (value, steps) = execute_counting(metaspace, frame);
+        let elapsed = start.elapsed();
+        match value {
+            Some(Value::Int(v)) => (v, steps, elapsed),
+            other => panic!("expected an int result, got {other:?}"),
+        }
+    }
+
+    /// The same run on the **os-gil** substrate (real OS threads + GIL). No opcode count comes
+    /// back from that engine, and none is needed: these workloads are single-threaded and
+    /// deterministic, so they execute exactly the opcodes green counted — only the per-opcode
+    /// overhead (lock + unlock around every instruction) differs, which is the point.
+    fn bench_os_gil(class_file: &str) -> (i32, std::time::Duration) {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_os_gil;
+        let (metaspace, frame) = bench_setup(class_file);
+        let start = std::time::Instant::now();
+        let value = execute_os_gil(metaspace, frame);
+        let elapsed = start.elapsed();
+        match value {
+            Some(Value::Int(v)) => (v, elapsed),
+            other => panic!("expected an int result, got {other:?}"),
+        }
+    }
+
+    /// The median of a set of samples (they are pre-sorted by the caller).
+    fn median(sorted: &[std::time::Duration]) -> std::time::Duration {
+        sorted[sorted.len() / 2]
+    }
+
+    // The **baseline harness** for the optimisation track (quickening → superinstructions →
+    // inline caching → JIT). It measures; it optimises nothing. Five workloads, each stressing
+    // one dimension (see `BENCH_WORKLOADS` and `java/Bm*.java`), are run 6× each: the first run
+    // is discarded as warm-up and the median of the other 5 is reported.
+    //
+    // The column that matters is **ns/opcode** — time divided by the opcodes actually executed
+    // (`SharedVm::steps`, handed back by `execute_counting`). Absolute times only say how big a
+    // workload is; ns/opcode says how expensive the engine is, and stays comparable when a
+    // workload is resized. `green` is the measurement substrate: it is single-threaded and
+    // deterministic, so the opcode count is identical run to run and there is no scheduling
+    // noise. (`gil_overhead_bench`, below, contrasts the same five against `os-gil`; it lives in
+    // its own test because the GIL makes that an order of magnitude slower to collect.)
+    //
+    // `#[ignore]` because it is a measurement, not a check — several seconds of pure CPU, and a
+    // timing assert would be a flaky test on shared hardware. The *correctness* of these same
+    // workloads is checked, cheaply and unconditionally, by
+    // `benchmark_workloads_return_their_expected_values`. Run it with:
+    //
+    //     cargo test --release --lib bench_baseline -- --ignored --nocapture
+    //
+    // ---------------------------------------------------------------------------------------
+    // **How to read this table — the measurement protocol.** Learned the hard way on the F
+    // track, and it applies to every optimisation this harness is used to judge.
+    //
+    // The dominant noise here is **code layout**, not the program. Any edit relinks the crate
+    // and reshuffles function addresses, alignment and branch-predictor aliasing; on this
+    // machine the resulting swing is **±3–12% per workload** — larger than the honest effect of
+    // most changes worth making. It is not subtle: adding a `HashMap` field that was never read
+    // moved a *control* workload by +3.4%. So a number from this table is only evidence when it
+    // was collected like this:
+    //
+    //  1. **Never compare a single binary before and after.** That difference is the change and
+    //     the relayout added together, and you cannot tell which one you are looking at.
+    //  2. **Latin square.** Keep *both* binaries built and run them interleaved in mirrored
+    //     orders (A B B A / B A A B …), so run position, thermal drift and background load fall
+    //     on both arms equally. Same binaries in every position — never rebuild mid-experiment.
+    //  3. **Zero-effect controls.** `BmLoop` and `BmArray` execute no `invoke` at all, so any
+    //     change to the call path *must* leave them flat. When they move with the target, what
+    //     moved was the layout: subtract their shift from the target's and report **both** the
+    //     raw and the normalised figure, never the raw one alone.
+    //  4. **Medians, and enough of them.** Report the median across invocations (each of which
+    //     is already a median of 5 runs), and quote the minimum too: an interrupted run can only
+    //     be slower, so the minimum is the least-perturbed sample. If the spread within one arm
+    //     is wider than the effect you are claiming, you have not measured the effect yet.
+    // ---------------------------------------------------------------------------------------
+    #[test]
+    #[ignore = "benchmark: prints the interpreter baseline table, asserts no timing"]
+    fn bench_baseline() {
+        const RUNS: usize = 6; // 1 warm-up (discarded) + 5 measured
+
+        eprintln!();
+        eprintln!("interpreter baseline — green, median of {} runs (1 warm-up discarded)", RUNS - 1);
+        eprintln!(
+            "{:<10} {:>10} {:>12} {:>14} {:>11}  dimension",
+            "workload", "value", "median", "opcodes", "ns/opcode"
+        );
+        eprintln!("{}", "-".repeat(96));
+
+        for (class_file, expected, dimension) in BENCH_WORKLOADS {
+            let short = class_file.trim_start_matches("java/").trim_end_matches(".class");
+            let mut times = Vec::with_capacity(RUNS - 1);
+            let (mut value, mut opcodes) = (0, 0);
+            for run in 0..RUNS {
+                let (v, steps, elapsed) = bench_green(class_file);
+                assert_eq!(v, expected, "{short}: wrong result");
+                if run > 0 {
+                    // The warm-up run pays for first-touch page faults and CPU frequency ramp-up.
+                    assert_eq!(steps, opcodes, "{short}: opcode count is not deterministic");
+                    times.push(elapsed);
+                }
+                (value, opcodes) = (v, steps);
+            }
+            times.sort();
+            let green_median = median(&times);
+            eprintln!(
+                "{:<10} {:>10} {:>11.1?} {:>14} {:>11.2}  {}",
+                short,
+                value,
+                green_median,
+                opcodes,
+                green_median.as_nanos() as f64 / opcodes as f64,
+                dimension
+            );
+        }
+        eprintln!();
+    }
+
+    // The **GIL tax**: the same five workloads on `green` and on `os-gil`, side by side. Both
+    // run the identical single-threaded program, so the opcode count is the same on both and
+    // green's count is used for each — the whole difference is the per-opcode cost of taking
+    // and releasing the one `Mutex<SharedVm>` around every instruction, which the ratio column
+    // states directly. Separate from `bench_baseline` (and named so its filter doesn't pick this
+    // up) because os-gil is ~an order of magnitude slower, i.e. minutes rather than seconds:
+    //
+    //     cargo test --release --lib gil_overhead_bench -- --ignored --nocapture
+    #[test]
+    #[ignore = "benchmark: green vs os-gil per-opcode cost; minutes of CPU"]
+    fn gil_overhead_bench() {
+        const RUNS: usize = 4; // 1 warm-up (discarded) + 3 measured
+
+        eprintln!();
+        eprintln!("GIL tax — median of {} runs (1 warm-up discarded)", RUNS - 1);
+        eprintln!(
+            "{:<10} {:>12} {:>11} {:>12} {:>11} {:>10}",
+            "workload", "green", "ns/opcode", "os-gil", "ns/opcode", "os-gil/green"
+        );
+        eprintln!("{}", "-".repeat(72));
+        for (class_file, expected, _) in BENCH_WORKLOADS {
+            let short = class_file.trim_start_matches("java/").trim_end_matches(".class");
+            let (mut green_times, mut os_times) = (Vec::new(), Vec::new());
+            let mut opcodes = 0;
+            for run in 0..RUNS {
+                let (v, steps, elapsed) = bench_green(class_file);
+                assert_eq!(v, expected, "{short} (green): wrong result");
+                opcodes = steps;
+                let (v, os_elapsed) = bench_os_gil(class_file);
+                assert_eq!(v, expected, "{short} (os-gil): wrong result");
+                if run > 0 {
+                    green_times.push(elapsed);
+                    os_times.push(os_elapsed);
+                }
+            }
+            green_times.sort();
+            os_times.sort();
+            let (green, os) = (median(&green_times), median(&os_times));
+            eprintln!(
+                "{:<10} {:>11.1?} {:>11.2} {:>12.1?} {:>11.2} {:>9.1}x",
+                short,
+                green,
+                green.as_nanos() as f64 / opcodes as f64,
+                os,
+                os.as_nanos() as f64 / opcodes as f64,
+                os.as_nanos() as f64 / green.as_nanos() as f64,
+            );
+        }
+        eprintln!();
     }
 }
