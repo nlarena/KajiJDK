@@ -1339,22 +1339,123 @@ impl Exec<'_> {
         // it is `pop_frame`'s job, so a call that never pushes a frame would leak the lock. (No
         // method in the compiled subset can be synchronized in practice — the subset has no way
         // to observe a lock — but the exclusion is structural rather than incidental.)
+        // `deopted` is the chain a deopt inside an **inlined** callee rebuilt (F3 step 8). It is
+        // empty for every other outcome, and for every method with nothing inlined.
+        let mut deopted = Vec::new();
         if lock.is_none() {
-            if let Some(value) = self.try_compiled_call(callee, &frame) {
+            if let Some(value) = self.try_compiled_call(callee, &mut frame, &mut deopted) {
                 self.running.recycle(frame);
                 self.advance_past_call();
-                self.top().push(value);
+                // `None` is a `void` callee (step 7): the frame is finished and the caller steps
+                // past the invoke exactly as it does for a value-returning one, but nothing lands
+                // on its operand stack — which is precisely what the matching `return` would do.
+                if let Some(value) = value {
+                    self.top().push(value);
+                }
                 return Step::Continue;
             }
         }
         self.running.frames.push(frame);
+        // On top of it, the frames the expansion had flattened away — outermost first, so the last
+        // one pushed is the one holding the instruction native code could not do.
+        self.running.frames.extend(deopted);
         Step::Continue
     }
 
+    /// The marshalling **in**: one interpreter `Value` as the bare `i64` compiled code works in.
+    ///
+    /// Two kinds cross, and they cross identically — an `int` sign-extended (which establishes the
+    /// normalisation invariant the generated arithmetic relies on) and a reference as its **heap
+    /// offset**, which is what a `Value::Reference` already is. `None` is every other kind, and it
+    /// abandons the call: a `long`, a `double` or a `float` has no representation in this subset,
+    /// and the compiled code provably never reads such a slot (the type map refuses to compile a
+    /// read of one), so `None` here only ever means a slot the code declared but cannot touch.
+    ///
+    /// Nothing is *checked* against the compiler's type map on this side, and that is deliberate
+    /// rather than an omission: the map's entry state comes from the method's own descriptor, so a
+    /// disagreement between it and the frame would mean the descriptor was wrong — the verifier's
+    /// business, not the JIT's. The direction that *is* checked is the one coming back, where a
+    /// mistake would be invisible: see [`JitCache::osr_writeback`].
+    fn marshal(value: Value) -> Option<i64> {
+        match value {
+            Value::Int(v) => Some(v as i64),
+            Value::Reference(offset) => Some(offset as i64),
+            _ => None,
+        }
+    }
+
+    /// The marshalling **out**: a kind-tagged boundary value as the interpreter's `Value`.
+    fn from_jit(value: crate::burst::code_cache::JitValue) -> Value {
+        match value {
+            crate::burst::code_cache::JitValue::Int(v) => Value::Int(v),
+            crate::burst::code_cache::JitValue::Reference(offset) => Value::Reference(offset),
+        }
+    }
+
+    /// **Puts a half-finished compiled method back into an interpreter frame** (F3 step 6): the
+    /// locals native code wrote, the operand stack it was holding, and the pc it stopped at.
+    ///
+    /// This is the whole of "a real deopt" on this side of the boundary. Before it, a method that
+    /// could not go on was simply re-run from its first byte, which is indistinguishable from a
+    /// first execution *only* while compiled code writes nothing observable — the restriction that
+    /// kept `putfield`, `iastore` and `putstatic` out of the subset. Here the frame is made to be
+    /// the state native code was in, so the interpreter continues instead of repeating.
+    ///
+    /// Three things are load-bearing:
+    ///
+    ///  - **The pc names an instruction that has not run.** Every deopt guard is emitted before its
+    ///    instruction's first observable effect, so resuming there re-executes that instruction
+    ///    exactly once in total. See `burst::compile`'s write/pc rule.
+    ///  - **The stack is cleared first.** Both callers hand over a frame whose stack is provably
+    ///    empty (a fresh callee frame, or a loop header), and the state carries the whole stack, so
+    ///    anything already there would be a duplicate.
+    ///  - **The values are tagged.** A heap offset put back as a `Value::Int` is a live object the
+    ///    collector can no longer see or relocate — and this frame is a GC root the moment it is
+    ///    interpreted again. The kinds come from the compiler's type map at this exact pc, and a
+    ///    local the map cannot type is absent from the state rather than guessed at.
+    ///  - **The frames inlining removed come back too** (F3 step 8). A guard inside an expanded
+    ///    callee has to hand back the whole call chain, not one state, so this returns the frames
+    ///    *above* the one it was given and the caller pushes them on top of it. The frame handed in
+    ///    is left at the pc of the **invoke** with the arguments already gone from its stack, which
+    ///    is exactly where the interpreter parks a caller during a real call — so when the rebuilt
+    ///    callee returns, `advance_past_call` steps the caller over the invoke and pushes the
+    ///    result, with no machinery that did not already exist.
+    fn resume_from_jit(
+        frame: &mut Frame,
+        state: &crate::burst::code_cache::ResumeState,
+    ) -> Vec<Frame> {
+        for &(slot, value) in &state.locals {
+            frame.store(slot as usize, Self::from_jit(value));
+        }
+        frame.clear_stack();
+        for &value in &state.stack {
+            frame.push(Self::from_jit(value));
+        }
+        frame.jump(state.pc as usize);
+        // Each inlined frame is built whole — every local, then the operand stack — because unlike
+        // the frame above there is nothing of it in existence to leave alone. `Frame::new` is the
+        // ordinary constructor, so these are frames like any other: not synthetic (they were
+        // reached through an invoke, and their `return` must step the caller over it) and holding
+        // no monitor (a `synchronized` callee is never inlined).
+        state
+            .inlined
+            .iter()
+            .map(|virt| {
+                let locals: Vec<Value> = virt.locals.iter().map(|&v| Self::from_jit(v)).collect();
+                let mut rebuilt = Frame::new(virt.unit, locals.len(), locals);
+                for &value in &virt.stack {
+                    rebuilt.push(Self::from_jit(value));
+                }
+                rebuilt.jump(virt.pc as usize);
+                rebuilt
+            })
+            .collect()
+    }
+
     /// Runs `callee` as **native code** if the JIT has it, compiling it first if this call is the
-    /// one that makes it hot. `None` means "interpret it" — and every path that says so is safe
-    /// for the same reason: a compiled method writes nothing observable, so an abandoned attempt
-    /// is indistinguishable from never having tried.
+    /// one that makes it hot. `None` means "interpret `frame`" — from its first byte when native
+    /// code was never entered, and from wherever native code stopped when it was (this method has
+    /// already moved `frame` there).
     ///
     /// There are four such paths, and they are worth naming because together they are the whole
     /// fallback story:
@@ -1365,12 +1466,31 @@ impl Exec<'_> {
     ///    opcode (and therefore no GC) runs anywhere while the native call is on this thread's
     ///    stack.
     /// 2. **Not hot yet, or not eligible.** One `HashMap` probe, then straight back.
-    /// 3. **A local that cannot be marshalled** — a slot the code reads holds something that is
-    ///    not a `Value::Int`.
-    /// 4. **A deopt** — today only a zero divisor, which the interpreter then re-runs and turns
-    ///    into a proper `ArithmeticException`.
-    fn try_compiled_call(&mut self, callee: MethodId, frame: &Frame) -> Option<Value> {
-        use crate::burst::code_cache::Decision;
+    /// 3. **A local that cannot be marshalled** — a slot the code declares holds a `long`, a
+    ///    `double` or a `float`. Since step 5 a `Value::Reference` marshals like any other value
+    ///    (as its heap offset), so `this` is no longer among the reasons a call is abandoned.
+    /// 4. **A deopt** — a zero divisor, a `null` receiver or array, or an array index out of
+    ///    range. Since step 6 this one is *not* "never having tried": native code hands back the
+    ///    pc it stopped at together with the locals and the operand stack, `frame` is made to be
+    ///    that state ([`Self::resume_from_jit`]), and the interpreter carries on from there — it
+    ///    re-executes the one instruction that could not be done natively and raises the proper
+    ///    exception. Native code decides only that it cannot proceed, never *which* exception.
+    ///    A **safepoint** exit during an ordinary call takes the same road.
+    /// 5. **Not enough frame headroom.** Inlining flattens a call chain away, so a deopt out of
+    ///    compiled code can hand back several frames at once — and the depth checks the interpreter
+    ///    would have made at each expanded invoke were never run. Refusing to *enter* when the
+    ///    chain would not fit is the only point at which refusing still costs nothing; see
+    ///    [`JitCache::frames_needed`][crate::burst::code_cache::JitCache::frames_needed].
+    ///
+    /// `deopted` receives the frames a deopt inside an inlined callee rebuilt, outermost first. The
+    /// caller pushes them **after** `frame`, which is the frame they were called from.
+    fn try_compiled_call(
+        &mut self,
+        callee: MethodId,
+        frame: &mut Frame,
+        deopted: &mut Vec<Frame>,
+    ) -> Option<Option<Value>> {
+        use crate::burst::code_cache::{Decision, OsrResult};
 
         if self.shared.mode == ThreadMode::OsParallel {
             return None;
@@ -1380,11 +1500,33 @@ impl Exec<'_> {
             Decision::Ready => {}
             Decision::Compile => self.compile_method(callee),
         }
-        let value = self.running.jit.run(callee, |slot| match frame.load(slot as usize) {
-            Value::Int(v) => Some(v as i64),
-            _ => None,
-        });
-        value.map(Value::Int)
+        // `frame` is not on the stack yet, so the chain this call could leave behind is
+        // `frames.len()` plus everything the compilation stands for.
+        if self.running.frames.len() + self.running.jit.frames_needed(callee) > Self::MAX_FRAMES {
+            return None;
+        }
+        // `jit` and `heap` are disjoint fields of two disjoint halves of `Exec`, so the call can
+        // hand the cache a closure that logs straight into the heap. That is not a convenience: the
+        // objects native code allocated are invisible to the collector until this runs, and making
+        // it an argument of the call is what stops a caller from forgetting it.
+        let (jit, heap) = (&mut self.running.jit, &self.shared.heap);
+        let outcome = jit.run(
+            callee,
+            |slot| Self::marshal(frame.load(slot as usize)),
+            |offset, size| heap.log_jit_allocation(offset, size),
+        );
+        match outcome? {
+            // The outer `Some` is "native code finished the method"; the inner one is its value, and
+            // `None` there is a `void` return — nothing to push.
+            OsrResult::Returned(value) => Some(value.map(Self::from_jit)),
+            // Not a return: the frame becomes the state native code stopped in and the caller
+            // pushes it, so interpretation continues at that pc rather than at the method's first
+            // byte. That difference is the whole of step 6.
+            OsrResult::Safepoint(state) | OsrResult::Deopt(state) => {
+                *deopted = Self::resume_from_jit(frame, &state);
+                None
+            }
+        }
     }
 
     /// Scans `method` once and hands the result to the code cache — the answer to a
@@ -1396,27 +1538,160 @@ impl Exec<'_> {
     /// or class initialisation: each unresolvable index is simply a `None` and the method is
     /// refused.
     ///
-    /// Both resolvers take `&` borrows of the metaspace and the heap, so **compiling cannot change
+    /// Every resolver takes `&` borrows of the metaspace and the heap, so **compiling cannot change
     /// the VM's state**: no class is loaded, no mirror allocated, no `<clinit>` run on the way to a
     /// decision. That is deliberate — compilation is triggered from an invocation counter or a
     /// back-edge counter, i.e. at moments the interpreter has not chosen for their side effects.
+    /// (The `getfield` resolver does *fill* the F0 resolved-site cache, whose cells are atomic and
+    /// whose contents are a pure function of `(method, pc)`. That is a memoisation, not a state
+    /// change: the same word the next interpreted execution of that site would have written.)
     fn compile_method(&mut self, method: MethodId) {
         let max_locals = self.shared.metaspace.max_locals(method);
         let poll = self.running.jit.poll_address();
+        // F3 step 10: how many operand-stack positions this compilation keeps in registers. Read
+        // from the cache (and therefore from `JVM_JIT_REGS`, or from the measurement's programmatic
+        // override) rather than fixed here, so both arms of the comparison are one binary.
+        let regs = self.running.jit.cache_regs();
         let result = {
             let metaspace = &self.shared.metaspace;
             let heap = &self.shared.heap;
-            let class = metaspace.class_of(method);
-            let class_file = metaspace.get(class);
-            crate::burst::compile::compile(
-                metaspace.code(method),
-                max_locals,
-                &|index| class_file.and_then(|cf| cf.integer_constant(index)),
-                &|index| class_operations::static_int_address(metaspace, heap, class, index),
-                poll,
+            let shape = Self::jit_shape(metaspace, method);
+            let bases = heap.jit_bases();
+            crate::burst::compile::compile_with_regs(
+                &shape,
+                &crate::burst::compile::Environment {
+                    // Every resolver is qualified by the **unit** — the `MethodId` of the body the
+                    // index was read from. Before step 8 there was only one, so the qualifier was
+                    // implicit and the caller's class was always the right one to ask; an inlined
+                    // callee brings its own constant pool, and reading its `ldc #7` out of the
+                    // caller's pool is exactly the silent mistake the parameter prevents.
+                    int_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.integer_constant(index))
+                    },
+                    static_int: &|unit, index| {
+                        class_operations::static_int_address(metaspace, heap, metaspace.class_of(unit), index)
+                    },
+                    int_field: &|unit, pc, index| {
+                        objects_operations::jit_int_field_offset(metaspace, unit, pc, index)
+                    },
+                    // `new`: the instance's size and header word, resolved read-only and refused
+                    // unless the class is already initialised — compiled code cannot run a
+                    // `<clinit>` any more than it can for a `getstatic`.
+                    instance: &|unit, index| {
+                        objects_operations::jit_instance(metaspace, metaspace.class_of(unit), index)
+                            .map(|(size, class_id)| crate::burst::compile::Instance { size, class_id })
+                    },
+                    invoke: &|unit, pc, index| Self::jit_callee(metaspace, unit, pc, index),
+                    // Where the heap is, and the three layout constants an array read needs — each
+                    // taken from the module that owns it, so compiled code and the interpreter
+                    // cannot come to disagree about where a `length` word or an element sits.
+                    heap: crate::burst::compile::Heap {
+                        eden_base: bases.eden,
+                        other_base: bases.other,
+                        eden_end: bases.eden_end.min(u32::MAX as usize) as u32,
+                        max_offset: bases.max_offset,
+                        eden_cursor: bases.eden_cursor,
+                        eden_capacity: bases.eden_capacity,
+                        null_page: bases.null_page.min(u32::MAX as usize) as u32,
+                        array_length: array_operations::LENGTH_OFFSET as u32,
+                        int_array_data: array_operations::ARRAY_HEADER_SIZE as u32,
+                        int_element: array_operations::array_element_width("[I") as u32,
+                    },
+                    poll_word: poll,
+                },
+                regs,
             )
         };
         self.running.jit.install(method, result, max_locals);
+    }
+
+    /// One method body in the shape [`burst::compile`][crate::burst::compile] wants it — the root
+    /// of a compilation, or (step 8) a callee about to be inlined into one.
+    ///
+    /// Its `unit` is the `MethodId` itself, which is what makes the compiler's resolvers able to ask
+    /// about the right constant pool and its cycle check able to recognise a method it is already
+    /// inside.
+    fn jit_shape(metaspace: &MetaspaceService, method: MethodId) -> crate::burst::compile::Method<'_> {
+        crate::burst::compile::Method {
+            unit: method,
+            code: metaspace.code(method),
+            max_locals: metaspace.max_locals(method),
+            descriptor: metaspace.descriptor(method),
+            is_static: metaspace.is_static(method),
+            has_handlers: !metaspace.exception_table(method).is_empty(),
+        }
+    }
+
+    /// **Which calls this tier may inline** (F3 step 8): the callee the invoke at `(unit, pc)`
+    /// binds to, or `None` for every call it must not expand.
+    ///
+    /// `None` is the ordinary answer and never an error — the compiler treats it exactly as it
+    /// treats an opcode outside the whitelist, so this is where the VM decides what inlining means
+    /// without `burst` learning anything about dispatch or class initialisation. What has to hold
+    /// for a `Some`, and why:
+    ///
+    ///  - **Statically bound.** `invokestatic` and `invokespecial` only. An `invokevirtual` binds on
+    ///    the receiver's runtime class, and this tier has no way to emit the type guard that would
+    ///    make a guess safe, so it is refused outright rather than speculated on.
+    ///  - **It has a body.** A `native` or `abstract` method has no bytecode to inline, and the
+    ///    intrinsics the interpreter intercepts (`System.exit`, `Thread.sleep`, …) are not bytecode
+    ///    either — they are interpreter actions, and inlining the body they *appear* to have would
+    ///    skip the interception entirely.
+    ///  - **Not `synchronized`.** There is no monitor acquire in an instruction stream, and a
+    ///    compiled frame is not one the unlock path could find.
+    ///  - **Its class is initialised.** The same requirement `getstatic` and `new` already have, for
+    ///    the same reason: entering a method is a first active use, and compiled code cannot run a
+    ///    `<clinit>`.
+    ///  - **`NoTarget` is not inlinable.** A constructor chain is allowed to bottom out at a
+    ///    `java.lang.Object.<init>` that is not on the classpath, and the interpreter's answer there
+    ///    is to drop the operands and move on. That is an interpreter decision with no body behind
+    ///    it, so there is nothing to expand.
+    ///
+    /// # Why the resolution is the **call-site cache** rather than the resolver
+    ///
+    /// `MetaspaceService::resolve_call` takes `&mut self` — it may load a class — and compiling is
+    /// deliberately unable to change the VM's state (see [`Self::compile_method`]): it is triggered
+    /// by a counter, at a moment the interpreter did not choose for its side effects. So the answer
+    /// comes from the **F0 quickened call site**, which is a read-only load of a word the
+    /// interpreter itself wrote the first time it executed this invoke.
+    ///
+    /// That is not a compromise, it is a better filter than resolution would be: a site with a
+    /// cached target is one the interpreter has *actually executed*, so inlining is offered only
+    /// for calls that have really happened, and a cold branch full of calls costs nothing.
+    fn jit_callee<'m>(
+        metaspace: &'m MetaspaceService,
+        unit: MethodId,
+        pc: usize,
+        index: u16,
+    ) -> Option<crate::burst::compile::Callee<'m>> {
+        use call_site::{CallSite, SiteKind};
+
+        let code = metaspace.code(unit);
+        // Statically bound only. The index is the site's own and is checked against the opcode's
+        // operand bytes, so a cache entry can never be read for a pc that is not this invoke.
+        if !matches!(code.get(pc), Some(0xb7 | 0xb8)) {
+            return None;
+        }
+        if u16::from_be_bytes([*code.get(pc + 1)?, *code.get(pc + 2)?]) != index {
+            return None;
+        }
+        let site = CallSite::unpack(metaspace.call_site(unit, pc))?;
+        let SiteKind::Direct(callee) = site.kind else { return None };
+        if metaspace.is_native(callee)
+            || metaspace.is_synchronized(callee)
+            || metaspace.intrinsic(callee) != crate::jvm::interpreter::metaspace::Intrinsic::None
+            || metaspace.code(callee).is_empty()
+            || !metaspace.declaring_class_initialized(callee)
+        {
+            return None;
+        }
+        // The operands the call consumes: the descriptor's arguments, plus the receiver for an
+        // instance call. The VM's own number, so it cannot drift from what `invokespecial` pops.
+        let receiver = usize::from(code[pc] == 0xb7);
+        Some(crate::burst::compile::Callee {
+            method: Self::jit_shape(metaspace, callee),
+            arg_slots: metaspace.arg_count(callee) + receiver,
+        })
     }
 
     /// The **back-edge hook** (F3 step 3): called after every backward branch, with the pc the
@@ -1427,31 +1702,35 @@ impl Exec<'_> {
     /// `Some(step)` means native code ran the method to its `ireturn` and the frame is gone;
     /// `None` means carry on interpreting, which is what every refusal amounts to.
     ///
-    /// # Why the state transfer is only the locals and a pc
+    /// # Why the state transfer *in* is only the locals and a pc
     ///
     /// The compiler offers entry points **only at back-edge targets where the operand stack is
     /// provably empty** (see [`burst::compile`][crate::burst::compile]). So there is no operand
-    /// stack to rebuild in either direction: going in, the locals are marshalled into the JIT's
-    /// flat buffer exactly as an ordinary compiled call marshals them — same contract, same
-    /// `Value::Int` guard, same fallback if a slot holds anything else; coming out, that buffer
-    /// already *is* the current locals (compiled `istore`/`iinc` write straight through it) and
-    /// they are copied back into this frame. The runtime `stack().is_empty()` check below is the
-    /// belt to the compiler's braces — one comparison, and it makes the contract checkable at the
-    /// boundary rather than only provable away from it.
+    /// stack to hand over on the way in: the locals are marshalled into the JIT's flat buffer
+    /// exactly as an ordinary compiled call marshals them — same contract, same guard, same
+    /// fallback if a slot holds something this tier cannot carry. The runtime `stack().is_empty()`
+    /// check below is the belt to the compiler's braces — one comparison, and it makes the
+    /// contract checkable at the boundary rather than only provable away from it.
+    ///
+    /// Coming **out** is no longer symmetrical, and that is F3 step 6: native code can now stop at
+    /// any guarded pc, where the operand stack is whatever the expression happened to be
+    /// half-through, so both non-return exits hand back a whole `ResumeState` and
+    /// [`Self::resume_from_jit`] pours it into this frame.
     ///
     /// # The three ways back
     ///
     /// - **Returned** — the loop ran on to the method's `ireturn`. Push the value and let
     ///   [`Self::ireturn`] do the rest, so an OSR return and a bytecode return are literally the
     ///   same code path (including "was this the entry frame?" and "step past the invoke").
-    /// - **Safepoint** — the poll fired. Write the locals back, jump to the pc it reports, and
-    ///   keep interpreting; the thread then reaches its safepoint by the ordinary route, which is
-    ///   why nothing about the GC has to be reachable from native code. If the method gets hot
-    ///   again afterwards it simply re-enters here.
-    /// - **Nothing** — not compiled, no entry point at this pc, an unmarshallable local, or a
-    ///   deopt. All are safe for one reason: the compiled subset writes nothing observable and
-    ///   this `Frame` was not touched, so carrying on interpreting from this pc is
-    ///   indistinguishable from never having tried.
+    /// - **Safepoint or deopt** — the poll fired, or a guard could not be satisfied. Rebuild this
+    ///   frame from the state and carry on interpreting at the pc it names. For a poll the thread
+    ///   then reaches its safepoint by the ordinary route, which is why nothing about the GC has to
+    ///   be reachable from native code; for a deopt the interpreter executes the instruction native
+    ///   code could not and raises the proper exception. Either way the loop has made progress, so
+    ///   a re-entry later starts from further along.
+    /// - **Nothing** — not compiled, no entry point at this pc, an unmarshallable local. All are
+    ///   safe for one reason: **native code was never entered**, so this `Frame` is untouched and
+    ///   carrying on interpreting from this pc is indistinguishable from never having tried.
     ///
     /// # Why this is still off on `os` (parallel)
     ///
@@ -1489,33 +1768,56 @@ impl Exec<'_> {
         if !self.frame().stack().is_empty() {
             return None;
         }
+        // The same headroom check the ordinary entry makes, and for the same reason (F3 step 8) —
+        // except that here the frame is already on the stack, so only `frames_needed - 1` of them
+        // would be *new*. Saturating because a method that failed to install answers `0`, and "one
+        // fewer than none" is none rather than a wrapped `usize`.
+        let new_frames = self.running.jit.frames_needed(method).saturating_sub(1);
+        if self.running.frames.len() + new_frames > Self::MAX_FRAMES {
+            return None;
+        }
         let outcome = {
             // `jit` and `frames` are disjoint fields of one context; splitting the borrow here is
             // what lets the marshalling closure read the very frame the cache is about to run
             // native code for.
             let RunningCtx { jit, frames, .. } = &mut *self.running;
+            let heap = &self.shared.heap;
             let frame = frames.last_mut().expect("a back-edge implies a running frame");
-            let outcome = jit.run_osr(method, target_pc as u32, |slot| match frame.load(slot as usize) {
-                Value::Int(v) => Some(v as i64),
-                _ => None,
-            });
-            if let Some(OsrResult::Safepoint(pc)) = outcome {
-                for (slot, value) in jit.osr_writeback(method) {
-                    frame.store(slot as usize, Value::Int(value as i32));
-                }
-                frame.jump(pc as usize);
+            let outcome = jit.run_osr(
+                method,
+                target_pc as u32,
+                |slot| Self::marshal(frame.load(slot as usize)),
+                |offset, size| heap.log_jit_allocation(offset, size),
+            );
+            // Typed, and typed **per pc**: the compiler's map says which of these `i64`s is an
+            // `int` and which is a heap offset at exactly the pc native code stopped at, and says
+            // nothing at all about the slots it proved compiled code cannot have written (those are
+            // simply absent, so this frame keeps whatever it already held).
+            let mut deopted = Vec::new();
+            if let Some(OsrResult::Safepoint(state) | OsrResult::Deopt(state)) = &outcome {
+                deopted = Self::resume_from_jit(frame, state);
             }
+            frames.extend(deopted);
             outcome
         };
         // That call may have closed OSR for this method (a deopt from a loop header does), so
         // re-read the verdict instead of carrying a stale `true` into the next iteration.
         self.running.osr_watch = self.running.jit.watches_back_edges(method);
         match outcome {
-            None | Some(OsrResult::Safepoint(_)) => None,
+            // Both non-return exits have already put this frame into the state native code left,
+            // at the pc it left from, so "carry on interpreting" is literally all that is left.
+            None | Some(OsrResult::Safepoint(_)) | Some(OsrResult::Deopt(_)) => None,
             Some(OsrResult::Returned(value)) => {
                 debug_assert!(self.frame().stack().is_empty(), "the entry contract is an empty stack");
-                self.top().push(Value::Int(value));
-                Some(self.ireturn())
+                match value {
+                    Some(value) => {
+                        self.top().push(Self::from_jit(value));
+                        Some(self.ireturn())
+                    }
+                    // A `void` method's `return` (step 7): the same frame teardown with nothing
+                    // handed back, so the two exits stay literally the interpreter's own.
+                    None => Some(self.return_void()),
+                }
             }
         }
     }
@@ -3149,10 +3451,30 @@ pub fn execute_counting_with_jit_and_poll(
     jit: Option<bool>,
     observe: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
 ) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
+    execute_counting_tuned(metaspace, entry, jit, None, observe)
+}
+
+/// [`execute_counting_with_jit_and_poll`] with the **operand-stack register cache** (F3 step 10)
+/// forced to a size as well — `None` leaves it to `JVM_JIT_REGS`.
+///
+/// The same reasoning as `jit` itself: the step-10 measurement runs a workload with the allocator on
+/// and off *inside one process*, so both arms are the same machine code at the same addresses and
+/// this machine's code-layout noise is structurally absent from the comparison rather than averaged
+/// out of it. Mutating `JVM_JIT_REGS` instead would mutate it for every test sharing the process.
+pub fn execute_counting_tuned(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    jit: Option<bool>,
+    regs: Option<u32>,
+    observe: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
+) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
     let mut interp = JVM::new(metaspace, entry);
     interp.shared.mode = ThreadMode::Green; // measure the deterministic substrate, whatever the env says
     if let Some(enabled) = jit {
         interp.running.jit.set_enabled(enabled);
+    }
+    if let Some(regs) = regs {
+        interp.running.jit.set_cache_regs(regs);
     }
     observe(interp.running.jit.poll_word());
     loop {

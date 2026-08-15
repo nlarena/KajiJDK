@@ -379,6 +379,25 @@ impl Asm {
         self.modrm_mem(src.low3(), dst);
     }
 
+    /// `lock xadd [base+disp], src` — `F0 REX.W 0F C1 /r` (`LOCK XADD r/m64, r64`).
+    ///
+    /// Atomically adds `src` to the memory word and leaves the word's **previous** value in `src`.
+    /// That is exactly Rust's `AtomicUsize::fetch_add(Relaxed)`, which is what makes it the right
+    /// instruction for reserving Eden bytes: compiled code and the interpreter bump the very same
+    /// cursor with the very same operation, so a reservation made by one can never overlap one made
+    /// by the other.
+    ///
+    /// The `LOCK` prefix is not strictly required on the substrates the JIT runs on (`green` has one
+    /// OS thread and `os-gil` one global lock), but it is what makes the claim above a property of
+    /// the instruction rather than of the scheduler.
+    pub fn lock_xadd_mr(&mut self, dst: Mem, src: Reg) {
+        self.byte(0xF0);
+        self.rex(true, src.is_extended(), dst.base.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xC1);
+        self.modrm_mem(src.low3(), dst);
+    }
+
     /// `movsxd dst, src32` — `REX.W + 63 /r`, sign-extending the low 32 bits of `src` into the
     /// full 64-bit `dst`. The inverse of [`mov_mr32`]: it re-canonicalises a Java `int` after a
     /// truncating operation.

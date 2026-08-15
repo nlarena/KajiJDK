@@ -56,6 +56,14 @@ impl AtomicRegion {
         self.bytes
     }
 
+    /// The **machine address** of byte 0 of the region — for the one consumer that needs a raw
+    /// base rather than an accessor: the JIT, which bakes it into an instruction stream and never
+    /// asks again. Stable for the region's whole life, because `cells` is a `Box<[…]>` that is
+    /// allocated once and never reallocates (moving the *region* moves the box, not the bytes).
+    pub fn base_address(&self) -> usize {
+        self.cells.as_ptr() as usize
+    }
+
     /// A raw pointer to byte `offset`, carrying the provenance of the enclosing 8-byte cell. The
     /// caller must keep the access (`u32`/`u64`) within that cell — guaranteed for 4-aligned `u32`
     /// and 8-aligned `u64` offsets, which never straddle a cell.

@@ -10,9 +10,51 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::compile::{
-    compile as compile_with_poll, CompiledCode, Ineligible, Outcome, Status, MAX_SWITCH_CASES,
+    CompiledCode, Environment, Heap, Ineligible, Instance, Kind, Method, Outcome, ResumeSite,
+    Status, MAX_SWITCH_CASES,
 };
 use super::exec_mem::ExecMem;
+
+/// [`super::compile::compile`] with everything a program here does not use filled in: a `static`
+/// method returning an `int`, no constants beyond `int_const`, no statics, no fields, and no heap.
+/// `heap` is the one that is worth naming — a [`Heap::default`] has `max_offset == 0`, which means
+/// "this VM told the compiler nothing about its heap", so any opcode that would dereference a
+/// reference is refused rather than emitted against a base address of zero.
+fn compile_with_poll(
+    code: &[u8],
+    max_locals: usize,
+    int_const: &dyn Fn(u16) -> Option<i32>,
+    poll_word: usize,
+) -> Result<CompiledCode, Ineligible> {
+    compile_shaped(code, max_locals, "()I", true, int_const, Heap::default(), poll_word)
+}
+
+/// [`compile_with_poll`] for a method whose *shape* matters: the descriptor is what fixes the kind
+/// of every entry local and of the exit, and the [`Heap`] is what makes a heap read compilable at
+/// all.
+fn compile_shaped(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    is_static: bool,
+    int_const: &dyn Fn(u16) -> Option<i32>,
+    heap: Heap,
+    poll_word: usize,
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static, has_handlers: false },
+        &Environment {
+            // One body, so the unit is the root's and carries no information.
+            int_const: &|_, index| int_const(index),
+            static_int: &|_, _| None,
+            int_field: &|_, _, _| None,
+            instance: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap,
+            poll_word,
+        },
+    )
+}
 
 /// The safepoint poll word these tests compile against. **Never written**: every test here asks
 /// "does this bytecode compute what the JLS says", and a poll firing mid-loop would answer a
@@ -27,7 +69,7 @@ fn compile(
     max_locals: usize,
     int_const: &dyn Fn(u16) -> Option<i32>,
 ) -> Result<CompiledCode, Ineligible> {
-    compile_with_poll(code, max_locals, int_const, &|_| None, &POLL as *const _ as usize)
+    compile_with_poll(code, max_locals, int_const, &POLL as *const _ as usize)
 }
 
 /// Compiles `code`, maps it, calls it with `locals`, and reports `Some(result)` / `None` for a
@@ -56,7 +98,11 @@ fn call_at(compiled: &CompiledCode, locals: &[i32], entry_pc: i64) -> (Outcome, 
     // exactly the normalisation invariant the generated code relies on for its inputs. The extra
     // trailing slot keeps `as_mut_ptr` non-dangling for a zero-local program.
     let mut buffer: Vec<i64> = locals.iter().map(|&v| v as i64).collect();
-    buffer.push(0);
+    // **The buffer's second half.** Since F3 step 6 a deopt spills the live operand stack into the
+    // slots past the locals, so the contract is `buffer_slots` long, not `max_locals` long — a
+    // buffer sized the old way would be written past its end by the very first null check. The one
+    // extra slot keeps `as_mut_ptr` non-dangling for a zero-local, zero-stack program.
+    buffer.resize(buffer.len().max(compiled.buffer_slots as usize) + 1, 0);
     // SAFETY: `compile` emits exactly one `extern "system" fn(*mut i64, i64) -> i64` at offset 0,
     // built from `x64::Frame`, restoring every non-volatile register and ending in `ret`. The
     // buffer is a live, initialised `[i64]` at least `locals.len()` long, which is the marshalling
@@ -65,6 +111,18 @@ fn call_at(compiled: &CompiledCode, locals: &[i32], entry_pc: i64) -> (Outcome, 
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
     let raw = f(buffer.as_mut_ptr(), entry_pc);
     (Status::unpack(raw), buffer)
+}
+
+/// The resume site at `pc` — what the interpreter would be handed if native code stopped there.
+fn site_at(compiled: &CompiledCode, pc: u32) -> &ResumeSite {
+    compiled.resume_sites.iter().find(|site| site.pc == pc).expect("a resume site at this pc")
+}
+
+/// The operand stack a deopt at `pc` spilled, read out of the buffer `call_at` handed back. The
+/// values are bottom-first, which is push order.
+fn spilled(compiled: &CompiledCode, buffer: &[i64], pc: u32) -> Vec<i64> {
+    let base = compiled.stack_base as usize;
+    (0..site_at(compiled, pc).stack.len()).map(|k| buffer[base + k]).collect()
 }
 
 // Bytecode shorthands, so the programs below read as bytecode rather than as hex.
@@ -372,8 +430,8 @@ fn a_method_that_uses_many_stack_slots_and_locals_still_works() {
 fn an_ineligible_method_is_reported_not_compiled() {
     // The safety net the whole design rests on: one opcode outside the subset and there is no
     // native code at all, for any part of the method.
-    let err = compile(&[ILOAD_0, 0xb4, 0x00, 0x02, IRETURN], 1, &|_| None).unwrap_err();
-    assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xb4 }); // getfield
+    let err = compile(&[ILOAD_0, 0xb6, 0x00, 0x02, IRETURN], 1, &|_| None).unwrap_err();
+    assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xb6 }); // invokevirtual: a *call*, never in
     assert!(err.to_string().contains("outside the compiled subset"));
 }
 
@@ -470,8 +528,7 @@ fn the_poll_leaves_at_a_loop_header_with_the_locals_already_written_back() {
     // address has to be something that cannot move.
     static TEST_POLL: AtomicU64 = AtomicU64::new(0);
     let compiled =
-        compile_with_poll(&SUM_LOOP, 3, &|_| None, &|_| None, &TEST_POLL as *const _ as usize)
-            .unwrap();
+        compile_with_poll(&SUM_LOOP, 3, &|_| None, &TEST_POLL as *const _ as usize).unwrap();
 
     // Unset: the loop runs to the end, exactly as the shared-poll compilation above does.
     assert_eq!(call_at(&compiled, &[0, 10, 0], 0).0, Outcome::Returned(45));
@@ -561,6 +618,12 @@ const WIDE: u8 = 0xc4;
 /// to a stack that already has the value underneath — and every one of them is in the subset, so
 /// the program under test is the shuffle and nothing else.
 fn shuffle(values: &[i32], op: u8, result_depth: usize) -> i32 {
+    run_with(&shuffle_program(values, op, result_depth), &[0], &[]).expect("the shuffles never deopt")
+}
+
+/// The program [`shuffle`] runs, split out so step 10 can compile the same bytes at every cache
+/// size instead of only at the default one.
+fn shuffle_program(values: &[i32], op: u8, result_depth: usize) -> Vec<u8> {
     let mut code = vec![ICONST_0, ISTORE_0]; // acc = 0
     for &v in values {
         code.extend([BIPUSH, v as u8]);
@@ -570,7 +633,7 @@ fn shuffle(values: &[i32], op: u8, result_depth: usize) -> i32 {
         code.extend([ILOAD_0, BIPUSH, 10, IMUL, IADD, ISTORE_0]);
     }
     code.extend([ILOAD_0, IRETURN]);
-    run_with(&code, &[0], &[]).expect("the shuffles never deopt")
+    code
 }
 
 /// The same permutation asked of the **interpreter**, by running its own opcode implementation
@@ -722,10 +785,11 @@ fn wide_iinc_takes_a_16_bit_signed_constant_and_still_wraps() {
 
 #[test]
 fn a_wide_wrapping_anything_else_is_refused() {
-    // `wide aload`, `wide lload`, `wide astore`, `wide fstore`, `wide ret` — the prefix is only
-    // accepted in front of the three instructions the subset already has. Reported as 0xc4 rather
-    // than as the inner byte, so `Ineligible::Opcode { pc, opcode }` always names `code[pc]`.
-    for inner in [0x19u8, 0x1e, 0x3a, 0x38, 0xa9] {
+    // `wide lload`, `wide fload`, `wide fstore`, `wide dstore`, `wide ret` — the prefix is only
+    // accepted in front of the five instructions the subset has (`iload`/`aload`/`istore`/`astore`/
+    // `iinc`). Reported as 0xc4 rather than as the inner byte, so `Ineligible::Opcode { pc, opcode }`
+    // always names `code[pc]`.
+    for inner in [0x16u8, 0x17, 0x1e, 0x38, 0x39, 0xa9] {
         let mut code = wide_local(inner, 300).to_vec();
         code.push(IRETURN);
         assert_eq!(
@@ -939,16 +1003,21 @@ fn getstatic_reads_the_live_four_bytes_at_the_address_it_was_given() {
 
     // getstatic #1; getstatic #2; iadd; ireturn — with #1 and #2 the outer two cells.
     let code = [GETSTATIC, 0x00, 0x01, GETSTATIC, 0x00, 0x02, IADD, IRETURN];
-    let compiled = compile_with_poll(
-        &code,
-        0,
-        &|_| None,
-        &|index| match index {
-            1 => Some(address(0)),
-            2 => Some(address(2)),
-            _ => None,
+    let compiled = super::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 0, descriptor: "()I", is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            static_int: &|_, index| match index {
+                1 => Some(address(0)),
+                2 => Some(address(2)),
+                _ => None,
+            },
+            int_field: &|_, _, _| None,
+            instance: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: Heap::default(),
+            poll_word: &POLL as *const _ as usize,
         },
-        &POLL as *const _ as usize,
     )
     .unwrap();
 
@@ -989,4 +1058,1701 @@ fn a_getstatic_the_resolver_will_not_answer_for_is_refused() {
         compile(&code, 1, &|_| None).unwrap_err(),
         Ineligible::UnresolvedStatic { pc: 1, index: 7 }
     ));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 5: references. The type map, the two-armed heap address, and the guards that deopt.
+// ---------------------------------------------------------------------------------------------
+
+const ACONST_NULL: u8 = 0x01;
+const ALOAD_0: u8 = 0x2a;
+const ALOAD_1: u8 = 0x2b;
+const ASTORE_1: u8 = 0x4c;
+const IALOAD: u8 = 0x2e;
+const IF_ACMPEQ: u8 = 0xa5;
+const IFNULL: u8 = 0xc6;
+const ARETURN: u8 = 0xb0;
+const GETFIELD: u8 = 0xb4;
+const ARRAYLENGTH: u8 = 0xbe;
+const IASTORE: u8 = 0x4f;
+const PUTSTATIC: u8 = 0xb3;
+const PUTFIELD: u8 = 0xb5;
+
+/// A stand-in for the VM's heap: **two** buffers and the numbers that decide which of them an
+/// offset belongs to, laid out exactly as `HeapService` lays its own out (Eden below `eden_end`,
+/// everything else above). Two really are needed — one buffer would let a compiler that ignored
+/// the split pass every test here, which is the mistake this shape exists to catch.
+struct FakeHeap {
+    eden: Vec<u8>,
+    other: Vec<u8>,
+    /// Eden's bump cursor, boxed for the same reason the real arena boxes its own: a compiled `new`
+    /// bakes this word's address in, so it must not move when the `FakeHeap` does.
+    cursor: Box<std::sync::atomic::AtomicUsize>,
+}
+
+impl FakeHeap {
+    /// Offset 0 is `null` and the first eight bytes are never handed out, as in the real heap.
+    const NULL_PAGE: usize = 8;
+    /// Eden's size, and therefore where the boundary between the two buffers sits.
+    const EDEN_SIZE: usize = 256;
+    const EDEN_END: u32 = (Self::NULL_PAGE + Self::EDEN_SIZE) as u32;
+    const CAPACITY: usize = 4096;
+
+    fn new() -> FakeHeap {
+        FakeHeap {
+            eden: vec![0; Self::EDEN_SIZE],
+            other: vec![0; Self::CAPACITY],
+            cursor: Box::new(std::sync::atomic::AtomicUsize::new(0)),
+        }
+    }
+
+    /// The addresses and layout constants, biased exactly as `HeapService::jit_bases` biases them.
+    fn bases(&self) -> Heap {
+        Heap {
+            eden_base: self.eden.as_ptr() as usize - Self::NULL_PAGE,
+            other_base: self.other.as_ptr() as usize,
+            eden_end: Self::EDEN_END,
+            max_offset: Self::CAPACITY,
+            eden_cursor: &*self.cursor as *const _ as usize,
+            eden_capacity: Self::EDEN_SIZE,
+            null_page: Self::NULL_PAGE as u32,
+            array_length: 8,    // the `length` word, right after the object header
+            int_array_data: 12, // ...and the elements right after that
+            int_element: 4,
+        }
+    }
+
+    /// Eden's cursor, as the arena's `used()` reports it — how many bytes have been handed out.
+    fn eden_used(&self) -> usize {
+        self.cursor.load(Ordering::Relaxed)
+    }
+
+    /// Writes a 4-byte little-endian word at a heap **offset**, routing it to the buffer that
+    /// offset belongs to — the same two-armed decision the emitted code makes.
+    fn write(&mut self, offset: usize, value: i32) {
+        let bytes = value.to_le_bytes();
+        match offset < Self::EDEN_END as usize {
+            true => self.eden[offset - Self::NULL_PAGE..][..4].copy_from_slice(&bytes),
+            false => self.other[offset..][..4].copy_from_slice(&bytes),
+        }
+    }
+
+    /// Reads back a 4-byte little-endian word at a heap **offset** — the inverse of
+    /// [`FakeHeap::write`], and what a test of a *write* opcode checks against.
+    fn read(&self, offset: usize) -> i32 {
+        let bytes: [u8; 4] = match offset < Self::EDEN_END as usize {
+            true => self.eden[offset - Self::NULL_PAGE..][..4].try_into().expect("four bytes"),
+            false => self.other[offset..][..4].try_into().expect("four bytes"),
+        };
+        i32::from_le_bytes(bytes)
+    }
+
+    /// Lays out an `int[]` of `values` at `offset`: `[class_id | mark | length | elements…]`.
+    fn array(&mut self, offset: usize, values: &[i32]) {
+        self.write(offset, 0x5a5a_5a5a); // a class id, never read by compiled code
+        self.write(offset + 8, values.len() as i32);
+        for (i, &v) in values.iter().enumerate() {
+            self.write(offset + 12 + 4 * i, v);
+        }
+    }
+}
+
+/// Compiles a program that reads the heap: `field` is the byte offset every `getfield` resolves to.
+fn compile_heap(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    heap: Heap,
+    field: u32,
+) -> Result<CompiledCode, Ineligible> {
+    compile_instance(code, max_locals, descriptor, true, heap, field)
+}
+
+/// [`compile_heap`] that can also compile an **instance** method, i.e. one whose slot 0 is `this`.
+fn compile_instance(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    is_static: bool,
+    heap: Heap,
+    field: u32,
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            static_int: &|_, _| None,
+            int_field: &|_, _, _| Some(field),
+            instance: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+#[test]
+fn a_reference_travels_through_a_local_and_back_out() {
+    // `aload_0; areturn` — the whole of step 5's new exit in two bytes. The offset goes in as a
+    // local and comes back as the low 32 bits of the protocol word, zero-extended: a heap offset
+    // is never negative, and this is the test that would fail if it were sign-extended.
+    let heap = FakeHeap::new();
+    let code = [ALOAD_0, ARETURN];
+    let compiled =
+        compile_heap(&code, 1, "(Ljava/lang/Object;)Ljava/lang/Object;", heap.bases(), 0).unwrap();
+    assert!(compiled.returns_reference, "the descriptor says a reference comes back");
+    for offset in [0, 8, 264, 4000] {
+        assert_eq!(call_at(&compiled, &[offset], 0).0, Outcome::Returned(offset));
+    }
+    // ...and `aconst_null; areturn` is the same thing with the offset 0, which is `null`.
+    let null =
+        compile_heap(&[ACONST_NULL, ARETURN], 0, "()Ljava/lang/String;", heap.bases(), 0).unwrap();
+    assert_eq!(call_at(&null, &[], 0).0, Outcome::Returned(0));
+}
+
+#[test]
+fn getfield_reads_the_right_four_bytes_in_both_halves_of_the_heap() {
+    // The same compiled code, run against a receiver in **Eden** and one in Old — the two arms of
+    // the address computation, which a compiler that knew about only one base would fail on
+    // whichever it did not know about.
+    let mut heap = FakeHeap::new();
+    heap.write(16 + 12, -5); // an Eden object at 16, field at +12
+    heap.write(16 + 16, 999_999); // ...and its neighbour, which must never be the answer
+    heap.write(1000 + 12, 77); // an Old object at 1000, same field offset
+    heap.write(1000 + 16, 999_999);
+
+    let code = [ALOAD_0, GETFIELD, 0x00, 0x01, IRETURN];
+    let compiled = compile_heap(&code, 1, "(LCell;)I", heap.bases(), 12).unwrap();
+    assert_eq!(call_at(&compiled, &[16], 0).0, Outcome::Returned(-5), "the Eden arm");
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(77), "the other arm");
+    // A `null` receiver gives up rather than faulting: the interpreter re-runs and throws.
+    assert_eq!(call_at(&compiled, &[0], 0).0, Outcome::Deopt(1), "at the `getfield`, unexecuted");
+}
+
+#[test]
+fn a_field_is_read_as_a_sign_extended_int_not_as_eight_bytes() {
+    // Two adjacent fields, the upper one deliberately non-zero: a 64-bit load would drag it in.
+    // And the value itself is negative, so the load has to *sign*-extend — the normalisation
+    // invariant every arithmetic opcode assumes of its inputs.
+    let mut heap = FakeHeap::new();
+    heap.write(1000 + 8, i32::MIN);
+    heap.write(1000 + 12, -1);
+    let code = [ALOAD_0, GETFIELD, 0x00, 0x01, ICONST_1, IADD, IRETURN];
+    let compiled = compile_heap(&code, 1, "(LCell;)I", heap.bases(), 8).unwrap();
+    // MIN + 1, computed in 64 bits from a correctly sign-extended operand.
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(i32::MIN + 1));
+}
+
+#[test]
+fn arraylength_and_iaload_read_and_check_their_bounds() {
+    let mut heap = FakeHeap::new();
+    heap.array(24, &[10, 20, 30]); // in Eden
+    heap.array(2000, &[-1, i32::MIN, 7, 0, 5]); // in Old
+
+    let length =
+        compile_heap(&[ALOAD_0, ARRAYLENGTH, IRETURN], 1, "([I)I", heap.bases(), 0).unwrap();
+    assert_eq!(call_at(&length, &[24], 0).0, Outcome::Returned(3));
+    assert_eq!(call_at(&length, &[2000], 0).0, Outcome::Returned(5));
+    assert_eq!(call_at(&length, &[0], 0).0, Outcome::Deopt(1), "a null array deopts");
+
+    let at =
+        compile_heap(&[ALOAD_0, ILOAD_1, IALOAD, IRETURN], 2, "([II)I", heap.bases(), 0).unwrap();
+    assert_eq!(call_at(&at, &[24, 0], 0).0, Outcome::Returned(10));
+    assert_eq!(call_at(&at, &[24, 2], 0).0, Outcome::Returned(30));
+    assert_eq!(call_at(&at, &[2000, 1], 0).0, Outcome::Returned(i32::MIN), "elements sign-extend");
+    assert_eq!(call_at(&at, &[2000, 4], 0).0, Outcome::Returned(5));
+    // The three ways out. A negative index is the one a single unsigned comparison would let
+    // through, because the index arrives *sign*-extended into 64 bits.
+    assert_eq!(call_at(&at, &[24, 3], 0).0, Outcome::Deopt(2), "one past the end");
+    assert_eq!(call_at(&at, &[24, -1], 0).0, Outcome::Deopt(2), "before the start");
+    assert_eq!(call_at(&at, &[24, i32::MIN], 0).0, Outcome::Deopt(2), "and the extreme of that");
+    assert_eq!(call_at(&at, &[0, 0], 0).0, Outcome::Deopt(2), "a null array");
+}
+
+#[test]
+fn the_reference_comparisons_are_identity_and_nothing_more() {
+    let heap = FakeHeap::new();
+    // `if_acmpeq +5; iconst_0; ireturn; iconst_1; ireturn` — 1 when the two are the same object.
+    let same = [ALOAD_0, ALOAD_1, IF_ACMPEQ, 0x00, 0x05, ICONST_0, IRETURN, ICONST_1, IRETURN];
+    let compiled =
+        compile_heap(&same, 2, "(Ljava/lang/Object;Ljava/lang/Object;)I", heap.bases(), 0).unwrap();
+    assert_eq!(call_at(&compiled, &[1000, 1000], 0).0, Outcome::Returned(1));
+    assert_eq!(call_at(&compiled, &[1000, 1004], 0).0, Outcome::Returned(0));
+    assert_eq!(
+        call_at(&compiled, &[0, 0], 0).0,
+        Outcome::Returned(1),
+        "null is a value like any other"
+    );
+
+    // `ifnull +6` on the same shape.
+    let is_null = [ALOAD_0, IFNULL, 0x00, 0x05, ICONST_0, IRETURN, ICONST_1, IRETURN];
+    let compiled = compile_heap(&is_null, 1, "(Ljava/lang/Object;)I", heap.bases(), 0).unwrap();
+    assert_eq!(call_at(&compiled, &[0], 0).0, Outcome::Returned(1));
+    assert_eq!(call_at(&compiled, &[8], 0).0, Outcome::Returned(0));
+}
+
+#[test]
+fn the_type_map_refuses_to_confuse_an_int_with_a_reference() {
+    let heap = FakeHeap::new();
+    // An `aload` of an `int` argument...
+    let err =
+        compile_heap(&[ALOAD_0, ARETURN], 1, "(I)Ljava/lang/Object;", heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 0 });
+    // ...and the same in the other direction, through an *instance* method's slot 0, which is
+    // `this`. This is the case that was previously caught only at run time, by a marshalling
+    // failure; it is now caught before a byte is emitted.
+    let err = compile_instance(&[ILOAD_0, IRETURN], 1, "()I", false, heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 0 }, "`iload_0` of `this`");
+    // An `iadd` of a reference, and an `iaload` whose operands are the right way round in the
+    // bytecode but the wrong way round in the map.
+    let err =
+        compile_heap(&[ALOAD_0, ICONST_1, IADD, IRETURN], 1, "(LA;)I", heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 2 });
+    let err = compile_heap(&[ILOAD_0, ALOAD_1, IALOAD, IRETURN], 2, "(I[I)I", heap.bases(), 0)
+        .unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 2 }, "the array must be *under* the index");
+}
+
+#[test]
+fn the_exit_must_agree_with_the_descriptor() {
+    let heap = FakeHeap::new();
+    // `areturn` in a method that returns an `int`, and `ireturn` in one that returns a reference:
+    // both are unverifiable bytecode, and both are the mistake that would hand the interpreter a
+    // heap offset labelled `int`.
+    let err = compile_heap(&[ALOAD_0, ARETURN], 1, "(LA;)I", heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 1 });
+    let err =
+        compile_heap(&[ICONST_1, IRETURN], 1, "()Ljava/lang/Object;", heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 1 });
+    // A method that returns something this tier has no exit for (`void`, `long`, `double`,
+    // `float`) cannot compile at all, because neither exit is legal in it.
+    for descriptor in ["()V", "()J", "()D", "()F"] {
+        let err = compile_heap(&[ICONST_1, IRETURN], 0, descriptor, heap.bases(), 0).unwrap_err();
+        assert_eq!(err, Ineligible::WrongType { pc: 1 }, "{descriptor}");
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 9: the top of the lattice. A local two paths type differently is `Kind::Conflict`, which
+// costs the method nothing unless somebody **reads** it.
+//
+// Until this step the type map merged by equality, so `javac`'s most ordinary shape — one slot
+// reused for two disjoint scopes, dead at the point where the scopes meet — refused the whole
+// method. The group below is the whole of the new rule, stated as programs:
+//
+//   * carrying a conflicted slot across a merge compiles;
+//   * *reading* one does not, in any of the three ways a slot can be read;
+//   * a `store` re-types it, and everything after the store is ordinary again;
+//   * the operand stack gets none of this, because a resume site cannot skip an operand;
+//   * a body with exception handlers gets none of it either, because this walk does not follow
+//     the edges into a handler and therefore cannot prove the slot dead;
+//   * and the write-back says *nothing* about a conflicted slot, which is the half of the design
+//     that has to answer to the collector rather than to the verifier.
+// ---------------------------------------------------------------------------------------------
+
+const IFEQ: u8 = 0x99;
+
+/// The program every test in this group varies: a branch that leaves slot 1 holding a **reference**
+/// on one path and an **`int`** on the other, with `tail` emitted at the merge.
+///
+/// ```text
+///  0: iload_0; ifeq -> 8      slot 1 arrives as a reference (the descriptor says so)
+///  4: aload_1; astore_1       ...and is still one on this path
+///  6: iconst_0; istore_1      ...but is an int on the fall-through
+///  8: <tail>                  <- the merge. Slot 1 is `Conflict` from here.
+/// ```
+fn merge_then(tail: &[u8]) -> Vec<u8> {
+    let mut code = vec![ILOAD_0, IFEQ, 0x00, 0x07, ALOAD_1, ASTORE_1, ICONST_0, ISTORE_1];
+    code.extend_from_slice(tail);
+    code
+}
+
+#[test]
+fn a_dead_slot_two_paths_type_differently_no_longer_costs_the_method() {
+    // The case this step exists for, and the one `BmField.run` is made of. Nothing reads slot 1
+    // after the merge, so there is nothing for the disagreement to break: it compiles, and it runs.
+    let heap = FakeHeap::new();
+    let compiled =
+        compile_heap(&merge_then(&[ICONST_1, IRETURN]), 2, "(ILjava/lang/Object;)I", heap.bases(), 0)
+            .unwrap();
+    // Both ways through the branch, and both give the same answer because the slot is dead.
+    assert_eq!(call_at(&compiled, &[0, 264], 0).0, Outcome::Returned(1));
+    assert_eq!(call_at(&compiled, &[1, 264], 0).0, Outcome::Returned(1));
+}
+
+#[test]
+fn reading_a_conflicted_slot_is_still_refused() {
+    // **The rule that turns "conflicted" into "dead".** A conflicted slot matches neither `Int` nor
+    // `Reference`, so every one of the three ways to read a local refuses it — and it is *that*
+    // refusal, not an assumption about `javac`, that licenses the write-back to leave the
+    // interpreter's stale value in place.
+    let heap = FakeHeap::new();
+    for (tail, what) in [
+        (vec![ILOAD_1, IRETURN], "iload"),
+        (vec![IINC, 0x01, 0x01, ICONST_1, IRETURN], "iinc"),
+    ] {
+        let err = compile_heap(&merge_then(&tail), 2, "(ILjava/lang/Object;)I", heap.bases(), 0)
+            .unwrap_err();
+        assert_eq!(err, Ineligible::WrongType { pc: 8 }, "{what}");
+    }
+    // The reference read is the one that matters most: it is the shape where a wrong answer would
+    // hand the program a pointer made of whatever the other path's `int` happened to be.
+    let code = merge_then(&[ALOAD_1, ARETURN]);
+    let err =
+        compile_heap(&code, 2, "(ILjava/lang/Object;)Ljava/lang/Object;", heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 8 }, "aload");
+
+    // **And the read does not have to be at the merge.** This is the check that the walk is a real
+    // fixed point rather than one visit per pc: the first edge to arrive at pc 8 carries an `int`,
+    // so pc 11's `iload_1` is walked once and *accepted*, and only the second edge — the one that
+    // makes the slot conflict — is what must send the analysis back through the tail and refuse it.
+    // Delete the re-propagation and this is the assertion that fails; the two above would not.
+    let err = compile_heap(
+        &merge_then(&[GOTO, 0x00, 0x03, ILOAD_1, IRETURN]),
+        2,
+        "(ILjava/lang/Object;)I",
+        heap.bases(),
+        0,
+    )
+    .unwrap_err();
+    assert_eq!(err, Ineligible::WrongType { pc: 11 }, "a read three instructions downstream");
+}
+
+#[test]
+fn a_store_re_types_a_conflicted_slot_and_the_read_after_it_is_ordinary() {
+    // `Conflict` is the top of the lattice, and a `store` is what brings a slot all the way back
+    // down. So the *second* scope `javac` gave this slot compiles like any other code — which is
+    // what makes the feature worth having rather than merely safe.
+    let heap = FakeHeap::new();
+    let compiled = compile_heap(
+        &merge_then(&[BIPUSH, 42, ISTORE_1, ILOAD_1, IRETURN]),
+        2,
+        "(ILjava/lang/Object;)I",
+        heap.bases(),
+        0,
+    )
+    .unwrap();
+    assert_eq!(call_at(&compiled, &[0, 264], 0).0, Outcome::Returned(42));
+    assert_eq!(call_at(&compiled, &[1, 264], 0).0, Outcome::Returned(42));
+}
+
+#[test]
+fn two_paths_that_disagree_about_an_operand_are_still_refused() {
+    // **The operand stack gets no lattice**, and the reason is the write-back rather than the type
+    // system: a local is handed back by name, so a conflicted one can be skipped, but an operand's
+    // *position is its identity* and a resume site owes the interpreter a value for every one of
+    // them. It is also a shape no verifier would have passed, so refusing it costs nothing real.
+    //
+    //  0: iload_0; ifeq -> 8
+    //  4: aload_1; goto -> 9     one path leaves a reference on the stack
+    //  8: iconst_0               the other leaves an int
+    //  9: pop; iconst_1; ireturn <- the merge, at depth 1 with two answers
+    let heap = FakeHeap::new();
+    let code = [
+        ILOAD_0, IFEQ, 0x00, 0x07, // 0: ifeq -> 8
+        ALOAD_1, GOTO, 0x00, 0x04, // 4: goto -> 9
+        ICONST_0,  // 8
+        POP, ICONST_1, IRETURN, // 9
+    ];
+    let err = compile_heap(&code, 2, "(ILjava/lang/Object;)I", heap.bases(), 0).unwrap_err();
+    assert_eq!(err, Ineligible::TypeMismatch { pc: 9 });
+}
+
+#[test]
+fn a_body_with_exception_handlers_refuses_a_conflict_rather_than_carrying_one() {
+    // **The one place this analysis declines to trust the verifier.** "A conflicted slot is dead"
+    // is proved by this walk covering every edge the interpreter can take out of a resume site —
+    // and the edges into an exception handler are exactly the ones it does not follow (the same gap
+    // that costs a handler method its OSR entries). So a body with handlers keeps step 8's answer,
+    // which is the answer every method got before this step.
+    let heap = FakeHeap::new();
+    let code = merge_then(&[ICONST_1, IRETURN]);
+    let handlers = |has_handlers| {
+        super::compile::compile(
+            &Method {
+                unit: 0,
+                code: &code,
+                max_locals: 2,
+                descriptor: "(ILjava/lang/Object;)I",
+                is_static: true,
+                has_handlers,
+            },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| None,
+                invoke: &|_, _, _| None,
+                heap: heap.bases(),
+                poll_word: &POLL as *const _ as usize,
+            },
+        )
+    };
+    assert!(handlers(false).is_ok(), "without handlers the conflict is carried");
+    assert_eq!(handlers(true).unwrap_err(), Ineligible::TypeMismatch { pc: 8 });
+}
+
+#[test]
+fn the_write_back_says_nothing_at_all_about_a_conflicted_slot() {
+    // **The half of step 9 that answers to the collector.** `BmField`'s shape in miniature: a loop
+    // whose body `astore`s a reference into a slot that arrives at the header as an `int` (every
+    // non-argument slot starts as `Value::Int(0)`). The header is a resume site, so the map there
+    // is what the interpreter would be handed — and for slot 1 it must say `Conflict`, which
+    // `JitCache::resume_state` turns into *no write at all*: the frame keeps the `Value` it had.
+    //
+    // The alternative to saying `Conflict` is the one unrecoverable mistake in this milestone.
+    // Calling it `Int` would hand the interpreter a heap offset labelled as an integer — a live
+    // object the collector can no longer see or relocate. Calling it `Reference` would hand it a
+    // pointer made of arithmetic. There is no third answer that is a value, which is why the
+    // answer is silence.
+    //
+    //  0: iconst_0; istore_2                     n = 0
+    //  2: iload_2; iconst_1; if_icmpge -> 15     <- the header, stack empty
+    //  7: aload_0; astore_1                      slot 1 becomes a reference
+    //  9: iinc 2, 1; goto -> 2
+    // 15: iload_2; ireturn
+    let heap = FakeHeap::new();
+    let code = [
+        ICONST_0, ISTORE_2, // 0
+        ILOAD_2, ICONST_1, IF_ICMPGE, 0x00, 0x0b, // 4: if_icmpge +11 -> 15
+        ALOAD_0, ASTORE_1, // 7
+        IINC, 0x02, 0x01, // 9
+        GOTO, 0xff, 0xf6, // 12: goto -10 -> 2
+        ILOAD_2, IRETURN, // 15
+    ];
+    let compiled = compile_heap(&code, 3, "(Ljava/lang/Object;)I", heap.bases(), 0).unwrap();
+    assert_eq!(compiled.osr_entries, vec![2], "one loop, one header");
+    assert_eq!(compiled.touched_locals, vec![0, 1, 2]);
+    assert_eq!(
+        site_at(&compiled, 2).locals,
+        vec![Kind::Reference, Kind::Conflict, Kind::Int],
+        "slot 1 is an int on the way in and a reference on the back-edge: neither, and therefore silence"
+    );
+    // And it runs, both through the front door and entered on-stack at the header — the entry that
+    // hands compiled code a slot 1 it must not read.
+    assert_eq!(call_at(&compiled, &[264, 0, 0], 0).0, Outcome::Returned(1));
+    assert_eq!(call_at(&compiled, &[264, 0, 0], 2).0, Outcome::Returned(1));
+}
+
+#[test]
+fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
+    // **The frames inlining removed get no skip, and this is the test that says so out loud.**
+    //
+    // The root frame exists already, so a conflicted slot in it can be left alone. An *inlined*
+    // frame does not exist at all until a deopt materialises it, so every one of its slots has to
+    // be written — and `Conflict` is precisely the kind that has nothing to write. There is no
+    // third answer, so the whole compilation is refused, which is the same answer step 8 gave every
+    // method with a conflict anywhere in it.
+    //
+    // It matters that this is a **compile-time** refusal rather than a run-time one. Before step 9
+    // the equivalent case was a `debug_assert!(false)` inside `JitCache::resume_state` whose
+    // release behaviour was to return `None` — "the JIT declined", *after* native code had run and
+    // written to the heap, which would have made the interpreter re-run the method and apply every
+    // one of those writes twice. A compilation that is never installed cannot do that.
+    //
+    // The callee is the same program as the group above, plus a guard: an `idiv` after the merge,
+    // which is a resume site at a pc where slot 2 is conflicted.
+    let heap = FakeHeap::new();
+    let conflicted = [
+        0x1a, 0x99, 0x00, 0x05, // 0: iload_0; ifeq +5 -> 6
+        ALOAD_1, 0x4d, // 4: aload_1; astore_2
+        BIPUSH, 100, ILOAD_0, IDIV, // 6: bipush 100; iload_0; idiv   <- the guard
+        IRETURN, // 10
+    ];
+    // The same callee with no branch in it at all: one resume site, no conflict, ordinary inlining.
+    let plain = [BIPUSH, 100, ILOAD_0, IDIV, IRETURN];
+    // `iload_0; aload_1; invokestatic <callee>; ireturn`.
+    let caller = [ILOAD_0, ALOAD_1, 0xb8, 0x00, 0x01, IRETURN];
+
+    let inlining = |callee: &[u8], callee_locals: usize| {
+        super::compile::compile(
+            &Method {
+                unit: 0,
+                code: &caller,
+                max_locals: 2,
+                descriptor: "(ILjava/lang/Object;)I",
+                is_static: true,
+                has_handlers: false,
+            },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| None,
+                invoke: &|_, _, _| {
+                    Some(super::compile::Callee {
+                        method: Method {
+                            unit: 1,
+                            code: callee,
+                            max_locals: callee_locals,
+                            descriptor: "(ILjava/lang/Object;)I",
+                            is_static: true,
+                            has_handlers: false,
+                        },
+                        arg_slots: 2,
+                    })
+                },
+                heap: heap.bases(),
+                poll_word: &POLL as *const _ as usize,
+            },
+        )
+    };
+
+    // The control first, so the refusal below is about the conflict and not about inlining: the
+    // same caller, the same call, a callee that deopts — and it compiles and runs.
+    let ok = inlining(&plain, 2).expect("a callee with a guard and no conflict inlines");
+    assert_eq!(call_at(&ok, &[4, 264], 0).0, Outcome::Returned(25));
+    assert!(matches!(call_at(&ok, &[0, 264], 0).0, Outcome::Deopt(_)), "a zero divisor still deopts");
+
+    // And with the conflict, at the *site*, the compilation is refused whole.
+    let err = inlining(&conflicted, 3).unwrap_err();
+    assert!(matches!(err, Ineligible::Unrebuildable { .. }), "{err:?}");
+}
+
+#[test]
+fn the_write_back_map_names_a_kind_for_every_touched_local_at_every_loop_header() {
+    // The map that leaves the compiler. This loop carries a reference (the array) and two `int`s
+    // across its back-edge, so the write-back at that header must say `Reference, Int, Int` — in
+    // `touched_locals` order, which is slot order.
+    //
+    //  0: iconst_0; istore_1                                   acc = 0
+    //  2: iconst_0; istore_2                                    i  = 0
+    //  4: iload_2; aload_0; arraylength; if_icmpge -> 22        <- the header, stack empty
+    // 10: iload_1; aload_0; iload_2; iaload; iadd; istore_1
+    // 16: iinc 2, 1
+    // 19: goto -> 4
+    // 22: iload_1; ireturn
+    let code = [
+        ICONST_0, ISTORE_1, // 0
+        ICONST_0, ISTORE_2, // 2
+        ILOAD_2, ALOAD_0, ARRAYLENGTH, 0xa2, 0x00, 0x0f, // 7: if_icmpge +15 -> 22
+        ILOAD_1, ALOAD_0, ILOAD_2, IALOAD, IADD, ISTORE_1, // 10
+        IINC, 0x02, 0x01, // 16
+        GOTO, 0xff, 0xf1, // 19: goto -15 -> 4
+        ILOAD_1, IRETURN, // 22
+    ];
+    let mut heap = FakeHeap::new();
+    heap.array(24, &[3, 4, 5]);
+    let compiled = compile_heap(&code, 3, "([I)I", heap.bases(), 0).unwrap();
+    assert_eq!(compiled.osr_entries, vec![4], "one loop, one header");
+    assert_eq!(compiled.touched_locals, vec![0, 1, 2]);
+    assert_eq!(site_at(&compiled, 4).locals, vec![Kind::Reference, Kind::Int, Kind::Int]);
+    assert!(site_at(&compiled, 4).stack.is_empty(), "a loop header carries no operands");
+    // The same map at the two *deopt* sites this body also has — where the operand stack is not
+    // empty, and is the half a restart never had to describe. At the `arraylength` (pc 6) the
+    // index is under the array; at the `iaload` (pc 13) the running total is under both.
+    assert_eq!(site_at(&compiled, 6).stack, vec![Kind::Int, Kind::Reference]);
+    assert_eq!(site_at(&compiled, 13).stack, vec![Kind::Int, Kind::Reference, Kind::Int]);
+    assert!(!compiled.returns_reference);
+    // And it runs, over an array in Eden.
+    assert_eq!(call_at(&compiled, &[24, 0, 0], 0).0, Outcome::Returned(12));
+}
+
+#[test]
+fn a_slot_the_map_cannot_type_is_left_alone_rather_than_written_back() {
+    // Local 0 is a `long` — `Kind::Opaque`, a kind this tier has no value for. The method never
+    // reads it (it could not), but it *writes* it, so it is a touched local; and at the loop
+    // header, before that write can have happened, the map still calls it `Opaque`. The write-back
+    // must then say nothing at all about it, because the interpreter's own `Value::Long` is the
+    // current one.
+    //
+    // The store is *after* the loop, deliberately. A store **inside** it would make the header
+    // disagree with itself — `Opaque` on the way in, `Int` across the back-edge — which since step
+    // 9 joins to `Kind::Conflict` rather than refusing the method. Both are written back the same
+    // way (not at all), but they are different claims and this test is about the first: `Opaque`
+    // says compiled code *never wrote the slot*, which is why the `long` in it is still intact.
+    //
+    //  0: iload_2; ifeq -> 10                    <- header (a back-edge target, stack empty)
+    //  4: iinc 2, -1; goto -> 0
+    // 10: iconst_1; istore_0                     slot 0 (the `long`'s low half) becomes an int
+    // 12: iload_2; ireturn
+    let heap = FakeHeap::new();
+    let code = [
+        ILOAD_2, 0x99, 0x00, 0x09, // 0: ifeq +9 -> 10
+        IINC, 0x02, 0xff, // 4: iinc 2, -1
+        GOTO, 0xff, 0xf9, // 7: goto -7 -> 0
+        ICONST_1, ISTORE_0, // 10
+        ILOAD_2, IRETURN, // 12
+    ];
+    let compiled = compile_heap(&code, 3, "(JI)I", heap.bases(), 0).unwrap();
+    assert_eq!(compiled.osr_entries, vec![0]);
+    assert_eq!(compiled.touched_locals, vec![0, 2]);
+    assert_eq!(
+        site_at(&compiled, 0).locals,
+        vec![Kind::Opaque, Kind::Int],
+        "the `long`'s slot is unwritten here, and saying so is what protects it"
+    );
+}
+
+#[test]
+fn a_heap_this_tier_cannot_address_puts_every_reference_read_out_of_reach() {
+    // Not a property of the method: a VM whose heap could grow past the 32 bits a reference has to
+    // cross the boundary in simply gets no compiled method that returns or dereferences one. The
+    // same answer covers the portable configuration, where no heap is supplied at all.
+    let mut heap = FakeHeap::new().bases();
+    heap.max_offset = u32::MAX as usize + 1;
+    let err = compile_heap(&[ALOAD_0, ARETURN], 1, "(LA;)LA;", heap, 0).unwrap_err();
+    assert_eq!(err, Ineligible::HeapOutOfReach { pc: 1 });
+    let err = compile_heap(&[ALOAD_0, ARRAYLENGTH, IRETURN], 1, "([I)I", heap, 0).unwrap_err();
+    assert_eq!(err, Ineligible::HeapOutOfReach { pc: 1 });
+    // ...and an `aload`/`astore`/`if_acmp` program that never *dereferences* anything still
+    // compiles, because none of it depends on where the heap is.
+    let same = [ALOAD_0, ALOAD_1, IF_ACMPEQ, 0x00, 0x05, ICONST_0, IRETURN, ICONST_1, IRETURN];
+    assert!(compile_heap(&same, 2, "(LA;LA;)I", heap, 0).is_ok());
+}
+
+#[test]
+fn a_method_with_exception_handlers_still_compiles_but_is_never_entered_on_stack() {
+    // The one place the type map is *not* sound is a pc the walk cannot reach: a handler is
+    // entered by an exception edge, so the interpreter can arrive at a loop header having run code
+    // this analysis never looked at — with, say, a reference in a slot the map calls an `int`.
+    //
+    // It is not hypothetical. The subset's own deopts send the interpreter back to run the method
+    // itself, and *that* execution can throw and be caught right here.
+    //
+    // The answer is surgical rather than total: the method still compiles (an **ordinary** entry
+    // starts at pc 0 with the descriptor's state, and native code throws nothing, so no handler can
+    // fire while it runs), but it is offered no on-stack entry point and therefore polls nowhere.
+    //
+    //  0: iconst_0; istore_0
+    //  2: iload_0; bipush 10; if_icmpge -> 14     <- a loop header in every other respect
+    //  8: iinc 0, 1; goto -> 2
+    // 14: iload_0; ireturn
+    let code = [
+        ICONST_0, ISTORE_0, // 0
+        ILOAD_0, BIPUSH, 0x0a, 0xa2, 0x00, 0x09, // 5: if_icmpge +9 -> 14
+        IINC, 0x00, 0x01, // 8
+        GOTO, 0xff, 0xf7, // 11: goto -9 -> 2
+        ILOAD_0, IRETURN, // 14
+    ];
+    let handlers = |has_handlers| {
+        super::compile::compile(
+            &Method { unit: 0, code: &code, max_locals: 1, descriptor: "()I", is_static: true, has_handlers },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| None,
+                invoke: &|_, _, _| None,
+                heap: Heap::default(),
+                poll_word: &POLL as *const _ as usize,
+            },
+        )
+        .unwrap()
+    };
+    assert_eq!(handlers(false).osr_entries, vec![2], "without a handler, an ordinary loop header");
+    let guarded = handlers(true);
+    assert!(guarded.osr_entries.is_empty(), "with one, no on-stack entry and no poll site");
+    // ...and therefore no resume site either, since this body has no deopt guard in it. A method
+    // with handlers that *did* would still get one: a deopt is an edge the forward analysis
+    // followed, so the state at that pc is the state the map says. Only an on-stack **entry** is
+    // an edge it cannot see.
+    assert!(guarded.resume_sites.is_empty());
+    // ...and it still computes the right answer through its ordinary entry.
+    assert_eq!(call_at(&guarded, &[0], 0).0, Outcome::Returned(10));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 6: the real deopt, and the three writes it made safe.
+//
+// Until this step compiled code wrote nothing observable, and that was the entire argument for
+// deopt-by-restart: re-running a method that has written nothing is indistinguishable from never
+// having run it. Resuming instead of restarting is what let `putfield`, `iastore` and `putstatic`
+// in — and it brings one new rule with it, which the tests below are mostly about:
+//
+//   **A deopt names an instruction that has not run.** Every guard of an instruction is emitted
+//   before that instruction's first observable effect, and nothing after the effect can deopt. So
+//   the interpreter resuming at that pc executes it exactly once, and the pair "native attempt +
+//   interpreted resume" applies each write once in total.
+//
+// Both halves are checked: a guard that fires leaves the heap untouched, and a deopt *after* a
+// write reports a pc past it.
+// ---------------------------------------------------------------------------------------------
+
+/// [`compile_instance`] with a working `getstatic`/`putstatic` resolver: every index resolves to
+/// `address`, which the tests below point at a cell they can read back.
+fn compile_static(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    heap: Heap,
+    address: usize,
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            static_int: &|_, _| Some(address),
+            int_field: &|_, _, _| Some(0),
+            instance: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+#[test]
+fn a_deopt_hands_back_the_operand_stack_it_was_holding() {
+    // `iload_0; iload_1; iload_2; idiv; iadd; ireturn` — `a + b / c`. The division at pc 3 gives up
+    // with **three values live**, and the first of them is not one of its own operands: it is the
+    // `a` that the `iadd` two instructions later will need. A restart could ignore all three; a
+    // resume cannot, and this is the shape the safepoint poll's empty-stack contract could never
+    // describe.
+    let code = [ILOAD_0, ILOAD_1, ILOAD_2, IDIV, IADD, IRETURN];
+    let compiled = compile(&code, 3, &|_| None).unwrap();
+    assert_eq!(compiled.stack_base, 3, "the spill starts past the three locals");
+    assert_eq!(compiled.buffer_slots, 6, "...and is three slots deep");
+    assert_eq!(site_at(&compiled, 3).stack, vec![Kind::Int, Kind::Int, Kind::Int]);
+
+    assert_eq!(call_at(&compiled, &[10, 30, 3], 0).0, Outcome::Returned(20));
+    let (outcome, buffer) = call_at(&compiled, &[10, 30, 0], 0);
+    assert_eq!(outcome, Outcome::Deopt(3), "the pc of the `idiv`, which has not run");
+    assert_eq!(spilled(&compiled, &buffer, 3), vec![10, 30, 0], "bottom-first, as the JVMS stack is");
+    // The locals were already current — nothing writes them here — but the buffer must not have
+    // been disturbed by the spill either, or a resume would restore the wrong ones.
+    assert_eq!(&buffer[..3], &[10, 30, 0]);
+}
+
+#[test]
+fn a_reference_on_the_operand_stack_comes_back_as_a_reference() {
+    // The mistake that does not fail where it is made. `x[i] + y[i]` leaves **an `int` under a
+    // reference under an `int`** when the second `iaload` finds its index out of range, so the
+    // resume site has to say `Int, Reference, Int` — get the middle one wrong and the interpreter
+    // rebuilds a heap offset as a `Value::Int`, which is a live object the collector can no longer
+    // see or relocate.
+    //
+    //  0: aload_0; iload_2; iaload      x[i]
+    //  3: aload_1; iload_2; iaload      y[i]   <- pc 5 is the guarded one
+    //  6: iadd; ireturn
+    let mut heap = FakeHeap::new();
+    heap.array(24, &[10, 20, 30, 40]); // x, in Eden
+    heap.array(2000, &[1, 2]); // y, in Old, and shorter
+    let code = [ALOAD_0, ILOAD_2, IALOAD, ALOAD_1, ILOAD_2, IALOAD, IADD, IRETURN];
+    let compiled = compile_instance(&code, 3, "([I[II)I", true, heap.bases(), 0).unwrap();
+    assert_eq!(site_at(&compiled, 5).stack, vec![Kind::Int, Kind::Reference, Kind::Int]);
+    assert_eq!(call_at(&compiled, &[24, 2000, 1], 0).0, Outcome::Returned(22));
+    // Index 3 is inside `x` and past the end of `y`, so the first read succeeds and the second is
+    // the one that gives up — with `x[3]` and the *reference* `y` both live.
+    let (outcome, buffer) = call_at(&compiled, &[24, 2000, 3], 0);
+    assert_eq!(outcome, Outcome::Deopt(5));
+    assert_eq!(spilled(&compiled, &buffer, 5), vec![40, 2000, 3]);
+}
+
+#[test]
+fn putstatic_writes_four_bytes_at_the_baked_in_address() {
+    // A static `int` occupies four bytes in its class's mirror (the interpreter's own `putstatic`
+    // writes it with `write_u32`), so an eight-byte store would take the neighbouring static with
+    // it. The neighbour here is a recognisable pattern for exactly that reason.
+    let cell: Box<[i32; 2]> = Box::new([0, 0x5A5A_5A5A]);
+    let address = cell.as_ptr() as usize;
+    // `getstatic #1; iload_0; iadd; dup; putstatic #1; ireturn` — read, add, write back, and return
+    // what was written, so one program checks the load and the store against each other.
+    let code = [GETSTATIC, 0x00, 0x01, ILOAD_0, IADD, DUP, PUTSTATIC, 0x00, 0x01, IRETURN];
+    let compiled = compile_static(&code, 1, "(I)I", Heap::default(), address).unwrap();
+    assert!(compiled.resume_sites.is_empty(), "neither static opcode can fail");
+    assert_eq!(call_at(&compiled, &[7], 0).0, Outcome::Returned(7));
+    assert_eq!(cell[0], 7);
+    assert_eq!(call_at(&compiled, &[-9], 0).0, Outcome::Returned(-2));
+    assert_eq!(cell[0], -2, "the store truncates to 32 bits, and the load sign-extends back");
+    assert_eq!(cell[1], 0x5A5A_5A5A, "the neighbouring static must be untouched");
+}
+
+#[test]
+fn putfield_writes_the_right_four_bytes_in_both_halves_of_the_heap() {
+    // The write twin of `getfield_reads_the_right_four_bytes_in_both_halves_of_the_heap`: the same
+    // two-armed address computation, the same four-byte width, and the same null check — except
+    // that here the null check is load-bearing in a way it never was for a read. A `getfield` that
+    // deopted after doing its work would merely be wasteful; a `putfield` that did would apply the
+    // store twice.
+    //
+    //  0: aload_0; iload_1; putfield #1     (a static method, so slot 0 is the argument)
+    //  5: iconst_0; ireturn
+    let mut heap = FakeHeap::new();
+    heap.write(16 + 16, 0x1234_5678); // the neighbour of the Eden object's field
+    heap.write(1000 + 16, 0x1234_5678); // ...and of the Old one's
+    let bases = heap.bases();
+    let code = [ALOAD_0, ILOAD_1, PUTFIELD, 0x00, 0x01, ICONST_0, IRETURN];
+    let compiled = compile_instance(&code, 2, "(LCell;I)I", true, bases, 12).unwrap();
+
+    assert_eq!(call_at(&compiled, &[16, -5], 0).0, Outcome::Returned(0), "the Eden arm");
+    assert_eq!(heap.read(16 + 12), -5);
+    assert_eq!(call_at(&compiled, &[1000, 77], 0).0, Outcome::Returned(0), "the other arm");
+    assert_eq!(heap.read(1000 + 12), 77);
+    assert_eq!(heap.read(16 + 16), 0x1234_5678, "four bytes, not eight");
+    assert_eq!(heap.read(1000 + 16), 0x1234_5678);
+
+    // And the guard: a null receiver deopts **at the `putfield` itself**, which is the pc the
+    // interpreter will re-execute — so nothing may have been written by then.
+    let before = (heap.read(16 + 12), heap.read(1000 + 12));
+    assert_eq!(call_at(&compiled, &[0, 999], 0).0, Outcome::Deopt(2));
+    assert_eq!((heap.read(16 + 12), heap.read(1000 + 12)), before, "a guard writes nothing");
+}
+
+#[test]
+fn iastore_checks_its_bounds_before_it_writes_anything() {
+    //  0: aload_0; iload_1; iload_2; iastore
+    //  4: iconst_0; ireturn
+    let mut heap = FakeHeap::new();
+    heap.array(24, &[10, 20, 30]); // in Eden
+    heap.array(2000, &[1, 2, 3, 4, 5]); // in Old
+    let bases = heap.bases();
+    let code = [ALOAD_0, ILOAD_1, ILOAD_2, IASTORE, ICONST_0, IRETURN];
+    let compiled = compile_instance(&code, 3, "([III)I", true, bases, 0).unwrap();
+
+    assert_eq!(call_at(&compiled, &[24, 1, -7], 0).0, Outcome::Returned(0));
+    assert_eq!(heap.read(24 + 12 + 4), -7, "element 1 of the Eden array");
+    assert_eq!(heap.read(24 + 12), 10, "and its neighbours are untouched");
+    assert_eq!(heap.read(24 + 12 + 8), 30);
+    assert_eq!(call_at(&compiled, &[2000, 4, i32::MIN], 0).0, Outcome::Returned(0));
+    assert_eq!(heap.read(2000 + 12 + 16), i32::MIN, "the last element of the Old array");
+    // The array's own `length` word sits immediately before element 0 — a stride or header
+    // constant that is off by one element would overwrite it, and nothing else here would notice.
+    assert_eq!(heap.read(2000 + 8), 5);
+
+    // The four guards. Each reports the pc of the `iastore`, which has not run, and each leaves
+    // every element exactly as it was.
+    let snapshot: Vec<i32> = (0..3).map(|k| heap.read(24 + 12 + 4 * k)).collect();
+    for (locals, why) in [
+        ([24, 3, 99], "one past the end"),
+        ([24, -1, 99], "before the start"),
+        ([24, i32::MIN, 99], "and the extreme of that"),
+        ([0, 0, 99], "a null array"),
+    ] {
+        assert_eq!(call_at(&compiled, &locals, 0).0, Outcome::Deopt(3), "{why}");
+    }
+    let after: Vec<i32> = (0..3).map(|k| heap.read(24 + 12 + 4 * k)).collect();
+    assert_eq!(after, snapshot, "not one of the four guards may have written an element");
+}
+
+#[test]
+fn a_deopt_after_a_write_reports_a_pc_past_it() {
+    // **The ordering rule, stated as a test.** `cell.a = v; return 100 / d;` — the store at pc 2 is
+    // applied, and then the division at pc 8 gives up. The pc that comes back is 8, not 2: the
+    // interpreter resumes *after* the write and therefore does not repeat it, which is the whole
+    // reason a write may sit in front of a deopt site at all.
+    //
+    // Reported as an assertion about the *pc* rather than only about the heap because that is the
+    // thing a future opcode could get wrong. A guard emitted after its own store would still write
+    // the field once here, and be a latent double-write for whoever resumed at it.
+    //
+    //  0: aload_0; iload_1; putfield #1
+    //  5: bipush 100; iload_2; idiv
+    //  9: ireturn
+    let mut heap = FakeHeap::new();
+    let bases = heap.bases();
+    let code = [ALOAD_0, ILOAD_1, PUTFIELD, 0x00, 0x01, BIPUSH, 100, ILOAD_2, IDIV, IRETURN];
+    let compiled = compile_instance(&code, 3, "(LCell;II)I", true, bases, 12).unwrap();
+    assert_eq!(
+        compiled.resume_sites.iter().map(|s| s.pc).collect::<Vec<_>>(),
+        vec![2, 8],
+        "both the store and the division are guarded pcs, and they are different pcs"
+    );
+
+    assert_eq!(call_at(&compiled, &[1000, 42, 4], 0).0, Outcome::Returned(25));
+    assert_eq!(heap.read(1000 + 12), 42);
+
+    // Now the pair that only a resuming deopt can survive: the write lands, and *then* the method
+    // gives up. One call, one write of the field — and the pc says the interpreter will pick up at
+    // the division, not at the store.
+    heap.write(1000 + 12, 0);
+    let (outcome, buffer) = call_at(&compiled, &[1000, 7, 0], 0);
+    assert_eq!(outcome, Outcome::Deopt(8), "past the `putfield`, at the `idiv`");
+    assert_eq!(heap.read(1000 + 12), 7, "the store happened, exactly once");
+    assert_eq!(spilled(&compiled, &buffer, 8), vec![100, 0], "the division's own two operands");
+}
+
+#[test]
+fn a_loop_of_array_writes_deopts_where_it_ran_off_the_end() {
+    // The shape the milestone's brief asks for by name: a loop that writes an array and gives up on
+    // an index past the end. What matters is not that it deopts but *where* — the elements it did
+    // write must be written once, and the interpreter must take over at the iteration native code
+    // stopped in rather than at the top of the loop.
+    //
+    //  0: iconst_0; istore_2                                          j = 0
+    //  2: iload_2                                                     <- the loop header
+    //  4: if_icmpge -> 21
+    //  7: aload_0; iload_2; aload_0; iload_2; iaload; iconst_1; iadd; iastore
+    // 15: iinc 2, 1
+    // 18: goto -> 2
+    // 21: iload_2; ireturn
+    let code = [
+        ICONST_0, ISTORE_2, // 0
+        ILOAD_2, ILOAD_1, IF_ICMPGE, 0x00, 0x11, // 2: if_icmpge +17 -> 21
+        ALOAD_0, ILOAD_2, ALOAD_0, ILOAD_2, IALOAD, ICONST_1, IADD, IASTORE, // 7..14
+        IINC, 0x02, 0x01, // 15
+        GOTO, 0xff, 0xf0, // 18: goto -16 -> 2
+        ILOAD_2, IRETURN, // 21
+    ];
+    let mut heap = FakeHeap::new();
+    heap.array(2000, &[5, 6, 7]);
+    let bases = heap.bases();
+    let compiled = compile_instance(&code, 3, "([II)I", true, bases, 0).unwrap();
+    assert_eq!(compiled.osr_entries, vec![2], "the loop header");
+
+    // In range: every element moves by exactly one.
+    assert_eq!(call_at(&compiled, &[2000, 3, 0], 0).0, Outcome::Returned(3));
+    assert_eq!((0..3).map(|k| heap.read(2000 + 12 + 4 * k)).collect::<Vec<_>>(), vec![6, 7, 8]);
+
+    // Past the end: the three elements move by one *each*, once, and the deopt names the read of
+    // the fourth element — with `j` already at 3 in the locals buffer, which is what makes the
+    // interpreter throw from the right iteration instead of re-running the first three.
+    let (outcome, buffer) = call_at(&compiled, &[2000, 9, 0], 0);
+    assert_eq!(outcome, Outcome::Deopt(11), "the `iaload` of the fourth element is the first guard");
+    assert_eq!((0..3).map(|k| heap.read(2000 + 12 + 4 * k)).collect::<Vec<_>>(), vec![7, 8, 9]);
+    assert_eq!(buffer[2], 3, "local 2 (`j`) is where native code left it");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Step 7: `new` — the allocation fast path, its two exits, and the log that keeps the GC informed.
+// ---------------------------------------------------------------------------------------------
+
+const NEW: u8 = 0xbb;
+const RETURN: u8 = 0xb1;
+
+/// The class every `new` below allocates: three `int` fields past the 8-byte header, so the object
+/// is 20 bytes logical and the arena's 8-byte rounding bumps by 24. Both numbers matter, and the
+/// tests check them apart: 20 is what the *collector* is told (it copies exactly that many bytes)
+/// and 24 is what the *cursor* moves by.
+const CELL: Instance = Instance { size: 20, class_id: 0xabc };
+
+/// [`compile_instance`] for a program that allocates: every `new` resolves to `instance`, and every
+/// field to `+8` — the first `int` past the header.
+fn compile_alloc(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    heap: Heap,
+    instance: Instance,
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            static_int: &|_, _| None,
+            int_field: &|_, _, _| Some(8),
+            instance: &|_, _| Some(instance),
+            invoke: &|_, _, _| None,
+            heap,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+/// The `(offset, size)` records a run left in the allocation log, read out of the buffer exactly as
+/// `JitCache::enter` reads them.
+fn logged(compiled: &CompiledCode, buffer: &[i64]) -> Vec<(usize, usize)> {
+    let base = compiled.alloc_base as usize;
+    let count = buffer[base] as usize;
+    (0..count).map(|r| (buffer[base + 1 + 2 * r] as usize, buffer[base + 2 + 2 * r] as usize)).collect()
+}
+
+#[test]
+fn new_bumps_eden_writes_the_header_and_logs_the_object() {
+    // The whole of the fast path, one clause at a time, against what
+    // `objects_operations::allocate` would have produced for the same class.
+    let mut heap = FakeHeap::new();
+    // Eden is deliberately *dirty*: the collector recycles the arena without wiping it, so zeroing
+    // is the compiled code's job and a test against a pre-zeroed buffer would prove nothing.
+    heap.eden.fill(0xAB);
+    let bases = heap.bases();
+
+    // new #1; astore_1; aload_1; areturn
+    let code = [NEW, 0x00, 0x01, ASTORE_1, ALOAD_1, ARETURN];
+    let compiled = compile_alloc(&code, 2, "()LCell;", bases, CELL).unwrap();
+    assert_eq!(compiled.alloc_records, super::compile::ALLOC_LOG_RECORDS, "the method allocates");
+    assert_eq!(compiled.alloc_base, compiled.stack_base + compiled.stack_slots);
+
+    let (outcome, buffer) = call_at(&compiled, &[0, 0], 0);
+    // The first object starts at arena-local 0, i.e. the heap offset `NULL_PAGE` — and it is a
+    // *reference*, which is what `areturn` hands back.
+    let object = FakeHeap::NULL_PAGE;
+    assert_eq!(outcome, Outcome::Returned(object as i32));
+    assert!(compiled.returns_reference);
+    // The cursor moved by the **rounded** stride, not by the logical size.
+    assert_eq!(heap.eden_used(), 24);
+    // The header is byte-for-byte the interpreter's: `class_id` in the first word, `mark` zero.
+    assert_eq!(heap.read(object), CELL.class_id as i32);
+    assert_eq!(heap.read(object + 4), 0, "the mark word");
+    // ...and every field is at its JVMS default, out of a buffer that was full of 0xAB.
+    for field in [8, 12, 16] {
+        assert_eq!(heap.read(object + field), 0, "field at +{field}");
+    }
+    // The log the trampoline replays: one object, at its heap offset, with its **logical** size.
+    assert_eq!(logged(&compiled, &buffer), vec![(object, CELL.size as usize)]);
+}
+
+#[test]
+fn a_fresh_object_is_an_eden_offset_the_field_opcodes_can_use() {
+    // The reference a `new` produces has to be indistinguishable from one the interpreter made —
+    // which for this tier means one thing above all: `heap_address` must route it to the **Eden**
+    // base. Get the null page wrong by eight and every field access lands in the other buffer.
+    let mut heap = FakeHeap::new();
+    heap.eden.fill(0xAB);
+    let bases = heap.bases();
+
+    // new #1; dup; bipush 42; putfield #1; getfield #1; ireturn   (the field resolves to +8)
+    let code =
+        [NEW, 0x00, 0x01, DUP, BIPUSH, 42, PUTFIELD, 0x00, 0x01, GETFIELD, 0x00, 0x01, IRETURN];
+    let compiled = compile_alloc(&code, 0, "()I", bases, CELL).unwrap();
+    let (outcome, _) = call_at(&compiled, &[], 0);
+    assert_eq!(outcome, Outcome::Returned(42), "written and read back through the fresh reference");
+    assert_eq!(heap.read(FakeHeap::NULL_PAGE + 8), 42, "and the bytes really are in Eden");
+}
+
+#[test]
+fn a_full_eden_leaves_through_the_alloc_exit_at_the_new() {
+    // Eden is 256 bytes and each object takes 24, so the eleventh allocation is the one that does
+    // not fit. What happens then is *not* a deopt and *not* an exception: the method stops at the
+    // `new`, which has not run, and the interpreter allocates — and may collect, with no native
+    // frame anywhere on the stack. That is the whole safety argument for inline allocation.
+    //
+    //  0: iconst_0; istore_0                     n = 0
+    //  2: iload_0; bipush 20; if_icmpge -> 18    <- the loop header
+    //  8: new #1; pop
+    // 12: iinc 0, 1
+    // 15: goto -> 2
+    // 18: iload_0; ireturn
+    let code = [
+        ICONST_0, ISTORE_0, // 0
+        ILOAD_0, BIPUSH, 20, IF_ICMPGE, 0x00, 0x0d, // 2: +13 -> 18
+        NEW, 0x00, 0x01, POP, // 8
+        IINC, 0x00, 0x01, // 12
+        GOTO, 0xff, 0xf3, // 15: -13 -> 2
+        ILOAD_0, IRETURN, // 18
+    ];
+    let heap = FakeHeap::new();
+    let bases = heap.bases();
+    let compiled = compile_alloc(&code, 1, "()I", bases, CELL).unwrap();
+
+    let (outcome, buffer) = call_at(&compiled, &[0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(8), "at the `new`, which has not run");
+    // Ten objects fit (240 of 256 bytes) and every one of them was logged.
+    let records = logged(&compiled, &buffer);
+    assert_eq!(records.len(), 10);
+    assert_eq!(buffer[0], 10, "local 0 (`n`) counted exactly the allocations that succeeded");
+    for (r, &(offset, size)) in records.iter().enumerate() {
+        assert_eq!(offset, FakeHeap::NULL_PAGE + 24 * r, "object {r}");
+        assert_eq!(size, CELL.size as usize);
+        assert!(offset < FakeHeap::EDEN_END as usize, "every one of them is an Eden offset");
+    }
+    // The cursor is left **past the end** — exactly what `EdenArena::alloc` does when it fails, so
+    // the interpreter, re-executing this same `new`, fails Eden too and falls to Old by its own
+    // path. Anything else here would be the two allocators disagreeing about how full Eden is.
+    assert!(heap.eden_used() > FakeHeap::EDEN_SIZE, "cursor at {}", heap.eden_used());
+}
+
+#[test]
+fn the_allocation_log_has_a_bottom_and_reaching_it_is_an_alloc_exit() {
+    // The other capacity condition, isolated from Eden's: with an object small enough that Eden
+    // could hold thousands, the *log* is what fills — and it must leave the same way, at a `new`
+    // that has not run, with every object it did allocate recorded.
+    let mut heap = FakeHeap::new();
+    heap.eden = vec![0; 8 * 4096];
+    let mut bases = heap.bases();
+    bases.eden_base = heap.eden.as_ptr() as usize - FakeHeap::NULL_PAGE;
+    bases.eden_capacity = 8 * 4096;
+    bases.eden_end = (FakeHeap::NULL_PAGE + 8 * 4096) as u32;
+    bases.max_offset = FakeHeap::NULL_PAGE + 8 * 4096;
+
+    //  0: iconst_0; istore_0
+    //  2: iload_0; sipush 1000; if_icmpge -> 19
+    //  9: new #1; pop
+    // 13: iinc 0, 1
+    // 16: goto -> 2
+    // 19: iload_0; ireturn
+    let code = [
+        ICONST_0, ISTORE_0, //
+        ILOAD_0, SIPUSH, 0x03, 0xe8, IF_ICMPGE, 0x00, 0x0d, // 2: +13 -> 19
+        NEW, 0x00, 0x01, POP, // 9
+        IINC, 0x00, 0x01, // 13
+        GOTO, 0xff, 0xf2, // 16: -14 -> 2
+        ILOAD_0, IRETURN, // 19
+    ];
+    let tiny = Instance { size: 8, class_id: 7 };
+    let records = super::compile::ALLOC_LOG_RECORDS as usize;
+    let compiled = compile_alloc(&code, 1, "()I", bases, tiny).unwrap();
+
+    let (outcome, buffer) = call_at(&compiled, &[0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(9), "the `new` that found the log full");
+    assert_eq!(buffer[compiled.alloc_base as usize], records as i64);
+    assert_eq!(logged(&compiled, &buffer).len(), records);
+    // Nothing was reserved for the allocation that did not happen: the log check comes **first**,
+    // before the bump, so a refused `new` leaves Eden exactly as it found it.
+    assert_eq!(heap.eden_used(), 8 * records);
+}
+
+#[test]
+fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
+    let heap = FakeHeap::new();
+    let code = [NEW, 0x00, 0x01, ARETURN];
+    // An object too big to zero with a straight run of stores.
+    let big = Instance { size: 1024, class_id: 1 };
+    assert_eq!(
+        compile_alloc(&code, 0, "()LCell;", heap.bases(), big).unwrap_err(),
+        Ineligible::AllocOutOfReach { pc: 0 }
+    );
+    // An object bigger than Eden itself — it could never fit, so there is no fast path to emit.
+    let huge = Instance { size: 264, class_id: 1 };
+    assert_eq!(
+        compile_alloc(&code, 0, "()LCell;", heap.bases(), huge).unwrap_err(),
+        Ineligible::AllocOutOfReach { pc: 0 }
+    );
+    // A VM that supplied no Eden cursor at all — the `Heap::default` posture, which is what keeps a
+    // forgotten field from becoming an address of zero.
+    let mut blind = heap.bases();
+    blind.eden_cursor = 0;
+    assert_eq!(
+        compile_alloc(&code, 0, "()LCell;", blind, CELL).unwrap_err(),
+        Ineligible::AllocOutOfReach { pc: 0 }
+    );
+    // And a class the resolver will not answer for — the class-initialisation case, which is what
+    // this looks like from inside the compiler.
+    let refused = super::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 0, descriptor: "()LCell;", is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            static_int: &|_, _| None,
+            int_field: &|_, _, _| None,
+            instance: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: heap.bases(),
+            poll_word: &POLL as *const _ as usize,
+        },
+    );
+    assert_eq!(refused.unwrap_err(), Ineligible::UnresolvedClass { pc: 0, index: 1 });
+}
+
+#[test]
+fn a_void_method_with_an_allocation_returns_nothing_and_still_logs() {
+    // Step 7's two halves in one method, which is the shape a constructor has: it allocates, it
+    // writes, and it hands nothing back.
+    let heap = FakeHeap::new();
+    let code = [NEW, 0x00, 0x01, DUP, BIPUSH, 9, PUTFIELD, 0x00, 0x01, POP, RETURN];
+    let compiled = compile_alloc(&code, 0, "()V", heap.bases(), CELL).unwrap();
+    assert!(compiled.returns_void);
+    let (outcome, buffer) = call_at(&compiled, &[], 0);
+    // `Status::OK`, and the value half is meaningless — the caller pushes nothing.
+    assert!(matches!(outcome, Outcome::Returned(_)));
+    assert_eq!(logged(&compiled, &buffer), vec![(FakeHeap::NULL_PAGE, CELL.size as usize)]);
+    assert_eq!(heap.read(FakeHeap::NULL_PAGE + 8), 9);
+}
+
+// =============================================================================================
+// Step 10: the operand stack in registers.
+//
+// The allocator is a **total function of an operand's position** — native slot `s` lives in
+// `CACHE[s]` when `s < regs`, and in its frame slot otherwise. So there is no register state for two
+// paths to disagree about and nothing to spill at a branch; what has to be checked instead is the
+// *boundary*, where one operand of an instruction is a register and the other is memory, and where
+// `idiv`'s implicit RDX:RAX and the shifts' CL meet a cached operand.
+//
+// Almost every test here therefore runs its program at **every** cache size, from 0 — which emits
+// byte-for-byte what step 9 emitted — to the whole cache. Sweeping the size is the same thing as
+// sweeping the boundary through the program, which is what a single fixed size would miss, and it
+// is also what makes each of these a differential test between the two arms rather than a
+// self-consistency check.
+// =============================================================================================
+
+use super::compile::{compile_with_regs, CACHE_REGS};
+
+/// Every cache size the compiler will emit, "off" included.
+fn every_cache_size() -> impl Iterator<Item = u32> {
+    0..=CACHE_REGS
+}
+
+/// [`compile`] at a chosen cache size, against [`POLL`] and no heap.
+fn compile_at(
+    code: &[u8],
+    max_locals: usize,
+    regs: u32,
+) -> Result<CompiledCode, Ineligible> {
+    compile_with_regs(
+        &Method { unit: 0, code, max_locals, descriptor: "()I", is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            static_int: &|_, _| None,
+            int_field: &|_, _, _| None,
+            instance: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: Heap::default(),
+            poll_word: &POLL as *const _ as usize,
+        },
+        regs,
+    )
+}
+
+/// Runs `code` at **every** cache size and asserts all of them agree, then hands back the answer.
+/// `why` names the program, because "Some(3) != Some(4)" says nothing about which of nine
+/// compilations was the odd one.
+fn agrees_at_every_cache_size(why: &str, code: &[u8], locals: &[i32]) -> Option<i32> {
+    let mut first = None;
+    for regs in every_cache_size() {
+        let compiled = compile_at(code, locals.len(), regs)
+            .unwrap_or_else(|e| panic!("{why}: refused at regs={regs}: {e}"));
+        let answer = call(&compiled, locals);
+        match regs {
+            0 => first = Some(answer),
+            _ => assert_eq!(Some(answer), first, "{why}: regs={regs} disagrees with regs=0, locals {locals:?}"),
+        }
+    }
+    first.expect("the sweep always starts at regs=0")
+}
+
+/// `iload 0; iload 1; …; iload n-1` — one push per local, so the stack ends `n` deep and a long
+/// enough program has positions past the end of the cache.
+fn push_locals(n: usize) -> Vec<u8> {
+    (0..n).flat_map(|i| [0x15u8, i as u8]).collect()
+}
+
+/// `push_locals(n); <ops>; ireturn` — the right-associated fold a parenthesised Java expression
+/// compiles to, and the only shape that makes the operand stack deep.
+fn fold_program(n: usize, ops: &[u8]) -> Vec<u8> {
+    let mut code = push_locals(n);
+    code.extend_from_slice(ops);
+    code.push(IRETURN);
+    code
+}
+
+/// **The oracle for [`fold_program`]**: the same stack machine written out here, with Java's `int`
+/// semantics spelled out — wrapping arithmetic, a shift count masked to five bits, a division that
+/// truncates toward zero. `None` where the JLS would throw.
+///
+/// A second implementation on purpose. An expectation taken from the thing under test cannot fail.
+fn fold_expected(values: &[i32], ops: &[u8]) -> Option<i32> {
+    let mut stack: Vec<i32> = values.to_vec();
+    for &op in ops {
+        let (rhs, lhs) = (stack.pop()?, stack.pop()?);
+        stack.push(match op {
+            IADD => lhs.wrapping_add(rhs),
+            ISUB => lhs.wrapping_sub(rhs),
+            IMUL => lhs.wrapping_mul(rhs),
+            IDIV | IREM if rhs == 0 => return None,
+            IDIV => lhs.wrapping_div(rhs),
+            IREM => lhs.wrapping_rem(rhs),
+            ISHL => ((lhs as u32) << (rhs as u32 & 31)) as i32,
+            ISHR => lhs >> (rhs as u32 & 31),
+            IUSHR => ((lhs as u32) >> (rhs as u32 & 31)) as i32,
+            IAND => lhs & rhs,
+            IOR => lhs | rhs,
+            IXOR => lhs ^ rhs,
+            other => panic!("fold_expected has no rule for opcode 0x{other:02x}"),
+        });
+    }
+    stack.pop()
+}
+
+#[test]
+fn an_expression_deeper_than_the_cache_computes_the_same_thing_at_every_size() {
+    // Twelve operands, four past the eight registers, folded with a **non-commutative** operation:
+    // `isub` is what turns a mis-mapped position into a wrong number rather than the same number
+    // reached differently. The values are distinct, so exchanging any two of them shows.
+    let values: Vec<i32> = (0..12).map(|k| (1 << k) + k).collect();
+    for depth in 2..=12usize {
+        let vals = &values[..depth];
+        let ops = vec![ISUB; depth - 1];
+        let code = fold_program(depth, &ops);
+        let why = format!("isub fold of depth {depth}");
+        assert_eq!(agrees_at_every_cache_size(&why, &code, vals), fold_expected(vals, &ops), "{why}");
+    }
+}
+
+#[test]
+fn the_fixed_register_instructions_meet_the_cache_at_every_boundary() {
+    // `idiv`/`irem` consume and clobber RDX:RAX implicitly and the shifts read CL — the three
+    // registers a cache would otherwise have to move an operand out of, per site, with the deopt
+    // state to match. None of them is in `CACHE`, so the claim is that **nothing has to happen**,
+    // and this is the program that would notice if something did.
+    //
+    // The fold puts the fixed-register instruction at the deepest point and then folds all the way
+    // back down, so every operand below it stays live across it. Sweeping the depth *and* the cache
+    // size walks the instruction's own two operands through "both cached", "cached over spilled"
+    // and "both spilled", and walks the boundary through the operands underneath it as well.
+    let values: Vec<i32> = (0..10).map(|k| 3 * k + 7).collect();
+    for &fixed in &[IDIV, IREM, ISHL, ISHR, IUSHR] {
+        for depth in 2..=10usize {
+            let vals = &values[..depth];
+            let mut ops = vec![fixed];
+            ops.extend(vec![ISUB; depth - 2]);
+            let code = fold_program(depth, &ops);
+            let why = format!("0x{fixed:02x} at depth {depth}");
+            assert_eq!(agrees_at_every_cache_size(&why, &code, vals), fold_expected(vals, &ops), "{why}");
+        }
+    }
+}
+
+#[test]
+fn the_whole_mixed_arithmetic_subset_agrees_at_every_cache_size() {
+    // One program using every binary opcode in the subset over a stack that starts ten deep, so
+    // each operation happens at a different position and no two of them meet the boundary the same
+    // way. Four seeds, including one that makes the intermediate values wrap.
+    let ops = [IDIV, IADD, ISHL, IXOR, IMUL, IUSHR, IOR, IREM, IAND];
+    for seed in [1i32, -7, 1_000_003, i32::MIN / 3] {
+        let values: Vec<i32> =
+            (0..10).map(|k: i32| seed.wrapping_mul(k + 1).wrapping_add(k * k + 1)).collect();
+        let code = fold_program(values.len(), &ops);
+        let why = format!("mixed fold, seed {seed}");
+        assert_eq!(agrees_at_every_cache_size(&why, &code, &values), fold_expected(&values, &ops), "{why}");
+    }
+}
+
+#[test]
+fn a_deopt_spills_the_registers_that_belong_to_its_pc() {
+    // **The delicate half of the step.** A stub has to materialise the operand stack of the pc it
+    // fires at, and since step 10 most of those operands are in R8-R15 rather than in frame slots.
+    // The values are all distinct, so a spill that named the wrong register — or the right registers
+    // in the wrong order — is a different vector rather than a permutation of the same one.
+    //
+    // Ten operands are live at the division, so at every cache size some are registers and some are
+    // slots; at `regs = 8` the boundary falls between positions 7 and 8.
+    let values: Vec<i32> = (1..=10).map(|k| 1000 + k).collect();
+    let mut zeroed = values.clone();
+    *zeroed.last_mut().unwrap() = 0; // the divisor `idiv` pops first
+    let ops = [IDIV, ISUB, ISUB, ISUB, ISUB, ISUB, ISUB, ISUB, ISUB];
+    let code = fold_program(10, &ops);
+    let div_pc = 20u32; // past ten two-byte `iload`s
+    let want: Vec<i64> = zeroed.iter().map(|&v| v as i64).collect();
+
+    for regs in every_cache_size() {
+        let compiled = compile_at(&code, 10, regs).unwrap();
+        assert_eq!(site_at(&compiled, div_pc).stack.len(), 10, "regs={regs}: ten operands are live");
+        // The good case first, so the deopt below is about the guard and not about the program.
+        assert_eq!(call(&compiled, &values), fold_expected(&values, &ops), "regs={regs}");
+        let (outcome, buffer) = call_at(&compiled, &zeroed, 0);
+        assert_eq!(outcome, Outcome::Deopt(div_pc), "regs={regs}: at the `idiv`, which has not run");
+        assert_eq!(
+            spilled(&compiled, &buffer, div_pc),
+            want,
+            "regs={regs}: the spilled stack must be the stack the instruction was entered with"
+        );
+        assert_eq!(&buffer[..10], &want[..], "regs={regs}: the locals were not disturbed by the spill");
+    }
+}
+
+#[test]
+fn a_guard_never_writes_a_home_register_before_it_can_still_fire() {
+    // **The order rule in its register form**, and the one place getting it wrong would be worse
+    // than a wrong number. `iaload` turns the array reference into a machine address and *then*
+    // checks the index — two more `jcc`s after the reference has been consumed — so a guard phase
+    // that computed into the operand's own register would leave the stub spilling an address where
+    // a heap offset belongs. The interpreter would rebuild that as a `Value::Reference`, which is a
+    // pointer made of arithmetic.
+    //
+    // The array is at position 1 and the index at position 2, with an operand underneath, at every
+    // cache size.
+    let mut heap = FakeHeap::new();
+    heap.array(24, &[10, 20, 30, 40]);
+    let code = [ILOAD_2, ALOAD_0, ILOAD_1, IALOAD, IADD, IRETURN];
+    for regs in every_cache_size() {
+        let compiled = compile_with_regs(
+            &Method {
+                unit: 0,
+                code: &code,
+                max_locals: 3,
+                descriptor: "([III)I",
+                is_static: true,
+                has_handlers: false,
+            },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| None,
+                invoke: &|_, _, _| None,
+                heap: heap.bases(),
+                poll_word: &POLL as *const _ as usize,
+            },
+            regs,
+        )
+        .unwrap();
+        assert_eq!(call_at(&compiled, &[24, 2, 5], 0).0, Outcome::Returned(35), "regs={regs}");
+        let (outcome, buffer) = call_at(&compiled, &[24, 9, 5], 0);
+        assert_eq!(outcome, Outcome::Deopt(3), "regs={regs}: at the `iaload`");
+        assert_eq!(
+            spilled(&compiled, &buffer, 3),
+            vec![5, 24, 9],
+            "regs={regs}: the array comes back as the heap offset it was, not as an address"
+        );
+    }
+}
+
+#[test]
+fn every_heap_opcode_agrees_at_every_cache_size_and_every_depth() {
+    // **The test a sabotage asked for.** The heap opcodes are the ones that compute an *address*
+    // into scratch and then need their value operand, so which scratch register that value is
+    // loaded into matters — and it only matters when the value is in a frame slot rather than in a
+    // register of its own. A putfield whose value sat in RAX, over the address, would be a wild
+    // four-byte store; and at the default cache size, with a shallow stack, that operand is always
+    // cached and the bug is invisible.
+    //
+    // So this sweeps **two** axes: the cache size, and the depth of the stack the heap opcodes sit
+    // on top of. Together they put every operand of every heap opcode on both sides of the
+    // boundary. The padding underneath is folded back down with `isub`, so it is not enough for it
+    // to survive — it has to survive in order.
+    //
+    // The receiver is in Eden and the array in the other half, so the two-armed address computation
+    // is exercised in both directions at every depth as well.
+    const OBJ: usize = 40;
+    const ARR: usize = 2000;
+    for pad in 0..9usize {
+        let mut code: Vec<u8> = (0..pad).flat_map(|k| [BIPUSH, (k + 1) as u8]).collect();
+        code.extend_from_slice(&[ALOAD_0, 0x1d, PUTFIELD, 0x00, 0x01]); // obj.f = local 3
+        code.extend_from_slice(&[ALOAD_0, GETFIELD, 0x00, 0x01]); // ...and read it back
+        code.extend_from_slice(&[ALOAD_1, ILOAD_2, 0x1d, IASTORE]); // xs[local 2] = local 3
+        code.extend_from_slice(&[ALOAD_1, ILOAD_2, IALOAD, IADD]); // ...and read that back
+        code.extend_from_slice(&[ALOAD_1, ARRAYLENGTH, IADD]);
+        code.extend_from_slice(&[0x1d, PUTSTATIC, 0x00, 0x01, GETSTATIC, 0x00, 0x01, IADD]);
+        code.extend(vec![ISUB; pad]);
+        code.push(IRETURN);
+
+        for regs in every_cache_size() {
+            let mut heap = FakeHeap::new();
+            heap.array(ARR, &[0; 6]);
+            heap.write(OBJ + 12, 0x5A5A_5A5A); // the field's neighbour, never to be touched
+            let cell: Box<[i32; 2]> = Box::new([0, 0x1234_5678]);
+            let address = cell.as_ptr() as usize;
+            let bases = heap.bases();
+            let compiled = compile_with_regs(
+                &Method {
+                    unit: 0,
+                    code: &code,
+                    max_locals: 4,
+                    descriptor: "(LCell;[III)I",
+                    is_static: true,
+                    has_handlers: false,
+                },
+                &Environment {
+                    int_const: &|_, _| None,
+                    static_int: &|_, _| Some(address),
+                    int_field: &|_, _, _| Some(8),
+                    instance: &|_, _| None,
+                    invoke: &|_, _, _| None,
+                    heap: bases,
+                    poll_word: &POLL as *const _ as usize,
+                },
+                regs,
+            )
+            .unwrap_or_else(|e| panic!("pad={pad} regs={regs}: {e}"));
+
+            let (index, value) = (3i32, -77i32);
+            let why = format!("pad={pad} regs={regs}");
+            // obj.f + xs[index] + xs.length + the static, all of which are `value` except the length.
+            let core = 3 * value + 6;
+            let expected = (1..=pad as i32).rev().fold(core, |acc, v| v.wrapping_sub(acc));
+            assert_eq!(
+                call_at(&compiled, &[OBJ as i32, ARR as i32, index, value], 0).0,
+                Outcome::Returned(expected),
+                "{why}"
+            );
+            // ...and the three writes really landed, four bytes wide, where they belong.
+            assert_eq!(heap.read(OBJ + 8), value, "{why}: the field");
+            assert_eq!(heap.read(OBJ + 12), 0x5A5A_5A5A, "{why}: four bytes, not eight");
+            assert_eq!(heap.read(ARR + 12 + 4 * index as usize), value, "{why}: the array element");
+            assert_eq!(heap.read(ARR + 12), 0, "{why}: the element before it is untouched");
+            assert_eq!(cell[0], value, "{why}: the static");
+            assert_eq!(cell[1], 0x1234_5678, "{why}: and its neighbour");
+        }
+    }
+}
+
+#[test]
+fn a_merge_with_a_non_empty_stack_needs_no_spill_and_no_reload() {
+    // Two paths into one pc with operands live across the join. The allocator has nothing to
+    // reconcile — a home is a function of the position, and the depth at the merge is single-valued
+    // because the scan already made it so — but "nothing to reconcile" is only true if both arms
+    // really do leave the value in the same place, which is what this executes.
+    //
+    // The merge is buried under `pad` operands so it lands at depths 1 through 10, i.e. below, on
+    // and above the boundary; and the `pad` operands are folded back down with `isub`, so their
+    // order matters too.
+    for pad in 0..10usize {
+        let mut code = push_locals(pad);
+        let (a, b) = (pad as u8, (pad + 1) as u8);
+        code.extend_from_slice(&[0x15, a, IFEQ, 0x00, 0x0b]);
+        code.extend_from_slice(&[0x15, a, 0x15, b, IMUL, GOTO, 0x00, 0x08]);
+        code.extend_from_slice(&[0x15, a, 0x15, b, ISUB]);
+        code.extend(vec![ISUB; pad]);
+        code.push(IRETURN);
+        for &(x, y) in &[(0i32, 7i32), (3, 7), (-4, 9)] {
+            let mut locals: Vec<i32> = (0..pad as i32).map(|k| 100 + k).collect();
+            locals.extend([x, y]);
+            let branch = match x == 0 {
+                true => x.wrapping_sub(y),
+                false => x.wrapping_mul(y),
+            };
+            let expected =
+                (0..pad as i32).map(|k| 100 + k).rev().fold(branch, |acc, v| v.wrapping_sub(acc));
+            let why = format!("merge at depth {} with x={x}", pad + 1);
+            assert_eq!(agrees_at_every_cache_size(&why, &code, &locals), Some(expected), "{why}");
+        }
+    }
+}
+
+#[test]
+fn every_stack_shuffle_permutes_the_same_way_at_every_cache_size() {
+    // The shuffles are permutations of *homes*, and a home is now sometimes a register. Their
+    // correctness argument was always the order of the moves; this says the argument survived the
+    // change of addressing mode — `dup2_x2` included, whose backup slots are its own result and can
+    // therefore straddle the boundary.
+    //
+    // Sweeping the cache size *is* sweeping the boundary through the affected region: `dup2_x2`
+    // works over six positions, so `regs = 0..=8` places the register/slot split at every one of
+    // them in turn. `shuffle` drains the whole resulting stack into one number, so one comparison
+    // checks the entire permutation — here against the interpreter's own implementation.
+    for (values, op, depth) in [
+        (&[1, 2][..], NOP, 2usize),
+        (&[1, 2][..], POP, 1),
+        (&[1, 2, 3][..], POP2, 1),
+        (&[1, 2][..], DUP, 3),
+        (&[1, 2][..], DUP_X1, 3),
+        (&[1, 2, 3][..], DUP_X2, 4),
+        (&[1, 2][..], DUP2, 4),
+        (&[1, 2, 3][..], DUP2_X1, 5),
+        (&[1, 2, 3, 4][..], DUP2_X2, 6),
+        (&[1, 2][..], SWAP, 2),
+    ] {
+        let code = shuffle_program(values, op, depth);
+        let why = format!("shuffle 0x{op:02x} on {values:?}");
+        let expected = shuffle_interpreted(values, op);
+        assert_eq!(agrees_at_every_cache_size(&why, &code, &[0]), Some(expected), "{why}");
+    }
+}
+
+#[test]
+fn the_cache_really_is_registers_and_the_off_arm_really_is_not() {
+    // The test that keeps every other one in this section from being vacuous. If `regs` were
+    // ignored the whole step would be a no-op and every "agrees at every cache size" assertion
+    // above would pass trivially.
+    //
+    // The prologue is where it shows without ambiguity. `push rbp; mov rbp, rsp; push rbx` is what
+    // every compilation without a loop starts with; a cached one whose stack reaches past the four
+    // volatile registers then pushes `r12`-`r15` (`41 54`, `41 55`, `41 56`, `41 57`) and an
+    // uncached one goes straight to `sub rsp`.
+    const HEAD: [u8; 5] = [0x55, 0x48, 0x89, 0xE5, 0x53]; // push rbp; mov rbp, rsp; push rbx
+    let deep = fold_program(10, &vec![ISUB; 9]);
+    let off = compile_at(&deep, 10, 0).unwrap();
+    let on = compile_at(&deep, 10, CACHE_REGS).unwrap();
+    assert!(off.code.starts_with(&HEAD) && on.code.starts_with(&HEAD));
+    assert_eq!(
+        &on.code[HEAD.len()..HEAD.len() + 8],
+        &[0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57],
+        "a ten-deep cached method saves the callee-saved half of the cache"
+    );
+    assert_ne!(off.code[HEAD.len()], 0x41, "with the cache off nothing extra is saved");
+    // The point of the step: fewer bytes, because most of the loads and stores are gone.
+    assert!(on.code.len() < off.code.len(), "{} cached vs {} in slots", on.code.len(), off.code.len());
+    // A method that never reaches past the volatile half pays nothing at all for the feature.
+    let shallow = compile_at(&[ILOAD_0, ILOAD_1, IADD, IRETURN], 2, CACHE_REGS).unwrap();
+    assert!(shallow.code.starts_with(&HEAD));
+    assert_ne!(shallow.code[HEAD.len()], 0x41, "four operands reach only R8-R11, which are volatile");
+    // And whatever the cache does with the operands, the *contract* is unchanged: the frame, the
+    // buffer and the resume map are about state, not about storage.
+    assert_eq!(off.stack_slots, on.stack_slots);
+    assert_eq!(off.buffer_slots, on.buffer_slots);
+    assert_eq!(off.resume_sites, on.resume_sites);
+}
+
+#[test]
+fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
+    // Step 8's virtual frames meeting step 10's registers. A body's operands are addressed by their
+    // **native** slot index, and [`plan`] gives each body a disjoint slice of those — so the
+    // caller's registers and the callee's are disjoint too, which is what lets the callee run
+    // without disturbing the caller's live stack and lets the stub walk the chain spilling each
+    // frame from its own.
+    //
+    // The caller keeps two operands live under the invoke and the callee stacks four of its own on
+    // top; sweeping the cache size moves the boundary through the callee's stack and then into the
+    // caller's, which is the case that would break if the two frames shared a mapping.
+    let heap = FakeHeap::new();
+    //  0: iload_0  1: iload_1  2: iload_2  3: iload 3  5: invokestatic #1  8: iadd  9: iadd  10: ireturn
+    let caller = [ILOAD_0, ILOAD_1, ILOAD_2, 0x15, 3, 0xb8, 0x00, 0x01, IADD, IADD, IRETURN];
+    //  0: iload_0  1: iload_1  2: iload_0  3: iload_1  4: idiv  5: isub  6: iadd  7: ireturn
+    let callee = [ILOAD_0, ILOAD_1, ILOAD_0, ILOAD_1, IDIV, ISUB, IADD, IRETURN];
+
+    for regs in every_cache_size() {
+        let compiled = compile_with_regs(
+            &Method {
+                unit: 0,
+                code: &caller,
+                max_locals: 4,
+                descriptor: "(IIII)I",
+                is_static: true,
+                has_handlers: false,
+            },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| None,
+                invoke: &|_, _, _| Some(super::compile::Callee {
+                    method: Method {
+                        unit: 1,
+                        code: &callee,
+                        max_locals: 2,
+                        descriptor: "(II)I",
+                        is_static: true,
+                        has_handlers: false,
+                    },
+                    arg_slots: 2,
+                }),
+                heap: heap.bases(),
+                poll_word: &POLL as *const _ as usize,
+            },
+            regs,
+        )
+        .unwrap();
+        // p + (q - p/q) with p = 20, q = 4 is 19, on top of the caller's 100 + 200.
+        assert_eq!(call_at(&compiled, &[100, 200, 20, 4], 0).0, Outcome::Returned(319), "regs={regs}");
+
+        // q = 0: the callee's `idiv` gives up, and the whole chain has to come back.
+        let (outcome, buffer) = call_at(&compiled, &[100, 200, 20, 0], 0);
+        let Outcome::Deopt(key) = outcome else { panic!("regs={regs}: expected a deopt, got {outcome:?}") };
+        let site = compiled.resume_sites.iter().find(|s| s.key == key).expect("a site for the key");
+        assert_eq!(site.pc, 5, "regs={regs}: the root resumes at the invoke");
+        assert_eq!(site.inlined.len(), 1, "regs={regs}: one frame to rebuild");
+        assert_eq!(site.stack.len(), 2, "regs={regs}: the caller's operands, its arguments removed");
+        assert_eq!(
+            (0..2).map(|k| buffer[compiled.stack_base as usize + k]).collect::<Vec<_>>(),
+            vec![100, 200],
+            "regs={regs}: the caller's stack, out of the caller's own registers"
+        );
+        let frame = &site.inlined[0];
+        assert_eq!(frame.pc, 4, "regs={regs}: the callee resumes at its own `idiv`");
+        assert_eq!(
+            frame.stack.iter().map(|&(slot, _)| buffer[slot as usize]).collect::<Vec<_>>(),
+            vec![20, 0, 20, 0],
+            "regs={regs}: the callee's stack, out of the callee's"
+        );
+        assert_eq!(
+            frame.locals.iter().map(|&(slot, _)| buffer[slot as usize]).collect::<Vec<_>>(),
+            vec![20, 0],
+            "regs={regs}: the arguments the call wrote into the callee's locals"
+        );
+    }
+}
+
+#[test]
+fn a_loop_entered_on_stack_starts_with_an_empty_cache() {
+    // Why the cache needs no transfer protocol of its own: an on-stack entry lands at a loop header,
+    // and this tier only ever offers one whose operand stack is **empty**. There is no live operand
+    // to hand across the boundary in either direction — at an entry or at a poll exit — so the
+    // registers may hold whatever the caller left in them and the first push overwrites them.
+    //
+    //  0: iconst_0; istore_0                      i = 0
+    //  2: iload_0; iload_1; if_icmpge -> 13       <- the header, stack empty
+    //  7: iinc 0, 1     10: goto -> 2     13: iload_0; ireturn
+    let code = [
+        ICONST_0, ISTORE_0, //
+        ILOAD_0, ILOAD_1, IF_ICMPGE, 0x00, 0x09, //
+        IINC, 0x00, 0x01, //
+        GOTO, 0xff, 0xf8, //
+        ILOAD_0, IRETURN,
+    ];
+    for regs in every_cache_size() {
+        let compiled = compile_at(&code, 2, regs).unwrap();
+        assert_eq!(compiled.osr_entries, vec![2], "regs={regs}");
+        assert!(site_at(&compiled, 2).stack.is_empty(), "regs={regs}: nothing is live at a header");
+        assert_eq!(call_at(&compiled, &[0, 50], 0).0, Outcome::Returned(50), "regs={regs}: from the top");
+        assert_eq!(call_at(&compiled, &[30, 50], 2).0, Outcome::Returned(50), "regs={regs}: on-stack");
+    }
 }

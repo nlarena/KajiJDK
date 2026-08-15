@@ -35,9 +35,18 @@
 //! A compiled method has, besides its ordinary entry, one entry point per **loop header** — see
 //! [`compile`][super::compile] for which loops qualify and why. [`JitCache::run_osr`] enters at
 //! one of them, and the same call may come back three ways: the method returned, it deopted, or
-//! its **safepoint poll** fired and it wants to be interpreted from a given pc. The state crossing
-//! the boundary in both directions is only the locals buffer and a pc, which is what makes the
-//! whole thing small enough to be obviously right.
+//! its **safepoint poll** fired and it wants to be interpreted from a given pc. Going *in* the
+//! state is still only the locals buffer and a pc, which is what keeps the entry contract small.
+//!
+//! # Coming back part-way: [`ResumeState`]
+//!
+//! Coming *out* is where step 6 changed everything. A deopt used to carry nothing: the interpreter
+//! re-ran the method from its first byte, which is indistinguishable from a first execution only
+//! while compiled code writes nothing observable — the restriction that kept `putfield`, `iastore`
+//! and `putstatic` out of the subset. Now both non-return exits carry a whole interpreter state —
+//! locals, **operand stack**, and the pc — and the interpreter *continues* from it. The two exits
+//! are one mechanism with two reasons, so they share one table
+//! ([`CompiledCode::resume_sites`]) and one reconstruction ([`JitCache::resume_state`]).
 //!
 //! # Crossing the boundary
 //!
@@ -47,20 +56,95 @@
 //! the result. Cost is O(touched locals) per invocation, amortised over the loop inside — which is
 //! precisely where a JIT wins.
 //!
-//! The marshalling is also a **guard**: a local that is not a `Value::Int` cannot be marshalled, so
-//! the call is simply abandoned and the interpreter runs the method. That is what makes an instance
-//! method safe to compile — slot 0 holds a `Value::Reference`, and if the body ever reads it the
-//! call falls back instead of reinterpreting a heap offset as an `int`.
+//! That buffer is **longer than the locals**: its tail is where a deopt spills the live operand
+//! stack, since the native frame slots holding it die with the frame. [`CompiledCode::buffer_slots`]
+//! is the length the contract requires and [`JitCache::install`] is where it is sized.
 //!
-//! Nothing is marshalled **back**. A compiled method is a pure function of its locals: its only
-//! observable effect is the value it returns, so the interpreter frame it was built from is
-//! discarded untouched. That is also what makes deopt free — see [`compile`][super::compile].
+//! Two kinds cross, and step 5 is where the second arrived: an `int` (sign-extended) and a
+//! **reference** (its heap offset). A `long`, a `double` or a `float` still cannot be marshalled at
+//! all, and a slot holding one abandons the call — but the compiled code provably never *reads*
+//! such a slot, so that is a fallback rather than a correctness guard.
+//!
+//! # The tag, and which direction needs it
+//!
+//! An `i64` in the scratch buffer does not say whether it is an `int` or an offset, and the two are
+//! not interchangeable at the far end: an offset put back into a frame as a `Value::Int` is a live
+//! object the collector can no longer see *or relocate*, and an `int` put back as a
+//! `Value::Reference` is a pointer made of arithmetic. Neither fails where the mistake is.
+//!
+//! Going **in**, the tag is not needed: the compiler derived its entry types from the method's own
+//! descriptor, so a disagreement with the frame would mean the descriptor was wrong — the
+//! verifier's business. Coming **out**, it is needed and it is carried: [`JitValue`] pairs each
+//! value with its kind, taken from [`CompiledCode::returns_reference`] for a return and from
+//! [`CompiledCode::resume_sites`] — the type map at that exact pc — for everything a
+//! [`ResumeState`] contains, operand stack included.
+//!
+//! Nothing is marshalled back on a call that **returns**: its only observable effect on the
+//! interpreter is the value, so the frame it was built from is discarded untouched. A call that
+//! stops part-way is the other case, and that is what [`ResumeState`] is for.
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
-use super::compile::{CompiledCode, Ineligible, Outcome, Status};
+use super::compile::{CompiledCode, Ineligible, Kind, Outcome, ResumeSite, Status};
+
+/// A value crossing back from native code, with its **kind** attached.
+///
+/// The bits are the same either way — a reference is a heap offset, and the protocol carries 32 of
+/// them exactly as it carries an `int` (see [`Status`]). What differs is what the interpreter must
+/// build out of them, and getting that wrong is the one mistake in this milestone that does not
+/// fail where the bug is: an offset stored as a `Value::Int` is a live object the collector can no
+/// longer see. So the kind travels *with* the value rather than being re-derived at the far end —
+/// from the descriptor for a return ([`CompiledCode::returns_reference`]), from the type map for a
+/// local or an operand ([`CompiledCode::resume_sites`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum JitValue {
+    Int(i32),
+    /// A heap **offset**, `0` for `null`.
+    Reference(usize),
+}
+
+impl JitValue {
+    /// Reads the low 32 bits of a boundary word as `kind`. A reference is **zero**-extended: an
+    /// offset is never negative, and sign-extending one would turn a heap past 2 GiB into a
+    /// nonsense pointer rather than into an error.
+    fn of(kind: Kind, raw: i64) -> Option<JitValue> {
+        match kind {
+            Kind::Int => Some(JitValue::Int(raw as i32)),
+            Kind::Reference => Some(JitValue::Reference(raw as u32 as usize)),
+            // **The two kinds that are not values, and the one place `None` is an answer rather
+            // than a failure**: a local the caller is told to leave alone.
+            //
+            // `Opaque` — the type map proved compiled code cannot have written this slot on any
+            // path to here, so the interpreter's own value is current.
+            //
+            // `Conflict` (step 9) — compiled code may have written it, as an `int` down one path
+            // and a reference down another, and there is no static answer to which. So the frame
+            // keeps the `Value` it already held: safe for the collector whatever it is, and correct
+            // because a conflicted slot is provably dead (nothing can read it before storing to
+            // it — see `ResumeSite::locals`). The cost is one object kept alive slightly too long.
+            Kind::Opaque | Kind::Conflict => None,
+        }
+    }
+
+    /// The same read, for a kind that is **known to name a value** — every operand-stack position
+    /// and every slot of an inlined frame, both guaranteed by [`compile`]'s rebuildability check
+    /// ([`Ineligible::Unrebuildable`][crate::burst::compile::Ineligible::Unrebuildable]).
+    ///
+    /// This exists so those two call sites have no `None` arm to invent a fallback for. The old
+    /// shape returned `Option` everywhere and its callers answered a `None` with "the JIT declined"
+    /// — which, after native code had already run and already mutated the heap, would restart the
+    /// method from its first byte and apply every write twice. There is no path to that now: the
+    /// site could not have been installed, and if the invariant were ever broken this stops loudly
+    /// instead of quietly re-running a method.
+    fn of_value(kind: Kind, raw: i64) -> JitValue {
+        match JitValue::of(kind, raw) {
+            Some(value) => value,
+            None => unreachable!("compile refuses a resume site whose operands or inlined frames are untypable"),
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // The executable-memory half, which only exists on Windows.
@@ -143,21 +227,42 @@ enum Entry {
     /// Scanned and rejected — an opcode outside the subset, or the mapping failed. Permanent: the
     /// bytecode of a resolved method never changes, so nothing can make this answer stale.
     Rejected,
-    /// Compiled. `locals` is the callee's `max_locals`, i.e. how long the scratch buffer must be.
+    /// Compiled. `slots` is how long the scratch buffer must be — the callee's `max_locals`
+    /// followed by room for its deepest operand stack, which a resume spills into.
     Compiled {
         native: native::Native,
         touched: Vec<u16>,
-        locals: usize,
+        slots: usize,
+        /// Where operand-stack position 0 lands in the buffer: the callee's `max_locals`.
+        stack_base: usize,
+        /// Where this code's **allocation log** starts in the buffer, and how many records it
+        /// holds — `0` for a method that contains no `new`, which carries no log at all. See
+        /// [`CompiledCode::alloc_base`].
+        alloc_base: usize,
+        alloc_records: usize,
         /// The bytecode pcs this code may be entered at on-stack (its loop headers), ascending.
         osr_entries: Vec<u32>,
+        /// **The resume map**: every point native code can hand a half-finished method back at,
+        /// with the kinds needed to turn the buffer's bare `i64`s into `Value`s, and — since step 8
+        /// — the frames inlining removed. Keyed by [`ResumeSite::key`]. See [`ResumeSite`].
+        resume: Vec<ResumeSite>,
+        /// How many interpreter frames one deopt out of this code can produce. See
+        /// [`CompiledCode::frame_depth`]; [`JitCache::frames_needed`] is what the interpreter asks.
+        frame_depth: usize,
+        /// Whether this method's descriptor returns a reference — i.e. what the 32 bits of an
+        /// [`Outcome::Returned`] mean.
+        returns_reference: bool,
+        /// Whether this method returns `void`, in which case an [`Outcome::Returned`] carries no
+        /// value at all and its 32 bits mean nothing.
+        returns_void: bool,
         /// Cleared for good the first time an OSR entry **deopts**.
         ///
-        /// A deopt from a loop header is safe — nothing observable was written, so the interpreter
-        /// simply carries on from that same pc — but it is also *reproducible*: the native code
-        /// would run the same iterations and give up in the same place on the next attempt, while
-        /// the interpreter creeps forward one iteration per try. That is quadratic work for no
-        /// progress, so the first one closes the door. The ordinary entry is untouched: a deopt
-        /// there re-runs the whole method, which converges.
+        /// Not a correctness rule any more — a deopt now hands back a pc and a state, so the
+        /// interpreter continues from exactly where native code stopped and every attempt makes
+        /// progress. It is a *cost* rule: a guard that fails immediately on entry (a receiver that
+        /// is always null, a divisor that is always zero) would otherwise have every back-edge pay
+        /// for a full marshal-and-enter to be told the same thing again. The ordinary entry is
+        /// untouched.
         osr_open: bool,
     },
 }
@@ -173,15 +278,66 @@ pub enum Decision {
     Ready,
 }
 
-/// How an on-stack entry ended. The two ways native code can hand control back *without* the
-/// method being over are folded into the one type the interpreter matches on.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// **The interpreter state native code left behind**, ready to be poured back into a `Frame`.
+///
+/// This is what "a real deopt" means in one type: not "give up and re-run the method", but "here
+/// are the locals, here is the operand stack, here is the pc — carry on". It is built by
+/// [`JitCache::resume_state`] out of the caller's buffer and the compiler's type map for that exact
+/// pc, so every value arrives tagged as the `int` or the reference it is.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ResumeState {
+    /// The bytecode pc **the frame the interpreter is holding** resumes at. **The instruction there
+    /// has not run** — see the write/pc rule in [`compile`][super::compile].
+    ///
+    /// When [`inlined`][ResumeState::inlined] is non-empty this is the pc of an *invoke*, and the
+    /// frames below are what that invoke would have created.
+    pub pc: u32,
+    /// The locals compiled code may have written, and only those: a slot absent from this list is
+    /// one the type map proved untouched, whose value in the interpreter's own frame is current.
+    pub locals: Vec<(u16, JitValue)>,
+    /// The operand stack at `pc`, **bottom-first** — push them in this order. Already trimmed of
+    /// the arguments of the call this frame is in the middle of, if any.
+    pub stack: Vec<JitValue>,
+    /// **The frames inlining removed**, outermost first: whole interpreter frames to build and push
+    /// on top of the one above. Empty unless native code stopped inside an expanded callee.
+    pub inlined: Vec<VirtualState>,
+}
+
+/// One frame [`ResumeState`] asks the interpreter to build from nothing — the run-time twin of
+/// [`VirtualFrame`][super::compile::VirtualFrame].
+///
+/// Everything here is complete rather than differential, and that is the difference from the root
+/// frame: there is no existing frame whose untouched slots could be left alone, so `locals` is every
+/// slot of the method, in order, already tagged.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct VirtualState {
+    /// The method this frame runs — the interpreter's own `MethodId`, as [`VirtualFrame::unit`][super::compile::VirtualFrame::unit].
+    pub unit: usize,
+    /// The bytecode pc in that method. The instruction there has not run.
+    pub pc: u32,
+    /// Every local slot, slot `0` first. `locals.len()` is the method's `max_locals`.
+    pub locals: Vec<JitValue>,
+    /// The operand stack, bottom-first.
+    pub stack: Vec<JitValue>,
+}
+
+/// How a crossing into native code ended. The two ways native code can hand control back *without*
+/// the method being over are folded into the one type the interpreter matches on, and since step 6
+/// they carry the same thing: a whole interpreter state.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum OsrResult {
-    /// The method ran to its `ireturn`; this is its result and its frame is finished.
-    Returned(i32),
-    /// The safepoint poll fired. Write the locals back
-    /// ([`osr_writeback`][JitCache::osr_writeback]) and resume **interpreting** at this pc.
-    Safepoint(u32),
+    /// The method ran to one of its exits and its frame is finished. `Some` is the value an
+    /// `ireturn`/`areturn` handed back; `None` is a `void` method's `return`, which hands back
+    /// nothing and whose caller must therefore push nothing.
+    Returned(Option<JitValue>),
+    /// The safepoint poll fired. Rebuild the frame from this state and resume **interpreting**;
+    /// the thread then reaches its safepoint by the ordinary path.
+    Safepoint(ResumeState),
+    /// Native code met something it cannot do — a zero divisor, a null receiver, an index out of
+    /// range. Rebuild the frame from this state and resume interpreting: the interpreter
+    /// re-executes the instruction at `pc` and raises the proper exception. It never re-runs what
+    /// native code already did, which is what makes a **write** inside compiled code safe.
+    Deopt(ResumeState),
 }
 
 /// Counters, for tests and for the measurement harness. Every one of them is a *fact about a run*,
@@ -206,6 +362,10 @@ pub struct JitStats {
     /// Native calls that came back because the **safepoint poll** fired: the locals were written
     /// back to the interpreter's frame and the method resumed interpreted.
     pub safepoint_exits: usize,
+    /// Native calls that came back because a `new` could not take its fast path — Eden was full, or
+    /// the excursion's allocation log was. Counted apart from `deopts` because it is a capacity
+    /// condition that clears by itself, not a guard the method keeps failing.
+    pub alloc_exits: usize,
 }
 
 /// One thread's compiled methods, invocation counters and scratch buffer.
@@ -215,6 +375,14 @@ pub struct JitStats {
 pub struct JitCache {
     enabled: bool,
     threshold: u32,
+    /// **How many operand-stack positions the compiler keeps in registers** (F3 step 10) — see
+    /// [`compile_with_regs`][super::compile::compile_with_regs]. `0` turns the allocator off and
+    /// makes the emitter produce exactly what step 9 produced.
+    ///
+    /// It is a *runtime* setting, not a `cfg`, and that is the whole point: both arms of the
+    /// measurement are then the same binary at the same addresses, so this machine's ±3–12%
+    /// code-layout noise cannot masquerade as an effect. Same reasoning, same shape, as `enabled`.
+    regs: u32,
     entries: HashMap<usize, Entry>,
     /// The marshalling buffer, grown once to the largest `max_locals` seen and reused thereafter —
     /// a compiled call must not allocate, or the allocator would be the thing being measured.
@@ -245,6 +413,12 @@ impl JitCache {
     ///   native code. **The default is on.** This is the switch the differential tests and any
     ///   bisection use — with it off the VM is bit-for-bit the interpreter it was before.
     /// - `JVM_JIT_THRESHOLD=<n>` overrides [`JitCache::THRESHOLD`].
+    /// - `JVM_JIT_REGS=0` (or `off`/`false`/`no`) turns off the **operand-stack register cache**
+    ///   (F3 step 10), leaving the operand stack entirely in frame slots as it was through step 9.
+    ///   A number sets how many positions are cached, clamped to
+    ///   [`CACHE_REGS`][super::compile::CACHE_REGS]. **The default is all of them.** This is the
+    ///   switch the step-10 measurement flips, and it is a runtime one so that both arms are the
+    ///   same binary — see [`JitCache::regs`].
     pub fn from_env() -> Self {
         let enabled = !matches!(
             std::env::var("JVM_JIT").ok().as_deref().map(str::trim),
@@ -254,9 +428,17 @@ impl JitCache {
             .ok()
             .and_then(|v| v.trim().parse::<u32>().ok())
             .unwrap_or(Self::THRESHOLD);
+        let regs = match std::env::var("JVM_JIT_REGS").ok().as_deref().map(str::trim) {
+            None => super::compile::CACHE_REGS,
+            Some("off" | "false" | "no") => 0,
+            // An unparseable value is read as "off" rather than as "the default": a typo in a
+            // measurement's environment must not silently measure the treatment arm twice.
+            Some(v) => v.parse::<u32>().unwrap_or(0).min(super::compile::CACHE_REGS),
+        };
         JitCache {
             enabled,
             threshold,
+            regs,
             entries: HashMap::new(),
             scratch: Vec::new(),
             poll: Arc::new(AtomicU64::new(0)),
@@ -313,6 +495,19 @@ impl JitCache {
     /// Whether native code may be produced or entered at all.
     pub fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    /// Forces the size of the **operand-stack register cache** regardless of `JVM_JIT_REGS`, the
+    /// same way [`set_enabled`][JitCache::set_enabled] does for the JIT itself — and for the same
+    /// reason: `cargo test` runs its tests in threads of one process, so the measurement cannot
+    /// mutate the environment to switch arms.
+    pub fn set_cache_regs(&mut self, regs: u32) {
+        self.regs = regs.min(super::compile::CACHE_REGS);
+    }
+
+    /// How many operand-stack positions this cache compiles into registers.
+    pub fn cache_regs(&self) -> u32 {
+        self.regs
     }
 
     /// This cache's counters.
@@ -382,17 +577,27 @@ impl JitCache {
     pub fn install(&mut self, key: usize, result: Result<CompiledCode, Ineligible>, max_locals: usize) {
         let Ok(compiled) = result else { return };
         let Ok(native) = native::Native::map(&compiled.code) else { return };
-        // The scratch buffer must cover every slot the code can address. `max(1)` because an empty
+        debug_assert_eq!(compiled.stack_base as usize, max_locals, "the buffer layout is the callee's");
+        // The scratch buffer must cover every slot the code can address — since step 6 that is the
+        // locals **and** the operand slots a deopt spills past them. `max(1)` because an empty
         // `Vec`'s `as_mut_ptr` is dangling, and a dangling pointer is not worth reasoning about
         // even when nothing dereferences it.
-        self.scratch.resize(self.scratch.len().max(max_locals).max(1), 0);
+        let slots = compiled.buffer_slots as usize;
+        self.scratch.resize(self.scratch.len().max(slots).max(1), 0);
         self.entries.insert(
             key,
             Entry::Compiled {
                 native,
                 touched: compiled.touched_locals,
-                locals: max_locals,
+                slots,
+                stack_base: compiled.stack_base as usize,
+                alloc_base: compiled.alloc_base as usize,
+                alloc_records: compiled.alloc_records as usize,
                 osr_entries: compiled.osr_entries,
+                resume: compiled.resume_sites,
+                frame_depth: compiled.frame_depth as usize,
+                returns_reference: compiled.returns_reference,
+                returns_void: compiled.returns_void,
                 osr_open: true,
             },
         );
@@ -405,24 +610,31 @@ impl JitCache {
 
     /// Runs `key`'s compiled code, marshalling its locals through `local`.
     ///
-    /// `local(i)` yields the interpreter's local slot `i` as an `i64` — `Some(v as i64)` for a
-    /// `Value::Int(v)`, and **`None` for anything else**, which abandons the call.
+    /// `local(i)` yields the interpreter's local slot `i` as an `i64` — `v as i64` for a
+    /// `Value::Int(v)`, the offset for a `Value::Reference`, and **`None` for anything else**
+    /// (a `long`, a `double`, a `float`), which abandons the call.
     ///
-    /// Returns `Some(result)` when native code ran to an `ireturn`, and `None` in every case where
-    /// the interpreter must run the method itself: not compiled, a local that could not be
-    /// marshalled, or a deopt. All three are safe for the same reason — the compiled subset writes
-    /// nothing observable, so re-executing from the start is indistinguishable from never having
-    /// tried.
-    pub fn run(&mut self, key: usize, local: impl Fn(u16) -> Option<i64>) -> Option<i32> {
-        match self.enter(key, 0, false, local)? {
-            OsrResult::Returned(value) => Some(value),
-            // A poll that fires during an ordinary call is simply ignored: the state at a loop
-            // header of a method entered at its start is a state the interpreter can reproduce by
-            // re-running the method, so this is the deopt path, and `enter` has already counted it
-            // as one. Not a case that arises today (nothing raises the poll while `green`/`os-gil`
-            // hold the world), but the answer has to be *some* correct answer rather than a panic.
-            OsrResult::Safepoint(_) => None,
-        }
+    /// `Some(Returned(v))` when native code ran the method to its exit; `Some(Safepoint(state))` or
+    /// `Some(Deopt(state))` when it stopped part-way, in which case the caller must **rebuild its
+    /// callee frame from `state` and interpret from `state.pc`** rather than from the method's
+    /// first byte; and `None` when native code was never entered at all (not compiled, or a local
+    /// that could not be marshalled), where interpreting from the start is right because nothing
+    /// happened.
+    ///
+    /// Before step 6 the two middle cases were also `None` — the interpreter re-ran the method from
+    /// the beginning, which was sound only because the compiled subset wrote nothing observable.
+    /// Resuming instead of restarting is exactly what lifted that restriction.
+    ///
+    /// `allocated(offset, size)` is called **once for every object native code allocated**, in
+    /// allocation order, before this returns — see [`JitCache::enter`]. It is not optional and it is
+    /// not conditional on the outcome: a deopt has allocated just as much as a return has.
+    pub fn run(
+        &mut self,
+        key: usize,
+        local: impl Fn(u16) -> Option<i64>,
+        allocated: impl FnMut(usize, usize),
+    ) -> Option<OsrResult> {
+        self.enter(key, 0, false, local, allocated)
     }
 
     /// Enters `key`'s compiled code **at a loop header**, marshalling its locals through `local`.
@@ -430,44 +642,115 @@ impl JitCache {
     /// `entry_pc` must be one of the code's own entry points; anything else answers `None` rather
     /// than entering, because the entry dispatch would otherwise fall through and run the method
     /// from its start with mid-loop locals. `None` also covers every other reason not to enter —
-    /// not compiled, OSR closed, an unmarshallable local, a deopt — and all of them mean the same
-    /// thing to the caller: **keep interpreting at this pc**, which is safe because the compiled
-    /// subset writes nothing observable and the interpreter's own frame has not been touched.
+    /// not compiled, OSR closed, an unmarshallable local — and all of them mean the same thing to
+    /// the caller: **keep interpreting at this pc**, which is safe because native code was never
+    /// entered and the interpreter's own frame has not been touched.
     ///
-    /// On [`OsrResult::Safepoint`] the caller must copy the locals back with
-    /// [`osr_writeback`][JitCache::osr_writeback] and resume at the pc it carries.
+    /// On [`OsrResult::Safepoint`] or [`OsrResult::Deopt`] the caller must rebuild this frame from
+    /// the state it carries and resume at its pc.
     pub fn run_osr(
         &mut self,
         key: usize,
         entry_pc: u32,
         local: impl Fn(u16) -> Option<i64>,
+        allocated: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
         match self.entries.get(&key) {
             Some(Entry::Compiled { osr_entries, osr_open, .. })
                 if *osr_open && osr_entries.contains(&entry_pc) => {}
             _ => return None,
         }
-        let result = self.enter(key, entry_pc, true, local)?;
+        let result = self.enter(key, entry_pc, true, local, allocated)?;
         if let OsrResult::Safepoint(_) = result {
             self.stats.safepoint_exits += 1;
         }
         Some(result)
     }
 
-    /// The locals the compiled code for `key` may have written, paired with their current values
-    /// in the marshalling buffer — what [`OsrResult::Safepoint`] leaves behind for the interpreter
-    /// to put back into its frame.
+    /// **The reconstruction**: the interpreter state compiled code for `key` left in the buffer when
+    /// it stopped at `pc`.
     ///
-    /// It is exactly `touched_locals`, and that is the whole correctness argument: every slot the
-    /// code can write is a slot it also declared, so writing all of them back is neither too few
-    /// (a written slot cannot be missing) nor too many (an unwritten one is copied back unchanged,
-    /// having been marshalled *in* from that same frame moments earlier).
-    pub fn osr_writeback(&self, key: usize) -> impl Iterator<Item = (u16, i64)> + '_ {
-        let touched: &[u16] = match self.entries.get(&key) {
-            Some(Entry::Compiled { touched, .. }) => touched,
-            _ => &[],
+    /// Two halves, and each has its own correctness argument.
+    ///
+    /// The **locals** are `touched_locals`, which is one half: every slot the code can write is a
+    /// slot it also declared, so nothing written can be missing. The other half is the **kind**,
+    /// which is why this takes a `pc` — whether slot 3 is an `int` or a reference is a property of
+    /// *where in the method* execution stopped, and the answer comes from the type map the compiler
+    /// computed for exactly this pc. A slot the map calls [`Kind::Opaque`] or [`Kind::Conflict`] is
+    /// **skipped**, not written — the first because compiled code provably never touched it, the
+    /// second because it touched it two different ways and the slot is dead either way. In both
+    /// cases the interpreter's own `Value` survives, which is what keeps the frame a well-typed GC
+    /// root without this side having to know which of the two reasons applied.
+    ///
+    /// The **operand stack** has no such escape hatch: an operand cannot be skipped, since its
+    /// position is its identity. It is read bottom-first out of the slots past the locals, where the
+    /// deopt stub spilled it, and every position has a kind (nothing in the subset can push a value
+    /// it cannot name).
+    ///
+    /// **This cannot fail, and that is a property rather than a convenience.** It is called only
+    /// after native code has returned — after it has written to the heap and after its allocations
+    /// have been replayed — and at that point there is no such thing as "never mind". Handing the
+    /// caller a `None` there would make it interpret the method from its first byte and apply every
+    /// one of those writes a second time, which is exactly the bug step 6 removed.
+    ///
+    /// So the two ways it used to be able to fail were closed rather than handled:
+    ///
+    ///  - an operand or an inlined frame with an untypable kind is refused at **compile** time
+    ///    ([`Ineligible::Unrebuildable`][crate::burst::compile::Ineligible::Unrebuildable]), so such
+    ///    a compilation is never installed;
+    ///  - `key` and `site_key` name an entry this cache installed and a site that entry declared —
+    ///    the site key is an immediate *this compiler wrote into the stub that just returned it*.
+    ///    A miss is memory corruption or a compiler bug, and the honest response to either is to
+    ///    stop, not to quietly re-run a method that has already had its effects.
+    fn resume_state(&self, key: usize, site_key: u32) -> ResumeState {
+        let Some(Entry::Compiled { touched, resume, stack_base, .. }) = self.entries.get(&key) else {
+            unreachable!("native code for {key} returned, so {key} is an installed compilation");
         };
-        touched.iter().map(|&i| (i, self.scratch[i as usize]))
+        let Some(site) = resume.iter().find(|site| site.key == site_key) else {
+            unreachable!("native code returned {site_key}, which is not one of its resume sites");
+        };
+        let locals = touched
+            .iter()
+            .zip(&site.locals)
+            .filter_map(|(&i, &kind)| JitValue::of(kind, self.scratch[i as usize]).map(|value| (i, value)))
+            .collect();
+        let stack = site
+            .stack
+            .iter()
+            .enumerate()
+            .map(|(k, &kind)| JitValue::of_value(kind, self.scratch[stack_base + k]))
+            .collect();
+        // **The frames inlining removed** (step 8). Each carries the buffer slot of every value it
+        // needs, so this is a read rather than a layout calculation — where a frame's locals and
+        // operands live was decided once, by the compiler, and is not re-derived here.
+        let inlined = site
+            .inlined
+            .iter()
+            .map(|frame| {
+                let read = |&(slot, kind): &(u32, Kind)| JitValue::of_value(kind, self.scratch[slot as usize]);
+                VirtualState {
+                    unit: frame.unit,
+                    pc: frame.pc,
+                    locals: frame.locals.iter().map(read).collect(),
+                    stack: frame.stack.iter().map(read).collect(),
+                }
+            })
+            .collect();
+        ResumeState { pc: site.pc, locals, stack, inlined }
+    }
+
+    /// **How many interpreter frames a deopt out of `key` can produce** — 1 for a method with
+    /// nothing inlined. See [`CompiledCode::frame_depth`] for why the caller must check it against
+    /// its own frame limit *before* entering: inlining hides the invokes it expanded, and with them
+    /// the depth checks the interpreter would have made at each one.
+    ///
+    /// A method that is not compiled needs none, which is the answer that makes the caller's check
+    /// harmless when the JIT has nothing to offer.
+    pub fn frames_needed(&self, key: usize) -> usize {
+        match self.entries.get(&key) {
+            Some(Entry::Compiled { frame_depth, .. }) => *frame_depth,
+            _ => 0,
+        }
     }
 
     /// The one crossing into native code: marshal, call, decode. Both [`run`][JitCache::run] and
@@ -479,14 +762,31 @@ impl JitCache {
         entry_pc: u32,
         on_stack: bool,
         local: impl Fn(u16) -> Option<i64>,
+        mut allocated: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
         if !self.enabled {
             return None;
         }
-        let Some(Entry::Compiled { native, touched, locals, .. }) = self.entries.get(&key) else {
+        let Some(Entry::Compiled {
+            native,
+            touched,
+            slots,
+            returns_reference,
+            returns_void,
+            alloc_base,
+            alloc_records,
+            ..
+        }) = self.entries.get(&key)
+        else {
             return None;
         };
-        debug_assert!(self.scratch.len() >= *locals, "the scratch buffer was sized at install time");
+        let returns = match returns_reference {
+            true => Kind::Reference,
+            false => Kind::Int,
+        };
+        let returns_void = *returns_void;
+        let (alloc_base, alloc_records) = (*alloc_base, *alloc_records);
+        debug_assert!(self.scratch.len() >= *slots, "the scratch buffer was sized at install time");
         for &i in touched {
             match local(i) {
                 Some(v) => self.scratch[i as usize] = v,
@@ -502,6 +802,12 @@ impl JitCache {
         // Counted here rather than on the way out, so a deopt is still an entry: "how often did
         // the interpreter hand a running loop to native code" is the question this answers.
         self.stats.osr_entries += usize::from(on_stack);
+        // The allocation log starts empty. A stale count from the previous excursion would replay
+        // objects that no longer exist — and after a collection has recycled Eden, that is a
+        // reference to nothing at all logged as live.
+        if alloc_records > 0 {
+            self.scratch[alloc_base] = 0;
+        }
         // SAFETY: `scratch` is a live, initialised `Vec<i64>` of at least `locals` elements (sized
         // in `install`, and every index in `touched` is `< max_locals` by construction — `compile`
         // rejects a local index at or past `max_locals`). The pointer is valid for the duration of
@@ -509,20 +815,56 @@ impl JitCache {
         // 0 (the ordinary entry) or, from `run_osr`, checked to be one of this code's own entry
         // points — the two values the entry dispatch is built for.
         let raw = unsafe { native.call(self.scratch.as_mut_ptr(), entry_pc as i64) };
+        // **Before anything else**, and on every outcome: replay what native code allocated into the
+        // heap's pending log. This is the fourth quarter of an Eden allocation (see the `new` arm in
+        // `compile`), deferred exactly as far as it can be and no further — the interpreter has not
+        // run an opcode since the call returned, so no collection has had a chance to look at a heap
+        // holding objects it does not know about.
+        if alloc_records > 0 {
+            let count = (self.scratch[alloc_base] as usize).min(alloc_records);
+            debug_assert!(
+                self.scratch[alloc_base] as usize <= alloc_records,
+                "compiled code logged more allocations than the buffer holds"
+            );
+            for r in 0..count {
+                let at = alloc_base + 1 + 2 * r;
+                allocated(self.scratch[at] as usize, self.scratch[at + 1] as usize);
+            }
+        }
         match Status::unpack(raw) {
-            Outcome::Returned(value) => Some(OsrResult::Returned(value)),
-            Outcome::Safepoint(pc) => Some(OsrResult::Safepoint(pc)),
-            Outcome::Deopt => {
+            // The descriptor decided which of the two this is, back when the method was compiled;
+            // `JitValue::of` never sees `Opaque` here because a method that returns a `long`, a
+            // `float` or nothing at all has no exit in the subset and never compiled.
+            Outcome::Returned(value) => match returns_void {
+                // A `void` method's `return` carries nothing; the 32 bits are not a value and must
+                // not be turned into one.
+                true => Some(OsrResult::Returned(None)),
+                false => Some(OsrResult::Returned(Some(JitValue::of_value(returns, value as i64)))),
+            },
+            Outcome::Safepoint(pc) => Some(OsrResult::Safepoint(self.resume_state(key, pc))),
+            Outcome::Deopt(pc) => {
                 self.stats.deopts += 1;
                 // A deopt out of an on-stack entry closes OSR for this method for good — see
-                // `Entry::Compiled::osr_open` for why re-entering would be quadratic. Keyed off
-                // *how* it was entered, not off the pc: a loop header can perfectly well be pc 0.
+                // `Entry::Compiled::osr_open`. Keyed off *how* it was entered, not off the pc: a
+                // loop header can perfectly well be pc 0.
                 if on_stack {
                     if let Some(Entry::Compiled { osr_open, .. }) = self.entries.get_mut(&key) {
                         *osr_open = false;
                     }
                 }
-                None
+                Some(OsrResult::Deopt(self.resume_state(key, pc)))
+            }
+            // A `new` that could not take its fast path. The state contract is a deopt's, so the
+            // caller is told the same thing; what is deliberately *not* done here is the two things
+            // a real deopt does. It does not close on-stack entry — Eden fills once per collection
+            // cycle and the log fills once per 256 objects, so closing OSR on either would retire
+            // every allocating loop after one lap, for a condition that clears on its own. And it
+            // does not count as a deopt: "this method keeps failing a guard" and "this loop keeps
+            // filling Eden" are different facts, and a measurement that conflates them is worse than
+            // one that omits them.
+            Outcome::AllocFailed(pc) => {
+                self.stats.alloc_exits += 1;
+                Some(OsrResult::Deopt(self.resume_state(key, pc)))
             }
         }
     }
@@ -532,11 +874,31 @@ impl JitCache {
 mod tests {
     use super::*;
 
+    /// Compiles `code` as a `static` method of `max_locals` slots with the descriptor `signature`,
+    /// against `c`'s poll word. Every program in this file is `int`-only, so no heap is supplied —
+    /// which also means a stray reference opcode would be refused rather than silently emitted.
+    #[cfg(windows)]
+    fn compiled(c: &JitCache, code: &[u8], max_locals: usize, signature: &str) -> CompiledCode {
+        use super::super::compile::{Environment, Heap, Method};
+        super::super::compile::compile(
+            &Method { unit: 0, code, max_locals, descriptor: signature, is_static: true, has_handlers: false },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| None,
+                invoke: &|_, _, _| None,
+                heap: Heap::default(),
+                poll_word: c.poll_address(),
+            },
+        )
+        .unwrap()
+    }
+
     /// `iload_0; iload_1; iadd; ireturn` — the smallest thing with locals in it.
     #[cfg(windows)]
     fn add_two(c: &JitCache) -> CompiledCode {
-        super::super::compile::compile(&[0x1a, 0x1b, 0x60, 0xac], 2, &|_| None, &|_| None, c.poll_address())
-            .unwrap()
+        compiled(c, &[0x1a, 0x1b, 0x60, 0xac], 2, "(II)I")
     }
 
     /// A counting loop over local 0, entered on-stack at its header:
@@ -560,13 +922,25 @@ mod tests {
             0xa7, 0xff, 0xf8, // 10: goto -8 -> 2
             0x1a, 0xac, // 13: iload_0; ireturn
         ];
-        super::super::compile::compile(&code, 2, &|_| None, &|_| None, c.poll_address()).unwrap()
+        compiled(c, &code, 2, "(II)I")
+    }
+
+    /// The allocation sink for the programs below, none of which contains a `new` — so it is not
+    /// merely unused, it is *asserted* unused: a call would mean compiled code allocated something
+    /// this test never asked for.
+    fn no_allocations(offset: usize, size: usize) {
+        panic!("this program allocates nothing, but native code logged ({offset}, {size})");
     }
 
     fn cache() -> JitCache {
         let mut c = JitCache::from_env();
         c.set_enabled(true);
         c
+    }
+
+    /// The ordinary "it ran to its `ireturn`" answer, so the assertions below read as values.
+    fn returned(v: i32) -> OsrResult {
+        OsrResult::Returned(Some(JitValue::Int(v)))
     }
 
     #[test]
@@ -613,7 +987,7 @@ mod tests {
         for _ in 0..1000 {
             assert_eq!(c.on_entry(7), Decision::Interpret);
         }
-        assert_eq!(c.run(7, |_| Some(0)), None);
+        assert_eq!(c.run(7, |_| Some(0), no_allocations), None);
         assert_eq!(c.stats(), JitStats::default());
     }
 
@@ -627,7 +1001,7 @@ mod tests {
         let code = add_two(&c);
         c.install(7, Ok(code), 2);
         assert_eq!(c.on_entry(7), Decision::Ready);
-        assert_eq!(c.run(7, |i| Some(i as i64 * 10 + 1)), Some(1 + 11));
+        assert_eq!(c.run(7, |i| Some(i as i64 * 10 + 1), no_allocations), Some(returned(1 + 11)));
         assert_eq!(c.stats().compiled, 1);
         assert_eq!(c.stats().rejected, 0);
         assert_eq!(c.stats().native_calls, 1);
@@ -643,29 +1017,86 @@ mod tests {
         let code = add_two(&c);
         c.install(7, Ok(code), 2);
         // Slot 1 holds something that is not an int (a reference, a long, a double...).
-        assert_eq!(c.run(7, |i| (i != 1).then_some(3)), None);
+        assert_eq!(c.run(7, |i| (i != 1).then_some(3), no_allocations), None);
         assert_eq!(c.stats().unmarshallable, 1);
         assert_eq!(c.stats().native_calls, 0);
     }
 
     #[cfg(windows)]
     #[test]
-    fn division_by_zero_deopts_instead_of_faulting() {
-        // iload_0; iload_1; idiv; ireturn — the one deopt site this tier has. Without the emitted
-        // zero check this call would raise #DE, which on Windows is a structured exception that
-        // would take the process down rather than throw ArithmeticException.
+    fn division_by_zero_deopts_with_the_state_to_resume_from() {
+        // iload_0; iload_1; idiv; ireturn. Without the emitted zero check this call would raise
+        // #DE, which on Windows is a structured exception that would take the process down rather
+        // than throw ArithmeticException.
+        //
+        // And what comes back is step 6 in one assertion: not "give up", but **pc 2 with both
+        // operands on the stack** — exactly the state an interpreter needs to execute that `idiv`
+        // itself and throw. Before this step the answer was a bare `None` and the whole method was
+        // re-run from its first byte.
         let mut c = cache();
         for _ in 0..c.threshold {
             c.on_entry(7);
         }
-        let code =
-            super::super::compile::compile(&[0x1a, 0x1b, 0x6c, 0xac], 2, &|_| None, &|_| None, c.poll_address())
-                .unwrap();
+        let code = compiled(&c, &[0x1a, 0x1b, 0x6c, 0xac], 2, "(II)I");
         c.install(7, Ok(code), 2);
-        assert_eq!(c.run(7, |i| Some(if i == 0 { 100 } else { 7 })), Some(14));
-        assert_eq!(c.run(7, |i| Some(if i == 0 { 100 } else { 0 })), None);
+        assert_eq!(c.run(7, |i| Some(if i == 0 { 100 } else { 7 }), no_allocations), Some(returned(14)));
+        let out = c.run(7, |i| Some(if i == 0 { 100 } else { 0 }), no_allocations);
+        assert_eq!(
+            out,
+            Some(OsrResult::Deopt(ResumeState {
+                pc: 2,
+                locals: vec![(0, JitValue::Int(100)), (1, JitValue::Int(0))],
+                stack: vec![JitValue::Int(100), JitValue::Int(0)],
+                inlined: Vec::new(),
+            }))
+        );
         assert_eq!(c.stats().deopts, 1);
         assert_eq!(c.stats().native_calls, 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_conflicted_slot_is_absent_from_the_state_rather_than_guessed_at() {
+        // **The write-back half of step 9, asked directly.** A local whose kind two paths disagree
+        // about is `Kind::Conflict`, and what the interpreter must be handed for it is *nothing* —
+        // no entry in `ResumeState::locals` at all — so that its frame keeps the `Value` it already
+        // had. There is no third option that is a value: labelling the slot `Int` would hand back a
+        // heap offset the collector can no longer see, and labelling it `Reference` would hand back
+        // a pointer made of arithmetic. Both fail somewhere else, later, as corruption.
+        //
+        //  0: iload_0; ifeq -> 6      slot 2 keeps the `int` a fresh frame put there
+        //  4: aload_1; astore_2       ...and holds a reference on the other path
+        //  6: bipush 100; iload_0     <- the merge: slot 2 is `Conflict` from here
+        //  9: idiv                    <- the deopt, with slot 2 still conflicted
+        // 10: ireturn
+        let mut c = cache();
+        for _ in 0..c.threshold {
+            c.on_entry(9);
+        }
+        let code = [
+            0x1a, 0x99, 0x00, 0x05, // 0: iload_0; ifeq +5 -> 6
+            0x2b, 0x4d, // 4: aload_1; astore_2
+            0x10, 100, 0x1a, 0x6c, // 6: bipush 100; iload_0; idiv
+            0xac, // 10: ireturn
+        ];
+        c.install(9, Ok(compiled(&c, &code, 3, "(ILjava/lang/Object;)I")), 3);
+        // Local 0 is the zero divisor *and* the branch flag, so this call takes the path that never
+        // writes slot 2 — and the assertion below is that the answer does not depend on which path
+        // it took, because the map says `Conflict` either way.
+        let out = c.run(9, |i| Some([0, 264, 4242][i as usize]), no_allocations);
+        assert_eq!(
+            out,
+            Some(OsrResult::Deopt(ResumeState {
+                pc: 9,
+                // Slot 2 is **not here**, and that is the whole test. Slots 0 and 1 are, with the
+                // kinds the map gives them — a reference still arriving as a `Reference`, which is
+                // the assertion that would catch a lattice change that flattened everything to
+                // "unknown" and stopped writing anything back at all.
+                locals: vec![(0, JitValue::Int(0)), (1, JitValue::Reference(264))],
+                stack: vec![JitValue::Int(100), JitValue::Int(0)],
+                inlined: Vec::new(),
+            }))
+        );
     }
 
     // -- On-stack replacement and the safepoint poll -------------------------------------------
@@ -704,8 +1135,8 @@ mod tests {
         // Enter at the loop header with i already at 5 and the bound at 9. Native code must run
         // the remaining four iterations and return 9 — not restart from `i = 0`, which is the one
         // thing an entry-point mix-up would look like.
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 9 }));
-        assert_eq!(out, Some(OsrResult::Returned(9)));
+        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 9 }), no_allocations);
+        assert_eq!(out, Some(returned(9)));
         assert_eq!(c.stats().osr_entries, 1);
         assert_eq!(c.stats().native_calls, 1);
         assert_eq!(c.stats().safepoint_exits, 0);
@@ -717,7 +1148,7 @@ mod tests {
         let mut c = warm_loop();
         // pc 7 is the `iinc` — a real instruction, but not a loop header, so not an entry point.
         // Falling through the dispatch would run the method from pc 0 and answer 9 instead.
-        assert_eq!(c.run_osr(7, 7, |_| Some(0)), None);
+        assert_eq!(c.run_osr(7, 7, |_| Some(0), no_allocations), None);
         assert_eq!(c.stats().native_calls, 0, "nothing must have been entered");
     }
 
@@ -728,19 +1159,27 @@ mod tests {
         // Raise the poll *before* entering: the first time the loop comes round to its header the
         // check fires, so exactly one iteration runs natively.
         c.poll_word().store(1, std::sync::atomic::Ordering::Release);
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 1_000_000 }));
-        assert_eq!(out, Some(OsrResult::Safepoint(2)), "it must come back at the loop header");
+        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 1_000_000 }), no_allocations);
+        // The state it comes back with is the state the interpreter has to resume from: local 0
+        // advanced by exactly the one iteration that ran, the pc at the loop header, and an empty
+        // operand stack — which is what a loop header being an entry point *means*.
+        assert_eq!(
+            out,
+            Some(OsrResult::Safepoint(ResumeState {
+                pc: 2,
+                locals: vec![(0, JitValue::Int(6)), (1, JitValue::Int(1_000_000))],
+                stack: Vec::new(),
+                inlined: Vec::new(),
+            })),
+            "it must come back at the loop header"
+        );
         assert_eq!(c.stats().safepoint_exits, 1);
-        // And the state it comes back with is the state the interpreter has to resume from: local
-        // 0 advanced by exactly the one iteration that ran.
-        let written: Vec<(u16, i64)> = c.osr_writeback(7).collect();
-        assert_eq!(written, vec![(0, 6), (1, 1_000_000)]);
 
         // Lower it again and the very same code runs the loop to the end — the poll is a
         // condition, not a mode.
         c.poll_word().store(0, std::sync::atomic::Ordering::Release);
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 6 } else { 9 }));
-        assert_eq!(out, Some(OsrResult::Returned(9)));
+        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 6 } else { 9 }), no_allocations);
+        assert_eq!(out, Some(returned(9)));
         assert_eq!(c.stats().safepoint_exits, 1);
     }
 
@@ -759,9 +1198,9 @@ mod tests {
     #[test]
     fn a_deopt_out_of_a_loop_header_closes_osr_for_good() {
         // `iload_0; iload_1; idiv; istore_0; goto -> 0` — a loop whose body divides, entered at
-        // pc 0 (its own header) with a zero divisor. The first attempt deopts; after that the
-        // method must stop being offered for on-stack entry, or the interpreter and the JIT would
-        // take turns making one iteration of progress each.
+        // pc 0 (its own header) with a zero divisor. The first attempt deopts and hands back a
+        // resumable state; after that the method stops being offered for on-stack entry, so a
+        // guard that fails on entry cannot make every back-edge pay for a marshal-and-enter.
         //
         //  0: iload_0; iload_1; idiv; istore_0   <- header (depth 0)
         //  4: goto -4 -> 0
@@ -769,21 +1208,26 @@ mod tests {
         for _ in 0..c.threshold {
             c.on_back_edge(7);
         }
-        let code = super::super::compile::compile(
-            &[0x1a, 0x1b, 0x6c, 0x3b, 0xa7, 0xff, 0xfc],
-            2,
-            &|_| None,
-            &|_| None,
-            c.poll_address(),
-        )
-        .unwrap();
+        let code = compiled(&c, &[0x1a, 0x1b, 0x6c, 0x3b, 0xa7, 0xff, 0xfc], 2, "(II)I");
         assert_eq!(code.osr_entries, vec![0]);
+        // pc 0 is both a loop header *and* — through the `idiv` at pc 2 — a method with a deopt
+        // site, so the resume map holds both, in pc order.
+        assert_eq!(code.resume_sites.iter().map(|s| s.pc).collect::<Vec<_>>(), vec![0, 2]);
         c.install(7, Ok(code), 2);
         assert!(c.watches_back_edges(7));
-        assert_eq!(c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 0 })), None);
+        let out = c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 0 }), no_allocations);
+        assert_eq!(
+            out,
+            Some(OsrResult::Deopt(ResumeState {
+                pc: 2,
+                locals: vec![(0, JitValue::Int(10)), (1, JitValue::Int(0))],
+                stack: vec![JitValue::Int(10), JitValue::Int(0)],
+                inlined: Vec::new(),
+            }))
+        );
         assert_eq!(c.stats().deopts, 1);
         assert!(!c.watches_back_edges(7), "OSR is closed after a deopt from a loop header");
-        assert_eq!(c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 2 })), None, "and stays closed");
+        assert_eq!(c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 2 }), no_allocations), None, "and stays closed");
         assert_eq!(c.stats().native_calls, 1, "the second attempt never entered");
     }
 
@@ -812,4 +1256,137 @@ mod tests {
         c.set_enabled(false);
         assert!(!c.watches_back_edges(9), "and nothing at all is watched with the JIT off");
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Step 7: the allocation log the trampoline replays, and the exit that is not a deopt.
+    // -----------------------------------------------------------------------------------------
+
+    /// A stand-in Eden: a byte buffer and a boxed cursor, shaped exactly as `HeapService` hands the
+    /// real ones to the compiler. Boxed for the same reason the arena boxes its own — a compiled
+    /// `new` bakes the cursor's address in.
+    #[cfg(windows)]
+    struct TestEden {
+        bytes: Vec<u8>,
+        cursor: Box<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[cfg(windows)]
+    impl TestEden {
+        const NULL_PAGE: usize = 8;
+
+        fn new(size: usize) -> TestEden {
+            TestEden {
+                bytes: vec![0; size],
+                cursor: Box::new(std::sync::atomic::AtomicUsize::new(0)),
+            }
+        }
+
+        fn heap(&self) -> super::super::compile::Heap {
+            super::super::compile::Heap {
+                eden_base: self.bytes.as_ptr() as usize - Self::NULL_PAGE,
+                other_base: self.bytes.as_ptr() as usize,
+                eden_end: (Self::NULL_PAGE + self.bytes.len()) as u32,
+                max_offset: Self::NULL_PAGE + self.bytes.len(),
+                eden_cursor: &*self.cursor as *const _ as usize,
+                eden_capacity: self.bytes.len(),
+                null_page: Self::NULL_PAGE as u32,
+                array_length: 8,
+                int_array_data: 12,
+                int_element: 4,
+            }
+        }
+    }
+
+    /// `compiled` for a program that allocates: every `new` resolves to a 16-byte instance.
+    #[cfg(windows)]
+    fn compiled_alloc(c: &JitCache, code: &[u8], max_locals: usize, signature: &str, eden: &TestEden) -> CompiledCode {
+        use super::super::compile::{Environment, Instance, Method};
+        super::super::compile::compile(
+            &Method { unit: 0, code, max_locals, descriptor: signature, is_static: true, has_handlers: false },
+            &Environment {
+                int_const: &|_, _| None,
+                static_int: &|_, _| None,
+                int_field: &|_, _, _| None,
+                instance: &|_, _| Some(Instance { size: 16, class_id: 0x77 }),
+                invoke: &|_, _, _| None,
+                heap: eden.heap(),
+                poll_word: c.poll_address(),
+            },
+        )
+        .unwrap()
+    }
+
+    /// **The trampoline's third clause**: every object native code allocated is handed to the
+    /// caller, exactly once, in allocation order — because until that happens the collector cannot
+    /// see any of them.
+    #[test]
+    #[cfg(windows)]
+    fn the_cache_hands_back_every_object_native_code_allocated() {
+        let mut c = cache();
+        let eden = TestEden::new(4096);
+        // new #1; astore_0; new #1; astore_0; aload_0; areturn — two objects, one excursion.
+        let code = [0xbb, 0, 1, 0x4b, 0xbb, 0, 1, 0x4b, 0x2a, 0xb0];
+        let program = compiled_alloc(&c, &code, 1, "()LCell;", &eden);
+        assert_eq!(program.alloc_records, super::super::compile::ALLOC_LOG_RECORDS);
+        c.install(7, Ok(program), 1);
+
+        let mut seen: Vec<(usize, usize)> = Vec::new();
+        let out = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)));
+        assert!(matches!(out, Some(OsrResult::Returned(Some(JitValue::Reference(_))))));
+        assert_eq!(
+            seen,
+            vec![(TestEden::NULL_PAGE, 16), (TestEden::NULL_PAGE + 16, 16)],
+            "both objects, in allocation order, with their logical sizes"
+        );
+
+        // And the count is **reset** between excursions: a second call must report its own two
+        // objects, not four. A stale count here would replay references to objects that a
+        // collection has since recycled — the one bookkeeping mistake that is silent.
+        seen.clear();
+        let _ = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)));
+        assert_eq!(seen, vec![(TestEden::NULL_PAGE + 32, 16), (TestEden::NULL_PAGE + 48, 16)]);
+    }
+
+    /// A full Eden is **not** a deopt: it does not count as one and it does not close on-stack
+    /// entry. Both matter for a real allocating loop, which fills Eden once per collection cycle
+    /// and would otherwise be retired from native code after its first lap.
+    #[test]
+    #[cfg(windows)]
+    fn a_full_eden_leaves_without_closing_on_stack_entry() {
+        let mut c = cache();
+        // Eden holds exactly two 16-byte objects, so the loop's third iteration cannot allocate.
+        let eden = TestEden::new(32);
+        //  0: iconst_0; istore_0
+        //  2: iload_0; bipush 10; if_icmpge -> 18   <- the loop header
+        //  8: new #1; pop
+        // 12: iinc 0, 1
+        // 15: goto -> 2
+        // 18: iload_0; ireturn
+        let code = [
+            0x03, 0x3b, //
+            0x1a, 0x10, 10, 0xa2, 0x00, 0x0d, // 2
+            0xbb, 0x00, 0x01, 0x57, // 8
+            0x84, 0x00, 0x01, // 12
+            0xa7, 0xff, 0xf3, // 15
+            0x1a, 0xac, // 18
+        ];
+        let program = compiled_alloc(&c, &code, 1, "()I", &eden);
+        assert_eq!(program.osr_entries, vec![2], "the loop header");
+        c.install(7, Ok(program), 1);
+
+        let mut seen = 0usize;
+        let out = c.run_osr(7, 2, |_| Some(0), |_, _| seen += 1);
+        // The state contract is a deopt's — the interpreter resumes at the `new` that did not run.
+        match out {
+            Some(OsrResult::Deopt(state)) => assert_eq!(state.pc, 8),
+            other => panic!("expected a resume at the `new`, got {other:?}"),
+        }
+        assert_eq!(seen, 2, "the two objects that did fit were still handed over");
+        assert_eq!(c.stats().alloc_exits, 1);
+        assert_eq!(c.stats().deopts, 0, "a full Eden is a capacity condition, not a failed guard");
+        // The decisive one: on-stack entry is still open, so the loop can be re-entered as soon as
+        // a collection has recycled Eden.
+        assert!(c.watches_back_edges(7), "an alloc exit must not retire the loop");
+    }
+
 }

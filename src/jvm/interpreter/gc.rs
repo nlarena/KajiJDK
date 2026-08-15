@@ -1867,6 +1867,12 @@ mod tests {
     /// interpreter, with the result the real `java` of JDK 25 gives for the same class file.
     /// Shared by the cheap correctness check below and by `bench_baseline` at the end of the
     /// module, so a benchmark can never drift from the value it is supposed to compute.
+    ///
+    /// **These runs respect `JVM_JIT`**, which is on by default, so two of the five are no longer
+    /// pure interpreter measurements: `BmLoop` has been compiled since F3 step 3 and `BmVirtual`
+    /// since step 5 (its `f` overrides are `aload_0; getfield; …; ireturn`). Read this table as an
+    /// interpreter baseline only with `JVM_JIT=0` set; `burst::jit_tests::bench_jit` is the
+    /// harness that measures the two arms against each other on purpose.
     const BENCH_WORKLOADS: [(&str, i32, &str); 5] = [
         ("java/BmLoop.class", 161265, "frame-local arithmetic + branches"),
         ("java/BmInvoke.class", 252624, "invokestatic (recursive fib)"),
@@ -1883,6 +1889,37 @@ mod tests {
         // just for a different program. This runs all five in green and pins their results.
         for (class_file, expected, dimension) in BENCH_WORKLOADS {
             assert_eq!(run_int(class_file), expected, "{class_file} ({dimension})");
+        }
+    }
+
+    #[test]
+    fn reference_workloads_agree_across_every_substrate() {
+        // The F3 step-5 workloads through the **three-substrate oracle**, which is the strongest
+        // differential test the project has and costs nothing extra here: the JIT is on in `green`
+        // and `os-gil` and off in `os` (parallel), so an agreement between the three is an
+        // agreement between compiled and interpreted execution of the same program — and these two
+        // programs are the ones whose compiled code holds *references* in native frames.
+        //
+        // `os-gil` matters in its own right: it is the substrate where a compiled frame coexists
+        // with sibling OS threads, and the whole no-stack-maps argument rests on the claim that the
+        // one global lock is held across the native call, so no sibling can collect while it runs.
+        // `JmDead` (F3 step 9) joins them for a reason of its own, and it is a **collector** reason
+        // rather than a type-system one. Its three hot methods all carry a local slot the type map
+        // calls `Kind::Conflict` — two edges, two kinds, no answer — and the write-back's response
+        // to one of those is to write *nothing*, leaving the interpreter's frame holding a value
+        // native code may have overwritten. That frame is a GC root the instant it is interpreted
+        // again, the workload allocates 1 500-odd objects to make sure the collector looks at it,
+        // and one of its deopts lands at a pc where the conflicted slot holds a stale reference
+        // from the previous iteration. If "a conflicted slot is dead" were wrong, or if the stale
+        // value were anything but a well-typed `Value`, this is where it would show.
+        for (class_file, expected) in
+            [("java/JrRef.class", 604164), ("java/JrPoll.class", 977804), ("java/JmDead.class", 854257)]
+        {
+            assert_eq!(run_int(class_file), expected, "{class_file} (green)");
+            assert_eq!(run_int_os(class_file), expected, "{class_file} (os-gil)");
+            for _ in 0..5 {
+                assert_eq!(run_int_os_parallel(class_file), expected, "{class_file} (os)");
+            }
         }
     }
 

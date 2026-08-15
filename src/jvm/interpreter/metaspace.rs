@@ -200,6 +200,9 @@ struct MethodBody {
     /// it — the VM takes the receiver's (or `Class`'s) monitor when it pushes the frame
     /// and releases it when the frame is popped. See `JVM::push_frame_locked`.
     synchronized_: bool,
+    /// `true` for a `static` method — recorded because the JIT needs to know whether slot 0 is
+    /// `this` (a reference) or the first argument before it can type the frame it is compiling.
+    static_: bool,
     /// The **field-site cache** (F0 quickening): one cell per code byte, so the
     /// `getfield`/`putfield` at `pc` reads its already-resolved field with a single
     /// indexed load — no `String`, no hash, no layout rebuild. The payload is opaque
@@ -688,20 +691,20 @@ impl MetaspaceService {
             return Some(id);
         }
         self.get_or_load(class)?; // make sure the class is loaded
-        let (max_locals, code, exceptions, native_, synchronized_) = {
+        let (max_locals, code, exceptions, native_, synchronized_, static_) = {
             let cf = self.classes.get(class)?;
             let member = cf.methods.iter().find(|m| {
                 cf.utf8(m.name_index) == Some(name)
                     && cf.utf8(m.descriptor_index) == Some(descriptor)
             })?;
-            let synchronized_ = member.is_synchronized();
+            let (synchronized_, static_) = (member.is_synchronized(), member.is_static());
             if member.is_native() {
                 // Native: no `Code`. We still record a body so it has a `MethodId`;
                 // the invoke checks `is_native` and dispatches to the native bridge.
-                (0, Vec::new(), Vec::new(), true, synchronized_)
+                (0, Vec::new(), Vec::new(), true, synchronized_, static_)
             } else {
                 let body = cf.member_code(member)?;
-                (body.max_locals as usize, body.code, body.exception_table, false, synchronized_)
+                (body.max_locals as usize, body.code, body.exception_table, false, synchronized_, static_)
             }
         };
         let id = self.methods.len();
@@ -734,6 +737,7 @@ impl MetaspaceService {
             exceptions,
             native_,
             synchronized_,
+            static_,
             field_sites,
             call_sites,
             slot_widths,
@@ -774,6 +778,13 @@ impl MetaspaceService {
     /// the object monitor on entry and releases it on every exit (no opcode involved).
     pub fn is_synchronized(&self, method: MethodId) -> bool {
         self.methods[method].synchronized_
+    }
+
+    /// Whether a resolved method is `static` — i.e. whether local slot 0 is the first argument
+    /// or `this`. Asked by the JIT, for which that is the difference between a frame whose slot 0
+    /// is an `int` and one whose slot 0 is a reference (`burst::compile`'s entry type map).
+    pub fn is_static(&self, method: MethodId) -> bool {
+        self.methods[method].static_
     }
 
     /// Argument count parsed straight from a method `descriptor` — for callers that

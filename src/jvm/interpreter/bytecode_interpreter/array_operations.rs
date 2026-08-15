@@ -23,10 +23,20 @@ use crate::jvm::interpreter::frame::{Frame, Value};
 use crate::jvm::interpreter::heap::HeapService;
 use crate::jvm::interpreter::metaspace::MetaspaceService;
 
-/// The `length` word sits right after the object header.
-const LENGTH_OFFSET: usize = HEADER_SIZE;
-/// An array's header is the object header plus the `length` word; elements follow.
-const ARRAY_HEADER_SIZE: usize = HEADER_SIZE + 4;
+/// The `length` word sits right after the object header. **Public** because the JIT emits the
+/// same load: `burst::compile`'s `arraylength` and `iaload` read the length from here, and the two
+/// must agree to the byte or compiled code reads someone else's word.
+pub const LENGTH_OFFSET: usize = HEADER_SIZE;
+/// An array's header is the object header plus the `length` word; elements follow. Public for the
+/// same reason as [`LENGTH_OFFSET`].
+pub const ARRAY_HEADER_SIZE: usize = HEADER_SIZE + 4;
+
+/// The width of one element of the array class `array_class` (e.g. `"[I"` → 4). Public so the JIT
+/// can be told the stride of an `int[]` rather than assuming it — the single source of truth is
+/// [`element_width`], and this is the door to it.
+pub fn array_element_width(array_class: &str) -> usize {
+    element_width(&array_class[1..])
+}
 
 // The implicit exceptions array opcodes can raise; returned as `Err` for the
 // dispatch loop to throw (`throw_exception`).

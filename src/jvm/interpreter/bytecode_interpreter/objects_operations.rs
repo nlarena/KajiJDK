@@ -458,6 +458,38 @@ fn resolve_field_site_read(
     Some(site)
 }
 
+/// The **JIT's** field resolver: the byte offset of the `getfield` at `(method, pc)` inside its
+/// receiver, and `None` unless the field is a **non-`volatile` instance `int`**.
+///
+/// It is [`resolve_field_site_read`] with two extra conditions, and both are deliberate rather
+/// than incidental:
+///
+///  - **`int` only.** The compiled subset has no other width to put on its operand stack, and the
+///    kind decides the load: an `int` field is four bytes and sign-extends, a reference field would
+///    be four bytes that mean something else entirely.
+///  - **non-`volatile` only.** A volatile read is an `Acquire`, which on x86-64 a plain `mov`
+///    already is — so this could be allowed and would even be correct. It is refused anyway: the
+///    JIT runs only where a single thread executes at a time, so "volatile" has no observable
+///    meaning to it, and leaning on an architecture's memory model in generated code is a claim
+///    this tier should make explicitly, in its own step, or not at all.
+///
+/// Read-only (`&MetaspaceService`), like every other resolver the compiler is handed — compiling
+/// must not load a class or run a `<clinit>`. It does *fill* the resolved-site cache, which is a
+/// pure function of `(method, pc)` and therefore not a change to the VM's state in any sense the
+/// program can observe.
+pub fn jit_int_field_offset(
+    metaspace: &MetaspaceService,
+    method: MethodId,
+    pc: usize,
+    cp_index: u16,
+) -> Option<u32> {
+    let site = resolve_field_site_read(metaspace, method, pc, cp_index)?;
+    match site.kind == FieldKind::Int && !site.volatile {
+        true => u32::try_from(site.offset).ok(),
+        false => None,
+    }
+}
+
 /// Read-only `getfield`. `Some(())` = read the field and pushed it (ran concurrently); `None` =
 /// escalate to the write path (null receiver or an unloaded class). On escalation the operand
 /// stack is left exactly as it was (the popped receiver is pushed back).
@@ -608,6 +640,42 @@ pub fn allocate_read(
 /// Read-only twin of [`instance_field_slots`] (uses `get`; stops at any unloaded super).
 fn instance_field_slots_read(metaspace: &MetaspaceService, name: &str) -> usize {
     total_slots(&layout_fields_ref(metaspace, name).0)
+}
+
+/// What the JIT bakes into a compiled `new`: the instance's `(size, class_id)` for the class named
+/// at `cp_index` in `caller`'s constant pool — see `burst::compile::Instance`.
+///
+/// Read-only in every sense, and that is the design, exactly as for
+/// [`static_int_address`][super::class_operations::static_int_address]: it takes
+/// `&MetaspaceService`, so it cannot load a class, mint a Class ID, allocate a mirror or run a
+/// `<clinit>`. Compilation must not have side effects on the VM's state, and the signature is what
+/// enforces that rather than a comment.
+///
+/// `None` — "do not compile this method" — unless **all four** hold:
+///
+///  1. the constant-pool entry is a `Class` whose name resolves;
+///  2. that class is **initialised** (`InitState::Done`). `new` is a first active use, so an
+///     uninitialised class would have to run its `<clinit>` — and compiled code cannot run
+///     anything. This is the same requirement `getstatic` has, refused for the same reason, and
+///     cached just as permanently;
+///  3. its Class ID is minted (i.e. it is *prepared*), so the layout below is the real one;
+///  4. its `Class<…>` mirror exists, and its offset fits the `u32` the header word is. The mirror is
+///     `malloc_old`ed and pinned against `gc::compact`, so that offset never moves — which is what
+///     makes baking it in sound.
+///
+/// The size is the **logical** one — `[header | inherited fields | own fields]`, each field at its
+/// width-aware slot — computed by the very same walk [`allocate`] uses, because compiled code and
+/// the interpreter must not come to disagree about how big a `Point` is.
+pub fn jit_instance(metaspace: &MetaspaceService, caller: &str, cp_index: u16) -> Option<(u32, u32)> {
+    let class_name = metaspace.get(caller)?.class_name(cp_index)?.to_string();
+    if metaspace.init_state(&class_name) != crate::jvm::interpreter::metaspace::InitState::Done {
+        return None;
+    }
+    let uuid = metaspace.class_id_read(&class_name)?;
+    let class_id = u32::try_from(metaspace.class_object(uuid)?).ok()?;
+    let slots = instance_field_slots_read(metaspace, &class_name);
+    let size = u32::try_from(HEADER_SIZE + slots * SLOT_SIZE).ok()?;
+    Some((size, class_id))
 }
 
 /// Read-path (lock-free) `AtomicInteger`/`AtomicLong.compareAndSet` (H5, widened like W3): when the

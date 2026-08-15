@@ -22,18 +22,51 @@ pub struct EdenArena {
     /// so a byte's address is stable for the arena's whole life.
     region: AtomicRegion,
     /// Bump cursor. `fetch_add` reserves disjoint ranges lock-free.
-    cursor: AtomicUsize,
+    ///
+    /// **Boxed, and that is load-bearing rather than incidental.** The JIT bakes this word's
+    /// machine address into an instruction stream (see [`Self::cursor_address`]) and never asks
+    /// again, so the address has to survive everything that can happen to the arena afterwards —
+    /// including the enclosing `HeapService` being *moved*, which it is (a `JVM` is built and
+    /// returned by value). A cursor stored inline would move with it; a boxed one does not, for
+    /// exactly the reason [`AtomicRegion::base_address`] is stable. The extra indirection costs one
+    /// pointer load on the allocation path, against a word that is in L1 by definition.
+    cursor: Box<AtomicUsize>,
 }
 
 impl EdenArena {
     /// A zeroed arena of at least `size` bytes.
     pub fn new(size: usize) -> Self {
-        EdenArena { region: AtomicRegion::new(size), cursor: AtomicUsize::new(0) }
+        EdenArena { region: AtomicRegion::new(size), cursor: Box::new(AtomicUsize::new(0)) }
     }
 
     /// Total capacity in bytes.
     pub fn capacity(&self) -> usize {
         self.region.capacity()
+    }
+
+    /// The **machine address** of arena-local byte 0 — see
+    /// [`AtomicRegion::base_address`][super::atomic_region::AtomicRegion::base_address]. The JIT
+    /// bakes it in so compiled code can read an Eden object's field without going through the
+    /// accessors; the arena never reallocates, so the address is good for the VM's life.
+    pub fn base_address(&self) -> usize {
+        self.region.base_address()
+    }
+
+    /// The **machine address** of the bump cursor itself — what a compiled `new` does its
+    /// `lock xadd` on, so that native code reserves Eden bytes through the very same word, and with
+    /// the very same semantics, as [`Self::alloc`]'s `fetch_add`.
+    ///
+    /// Stable for the arena's whole life: the cursor is boxed (see the field), so no move of the
+    /// arena — or of the `HeapService` around it — relocates the word. `reset` writes through
+    /// `get_mut` to this same address.
+    ///
+    /// The two constants a caller needs alongside it are [`Self::capacity`] and the **8-byte
+    /// rounding** `alloc` applies to the request: a reservation of `n` bytes bumps the cursor by
+    /// `(n + 7) & !7` and fails when the value it read back exceeds `capacity - bump`. Emitting
+    /// anything else here would let compiled code and the interpreter disagree about where the next
+    /// object starts.
+    pub fn cursor_address(&self) -> usize {
+        &*self.cursor as *const AtomicUsize as usize
     }
 
     /// Bytes handed out so far (clamped — the cursor may sit past the end after an overflow).
