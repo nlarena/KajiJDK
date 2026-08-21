@@ -53,6 +53,11 @@ impl Exec<'_> {
             _ => panic!("invokeinterface: receiver is not an object reference"),
         };
         let mirror_offset = self.shared.heap.read_u32(receiver) as usize;
+        // **The inline cache's one observation** (milestone F2), on exactly the same terms as
+        // `invokevirtual`'s: the header word is already in hand, and an interface call guarded on
+        // the receiver's *exact* class needs no signature search at all — which is the whole reason
+        // the same guard serves both opcodes. See `MethodBody::receiver_classes`.
+        self.shared.metaspace.set_receiver_class(caller, pc, mirror_offset as u32);
 
         // A lambda produced by a call site is now an ordinary instance of a **spun** class that
         // implements the interface (see `lambda_factory`), so there's no special case: its SAM is

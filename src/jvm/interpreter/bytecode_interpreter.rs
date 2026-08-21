@@ -1364,12 +1364,13 @@ impl Exec<'_> {
 
     /// The marshalling **in**: one interpreter `Value` as the bare `i64` compiled code works in.
     ///
-    /// Two kinds cross, and they cross identically — an `int` sign-extended (which establishes the
+    /// Every kind crosses, and they cross identically — an `int` sign-extended (which establishes the
     /// normalisation invariant the generated arithmetic relies on) and a reference as its **heap
     /// offset**, which is what a `Value::Reference` already is. `None` is every other kind, and it
-    /// abandons the call: a `long`, a `double` or a `float` has no representation in this subset,
-    /// and the compiled code provably never reads such a slot (the type map refuses to compile a
-    /// read of one), so `None` here only ever means a slot the code declared but cannot touch.
+    /// abandons the call — which, now that every primitive has a representation, only a slot the
+    /// compiler could not type at all can produce. The compiled code provably never reads such a
+    /// slot (the type map refuses to compile a read of one), so `None` here only ever means a slot
+    /// the code declared but cannot touch.
     ///
     /// Nothing is *checked* against the compiler's type map on this side, and that is deliberate
     /// rather than an omission: the map's entry state comes from the method's own descriptor, so a
@@ -1380,7 +1381,19 @@ impl Exec<'_> {
         match value {
             Value::Int(v) => Some(v as i64),
             Value::Reference(offset) => Some(offset as i64),
-            _ => None,
+            // A `long` is category-2 and it still marshals as **one** slot, because that is what it
+            // is on both sides: the interpreter keeps a whole `Value::Long` in the low local slot
+            // and leaves the high one untouched, and so does compiled code. The high slot marshals
+            // as whatever it holds — `Value::Int(0)` for a frame nobody wrote it in — and nothing
+            // ever reads it (`Kind::Cat2High` fails every kind check in `burst::compile`).
+            Value::Long(v) => Some(v),
+            // A `float` and a `double` cross as their **IEEE bit patterns**, not as numbers: the
+            // boundary has no floating-point register in it, and compiled code works in the bits
+            // until the moment an SSE instruction needs them. `to_bits` on an `f32` gives a `u32`,
+            // so `as i64` zero-extends -- which is exactly the boundary form `burst::compile`'s
+            // `Kind::Float` describes.
+            Value::Float(v) => Some(v.to_bits() as i64),
+            Value::Double(v) => Some(v.to_bits() as i64),
         }
     }
 
@@ -1389,6 +1402,9 @@ impl Exec<'_> {
         match value {
             crate::burst::code_cache::JitValue::Int(v) => Value::Int(v),
             crate::burst::code_cache::JitValue::Reference(offset) => Value::Reference(offset),
+            crate::burst::code_cache::JitValue::Long(v) => Value::Long(v),
+            crate::burst::code_cache::JitValue::Float(v) => Value::Float(v),
+            crate::burst::code_cache::JitValue::Double(v) => Value::Double(v),
         }
     }
 
@@ -1466,9 +1482,10 @@ impl Exec<'_> {
     ///    opcode (and therefore no GC) runs anywhere while the native call is on this thread's
     ///    stack.
     /// 2. **Not hot yet, or not eligible.** One `HashMap` probe, then straight back.
-    /// 3. **A local that cannot be marshalled** — a slot the code declares holds a `long`, a
-    ///    `double` or a `float`. Since step 5 a `Value::Reference` marshals like any other value
-    ///    (as its heap offset), so `this` is no longer among the reasons a call is abandoned.
+    /// 3. **A local that cannot be marshalled.** Every `Value` a well-formed descriptor can put in
+    ///    a slot marshals now — a reference as its heap offset, a `long` as its whole 64 bits, a
+    ///    `float`/`double` as its IEEE pattern — so this path has narrowed to slots the compiler
+    ///    could not type at all, and in practice never fires.
     /// 4. **A deopt** — a zero divisor, a `null` receiver or array, or an array index out of
     ///    range. Since step 6 this one is *not* "never having tried": native code hands back the
     ///    pc it stopped at together with the locals and the operand stack, `frame` is made to be
@@ -1568,18 +1585,52 @@ impl Exec<'_> {
                     int_const: &|unit, index| {
                         metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.integer_constant(index))
                     },
-                    static_int: &|unit, index| {
-                        class_operations::static_int_address(metaspace, heap, metaspace.class_of(unit), index)
+                    // `ldc2_w`, and only for a `CONSTANT_Long`: `long_constant` answers `None` for
+                    // a `CONSTANT_Double`, which is how a `double` literal stays outside the subset
+                    // without `burst` knowing what a constant pool is.
+                    long_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.long_constant(index))
                     },
-                    int_field: &|unit, pc, index| {
-                        objects_operations::jit_int_field_offset(metaspace, unit, pc, index)
+                    // The two floating-point pools, handed over as **bit patterns**: that is what
+                    // the generated code bakes in as an immediate, and it is what keeps a NaN's
+                    // payload from being quieted by a trip through an `f32`/`f64` value.
+                    float_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.float_constant(index)).map(f32::to_bits)
                     },
+                    double_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.double_constant(index)).map(f64::to_bits)
+                    },
+                    static_field: &|unit, index| {
+                        class_operations::jit_static_field(metaspace, heap, metaspace.class_of(unit), index)
+                    },
+                    field: &|unit, pc, index| objects_operations::jit_field_site(metaspace, unit, pc, index),
                     // `new`: the instance's size and header word, resolved read-only and refused
                     // unless the class is already initialised — compiled code cannot run a
                     // `<clinit>` any more than it can for a `getstatic`.
                     instance: &|unit, index| {
                         objects_operations::jit_instance(metaspace, metaspace.class_of(unit), index)
                             .map(|(size, class_id)| crate::burst::compile::Instance { size, class_id })
+                    },
+                    // `newarray`/`anewarray`: the array class's mirror and its element width,
+                    // resolved read-only. Unlike `new` there is no `<clinit>` to wait for — an
+                    // array class has none — but the *mirror* must already exist, because minting
+                    // one allocates and compilation may not. Naming the class is this side's job
+                    // (a constant pool and a descriptor are not things `burst` knows about); all
+                    // it hands over is the operand it read.
+                    array: &|unit, of| {
+                        use crate::burst::compile::ArrayOf;
+                        let class = match of {
+                            ArrayOf::Primitive(atype) => {
+                                array_operations::primitive_array_class(atype)?.0.to_string()
+                            }
+                            ArrayOf::Reference(index) => {
+                                let caller = metaspace.class_of(unit);
+                                let element = metaspace.get(caller)?.class_name(index)?;
+                                array_operations::reference_array_class(element)
+                            }
+                        };
+                        array_operations::jit_array_class(metaspace, &class)
+                            .map(|(class_id, element)| crate::burst::compile::ArrayType { class_id, element })
                     },
                     invoke: &|unit, pc, index| Self::jit_callee(metaspace, unit, pc, index),
                     // Where the heap is, and the three layout constants an array read needs — each
@@ -1594,8 +1645,15 @@ impl Exec<'_> {
                         eden_capacity: bases.eden_capacity,
                         null_page: bases.null_page.min(u32::MAX as usize) as u32,
                         array_length: array_operations::LENGTH_OFFSET as u32,
-                        int_array_data: array_operations::ARRAY_HEADER_SIZE as u32,
+                        array_data: array_operations::ARRAY_HEADER_SIZE as u32,
                         int_element: array_operations::array_element_width("[I") as u32,
+                    },
+                    // `checkcast`/`instanceof`/`ldc Foo.class`: the target class's **pinned**
+                    // mirror offset, read-only. `None` for a class the interpreter has never
+                    // prepared, which refuses the method — minting a mirror allocates, and
+                    // compiling may not.
+                    class_mirror: &|unit, index| {
+                        class_operations::jit_class_mirror(metaspace, metaspace.class_of(unit), index)
                     },
                     poll_word: poll,
                 },
@@ -1665,18 +1723,74 @@ impl Exec<'_> {
         index: u16,
     ) -> Option<crate::burst::compile::Callee<'m>> {
         use call_site::{CallSite, SiteKind};
+        use crate::burst::compile::Guard;
 
         let code = metaspace.code(unit);
-        // Statically bound only. The index is the site's own and is checked against the opcode's
-        // operand bytes, so a cache entry can never be read for a pc that is not this invoke.
-        if !matches!(code.get(pc), Some(0xb7 | 0xb8)) {
+        // The four constant-pool-indexed invokes. The index is the site's own and is checked
+        // against the opcode's operand bytes, so a cache entry can never be read for a pc that is
+        // not this invoke.
+        let op = *code.get(pc)?;
+        if !matches!(op, 0xb6..=0xb9) {
             return None;
         }
         if u16::from_be_bytes([*code.get(pc + 1)?, *code.get(pc + 2)?]) != index {
             return None;
         }
-        let site = CallSite::unpack(metaspace.call_site(unit, pc))?;
-        let SiteKind::Direct(callee) = site.kind else { return None };
+        // **A cold site is still inlinable when the call is statically bound.** The F0 cache is
+        // filled by *executing* the invoke, so a call on a branch this method has never taken
+        // leaves its cell at zero — and one such call used to refuse the whole method, however hot
+        // the rest of it was. For `invokestatic` and `invokespecial` nothing about the receiver is
+        // involved, so the only thing the site was going to say is which method; when that has
+        // already been resolved from somewhere, the metaspace can answer it read-only. See
+        // `MetaspaceService::resolved_call_readonly` for why that is free of side effects and free
+        // of linkage errors. A cold *dispatched* site stays refused: there is no receiver class to
+        // speculate on, and inventing one is not a speculation, it is a guess.
+        let site = match CallSite::unpack(metaspace.call_site(unit, pc)) {
+            Some(site) => site,
+            None if matches!(op, 0xb7 | 0xb8) => {
+                let caller = metaspace.class_of(unit);
+                let callee = metaspace.resolved_call_readonly(caller, index)?;
+                call_site::CallSite {
+                    kind: SiteKind::Direct(callee),
+                    arg_count: metaspace.arg_count(callee),
+                    initialized: false,
+                }
+            }
+            None => return None,
+        };
+        // **Which body, and what has to be true for it to be the right one** (milestone F2).
+        //
+        // A statically bound site answers itself: `Direct` *is* the target, whatever the receiver.
+        // A dispatched site does not, and this is where the inline cache is decided — the class the
+        // interpreter last dispatched on at this very pc, and the method that class's table selects
+        // for it. Both come out of read-only tables: the profile is a `Relaxed` load of a word the
+        // interpreter wrote, and the vtable lookup refuses rather than builds (see
+        // `vtable_method_at_mirror_readonly`), because compiling may not change the VM's state.
+        //
+        // A `0` mirror is a site that has **never executed** — a call down a cold branch of a hot
+        // method — and it is not a failure: the honest answer for a call that has never happened is
+        // that this tier has nothing to speculate on, so the method is refused exactly as it was
+        // before F2.
+        let (callee, guard) = match site.kind {
+            // `invokestatic` has no receiver, and the interpreter's `invokespecial` never looks at
+            // one; but its `invokevirtual` throws the `NullPointerException` before it dispatches,
+            // even for the `private` nestmate target that lands here — so that one case owes a null
+            // check to keep native code and the interpreter agreeing.
+            SiteKind::Direct(callee) => (callee, if op == 0xb6 { Guard::NotNull } else { Guard::Static }),
+            SiteKind::Vtable(slot) => {
+                let mirror = metaspace.receiver_class(unit, pc);
+                let callee = metaspace.vtable_method_at_mirror_readonly(mirror as usize, slot)?;
+                (callee, Guard::ExactClass(mirror))
+            }
+            SiteKind::Signature(signature) => {
+                let mirror = metaspace.receiver_class(unit, pc);
+                let callee = metaspace.vtable_method_at_mirror_by_signature_readonly(mirror as usize, signature)?;
+                (callee, Guard::ExactClass(mirror))
+            }
+            // `NoTarget` has no body; `ArrayClone` and the two `MethodHandle` kinds are interpreter
+            // actions with no bytecode behind them at all.
+            _ => return None,
+        };
         if metaspace.is_native(callee)
             || metaspace.is_synchronized(callee)
             || metaspace.intrinsic(callee) != crate::jvm::interpreter::metaspace::Intrinsic::None
@@ -1685,12 +1799,14 @@ impl Exec<'_> {
         {
             return None;
         }
-        // The operands the call consumes: the descriptor's arguments, plus the receiver for an
-        // instance call. The VM's own number, so it cannot drift from what `invokespecial` pops.
-        let receiver = usize::from(code[pc] == 0xb7);
+        // The operands the call consumes: the descriptor's arguments, plus the receiver for every
+        // instance call — which is all three of `invokevirtual`, `invokespecial` and
+        // `invokeinterface`. The VM's own number, so it cannot drift from what the interpreter pops.
+        let receiver = usize::from(op != 0xb8);
         Some(crate::burst::compile::Callee {
             method: Self::jit_shape(metaspace, callee),
             arg_slots: metaspace.arg_count(callee) + receiver,
+            guard,
         })
     }
 
@@ -1742,6 +1858,13 @@ impl Exec<'_> {
     /// them by [`coordinate_gc`]. Neither is hard. But that substrate has an open stale-reference
     /// bug of its own, and putting native frames into its stop-the-world handshake while that is
     /// unresolved would confound two investigations at once. It stays off until that one closes.
+    ///
+    /// **A third thing joined the list with group 2**: VOLATILE-REVISIT-OS-PARALLEL. Compiled code
+    /// now reads and writes `volatile` fields with plain `mov`s, and the licence for that is
+    /// precisely that *no other thread runs* while a native frame is on this stack — true on
+    /// `green` and on `os-gil`, false by definition on `os`. Turning the JIT on here is therefore
+    /// not only the two mechanical changes above: every volatile access the emitter produces has to
+    /// be given a real ordering (and a `long` a real atomic) first. Grep the marker.
     fn try_osr(&mut self, target_pc: usize) -> Option<Step> {
         use crate::burst::code_cache::{Decision, OsrResult};
 

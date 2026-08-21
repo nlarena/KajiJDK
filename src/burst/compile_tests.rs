@@ -10,10 +10,31 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::compile::{
-    CompiledCode, Environment, Heap, Ineligible, Instance, Kind, Method, Outcome, ResumeSite,
-    Status, MAX_SWITCH_CASES,
+    ArrayOf, ArrayType, CompiledCode, Environment, Heap, Ineligible, Instance, Kind, Method,
+    Outcome as RawOutcome, ResumeSite, Status, MAX_SWITCH_CASES,
 };
 use super::exec_mem::ExecMem;
+
+/// **The boundary outcome as a test wants to read it**: the production
+/// [`Outcome`][RawOutcome] with the returned value attached.
+///
+/// The two are not the same shape, and deliberately so. `RAX` carries a status and nothing else,
+/// so [`RawOutcome::Returned`] is a unit variant and the value lives in the buffer's
+/// [`result slot`][CompiledCode::result_base] — which is right for the boundary and inconvenient
+/// for an assertion, since every test here wants to say "it returned 45" in one expression.
+/// [`call_at`] joins the two back together, reading the slot exactly as `JitCache` does.
+///
+/// It is **64 bits wide**, because that is what the slot is: an `int` arrives sign-extended (the
+/// normalisation invariant), a reference as a whole offset, and a `long` as itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Outcome {
+    /// Ran to an exit. The payload is the result slot, **unread by a `void` method** — those tests
+    /// assert on the buffer rather than on this.
+    Returned(i64),
+    Deopt(u32),
+    Safepoint(u32),
+    AllocFailed(u32),
+}
 
 /// [`super::compile::compile`] with everything a program here does not use filled in: a `static`
 /// method returning an `int`, no constants beyond `int_const`, no statics, no fields, and no heap.
@@ -46,11 +67,16 @@ fn compile_shaped(
         &Environment {
             // One body, so the unit is the root's and carries no information.
             int_const: &|_, index| int_const(index),
-            static_int: &|_, _| None,
-            int_field: &|_, _, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
             instance: &|_, _| None,
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            class_mirror: &|_, _| None,
             poll_word,
         },
     )
@@ -85,7 +111,7 @@ fn run_with(code: &[u8], locals: &[i32], constants: &[(u16, i32)]) -> Option<i32
 /// The invocation half of [`run_with`], split out so a test can compile once and call many times.
 fn call(compiled: &CompiledCode, locals: &[i32]) -> Option<i32> {
     match call_at(compiled, locals, 0).0 {
-        Outcome::Returned(v) => Some(v),
+        Outcome::Returned(v) => Some(v as i32),
         _ => None,
     }
 }
@@ -93,11 +119,18 @@ fn call(compiled: &CompiledCode, locals: &[i32]) -> Option<i32> {
 /// [`call`] entering at `entry_pc` and reporting the full [`Outcome`] alongside the locals buffer
 /// as native code left it — which is what an on-stack exit hands the interpreter.
 fn call_at(compiled: &CompiledCode, locals: &[i32], entry_pc: i64) -> (Outcome, Vec<i64>) {
-    let mem = ExecMem::from_code(&compiled.code).expect("map the code W^X");
     // `Value::Int(v) as i64` is the interpreter's marshalling, and it sign-extends -- which is
-    // exactly the normalisation invariant the generated code relies on for its inputs. The extra
-    // trailing slot keeps `as_mut_ptr` non-dangling for a zero-local program.
-    let mut buffer: Vec<i64> = locals.iter().map(|&v| v as i64).collect();
+    // exactly the normalisation invariant the generated code relies on for its inputs.
+    let raw: Vec<i64> = locals.iter().map(|&v| v as i64).collect();
+    call_at_raw(compiled, &raw, entry_pc)
+}
+
+/// [`call_at`] over locals that are already boundary words — what a `long` test needs, since a
+/// `Value::Long(v)` marshals as the whole 64-bit `v` rather than as a widened `i32`.
+fn call_at_raw(compiled: &CompiledCode, locals: &[i64], entry_pc: i64) -> (Outcome, Vec<i64>) {
+    let mem = ExecMem::from_code(&compiled.code).expect("map the code W^X");
+    // The extra trailing slot keeps `as_mut_ptr` non-dangling for a zero-local program.
+    let mut buffer: Vec<i64> = locals.to_vec();
     // **The buffer's second half.** Since F3 step 6 a deopt spills the live operand stack into the
     // slots past the locals, so the contract is `buffer_slots` long, not `max_locals` long — a
     // buffer sized the old way would be written past its end by the very first null check. The one
@@ -110,7 +143,16 @@ fn call_at(compiled: &CompiledCode, locals: &[i32], entry_pc: i64) -> (Outcome, 
     // is 0 or one of the code's own `osr_entries` at every call site below.
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
     let raw = f(buffer.as_mut_ptr(), entry_pc);
-    (Status::unpack(raw), buffer)
+    // The boundary contract in one line: the status word says *how* it ended, and the result slot
+    // holds *what* it handed back. Reading them together here is what keeps every assertion below
+    // reading as one fact.
+    let outcome = match Status::unpack(raw) {
+        RawOutcome::Returned => Outcome::Returned(buffer[compiled.result_base as usize]),
+        RawOutcome::Deopt(key) => Outcome::Deopt(key),
+        RawOutcome::Safepoint(key) => Outcome::Safepoint(key),
+        RawOutcome::AllocFailed(key) => Outcome::AllocFailed(key),
+    };
+    (outcome, buffer)
 }
 
 /// The resume site at `pc` — what the interpreter would be handed if native code stopped there.
@@ -156,10 +198,84 @@ const IINC: u8 = 0x84;
 const IF_ICMPGE: u8 = 0xa2;
 const GOTO: u8 = 0xa7;
 const IRETURN: u8 = 0xac;
+// The `long` group.
+const LCONST_0: u8 = 0x09;
+const LCONST_1: u8 = 0x0a;
+const LDC2_W: u8 = 0x14;
+const LLOAD_0: u8 = 0x1e;
+const LLOAD_1: u8 = 0x1f;
+const LLOAD_2: u8 = 0x20;
+const LSTORE_0: u8 = 0x3f;
+const LSTORE_2: u8 = 0x41;
+const LADD: u8 = 0x61;
+const LSUB: u8 = 0x65;
+const LMUL: u8 = 0x69;
+const LDIV: u8 = 0x6d;
+const LREM: u8 = 0x71;
+const LNEG: u8 = 0x75;
+const LSHL: u8 = 0x79;
+const LSHR: u8 = 0x7b;
+const LUSHR: u8 = 0x7d;
+const LAND: u8 = 0x7f;
+const LOR: u8 = 0x81;
+const LXOR: u8 = 0x83;
+const I2L: u8 = 0x85;
+const L2I: u8 = 0x88;
+const LCMP: u8 = 0x94;
+const LRETURN: u8 = 0xad;
 
 /// `iload_0; iload_1; <op>; ireturn` — the shape almost every test below wants.
 fn binop(op: u8, a: i32, b: i32) -> Option<i32> {
     run_with(&[ILOAD_0, ILOAD_1, op, IRETURN], &[a, b], &[])
+}
+
+// ---------------------------------------------------------------------------------------------
+// The `long` group's own helpers. A `long` argument occupies **two** local slots, so a method
+// taking two of them has `max_locals` 4 and reads slots 0 and 2 — which is exactly what makes the
+// pair (`Long`, `Cat2High`) the thing the type map has to get right, and what these shapes exist
+// to exercise.
+// ---------------------------------------------------------------------------------------------
+
+/// Compiles a `long`-returning static method and runs it, with `constants` resolving a `ldc2_w`.
+fn run_long(code: &[u8], locals: &[i64], descriptor: &str, constants: &[(u16, i64)]) -> Option<i64> {
+    let compiled = compile_long(code, locals.len(), descriptor, constants)
+        .expect("the test programs are all inside the compiled subset");
+    match call_at_raw(&compiled, locals, 0).0 {
+        Outcome::Returned(v) => Some(v),
+        _ => None,
+    }
+}
+
+/// The compile half of [`run_long`], for tests that want the [`CompiledCode`] itself.
+fn compile_long(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    constants: &[(u16, i64)],
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, index| constants.iter().find(|(i, _)| *i == index).map(|(_, v)| *v),
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: Heap::default(),
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+/// `lload_0; lload_2; <op>; lreturn` over `(JJ)J` — the `long` twin of [`binop`]. Slots 0 and 2,
+/// because slots 1 and 3 are the high halves JVMS §2.6.1 makes inaccessible.
+fn lbinop(op: u8, a: i64, b: i64) -> Option<i64> {
+    run_long(&[LLOAD_0, LLOAD_2, op, LRETURN], &[a, 0, b, 0], "(JJ)J", &[])
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -785,11 +901,12 @@ fn wide_iinc_takes_a_16_bit_signed_constant_and_still_wraps() {
 
 #[test]
 fn a_wide_wrapping_anything_else_is_refused() {
-    // `wide lload`, `wide fload`, `wide fstore`, `wide dstore`, `wide ret` — the prefix is only
-    // accepted in front of the five instructions the subset has (`iload`/`aload`/`istore`/`astore`/
-    // `iinc`). Reported as 0xc4 rather than as the inner byte, so `Ineligible::Opcode { pc, opcode }`
-    // always names `code[pc]`.
-    for inner in [0x16u8, 0x17, 0x1e, 0x38, 0x39, 0xa9] {
+    // The prefix is accepted in front of the eleven instructions the subset has —
+    // `iload`/`lload`/`fload`/`dload`/`aload`, their five stores, and `iinc` — and in front of
+    // nothing else. `ret` (0xa9) is the one JVMS form `wide` may legally wrap that this tier does
+    // not have; the other two below are bytes `wide` may not wrap at all. Reported as 0xc4 rather
+    // than as the inner byte, so `Ineligible::Opcode { pc, opcode }` always names `code[pc]`.
+    for inner in [0xa9u8, 0x60, 0xb1] {
         let mut code = wide_local(inner, 300).to_vec();
         code.push(IRETURN);
         assert_eq!(
@@ -1007,15 +1124,20 @@ fn getstatic_reads_the_live_four_bytes_at_the_address_it_was_given() {
         &Method { unit: 0, code: &code, max_locals: 0, descriptor: "()I", is_static: true, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, index| match index {
-                1 => Some(address(0)),
-                2 => Some(address(2)),
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, index| match index {
+                1 => Some((address(0), Kind::Int)),
+                2 => Some((address(2), Kind::Int)),
                 _ => None,
             },
-            int_field: &|_, _, _| None,
+            field: &|_, _, _| None,
             instance: &|_, _| None,
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            class_mirror: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -1117,7 +1239,7 @@ impl FakeHeap {
             eden_capacity: Self::EDEN_SIZE,
             null_page: Self::NULL_PAGE as u32,
             array_length: 8,    // the `length` word, right after the object header
-            int_array_data: 12, // ...and the elements right after that
+            array_data: 12, // ...and the elements right after that
             int_element: 4,
         }
     }
@@ -1145,6 +1267,26 @@ impl FakeHeap {
             false => self.other[offset..][..4].try_into().expect("four bytes"),
         };
         i32::from_le_bytes(bytes)
+    }
+
+    /// Writes an 8-byte little-endian word at a heap **offset** — what the interpreter's
+    /// `write_u64` does for a `long` field, and what a compiled `putfield` of one must match to the
+    /// byte.
+    fn write64(&mut self, offset: usize, value: i64) {
+        let bytes = value.to_le_bytes();
+        match offset < Self::EDEN_END as usize {
+            true => self.eden[offset - Self::NULL_PAGE..][..8].copy_from_slice(&bytes),
+            false => self.other[offset..][..8].copy_from_slice(&bytes),
+        }
+    }
+
+    /// The inverse of [`FakeHeap::write64`].
+    fn read64(&self, offset: usize) -> i64 {
+        let bytes: [u8; 8] = match offset < Self::EDEN_END as usize {
+            true => self.eden[offset - Self::NULL_PAGE..][..8].try_into().expect("eight bytes"),
+            false => self.other[offset..][..8].try_into().expect("eight bytes"),
+        };
+        i64::from_le_bytes(bytes)
     }
 
     /// Lays out an `int[]` of `values` at `offset`: `[class_id | mark | length | elements…]`.
@@ -1181,11 +1323,16 @@ fn compile_instance(
         &Method { unit: 0, code, max_locals, descriptor, is_static, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, _| None,
-            int_field: &|_, _, _| Some(field),
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| Some((field, Kind::Int)),
             instance: &|_, _| None,
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            class_mirror: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -1200,9 +1347,9 @@ fn a_reference_travels_through_a_local_and_back_out() {
     let code = [ALOAD_0, ARETURN];
     let compiled =
         compile_heap(&code, 1, "(Ljava/lang/Object;)Ljava/lang/Object;", heap.bases(), 0).unwrap();
-    assert!(compiled.returns_reference, "the descriptor says a reference comes back");
+    assert_eq!(compiled.returns, Kind::Reference, "the descriptor says a reference comes back");
     for offset in [0, 8, 264, 4000] {
-        assert_eq!(call_at(&compiled, &[offset], 0).0, Outcome::Returned(offset));
+        assert_eq!(call_at(&compiled, &[offset], 0).0, Outcome::Returned(offset.into()));
     }
     // ...and `aconst_null; areturn` is the same thing with the offset 0, which is `null`.
     let null =
@@ -1240,7 +1387,7 @@ fn a_field_is_read_as_a_sign_extended_int_not_as_eight_bytes() {
     let code = [ALOAD_0, GETFIELD, 0x00, 0x01, ICONST_1, IADD, IRETURN];
     let compiled = compile_heap(&code, 1, "(LCell;)I", heap.bases(), 8).unwrap();
     // MIN + 1, computed in 64 bits from a correctly sign-extended operand.
-    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(i32::MIN + 1));
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned((i32::MIN + 1).into()));
 }
 
 #[test]
@@ -1259,7 +1406,7 @@ fn arraylength_and_iaload_read_and_check_their_bounds() {
         compile_heap(&[ALOAD_0, ILOAD_1, IALOAD, IRETURN], 2, "([II)I", heap.bases(), 0).unwrap();
     assert_eq!(call_at(&at, &[24, 0], 0).0, Outcome::Returned(10));
     assert_eq!(call_at(&at, &[24, 2], 0).0, Outcome::Returned(30));
-    assert_eq!(call_at(&at, &[2000, 1], 0).0, Outcome::Returned(i32::MIN), "elements sign-extend");
+    assert_eq!(call_at(&at, &[2000, 1], 0).0, Outcome::Returned(i32::MIN.into()), "elements sign-extend");
     assert_eq!(call_at(&at, &[2000, 4], 0).0, Outcome::Returned(5));
     // The three ways out. A negative index is the one a single unsigned comparison would let
     // through, because the index arrives *sign*-extended into 64 bits.
@@ -1479,11 +1626,16 @@ fn a_body_with_exception_handlers_refuses_a_conflict_rather_than_carrying_one() 
             },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: heap.bases(),
+                class_mirror: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
         )
@@ -1576,9 +1728,13 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
             },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| {
                     Some(super::compile::Callee {
                         method: Method {
@@ -1590,9 +1746,11 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
                             has_handlers: false,
                         },
                         arg_slots: 2,
+                        guard: super::compile::Guard::Static,
                     })
                 },
                 heap: heap.bases(),
+                class_mirror: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
         )
@@ -1643,45 +1801,50 @@ fn the_write_back_map_names_a_kind_for_every_touched_local_at_every_loop_header(
     // index is under the array; at the `iaload` (pc 13) the running total is under both.
     assert_eq!(site_at(&compiled, 6).stack, vec![Kind::Int, Kind::Reference]);
     assert_eq!(site_at(&compiled, 13).stack, vec![Kind::Int, Kind::Reference, Kind::Int]);
-    assert!(!compiled.returns_reference);
+    assert_eq!(compiled.returns, Kind::Int);
     // And it runs, over an array in Eden.
     assert_eq!(call_at(&compiled, &[24, 0, 0], 0).0, Outcome::Returned(12));
 }
 
 #[test]
 fn a_slot_the_map_cannot_type_is_left_alone_rather_than_written_back() {
-    // Local 0 is a `long` — `Kind::Opaque`, a kind this tier has no value for. The method never
-    // reads it (it could not), but it *writes* it, so it is a touched local; and at the loop
-    // header, before that write can have happened, the map still calls it `Opaque`. The write-back
-    // must then say nothing at all about it, because the interpreter's own `Value::Long` is the
-    // current one.
+    // Local 0 is a slot the map **cannot type**, and finding one is now the hard part: it was a
+    // `long` until longs became a kind of their own, then a `double` until the floating-point step
+    // gave that one a kind too. **No well-formed descriptor produces `Kind::Opaque` any more** —
+    // every primitive and every reference has a representation — so the only way left to reach the
+    // skip path is a descriptor that cannot be parsed at all, which is what `"(Q)I"` is.
     //
-    // The store is *after* the loop, deliberately. A store **inside** it would make the header
-    // disagree with itself — `Opaque` on the way in, `Int` across the back-edge — which since step
-    // 9 joins to `Kind::Conflict` rather than refusing the method. Both are written back the same
-    // way (not at all), but they are different claims and this test is about the first: `Opaque`
-    // says compiled code *never wrote the slot*, which is why the `long` in it is still intact.
+    // That the path is now unreachable from real bytecode is worth a test rather than a deletion:
+    // it is the write-back's fallback, and a fallback that is never exercised is a fallback that
+    // quietly stops working. The method never
+    // reads slot 0 (it could not), but it *writes* it, so it is a touched local; and at the deopt
+    // site before that write, the map still calls it `Opaque`. The write-back must then say nothing
+    // at all about it, because the interpreter's own `Value` — whatever it is — is the current one.
     //
-    //  0: iload_2; ifeq -> 10                    <- header (a back-edge target, stack empty)
-    //  4: iinc 2, -1; goto -> 0
-    // 10: iconst_1; istore_0                     slot 0 (the `long`'s low half) becomes an int
-    // 12: iload_2; ireturn
+    // A malformed descriptor makes **every** slot `Opaque` (see `entry_locals`), so the program has
+    // to touch only slot 0 and use the operand stack for everything else. The resume site is a
+    // guard rather than a loop header for the same reason: a loop counter would need a second
+    // typed local, and there are none to be had here.
+    //
+    //  0: aconst_null                 stack: [reference]
+    //  1: getfield #1                 <- the deopt site: a null receiver, and slot 0 is `Opaque`
+    //  4: istore_0                    slot 0 becomes an int
+    //  5: iload_0; ireturn
     let heap = FakeHeap::new();
-    let code = [
-        ILOAD_2, 0x99, 0x00, 0x09, // 0: ifeq +9 -> 10
-        IINC, 0x02, 0xff, // 4: iinc 2, -1
-        GOTO, 0xff, 0xf9, // 7: goto -7 -> 0
-        ICONST_1, ISTORE_0, // 10
-        ILOAD_2, IRETURN, // 12
-    ];
-    let compiled = compile_heap(&code, 3, "(JI)I", heap.bases(), 0).unwrap();
-    assert_eq!(compiled.osr_entries, vec![0]);
-    assert_eq!(compiled.touched_locals, vec![0, 2]);
+    let code = [ACONST_NULL, GETFIELD, 0x00, 0x01, ISTORE_0, ILOAD_0, IRETURN];
+    let compiled = compile_heap(&code, 1, "(Q)I", heap.bases(), 8).unwrap();
+    assert_eq!(compiled.touched_locals, vec![0]);
     assert_eq!(
-        site_at(&compiled, 0).locals,
-        vec![Kind::Opaque, Kind::Int],
-        "the `long`'s slot is unwritten here, and saying so is what protects it"
+        site_at(&compiled, 1).locals,
+        vec![Kind::Opaque],
+        "the untypable slot is unwritten here, and saying so is what protects it"
     );
+    assert_eq!(site_at(&compiled, 1).stack, vec![Kind::Reference], "and the operand under the guard");
+    // It really does deopt there, with slot 0 left exactly as the caller filled it — the buffer is
+    // the proof that "not written back" means "not written".
+    let (outcome, buffer) = call_at(&compiled, &[0x5A5A_5A5A], 0);
+    assert_eq!(outcome, Outcome::Deopt(1));
+    assert_eq!(buffer[0], 0x5A5A_5A5A, "compiled code never touched the slot it could not type");
 }
 
 #[test]
@@ -1730,11 +1893,16 @@ fn a_method_with_exception_handlers_still_compiles_but_is_never_entered_on_stack
             &Method { unit: 0, code: &code, max_locals: 1, descriptor: "()I", is_static: true, has_handlers },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: Heap::default(),
+                class_mirror: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
         )
@@ -1782,11 +1950,16 @@ fn compile_static(
         &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, _| Some(address),
-            int_field: &|_, _, _| Some(0),
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| Some((address, Kind::Int)),
+            field: &|_, _, _| Some((0, Kind::Int)),
             instance: &|_, _| None,
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            class_mirror: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -1802,7 +1975,8 @@ fn a_deopt_hands_back_the_operand_stack_it_was_holding() {
     let code = [ILOAD_0, ILOAD_1, ILOAD_2, IDIV, IADD, IRETURN];
     let compiled = compile(&code, 3, &|_| None).unwrap();
     assert_eq!(compiled.stack_base, 3, "the spill starts past the three locals");
-    assert_eq!(compiled.buffer_slots, 6, "...and is three slots deep");
+    assert_eq!(compiled.result_base, 6, "...is three slots deep, and the result follows it");
+    assert_eq!(compiled.buffer_slots, 7);
     assert_eq!(site_at(&compiled, 3).stack, vec![Kind::Int, Kind::Int, Kind::Int]);
 
     assert_eq!(call_at(&compiled, &[10, 30, 3], 0).0, Outcome::Returned(20));
@@ -2029,11 +2203,16 @@ fn compile_alloc(
         &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, _| None,
-            int_field: &|_, _, _| Some(8),
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| Some((8, Kind::Int)),
             instance: &|_, _| Some(instance),
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            class_mirror: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -2061,14 +2240,16 @@ fn new_bumps_eden_writes_the_header_and_logs_the_object() {
     let code = [NEW, 0x00, 0x01, ASTORE_1, ALOAD_1, ARETURN];
     let compiled = compile_alloc(&code, 2, "()LCell;", bases, CELL).unwrap();
     assert_eq!(compiled.alloc_records, super::compile::ALLOC_LOG_RECORDS, "the method allocates");
-    assert_eq!(compiled.alloc_base, compiled.stack_base + compiled.stack_slots);
+    // The result slot sits between the last body's region and the log — see the boundary contract.
+    assert_eq!(compiled.result_base, compiled.stack_base + compiled.stack_slots);
+    assert_eq!(compiled.alloc_base, compiled.result_base + 1);
 
     let (outcome, buffer) = call_at(&compiled, &[0, 0], 0);
     // The first object starts at arena-local 0, i.e. the heap offset `NULL_PAGE` — and it is a
     // *reference*, which is what `areturn` hands back.
     let object = FakeHeap::NULL_PAGE;
-    assert_eq!(outcome, Outcome::Returned(object as i32));
-    assert!(compiled.returns_reference);
+    assert_eq!(outcome, Outcome::Returned(object as i64));
+    assert_eq!(compiled.returns, Kind::Reference);
     // The cursor moved by the **rounded** stride, not by the logical size.
     assert_eq!(heap.eden_used(), 24);
     // The header is byte-for-byte the interpreter's: `class_id` in the first word, `mark` zero.
@@ -2212,11 +2393,16 @@ fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
         &Method { unit: 0, code: &code, max_locals: 0, descriptor: "()LCell;", is_static: true, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, _| None,
-            int_field: &|_, _, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
             instance: &|_, _| None,
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: heap.bases(),
+            class_mirror: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     );
@@ -2271,11 +2457,16 @@ fn compile_at(
         &Method { unit: 0, code, max_locals, descriptor: "()I", is_static: true, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, _| None,
-            int_field: &|_, _, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
             instance: &|_, _| None,
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            class_mirror: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
         regs,
@@ -2455,11 +2646,16 @@ fn a_guard_never_writes_a_home_register_before_it_can_still_fire() {
             },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: heap.bases(),
+                class_mirror: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
             regs,
@@ -2523,11 +2719,16 @@ fn every_heap_opcode_agrees_at_every_cache_size_and_every_depth() {
                 },
                 &Environment {
                     int_const: &|_, _| None,
-                    static_int: &|_, _| Some(address),
-                    int_field: &|_, _, _| Some(8),
+                    long_const: &|_, _| None,
+                    float_const: &|_, _| None,
+                    double_const: &|_, _| None,
+                    static_field: &|_, _| Some((address, Kind::Int)),
+                    field: &|_, _, _| Some((8, Kind::Int)),
                     instance: &|_, _| None,
+                    array: &|_, _| None,
                     invoke: &|_, _, _| None,
                     heap: bases,
+                    class_mirror: &|_, _| None,
                     poll_word: &POLL as *const _ as usize,
                 },
                 regs,
@@ -2541,7 +2742,7 @@ fn every_heap_opcode_agrees_at_every_cache_size_and_every_depth() {
             let expected = (1..=pad as i32).rev().fold(core, |acc, v| v.wrapping_sub(acc));
             assert_eq!(
                 call_at(&compiled, &[OBJ as i32, ARR as i32, index, value], 0).0,
-                Outcome::Returned(expected),
+                Outcome::Returned(expected.into()),
                 "{why}"
             );
             // ...and the three writes really landed, four bytes wide, where they belong.
@@ -2681,9 +2882,13 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
             },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| Some(super::compile::Callee {
                     method: Method {
                         unit: 1,
@@ -2694,8 +2899,10 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
                         has_handlers: false,
                     },
                     arg_slots: 2,
+                    guard: super::compile::Guard::Static,
                 }),
                 heap: heap.bases(),
+                class_mirror: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
             regs,
@@ -2754,5 +2961,1489 @@ fn a_loop_entered_on_stack_starts_with_an_empty_cache() {
         assert!(site_at(&compiled, 2).stack.is_empty(), "regs={regs}: nothing is live at a header");
         assert_eq!(call_at(&compiled, &[0, 50], 0).0, Outcome::Returned(50), "regs={regs}: from the top");
         assert_eq!(call_at(&compiled, &[30, 50], 2).0, Outcome::Returned(50), "regs={regs}: on-stack");
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The `long` group. Category-2 values, at machine-code level: what the emitted instructions
+// compute, checked against what the JLS says a `long` does — which is not what the `int` arms of
+// the same emitter do, in three specific places (no normalisation, a 6-bit shift mask, and a
+// division that really can raise `#DE`).
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn long_constants_and_locals_round_trip() {
+    // `lconst_0` / `lconst_1`, and a `ldc2_w` of a constant no `int` could hold.
+    assert_eq!(run_long(&[LCONST_0, LRETURN], &[], "()J", &[]), Some(0));
+    assert_eq!(run_long(&[LCONST_1, LRETURN], &[], "()J", &[]), Some(1));
+    assert_eq!(
+        run_long(&[LDC2_W, 0, 7, LRETURN], &[], "()J", &[(7, i64::MAX)]),
+        Some(i64::MAX),
+        "the whole 64-bit immediate, which the old packed-RAX protocol could not have returned"
+    );
+    assert_eq!(run_long(&[LDC2_W, 0, 7, LRETURN], &[], "()J", &[(7, i64::MIN)]), Some(i64::MIN));
+    // `lload`/`lstore` of a value whose upper half is not a copy of bit 31 — i.e. one that would
+    // survive an `int`'s 32-bit round trip only by accident.
+    let big = 0x0123_4567_89AB_CDEFi64;
+    assert_eq!(
+        run_long(&[LLOAD_0, LSTORE_2, LLOAD_2, LRETURN], &[big, 0, 0, 0], "(J)J", &[]),
+        Some(big),
+        "eight bytes through a local slot, not four"
+    );
+    // The generic (two-byte) forms, and the `wide` ones, over the same value.
+    assert_eq!(run_long(&[0x16, 0, 0x37, 2, 0x16, 2, LRETURN], &[big, 0, 0, 0], "(J)J", &[]), Some(big));
+    let wide = [0xc4, 0x16, 0, 0, 0xc4, 0x37, 0, 2, 0xc4, 0x16, 0, 2, LRETURN];
+    assert_eq!(run_long(&wide, &[big, 0, 0, 0], "(J)J", &[]), Some(big));
+}
+
+#[test]
+fn long_arithmetic_wraps_at_64_bits_and_not_at_32() {
+    // **The trap the `int` arms have and this one must not.** Every `int` operation here is
+    // followed by a `movsxd`, which is Java's 32-bit wraparound; emitting one after a `ladd` would
+    // truncate every result to its low 32 bits. So the cases below are chosen to be *wrong* under
+    // an `int`'s normalisation and right under a `long`'s.
+    assert_eq!(lbinop(LADD, i64::MAX, 1), Some(i64::MIN), "Long.MAX_VALUE + 1 wraps to MIN");
+    assert_eq!(lbinop(LADD, 0x7FFF_FFFF, 1), Some(0x8000_0000), "and does *not* wrap at 32 bits");
+    assert_eq!(lbinop(LSUB, i64::MIN, 1), Some(i64::MAX));
+    assert_eq!(lbinop(LMUL, 0x1_0000_0000, 0x1_0000_0000), Some(0), "2^32 * 2^32 overflows to 0");
+    assert_eq!(lbinop(LMUL, 4_000_000_000, 3), Some(12_000_000_000));
+    assert_eq!(run_long(&[LLOAD_0, LNEG, LRETURN], &[i64::MIN, 0], "(J)J", &[]), Some(i64::MIN));
+    assert_eq!(run_long(&[LLOAD_0, LNEG, LRETURN], &[42, 0], "(J)J", &[]), Some(-42));
+    // The bitwise trio, over bits an `int` could not reach.
+    assert_eq!(lbinop(LAND, -1, 0x0F0F_0F0F_0F0F_0F0F), Some(0x0F0F_0F0F_0F0F_0F0F));
+    assert_eq!(lbinop(LOR, 0x0F0F_0F0F_0F0F_0F0F, 0x00FF_00FF_00FF_00FF), Some(0x0FFF_0FFF_0FFF_0FFF));
+    assert_eq!(lbinop(LXOR, i64::MIN, i64::MIN), Some(0));
+}
+
+#[test]
+fn long_shifts_mask_to_six_bits_not_five() {
+    // JLS §15.19: a `long` shift count is masked to **6** bits, where an `int`'s is masked to 5.
+    // The `int` arms emit an explicit `and rcx, 31` for exactly that reason; the `long` arms emit
+    // nothing, because x86's own 64-bit masking *is* the 6 bits. 33 and 65 are the discriminating
+    // counts — a 5-bit mask would turn both into 1.
+    let shift = |op: u8, v: i64, s: i64| run_long(&[LLOAD_0, ILOAD_2, op, LRETURN], &[v, 0, s], "(JI)J", &[]);
+    assert_eq!(shift(LSHL, 1, 1), Some(2));
+    assert_eq!(shift(LSHL, 1, 63), Some(i64::MIN));
+    assert_eq!(shift(LSHL, 1, 64), Some(1), "64 & 63 == 0, so the value is unchanged");
+    assert_eq!(shift(LSHL, 1, 65), Some(2), "65 & 63 == 1 — a 5-bit mask would also say 1 here");
+    assert_eq!(shift(LSHL, 1, 33), Some(0x2_0000_0000), "33 & 63 == 33; a 5-bit mask would say 1");
+    assert_eq!(shift(LSHL, 1, -1), Some(i64::MIN), "-1 & 63 == 63, and x86 masks CL the same way");
+    // `lshr` is arithmetic, `lushr` logical — and the difference is only visible above bit 31,
+    // which is where an `int`'s zero-extension trick would have destroyed the value.
+    assert_eq!(shift(LSHR, -1, 1), Some(-1));
+    assert_eq!(shift(LUSHR, -1, 1), Some(i64::MAX));
+    assert_eq!(shift(LUSHR, i64::MIN, 63), Some(1));
+    assert_eq!(shift(LSHR, i64::MIN, 63), Some(-1));
+    assert_eq!(shift(LUSHR, -1, 64), Some(-1), "the count masks to 0, so nothing shifts");
+}
+
+#[test]
+fn long_division_survives_min_over_minus_one() {
+    // **The one place `long` is harder than `int`.** `Integer.MIN_VALUE / -1` is `2^31`, which fits
+    // the 64-bit `idiv` the `int` arm uses, so that arm needs no guard at all. `Long.MIN_VALUE / -1`
+    // is `2^63`, which fits nothing — the hardware raises `#DE`, a Windows structured exception in
+    // a thread with no handler for it. If the branch around it were missing, this test would not
+    // fail, it would take the process down.
+    assert_eq!(lbinop(LDIV, i64::MIN, -1), Some(i64::MIN), "JLS 15.17.2: the overflow wraps");
+    assert_eq!(lbinop(LREM, i64::MIN, -1), Some(0), "JLS 15.17.3");
+    // The same branch, on values that are not the extreme — it must be a *computation*, not a
+    // special case that only happens to be right at the boundary.
+    assert_eq!(lbinop(LDIV, 42, -1), Some(-42));
+    assert_eq!(lbinop(LREM, 42, -1), Some(0));
+    assert_eq!(lbinop(LDIV, i64::MAX, -1), Some(-i64::MAX));
+    // Ordinary division, truncating toward zero as Java does (not a floor divide).
+    assert_eq!(lbinop(LDIV, -7, 2), Some(-3));
+    assert_eq!(lbinop(LREM, -7, 2), Some(-1));
+    assert_eq!(lbinop(LREM, 7, -2), Some(1));
+    assert_eq!(lbinop(LDIV, 12_000_000_000, 3), Some(4_000_000_000));
+    // A zero divisor is the other `#DE`, and it **deopts**: the interpreter re-runs the instruction
+    // and throws a proper ArithmeticException. The pc is the division's, which has not run.
+    let compiled = compile_long(&[LLOAD_0, LLOAD_2, LDIV, LRETURN], 4, "(JJ)J", &[]).unwrap();
+    assert_eq!(call_at_raw(&compiled, &[10, 0, 0, 0], 0).0, Outcome::Deopt(2));
+    assert_eq!(call_at_raw(&compiled, &[10, 0, 5, 0], 0).0, Outcome::Returned(2));
+}
+
+/// A method that takes `long`s and returns an `int` — the `lcmp`/`l2i` shape. The descriptor is
+/// derived from the buffer length, which for these programs is always two slots per `long`.
+fn longs_returning_int(code: &[u8], locals: &[i64]) -> Option<i32> {
+    let descriptor = match locals.len() {
+        2 => "(J)I",
+        _ => "(JJ)I",
+    };
+    let compiled = compile_long(code, locals.len(), descriptor, &[]).expect("inside the subset");
+    match call_at_raw(&compiled, locals, 0).0 {
+        Outcome::Returned(v) => Some(v as i32),
+        _ => None,
+    }
+}
+
+#[test]
+fn lcmp_gives_all_three_answers_and_i2l_l2i_round_trip() {
+    let cmp = |a: i64, b: i64| longs_returning_int(&[LLOAD_0, LLOAD_2, LCMP, IRETURN], &[a, 0, b, 0]);
+    assert_eq!(cmp(1, 2), Some(-1));
+    assert_eq!(cmp(2, 2), Some(0));
+    assert_eq!(cmp(2, 1), Some(1));
+    // Signed, and across the whole 64-bit range — an unsigned compare would rank MIN above MAX.
+    assert_eq!(cmp(i64::MIN, i64::MAX), Some(-1));
+    assert_eq!(cmp(i64::MAX, i64::MIN), Some(1));
+    assert_eq!(cmp(-1, 0), Some(-1));
+    // Differences that vanish in 32 bits: an `int` compare of the low halves would call these equal.
+    assert_eq!(cmp(0x1_0000_0000, 0), Some(1));
+    assert_eq!(cmp(0, 0x1_0000_0000), Some(-1));
+
+    // `i2l` widens with the sign, `l2i` truncates to the low 32 bits (JLS 5.1.3).
+    assert_eq!(run_long(&[ILOAD_0, I2L, LRETURN], &[-7], "(I)J", &[]), Some(-7));
+    assert_eq!(run_long(&[ILOAD_0, I2L, LRETURN], &[i32::MIN as i64], "(I)J", &[]), Some(i32::MIN as i64));
+    let narrow = |v: i64| longs_returning_int(&[LLOAD_0, L2I, IRETURN], &[v, 0]);
+    assert_eq!(narrow(0x1_0000_0001), Some(1));
+    assert_eq!(narrow(0xFFFF_FFFF), Some(-1), "the low 32 bits, sign-extended back into an int");
+    assert_eq!(narrow(i64::MIN), Some(0));
+}
+
+#[test]
+fn the_high_half_of_a_long_local_is_inaccessible() {
+    // JVMS 2.6.1: local `n + 1` of a category-2 value may not be read, and nothing writes it. The
+    // map says so with `Kind::Cat2High`, and every read is an equality check against a kind that
+    // is not it — so all four of these are refusals rather than wrong answers.
+    //
+    // `iload_1` where slot 0 holds a `long` argument.
+    assert_eq!(
+        compile_long(&[ILOAD_1, IRETURN], 2, "(J)I", &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 0 }
+    );
+    // ...and after an `lstore` rather than from the descriptor.
+    assert_eq!(
+        compile_long(&[LCONST_1, LSTORE_0, ILOAD_1, IRETURN], 2, "()I", &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 2 }
+    );
+    // **The pair check, which is the half that is easy to leave out.** An `istore` over the high
+    // slot leaves the low one still saying `Long`, and reading it back as a whole `long` would
+    // hand the interpreter a value that is no longer there.
+    //
+    // lconst_1; lstore_0; iconst_0; istore_1; lload_0; lreturn
+    assert_eq!(
+        compile_long(&[LCONST_1, LSTORE_0, ICONST_0, ISTORE_1, LLOAD_0, LRETURN], 2, "()J", &[])
+            .unwrap_err(),
+        Ineligible::WrongType { pc: 4 },
+        "the `long` in slot 0 stopped being one when slot 1 was overwritten"
+    );
+    // A `long` local that runs off the end of the frame: the *pair* has to fit, not just the index.
+    assert_eq!(
+        compile_long(&[LCONST_1, LSTORE_0, LLOAD_0, LRETURN], 1, "()J", &[]).unwrap_err(),
+        Ineligible::LocalOutOfRange { pc: 1, slot: 0 }
+    );
+}
+
+#[test]
+fn a_long_and_an_int_disagreeing_at_a_merge_conflict_rather_than_compile() {
+    // The lattice is flat, so `Long` joined with `Int` is `Conflict` like any other disagreement —
+    // and a `Conflict` may be carried and stored over but never read. What is new for category-2 is
+    // that the disagreement spans **two** slots, and each of them joins independently: slot 0
+    // conflicts (`Long` against `Int`) and slot 1 conflicts (`Cat2High` against `Int`). Both
+    // refusals say the same thing, and either one is enough — a `long` needs *both* halves.
+    //
+    //  0: iload_2; ifeq -> 11
+    //  4: lconst_1; lstore_0; goto -> 11
+    //  9: iconst_1; istore_0
+    // 11: lload_0; lreturn          <- reached with (Long, Cat2High) and with (Int, Int)
+    let code = [
+        ILOAD_2, 0x99, 0x00, 0x08, // 0: ifeq +8 -> 9
+        LCONST_1, LSTORE_0, GOTO, 0x00, 0x05, // 4: ... goto +5 -> 11
+        ICONST_1, ISTORE_0, // 9
+        LLOAD_0, LRETURN, // 11
+    ];
+    assert_eq!(
+        compile_long(&code, 3, "(I)J", &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 11 },
+        "a conflicted `long` is dead, and the refusal to read one is what proves it"
+    );
+}
+
+#[test]
+fn the_stack_shuffles_refuse_a_category_2_value() {
+    // JVMS defines all ten shuffles in **slots**, while this map and the interpreter both count
+    // *entries* — a `Value::Long` is one. So "the top two slots" is one entry or two depending on
+    // what is in them, and there is no opcode-level way to tell. Rather than re-derive the shape,
+    // every shuffle over a category-2 value is refused.
+    for op in [POP, 0x58, DUP, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, SWAP] {
+        let code = [LCONST_1, LCONST_1, LCONST_1, LCONST_1, op, LCONST_0, LRETURN];
+        assert!(
+            matches!(compile_long(&code, 0, "()J", &[]), Err(Ineligible::WrongType { .. })),
+            "0x{op:02x} over a long must be refused"
+        );
+    }
+    // The control that keeps this from being a blanket ban: `pop2` over two `int`s still compiles.
+    assert_eq!(run_long(&[ICONST_1, ICONST_1, 0x58, LCONST_1, LRETURN], &[], "()J", &[]), Some(1));
+}
+
+#[test]
+fn a_long_crossing_a_deopt_is_rebuilt_exactly() {
+    // A deopt with a `long` **live on the operand stack under the guard's own operands**. The
+    // resume site has to say `Kind::Long` for that position, and the stub has to spill all eight
+    // bytes of it — a four-byte spill would hand the interpreter a truncated `long` and nothing
+    // would notice until the value was used.
+    //
+    // lload_0; lload_2; lload_2; ldiv; ladd; lreturn   — `a + b / b`, with `b` zero.
+    let code = [LLOAD_0, LLOAD_2, LLOAD_2, LDIV, LADD, LRETURN];
+    let compiled = compile_long(&code, 4, "(JJ)J", &[]).unwrap();
+    assert_eq!(
+        site_at(&compiled, 3).stack,
+        vec![Kind::Long, Kind::Long, Kind::Long],
+        "three category-2 operands, one entry each"
+    );
+    assert_eq!(site_at(&compiled, 3).locals, vec![Kind::Long, Kind::Long], "slots 0 and 2");
+    let big = 0x0123_4567_89AB_CDEFi64;
+    let (outcome, buffer) = call_at_raw(&compiled, &[big, 0, 0, 0], 0);
+    assert_eq!(outcome, Outcome::Deopt(3), "the pc of the `ldiv`, which has not run");
+    assert_eq!(spilled(&compiled, &buffer, 3), vec![big, 0, 0], "all eight bytes of each");
+    // And the same program with a divisor that works: `b / b` is 1, so the answer is `a + 1` —
+    // computed in 64 bits, on a value whose low half is all ones and would have carried wrongly.
+    assert_eq!(call_at_raw(&compiled, &[big, 0, 4, 0], 0).0, Outcome::Returned(big + 1));
+}
+
+#[test]
+fn a_long_local_is_marshalled_as_one_slot_and_the_high_half_is_never_written_back() {
+    // The marshalling contract for a category-2 local: **one** slot, the low one. The high slot is
+    // absent from `touched_locals` — the caller need not fill it and a resume site never writes it,
+    // which is what makes this tier's layout and the interpreter's the same layout rather than two
+    // that happen to agree.
+    //
+    //  0: iload_2; ifeq -> 14        <- loop header, stack empty
+    //  4: lload_0; lconst_1; ladd; lstore_0
+    //  8: iinc 2, -1
+    // 11: goto -> 0
+    // 14: lload_0; lreturn
+    let code = [
+        ILOAD_2, 0x99, 0x00, 0x0d, // 0: ifeq +13 -> 14
+        LLOAD_0, LCONST_1, LADD, LSTORE_0, // 4
+        IINC, 0x02, 0xff, // 8
+        GOTO, 0xff, 0xf5, // 11: goto -11 -> 0
+        LLOAD_0, LRETURN, // 14
+    ];
+    let compiled = compile_long(&code, 3, "(JI)J", &[]).unwrap();
+    assert_eq!(compiled.touched_locals, vec![0, 2], "slot 1 is the high half and is not touched");
+    assert_eq!(compiled.osr_entries, vec![0]);
+    assert_eq!(
+        site_at(&compiled, 0).locals,
+        vec![Kind::Long, Kind::Int],
+        "the kinds of the two touched slots, in order"
+    );
+    assert_eq!(compiled.returns, Kind::Long);
+    // Ten laps starting from a value only a `long` can hold.
+    assert_eq!(call_at_raw(&compiled, &[i64::MAX - 10, 0, 10], 0).0, Outcome::Returned(i64::MAX));
+    // ...and one more lap wraps, which is the JLS answer and not a 32-bit one.
+    assert_eq!(call_at_raw(&compiled, &[i64::MAX, 0, 1], 0).0, Outcome::Returned(i64::MIN));
+}
+
+#[test]
+fn a_long_crossing_a_safepoint_poll_is_the_locals_buffer_and_nothing_else() {
+    // The poll exit hands back no operand stack (a loop header has none) — what it hands back is
+    // the locals, which `lstore` wrote straight through to the caller's buffer. So a `long` in a
+    // loop needs no spill code at all, and this is the check that it is *there* and whole.
+    static WORD: AtomicU64 = AtomicU64::new(0);
+    let code = [
+        ILOAD_2, 0x99, 0x00, 0x0d, //  0: ifeq +13 -> 14
+        LLOAD_0, LCONST_1, LADD, LSTORE_0, // 4
+        IINC, 0x02, 0xff, // 8
+        GOTO, 0xff, 0xf5, // 11
+        LLOAD_0, LRETURN, // 14
+    ];
+    let compiled = super::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 3, descriptor: "(JI)J", is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: Heap::default(),
+            class_mirror: &|_, _| None,
+            poll_word: &WORD as *const _ as usize,
+        },
+    )
+    .unwrap();
+    WORD.store(1, Ordering::SeqCst);
+    let start = 0x0123_4567_89AB_CDEFi64;
+    let (outcome, buffer) = call_at_raw(&compiled, &[start, 0, 3], 0);
+    WORD.store(0, Ordering::SeqCst);
+    assert_eq!(outcome, Outcome::Safepoint(0), "the poll fires at the header");
+    // **One lap ran first**, and that is the entry dispatch working as designed: an entry pc of 0
+    // matches the loop header at 0, so control lands on the OSR label *below* the poll — which is
+    // what guarantees that a re-entry always makes progress even against a poll word that is
+    // permanently set. So the state handed back is the state after one iteration.
+    assert_eq!(buffer[0], start + 1, "the `long` is in its low slot, all eight bytes of it");
+    assert_eq!(buffer[2], 2, "and the counter beside it, one lap down");
+    // The same entry with the poll clear: it runs the three laps and returns.
+    assert_eq!(call_at_raw(&compiled, &[start, 0, 3], 0).0, Outcome::Returned(start + 3));
+}
+
+#[test]
+fn a_method_returning_a_long_declares_it_and_a_mismatch_is_refused() {
+    // The descriptor is the authority on all three exits, and the checks are symmetric.
+    let ok = compile_long(&[LCONST_1, LRETURN], 0, "()J", &[]).unwrap();
+    assert_eq!(ok.returns, Kind::Long);
+    assert!(!ok.returns_void);
+    // `lreturn` in an `int` method, and `ireturn` in a `long` one.
+    assert_eq!(
+        compile_long(&[LCONST_1, LRETURN], 0, "()I", &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 1 }
+    );
+    assert_eq!(
+        compile_long(&[ICONST_1, IRETURN], 0, "()J", &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 1 }
+    );
+    // A `double` is still outside the subset at every point it could enter: `ldc2_w` of one is
+    // refused by the resolver (which answers only for a CONSTANT_Long), and `dreturn` is not an
+    // opcode this tier knows.
+    assert_eq!(
+        compile_long(&[LDC2_W, 0, 7, LRETURN], 0, "()J", &[]).unwrap_err(),
+        Ineligible::NonIntegerConstant { pc: 0, index: 7 }
+    );
+    // `dreturn` (0xaf) is in the subset since the floating-point step, so a `long` handed to it is
+    // an ordinary type error rather than an unknown opcode — which is the same check the other
+    // four exits get, from the same authority.
+    assert_eq!(
+        compile_long(&[LCONST_1, 0xaf], 0, "()D", &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 1 }
+    );
+}
+
+#[test]
+fn mixing_int_and_long_in_one_method_keeps_the_two_maps_apart() {
+    // The shape that would catch a slot-index error: an `int` local *between* two `long`s, so any
+    // off-by-one in the category-2 width lands on a live slot rather than on padding.
+    //
+    // `(long a, int b, long c)` -> slots 0 (a), 2 (b), 3 (c). Compute `(a + c) * b`, as a `long`.
+    //
+    // lload_0; lload_3; ladd; iload_2; i2l; lmul; lreturn
+    let code = [LLOAD_0, 0x21, LADD, ILOAD_2, I2L, LMUL, LRETURN];
+    let compiled = compile_long(&code, 5, "(JIJ)J", &[]).unwrap();
+    assert_eq!(compiled.touched_locals, vec![0, 2, 3], "the two lows and the int, not the highs");
+    assert_eq!(compiled.returns, Kind::Long);
+    assert_eq!(
+        call_at_raw(&compiled, &[4_000_000_000, 0, 3, 1_000_000_000, 0], 0).0,
+        Outcome::Returned(15_000_000_000),
+        "(4e9 + 1e9) * 3 — a product no `int` could hold, from an `int` multiplier"
+    );
+    // And the `int` half still wraps at 32 bits in the same method, which is the point of the mix.
+    // iload_2; iconst_1; iadd; ireturn
+    let mixed = compile_long(&[ILOAD_2, ICONST_1, IADD, IRETURN], 5, "(JIJ)I", &[]).unwrap();
+    assert_eq!(
+        call_at_raw(&mixed, &[0, 0, i32::MAX as i64, 0, 0], 0).0,
+        Outcome::Returned(i32::MIN as i64),
+        "the `int` normalisation is untouched by the `long` arms sharing the emitter"
+    );
+}
+
+/// Compiles a program whose `getfield`/`putfield` resolve to `(offset, Kind::Long)` and whose
+/// `getstatic`/`putstatic` resolve to `(address, Kind::Long)` — the category-2 twin of
+/// [`compile_heap`], and the shape that makes the *width* of a heap access testable.
+fn compile_long_heap(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    is_static: bool,
+    heap: Heap,
+    field: u32,
+    static_at: usize,
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| match static_at {
+                0 => None,
+                at => Some((at, Kind::Long)),
+            },
+            field: &|_, _, _| Some((field, Kind::Long)),
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap,
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+#[test]
+fn a_long_field_is_read_and_written_eight_bytes_wide() {
+    // **The width is the whole test.** A `long` field is eight bytes (the interpreter writes it
+    // with `write_u64`), and reading it four bytes at a time is the silent kind of wrong: right for
+    // every value below 2^31 and garbage above it. So the value here has bits in both halves, and
+    // the neighbouring words are poisoned so an over-wide access shows up too.
+    const OBJ: usize = 1000; // in the "other" buffer, so `heap_address` takes its second arm
+    let big = 0x0123_4567_89AB_CDEFi64;
+    let mut heap = FakeHeap::new();
+    heap.write(OBJ, 0x5a5a_5a5a); // the header, never read by compiled code
+    heap.write64(OBJ + 8, big); // the `long` field
+    heap.write(OBJ + 16, 0x7777_7777); // the word after it, which must survive a write
+
+    // aload_0; getfield #1; lreturn
+    let read = compile_long_heap(&[ALOAD_0, GETFIELD, 0, 1, LRETURN], 1, "()J", false, heap.bases(), 8, 0)
+        .unwrap();
+    assert_eq!(read.returns, Kind::Long);
+    assert_eq!(call_at_raw(&read, &[OBJ as i64], 0).0, Outcome::Returned(big));
+    // A null receiver still deopts, exactly as it does for an `int` field.
+    assert_eq!(call_at_raw(&read, &[0], 0).0, Outcome::Deopt(1));
+
+    // The same field in Eden, so the *other* arm of `heap_address` is exercised too.
+    const IN_EDEN: usize = 16;
+    heap.write64(IN_EDEN + 8, i64::MIN);
+    assert_eq!(call_at_raw(&read, &[IN_EDEN as i64], 0).0, Outcome::Returned(i64::MIN));
+
+    // aload_0; lload_1; putfield #1; return   — eight bytes in, and only eight.
+    let write = compile_long_heap(
+        &[ALOAD_0, LLOAD_1, PUTFIELD, 0, 1, 0xb1],
+        3,
+        "(J)V",
+        false,
+        heap.bases(),
+        8,
+        0,
+    )
+    .unwrap();
+    let fresh = -1i64;
+    assert!(matches!(call_at_raw(&write, &[OBJ as i64, fresh, 0], 0).0, Outcome::Returned(_)));
+    assert_eq!(heap.read64(OBJ + 8), fresh, "all eight bytes were written");
+    assert_eq!(heap.read(OBJ + 16), 0x7777_7777, "and not one byte more");
+    // The null-receiver guard precedes the store, so a deopt means the field is untouched.
+    heap.write64(OBJ + 8, big);
+    assert_eq!(call_at_raw(&write, &[0, fresh, 0], 0).0, Outcome::Deopt(2));
+    assert_eq!(heap.read64(OBJ + 8), big, "the guard fired before the store");
+}
+
+#[test]
+fn a_long_static_is_read_and_written_eight_bytes_wide() {
+    // A static is an *address* rather than an offset, so there is no `heap_address` in the way —
+    // which makes this purely a test of the width, and of the neighbour that must not be touched.
+    // Two adjacent `i64`s standing in for a mirror's slots; the second is the poison.
+    let cell = Box::new([0i64, 0x7777_7777_7777_7777]);
+    let address = cell.as_ptr() as usize;
+    let heap = FakeHeap::new();
+
+    // getstatic #1; lreturn
+    let read =
+        compile_long_heap(&[GETSTATIC, 0, 1, LRETURN], 0, "()J", true, heap.bases(), 0, address).unwrap();
+    assert_eq!(call_at_raw(&read, &[], 0).0, Outcome::Returned(0));
+
+    // lload_0; putstatic #1; getstatic #1; lreturn
+    let write = compile_long_heap(
+        &[LLOAD_0, PUTSTATIC, 0, 1, GETSTATIC, 0, 1, LRETURN],
+        2,
+        "(J)J",
+        true,
+        heap.bases(),
+        0,
+        address,
+    )
+    .unwrap();
+    let big = 0x0123_4567_89AB_CDEFi64;
+    assert_eq!(call_at_raw(&write, &[big, 0], 0).0, Outcome::Returned(big), "written and read back");
+    assert_eq!(cell[0], big, "all eight bytes");
+    assert_eq!(cell[1], 0x7777_7777_7777_7777, "and the neighbouring slot is untouched");
+    // A negative value, whose upper half a 4-byte store would have left as the old bits.
+    assert_eq!(call_at_raw(&write, &[-1, 0], 0).0, Outcome::Returned(-1));
+    assert_eq!(cell[0], -1);
+    assert_eq!(cell[1], 0x7777_7777_7777_7777);
+}
+
+#[test]
+fn the_resolver_decides_the_width_and_a_kind_mismatch_is_refused() {
+    // The resolver's kind is what the type map carries, so a `long` field pushed where an `int` is
+    // expected is an ordinary `WrongType` — the compiler never re-parses a descriptor to
+    // second-guess it, which is exactly what keeps the map and the emitted width in step.
+    let heap = FakeHeap::new();
+    // aload_0; getfield #1 (a long); ireturn — the `int` exit cannot take it.
+    assert_eq!(
+        compile_long_heap(&[ALOAD_0, GETFIELD, 0, 1, IRETURN], 1, "()I", false, heap.bases(), 8, 0)
+            .unwrap_err(),
+        Ineligible::WrongType { pc: 4 }
+    );
+    // ...and the mirror image: an `int` value stored into a `long` field.
+    // aload_0; iconst_1; putfield #1; return
+    assert_eq!(
+        compile_long_heap(&[ALOAD_0, ICONST_1, PUTFIELD, 0, 1, 0xb1], 1, "()V", false, heap.bases(), 8, 0)
+            .unwrap_err(),
+        Ineligible::WrongType { pc: 2 }
+    );
+    // A field the resolver will not answer for at all — a `float`, a reference, a `volatile` one —
+    // is the refusal it always was.
+    let none = super::compile::compile(
+        &Method { unit: 0, code: &[ALOAD_0, GETFIELD, 0, 1, IRETURN], max_locals: 1, descriptor: "()I", is_static: false, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: heap.bases(),
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    );
+    assert_eq!(none.unwrap_err(), Ineligible::UnresolvedField { pc: 1, index: 1 });
+}
+
+// ---------------------------------------------------------------------------------------------
+// The floating-point group. A `float` and a `double` travel as **bit patterns** through the same
+// slots everything else uses and only become numbers inside an SSE register, so every test here
+// goes in and comes out in bits — which is also the only way to check the cases IEEE-754 has and
+// the integers do not: signed zero, and NaN.
+// ---------------------------------------------------------------------------------------------
+
+// The float group's opcodes, in the order they appear in JVMS.
+const FCONST_0: u8 = 0x0b;
+const FCONST_1: u8 = 0x0c;
+const FCONST_2: u8 = 0x0d;
+const DCONST_0: u8 = 0x0e;
+const DCONST_1: u8 = 0x0f;
+const FLOAD_0: u8 = 0x22;
+const FLOAD_1: u8 = 0x23;
+const DLOAD_0: u8 = 0x26;
+const DLOAD_1: u8 = 0x27;
+const DLOAD_2: u8 = 0x28;
+const FSTORE_1: u8 = 0x44;
+const DSTORE_2: u8 = 0x49;
+const FADD: u8 = 0x62;
+const DADD: u8 = 0x63;
+const FSUB: u8 = 0x66;
+const DSUB: u8 = 0x67;
+const FMUL: u8 = 0x6a;
+const DMUL: u8 = 0x6b;
+const FDIV: u8 = 0x6e;
+const DDIV: u8 = 0x6f;
+const FREM: u8 = 0x72;
+const DREM: u8 = 0x73;
+const FNEG: u8 = 0x76;
+const DNEG: u8 = 0x77;
+const I2F: u8 = 0x86;
+const I2D: u8 = 0x87;
+const L2F: u8 = 0x89;
+const L2D: u8 = 0x8a;
+const F2D: u8 = 0x8d;
+const D2F: u8 = 0x90;
+const FCMPL: u8 = 0x95;
+const FCMPG: u8 = 0x96;
+const DCMPL: u8 = 0x97;
+const DCMPG: u8 = 0x98;
+const FRETURN: u8 = 0xae;
+const DRETURN: u8 = 0xaf;
+
+/// Compiles a floating-point program. `constants` resolves both `ldc` (as a `float`) and `ldc2_w`
+/// (as a `double`) by index, in bit form — which is what the compiler bakes in.
+fn compile_fp(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    floats: &[(u16, f32)],
+    doubles: &[(u16, f64)],
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, i| floats.iter().find(|(k, _)| *k == i).map(|(_, v)| v.to_bits()),
+            double_const: &|_, i| doubles.iter().find(|(k, _)| *k == i).map(|(_, v)| v.to_bits()),
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: Heap::default(),
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+/// `fload_0; fload_1; <op>; freturn` over `(FF)F`, in and out as `f32`.
+fn fbinop(op: u8, a: f32, b: f32) -> f32 {
+    let compiled = compile_fp(&[FLOAD_0, FLOAD_1, op, FRETURN], 2, "(FF)F", &[], &[]).expect("in the subset");
+    let locals = [i64::from(a.to_bits()), i64::from(b.to_bits())];
+    match call_at_raw(&compiled, &locals, 0).0 {
+        Outcome::Returned(v) => f32::from_bits(v as u32),
+        other => panic!("expected a value, got {other:?}"),
+    }
+}
+
+/// `dload_0; dload_2; <op>; dreturn` over `(DD)D`. Slots 0 and 2 — 1 and 3 are the high halves.
+fn dbinop(op: u8, a: f64, b: f64) -> f64 {
+    let compiled = compile_fp(&[DLOAD_0, DLOAD_2, op, DRETURN], 4, "(DD)D", &[], &[]).expect("in the subset");
+    let locals = [a.to_bits() as i64, 0, b.to_bits() as i64, 0];
+    match call_at_raw(&compiled, &locals, 0).0 {
+        Outcome::Returned(v) => f64::from_bits(v as u64),
+        other => panic!("expected a value, got {other:?}"),
+    }
+}
+
+/// The raw 64-bit result of a float program, for the cases where the *bits* are the claim — a
+/// signed zero and a NaN are both invisible to `==`.
+fn fp_bits(compiled: &CompiledCode, locals: &[i64]) -> u64 {
+    match call_at_raw(compiled, locals, 0).0 {
+        Outcome::Returned(v) => v as u64,
+        other => panic!("expected a value, got {other:?}"),
+    }
+}
+
+#[test]
+fn float_constants_and_locals_round_trip_as_bit_patterns() {
+    let ret = |code: &[u8]| {
+        let c = compile_fp(code, 0, "()F", &[(7, -0.0f32)], &[]).expect("in the subset");
+        f32::from_bits(fp_bits(&c, &[]) as u32)
+    };
+    assert_eq!(ret(&[FCONST_0, FRETURN]), 0.0);
+    assert_eq!(ret(&[FCONST_1, FRETURN]), 1.0);
+    assert_eq!(ret(&[FCONST_2, FRETURN]), 2.0);
+    // A `ldc` of a float constant: the resolver hands over bits and the emitter bakes them in as an
+    // immediate, so `-0.0f` survives — which `== 0.0` would not have noticed.
+    let neg_zero = compile_fp(&[LDC, 7, FRETURN], 0, "()F", &[(7, -0.0f32)], &[]).unwrap();
+    assert_eq!(fp_bits(&neg_zero, &[]), u64::from((-0.0f32).to_bits()));
+
+    let dret = |code: &[u8]| {
+        let c = compile_fp(code, 0, "()D", &[], &[(7, f64::NAN)]).expect("in the subset");
+        f64::from_bits(fp_bits(&c, &[]))
+    };
+    assert_eq!(dret(&[DCONST_0, DRETURN]), 0.0);
+    assert_eq!(dret(&[DCONST_1, DRETURN]), 1.0);
+    // A `ldc2_w` of a NaN: the bits are carried verbatim rather than through an `f64` comparison.
+    let nan = compile_fp(&[LDC2_W, 0, 7, DRETURN], 0, "()D", &[], &[(7, f64::NAN)]).unwrap();
+    assert_eq!(fp_bits(&nan, &[]), f64::NAN.to_bits());
+
+    // `fload`/`fstore` and `dload`/`dstore` through a local: a float is one slot, a double is two,
+    // and the value is the pattern in the low one.
+    let f = compile_fp(&[FLOAD_0, FSTORE_1, FLOAD_1, FRETURN], 2, "(F)F", &[], &[]).unwrap();
+    assert_eq!(f32::from_bits(fp_bits(&f, &[i64::from(1.5f32.to_bits()), 0]) as u32), 1.5);
+    let d = compile_fp(&[DLOAD_0, DSTORE_2, DLOAD_2, DRETURN], 4, "(D)D", &[], &[]).unwrap();
+    assert_eq!(f64::from_bits(fp_bits(&d, &[(-1.5f64).to_bits() as i64, 0, 0, 0])), -1.5);
+    // The generic and `wide` forms, over the same value.
+    let g = compile_fp(&[0x17, 0, 0x38, 1, 0x17, 1, FRETURN], 2, "(F)F", &[], &[]).unwrap();
+    assert_eq!(f32::from_bits(fp_bits(&g, &[i64::from(1.5f32.to_bits()), 0]) as u32), 1.5);
+    let w = compile_fp(&[0xc4, 0x18, 0, 0, 0xc4, 0x39, 0, 2, 0xc4, 0x18, 0, 2, DRETURN], 4, "(D)D", &[], &[])
+        .unwrap();
+    assert_eq!(f64::from_bits(fp_bits(&w, &[(-1.5f64).to_bits() as i64, 0, 0, 0])), -1.5);
+}
+
+#[test]
+fn float_arithmetic_is_ieee_754_and_not_the_integer_emitter() {
+    assert_eq!(fbinop(FADD, 1.5, 2.25), 3.75);
+    assert_eq!(fbinop(FSUB, 1.5, 2.25), -0.75);
+    assert_eq!(fbinop(FMUL, 1.5, 2.0), 3.0);
+    assert_eq!(fbinop(FDIV, 3.0, 2.0), 1.5);
+    assert_eq!(dbinop(DADD, 1.5, 2.25), 3.75);
+    assert_eq!(dbinop(DSUB, 1.5, 2.25), -0.75);
+    assert_eq!(dbinop(DMUL, 1.5, 2.0), 3.0);
+    assert_eq!(dbinop(DDIV, 3.0, 2.0), 1.5);
+
+    // **Single precision really is single.** 1/3 as an `f32` and as an `f64` differ, so a `fdiv`
+    // that had reached for `divsd` — one prefix byte away — would answer the double's value and
+    // every ordinary test would still pass.
+    assert_eq!(fbinop(FDIV, 1.0, 3.0), 1.0f32 / 3.0);
+    assert_ne!(f64::from(fbinop(FDIV, 1.0, 3.0)), 1.0f64 / 3.0);
+    assert_eq!(dbinop(DDIV, 1.0, 3.0), 1.0f64 / 3.0);
+    // ...and rounding at the edge of the mantissa, where 24 bits and 53 bits disagree.
+    assert_eq!(fbinop(FADD, 16777216.0, 1.0), 16777216.0, "2^24 + 1 is not representable as a float");
+    assert_eq!(dbinop(DADD, 16777216.0, 1.0), 16777217.0, "...and is, as a double");
+
+    // Division by zero is an IEEE result, not an exception — unlike `idiv`/`ldiv`, so this is also
+    // the check that no guard was copied over from the integer arms.
+    assert_eq!(fbinop(FDIV, 1.0, 0.0), f32::INFINITY);
+    assert_eq!(fbinop(FDIV, -1.0, 0.0), f32::NEG_INFINITY);
+    assert!(fbinop(FDIV, 0.0, 0.0).is_nan());
+    assert_eq!(dbinop(DDIV, 1.0, 0.0), f64::INFINITY);
+    assert!(dbinop(DDIV, 0.0, 0.0).is_nan());
+    // Infinity arithmetic, which propagates rather than trapping.
+    assert_eq!(fbinop(FADD, f32::INFINITY, 1.0), f32::INFINITY);
+    assert!(fbinop(FSUB, f32::INFINITY, f32::INFINITY).is_nan());
+}
+
+#[test]
+fn fneg_flips_the_sign_bit_rather_than_subtracting() {
+    // JVMS is explicit: `fneg` is the operand **with its sign bit inverted**, which is not
+    // `0.0 - x`. The two differ at zero — `0.0 - 0.0` is `+0.0` and `-(0.0)` is `-0.0` — and the
+    // difference is invisible to `==`, so the bits are the assertion.
+    let f = compile_fp(&[FLOAD_0, FNEG, FRETURN], 1, "(F)F", &[], &[]).unwrap();
+    let neg_f = |v: f32| fp_bits(&f, &[i64::from(v.to_bits())]) as u32;
+    assert_eq!(neg_f(0.0), (-0.0f32).to_bits(), "0.0 negates to -0.0, not to 0.0");
+    assert_eq!(neg_f(-0.0), 0.0f32.to_bits());
+    assert_eq!(f32::from_bits(neg_f(1.5)), -1.5);
+    assert_eq!(f32::from_bits(neg_f(f32::INFINITY)), f32::NEG_INFINITY);
+    // A NaN keeps its payload and flips its sign — a subtraction could have quieted it.
+    let nan = f32::from_bits(0x7FC0_1234);
+    assert_eq!(neg_f(nan), 0xFFC0_1234);
+
+    let d = compile_fp(&[DLOAD_0, DNEG, DRETURN], 2, "(D)D", &[], &[]).unwrap();
+    let neg_d = |v: f64| fp_bits(&d, &[v.to_bits() as i64, 0]);
+    assert_eq!(neg_d(0.0), (-0.0f64).to_bits());
+    assert_eq!(f64::from_bits(neg_d(2.5)), -2.5);
+    assert_eq!(neg_d(f64::from_bits(0x7FF8_0000_0000_1234)), 0xFFF8_0000_0000_1234);
+}
+
+#[test]
+fn the_two_spellings_of_each_compare_differ_only_on_nan() {
+    let cmp = |op: u8, a: f32, b: f32| {
+        let c = compile_fp(&[FLOAD_0, FLOAD_1, op, IRETURN], 2, "(FF)I", &[], &[]).unwrap();
+        fp_bits(&c, &[i64::from(a.to_bits()), i64::from(b.to_bits())]) as i32
+    };
+    // The ordered cases, where the two spellings agree exactly.
+    for op in [FCMPL, FCMPG] {
+        assert_eq!(cmp(op, 1.0, 2.0), -1);
+        assert_eq!(cmp(op, 2.0, 2.0), 0);
+        assert_eq!(cmp(op, 2.0, 1.0), 1);
+        assert_eq!(cmp(op, f32::NEG_INFINITY, f32::INFINITY), -1);
+        // JVMS: `-0.0` and `0.0` compare **equal**, which `ucomiss` gives for free.
+        assert_eq!(cmp(op, -0.0, 0.0), 0);
+        assert_eq!(cmp(op, 0.0, -0.0), 0);
+    }
+    // **The unordered case, which is the whole reason there are two opcodes.** A NaN compares
+    // unordered with everything, itself included; `fcmpg` answers 1 and `fcmpl` answers -1, so that
+    // a `javac`-emitted `a < b` and `a > b` both come out false whichever way it emitted them.
+    for v in [1.0f32, f32::INFINITY, f32::NAN] {
+        assert_eq!(cmp(FCMPG, f32::NAN, v), 1);
+        assert_eq!(cmp(FCMPL, f32::NAN, v), -1);
+        assert_eq!(cmp(FCMPG, v, f32::NAN), 1);
+        assert_eq!(cmp(FCMPL, v, f32::NAN), -1);
+    }
+
+    let dcmp = |op: u8, a: f64, b: f64| {
+        let c = compile_fp(&[DLOAD_0, DLOAD_2, op, IRETURN], 4, "(DD)I", &[], &[]).unwrap();
+        fp_bits(&c, &[a.to_bits() as i64, 0, b.to_bits() as i64, 0]) as i32
+    };
+    for op in [DCMPL, DCMPG] {
+        assert_eq!(dcmp(op, 1.0, 2.0), -1);
+        assert_eq!(dcmp(op, 2.0, 2.0), 0);
+        assert_eq!(dcmp(op, 2.0, 1.0), 1);
+        assert_eq!(dcmp(op, -0.0, 0.0), 0);
+    }
+    assert_eq!(dcmp(DCMPG, f64::NAN, 1.0), 1);
+    assert_eq!(dcmp(DCMPL, f64::NAN, 1.0), -1);
+    assert_eq!(dcmp(DCMPG, 1.0, f64::NAN), 1);
+    assert_eq!(dcmp(DCMPL, 1.0, f64::NAN), -1);
+}
+
+#[test]
+fn the_widening_conversions_round_the_way_the_jls_says() {
+    // i2f / i2d: exact for every `int` in `i2d`, and rounded past 2^24 in `i2f`.
+    let i2f = compile_fp(&[ILOAD_0, I2F, FRETURN], 1, "(I)F", &[], &[]).unwrap();
+    let to_f = |v: i32| f32::from_bits(fp_bits(&i2f, &[i64::from(v)]) as u32);
+    assert_eq!(to_f(-7), -7.0);
+    assert_eq!(to_f(i32::MIN), i32::MIN as f32);
+    assert_eq!(to_f(16777217), 16777216.0, "2^24+1 rounds to nearest-even, as JLS 5.1.2 says");
+    let i2d = compile_fp(&[ILOAD_0, I2D, DRETURN], 1, "(I)D", &[], &[]).unwrap();
+    let to_d = |v: i32| f64::from_bits(fp_bits(&i2d, &[i64::from(v)]));
+    assert_eq!(to_d(16777217), 16777217.0, "every int is exact as a double");
+    assert_eq!(to_d(i32::MIN), i32::MIN as f64);
+
+    // l2f / l2d, where the rounding really bites: 2^53+1 is not a double.
+    let l2f = compile_fp(&[LLOAD_0, L2F, FRETURN], 2, "(J)F", &[], &[]).unwrap();
+    assert_eq!(f32::from_bits(fp_bits(&l2f, &[i64::MAX, 0]) as u32), i64::MAX as f32);
+    let l2d = compile_fp(&[LLOAD_0, L2D, DRETURN], 2, "(J)D", &[], &[]).unwrap();
+    assert_eq!(f64::from_bits(fp_bits(&l2d, &[9007199254740993i64, 0])), 9007199254740992.0);
+    assert_eq!(f64::from_bits(fp_bits(&l2d, &[i64::MIN, 0])), i64::MIN as f64);
+
+    // f2d is exact and NaN-preserving; d2f rounds and can overflow to infinity.
+    let f2d = compile_fp(&[FLOAD_0, F2D, DRETURN], 1, "(F)D", &[], &[]).unwrap();
+    assert_eq!(f64::from_bits(fp_bits(&f2d, &[i64::from(0.5f32.to_bits())])), 0.5);
+    assert!(f64::from_bits(fp_bits(&f2d, &[i64::from(f32::NAN.to_bits())])).is_nan());
+    let d2f = compile_fp(&[DLOAD_0, D2F, FRETURN], 2, "(D)F", &[], &[]).unwrap();
+    let narrow = |v: f64| f32::from_bits(fp_bits(&d2f, &[v.to_bits() as i64, 0]) as u32);
+    assert_eq!(narrow(0.5), 0.5);
+    assert_eq!(narrow(1.0e300), f32::INFINITY, "out of range narrows to infinity, not to garbage");
+    assert_eq!(narrow(1.0f64 / 3.0), (1.0f64 / 3.0) as f32);
+}
+
+#[test]
+fn frem_and_drem_deopt_rather_than_computing() {
+    // There is no SSE scalar remainder, so the opcode compiles to an **unconditional** deopt: the
+    // pc it names has not run, the operands are handed back, and the interpreter does the work.
+    // That is why the method compiles at all — everything before the `frem` runs natively.
+    let f = compile_fp(&[FLOAD_0, FLOAD_1, FREM, FRETURN], 2, "(FF)F", &[], &[]).unwrap();
+    assert_eq!(
+        site_at(&f, 2).stack,
+        vec![Kind::Float, Kind::Float],
+        "both operands are live and must come back"
+    );
+    let (outcome, buffer) = call_at_raw(&f, &[i64::from(7.5f32.to_bits()), i64::from(2.0f32.to_bits())], 0);
+    assert_eq!(outcome, Outcome::Deopt(2), "the pc of the `frem`, which has not run");
+    assert_eq!(
+        spilled(&f, &buffer, 2),
+        vec![i64::from(7.5f32.to_bits()), i64::from(2.0f32.to_bits())],
+        "spilled as bit patterns, zero-extended"
+    );
+    let d = compile_fp(&[DLOAD_0, DLOAD_2, DREM, DRETURN], 4, "(DD)D", &[], &[]).unwrap();
+    assert_eq!(call_at_raw(&d, &[1, 0, 1, 0], 0).0, Outcome::Deopt(2));
+}
+
+#[test]
+fn a_float_is_a_category_1_slot_and_a_double_is_a_pair() {
+    // The category rules, stated through what the map refuses. A `float` occupies one local slot,
+    // so a method with two of them uses slots 0 and 1; a `double` occupies two, so its neighbour is
+    // `Cat2High` and unreadable.
+    let two_floats = compile_fp(&[FLOAD_0, FLOAD_1, FADD, FRETURN], 2, "(FF)F", &[], &[]).unwrap();
+    assert_eq!(two_floats.touched_locals, vec![0, 1], "a float is one slot, so both are live");
+    assert_eq!(two_floats.returns, Kind::Float);
+
+    let one_double = compile_fp(&[DLOAD_0, DRETURN], 2, "(D)D", &[], &[]).unwrap();
+    assert_eq!(one_double.touched_locals, vec![0], "the high half is never touched");
+    assert_eq!(one_double.returns, Kind::Double);
+    // Reading a `double`'s high half is a refusal, exactly as for a `long`.
+    assert_eq!(
+        compile_fp(&[FLOAD_1, FRETURN], 2, "(D)F", &[], &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 0 }
+    );
+    // ...and so is reading a `float` slot as an `int`, or an `int` slot as a `float`. The bits
+    // would have moved perfectly well; the operations would have been the wrong ones.
+    assert_eq!(
+        compile_fp(&[ILOAD_0, IRETURN], 1, "(F)I", &[], &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 0 }
+    );
+    assert_eq!(
+        compile_fp(&[FLOAD_0, FRETURN], 1, "(I)F", &[], &[]).unwrap_err(),
+        Ineligible::WrongType { pc: 0 }
+    );
+    // A `double` under a stack shuffle is refused like a `long`: the shape is ambiguous.
+    assert!(matches!(
+        compile_fp(&[DCONST_1, DCONST_1, POP, DRETURN], 0, "()D", &[], &[]),
+        Err(Ineligible::WrongType { .. })
+    ));
+    // A `float` under one is fine — it is category-1 like everything else.
+    let dup = compile_fp(&[FCONST_1, DUP, FADD, FRETURN], 0, "()F", &[], &[]).unwrap();
+    assert_eq!(f32::from_bits(fp_bits(&dup, &[]) as u32), 2.0);
+}
+
+#[test]
+fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
+    // The width table in `heap_load`/`heap_store`, checked where getting it wrong is silent: a
+    // *sign*-extending four-byte load of a negative float fills the upper half with ones, which
+    // nothing reads — until a deopt spills it.
+    const OBJ: usize = 1000;
+    let mut heap = FakeHeap::new();
+    heap.write(OBJ, 0x5a5a_5a5a);
+    heap.write(OBJ + 8, (-1.5f32).to_bits() as i32);
+    heap.write(OBJ + 12, 0x7777_7777);
+
+    let read = super::compile::compile(
+        &Method { unit: 0, code: &[ALOAD_0, GETFIELD, 0, 1, FRETURN], max_locals: 1, descriptor: "()F", is_static: false, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| Some((8, Kind::Float)),
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: heap.bases(),
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .unwrap();
+    let bits = fp_bits(&read, &[OBJ as i64]);
+    assert_eq!(bits, u64::from((-1.5f32).to_bits()), "four bytes, zero-extended -- not sign-extended");
+    assert_eq!(f32::from_bits(bits as u32), -1.5);
+
+    // A `double` field: eight bytes, and the word after it untouched by the write.
+    heap.write64(OBJ + 16, 1.0f64.to_bits() as i64);
+    let dwrite = super::compile::compile(
+        &Method { unit: 0, code: &[ALOAD_0, DLOAD_1, PUTFIELD, 0, 1, 0xb1], max_locals: 3, descriptor: "(D)V", is_static: false, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| Some((16, Kind::Double)),
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: heap.bases(),
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .unwrap();
+    heap.write(OBJ + 24, 0x7777_7777);
+    assert!(matches!(call_at_raw(&dwrite, &[OBJ as i64, (-2.5f64).to_bits() as i64, 0], 0).0, Outcome::Returned(_)));
+    assert_eq!(f64::from_bits(heap.read64(OBJ + 16) as u64), -2.5, "all eight bytes");
+    assert_eq!(heap.read(OBJ + 24), 0x7777_7777, "and not one more");
+}
+
+// ---------------------------------------------------------------------------------------------
+// `newarray` / `anewarray` — the same fast path over a size that is only known at run time.
+//
+// Every test below is an observation that can only go wrong because of that one difference. The
+// object tests above can pin their numbers as constants; here the same numbers are the output of
+// arithmetic the emitted code does, and the interesting cases are the ones where the count is
+// *not* what the allocator should use (negative, oversized) or where the two roundings — the
+// stride's up to eight, the length's not at all — could be confused.
+// ---------------------------------------------------------------------------------------------
+
+const NEWARRAY: u8 = 0xbc;
+const ANEWARRAY: u8 = 0xbd;
+
+/// JVMS §6.5's `atype` table, the three entries these tests use.
+const T_CHAR: u8 = 5;
+const T_BYTE: u8 = 8;
+const T_INT: u8 = 10;
+
+/// The four array classes the resolver below answers with. The **widths are the real ones** — that
+/// is the whole point of asking the VM rather than deriving them here — and each `class_id` is
+/// distinct so a test can tell which header was written.
+const INT_ARRAY: ArrayType = ArrayType { class_id: 0xa11, element: 4 };
+const CHAR_ARRAY: ArrayType = ArrayType { class_id: 0xa12, element: 2 };
+const BYTE_ARRAY: ArrayType = ArrayType { class_id: 0xa13, element: 1 };
+/// `anewarray`: one heap offset per slot, and `null` is the offset `0`.
+const REF_ARRAY: ArrayType = ArrayType { class_id: 0xa14, element: 4 };
+
+/// [`compile_alloc`] for a program that allocates **arrays**: every `newarray` resolves through the
+/// `atype` table and every `anewarray` to a reference array, whatever class it names.
+fn compile_array(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| Some((8, Kind::Int)),
+            instance: &|_, _| None,
+            array: &|_, of| match of {
+                ArrayOf::Primitive(T_CHAR) => Some(CHAR_ARRAY),
+                ArrayOf::Primitive(T_BYTE) => Some(BYTE_ARRAY),
+                ArrayOf::Primitive(T_INT) => Some(INT_ARRAY),
+                ArrayOf::Primitive(_) => None,
+                ArrayOf::Reference(_) => Some(REF_ARRAY),
+            },
+            invoke: &|_, _, _| None,
+            heap,
+            class_mirror: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+/// `iload_0; newarray <atype>; astore_1; aload_1; areturn` — a whole method whose only instruction
+/// that matters is the allocation, with the count arriving in local 0.
+fn newarray_program(atype: u8) -> [u8; 6] {
+    [ILOAD_0, NEWARRAY, atype, ASTORE_1, ALOAD_1, ARETURN]
+}
+
+#[test]
+fn newarray_bumps_eden_writes_the_length_and_logs_the_array() {
+    // The whole of the fast path, one clause at a time, against what
+    // `array_operations::allocate_array` would have produced for the same class and count.
+    let mut heap = FakeHeap::new();
+    // Eden is deliberately *dirty*, for the same reason the `new` tests dirty it: the collector
+    // recycles the arena without wiping it, so zeroing is the compiled code's job.
+    heap.eden.fill(0xAB);
+    let bases = heap.bases();
+
+    let code = newarray_program(T_INT);
+    let compiled = compile_array(&code, 2, "()[I", bases).unwrap();
+    assert_eq!(compiled.alloc_records, super::compile::ALLOC_LOG_RECORDS, "the method allocates");
+    assert_eq!(compiled.returns, Kind::Reference, "an array is a reference like any other");
+
+    let (outcome, buffer) = call_at(&compiled, &[3, 0], 0);
+    // The first array starts at arena-local 0, i.e. the heap offset `NULL_PAGE`.
+    let array = FakeHeap::NULL_PAGE;
+    assert_eq!(outcome, Outcome::Returned(array as i64));
+    // `12 + 3 * 4` is 24, already a multiple of eight, so stride and logical size coincide here —
+    // which is exactly why the odd-payload test below exists as well.
+    assert_eq!(heap.eden_used(), 24, "the cursor moved by the rounded stride");
+    // The header is byte-for-byte the interpreter's: the **array class's** mirror in the first
+    // word, `mark` zero, and the `length` word right after them.
+    assert_eq!(heap.read(array), INT_ARRAY.class_id as i32);
+    assert_eq!(heap.read(array + 4), 0, "the mark word");
+    assert_eq!(heap.read(array + 8), 3, "the length word carries the count");
+    // ...and every element is at its JVMS default, out of a buffer that was full of 0xAB.
+    for i in 0..3 {
+        assert_eq!(heap.read(array + 12 + 4 * i), 0, "element {i}");
+    }
+    // The log carries the **logical** size — what the collector copies when it evacuates — not the
+    // 24 the cursor moved by. Here they happen to be equal; `a_char_array_of_an_odd_length` is
+    // where they are not.
+    assert_eq!(logged(&compiled, &buffer), vec![(array, 24)]);
+}
+
+#[test]
+fn a_char_array_of_an_odd_length_is_zeroed_to_the_rounded_stride() {
+    // **The rounding, from both sides.** A `char[3]` is `12 + 6` = 18 logical bytes and the arena
+    // reserves 24. Its three elements are at 12, 14 and **16** — past `18 & !7` = 16 — so a zeroing
+    // loop that rounded down would leave the last element dirty and every other element correct.
+    // A `byte[5]` is 17 logical bytes over the same 24, with its last element at 16 for the same
+    // reason.
+    for (atype, count, logical) in [(T_CHAR, 3usize, 18usize), (T_BYTE, 5, 17)] {
+        let mut heap = FakeHeap::new();
+        heap.eden.fill(0xAB);
+        let bases = heap.bases();
+        let code = newarray_program(atype);
+        let compiled = compile_array(&code, 2, "()[C", bases).unwrap();
+
+        let (outcome, buffer) = call_at(&compiled, &[count as i32, 0], 0);
+        let array = FakeHeap::NULL_PAGE;
+        assert_eq!(outcome, Outcome::Returned(array as i64));
+        assert_eq!(heap.eden_used(), 24, "atype {atype}: the stride is the logical size rounded up");
+        assert_eq!(heap.read(array + 8), count as i32, "atype {atype}: the length is the count");
+        // Every byte of the payload is zero, **including the ones past `logical & !7`**.
+        for b in 12..24 {
+            assert_eq!(heap.eden[b], 0, "atype {atype}: payload byte {b}");
+        }
+        // And the byte just past the reservation is still dirty: the loop zeroed our block and not
+        // one byte more, which is the half of the claim nothing else would notice.
+        assert_eq!(heap.eden[24], 0xAB, "atype {atype}: the next block is not ours to zero");
+        // The log carries the logical size, which here is **not** the stride.
+        assert_eq!(logged(&compiled, &buffer), vec![(array, logical)], "atype {atype}");
+    }
+}
+
+#[test]
+fn a_negative_count_leaves_before_anything_has_happened() {
+    // `NegativeArraySizeException` is the interpreter's to throw, as every exception in this tier
+    // is. What compiled code owes is that it leaves *before* the reservation — so the cursor has
+    // not moved, no log record exists, and the interpreter re-executing this pc allocates exactly
+    // once. The exit reports `ALLOC` rather than `DEOPT` because the site carries one status; see
+    // the `newarray` arm for why that is the better of the two.
+    let mut heap = FakeHeap::new();
+    heap.eden.fill(0xAB);
+    let bases = heap.bases();
+    let code = newarray_program(T_INT);
+    let compiled = compile_array(&code, 2, "()[I", bases).unwrap();
+
+    let (outcome, buffer) = call_at(&compiled, &[-1, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(1), "the `newarray` at pc 1 is where it gave up");
+    assert_eq!(heap.eden_used(), 0, "nothing was reserved");
+    assert_eq!(logged(&compiled, &buffer), vec![], "and nothing was logged");
+    assert_eq!(buffer[0], -1, "the count is where the interpreter will find it");
+    // `Integer.MIN_VALUE` is the case an unsigned comparison would wave through: `count * 4`
+    // overflows 32 bits and is a small positive number there. The product is computed in 64 bits
+    // and the guard is on the *count*, before it, so both are refused.
+    let (outcome, _) = call_at(&compiled, &[i32::MIN, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(1));
+    assert_eq!(heap.eden_used(), 0);
+}
+
+#[test]
+fn a_count_over_the_inline_cap_leaves_the_allocation_to_the_interpreter() {
+    // Big arrays are the interpreter's — which is what every tier-1 JIT does, and here it costs an
+    // *exit* rather than a refusal: the method compiled, and only this allocation leaves.
+    let heap = FakeHeap::new();
+    let bases = heap.bases();
+    let code = newarray_program(T_INT);
+    let compiled = compile_array(&code, 2, "()[I", bases).unwrap();
+
+    // 1021 ints is 12 + 4084 = 4096 bytes exactly, which is the cap and is allowed... except that
+    // this Eden is 256 bytes, so it fails the *capacity* check instead. Both are the same exit and
+    // the same "nothing happened", which is the point: the cursor moved and moved back past the
+    // end, exactly as `EdenArena::alloc` leaves it on failure.
+    let (outcome, buffer) = call_at(&compiled, &[1021, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(1));
+    assert!(heap.eden_used() > FakeHeap::EDEN_SIZE, "a failed reservation leaves the cursor past the end");
+    assert_eq!(logged(&compiled, &buffer), vec![]);
+
+    // One int more than the cap: 1022 ints is 4100 bytes. This one is refused by the **size** guard,
+    // which comes before the reservation — so the cursor does not move at all.
+    let mut heap = FakeHeap::new();
+    let compiled = compile_array(&code, 2, "()[I", heap.bases()).unwrap();
+    heap.eden.fill(0xAB);
+    let (outcome, buffer) = call_at(&compiled, &[1022, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(1));
+    assert_eq!(heap.eden_used(), 0, "the size guard is ahead of the reservation");
+    assert_eq!(logged(&compiled, &buffer), vec![]);
+    // ...and `i32::MAX`, where `count * 4` would overflow a 32-bit multiply into a small positive.
+    let (outcome, _) = call_at(&compiled, &[i32::MAX, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(1));
+    assert_eq!(heap.eden_used(), 0, "the product is computed in 64 bits, so it cannot wrap into range");
+}
+
+#[test]
+fn a_full_eden_leaves_the_cursor_exactly_where_the_interpreter_would() {
+    // The failure mode has to be **the arena's own**, or compiled code and the interpreter come to
+    // disagree about how full Eden is: `EdenArena::alloc` bumps first and checks afterwards, and
+    // leaves the cursor past the end when it fails, so every later allocation fails too until a
+    // collection resets it. This asks for that byte for byte.
+    let heap = FakeHeap::new();
+    let bases = heap.bases();
+    // iload_0; newarray int; pop; iload_0; newarray int; astore_1; aload_1; areturn
+    let code = [ILOAD_0, NEWARRAY, T_INT, POP, ILOAD_0, NEWARRAY, T_INT, ASTORE_1, ALOAD_1, ARETURN];
+    let compiled = compile_array(&code, 2, "()[I", bases).unwrap();
+
+    // 30 ints is 132 bytes, rounded to 136. Two of them is 272, past this 256-byte Eden — so the
+    // first succeeds and the second leaves.
+    let (outcome, buffer) = call_at(&compiled, &[30, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(5), "the *second* `newarray`, at pc 5");
+    assert_eq!(heap.eden_used(), 272, "bumped by both, and left past the end by the failing one");
+    // The first array is intact and logged, which is what makes the resume sound: the interpreter
+    // picks up at pc 5 with that reference still on its operand stack.
+    assert_eq!(logged(&compiled, &buffer), vec![(FakeHeap::NULL_PAGE, 132)]);
+    assert_eq!(heap.read(FakeHeap::NULL_PAGE + 8), 30, "the first array kept its length");
+}
+
+#[test]
+fn anewarray_is_the_same_code_with_null_slots() {
+    // A reference array is one heap offset per slot and `null` is the offset `0`, so the zeroing
+    // the allocation already did *is* the null-filling JVMS asks for — there is no second pass and
+    // no write barrier, because nothing is stored into it.
+    let mut heap = FakeHeap::new();
+    heap.eden.fill(0xAB);
+    let bases = heap.bases();
+    // iload_0; anewarray #1; astore_1; aload_1; areturn
+    let code = [ILOAD_0, ANEWARRAY, 0x00, 0x01, ASTORE_1, ALOAD_1, ARETURN];
+    let compiled = compile_array(&code, 2, "()[Ljava/lang/String;", bases).unwrap();
+
+    let (outcome, buffer) = call_at(&compiled, &[4, 0], 0);
+    let array = FakeHeap::NULL_PAGE;
+    assert_eq!(outcome, Outcome::Returned(array as i64));
+    assert_eq!(heap.read(array), REF_ARRAY.class_id as i32, "the *array* class, not the element's");
+    assert_eq!(heap.read(array + 8), 4);
+    for i in 0..4 {
+        assert_eq!(heap.read(array + 12 + 4 * i), 0, "slot {i} is null");
+    }
+    assert_eq!(logged(&compiled, &buffer), vec![(array, 28)]);
+}
+
+#[test]
+fn an_array_class_without_a_mirror_refuses_the_whole_method() {
+    // The array counterpart of "a `new` of a class that is not `Done`". An array class has no
+    // `<clinit>` to wait for, but its `Class<…>` mirror has to exist already — minting one
+    // *allocates*, and a compilation may not. So a `None` from the resolver refuses the method
+    // rather than escaping the opcode, exactly as an unresolved `new` does.
+    let heap = FakeHeap::new();
+    // `T_FLOAT` (6) is the one `atype` the resolver above does not answer for.
+    let code = newarray_program(6);
+    let err = compile_array(&code, 2, "()[F", heap.bases()).unwrap_err();
+    assert_eq!(err, Ineligible::UnresolvedClass { pc: 1, index: 6 }, "the `atype` names the class here");
+    // And `multianewarray` (0xc5) is outside the subset entirely — a recursion over allocations
+    // rather than an allocation. It is refused as an unknown opcode, not as an unresolved class.
+    let code = [ILOAD_0, ILOAD_0, 0xc5, 0x00, 0x01, 0x02, ASTORE_1, ALOAD_1, ARETURN];
+    let err = compile_array(&code, 2, "()[[I", heap.bases()).unwrap_err();
+    assert_eq!(err, Ineligible::Opcode { pc: 2, opcode: 0xc5 });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Group 2: reference fields, `checkcast`/`instanceof`, and the class literal.
+// ---------------------------------------------------------------------------------------------
+
+const CHECKCAST: u8 = 0xc0;
+const INSTANCEOF: u8 = 0xc1;
+
+/// The class mirror every class constant in the programs below resolves to. A plausible heap
+/// offset in the "other" half of [`FakeHeap`], and — like the real thing — a **pinned** one: the
+/// whole point of the value is that it never changes, so the tests can bake it into a header.
+const MIRROR: u32 = 0x0100;
+
+/// [`compile_instance`] for group 2's opcodes, with **three fixed conventions** so the programs
+/// below read as bytecode rather than as resolver plumbing:
+///
+/// | constant | resolves to |
+/// |---|---|
+/// | `getfield`/`putfield` `#1` | a **reference** field at byte `+8` |
+/// | `getfield`/`putfield` `#2` | an `int` field at byte `+12` |
+/// | `getstatic`/`putstatic` `#1` | a **reference** static at `static_cell` |
+/// | any class constant | [`MIRROR`], unless `mirror` is `None` |
+///
+/// `mirror: None` is how a test asks the "this class has no `Class<…>` yet" question — and it is
+/// also what a `ldc` of a **`String`** looks like from here, since `burst` learns what a constant
+/// is only from which resolver answers for it.
+fn compile_group2(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    heap: Heap,
+    static_cell: usize,
+    mirror: Option<u32>,
+) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, index| match index {
+                1 => Some((static_cell, Kind::Reference)),
+                _ => None,
+            },
+            field: &|_, _, index| match index {
+                1 => Some((8, Kind::Reference)),
+                _ => Some((12, Kind::Int)),
+            },
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            class_mirror: &|_, _| mirror,
+            heap,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+#[test]
+fn a_reference_field_is_read_and_dereferenced_again() {
+    // `a.b.c` — the shape the whole group is for. Three loads: two references and an `int`, and
+    // the middle one lands in the *other* half of the heap than the first, so a compiler that
+    // knew about only one base would answer with garbage rather than fail.
+    let mut heap = FakeHeap::new();
+    heap.write(1000 + 8, 24); // an Old object whose reference field points into Eden...
+    heap.write(24 + 8, 2000); // ...at an Eden object pointing back out to Old...
+    heap.write(2000 + 12, 4242); // ...whose `int` field is the answer.
+    heap.write(2000 + 8, 999_999); // its neighbour, which must never be it
+
+    // aload_0; getfield #1; getfield #1; getfield #2; ireturn
+    let code = [ALOAD_0, GETFIELD, 0x00, 0x01, GETFIELD, 0x00, 0x01, GETFIELD, 0x00, 0x02, IRETURN];
+    let compiled = compile_group2(&code, 1, "(LA;)I", heap.bases(), 0, None).unwrap();
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(4242));
+
+    // A null at the **second** hop deopts at that hop's pc, not at the first's: the guard belongs
+    // to the instruction that dereferences, and the pc a deopt names is the one that has not run.
+    heap.write(1000 + 8, 0);
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Deopt(4), "the middle `getfield`");
+    assert_eq!(call_at(&compiled, &[0], 0).0, Outcome::Deopt(1), "the first one");
+}
+
+#[test]
+fn a_null_reference_field_is_a_value_and_not_a_deopt() {
+    // The distinction the group turns on: **loading** `null` is ordinary, **dereferencing** it is
+    // the deopt. A compiler that treated a zero *result* as a guard failure would still compute the
+    // right answer here (the interpreter would re-run and produce it), so only the `Outcome` — not
+    // the value — can tell the two apart. That is why this asserts `Returned` rather than `Some`.
+    let mut heap = FakeHeap::new();
+    // aload_0; getfield #1; ifnull +5 -> 9; iconst_0; ireturn; [9] iconst_1; ireturn
+    let code =
+        [ALOAD_0, GETFIELD, 0x00, 0x01, IFNULL, 0x00, 0x05, ICONST_0, IRETURN, ICONST_1, IRETURN];
+    let compiled = compile_group2(&code, 1, "(LA;)I", heap.bases(), 0, None).unwrap();
+
+    heap.write(1000 + 8, 0); // the field holds `null`
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(1), "`null` loaded, then tested");
+    heap.write(1000 + 8, 24); // ...and a real reference through the same code
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(0));
+}
+
+#[test]
+fn a_reference_field_is_zero_extended_and_not_sign_extended() {
+    // A heap **offset** is a `u32` — the interpreter reads one as `read_u32(at) as usize` — so the
+    // four-byte load has to zero-extend. This is the whole of the trap: sign-extending an offset
+    // whose bit 31 is set gives a negative `i64`, which the unsigned Eden/Old compare would route
+    // to the wrong base and which a deopt would spill as a `Value::Reference` made of arithmetic.
+    //
+    // The value is never dereferenced here, only returned, so the test says exactly one thing.
+    let mut heap = FakeHeap::new();
+    heap.write(1000 + 8, i32::MIN); // 0x8000_0000 seen as four bytes
+    let code = [ALOAD_0, GETFIELD, 0x00, 0x01, ARETURN];
+    let compiled =
+        compile_group2(&code, 1, "(LA;)Ljava/lang/Object;", heap.bases(), 0, None).unwrap();
+    assert_eq!(compiled.returns, Kind::Reference);
+    assert_eq!(
+        call_at(&compiled, &[1000], 0).0,
+        Outcome::Returned(0x8000_0000),
+        "zero-extended; a `movsxd` here would answer -2147483648"
+    );
+}
+
+#[test]
+fn a_reference_static_is_read_live_and_dereferenced() {
+    use std::sync::atomic::AtomicU32;
+
+    // The static's *slot* is pinned (it lives in a `Class<…>` mirror), but what is **in** it is
+    // not: it is read at run time like any other field, so an object the collector later moves is
+    // no more a problem here than it is for the interpreter. Hence "live": the same compiled code,
+    // called twice, must follow the new reference rather than a folded-in old one.
+    static CELL: AtomicU32 = AtomicU32::new(0);
+    let mut heap = FakeHeap::new();
+    heap.write(1000 + 12, 7); // an Old object...
+    heap.write(24 + 12, -9); // ...and an Eden one
+
+    // getstatic #1; getfield #2; ireturn
+    let code = [GETSTATIC, 0x00, 0x01, GETFIELD, 0x00, 0x02, IRETURN];
+    let cell = &CELL as *const _ as usize;
+    let compiled = compile_group2(&code, 0, "()I", heap.bases(), cell, None).unwrap();
+
+    CELL.store(1000, Ordering::Release);
+    assert_eq!(call_at(&compiled, &[], 0).0, Outcome::Returned(7), "the Old arm");
+    CELL.store(24, Ordering::Release);
+    assert_eq!(call_at(&compiled, &[], 0).0, Outcome::Returned(-9), "the Eden arm, same code");
+    CELL.store(0, Ordering::Release);
+    assert_eq!(call_at(&compiled, &[], 0).0, Outcome::Deopt(3), "a null static deopts at the read");
+}
+
+#[test]
+fn writing_a_reference_field_is_refused_and_reading_one_is_not() {
+    // **The hard limit of this group, asserted as a limit.** A reference store owes the collector's
+    // write barrier (`HeapService::store_reference`, which records an old→young pointer in the
+    // remembered set) and no instruction stream can run one, so both write opcodes are refused —
+    // while their reading twins, above and below, compile.
+    let heap = FakeHeap::new();
+
+    // aload_0; aload_1; putfield #1 (a reference field); return
+    let code = [ALOAD_0, ALOAD_1, PUTFIELD, 0x00, 0x01, RETURN];
+    let err = compile_group2(&code, 2, "(LA;LB;)V", heap.bases(), 0, None).unwrap_err();
+    assert_eq!(err, Ineligible::ReferenceWrite { pc: 2 });
+
+    // aload_0; putstatic #1 (a reference static); return
+    let code = [ALOAD_0, PUTSTATIC, 0x00, 0x01, RETURN];
+    let err = compile_group2(&code, 1, "(LA;)V", heap.bases(), 0x40, None).unwrap_err();
+    assert_eq!(err, Ineligible::ReferenceWrite { pc: 1 });
+
+    // ...and the `int` field at #2 writes perfectly well through the very same resolver, which is
+    // what makes the two refusals above about *references* rather than about writes.
+    let code = [ALOAD_0, ICONST_1, PUTFIELD, 0x00, 0x02, RETURN];
+    assert!(compile_group2(&code, 1, "(LA;)V", heap.bases(), 0, None).is_ok());
+}
+
+#[test]
+fn checkcast_passes_the_exact_class_and_null_and_deopts_for_everything_else() {
+    // The three cases, and the middle one is the one a mistake would hide:
+    //
+    //  - the **exact** class is a `cmp` and a `jcc`, and the reference passes through untouched;
+    //  - **`null`** passes without ever reading a header — which is both the JVMS's rule and what
+    //    keeps the guard from dereferencing `eden_base + 0`. It is asserted *positively*: a null
+    //    receiver must reach the `getfield` behind the cast and deopt **there**, at pc 4, not at
+    //    the `checkcast` at pc 1;
+    //  - anything else deopts, and the interpreter decides subtype-or-exception by its full path.
+    let mut heap = FakeHeap::new();
+    heap.write(1000, MIRROR as i32); // an object of exactly the target class
+    heap.write(1000 + 12, 55);
+    heap.write(24, MIRROR as i32 + 8); // ...and one of some other class
+    heap.write(24 + 12, 66);
+
+    // aload_0; checkcast #1; getfield #2; ireturn
+    let code = [ALOAD_0, CHECKCAST, 0x00, 0x01, GETFIELD, 0x00, 0x02, IRETURN];
+    let compiled = compile_group2(&code, 1, "(LA;)I", heap.bases(), 0, Some(MIRROR)).unwrap();
+
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(55), "the exact class passes");
+    assert_eq!(call_at(&compiled, &[24], 0).0, Outcome::Deopt(1), "another class hands it back");
+    assert_eq!(call_at(&compiled, &[0], 0).0, Outcome::Deopt(4), "`null` passed the cast");
+
+    // The reference is handed **through** unchanged, which is the other half of the opcode's
+    // semantics: `aload_0; checkcast #1; areturn` returns the same offset it was given.
+    let code = [ALOAD_0, CHECKCAST, 0x00, 0x01, ARETURN];
+    let through =
+        compile_group2(&code, 1, "(LA;)Ljava/lang/Object;", heap.bases(), 0, Some(MIRROR)).unwrap();
+    assert_eq!(call_at(&through, &[1000], 0).0, Outcome::Returned(1000));
+    assert_eq!(call_at(&through, &[0], 0).0, Outcome::Returned(0), "`null` all the way out");
+}
+
+#[test]
+fn instanceof_answers_one_and_zero_natively_and_deopts_in_between() {
+    let mut heap = FakeHeap::new();
+    heap.write(1000, MIRROR as i32);
+    heap.write(24, MIRROR as i32 + 8);
+
+    // aload_0; instanceof #1; ireturn
+    let code = [ALOAD_0, INSTANCEOF, 0x00, 0x01, IRETURN];
+    let compiled = compile_group2(&code, 1, "(LA;)I", heap.bases(), 0, Some(MIRROR)).unwrap();
+
+    assert_eq!(call_at(&compiled, &[1000], 0).0, Outcome::Returned(1), "the exact class");
+    assert_eq!(call_at(&compiled, &[0], 0).0, Outcome::Returned(0), "`null` is an instance of nothing");
+    // A subtype and an unrelated class are the same case here — native code knows neither, and the
+    // interpreter re-executes the `instanceof` and answers 1 or 0 by its own subtype walk.
+    assert_eq!(call_at(&compiled, &[24], 0).0, Outcome::Deopt(1));
+}
+
+#[test]
+fn a_type_check_against_a_class_with_no_mirror_refuses_the_method() {
+    // Minting a `Class<…>` **allocates**, and a compilation that allocates is a compilation that
+    // can collect — so the resolver is read-only and a class the interpreter has never prepared
+    // simply refuses the method. The same trade `newarray` makes, and free for the same reason.
+    let heap = FakeHeap::new();
+    let code = [ALOAD_0, CHECKCAST, 0x00, 0x03, ARETURN];
+    let err =
+        compile_group2(&code, 1, "(LA;)Ljava/lang/Object;", heap.bases(), 0, None).unwrap_err();
+    assert_eq!(err, Ineligible::UnresolvedClass { pc: 1, index: 3 });
+}
+
+#[test]
+fn a_class_literal_is_the_pinned_mirror_and_a_string_literal_is_still_refused() {
+    // `ldc Foo.class` is a reference to a `Class<…>`, which is `malloc_old`ed and in the set
+    // `gc::compact` refuses to relocate — so its offset is a constant for the life of the VM and
+    // baking it in is exactly as sound as baking in a static's address.
+    let heap = FakeHeap::new();
+    let code = [LDC, 0x01, ARETURN];
+    let compiled =
+        compile_group2(&code, 0, "()Ljava/lang/Class;", heap.bases(), 0, Some(MIRROR)).unwrap();
+    assert_eq!(compiled.returns, Kind::Reference, "a class literal is typed as a reference");
+    assert_eq!(call_at(&compiled, &[], 0).0, Outcome::Returned(MIRROR.into()));
+
+    // An `ldc` no resolver answers for is a **`String`**, and it is still refused. Not for want of
+    // a width: this VM allocates a fresh `String` in Eden for every one of them (there is no
+    // interning table at all), so there is no permanent offset to bake — and one baked anyway
+    // would make `"a" == "a"` true here, where the interpreter says false. See the module docs.
+    let err = compile_group2(&code, 0, "()Ljava/lang/String;", heap.bases(), 0, None).unwrap_err();
+    assert_eq!(err, Ineligible::NonIntegerConstant { pc: 0, index: 1 });
+}
+
+#[test]
+fn instanceof_agrees_at_every_cache_size_and_every_depth() {
+    // `instanceof` is the group's one type check that **writes** its operand's home: the reference
+    // goes in and a `0`/`1` comes out of the same position. So it is the one whose interaction with
+    // the register cache can be wrong — and wrong invisibly, since at the default cache size and a
+    // shallow stack the position is always a register and the frame-slot path never runs.
+    //
+    // Two axes, as for the heap opcodes: the cache size, and the depth the check sits at. The
+    // padding underneath is folded back down with `isub`, so it has to survive *in order* rather
+    // than merely survive. Both the exact-class answer and the `null` answer are driven, because
+    // they are the two arms that converge on the write.
+    const HIT: usize = 40; // in Eden, header = MIRROR
+    for pad in 0..9usize {
+        let mut code: Vec<u8> = (0..pad).flat_map(|k| [BIPUSH, (k + 1) as u8]).collect();
+        code.extend_from_slice(&[ALOAD_0, INSTANCEOF, 0x00, 0x01]);
+        code.extend(vec![ISUB; pad]);
+        code.push(IRETURN);
+
+        for regs in every_cache_size() {
+            let mut heap = FakeHeap::new();
+            heap.write(HIT, MIRROR as i32);
+            let bases = heap.bases();
+            let compiled = compile_with_regs(
+                &Method {
+                    unit: 0,
+                    code: &code,
+                    max_locals: 1,
+                    descriptor: "(LA;)I",
+                    is_static: true,
+                    has_handlers: false,
+                },
+                &Environment {
+                    int_const: &|_, _| None,
+                    long_const: &|_, _| None,
+                    float_const: &|_, _| None,
+                    double_const: &|_, _| None,
+                    static_field: &|_, _| None,
+                    field: &|_, _, _| None,
+                    instance: &|_, _| None,
+                    array: &|_, _| None,
+                    invoke: &|_, _, _| None,
+                    heap: bases,
+                    class_mirror: &|_, _| Some(MIRROR),
+                    poll_word: &POLL as *const _ as usize,
+                },
+                regs,
+            )
+            .unwrap_or_else(|e| panic!("pad={pad} regs={regs}: {e}"));
+
+            for (receiver, answer) in [(HIT as i32, 1i32), (0, 0)] {
+                let why = format!("pad={pad} regs={regs} receiver={receiver}");
+                let expected = (1..=pad as i32).rev().fold(answer, |acc, v| v.wrapping_sub(acc));
+                assert_eq!(
+                    call_at(&compiled, &[receiver], 0).0,
+                    Outcome::Returned(expected.into()),
+                    "{why}"
+                );
+            }
+        }
     }
 }

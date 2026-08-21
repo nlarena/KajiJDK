@@ -11,16 +11,19 @@
 //!
 //! | group | opcodes |
 //! |---|---|
-//! | constants | `iconst_m1`…`iconst_5`, `bipush`, `sipush`, `ldc`/`ldc_w` **of an `Integer`**, `aconst_null` |
-//! | locals | `iload`/`aload`, `iload_0..3`/`aload_0..3`, `istore`/`astore`, `istore_0..3`/`astore_0..3`, `iinc`, and all five under `wide` |
-//! | arithmetic | `iadd`, `isub`, `imul`, `idiv`, `irem`, `ineg` |
-//! | bits & shifts | `iand`, `ior`, `ixor`, `ishl`, `ishr`, `iushr` |
+//! | constants | `iconst_m1`…`iconst_5`, `bipush`, `sipush`, `lconst_0/1`, `fconst_0/1/2`, `dconst_0/1`, `ldc`/`ldc_w` **of an `Integer` or a `Float`**, `ldc2_w` **of a `Long` or a `Double`**, `aconst_null` |
+//! | locals | `iload`/`lload`/`fload`/`dload`/`aload`, their `_0..3` forms, the five matching stores and *their* `_0..3` forms, `iinc`, and all eleven under `wide` |
+//! | arithmetic | `iadd`, `isub`, `imul`, `idiv`, `irem`, `ineg`; the same six for `long`; `fadd`, `fsub`, `fmul`, `fdiv`, `fneg` and the same five for `double` |
+//! | bits & shifts | `iand`, `ior`, `ixor`, `ishl`, `ishr`, `iushr`; `land`, `lor`, `lxor`, `lshl`, `lshr`, `lushr` |
+//! | conversions & compares | `i2l`, `l2i`, `i2f`, `i2d`, `l2f`, `l2d`, `f2d`, `d2f`; `lcmp`, `fcmpl`, `fcmpg`, `dcmpl`, `dcmpg` |
+//! | give-up-and-resume | `frem`, `drem` — compiled to an unconditional deopt, since SSE has no scalar remainder; `athrow`, `monitorenter`, `monitorexit` — the same shape, for the reasons in "Group 5" below |
 //! | control flow | `if_icmp<cond>`, `if<cond>`, `if_acmpeq`, `if_acmpne`, `ifnull`, `ifnonnull`, `goto`, `tableswitch`, `lookupswitch` |
-//! | stack | `nop`, `pop`, `pop2`, `dup`, `dup_x1`, `dup_x2`, `dup2`, `dup2_x1`, `dup2_x2`, `swap` |
-//! | heap (read) | `getstatic` **of an `int`, in an already-initialised class**; `getfield` **of a non-`volatile` `int`**; `arraylength`; `iaload` |
-//! | heap (write) | `putstatic` and `putfield` under the same conditions as their reading twins; `iastore` |
-//! | allocation | `new` **of an already-initialised class**, on Eden's fast path only |
-//! | exits | `ireturn`, `areturn`, `return` |
+//! | stack | `nop`, `pop`, `pop2`, `dup`, `dup_x1`, `dup_x2`, `dup2`, `dup2_x1`, `dup2_x2`, `swap` — **category-1 operands only** |
+//! | heap (read) | `getstatic` **of any primitive or reference, in an already-initialised class**; `getfield` **of any primitive or reference**, `volatile` included; `arraylength`; `iaload` |
+//! | heap (write) | `putstatic` and `putfield` under the same conditions as their reading twins **except that the field may not hold a reference** ([`Ineligible::ReferenceWrite`]); `iastore` |
+//! | type checks | `checkcast` and `instanceof` — **exact class or deopt**, and `null` never deopts |
+//! | allocation | `new` **of an already-initialised class**; `newarray` of any primitive and `anewarray` **of a class whose array mirror exists** — all three on Eden's fast path only, and arrays only up to [`MAX_INLINE_ARRAY_BYTES`] |
+//! | exits | `ireturn`, `areturn`, `lreturn`, `freturn`, `dreturn`, `return` — i.e. all of them |
 //!
 //! Anything else — one single byte — makes the method permanently ineligible. Until step 6 the
 //! safety argument was one sentence: such a method **writes nothing observable**, so an abandoned
@@ -104,6 +107,62 @@
 //! calls are the next step's. The census says so numerically — adding `new` moved the compiled
 //! count by zero and merely folded the `new` refusals into the `invokespecial` ones. This step is
 //! the half of `new X(…)` that had a correctness argument to make; the other half is a call.
+//!
+//! # Arrays: the same allocation, over a size that is an **operand**
+//!
+//! `newarray` and `anewarray` reuse every part of the argument above — the same `lock xadd` on the
+//! same cursor word, the same "a failed bounds check leaves the cursor past the end" failure mode
+//! the interpreter's own `EdenArena::alloc` has, the same deferred `(offset, size)` log record, the
+//! same [`Status::ALLOC`] exit. One thing is different and everything else follows from it:
+//!
+//! > `size = ARRAY_HEADER_SIZE + count * width`, and `count` is in a **register**.
+//!
+//! | consequence | what it costs |
+//! |---|---|
+//! | the count can be **negative** | a guard, before the reservation, that leaves — `NegativeArraySizeException` is the interpreter's to throw, as every exception in this tier is |
+//! | the count can be **huge** | a guard against [`MAX_INLINE_ARRAY_BYTES`], computed in 64 bits where `count * width` cannot overflow. Bigger arrays are the interpreter's, which is what every tier-1 JIT does — and it costs an exit, not a refusal: the *method* still compiles |
+//! | the zeroing is a **loop** | four instructions, descending, using the block's base as the bound — see [`emit_array_alloc`] for why descending is what makes it fit in three scratch registers, and why `rep stosq` is the wrong instruction here |
+//! | the stride is rounded and the length is not | the loop covers `(size + 7) & !7`, and the `length` word carries the **original** count. Confusing the two is the one mistake here that produces a plausible array rather than a crash |
+//!
+//! ## What the array class has to be, and what the requirement costs
+//!
+//! An array class has no `<clinit>` and no statics, so — unlike `new` — there is no initialisation
+//! to wait for. What there *is* is a `Class<…>` **mirror**, and minting one **allocates**
+//! (`array_class_mirror` is `&mut` for exactly that reason). A compilation that allocates is a
+//! compilation that can collect, so the resolver is read-only and answers `None` when the mirror
+//! does not exist yet, which refuses the whole method.
+//!
+//! The cost, stated rather than hidden: the first `int[]` a program creates is always interpreted,
+//! and a method containing a `new int[…]` does not compile until some array of that class has been
+//! allocated at least once. In practice that is free — a method reaches this tier only once it is
+//! hot, which means it has already run, which means the mirror exists. It bites only on a
+//! `newarray` down a cold branch of a hot method, where the interpreter is the honest answer.
+//!
+//! ## `multianewarray` is out, and not narrowly
+//!
+//! It is defined as a **recursion**: allocate the outer array, then one inner array per slot, each
+//! with its own reservation, its own log record and its own reference stored through the parent.
+//! That is a loop over allocations rather than an allocation — a different shape, with a different
+//! bound on the log and a write barrier to think about — so it stays an unknown opcode.
+//!
+//! ## Every element width allocates; only `int` is **accessed**
+//!
+//! Worth stating plainly, because the asymmetry looks like an oversight and is not. *Allocating* an
+//! array of any element type costs nothing extra: the width is a resolved immediate
+//! ([`ArrayType::element`]), so `byte[]`, `char[]`, `short[]`, `int[]`, `float[]`, `long[]`,
+//! `double[]` and every reference array take the same emitted code with a different constant in it.
+//! *Reading and writing* elements is still `iaload`/`iastore` only — one width, baked into
+//! [`Heap::int_element`].
+//!
+//! Widening the access side is a separate step, and the census says how much it is worth. After
+//! this one, the primary refusal reasons it would remove are `aastore` (8 methods), `lastore` (4)
+//! and `aaload` (2) — and **the largest of the three is not about widths at all**: a reference
+//! store into an array needs the GC's write barrier, which is the same reason `putfield` of a
+//! reference is outside the subset. The genuinely cheap half is `laload`/`lastore`/`daload`/
+//! `dastore`/`faload`/`fastore`, which need no new assembler encoding (the 8- and 4-byte `mov`s
+//! already exist) and which the opcode itself types, so no resolver is involved. `baload`/`bastore`
+//! and the `char`/`short` pairs are the expensive half: they need `movsx`/`movzx` from memory and
+//! 8- and 16-bit stores, none of which [`x64`][crate::burst::x64] can encode yet.
 //!
 //! # Step 8: calls, by **inlining** — and the virtual frames that pay for them
 //!
@@ -213,12 +272,18 @@
 //! `pop2` and `pop` emit nothing at all, and the `dup` family emits only `mov`s.
 //!
 //! Their JVMS definitions are *shape-dependent* — `dup2` duplicates either two category-1 values
-//! or one category-2 value, and there is no opcode-level way to tell which. **In this subset the
-//! question never arises**: every opcode that pushes pushes an `int`, so every operand-stack slot
-//! holds a category-1 value, always. The category-1 reading is therefore not a guess but the only
-//! possible one. The moment a category-2 value can reach the operand stack — the `long` step —
-//! every one of these six opcodes has to be revisited, which is exactly why the guarantee is
-//! written down here rather than assumed.
+//! or one category-2 value, and there is no opcode-level way to tell which. Until the `long` step
+//! the question never arose: every opcode that pushed pushed an `int`, so every operand-stack
+//! position held a category-1 value, always, and the category-1 reading was not a guess but the
+//! only possible one.
+//!
+//! **The `long` step is where it came back, and the answer is a refusal.** A `Value::Long` is one
+//! entry on the interpreter's operand stack and one position in this map (see [`Kind::Long`]), so
+//! "the top two slots" is one position or two depending on what is in them. Rather than re-derive
+//! the shape from the type map for six opcodes, [`State::pop_any`] refuses **any** shuffle over a
+//! category-2 value and the method is not compiled. It is conservative and nearly free: the shapes
+//! `javac` emits a `dup2` for are compound assignments to `long` array elements and fields, and
+//! `laload`/`lastore` are outside the subset anyway.
 //!
 //! ## `tableswitch` / `lookupswitch`
 //!
@@ -277,21 +342,77 @@
 //! mid-expression with operands live. That is exactly what step 6 built, and it is why the writes
 //! arrive as a consequence of the deopt work rather than as a widening of their own.
 //!
-//! ## `long` arithmetic — out, and blocked on the calling convention rather than on effort
+//! ## `long` arithmetic — in, once the boundary made room for it
 //!
 //! `lload`/`ladd`/`lshl`/… map beautifully onto x86-64: they are native 64-bit operations, they
-//! need no normalisation (the whole register *is* the value), and x86 masks a 64-bit shift count
-//! to 6 bits exactly as JLS §15.19 does for `long`. The work is in the slot mapping — a `long` is
-//! **category 2**, so it occupies two local slots and two operand-stack slots, which every index
-//! calculation in both passes would have to account for, and it is also what makes the six `dup`
-//! forms above ambiguous again.
+//! need **no normalisation** (the whole register *is* the value), and x86 masks a 64-bit shift
+//! count to 6 bits exactly as JLS §15.19 does for `long`. What blocked them was not the emitter
+//! but the boundary: the old packed `RAX = (status << 32) | value` spent the high half on the
+//! status, leaving 32 bits for a result — enough for every `int`, and not enough for any `long`.
+//! `lreturn` was not a missing opcode, it was an unrepresentable one.
 //!
-//! But none of that is what stops it. **`lreturn` does not fit the return protocol.** The packed
-//! `RAX = (status << 32) | value` below spends the high half on the status, leaving 32 bits for
-//! the result — enough for every `int`, and not enough for any `long`. Adding `long` therefore
-//! means changing the boundary itself (a second return register, or an out-pointer, and with it
-//! the marshalling contract, the OSR write-back and every `unsafe` block that crosses it), which
-//! is a step of its own rather than a widening of this one.
+//! Moving the value out of the register and into a **result slot in the caller's buffer** (see
+//! "the boundary contract" below) is what unblocked it, and it did so for every width at once.
+//! What was left to do was the slot mapping — see [`Kind::Long`] for the whole of it, and note
+//! where category 2 costs something (local indices, and the shape-dependent stack shuffles) and
+//! where it costs nothing at all (the operand stack, whose entries the interpreter counts the same
+//! way this map does).
+//!
+//! **Three places the `long` arms deliberately differ from the `int` ones**, each argued at its own
+//! opcode: no `movsxd` after the arithmetic (it would truncate every result to 32 bits); no
+//! explicit shift mask (JLS's 6 bits and x86's 6 bits are the same mask, where for an `int` they
+//! are 5 and 6 and disagree); and an explicit branch around `Long.MIN_VALUE / -1`, which really
+//! does raise `#DE` where `Integer.MIN_VALUE / -1` in a 64-bit register does not.
+//!
+//! # `float` and `double`: a second register bank, and how not to have one
+//!
+//! The obvious way to compile floating-point arithmetic is to give `XMM` its own allocator: a
+//! second set of homes, a second `operand_home`, a second spill discipline, and — at every merge,
+//! every deopt site and every OSR entry — an answer to "which bank is operand `k` in?". The
+//! positional [`operand_home`] mapping is designed so that question never has to be asked, and
+//! this step is careful not to introduce it.
+//!
+//! **So a floating-point value is a bit pattern that visits an SSE register.** It lives in an
+//! ordinary 64-bit buffer slot or [`CACHE`] register like everything else ([`Kind::Float`],
+//! [`Kind::Double`]); an arithmetic opcode is `movd`/`movq` in, one SSE instruction, `movd`/`movq`
+//! out; and nothing floating-point is ever live in `XMM` across an instruction boundary. Two
+//! instructions per opcode buys the whole allocator, the whole deopt story and the whole register
+//! cache unchanged — a deopt stub reads the same homes it always did, because that is where the
+//! values still are. See [`F0`].
+//!
+//! Three consequences fall out of it, and each is worth a line:
+//!
+//!  - **`fneg`/`dneg` need no SSE at all.** JVMS defines them as "the operand with its sign bit
+//!    inverted", which on bits is an `xor` — and which is *not* `0.0 - x`, since that gives `+0.0`
+//!    for `0.0` where negation must give `-0.0`.
+//!  - **A constant is an immediate.** `fconst_1` is `mov r, 0x3F800000`.
+//!  - **The boundary needs nothing new.** A float crosses as its 32-bit pattern zero-extended and a
+//!    double as its 64-bit pattern, in the same result slot and the same spill slots — which is why
+//!    `freturn` and `dreturn` cost exactly what `ireturn` does.
+//!
+//! ## What IEEE-754 does that no integer type does
+//!
+//! | | |
+//! |---|---|
+//! | **NaN is unordered** | `fcmpl` and `fcmpg` exist *only* to differ here (−1 and +1), so that `a < b` and `a > b` are both false whichever way `javac` emitted them. `ucomis*` reports it in the parity flag; see the `fcmp` arm. |
+//! | **zero is signed** | `-0.0 == 0.0`, so nothing but a division into it can tell them apart — which is what makes `fneg` being a bit flip observable. |
+//! | **division does not throw** | `1.0/0.0` is infinity. A zero-divisor guard copied over from `idiv` would deopt on an ordinary value. |
+//! | **single is not double** | `divss` and `divsd` are one prefix byte apart and `1.0f/3.0f` differs from `1.0/3.0` — a mix-up computes a plausible number. |
+//!
+//! Rounding is `MXCSR`'s default round-to-nearest-even throughout, which is what the JLS requires
+//! and what nothing in this VM changes. The 80-bit x87 stack — whose excess precision is the reason
+//! `strictfp` ever existed — is not involved anywhere.
+//!
+//! ## What is left out, and why it is the *narrowing* half
+//!
+//! `f2i`, `f2l`, `d2i` and `d2l`. JLS §5.1.3 makes them **saturating and NaN-aware**: a NaN becomes
+//! `0`, and a value outside the target's range becomes `MIN`/`MAX`. x86's `cvtt*2si` answers the
+//! "integer indefinite" value (`MIN`) for all three of those cases, so each needs a
+//! compare-and-branch sequence around it. That is a step of its own; leaving them out costs a
+//! refused method, and getting them wrong would cost a silently different number.
+//!
+//! `frem`/`drem` are in the subset but are not an instruction — see the table above and the
+//! `frem` arm for why a deopt is the right shape for them rather than a refusal.
 //!
 //! ## Constant-folded shift counts — out, for now
 //!
@@ -375,14 +496,16 @@
 //! frame — the one mistake in this milestone that would corrupt the collector's world-view rather
 //! than compute a wrong number. (Step 5 needed it only for the locals at a loop header; step 6
 //! needs the same answer for the operand stack at every deopt site.) And
-//! **[`CompiledCode::returns_reference`]** tells the caller what the 32 bits it got back mean.
+//! **[`CompiledCode::returns`]** tells the caller what the bits in the result slot mean.
 //!
 //! ## References across the boundary, and the 4 GiB limit
 //!
 //! A reference here is a **heap offset**, not an address — `0` is `null`, and the first real object
-//! starts past a reserved null page. It crosses the boundary in the same 32 bits an `int` does
-//! (`RAX = (status << 32) | value`), which caps the heap this tier can return a reference out of at
-//! `u32::MAX`. That is not a new limit — the VM already stores every reference in a field, an array
+//! starts past a reserved null page. It used to cross the boundary in the same 32 bits an `int`
+//! did (`RAX = (status << 32) | value`), which capped the heap this tier could return a reference
+//! out of at `u32::MAX`; since the result moved into the buffer it crosses whole, and the cap
+//! survives only where it was always really about the heap *accessors* rather than about the
+//! exit. That is not a new limit — the VM already stores every reference in a field, an array
 //! slot and an object header as a `u32` — but it is now *load-bearing* for the JIT, so it is
 //! checked rather than assumed: [`Heap::max_offset`] is compared against `u32::MAX` and a VM
 //! configured past it simply compiles no method that returns or dereferences a reference
@@ -400,10 +523,206 @@
 //! that same instruction itself, and throws the right one by its ordinary path. Which exception it
 //! is was never this tier's business, and now it does not even have to re-derive *where* it was.
 //!
-//! # The three semantics traps
+//! # Group 2: richer references — reference fields, `volatile`, and a type check
+//!
+//! Step 5 gave this tier references it could *carry*; the wide-type step gave it every primitive
+//! field. What was left was the three things a real program does with a reference that this tier
+//! still could not: read one **out of a field**, touch a field the programmer marked `volatile`,
+//! and ask **what class an object is**. Each is a separate argument and none of them widens the
+//! master invariant.
+//!
+//! ## Reading a reference field is exactly as safe as reading an `int` one
+//!
+//! Because of the invariant, and only because of it: **no GC can observe a compiled frame**, so
+//! while native code is on this stack the object graph is *frozen* — no object moves, no reference
+//! goes stale, and re-reading a field re-reads the same bytes. A field holding a `long` and a field
+//! holding a reference are, to this tier, the same read at a different width.
+//!
+//! What it costs is one line of [`heap_load`] and one trap avoided: a reference is a heap **offset**,
+//! which is unsigned, so the four-byte load is **zero**-extending like a `float`'s and not
+//! sign-extending like an `int`'s. Sign-extending an offset with bit 31 set would give a negative
+//! `i64` that [`heap_address`]'s unsigned compare routes to the wrong base and that a deopt spills
+//! as a `Value::Reference` made of arithmetic. `null` is offset `0` and is an ordinary value here:
+//! loading it is not a deopt, `ifnull` tests it with the `cmp` it always did, and only
+//! *dereferencing* it deopts, exactly as before.
+//!
+//! ## What is **not** in, and why the line is drawn at writing rather than at reading
+//!
+//! **`putfield` of a reference, `putstatic` of one, and `aastore` are out** —
+//! [`Ineligible::ReferenceWrite`] and the still-unknown opcode `0x53`. Not for want of an
+//! instruction: a four-byte store would do it. What a reference store owes is the collector's
+//! **write barrier** — the interpreter routes one through `HeapService::store_reference`, which
+//! records an old→young pointer in the remembered set — and there is no instruction stream that can
+//! run one. An unrecorded old→young pointer is not a crash; it is a live object the next minor
+//! collection frees, discovered much later and somewhere else. That is a milestone of its own.
+//!
+//! It also buys a *diagnostic* property worth stating, because it is load-bearing for an
+//! investigation that is still open: this VM has an intermittent `DANGLING (Old, …) → (Eden, …)`
+//! report, and the argument that isolates it as **not the JIT's** is precisely that compiled code
+//! cannot write a reference into the heap, and therefore cannot create such a pointer. Widening
+//! this rule would destroy the argument before the bug is understood.
+//!
+//! Writing a **primitive** `volatile` field is in: an `int`, a `long`, a `float` and a `double` are
+//! not pointers, so no barrier is owed and nothing about the collector's world-view is at stake.
+//!
+//! ## `volatile`: the argument is the substrate, **not** x86-TSO
+//!
+//! Step 5 refused `volatile` fields on purpose, saying that "leaning on an architecture's memory
+//! model deserves its own step". This is that step, and the answer is that **no memory model is
+//! being leaned on**.
+//!
+//! > The JIT runs only on `green` — one OS thread, with context switches *between* opcodes — and on
+//! > `os-gil`, where the running thread holds the one global lock for the whole opcode, the native
+//! > call included. So while compiled code is on this thread's stack, **no other thread executes a
+//! > single opcode**. There is no concurrent reader for a `Release` to publish to, no concurrent
+//! > writer for an `Acquire` to observe, and no observer at all for an 8-byte `long` access to tear
+//! > in front of. A plain `mov` is not an approximation of the volatile access — in the absence of
+//! > any second execution it *is* the same execution.
+//!
+//! It is a stronger argument than TSO would have been, and it is also a narrower one: TSO would be
+//! a property of the machine and would survive anything, while this is a property of the
+//! **substrate** and dies the moment the substrate changes.
+//!
+//! > **VOLATILE-REVISIT-OS-PARALLEL.** Enabling this tier on `os-parallel` invalidates the whole
+//! > paragraph above, and not subtly — there really are other threads running Java opcodes. Every
+//! > volatile access emitted here must then be revisited and given a real ordering, and a volatile
+//! > `long` a real atomic rather than a `mov`. The marker is greppable and appears at each of the
+//! > three places that would have to change: here, the VM's `jit_field_site` resolver, and the
+//! > `os-parallel` gate in `Exec::try_osr`.
+//!
+//! ## `checkcast`/`instanceof`: an equality test, and a deopt for everything else
+//!
+//! The semantics are a subtype question — `null` always passes, otherwise the object's class must
+//! be a subclass, an implementer, or array-covariantly assignable — and computing that means
+//! walking superclass chains and interface lists, which is not something an instruction stream
+//! does. So it does not:
+//!
+//! ```text
+//!   null?                      -> pass (checkcast) / push 0 (instanceof), never a deopt
+//!   header class_id == target? -> pass (checkcast) / push 1 (instanceof)
+//!   anything else              -> DEOPT
+//! ```
+//!
+//! The **exact** case is the common one and is a `mov`, a `cmp` and a `jcc`; everything else — a
+//! genuine subclass, an interface, an array, and every failing cast — hands the method back at that
+//! pc and lets the interpreter re-execute the instruction and decide by its full path. Native code
+//! therefore computes no hierarchy and, as everywhere in this tier, **throws nothing**: a
+//! `ClassCastException` is the interpreter's, raised in a frame a deopt rebuilt.
+//!
+//! Baking the target's mirror offset in as an immediate is sound for the same reason `getstatic`
+//! bakes in an address: a `Class<…>` mirror is `malloc_old`ed and is in the **pinned** set
+//! `gc::compact` refuses to relocate, so its offset is fixed for the VM's life — and a comparison
+//! against a *pinned* offset is valid forever rather than until the next collection. The object's
+//! own `class_id` is the first word of its header, written by `objects_operations::allocate` as
+//! exactly that mirror offset, so the two sides of the `cmp` are the same quantity by construction.
+//!
+//! `ldc` of a **class literal** rides the same resolver: `Foo.class` is that pinned mirror offset,
+//! materialised as an immediate. It is the only `ldc` of a reference this tier does.
+//!
+//! ## `ldc` of a `String` is **out**, and the reason is a fact about this VM
+//!
+//! It looks like the twin of the class literal and it is not. `strings::intern` — despite the name
+//! — keeps **no interning table at all**: it `heap.malloc`s a fresh `String` object, in **Eden**,
+//! on every single execution, and `strings.rs` says so in as many words. Two consequences, and
+//! either one alone is disqualifying:
+//!
+//!  - **There is no offset to bake.** An interned String is not a permanent object here; it is a
+//!    young one that the next minor collection evacuates. Baking its offset in as an immediate is
+//!    the corruption this section's `checkcast` argument was careful to avoid — a pinned mirror is
+//!    safe, an Eden object is not.
+//!  - **Baking one would change the program's meaning.** Because there is no dedup, `"a" == "a"` is
+//!    *false* in this VM today. A compiled `ldc` that handed back the same offset twice would make
+//!    it true — so the two tiers would disagree about a program's result, which is worse than a
+//!    method that does not compile.
+//!
+//! The way in is to make interning real: a table, allocation in **Old**, and the interned set added
+//! to `gc::compact`'s `pinned` — the same move the array-class mirrors made when
+//! `ArrayStoreException` revealed the minor collection relocating them. That is a change to the
+//! *VM's* String semantics, observable to every program whether or not it is compiled, and it
+//! belongs in a step that owns it rather than as a side effect of a JIT widening.
+//!
+//! # Group 5: the opcodes that leave — `athrow`, and the monitors
+//!
+//! Both are added by **compiling them to an unconditional deopt**, which is a shape this tier
+//! already had (`frem`) rather than a new mechanism. What is new is only the argument for why the
+//! deopt is the *right* answer in each case, and the two arguments are not the same one.
+//!
+//! ## `athrow`: the exception is an operand, and the unwinding is the interpreter's
+//!
+//! Every exception in this tier has always been the interpreter's — a null receiver, an index out
+//! of range and a zero divisor all deopt rather than throw, and *which* exception it is was never
+//! native code's business. `athrow` is the case where the program says outright that it is
+//! throwing, and the answer does not change: **deopt at the pc of the `athrow`**, with the
+//! exception left where it already is, as the top entry of the reconstructed operand stack
+//! (`Kind::Reference` — the resume machinery materialises operands, and has since step 6).
+//!
+//! The interpreter then re-executes that very `athrow` and does the real work: the handler search,
+//! the monitors, the backtrace. **No exception handling is emitted anywhere.**
+//!
+//! The order rule ("a deopt names an instruction that has not run") is satisfied trivially, because
+//! the deopt *is* the instruction. The part that is worth checking rather than assuming is the
+//! interaction with the **handler restriction**, and it holds:
+//!
+//! > A method with a non-empty exception table compiles, with no OSR entries and no safepoint
+//! > polls, because a handler is an *entry* on an edge the forward walk never followed. A deopt is
+//! > an **exit**, taken at a pc reached along edges the walk did follow. So an `athrow` inside a
+//! > handler-bearing method deopts like any other guard, the interpreter picks the frame up at the
+//! > athrow's pc, and that frame's *own* table catches — the `JdWrite.guarded` shape, one step
+//! > earlier in the instruction.
+//!
+//! Inlined, the stub rebuilds the whole chain and the caller frame sits at the pc of its invoke,
+//! which is exactly where an interpreted call parks it — so a caller's handler covering that invoke
+//! catches with no special case.
+//!
+//! ## `monitorenter`/`monitorexit`: a deopt that is permanent, and a **frontier**
+//!
+//! A monitor acquire is a scheduler operation — it can park the thread, it has a wait-set, it is
+//! keyed by a heap offset — so it will not become an instruction at this tier. Refusing the method
+//! is nevertheless the worse answer, and for the reason the resume protocol exists: everything
+//! *before* the lock still runs natively. A method shaped "hot loop, then synchronize" keeps its
+//! loop.
+//!
+//! The load-bearing half is not the emitted jump but the decode: both opcodes are `Flow::Return`,
+//! so the scan **stops there**. The code after a `monitorenter` is therefore not part of the
+//! compilation at all — no state, no label, no emitted bytes, and no requirement that it be in the
+//! subset. Two consequences fall straight out:
+//!
+//!  - **Nothing after a `monitorenter` ever runs natively**, on any path, in that method. The
+//!    interpreter takes the lock and the interpreter releases it, so a monitor cannot be left
+//!    unbalanced by a compiled frame — there is no compiled frame after it.
+//!  - **There is no way back in**, either: a back-edge past the `monitorenter` is never walked, so
+//!    it never becomes an OSR entry.
+//!
+//! The cost is that a method that locks at its first instruction now compiles to a stub that deopts
+//! immediately, where it used to be refused — one boundary crossing per call for no work. That is
+//! the trade `frem` already makes at pc 0, taken here for the same reason.
+//!
+//! ### `synchronized` methods are excluded **structurally**, and still are
+//!
+//! Worth stating next to the above, because the two look like one thing and are not.
+//! `ACC_SYNCHRONIZED` is a **flag on the method**, not an opcode in its body: there is no bytecode
+//! for a deopt to name, so the trick above has nothing to apply to. The monitor is acquired by
+//! `push_frame` — *before* the interpreter reaches the JIT's dispatch point, which is gated on
+//! `lock.is_none()` — and released by `pop_frame`; inlining refuses such a callee outright
+//! (`jit_callee` checks `is_synchronized`). So the exclusion lives in the interpreter, is a
+//! property of the frame rather than of the instruction stream, and this group does not touch it.
+//!
+//! (The one place a `synchronized` method's *body* can still reach native code is an **OSR entry**
+//! into a loop of its own, which `try_osr` does not gate on the flag. That is sound and predates
+//! this group: the frame exists and holds the monitor throughout, native code neither takes nor
+//! drops it, and the ordinary `pop_frame` releases it on the way out.)
+//!
+//! # The three semantics traps — of the `int` type
 //!
 //! The emitter works in 64-bit registers; a Java `int` is 32-bit with wraparound. Three places
-//! where the difference is not academic, and what this module does about each:
+//! where the difference is not academic, and what this module does about each.
+//!
+//! **They are the `int`'s traps and not the tier's**, which is worth saying now that there are
+//! other types in it: a `long` has none of the three (it fills the register, its shift mask agrees
+//! with x86's, and its division needs a branch the `int`'s does *not*), and a `float` has a
+//! different set again. Each type's are argued at its own opcodes, and the differences are exactly
+//! where a copied-over habit becomes a wrong answer — see "`long` arithmetic" and "`float` and
+//! `double`" above.
 //!
 //! ## 1. The normalisation invariant
 //!
@@ -448,26 +767,86 @@
 //! a `java.lang.ArithmeticException`. Rather than emit exception machinery in native code, the
 //! compiler emits an explicit `cmp rcx, 0; je deopt` — see below.
 //!
-//! # Deopt: the protocol, and why it is sound
+//! # The boundary contract
 //!
-//! The compiled function is
+//! **This is the contract every other widening of this tier is built on — read it before changing
+//! anything that crosses.** The compiled function is
 //!
 //! ```text
 //!   extern "system" fn(buffer: *mut i64, entry_pc: i64) -> i64
 //! ```
 //!
-//! and packs **status and value into the one return register**:
+//! ## `RAX` carries the **status and nothing else**
 //!
 //! ```text
-//!   RAX = (status << 32) | (value as u32)
-//!   status 0 = returned normally, value is the `ireturn`/`areturn` operand
-//!   status 1 = deopt, value is the **bytecode pc** to resume interpreting at
-//!   status 2 = safepoint, value is the **bytecode pc** to resume interpreting at
+//!   RAX = (status << 32) | key
+//!
+//!   status 0  Status::OK         the method ran to one of its exits. `key` is 0 and means nothing.
+//!   status 1  Status::DEOPT      a guard failed;    `key` names a ResumeSite.
+//!   status 2  Status::SAFEPOINT  the poll fired;    `key` names a ResumeSite (a bytecode pc).
+//!   status 3  Status::ALLOC      Eden or the log is full; `key` names a ResumeSite.
 //! ```
 //!
-//! One register, no out-pointer, and the common case costs one instruction: `ireturn` is
-//! `mov eax, dword [slot]`, whose zero-extension simultaneously loads the value and writes status
-//! 0 into the high half. See [`Status`].
+//! Every value of `key` is a [`ResumeSite::key`]: a bytecode pc for a site in the root's own body,
+//! and a number past [`MAX_CODE_LEN`] for one inside an inlined callee. Any other status word
+//! decodes as a deopt at [`Status::NO_PC`], which names no site, so the caller falls back rather
+//! than reconstructing.
+//!
+//! ## The **value** travels in the buffer
+//!
+//! ```text
+//!   buffer: [ body₀ locals | body₀ spill | … | bodyₙ locals | bodyₙ spill | result | alloc log ]
+//!             └ written through ┘└ deopt only ┘                             └ return only ┘
+//! ```
+//!
+//! A `return`-family opcode stores its operand — **all 64 bits of it** — into the single slot at
+//! [`CompiledCode::result_base`] and then zeroes `RAX`. The caller reads that slot on
+//! [`Outcome::Returned`], and only when the descriptor says there is something to read: a `void`
+//! method never writes it and its contents are then whatever the previous excursion left.
+//!
+//! Every kind uses the same slot and the same instruction, and what differs is only how the bits
+//! are read at the far end:
+//!
+//! | kind | in the slot |
+//! |---|---|
+//! | `int` | the value, sign-extended (the normalisation invariant) |
+//! | reference | the heap **offset**, non-negative, whole |
+//! | `long` | the value |
+//! | `float` | the 32-bit IEEE pattern, zero-extended |
+//! | `double` | the 64-bit IEEE pattern |
+//!
+//! That table is the whole of what "the boundary is type-agnostic" means, and it is why adding
+//! `lreturn`, `freturn` and `dreturn` cost one line of emitter each.
+//!
+//! What the slot holds is the **descriptor's** answer, not the bits':
+//! [`CompiledCode::returns`] and [`CompiledCode::returns_void`] are read from the
+//! signature at compile time, and `ireturn`/`areturn`/`lreturn` are each checked against it
+//! ([`Ineligible::WrongType`]), so no caller ever inspects a returned value to learn its type.
+//!
+//! ## Why the value moved out of the register
+//!
+//! The original protocol packed both halves into `RAX` — `(status << 32) | (value as u32)` — and
+//! the common case really did cost one instruction (`mov eax, dword [slot]` loads the value and
+//! writes status 0 at once). What it also did was **spend the high half on the status**, leaving
+//! 32 bits for a result. That is enough for every `int` and every reference in a heap under 4 GiB,
+//! and enough for no `long` at all: `lreturn` was not a missing opcode, it was an unrepresentable
+//! one, and every widening to a category-2 type was blocked behind it.
+//!
+//! Of the three ways out — a second return register (`RDX`, which the ABI allows but which no
+//! `extern "system" fn` signature in Rust can express), a wider status word, or a slot in the
+//! buffer the caller already owns — the buffer is the one that costs nothing new. The buffer is
+//! already the marshalling channel, already sized by the compiler and reused by the caller, and
+//! already the thing a deopt spills through. Adding one slot to it makes a returned value
+//! **type-agnostic and width-agnostic** at the price of one store on the exit path, which is
+//! traversed once per call rather than once per iteration.
+//!
+//! Two smaller things fell out of it. A returned reference no longer passes through a `u32`, so
+//! the 32-bit cap on the heap is a property of the *heap accessors* rather than of the exit. And
+//! the OK path no longer depends on a zero-extension to write its status: `xor eax, eax` says
+//! `Status::OK` outright, so the status is built by the same [`Status`] constructor on all four
+//! paths.
+//!
+//! # Deopt: why resuming is sound
 //!
 //! # Step 6: a deopt that resumes instead of restarting, and the writes that unlocked
 //!
@@ -597,10 +976,77 @@
 //! L1 and store-to-load forwarding covers the round trip, while a register-allocated operand stack
 //! would have to negotiate with `idiv`'s fixed `RDX:RAX` and the shifts' fixed `CL`. Register
 //! allocation is the next step, not this one.
+//!
+//! # Group 3: the calls that were not inlinable
+//!
+//! Step 8 could expand exactly two of the five invokes, and only when the callee did not loop. This
+//! group takes the other three restrictions off, one mechanism each, and the shape of all three is
+//! the same: **nothing new is built; something that already existed is pointed at a second thing.**
+//!
+//! ## Stage 1: an inlined body may loop, because a poll is a resume site
+//!
+//! The refusal ([`Ineligible::InlineLoop`]) was justified by "only the root's loop headers carry a
+//! safepoint poll", which was true and beside the point. A poll is a place native code hands a
+//! half-finished method back, and such places have carried the **frames inlining removed** since
+//! step 8 ([`ResumeSite::inlined`]). So an inlined loop header gets a poll, and the exit stub that
+//! serves it is the deopt stub with a different status word — literally, via [`spill_chain`].
+//!
+//! Two things stay exactly as they were, and both are the difference between leaving and entering:
+//!
+//!  - **An inlined header is never an OSR entry.** Entering halfway into an expansion would mean
+//!    materialising a call chain that never happened; [`CompiledCode::osr_entries`] is the root's
+//!    set alone, and the entry dispatch still speaks bytecode pcs.
+//!  - **A header that cannot poll still refuses the callee.** The operand stack must be provably
+//!    empty *in the callee's own frame*, and the callee must have no exception table. Those are the
+//!    same two conditions the root's headers have always had; what changed is that failing them now
+//!    refuses the *inline* rather than being silently tolerated.
+//!
+//! ## Stage 2 (milestone F2): the monomorphic inline cache
+//!
+//! `invokevirtual` and `invokeinterface` bind on the receiver's runtime class, which an instruction
+//! stream cannot look up. They are inlined anyway, **speculatively**: the VM names the class it
+//! last dispatched on at that site, the compiler bakes its pinned mirror offset in as an immediate,
+//! and the emitted code compares it against the receiver's header word before the call's first
+//! write. A hit falls into the body; a miss deopts and the interpreter dispatches by its full path.
+//! See [`Guard`] for the whole argument, which is `checkcast`'s argument with a different consequence.
+//!
+//! **Where the class comes from is the design decision**, and it is the interpreter's observation
+//! rather than the static type: the dispatch path already holds the receiver's header word, so
+//! recording it is one `Relaxed` store on a path that has already loaded it, and by the time a
+//! method is compiled the site has been observed at least as many times as the invocation counter
+//! demanded. A guess is not a wrong answer, only a slow site.
+//!
+//! An `invokeinterface` needs nothing extra: a guard on the **exact** class makes the signature
+//! search the interpreter would do unnecessary, which is why one [`Guard::ExactClass`] serves both
+//! opcodes.
+//!
+//! ## Stage 2b: the cold call site
+//!
+//! A statically bound invoke the method has never *executed* — an untaken branch — leaves its F0
+//! cache cell at zero, and one of those used to refuse the whole method. It no longer does: for
+//! `invokestatic`/`invokespecial` the site was only ever going to name a method, and the VM can
+//! answer that read-only out of its resolution caches when some site has already resolved the same
+//! triple. A cold **dispatched** site stays refused, because there is no receiver class to
+//! speculate on and inventing one is a guess rather than a speculation.
+//!
+//! ## `invokedynamic` (0xba) is still out, and not for want of a guard
+//!
+//! It is worth stating why, because "bake in the linked call site" is the obvious next move and it
+//! does not apply to this VM. An `invokedynamic` here is **not a call**: the interpreter re-runs the
+//! bootstrap on every execution and what the bootstrap produces is a VM action, not a target.
+//! `StringConcatFactory` builds a `String`; `LambdaMetafactory` allocates an instance of a spun
+//! class and runs its constructor; `ObjectMethods`, `SwitchBootstraps` and `ConstantBootstraps`
+//! compute in Rust. Only the *spun class* and the *condy constants* are memoised — there is no
+//! linked `MethodId` anywhere to hand this tier, so there is nothing a class guard would protect.
+//!
+//! Making one inlinable would mean first giving the interpreter a linked call site to cache, and
+//! then — for the one factory with a plausible shape, `metafactory` — expressing "allocate the spun
+//! class and run its `<init>`" as the `new` + `invokespecial` pair it already is. Both are real
+//! steps; neither is a guard.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::x64::{Asm, AsmError, Cond, Label, Mem, Reg};
+use super::x64::{Asm, AsmError, Cond, Label, Mem, Reg, Xmm};
 
 /// What a value **is**, as far as the boundary is concerned — the lattice the abstract
 /// interpretation carries for every local slot and every operand-stack position.
@@ -609,9 +1055,9 @@ use super::x64::{Asm, AsmError, Cond, Label, Mem, Reg};
 /// one that names *disagreement*:
 ///
 /// ```text
-///                Conflict          ⊤ — two paths, two answers
-///              /    |    \
-///           Int  Reference  Opaque
+///                              Conflict                ⊤ — two paths, two answers
+///        /       /       |       |       |       \      \
+///      Int  Reference  Long   Float  Double  Cat2High  Opaque
 /// ```
 ///
 /// Until step 8 there was no join at all: two paths reaching a pc with different kinds in the same
@@ -636,8 +1082,75 @@ pub enum Kind {
     /// A **reference**: a heap *offset*, `0` for `null`, carried zero-extended (an offset is never
     /// negative). Not a machine address — see [`Heap`] for what turns one into the other.
     Reference,
-    /// Something this tier cannot hold in a slot at all: a `long`, a `double` or a `float`
-    /// argument. No opcode in the subset reads or writes one, so an `Opaque` slot is only ever
+    /// A Java `long` — **category 2**, and the whole of what that costs this map.
+    ///
+    /// The *value* is one 64-bit word and needs no normalisation invariant: unlike an `int`, whose
+    /// 32 bits sit in a 64-bit register and have to be re-sign-extended after every operation that
+    /// can overflow them, a `long` **is** the register. The 64-bit `add`, `sub`, `imul`, `neg`,
+    /// `and`, `or`, `xor` and the 64-bit shifts are Java's semantics exactly, with nothing emitted
+    /// afterwards to repair them.
+    ///
+    /// What category 2 does cost is the **slot arithmetic**, and it costs it in exactly one of the
+    /// two halves of a frame (all of which applies verbatim to [`Kind::Double`], the other
+    /// category-2 type):
+    ///
+    ///  - **Locals are indexed in JVMS slots**, so a `long` in local `n` also claims local `n + 1`
+    ///    ([`Kind::Cat2High`]), which JVMS §2.6.1 makes inaccessible. Both this tier and the
+    ///    interpreter keep the whole 64-bit value in the *low* slot and never touch the high one —
+    ///    the interpreter because a `Value::Long` is one entry, this tier because buffer slot
+    ///    `locals_base + n` is where `lstore` writes. They agree by construction rather than by
+    ///    convention.
+    ///  - **The operand stack is *not*.** The interpreter's stack is a `Vec<Value>` in which a
+    ///    `Value::Long` is **one** entry, so this map counts it as one position too. That is not a
+    ///    simplification of the JVMS — it is what makes a resume site's stack pour straight into
+    ///    `Frame::push` with no width arithmetic between the two. The price is stated at the stack
+    ///    shuffles: the six shape-dependent ones (`pop2`, `dup2`, `dup2_x1`, `dup2_x2`, `dup_x2`,
+    ///    and `dup_x1`/`swap`/`pop`/`dup` over a category-2 value) are **refused** rather than
+    ///    guessed at, since "two slots" is one entry or two depending on what is in them.
+    Long,
+    /// A Java `float` — IEEE-754 binary32, and **category 1**: one local slot and one operand, like
+    /// an `int`.
+    ///
+    /// **The boundary form is the 32-bit pattern, zero-extended.** A float never travels as a
+    /// number here — it travels as its bits, in the same 64-bit slots and the same [`CACHE`]
+    /// registers everything else uses, and only becomes a float inside an SSE register for the
+    /// three or four instructions of an arithmetic opcode. That is the whole of the design the
+    /// module docs call "the float never gets a register of its own": `XMM` is a second bank with a
+    /// second allocator's worth of problems, and the round trip through `movd` costs two
+    /// instructions per opcode and buys the operand-stack cache back unchanged.
+    ///
+    /// The zero-extension is an invariant of *hygiene* rather than of correctness — every consumer
+    /// (`movd`, a 32-bit store, `JitValue::of`) reads the low half and ignores the rest. It is
+    /// maintained anyway, by loading floats with a zero-extending 32-bit `mov` and by taking them
+    /// out of `XMM` with `movd`, so that the bytes a deopt spills are a function of the program and
+    /// not of what happened to be in the register.
+    Float,
+    /// A Java `double` — IEEE-754 binary64, and **category 2**: two local slots, of which the
+    /// second is [`Kind::Cat2High`], exactly as for [`Kind::Long`].
+    ///
+    /// Its boundary form is the 64-bit pattern, which fills the slot, so unlike [`Kind::Float`] it
+    /// has no upper half to keep tidy.
+    Double,
+    /// **The upper half of a category-2 local**: the slot a `long` or a `double` in local `n`
+    /// claims at `n + 1`, which JVMS §2.6.1 forbids anything from reading.
+    ///
+    /// It has no value and is never written by anybody — neither the interpreter's `lstore`, which
+    /// stores one `Value::Long` into slot `n`, nor this tier's, which writes buffer slot `n`. It
+    /// exists so that the two facts a `long` local implies are *checked* rather than assumed:
+    ///
+    ///  - `lload n` requires `n` to be `Long` **and** `n + 1` to be `Cat2High` (and `dload n` the
+    ///    same, for `Double`). A method that overwrote the high slot with an `istore` (illegal
+    ///    bytecode, but a hostile class file may contain it) has a `long` that is no longer there,
+    ///    and this is what notices;
+    ///  - nothing reads it as anything else, since it equals neither `Int` nor `Reference` nor
+    ///    `Long` and every read is an equality check.
+    ///
+    /// It never appears on the operand stack — a `long` is one position there — so the only place
+    /// it is ever handed back is a [`VirtualFrame`]'s locals, where it is the `Value::Int(0)` the
+    /// emitted call zeroed the slot to.
+    Cat2High,
+    /// Something this tier cannot hold in a slot at all: a `double` or a `float` argument. No
+    /// opcode in the subset reads or writes one, so an `Opaque` slot is only ever
     /// *passed over* — which is why it needs no representation beyond "not ours".
     ///
     /// **Not the same claim as [`Conflict`][Kind::Conflict]**, though both are written back the same
@@ -661,15 +1174,34 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// Whether this kind **names a `Value`** the interpreter can be handed — `Int` or `Reference`,
-    /// and neither of the two that mean "no answer".
+    /// Whether this kind **names a `Value`** the interpreter can be handed with no reference to the
+    /// frame it already holds — `Int`, `Reference`, `Long`, and `Cat2High` (which names the
+    /// `Value::Int(0)` a fresh frame's untouched slot holds).
     ///
     /// The two negative cases are different claims with the same consequence: `Opaque` says
     /// compiled code never wrote the slot, `Conflict` says two paths wrote it differently. Where a
     /// value may be *skipped* (the root frame's locals) both are skipped; where it may not (an
     /// operand, an inlined frame's slot) both make the site unrebuildable and the method ineligible.
     pub fn names_a_value(self) -> bool {
-        matches!(self, Kind::Int | Kind::Reference)
+        matches!(
+            self,
+            Kind::Int | Kind::Reference | Kind::Long | Kind::Float | Kind::Double | Kind::Cat2High
+        )
+    }
+
+    /// Whether this kind is **category 2** — a `long` or a `double`. The one question the
+    /// operand-stack shuffles have to ask, and the reason they ask it is that JVMS defines them in
+    /// *slots* while both this map and the interpreter count *entries*.
+    pub fn is_category2(self) -> bool {
+        matches!(self, Kind::Long | Kind::Double)
+    }
+
+    /// Whether this kind is a **floating-point** one, i.e. whether its bits are an IEEE-754 value
+    /// rather than an integer. What separates the two in this tier is not their width — a `long`
+    /// and a `double` are both 64 bits in the same slot — but which register bank an *operation* on
+    /// them has to happen in.
+    pub fn is_floating(self) -> bool {
+        matches!(self, Kind::Float | Kind::Double)
     }
 }
 
@@ -721,9 +1253,17 @@ pub struct Heap {
     pub null_page: u32,
     /// Byte offset of an array's `length` word inside the array object.
     pub array_length: u32,
-    /// Byte offset of element `0` of an `int[]`.
-    pub int_array_data: u32,
-    /// Bytes per element of an `int[]`.
+    /// Byte offset of element `0` — i.e. the whole array header, `[class_id | mark | length]`.
+    ///
+    /// **The same for every element type**, which is why this is no longer called
+    /// `int_array_data`: this VM lays an array out as `header ++ count * width`, and only the
+    /// *width* varies. That is what lets a compiled `newarray` of any primitive, and every element
+    /// access, share one displacement.
+    pub array_data: u32,
+    /// Bytes per element of an `int[]`. Still `int`-specific because it is what `iaload`/`iastore`
+    /// bake in; the widths of the *other* element types travel per-instruction, in
+    /// [`ArrayType::element`], because they are a property of the array class being allocated
+    /// rather than of the VM.
     pub int_element: u32,
 }
 
@@ -745,6 +1285,46 @@ pub struct Instance {
     /// interpreter's `allocate` writes it. A byte of difference here is an object the collector
     /// cannot type, which is why it is resolved by the VM rather than derived here.
     pub class_id: u32,
+}
+
+/// **Which array a `newarray`/`anewarray` is asking about**, in the operand's own terms — the
+/// compiler does not know what a descriptor is, so it hands the VM the bytes it read and lets the
+/// VM name the class.
+///
+/// The two opcodes carry genuinely different operands, which is why this is an enum rather than a
+/// `u16`: `newarray`'s is a one-byte `atype` naming a primitive from a fixed table, `anewarray`'s
+/// is a constant-pool index naming the **element** class (so the array class is `[L…;`, or a plain
+/// `[` prefix when the element is itself an array).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ArrayOf {
+    /// `newarray`'s `atype` byte: `4`=`boolean` … `11`=`long` (JVMS §6.5).
+    Primitive(u8),
+    /// `anewarray`'s constant-pool index, naming the element class in the *instruction's own* unit.
+    Reference(u16),
+}
+
+/// What a compiled `newarray`/`anewarray` needs to know, and the array counterpart of [`Instance`]:
+/// the header word, and **how wide one element is**.
+///
+/// The size is not here, and that is the whole difference between allocating an array and
+/// allocating an object: `ARRAY_HEADER_SIZE + count * element` is only known at run time, because
+/// `count` is an operand. So what is baked in is the *width*, and the size is computed by the
+/// emitted code — see the `newarray` arm for the three consequences (a guard on the count, a
+/// zeroing **loop**, and a length word that carries the unrounded count).
+///
+/// Both fields are resolved at **compile time** and neither may move afterwards. Neither does: an
+/// array class's element width is a property of its descriptor, and its `Class<…>` mirror is
+/// `malloc_old`ed and pinned against `gc::compact` exactly as an ordinary class's is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ArrayType {
+    /// The header's `class_id` word: the **array class's** mirror offset (`[I`, `[LDog;`, `[[J`),
+    /// written exactly as `array_operations::allocate_array` writes it.
+    pub class_id: u32,
+    /// Bytes per element — `1` for `byte[]`/`boolean[]`, `2` for `char[]`/`short[]`, `4` for
+    /// `int[]`/`float[]` and every reference array, `8` for `long[]`/`double[]`. The VM's own
+    /// `element_width`, asked rather than re-derived, for the same reason [`Heap::int_element`] is
+    /// asked: a width the two disagree about is an array whose elements land on top of each other.
+    pub element: u32,
 }
 
 /// Everything about the method being compiled that is not decided by reading its bytecode.
@@ -821,20 +1401,83 @@ pub struct Callee<'a> {
     /// descriptor here, because it is the same number the interpreter's own `invokespecial` pops
     /// and the two must not be able to disagree.
     pub arg_slots: usize,
+    /// **What has to hold at run time for this body to be the right one** — see [`Guard`]. A
+    /// statically bound call answers [`Guard::Static`]; a speculatively bound one names the class
+    /// its body was selected for.
+    pub guard: Guard,
+}
+
+/// **What an expanded call checks before it runs the body it was given** — the whole of this
+/// tier's inline cache (milestone F2).
+///
+/// A call is inlined by emitting the callee's body in place, which is only sound while the body
+/// handed over is the body that would actually run. For `invokestatic` and `invokespecial` that is
+/// a static fact and there is nothing to check. For `invokevirtual` and `invokeinterface` it is
+/// not: the target is selected by the receiver's **runtime** class, and this tier has no way to
+/// walk a vtable.
+///
+/// So the call is bound **speculatively**: the VM names one class it has actually seen at this site,
+/// the compiler bakes that class's mirror offset in as an immediate, and the emitted code compares
+/// it against the receiver's header word. A hit falls into the inlined body; a miss deopts, and the
+/// interpreter dispatches the call by its full path. The guard is emitted **before** the arguments
+/// are copied into the callee's locals, so a miss resumes at the invoke with the operand stack it
+/// was entered with and the call is simply performed again, interpreted.
+///
+/// Why an equality test is enough — the same argument `checkcast` makes: a `Class<…>` mirror is
+/// `malloc_old`ed and pinned against `gc::compact`, so its offset is fixed for the VM's life, and
+/// it is the very word `objects_operations::allocate` writes into an object's header. The two
+/// sides are one quantity, not two derivations of it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Guard {
+    /// Nothing to check: the call is statically bound *and* the interpreter would not have looked
+    /// at the receiver either. `invokestatic` and `invokespecial` — the interpreter's
+    /// `invokespecial` pushes a frame with a `null` `this` and lets the body's first dereference
+    /// raise the `NullPointerException`, so inlining the body reproduces it exactly.
+    Static,
+    /// The receiver must be non-`null`, and nothing more: a `private` method reached by
+    /// `invokevirtual` (JVMS §6.5 nestmate access), which is its own selected method whatever the
+    /// receiver's class is.
+    ///
+    /// The check is not pedantry. The interpreter's `invokevirtual` throws the
+    /// `NullPointerException` **before** it dispatches, unlike its `invokespecial`, so a body
+    /// inlined without this guard would run on a `null` receiver and quietly compute something —
+    /// and the whole of this tier's contract is that native code and the interpreter agree.
+    NotNull,
+    /// The receiver must be non-`null` **and** its runtime class exactly the one whose `Class<…>`
+    /// mirror sits at this heap offset. Anything else — a `null`, a subclass, a sibling
+    /// implementor — deopts.
+    ExactClass(u32),
 }
 
 pub struct Environment<'a> {
     /// Resolves a constant-pool index **of `unit`** to an `int` constant — `None` for every other
     /// constant kind, which is how a `String` or class-literal `ldc` is rejected.
     pub int_const: &'a dyn Fn(Unit, u16) -> Option<i32>,
-    /// Resolves a `getstatic`'s index **in `unit`** to the **absolute address** of an `int` static,
-    /// and answers `None` unless the field is a static `int` of an **already-initialised** class.
-    pub static_int: &'a dyn Fn(Unit, u16) -> Option<usize>,
-    /// Resolves a `getfield` at `(unit, pc, index)` to the field's **byte offset inside the
-    /// object**, and answers `None` unless it is a **non-`volatile` instance field of type `int`**.
-    /// The `pc` is passed because the VM keys its own resolved-site cache by it; the answer depends
-    /// only on the unit and the index.
-    pub int_field: &'a dyn Fn(Unit, usize, u16) -> Option<u32>,
+    /// Resolves a `ldc2_w`'s index **of `unit`** to a `long` constant — `None` for a
+    /// `CONSTANT_Double`, which is what [`double_const`][Environment::double_const] answers for.
+    pub long_const: &'a dyn Fn(Unit, u16) -> Option<i64>,
+    /// Resolves a `ldc`/`ldc_w`'s index to a `float` constant, as its **32-bit IEEE pattern**.
+    /// Bits rather than an `f32` because that is what the generated code materialises — an
+    /// immediate — and because it keeps a NaN's payload from being quieted in transit.
+    pub float_const: &'a dyn Fn(Unit, u16) -> Option<u32>,
+    /// Resolves a `ldc2_w`'s index to a `double` constant, as its 64-bit IEEE pattern. Same
+    /// reasoning as [`float_const`][Environment::float_const].
+    pub double_const: &'a dyn Fn(Unit, u16) -> Option<u64>,
+    /// Resolves a `getstatic`/`putstatic`'s index **in `unit`** to the **absolute address** of the
+    /// static and **what is in it** — [`Kind::Int`] for a 4-byte `int`, [`Kind::Long`] for an
+    /// 8-byte `long`. `None` unless the field is one of those two, in a class that is
+    /// **already initialised**.
+    ///
+    /// The kind is what decides the emitted access, and getting it wrong is not a wrong number but
+    /// a wrong *width*: a 64-bit load of an `int` static drags in its neighbour, and a 32-bit store
+    /// to a `long` static leaves the top half of the old value behind. So the resolver states it
+    /// rather than the compiler inferring it from the descriptor it never sees.
+    pub static_field: &'a dyn Fn(Unit, u16) -> Option<(usize, Kind)>,
+    /// Resolves a `getfield`/`putfield` at `(unit, pc, index)` to the field's **byte offset inside
+    /// the object** and its kind — [`Kind::Int`] or [`Kind::Long`], and `None` for everything else
+    /// (a reference field, a `volatile` one, a `float`). The `pc` is passed because the VM keys its
+    /// own resolved-site cache by it; the answer depends only on the unit and the index.
+    pub field: &'a dyn Fn(Unit, usize, u16) -> Option<(u32, Kind)>,
     /// Resolves a `new`'s class-constant index to the two facts an inline allocation needs — see
     /// [`Instance`] — and answers `None` unless every precondition of a *bare* allocation holds:
     /// the class is loaded, its layout is known, its `Class<…>` mirror exists, and it is
@@ -845,6 +1488,47 @@ pub struct Environment<'a> {
     /// code has no way to run anything. A method allocating an instance of a class that is not yet
     /// initialised simply does not compile.
     pub instance: &'a dyn Fn(Unit, u16) -> Option<Instance>,
+    /// Resolves a `newarray`/`anewarray` to the two facts an inline array allocation needs — see
+    /// [`ArrayType`] — and answers `None` whenever this tier must not allocate that array inline.
+    ///
+    /// The precondition is the array-class twin of [`instance`][Environment::instance]'s, and it is
+    /// **weaker in one way and stricter in another**. Weaker: an array class has no `<clinit>` and
+    /// no static state, so there is no initialisation to wait for — `int[]` is allocatable the
+    /// moment the VM can name it. Stricter: its `Class<…>` **mirror must already exist**, and
+    /// minting one is a *write* (it allocates), which compilation is not allowed to do. So a
+    /// `newarray` whose array class has never been allocated by the interpreter refuses the whole
+    /// method, exactly as a `new` of a not-yet-`Done` class does.
+    ///
+    /// **What that costs**, stated rather than hidden: the very first `int[]` in a program is
+    /// always allocated interpreted, and until then no method containing a `new int[]` compiles. In
+    /// practice the cost is nil — a method is offered to this tier only once it is *hot*, which
+    /// means it has already run many times, which means its arrays' mirrors exist. The refusal
+    /// therefore bites only on a `newarray` on a cold branch of a hot method, where the honest
+    /// answer is the interpreter anyway. Making it not bite would mean allocating a mirror from
+    /// inside a compilation, and a compilation that can allocate is a compilation that can collect.
+    pub array: &'a dyn Fn(Unit, ArrayOf) -> Option<ArrayType>,
+    /// Resolves a **class-constant** index in `unit` to the heap **offset of that class's
+    /// `Class<…>` mirror** — the exact `u32` an object of that class carries in the first word of
+    /// its header. `None` when the class has no mirror yet, which refuses the whole method.
+    ///
+    /// It is what `checkcast`, `instanceof` and a class-literal `ldc` bake in as an immediate, and
+    /// the reason all three may is one fact about the VM: a mirror is `malloc_old`ed and is in the
+    /// **pinned set** `gc::compact` refuses to relocate, so its offset is fixed for the VM's life.
+    /// A comparison against it is therefore valid forever, not merely until the next collection —
+    /// which is precisely what an *interned `String`* would not be, and why `ldc` of one is not
+    /// here (see the module docs).
+    ///
+    /// Read-only like every other resolver: minting a mirror **allocates**, and a compilation that
+    /// can allocate is a compilation that can collect. So a `checkcast` against a class the
+    /// interpreter has never prepared refuses the method rather than preparing it — the same trade
+    /// [`array`][Environment::array] makes, and free for the same reason (a method reaches this
+    /// tier only once it is hot, i.e. once it has already run).
+    ///
+    /// **Not the same question as [`instance`][Environment::instance]**, which also hands back a
+    /// `class_id`: that one additionally requires the class to be *initialised*, because `new` is a
+    /// first active use. A `checkcast` is not, so requiring it here would refuse methods for a
+    /// reason the JVMS does not have.
+    pub class_mirror: &'a dyn Fn(Unit, u16) -> Option<u32>,
     /// Resolves the **invoke** at `(unit, pc, index)` to the callee this tier may inline there, or
     /// `None` for every call it may not.
     ///
@@ -886,6 +1570,27 @@ const T1: Reg = Reg::Rcx;
 /// Third scratch. Clobbered by `cqo`/`idiv` (which write the remainder there), so nothing may be
 /// live in it across a division.
 const T2: Reg = Reg::Rdx;
+
+/// **The two SSE scratch registers**, and the whole of this tier's use of the XMM bank.
+///
+/// A floating-point value here lives in an ordinary 64-bit slot or [`CACHE`] register as its *bit
+/// pattern* ([`Kind::Float`]); it enters an XMM register at the start of an arithmetic opcode and
+/// leaves at the end, and nothing is ever live in one across an instruction boundary. So there is
+/// no second register allocator, no second set of homes, no interaction with the operand-stack
+/// cache, and no spill discipline for a deopt stub to know about — a stub reads the same homes it
+/// always did, because that is where the values still are.
+///
+/// The cost is two `movd`/`movq` instructions per opcode. The saving is an entire allocator, and
+/// the reason it is the right trade for a first tier is that the alternative has to answer
+/// "which bank is operand `k` in?" at every merge, every deopt site and every OSR entry — a
+/// question the positional [`operand_home`] mapping is designed never to have.
+///
+/// Both are **volatile** under the Microsoft x64 ABI (`XMM0`–`XMM5` are), so the prologue owes
+/// them nothing; `XMM6`–`XMM15` would each need a 16-byte-aligned spill slot the frame does not
+/// have, which is the other reason the working set is two.
+const F0: Xmm = Xmm::Xmm0;
+/// The second SSE scratch — see [`F0`].
+const F1: Xmm = Xmm::Xmm1;
 
 /// **The operand-stack cache** (step 10): the registers native operand slots `0..CACHE.len()` live
 /// in, in slot order. Everything past the end of this array stays in its frame slot, exactly as
@@ -1057,11 +1762,16 @@ fn alu_home(a: &mut Asm, op: Alu, dst: Reg, h: Home) {
     }
 }
 
-/// How a native call ended — the decoded form of the packed return value (see the module docs).
+/// How a native call ended — the decoded form of the status word (see the module docs).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Outcome {
-    /// Ran to an `ireturn`/`areturn`; this is the method's result.
-    Returned(i32),
+    /// Ran to a `return`-family opcode and the frame is finished.
+    ///
+    /// **It carries nothing**, and that is the whole of the F3-`long` boundary change. The value —
+    /// when there is one — is in the buffer's [`result slot`][CompiledCode::result_base], all
+    /// **64 bits** of it, and what it is (an `int`, a reference, a `long`) is the descriptor's
+    /// answer rather than the status word's. See [`Status`].
+    Returned,
     /// Gave up at this **bytecode pc** — a zero divisor, a null receiver, an index out of range.
     /// The instruction at that pc has *not* been executed (see the write/pc rule in the module
     /// docs), the caller's buffer holds the locals **and** the operand stack, and the interpreter
@@ -1074,25 +1784,42 @@ pub enum Outcome {
     /// and this is the bytecode pc to resume interpreting at. The only difference is *why*, which
     /// matters to the counters and to whether on-stack entry stays open.
     Safepoint(u32),
-    /// A `new`'s fast path was not available — Eden is full, or this excursion has already logged
-    /// as many allocations as the buffer holds. Same state contract again; see [`Status::ALLOC`]
-    /// for why it is not folded into [`Outcome::Deopt`].
+    /// An allocation's fast path was not available — Eden is full, or this excursion has already
+    /// logged as many allocations as the buffer holds. Same state contract again; see
+    /// [`Status::ALLOC`] for why it is not folded into [`Outcome::Deopt`].
+    ///
+    /// The two array opcodes report this for two further conditions that are not about capacity at
+    /// all: a **negative** count and a count over [`MAX_INLINE_ARRAY_BYTES`]. A site carries one
+    /// status, and the interpreter's response is identical either way — resume at this pc and
+    /// re-execute the instruction, which is what throws the `NegativeArraySizeException` or
+    /// allocates the big array. See the `newarray` arm for the argument.
     AllocFailed(u32),
 }
 
-/// The status half of the packed return value (see the module docs).
+/// **The status word**: everything `RAX` carries back across the boundary, and — since the widening
+/// to `long` — the *only* thing it carries.
+///
+/// ```text
+///   RAX = (status << 32) | key
+/// ```
+///
+/// `key` is a [`ResumeSite::key`] for the three non-return statuses and is **meaningless** (emitted
+/// as 0) for [`Status::OK`]. The returned value does not appear here at all: it is written to the
+/// buffer's [`result slot`][CompiledCode::result_base] by the `return`-family opcode itself. See
+/// the module docs, "the boundary contract", for why the value moved out of the register.
 pub struct Status;
 
 impl Status {
     /// Bits the status occupies: the high half of `RAX`.
     pub const SHIFT: u32 = 32;
-    /// The method ran to an `ireturn`; the low 32 bits are the result.
+    /// The method ran to one of its exits. The low 32 bits are **not** a value — the result, if the
+    /// descriptor says there is one, is in the buffer's result slot.
     pub const OK: i64 = 0;
-    /// The method gave up; the low 32 bits are the bytecode pc to resume at.
+    /// The method gave up; the low 32 bits are the resume-site key to rebuild the state at.
     pub const DEOPT: i64 = 1;
-    /// The poll fired; the low 32 bits are the bytecode pc to resume at.
+    /// The poll fired; the low 32 bits are the resume-site key (a bytecode pc) to resume at.
     pub const SAFEPOINT: i64 = 2;
-    /// A `new` could not take its **fast path**; the low 32 bits are the bytecode pc to resume at.
+    /// An allocation could not take its **fast path**; the low 32 bits are the resume-site key.
     ///
     /// The state contract is a deopt's exactly — the buffer holds the locals and the operand stack,
     /// and the instruction at that pc has not run — but the *reason* is a capacity condition rather
@@ -1102,6 +1829,12 @@ impl Status {
     /// first Eden fill would retire every allocating loop after one lap); and it must not be counted
     /// as a deopt, because "this method keeps failing a guard" and "this loop keeps filling Eden"
     /// are different facts about a run.
+    ///
+    /// `newarray`/`anewarray` add two conditions to the list that are not about capacity: a
+    /// **negative** count, and one whose array would exceed [`MAX_INLINE_ARRAY_BYTES`]. They ride
+    /// this status because a site carries exactly one, and because neither wants the enclosing loop
+    /// retired — a negative count throws, so the loop does not continue anyway, and a big array is
+    /// the ordinary "this is not native code's job" case the status exists for.
     pub const ALLOC: i64 = 3;
 
     /// The pc [`unpack`][Status::unpack] reports for a status word no emitted code produces. Not a
@@ -1109,7 +1842,15 @@ impl Status {
     /// resume table simply finds nothing.
     pub const NO_PC: u32 = u32::MAX;
 
-    /// The exact `i64` a deopt stub at bytecode `pc` returns — `mov rax, <this>`.
+    /// The exact `i64` a `return`-family opcode leaves in `RAX` — `Status::OK` with an empty key.
+    ///
+    /// It is zero, so the emitter writes it with a two-byte `xor eax, eax`; naming it anyway is
+    /// what keeps "the status word is built in exactly one place" true of the OK path too.
+    pub const fn ok_value() -> i64 {
+        Status::OK << Status::SHIFT
+    }
+
+    /// The exact `i64` a deopt stub for resume-site `key` returns — `mov rax, <this>`.
     pub const fn deopt_value(pc: u32) -> i64 {
         (Status::DEOPT << Status::SHIFT) | pc as i64
     }
@@ -1132,7 +1873,7 @@ impl Status {
     /// anything, so it must not try" is the answer that is safe for every possible state.
     pub fn unpack(raw: i64) -> Outcome {
         match raw >> Status::SHIFT {
-            Status::OK => Outcome::Returned(raw as i32),
+            Status::OK => Outcome::Returned,
             Status::SAFEPOINT => Outcome::Safepoint(raw as u32),
             Status::DEOPT => Outcome::Deopt(raw as u32),
             Status::ALLOC => Outcome::AllocFailed(raw as u32),
@@ -1147,7 +1888,9 @@ impl Status {
 pub enum Ineligible {
     /// An opcode outside the whitelist (the overwhelmingly common answer).
     Opcode { pc: usize, opcode: u8 },
-    /// `ldc`/`ldc_w` naming something that is not a `CONSTANT_Integer`.
+    /// `ldc`/`ldc_w` naming something that is not a `CONSTANT_Integer`, or `ldc2_w` naming
+    /// something that is not a `CONSTANT_Long` — i.e. a `CONSTANT_Double`, the only other thing it
+    /// can name.
     NonIntegerConstant { pc: usize, index: u16 },
     /// A `getstatic` the resolver would not give an address for: the field is not a static `int`,
     /// or its declaring class is not initialised yet. Unlike every other variant this one is a
@@ -1160,9 +1903,32 @@ pub enum Ineligible {
     /// [`UnresolvedStatic`][Ineligible::UnresolvedStatic] this is a property of the VM's state as
     /// well as of the bytecode, and caching it is the same deliberate price.
     UnresolvedField { pc: usize, index: u16 },
-    /// A `new` the resolver would not answer for: the class is not loaded, has no mirror, or — the
-    /// common case — has not been initialised yet. Like the two above it is a property of the VM's
-    /// state as well as of the bytecode, and caching it is the same deliberate price.
+    /// A `putfield`/`putstatic` whose field holds a **reference** (group 2).
+    ///
+    /// Reading one is in the subset and costs nothing (see the module docs, "reference fields");
+    /// *writing* one is out, and it is out for a reason that has nothing to do with widths — a
+    /// four-byte store would do. What a reference store owes is the collector's **write barrier**:
+    /// the interpreter writes it through `HeapService::store_reference`, which records an
+    /// old→young pointer in the remembered set, and an instruction stream has no way to run one. An
+    /// unrecorded old→young pointer is not a crash, it is an object the minor collection frees
+    /// while it is still reachable.
+    ///
+    /// So the ban lives **here**, in the compiler, rather than in the VM's resolvers: the resolvers
+    /// answer what a field *is*, and the one opcode-shaped rule — "compiled code may read a
+    /// reference field and may not write one" — is stated once, where both halves of the pair can
+    /// be seen at the same time. It is also what keeps the diagnostic argument about the
+    /// intermittent `DANGLING (Old, …) → (Eden, …)` report intact: compiled code cannot create such
+    /// a pointer, so a dangling one is provably not this tier's.
+    ReferenceWrite { pc: usize },
+    /// A `new`, `newarray` or `anewarray` the resolver would not answer for: the class is not
+    /// loaded, has no mirror, or — the common case for `new` — has not been initialised yet. Like
+    /// the two above it is a property of the VM's state as well as of the bytecode, and caching it
+    /// is the same deliberate price.
+    ///
+    /// `index` is the constant-pool index for `new` and `anewarray`. For **`newarray` it is the
+    /// `atype` operand** instead (`4`…`11`), which names a primitive from JVMS §6.5's table rather
+    /// than a pool entry — the opcode has no pool index to report, and the operand it does have is
+    /// the more useful thing to print.
     UnresolvedClass { pc: usize, index: u16 },
     /// A `new` this tier cannot allocate inline even though the class resolved: no Eden cursor was
     /// supplied, the object is bigger than Eden, or Eden's capacity does not fit the immediate the
@@ -1229,12 +1995,17 @@ impl std::fmt::Display for Ineligible {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Ineligible::Opcode { pc, opcode } => write!(f, "opcode 0x{opcode:02x} at {pc} is outside the compiled subset"),
-            Ineligible::NonIntegerConstant { pc, index } => write!(f, "ldc #{index} at {pc} is not an integer constant"),
+            Ineligible::NonIntegerConstant { pc, index } => {
+                write!(f, "the constant #{index} loaded at {pc} is neither an int nor a long")
+            }
             Ineligible::UnresolvedStatic { pc, index } => {
                 write!(f, "getstatic #{index} at {pc} is not an int static of an initialised class")
             }
             Ineligible::UnresolvedField { pc, index } => {
                 write!(f, "getfield #{index} at {pc} is not a non-volatile int instance field")
+            }
+            Ineligible::ReferenceWrite { pc } => {
+                write!(f, "the field written at {pc} holds a reference, which needs the GC write barrier")
             }
             Ineligible::UnresolvedClass { pc, index } => {
                 write!(f, "new #{index} at {pc} is not an instance of a loaded, initialised class")
@@ -1417,8 +2188,20 @@ pub struct CompiledCode {
     /// a [`ResumeSite`] names those slots outright rather than deriving them, so this stays the one
     /// number the interpreter needs for the frame it is already holding.
     pub stack_base: u32,
-    /// Where the **allocation log** starts in the caller's buffer: past every body's locals and
-    /// spill area. Only meaningful when [`alloc_records`][CompiledCode::alloc_records] is non-zero.
+    /// **Where the returned value lands**: one 8-byte buffer slot, past every body's locals and
+    /// spill area, written by whichever `return`-family opcode ends the method.
+    ///
+    /// This is the half of the boundary contract that the status word gave up. `RAX` carries a
+    /// status and a resume key and nothing else, so a result is **64 bits wide** here whatever its
+    /// type — which is what makes `lreturn` expressible at all, and what lets `areturn` hand back
+    /// an offset that is not squeezed through 32 bits.
+    ///
+    /// Read by the caller **only** on [`Outcome::Returned`], and only when the descriptor says the
+    /// method returns something: a `void` method writes nothing here and the slot holds whatever
+    /// the previous excursion left. See [`CompiledCode::returns_void`].
+    pub result_base: u32,
+    /// Where the **allocation log** starts in the caller's buffer: past the result slot. Only
+    /// meaningful when [`alloc_records`][CompiledCode::alloc_records] is non-zero.
     ///
     /// The log is `[count, offset₀, size₀, offset₁, size₁, …]` — one `i64` holding how many objects
     /// this excursion allocated, then that many `(heap offset, logical size)` pairs, in allocation
@@ -1432,9 +2215,10 @@ pub struct CompiledCode {
     /// method contains a `new`, and **0** when it does not, in which case the method carries no log
     /// at all and the caller has nothing to replay.
     pub alloc_records: u32,
-    /// Total 8-byte slots the caller's buffer must have: the locals, the operand spill area, and
-    /// the allocation log. **The marshalling contract's second half** — a shorter buffer would be
-    /// written past the end by a deopt spill or by the first inline allocation.
+    /// Total 8-byte slots the caller's buffer must have: every body's locals and operand spill
+    /// area, the result slot, and the allocation log. **The marshalling contract's second half** —
+    /// a shorter buffer would be written past the end by a deopt spill, by the return, or by the
+    /// first inline allocation.
     pub buffer_slots: u32,
     /// **Loop headers**: the bytecode pcs this code may be entered at on-stack, and the same pcs
     /// at which it polls the safepoint word. Ascending, and always the target of some backward
@@ -1451,13 +2235,17 @@ pub struct CompiledCode {
     /// deopt-by-restart: with it the interpreter *continues* a method rather than re-running it,
     /// which is what makes an observable write inside compiled code safe.
     pub resume_sites: Vec<ResumeSite>,
-    /// Whether the method's descriptor says it returns a **reference**, i.e. whether the 32 bits
-    /// [`Outcome::Returned`] carries are a heap offset rather than an `int`.
+    /// **What the [`result slot`][CompiledCode::result_base] holds**, as the descriptor states it:
+    /// [`Kind::Int`], [`Kind::Reference`] or [`Kind::Long`].
     ///
-    /// The descriptor is the authority, not the opcode: `ireturn` and `areturn` are already checked
-    /// against it at compile time ([`Ineligible::WrongType`]), so the caller never has to inspect
-    /// the code to know what it was handed.
-    pub returns_reference: bool,
+    /// The descriptor is the authority, not the opcode: `ireturn`, `areturn` and `lreturn` are each
+    /// checked against it at compile time ([`Ineligible::WrongType`]), so the caller never has to
+    /// inspect the bits to know what it was handed — which matters most for the pair that shares a
+    /// representation, an `int` and a small heap offset.
+    ///
+    /// Meaningless when [`returns_void`][CompiledCode::returns_void] is set: the slot was not
+    /// written and there is nothing to interpret.
+    pub returns: Kind,
     /// **How many interpreter frames one deopt out of this code can produce**: 1 for a method with
     /// nothing inlined, and one more per level of the deepest inline chain.
     ///
@@ -1467,10 +2255,11 @@ pub struct CompiledCode {
     /// interpreter would ever have allowed itself to build. The caller refuses to *enter* when the
     /// headroom is short, which is the only point at which refusing is still free.
     pub frame_depth: u32,
-    /// Whether the method's descriptor says it returns **`void`**, i.e. whether an
-    /// [`Outcome::Returned`] carries *no* value at all and its 32 bits are meaningless.
+    /// Whether the method's descriptor says it returns **`void`**, i.e. whether the result slot was
+    /// written at all. A `void` exit leaves it holding whatever the previous excursion put there,
+    /// so a caller that read it anyway would push a stale value.
     ///
-    /// Mutually exclusive with [`returns_reference`][CompiledCode::returns_reference], and the two
+    /// Mutually exclusive with a meaningful [`returns`][CompiledCode::returns], and the two
     /// together are the whole of what the caller needs to interpret a normal exit. Kept as a second
     /// flag rather than folded into an enum because that is the shape the boundary already had, and
     /// a `void` method is the only new case step 7 adds to it.
@@ -1514,16 +2303,25 @@ pub(super) const MAX_SWITCH_CASES: usize = 256;
 
 /// The kind of one field/argument/return descriptor, and how many local **slots** it occupies.
 ///
-/// `float` is `Opaque` rather than `Int` even though it is category-1 and four bytes wide: the
-/// subset has no float opcode, so nothing may read one, and calling it an `Int` would let a
-/// hypothetical future `iload` of that slot through. Category-2 (`J`, `D`) is `Opaque` and two
-/// slots — the second of which the interpreter leaves as `Value::Int(0)`, and which is therefore
-/// `Int` by the same reading as any other slot the frame never filled.
+/// Every descriptor form this tier knows now has a kind of its own: `F` is [`Kind::Float`] and one
+/// slot, `J` is [`Kind::Long`] and **two**, `D` is [`Kind::Double`] and two. [`Kind::Opaque`]
+/// survives only for a descriptor that cannot be parsed at all, and for `void` in
+/// [`return_kind`] — it no longer means "a type this tier has no value for", because there is no
+/// longer such a type among the primitives.
+///
+/// Distinguishing `F` from `I` is not a formality even though both are four bytes: it is what makes
+/// an `iload` of a `float` slot a refusal, and an `fadd` of an `int` one too. The bits are
+/// interchangeable and the operations are not.
+///
+/// The **width** is in JVMS local slots and is what [`entry_locals`] steps by and what
+/// [`arg_slot_width`] sums; it is deliberately *not* the operand-stack width, which is one entry
+/// for every kind (see [`Kind::Long`]).
 fn descriptor_kind(bytes: &[u8]) -> Option<(Kind, usize, usize)> {
     Some(match bytes.first()? {
         b'B' | b'C' | b'I' | b'S' | b'Z' => (Kind::Int, 1, 1),
-        b'F' => (Kind::Opaque, 1, 1),
-        b'J' | b'D' => (Kind::Opaque, 2, 1),
+        b'F' => (Kind::Float, 1, 1),
+        b'J' => (Kind::Long, 2, 1),
+        b'D' => (Kind::Double, 2, 1),
         b'L' => (Kind::Reference, 1, bytes.iter().position(|&b| b == b';')? + 1),
         b'[' => {
             // An array descriptor is `[`s followed by one element descriptor; only its *length*
@@ -1567,6 +2365,14 @@ fn entry_locals(method: &Method) -> Vec<Kind> {
             return vec![Kind::Opaque; method.max_locals];
         };
         place(slot, kind);
+        // **The high half of a category-2 argument** — a `long`'s or a `double`'s.
+        // `Frame::reset_for_call` leaves it as the `Value::Int(0)` the resize wrote, and JVMS
+        // §2.6.1 forbids reading it, so it is marked rather than left at the `Int` default: that is
+        // what makes an `iload` of it a refusal instead of a silent read of a slot that is not a
+        // value.
+        if width == 2 {
+            place(slot + 1, Kind::Cat2High);
+        }
         slot += width;
         at += len;
     }
@@ -1574,8 +2380,11 @@ fn entry_locals(method: &Method) -> Vec<Kind> {
 }
 
 /// The kind a `return`-family opcode must hand back: what the descriptor says after the `)`.
-/// `Opaque` covers `void`, `long`, `double` and `float` — i.e. "no exit in this subset can be
-/// taken", which is why such a method compiles only if it never returns at all (it cannot).
+///
+/// [`Kind::Opaque`] now covers only `void` and a descriptor that cannot be parsed — every
+/// primitive and every reference has an exit in this subset. That is a property of the **boundary**
+/// rather than of the opcode set: a result slot is 64 bits and carries any of them, so what a
+/// method returns stopped being a reason not to compile it.
 fn return_kind(descriptor: &str) -> Kind {
     let bytes = descriptor.as_bytes();
     match bytes.iter().position(|&b| b == b')') {
@@ -1699,10 +2508,27 @@ impl State {
         }
     }
 
-    /// Pops one operand of **either** kind — for the stack shuffles, which move slots without
-    /// caring what is in them.
+    /// Pops one **category-1** operand of either kind — for the stack shuffles, which move
+    /// positions without caring what is in them.
+    ///
+    /// **Category-2 is refused here, and that is the whole of what `long` costs the shuffles.**
+    /// JVMS defines all ten of them in *slots*, while this map and the interpreter both count
+    /// *entries* (a `Value::Long` is one), so "the top two slots" is one entry or two depending on
+    /// what is in them — the shape ambiguity the module docs promised would come back. Six of the
+    /// ten (`pop2`, `dup2`, `dup2_x1`, `dup2_x2`, `dup_x2` and, in its second form, `dup_x1`) have
+    /// two readings and no opcode-level way to tell them apart; the other four are category-1 by
+    /// definition and a `long` under them is unverifiable bytecode.
+    ///
+    /// Rather than split the ten into "re-derive the shape from the type map" and "trust the
+    /// verifier", **every** shuffle over a category-2 value is refused. It is conservative and it
+    /// is nearly free: the shapes `javac` emits a `dup2` for are compound assignments to `long`
+    /// array elements and fields, and `laload`/`lastore` are outside the subset anyway.
     fn pop_any(&mut self, pc: usize) -> Result<Kind, Ineligible> {
-        self.stack.pop().ok_or(Ineligible::StackUnderflow { pc })
+        match self.stack.pop() {
+            Some(kind) if kind.is_category2() => Err(Ineligible::WrongType { pc }),
+            Some(kind) => Ok(kind),
+            None => Err(Ineligible::StackUnderflow { pc }),
+        }
     }
 
     /// The kind of local `slot`, or `Opaque` for one past `max_locals` (which [`decode`] has
@@ -1732,6 +2558,46 @@ impl State {
         self.pop(pc, kind)?;
         if let Some(cell) = self.locals.get_mut(slot as usize) {
             *cell = kind;
+        }
+        Ok(())
+    }
+
+    /// `lload`/`dload`: reads the **category-2 pair** `(slot, slot + 1)` and pushes it as one
+    /// operand of `kind`.
+    ///
+    /// Both halves are checked, and the second one is the point. A `long` in local `n` is only
+    /// still there if nothing has overwritten `n + 1` since — and an `istore` to `n + 1` is exactly
+    /// the way to make `n` a `long` that is no longer a `long`, which the interpreter would happily
+    /// read back as a whole `Value::Long` because it never stored anything in the high slot to
+    /// begin with. So the pair is the unit that is verified, not the low slot alone.
+    ///
+    /// [`Kind::Conflict`] fails this like any other wrong kind, in both halves, which is what makes
+    /// a conflicted `long` dead in exactly the sense [`ResumeSite::locals`] needs.
+    fn load_cat2(&mut self, pc: usize, slot: u16, kind: Kind) -> Result<(), Ineligible> {
+        debug_assert!(kind.is_category2(), "load_cat2 is for `long` and `double` only");
+        match self.local(slot) == kind && self.local(slot + 1) == Kind::Cat2High {
+            true => {
+                self.stack.push(kind);
+                Ok(())
+            }
+            false => Err(Ineligible::WrongType { pc }),
+        }
+    }
+
+    /// `lstore`/`dstore`: pops one category-2 operand and claims **both** local slots for it.
+    ///
+    /// The high slot is re-typed even though nothing ever writes its contents, because what it
+    /// records is not a value but a *claim*: "local `slot + 1` is the upper half of a category-2
+    /// value and may not be read". Leaving it at whatever it was would let an `iload` of it through
+    /// on the strength of a store that is no longer current.
+    fn store_cat2(&mut self, pc: usize, slot: u16, kind: Kind) -> Result<(), Ineligible> {
+        debug_assert!(kind.is_category2(), "store_cat2 is for `long` and `double` only");
+        self.pop(pc, kind)?;
+        if let Some(cell) = self.locals.get_mut(slot as usize) {
+            *cell = kind;
+        }
+        if let Some(cell) = self.locals.get_mut(slot as usize + 1) {
+            *cell = Kind::Cat2High;
         }
         Ok(())
     }
@@ -1770,7 +2636,38 @@ fn transfer(
     match op {
         // --- constants --------------------------------------------------------------------
         0x01 => state.stack.push(Reference), // aconst_null: `null` is the reference 0
-        0x02..=0x08 | 0x10 | 0x11 | 0x12 | 0x13 => state.stack.push(Int),
+        0x02..=0x08 | 0x10 | 0x11 => state.stack.push(Int),
+        0x09 | 0x0a => state.stack.push(Kind::Long), // lconst_0/1
+        0x0b..=0x0d => state.stack.push(Kind::Float), // fconst_0/1/2
+        0x0e | 0x0f => state.stack.push(Kind::Double), // dconst_0/1
+        // `ldc`/`ldc_w`/`ldc2_w` are the three whose kind is not in the opcode: it is whichever
+        // resolver answered, which is the same order [`decode`] asked them in. Asking again here
+        // rather than threading the answer through keeps the two passes reading the same fact from
+        // the same place — an `int` constant and a `float` constant are the same three bytes of
+        // bytecode and differ only in the pool.
+        0x12 | 0x13 => {
+            let index = match op {
+                0x12 => u16::from(code[pc + 1]),
+                _ => u16::from_be_bytes([code[pc + 1], code[pc + 2]]),
+            };
+            // The same three resolvers in the same order [`decode`] asked them in — an `int`, a
+            // `float`, and (group 2) a **class literal**, which is a reference to a `Class<…>`
+            // mirror and must be typed as one or a deopt would spill it as an `int`.
+            if (env.int_const)(method.unit, index).is_some() {
+                state.stack.push(Int);
+            } else if (env.float_const)(method.unit, index).is_some() {
+                state.stack.push(Kind::Float);
+            } else {
+                state.stack.push(Reference);
+            }
+        }
+        0x14 => {
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            match (env.long_const)(method.unit, index).is_some() {
+                true => state.stack.push(Kind::Long),
+                false => state.stack.push(Kind::Double),
+            }
+        }
 
         // --- locals: the `i`/`a` opcode pairs differ *only* in the kind they move -----------
         0x15 => state.load(pc, code[pc + 1] as u16, Int)?,
@@ -1781,14 +2678,36 @@ fn transfer(
         0x3b..=0x3e => state.store(pc, (op - 0x3b) as u16, Int)?,
         0x3a => state.store(pc, code[pc + 1] as u16, Reference)?,
         0x4b..=0x4e => state.store(pc, (op - 0x4b) as u16, Reference)?,
+        // `lload`/`lstore` are the category-2 pair: the whole value lives in the low slot, and the
+        // high one is claimed rather than written. See [`State::load_long`].
+        0x16 => state.load_cat2(pc, code[pc + 1] as u16, Kind::Long)?,
+        0x1e..=0x21 => state.load_cat2(pc, (op - 0x1e) as u16, Kind::Long)?,
+        0x37 => state.store_cat2(pc, code[pc + 1] as u16, Kind::Long)?,
+        0x3f..=0x42 => state.store_cat2(pc, (op - 0x3f) as u16, Kind::Long)?,
+        // `float` is category-1 and goes through the ordinary `load`/`store`; `double` is
+        // category-2 and goes through the pair.
+        0x17 => state.load(pc, code[pc + 1] as u16, Kind::Float)?,
+        0x22..=0x25 => state.load(pc, (op - 0x22) as u16, Kind::Float)?,
+        0x38 => state.store(pc, code[pc + 1] as u16, Kind::Float)?,
+        0x43..=0x46 => state.store(pc, (op - 0x43) as u16, Kind::Float)?,
+        0x18 => state.load_cat2(pc, code[pc + 1] as u16, Kind::Double)?,
+        0x26..=0x29 => state.load_cat2(pc, (op - 0x26) as u16, Kind::Double)?,
+        0x39 => state.store_cat2(pc, code[pc + 1] as u16, Kind::Double)?,
+        0x47..=0x4a => state.store_cat2(pc, (op - 0x47) as u16, Kind::Double)?,
         0x84 => increment(state, code[pc + 1] as u16)?,
         0xc4 => {
             let slot = u16::from_be_bytes([code[pc + 2], code[pc + 3]]);
             match code[pc + 1] {
                 0x15 => state.load(pc, slot, Int)?,
                 0x19 => state.load(pc, slot, Reference)?,
+                0x16 => state.load_cat2(pc, slot, Kind::Long)?,
+                0x17 => state.load(pc, slot, Kind::Float)?,
+                0x18 => state.load_cat2(pc, slot, Kind::Double)?,
+                0x38 => state.store(pc, slot, Kind::Float)?,
+                0x39 => state.store_cat2(pc, slot, Kind::Double)?,
                 0x36 => state.store(pc, slot, Int)?,
                 0x3a => state.store(pc, slot, Reference)?,
+                0x37 => state.store_cat2(pc, slot, Kind::Long)?,
                 _ => increment(state, slot)?, // wide iinc
             }
         }
@@ -1799,13 +2718,40 @@ fn transfer(
         // `arrayref, index` order, so the index pops first).
         // `new` pushes the reference to a freshly allocated, all-zero instance.
         0xbb => state.stack.push(Reference),
-        0xb2 => state.stack.push(Int), // getstatic
+        // `newarray`/`anewarray` do the same over an `int` **count**, which is the one operand a
+        // `new` does not have. The kind that comes back is a reference either way — an `int[]` is
+        // as much an object as a `Point` is, and a reference array's null slots are simply the
+        // zeroes the allocation already wrote.
+        0xbc | 0xbd => {
+            state.pop(pc, Int)?;
+            state.stack.push(Reference);
+        }
+        // `getstatic` / `getfield` push **what the resolver said is in the slot** — an `int` or a
+        // `long`. It is the resolver's answer rather than a re-parse of a descriptor here, so the
+        // kind the type map carries and the width the emitter loads cannot come apart.
+        0xb2 => {
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            let (_, kind) = (env.static_field)(method.unit, index).ok_or(wrong)?;
+            state.stack.push(kind);
+        }
         0xb4 => {
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            let (_, kind) = (env.field)(method.unit, pc, index).ok_or(wrong)?;
             state.pop(pc, Reference)?; // getfield
-            state.stack.push(Int);
+            state.stack.push(kind);
         }
         0xbe => {
             state.pop(pc, Reference)?; // arraylength
+            state.stack.push(Int);
+        }
+        // `checkcast` hands the *same* reference back — the opcode's whole job is to be
+        // transparent when it succeeds — while `instanceof` replaces it with an `int` 0/1.
+        0xc0 => {
+            state.pop(pc, Reference)?;
+            state.stack.push(Reference);
+        }
+        0xc1 => {
+            state.pop(pc, Reference)?;
             state.stack.push(Int);
         }
         0x2e => {
@@ -1817,9 +2763,15 @@ fn transfer(
         // --- the heap, written (step 6) -----------------------------------------------------
         // The mirror images of the three reads above, and the pops come off in JVMS's order: the
         // value is always on top, whatever is being written into is underneath it.
-        0xb3 => state.pop(pc, Int)?, // putstatic
+        0xb3 => {
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            let (_, kind) = (env.static_field)(method.unit, index).ok_or(wrong)?;
+            state.pop(pc, kind)?; // putstatic
+        }
         0xb5 => {
-            state.pop(pc, Int)?; // putfield: the value...
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            let (_, kind) = (env.field)(method.unit, pc, index).ok_or(wrong)?;
+            state.pop(pc, kind)?; // putfield: the value...
             state.pop(pc, Reference)?; // ...over the receiver
         }
         0x4f => {
@@ -1837,6 +2789,110 @@ fn transfer(
         0x74 => {
             state.pop(pc, Int)?; // ineg
             state.stack.push(Int);
+        }
+
+        // --- the same shapes over `long` ------------------------------------------------------
+        // ladd lsub lmul ldiv lrem land lor lxor: two `long`s in, one out.
+        0x61 | 0x65 | 0x69 | 0x6d | 0x71 | 0x7f | 0x81 | 0x83 => {
+            state.pop(pc, Kind::Long)?;
+            state.pop(pc, Kind::Long)?;
+            state.stack.push(Kind::Long);
+        }
+        0x75 => {
+            state.pop(pc, Kind::Long)?; // lneg
+            state.stack.push(Kind::Long);
+        }
+        // **The shifts are mixed**, and that is the one asymmetry in the `long` group: JVMS gives
+        // `lshl`/`lshr`/`lushr` an `int` shift count over a `long` value. The count pops first (it
+        // is on top), which is also the order the emitter reads them in.
+        0x79 | 0x7b | 0x7d => {
+            state.pop(pc, Int)?;
+            state.pop(pc, Kind::Long)?;
+            state.stack.push(Kind::Long);
+        }
+        // `lcmp` is the other mixed one, the other way round: two `long`s in, an `int` out. It is
+        // how every `long` comparison in Java is spelled — `javac` emits `lcmp` followed by an
+        // `if<cond>` against zero, which is why the `int` it produces matters as much as the
+        // `long`s it consumes.
+        0x94 => {
+            state.pop(pc, Kind::Long)?;
+            state.pop(pc, Kind::Long)?;
+            state.stack.push(Int);
+        }
+        // The two conversions in the group. `i2l` is a widening (and, given the normalisation
+        // invariant, a no-op on the bits); `l2i` is a truncation to the low 32 bits, which the
+        // emitter re-normalises.
+        0x85 => {
+            state.pop(pc, Int)?; // i2l
+            state.stack.push(Kind::Long);
+        }
+        0x88 => {
+            state.pop(pc, Kind::Long)?; // l2i
+            state.stack.push(Int);
+        }
+
+        // --- the floating-point group ---------------------------------------------------------
+        // Two of a kind in, one of the same kind out — the shapes are the `long` ones exactly, and
+        // it is only *which* kind that differs. `frem`/`drem` are here too: they type like `fdiv`
+        // and `ddiv` even though they emit a deopt rather than an instruction, because a deopt is
+        // an exit and the state at it has to be the state this map says.
+        0x62 | 0x66 | 0x6a | 0x6e | 0x72 => {
+            state.pop(pc, Kind::Float)?;
+            state.pop(pc, Kind::Float)?;
+            state.stack.push(Kind::Float);
+        }
+        0x63 | 0x67 | 0x6b | 0x6f | 0x73 => {
+            state.pop(pc, Kind::Double)?;
+            state.pop(pc, Kind::Double)?;
+            state.stack.push(Kind::Double);
+        }
+        0x76 => {
+            state.pop(pc, Kind::Float)?; // fneg
+            state.stack.push(Kind::Float);
+        }
+        0x77 => {
+            state.pop(pc, Kind::Double)?; // dneg
+            state.stack.push(Kind::Double);
+        }
+        // `fcmpl`/`fcmpg` and `dcmpl`/`dcmpg`: two floats in, an `int` out. The pair in each
+        // differs only in what it answers for a NaN, which is a property of the *emitted code* and
+        // not of the types — so they are one arm here and two constants there.
+        0x95 | 0x96 => {
+            state.pop(pc, Kind::Float)?;
+            state.pop(pc, Kind::Float)?;
+            state.stack.push(Int);
+        }
+        0x97 | 0x98 => {
+            state.pop(pc, Kind::Double)?;
+            state.pop(pc, Kind::Double)?;
+            state.stack.push(Int);
+        }
+        // The widening conversions. Each names its source and its destination, and the map is the
+        // only thing that knows the difference — `i2f` and `i2d` read the same `int` and produce
+        // two things that are the same 64 bits in a slot.
+        0x86 => {
+            state.pop(pc, Int)?; // i2f
+            state.stack.push(Kind::Float);
+        }
+        0x87 => {
+            state.pop(pc, Int)?; // i2d
+            state.stack.push(Kind::Double);
+        }
+        0x89 => {
+            state.pop(pc, Kind::Long)?; // l2f
+            state.stack.push(Kind::Float);
+        }
+        0x8a => {
+            state.pop(pc, Kind::Long)?; // l2d
+            state.stack.push(Kind::Double);
+        }
+        0x8d => {
+            state.pop(pc, Kind::Float)?; // f2d
+            state.stack.push(Kind::Double);
+        }
+        0x90 => {
+            state.pop(pc, Kind::Double)?; // d2f
+            state.stack.push(Kind::Float);
         }
 
         // --- the stack shuffles: permutations, and blind to the kinds they move --------------
@@ -1912,6 +2968,29 @@ fn transfer(
             }
             state.pop(pc, Reference)?;
         }
+        // `lreturn`, checked against the descriptor exactly as the other two are. It is the exit
+        // the old packed-`RAX` protocol could not express at any width — see the boundary contract.
+        0xad => {
+            if returns != Kind::Long {
+                return Err(wrong);
+            }
+            state.pop(pc, Kind::Long)?;
+        }
+        // `freturn` / `dreturn`. Nothing about them is special any more — the result slot is 64
+        // bits and does not care what is in them — so they are the same two lines as the other
+        // three exits, checked against the same authority.
+        0xae => {
+            if returns != Kind::Float {
+                return Err(wrong);
+            }
+            state.pop(pc, Kind::Float)?;
+        }
+        0xaf => {
+            if returns != Kind::Double {
+                return Err(wrong);
+            }
+            state.pop(pc, Kind::Double)?;
+        }
         // `return` (step 7): no operand at all, and legal in exactly one kind of method. The
         // descriptor is the authority here as it is for the other two, and `returns_void` is what
         // separates `void` from the other three `Opaque` return kinds.
@@ -1920,6 +2999,26 @@ fn transfer(
                 return Err(wrong);
             }
         }
+
+        // --- athrow (group 5) ------------------------------------------------------------------
+        //
+        // Popping the exception is the *whole* type effect this map has to state, and it has to
+        // state it for one reason only: the pop is what proves the operand on top is a
+        // [`Kind::Reference`], which is what the resume site will hand the interpreter back. Get it
+        // wrong and the rebuilt frame throws an `int`.
+        //
+        // What the JVMS says happens *next* — the operand stack is emptied and the exception pushed
+        // alone, in this frame or in a caller's — is not modelled here and must not be: native code
+        // does not take the handler edge, it leaves. The state this map describes is the state
+        // **on entry to** the athrow, which is exactly what the deopt hands back.
+        0xbf => state.pop(pc, Reference)?,
+
+        // --- monitorenter / monitorexit (group 5) ---------------------------------------------
+        //
+        // The lock object, popped and otherwise untouched. Nothing after this pc is reachable in
+        // this compilation ([`decode`] says `Flow::Return`), so there is no successor state to be
+        // right about — the pop exists to type the operand for the resume site, like `athrow`'s.
+        0xc2 | 0xc3 => state.pop(pc, Reference)?,
 
         // --- the call (step 8): the arguments become the callee's locals ----------------------
         //
@@ -1933,7 +3032,7 @@ fn transfer(
         // mismatch is an [`Ineligible::WrongType`] like any other. It is also what refuses a
         // `long`, a `double` or a `float` argument without a special case: such a slot is
         // [`Kind::Opaque`], nothing on the operand stack can ever be `Opaque`, so the pop fails.
-        0xb7 | 0xb8 => {
+        0xb6..=0xb9 => {
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             let callee = (env.invoke)(method.unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode: op })?;
             let want = entry_locals(&callee.method);
@@ -1941,9 +3040,11 @@ fn transfer(
                 state.pop(pc, want.get(k).copied().unwrap_or(Kind::Opaque))?;
             }
             if !returns_void(callee.method.descriptor) {
-                // A callee returning a `long`, a `double` or a `float` has no exit this tier can
-                // express, so it could never have compiled; refusing it *here* is what keeps an
-                // `Opaque` off the operand stack, where nothing could ever put it back.
+                // A callee returning a `double` or a `float` has no exit this tier can express, so
+                // it could never have compiled; refusing it *here* is what keeps an `Opaque` off
+                // the operand stack, where nothing could ever put it back. A `long` return is a
+                // `Kind::Long` and is pushed like any other — the callee's `lreturn` writes it to
+                // the caller's operand slot, since an inlined return crosses no boundary.
                 match return_kind(callee.method.descriptor) {
                     Kind::Opaque => return Err(wrong),
                     kind => state.stack.push(kind),
@@ -2021,6 +3122,10 @@ struct Body<'a> {
     /// `[depth - arg_slots, depth)` become this body's locals `[0, arg_slots)`, and what is left
     /// underneath them — `depth - arg_slots` — is where this body's **result** goes.
     arg_slots: usize,
+    /// **What the call that expanded this body checks before entering it** — see [`Guard`].
+    /// [`Guard::Static`] for the root (no call expanded it) and for every statically bound call;
+    /// [`Guard::ExactClass`] for a call this tier bound speculatively on the receiver's class.
+    guard: Guard,
     /// Where this body's **locals** start in the caller's buffer. Local `i` of this body is buffer
     /// slot `locals_base + i` — so `istore` writes through to the interpreter exactly as it always
     /// has, just at this body's own offset.
@@ -2044,11 +3149,14 @@ struct Body<'a> {
     /// Local slots read or written anywhere in this body.
     touched: BTreeSet<u16>,
     /// Targets of **backward** branches whose operand-stack depth is 0 — the loop headers that
-    /// become OSR entry points and safepoint poll sites. A `BTreeSet` so the order is the pc
-    /// order, which is what the entry dispatch and the interpreter's lookup both want.
+    /// become safepoint poll sites. A `BTreeSet` so the order is the pc order, which is what the
+    /// entry dispatch and the interpreter's lookup both want.
     ///
-    /// Only ever non-empty for the **root**: an inlined body is refused if it contains a backward
-    /// branch at all (see [`scan_body`]), so there is no loop inside one to enter or to poll.
+    /// **Poll sites in every body; OSR entries only in the root.** Since group 3's first stage an
+    /// inlined callee may loop, provided each of its headers can carry a poll (see [`scan_body`]);
+    /// what it may never be is *entered* at one, because entering halfway into an expansion would
+    /// mean materialising a call chain that never happened. So [`CompiledCode::osr_entries`] is
+    /// `bodies[0].osr` and this set is what gets a poll.
     osr: BTreeSet<usize>,
 }
 
@@ -2137,7 +3245,7 @@ fn decode(
     pc: usize,
     method: &Method,
     env: &Environment,
-) -> Result<(Insn, Option<i32>), Ineligible> {
+) -> Result<(Insn, Option<i64>), Ineligible> {
     let (op, max_locals) = (code[pc], method.max_locals);
     // Every arm below indexes `code[pc + k]`; check the whole instruction fits first, once.
     let need = |n: usize| -> Result<(), Ineligible> {
@@ -2148,6 +3256,16 @@ fn decode(
     };
     let local = |slot: usize| -> Result<u16, Ineligible> {
         match slot < max_locals && slot <= u16::MAX as usize {
+            true => Ok(slot as u16),
+            false => Err(Ineligible::LocalOutOfRange { pc, slot }),
+        }
+    };
+    // A **category-2** local claims `slot` *and* `slot + 1` (JVMS §2.6.1), so both have to be
+    // inside `max_locals` before either half of the pair means anything. Checked here rather than
+    // in the type map so that `State::load_long`/`store_long` can index the pair without an
+    // in-range test of their own.
+    let local2 = |slot: usize| -> Result<u16, Ineligible> {
+        match slot.checked_add(1).is_some_and(|high| high < max_locals) && slot <= u16::MAX as usize {
             true => Ok(slot as u16),
             false => Err(Ineligible::LocalOutOfRange { pc, slot }),
         }
@@ -2195,19 +3313,64 @@ fn decode(
             alloc_bounds(env.heap, instance.size).ok_or(Ineligible::AllocOutOfReach { pc })?;
             simple(3, 0, 1)
         }
+
+        // --- newarray / anewarray: the same fast path, over a size that is an operand -------
+        // Resolved here for the same reason `new` is — the array class's mirror offset and its
+        // element width become immediates — and refused the same way. What is *not* resolved here
+        // is the size, and that is the whole of what separates this pair from `new`: see the
+        // emitter for the guard, the loop and the length word it costs.
+        //
+        // `multianewarray` (0xc5) is **not** here and is not a near miss: it is defined as a
+        // recursion, allocating the outer array and then one inner array per slot, each of which
+        // needs its own reservation, its own log record and its own reference stored through the
+        // parent. That is a loop over allocations rather than an allocation, so it belongs to a
+        // step of its own — it stays an unknown opcode and refuses its method.
+        0xbc => {
+            need(2)?;
+            reachable_heap()?;
+            let atype = code[pc + 1];
+            (env.array)(method.unit, ArrayOf::Primitive(atype))
+                .ok_or(Ineligible::UnresolvedClass { pc, index: u16::from(atype) })?;
+            array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
+            simple(2, 1, 1)
+        }
+        0xbd => {
+            need(3)?;
+            reachable_heap()?;
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            (env.array)(method.unit, ArrayOf::Reference(index))
+                .ok_or(Ineligible::UnresolvedClass { pc, index })?;
+            array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
+            simple(3, 1, 1)
+        }
         // --- constants ---------------------------------------------------------------------
         // `aconst_null` is a constant like any other here: `null` is the reference `0`, so it
         // materialises the immediate 0 and the type map is what remembers it is not an `int`.
         0x01 => return Ok((simple(1, 0, 1), Some(0))),
         // iconst_m1 (0x02) .. iconst_5 (0x08): the value is the opcode minus iconst_0.
-        0x02..=0x08 => return Ok((simple(1, 0, 1), Some(op as i32 - 0x03))),
+        0x02..=0x08 => return Ok((simple(1, 0, 1), Some(op as i64 - 0x03))),
+        // `fconst_0/1/2` and `dconst_0/1`. Like every other constant here the *bits* are what is
+        // baked in, not a number — a float in this tier is a bit pattern until an SSE instruction
+        // asks otherwise (see [`Kind::Float`]). The float forms are zero-extended into the 64-bit
+        // immediate, which is the boundary form exactly.
+        0x0b..=0x0d => {
+            let bits = [0.0f32, 1.0, 2.0][(op - 0x0b) as usize].to_bits();
+            return Ok((simple(1, 0, 1), Some(i64::from(bits))));
+        }
+        0x0e | 0x0f => {
+            let bits = [0.0f64, 1.0][(op - 0x0e) as usize].to_bits();
+            return Ok((simple(1, 0, 1), Some(bits as i64)));
+        }
+        // `lconst_0` / `lconst_1`. The immediate is 64 bits wide like every other `long`, which is
+        // why the constant channel out of this function is an `i64` rather than an `i32`.
+        0x09 | 0x0a => return Ok((simple(1, 0, 1), Some(op as i64 - 0x09))),
         0x10 => {
             need(2)?;
-            return Ok((simple(2, 0, 1), Some(code[pc + 1] as i8 as i32)));
+            return Ok((simple(2, 0, 1), Some(code[pc + 1] as i8 as i64)));
         }
         0x11 => {
             need(3)?;
-            return Ok((simple(3, 0, 1), Some(i16::from_be_bytes([code[pc + 1], code[pc + 2]]) as i32)));
+            return Ok((simple(3, 0, 1), Some(i16::from_be_bytes([code[pc + 1], code[pc + 2]]) as i64)));
         }
         // ldc / ldc_w restricted to CONSTANT_Integer — resolved *now*, so the generated code
         // carries an immediate and never looks at a constant pool.
@@ -2222,8 +3385,46 @@ fn decode(
                     (3u16, u16::from_be_bytes([code[pc + 1], code[pc + 2]]))
                 }
             };
-            let value = (env.int_const)(method.unit, index).ok_or(Ineligible::NonIntegerConstant { pc, index })?;
+            // An `Integer`, a `Float`, or — group 2 — a **class literal**, whose value is the
+            // target's pinned mirror offset. A `String` is the one thing left that refuses the
+            // method, and deliberately: this VM allocates a *fresh* `String` in Eden for every
+            // `ldc` (there is no interning table at all), so there is no permanent offset to bake
+            // and baking one would make `"a" == "a"` true here where the interpreter says false.
+            // See the module docs.
+            //
+            // The resolvers are asked in order rather than by inspecting a tag, because `burst`
+            // deliberately knows nothing about constant pools — a resolver that will not answer is
+            // the only signal there is.
+            let value = match (env.int_const)(method.unit, index) {
+                Some(v) => i64::from(v),
+                None => match (env.float_const)(method.unit, index) {
+                    Some(bits) => i64::from(bits),
+                    None => i64::from(
+                        (env.class_mirror)(method.unit, index)
+                            .ok_or(Ineligible::NonIntegerConstant { pc, index })?,
+                    ),
+                },
+            };
             return Ok((simple(len, 0, 1), Some(value)));
+        }
+
+        // --- ldc2_w, restricted to CONSTANT_Long -------------------------------------------
+        // The category-2 twin of `ldc`, and resolved the same way: the constant is read from the
+        // pool **at compile time** and baked in as a 64-bit immediate, so the generated code never
+        // touches a constant pool. A `CONSTANT_Double` is refused exactly as a `String` `ldc` is —
+        // the resolver simply does not answer for it.
+        //
+        // It is category-2 in the *bytecode*'s accounting and one operand in this map's, which is
+        // the whole of the difference [`Kind::Long`] describes.
+        0x14 => {
+            need(3)?;
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            let value = match (env.long_const)(method.unit, index) {
+                Some(v) => v,
+                None => (env.double_const)(method.unit, index)
+                    .ok_or(Ineligible::NonIntegerConstant { pc, index })? as i64,
+            };
+            return Ok((simple(3, 0, 1), Some(value)));
         }
 
         // --- locals ------------------------------------------------------------------------
@@ -2256,6 +3457,56 @@ fn decode(
             local(code[pc + 1] as usize)?;
             simple(2, 1, 0)
         }
+
+        // --- lload / lstore, in all their forms ---------------------------------------------
+        // Decoded exactly like their `int` twins — same lengths, same one-operand stack effect —
+        // and separated from them by one thing only: the local index names a **pair** of slots,
+        // so `local2` is what checks it. The emitted instruction is the same 8-byte `mov`; what
+        // differs is the kind the type map moves and the second slot it claims.
+        0x1e..=0x21 => {
+            local2((op - 0x1e) as usize)?; // lload_0..3
+            simple(1, 0, 1)
+        }
+        0x22..=0x25 => {
+            local((op - 0x22) as usize)?; // fload_0..3 — category-1, so one slot
+            simple(1, 0, 1)
+        }
+        0x26..=0x29 => {
+            local2((op - 0x26) as usize)?; // dload_0..3 — category-2, so a pair
+            simple(1, 0, 1)
+        }
+        0x3f..=0x42 => {
+            local2((op - 0x3f) as usize)?; // lstore_0..3
+            simple(1, 1, 0)
+        }
+        0x43..=0x46 => {
+            local((op - 0x43) as usize)?; // fstore_0..3
+            simple(1, 1, 0)
+        }
+        0x47..=0x4a => {
+            local2((op - 0x47) as usize)?; // dstore_0..3
+            simple(1, 1, 0)
+        }
+        0x16 | 0x18 => {
+            need(2)?;
+            local2(code[pc + 1] as usize)?; // lload / dload
+            simple(2, 0, 1)
+        }
+        0x17 => {
+            need(2)?;
+            local(code[pc + 1] as usize)?; // fload
+            simple(2, 0, 1)
+        }
+        0x37 | 0x39 => {
+            need(2)?;
+            local2(code[pc + 1] as usize)?; // lstore / dstore
+            simple(2, 1, 0)
+        }
+        0x38 => {
+            need(2)?;
+            local(code[pc + 1] as usize)?; // fstore
+            simple(2, 1, 0)
+        }
         0x84 => {
             need(3)?;
             local(code[pc + 1] as usize)?;
@@ -2279,6 +3530,24 @@ fn decode(
                     local(wide_index(code))?;
                     simple(4, 1, 0)
                 }
+                // `wide fload` / `wide fstore`: category-1, so the ordinary index check.
+                0x17 | 0x38 => {
+                    need(4)?;
+                    local(wide_index(code))?;
+                    simple(4, u16::from(code[pc + 1] == 0x38), u16::from(code[pc + 1] == 0x17))
+                }
+                // `wide lload`/`lstore`/`dload`/`dstore`: the **pair** check is the only thing that
+                // separates them from the arms above.
+                0x16 | 0x18 => {
+                    need(4)?;
+                    local2(wide_index(code))?;
+                    simple(4, 0, 1)
+                }
+                0x37 | 0x39 => {
+                    need(4)?;
+                    local2(wide_index(code))?;
+                    simple(4, 1, 0)
+                }
                 0x84 => {
                     need(6)?;
                     local(wide_index(code))?;
@@ -2288,14 +3557,18 @@ fn decode(
             }
         }
 
-        // --- getstatic of an int ------------------------------------------------------------
+        // --- getstatic of an int or a long ----------------------------------------------------
         // Resolved **now**, to an address baked in as an immediate — so the generated code never
         // touches a constant pool, a metaspace or a class-init state. See the module docs for why
         // that address cannot move and why the class has to be initialised already.
+        //
+        // The resolver also says **how wide the slot is**, which is what separates the two kinds
+        // this accepts: an `int` static is 4 bytes and sign-extends on the way in, a `long` static
+        // is 8 and is its own value. Any other kind is a `None` and the method is refused.
         0xb2 => {
             need(3)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            (env.static_int)(method.unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
+            (env.static_field)(method.unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
             simple(3, 0, 1)
         }
 
@@ -2308,7 +3581,9 @@ fn decode(
         0xb3 => {
             need(3)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            (env.static_int)(method.unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
+            let (_, kind) =
+                (env.static_field)(method.unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
+            writable(pc, kind)?;
             simple(3, 1, 0)
         }
 
@@ -2321,9 +3596,28 @@ fn decode(
             need(3)?;
             reachable_heap()?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let offset = (env.int_field)(method.unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
+            let (offset, _) = (env.field)(method.unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
             // The displacement goes into a ModRM byte, so it has to fit a signed 32-bit field.
             i32::try_from(offset).map_err(|_| Ineligible::HeapOutOfReach { pc })?;
+            simple(3, 1, 1)
+        }
+
+        // --- checkcast / instanceof -----------------------------------------------------------
+        // Resolved to the target's **mirror offset**, baked in as an immediate, and valid forever
+        // because a mirror is `malloc_old`ed and pinned against `gc::compact`. What the emitted
+        // code does with it is an *equality* test against the object's header word and a deopt for
+        // every other answer — see the emitter, and the module docs for why that is the whole of
+        // the design rather than a first approximation of one.
+        //
+        // `reachable_heap` because the object's header is dereferenced, which needs the two-armed
+        // address computation and therefore the same heap bounds every other read needs. Both
+        // opcodes are 3 bytes and pop one reference; `checkcast` pushes it back, `instanceof`
+        // pushes an `int` in its place.
+        0xc0 | 0xc1 => {
+            need(3)?;
+            reachable_heap()?;
+            let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+            (env.class_mirror)(method.unit, index).ok_or(Ineligible::UnresolvedClass { pc, index })?;
             simple(3, 1, 1)
         }
 
@@ -2349,7 +3643,9 @@ fn decode(
             need(3)?;
             reachable_heap()?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let offset = (env.int_field)(method.unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
+            let (offset, kind) =
+                (env.field)(method.unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
+            writable(pc, kind)?;
             i32::try_from(offset).map_err(|_| Ineligible::HeapOutOfReach { pc })?;
             simple(3, 2, 0)
         }
@@ -2362,6 +3658,42 @@ fn decode(
         // iadd isub imul idiv irem / ishl ishr iushr iand ior ixor: two operands, one result.
         0x60 | 0x64 | 0x68 | 0x6c | 0x70 | 0x78 | 0x7a | 0x7c | 0x7e | 0x80 | 0x82 => simple(1, 2, 1),
         0x74 => simple(1, 1, 1), // ineg
+
+        // --- the `long` arithmetic, bits, shifts and compare ---------------------------------
+        // ladd lsub lmul ldiv lrem / land lor lxor / lshl lshr lushr / lcmp: two operands, one
+        // result — the *entry* counts, which for a `long` are one apiece (see [`Kind::Long`]).
+        // `lshl`/`lshr`/`lushr` take an `int` count on top of a `long`, and `lcmp` takes two
+        // `longs` and produces an `int`; the shapes are identical, and it is [`transfer`] that
+        // says which kinds go where.
+        0x61 | 0x65 | 0x69 | 0x6d | 0x71 | 0x79 | 0x7b | 0x7d | 0x7f | 0x81 | 0x83 | 0x94 => simple(1, 2, 1),
+        0x75 => simple(1, 1, 1), // lneg
+
+        // --- the floating-point group -------------------------------------------------------
+        // fadd fsub fmul fdiv / dadd dsub dmul ddiv: two operands, one result — and, as everywhere
+        // else here, *entries* rather than JVMS slots, so a `double` counts as one apiece.
+        0x62 | 0x63 | 0x66 | 0x67 | 0x6a | 0x6b | 0x6e | 0x6f => simple(1, 2, 1),
+        // fneg / dneg: one operand. Both are a bit flip rather than an arithmetic negation.
+        0x76 | 0x77 => simple(1, 1, 1),
+        // **frem / drem**, which are not an instruction. x86-64 SSE has no scalar remainder (the
+        // x87 `fprem` is a partial remainder needing a loop, and this tier has no x87 state to
+        // manage), and Java's `%` on floats is IEEE-754's `remainder`-toward-zero, which is
+        // `a - (b * trunc(a / b))` computed exactly. So the opcode is accepted and compiled to an
+        // **unconditional deopt**: everything before it runs natively, and the interpreter takes
+        // over at this pc and does the one thing the instruction stream cannot. That is a better
+        // answer than refusing the method — a `frem` on a cold branch then costs nothing at all —
+        // and it is only worse on a hot one, where the method pays a boundary crossing per call.
+        0x72 | 0x73 => simple(1, 2, 1),
+        // fcmpl fcmpg dcmpl dcmpg: two floating-point operands, one `int`.
+        0x95..=0x98 => simple(1, 2, 1),
+        // The **widening** conversions, and only those. i2l / l2i / i2f / i2d / l2f / l2d / f2d /
+        // d2f: one in, one out, one or two instructions each.
+        //
+        // `f2i` (0x8b), `f2l` (0x8c), `d2i` (0x8e) and `d2l` (0x8f) are deliberately **out**. JLS
+        // §5.1.3 makes them saturating and NaN-aware — a NaN becomes 0, an out-of-range value
+        // becomes `MIN`/`MAX` — while x86's `cvtt*2si` answers the "integer indefinite" value
+        // (`MIN`) for all three of those cases. Getting them right needs a compare-and-branch
+        // sequence per conversion, which is a step of its own; getting them wrong is silent.
+        0x85 | 0x88 | 0x86 | 0x87 | 0x89 | 0x8a | 0x8d | 0x90 => simple(1, 1, 1),
 
         // --- stack -------------------------------------------------------------------------
         // Every one of these is read as its **category-1** form, which in this subset is not a
@@ -2405,15 +3737,39 @@ fn decode(
         }
         // ireturn / areturn. Which of the two is legal is decided by the **descriptor**, in
         // [`transfer`], not here — the shape of the instruction is identical.
-        0xac | 0xb0 => {
+        // **All five exits, and they are contiguous**: `ireturn` (0xac), `lreturn`, `freturn`,
+        // `dreturn`, `areturn` (0xb0). Which of them a given method may take is the descriptor's
+        // business, in [`transfer`]; the *shape* is identical for all five, which is what the
+        // boundary contract bought.
+        0xac..=0xb0 => {
             if op == 0xb0 {
-                reachable_heap()?; // a returned reference has to fit the 32 bits of the protocol
+                reachable_heap()?; // a returned reference is dereferenced by whoever gets it
             }
             Insn { len: 1, pops: 1, pushes: 0, flow: Flow::Return }
         }
         // `return` — the same exit with nothing to hand back. Whether the method is allowed to take
         // it is again the descriptor's business, in [`transfer`].
         0xb1 => Insn { len: 1, pops: 0, pushes: 0, flow: Flow::Return },
+
+        // --- athrow (group 5): a deopt at the pc of the throw ---------------------------------
+        //
+        // One operand (the exception), and control **never continues here**: no fall-through, no
+        // branch target this walk could follow. The handler edge is the interpreter's, and that is
+        // the whole design — see the emitter's arm and the module docs.
+        //
+        // No `reachable_heap()`. Nothing is dereferenced: the exception is popped as an operand and
+        // handed straight back through the resume site, exactly as a reference already crosses a
+        // deopt taken at an `idiv` under a live `aload`.
+        0xbf => Insn { len: 1, pops: 1, pushes: 0, flow: Flow::Return },
+
+        // --- monitorenter / monitorexit (group 5): a permanent deopt --------------------------
+        //
+        // Both pop the lock object and neither continues: `Flow::Return` is what makes the code
+        // *after* a `monitorenter` not part of this compilation at all, which is the entire point
+        // — see the emitter's arm. A `monitorexit` reachable only from a handler is never walked
+        // anyway (the forward analysis does not follow handler edges); the arm covers the one that
+        // is reachable forwards, and costs nothing for the one that is not.
+        0xc2 | 0xc3 => Insn { len: 1, pops: 1, pushes: 0, flow: Flow::Return },
 
         // --- invokestatic / invokespecial: a call, which this tier **inlines** (step 8) --------
         // Resolved here like every other opcode with an operand, and refused the same way: a `None`
@@ -2425,13 +3781,22 @@ fn decode(
         // falls through to the next, which is exactly what it will be once the callee's body is
         // emitted in between. The callee's own control flow is a graph of its own, walked by its
         // own [`scan_body`], and nothing about it is visible here.
-        0xb7 | 0xb8 => {
-            need(3)?;
+        // **Step F2 adds the two dispatched forms** — `invokevirtual` (0xb6) and `invokeinterface`
+        // (0xb9). Nothing about the *shape* differs: they consume the same operands and leave the
+        // same result. What differs is that the VM's answer is a **speculation** rather than a
+        // fact, and the speculation is carried in [`Callee::guard`], which the emitter turns into a
+        // class check. From here it is one instruction that falls through, exactly as before.
+        //
+        // The **length** is the one thing that is not shared: an `invokeinterface` is five bytes
+        // (its two trailing operands, a count and a zero, are historical), so the length comes from
+        // [`invoke_len`] rather than a literal.
+        0xb6..=0xb9 => {
+            need(invoke_len(op) as usize)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             let callee = (env.invoke)(method.unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode: op })?;
             let pops = u16::try_from(callee.arg_slots).map_err(|_| Ineligible::TooBig)?;
             let pushes = u16::from(!returns_void(callee.method.descriptor));
-            simple(3, pops, pushes)
+            simple(invoke_len(op), pops, pushes)
         }
 
         _ => return Err(Ineligible::Opcode { pc, opcode: op }),
@@ -2444,13 +3809,24 @@ fn decode(
 /// Only ever called on an instruction [`decode`] has already accepted, so the operand bytes it
 /// indexes are known to be there — and the `wide` arm is known to wrap one of the five forms
 /// with a local index.
+/// A **category-2** local names two slots but touches only one: the whole `long` lives in the low
+/// one, and nothing on either side of the boundary ever writes the high one (see
+/// [`Kind::Cat2High`]). So `lload 3` reports slot 3 and not slot 4 — which is not an omission but
+/// the marshalling contract being exact: a slot in this set is one the caller must fill and one a
+/// resume site may write back, and slot 4 is neither.
 fn touched_local(code: &[u8], pc: usize) -> Option<u16> {
     match code[pc] {
         0x1a..=0x1d => Some((code[pc] - 0x1a) as u16), // iload_0..3
         0x2a..=0x2d => Some((code[pc] - 0x2a) as u16), // aload_0..3
+        0x1e..=0x21 => Some((code[pc] - 0x1e) as u16), // lload_0..3
+        0x22..=0x25 => Some((code[pc] - 0x22) as u16), // fload_0..3
+        0x26..=0x29 => Some((code[pc] - 0x26) as u16), // dload_0..3
         0x3b..=0x3e => Some((code[pc] - 0x3b) as u16), // istore_0..3
         0x4b..=0x4e => Some((code[pc] - 0x4b) as u16), // astore_0..3
-        0x15 | 0x19 | 0x36 | 0x3a | 0x84 => Some(code[pc + 1] as u16),
+        0x3f..=0x42 => Some((code[pc] - 0x3f) as u16), // lstore_0..3
+        0x43..=0x46 => Some((code[pc] - 0x43) as u16), // fstore_0..3
+        0x47..=0x4a => Some((code[pc] - 0x47) as u16), // dstore_0..3
+        0x15..=0x19 | 0x36..=0x3a | 0x84 => Some(code[pc + 1] as u16),
         0xc4 => Some(u16::from_be_bytes([code[pc + 2], code[pc + 3]])),
         _ => None,
     }
@@ -2610,15 +3986,27 @@ fn scan_body<'a>(method: Method<'a>, env: &Environment<'a>, inlined: bool) -> Re
             if target >= pc {
                 continue;
             }
-            // **An inlined body may not loop.** Only the root's headers get a safepoint poll and
-            // only the root can be entered on-stack, so a loop expanded inline would be a loop
-            // native code cannot be pulled out of — and step 3's poll invariant is not something
-            // step 8 is allowed to quietly weaken. Refusing the *callee* costs a call site; letting
-            // it through would cost the handshake.
-            if inlined {
+            // **Whether this header can carry a poll**, which is the same question for the root
+            // and for an inlined callee: the operand stack must be provably empty *in this body's
+            // own frame* (a poll exit describes a frame by its locals and its pc, and a header
+            // whose stack is not empty has no such description), and the body must have no
+            // exception table (an edge into a handler is one this forward walk never followed, so
+            // the state recorded here would not be the state there).
+            let pollable = !method.has_handlers && state[target].as_ref().is_some_and(|s| s.stack.is_empty());
+            // **An inlined body may only loop where it can poll** (group 3, stage 1). The refusal
+            // used to be unconditional, on the grounds that only the root's headers got a poll —
+            // but a poll is just a resume site, and resume sites have carried virtual frames since
+            // step 8. So an inlined header that *can* poll gets one, and the callee is refused only
+            // when it cannot: that is the one case that would leave a loop native code cannot be
+            // pulled out of, which is what step 3's invariant forbids.
+            //
+            // What an inlined header never becomes is an **OSR entry**: entering halfway into an
+            // expansion would mean materialising a call chain that never happened, and
+            // [`CompiledCode::osr_entries`] is the root's set alone.
+            if inlined && !pollable {
                 return Err(Ineligible::InlineLoop { pc });
             }
-            if !method.has_handlers && state[target].as_ref().is_some_and(|s| s.stack.is_empty()) {
+            if pollable {
                 osr.insert(target);
             }
         }
@@ -2629,6 +4017,7 @@ fn scan_body<'a>(method: Method<'a>, env: &Environment<'a>, inlined: bool) -> Re
         children: BTreeMap::new(),
         parent: None,
         arg_slots: 0,
+        guard: Guard::Static,
         // The three bases are the **layout**, which is a property of the whole tree rather than of
         // one body: [`plan`] assigns them once every body is known. Zero is the root's answer and
         // the only one that is right by default.
@@ -2665,13 +4054,17 @@ fn scan_body<'a>(method: Method<'a>, env: &Environment<'a>, inlined: bool) -> Re
 /// would inline the constructor and then refuse the `super()` inside it, which is to say it would
 /// refuse every allocation `javac` emits. `java/JiNew.class` is that shape, and it compiles.
 ///
-/// **The frontier this draws**, stated because it is the first question anyone will ask of the
-/// number: a `new` is inlinable in the root or one level below it, and no deeper. A callee that
-/// itself allocates would be root → callee → `<init>` → `Object.<init>`, which is four, so
-/// `int f() { return g(); }` inlines but `int f() { return new G().v; }` inlined *into* something
-/// else does not ([`Ineligible::InlineDepth`]). Raising it costs only code size, and the honest
-/// reason it is not raised here is that this step is already the largest in the milestone.
-const MAX_INLINE_DEPTH: usize = 3;
+/// **Four since group 3**, and the extra level is the one milestone F2 spends. A dispatched call is
+/// now an expansion of its own, so `new X(a)` reached *through* a virtual call is root → the virtual
+/// callee → `X.<init>` → `Object.<init>`: exactly four, and at three it was refused. The census is
+/// the evidence — raising the bound from three to four moves the compiled count by ten methods, and
+/// raising it again to five or six moves it by none, so four is where this corpus stops asking.
+///
+/// **The frontier this draws** is therefore one level further out than step 8's: a `new` is
+/// inlinable in the root or two levels below it. Beyond that the answer is still
+/// [`Ineligible::InlineDepth`], and the reason not to keep going is the one the two budgets below
+/// state — the code cache is finite, and each level multiplies.
+const MAX_INLINE_DEPTH: usize = 4;
 
 /// **The code-size budget**: the most bytecode, in bytes, that one compilation may expand *in
 /// total* across every body in the tree.
@@ -2686,13 +4079,25 @@ const MAX_INLINE_DEPTH: usize = 3;
 /// It is a budget over the **total** rather than a per-callee size limit because that is the
 /// quantity that actually matters — `MAX_CODE_LEN` bounds each body, and the sum is what bounds
 /// the emitted function.
-const MAX_INLINE_BYTES: usize = 1024;
+///
+/// **Doubled by group 3**, because both of its stages make expansions bigger: a callee that loops
+/// is not a getter, and a dispatched call expands a real method body rather than a `super()`. One
+/// kilobyte was already the binding refusal for a handful of methods at the old depth, and it would
+/// have become the binding one for many at the new. Two is where the census stops paying: four
+/// kilobytes buys one further method for twice the emitted code, which is not a trade this tier
+/// should make silently.
+const MAX_INLINE_BYTES: usize = 2048;
 
 /// The most **bodies** one compilation may contain, the root included. A second, blunter bound
 /// than [`MAX_INLINE_BYTES`]: it caps the number of frame regions the buffer layout has to
 /// allocate, and therefore the length of the caller's scratch buffer, independently of how small
 /// the inlined bodies happen to be.
-const MAX_INLINE_BODIES: usize = 16;
+///
+/// Raised with the byte budget rather than for a reason of its own: it is meant to be the *blunt*
+/// bound, and leaving it at sixteen while the other two grew would have made it the one that
+/// actually decides, which is the opposite of what it is for. On this corpus it decides nothing at
+/// either value.
+const MAX_INLINE_BODIES: usize = 24;
 
 /// **Builds the inline tree** and lays out its frames: scan the root, expand every invoke it may
 /// expand, and give each body a disjoint slice of the locals buffer and of the native operand area.
@@ -2755,15 +4160,18 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, In
             }
             // **One operand, one local slot.** The emitter copies operand `k` to local `k`, which
             // is only the callee's argument layout while every argument is category-1: a `long`
-            // occupies one operand and *two* local slots, and the arguments after it would land
-            // one slot low. Comparing the VM's operand count against the descriptor's slot width
-            // is what catches that, and it catches it for the receiver too.
+            // occupies one operand (the interpreter's stack holds one `Value::Long`) and *two*
+            // local slots, and the arguments after it would land one slot low. Comparing the VM's
+            // operand count against the descriptor's slot width is what catches that, and it
+            // catches it for the receiver too. See [`arg_slot_width`] for why the category-2 step
+            // left this refusal in place.
             if arg_slot_width(&callee.method) != Some(callee.arg_slots) {
                 return Err(Ineligible::WrongType { pc });
             }
             let mut body = scan_body(callee.method, env, true)?;
             body.parent = Some((at, pc));
             body.arg_slots = callee.arg_slots;
+            body.guard = callee.guard;
             let child = bodies.len();
             bodies.push(body);
             depth.push(depth[at] + 1);
@@ -2790,16 +4198,34 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, In
     Ok(bodies)
 }
 
-/// Whether the opcode is an **invoke this tier inlines**: `invokespecial` and `invokestatic`, the
-/// two that are statically bound.
+/// Whether the opcode is an **invoke this tier inlines**: all four of the constant-pool-indexed
+/// forms since milestone F2.
 ///
-/// `invokevirtual` and `invokeinterface` bind on the receiver's runtime class, which would need a
-/// type guard this tier has no way to emit, and `invokedynamic` needs a call site resolved through
-/// a bootstrap method. All three are refused by [`decode`] like any other opcode outside the
-/// whitelist. Written once because both [`decode`] and [`plan`] ask, and a disagreement between
-/// them would be an invoke with a body that never got emitted.
+/// `invokespecial` and `invokestatic` are statically bound and were the whole of it in step 8.
+/// `invokevirtual` and `invokeinterface` bind on the receiver's runtime class, which is why they
+/// waited: expanding one means picking a target *speculatively* and checking the pick, and the
+/// check is [`Guard::ExactClass`]. `invokedynamic` (0xba) is still out — its target comes from a
+/// bootstrap method the VM has to have run, and it is refused by [`decode`] like any other opcode
+/// outside the whitelist.
+///
+/// Written once because both [`decode`] and [`plan`] ask, and a disagreement between them would be
+/// an invoke with a body that never got emitted.
 fn is_invoke(op: u8) -> bool {
-    matches!(op, 0xb7 | 0xb8)
+    matches!(op, 0xb6..=0xb9)
+}
+
+/// **How many bytes an invoke occupies.** Three for `invokevirtual`, `invokespecial` and
+/// `invokestatic`; five for `invokeinterface` and `invokedynamic`, whose two trailing operand bytes
+/// are historical and carry nothing this tier reads.
+///
+/// It is a function rather than a literal because the emitted `return` of an inlined callee jumps
+/// to *the instruction after the invoke*, and a length that was wrong by two would land in the
+/// middle of one — the silent kind of wrong.
+fn invoke_len(op: u8) -> u16 {
+    match op {
+        0xb9 | 0xba => 5,
+        _ => 3,
+    }
 }
 
 /// The number of **local slots** a callee's receiver and arguments occupy, or `None` for a
@@ -2810,6 +4236,16 @@ fn is_invoke(op: u8) -> bool {
 /// when "operand `k` becomes local `k`" — the only argument-passing rule the emitter implements —
 /// is the callee's real layout. A `long` or `double` parameter makes the width larger than the
 /// count and the call is refused.
+///
+/// **That refusal survived the `long` step deliberately, and it is the one place category-2 still
+/// costs a whole feature.** A `long` *return* from an inlined callee needs nothing new — the
+/// callee's `lreturn` writes one operand into the caller's stack, which is exactly what an `int`
+/// return does. A `long` *parameter* would need the emitted call to copy operand `k` into local
+/// `w(k)` for a width-aware `w`, and to zero the high slot it skipped; that is a small change to
+/// the invoke arm and a real change to [`VirtualFrame`]'s locals, which are complete rather than
+/// differential and would then contain a [`Kind::Cat2High`] the call really did write. It is left
+/// out rather than half-done: a call with a `long` argument is simply not inlined, so the method
+/// containing it is not compiled, exactly as before.
 fn arg_slot_width(method: &Method) -> Option<usize> {
     let bytes = method.descriptor.as_bytes();
     let mut slots = usize::from(!method.is_static); // `this`
@@ -2866,8 +4302,11 @@ pub fn compile_with_regs<'a>(
     // exactly the frame — and the prologue — it had before OSR existed. The **callee-saved** half of
     // the cache (`R12`–`R15`) joins it on the same terms: pushed only when the operand stack is deep
     // enough to reach them, so nothing shallower than five live operands pays a byte for step 10.
+    // **Any** body's loop headers read `POLL`, not only the root's: since group 3's first stage an
+    // inlined callee may loop, and its header polls through the same word.
+    let polls = bodies.iter().any(|b| !b.osr.is_empty());
     let mut saved: Vec<Reg> = vec![LOCALS];
-    if !root.osr.is_empty() {
+    if polls {
         saved.push(POLL);
     }
     saved.extend(CACHE[..regs as usize].iter().copied().filter(|r| !r.is_volatile()));
@@ -2884,10 +4323,11 @@ pub fn compile_with_regs<'a>(
         allocs: BTreeSet::new(),
         // A loop header gets two more names: `osr_labels[pc]` is the instruction itself (where an
         // on-stack entry lands, *past* the poll — so a re-entry always makes at least one iteration
-        // of progress even against a poll word that is permanently set), and `exits[pc]` is the
-        // stub that returns `Safepoint(pc)`. **Root only**: an inlined body may not loop.
+        // of progress even against a poll word that is permanently set), which only the **root**
+        // has; and `exits[b][pc]` is the stub that returns `Safepoint(key)`, which every body with
+        // a loop header has.
         osr_labels: vec![None; root.method.code.len()],
-        exits: vec![None; root.method.code.len()],
+        exits: bodies.iter().map(|b| vec![None; b.method.code.len()]).collect(),
         epilogue: a.new_label(),
         regs,
     };
@@ -2896,19 +4336,26 @@ pub fn compile_with_regs<'a>(
             st.labels[b][pc] = Some(a.new_label());
         }
     }
-    for &pc in &root.osr {
-        st.osr_labels[pc] = Some(a.new_label());
-        st.exits[pc] = Some(a.new_label());
+    for (b, body) in bodies.iter().enumerate() {
+        for &pc in &body.osr {
+            if b == 0 {
+                st.osr_labels[pc] = Some(a.new_label());
+            }
+            st.exits[b][pc] = Some(a.new_label());
+        }
     }
 
     frame.prologue(&mut a);
     // The ABI delivers the locals pointer in RCX; park it in the callee-saved register so RCX is
     // free to be the shift count (`shl` and friends can read the count from nowhere else).
     a.mov_rr(LOCALS, frame.arg(0));
+    if polls {
+        // The poll word's address, loaded once for every body that polls.
+        a.mov_ri(POLL, env.poll_word as i64);
+    }
     if !root.osr.is_empty() {
         // The entry dispatch. `frame.arg(1)` is RDX, which is also `T2` (scratch, and `cqo`'s
         // output) — so it is consumed here, before a single body instruction can clobber it.
-        a.mov_ri(POLL, env.poll_word as i64);
         for &pc in &root.osr {
             a.cmp_ri(frame.arg(1), pc as i32);
             a.jcc(Cond::E, st.osr_labels[pc].expect("every loop header has an OSR label"));
@@ -2916,21 +4363,40 @@ pub fn compile_with_regs<'a>(
         // Anything else — in practice only 0, the ordinary invocation — falls through to pc 0.
     }
 
-    // Where the **allocation log** starts: just past every body's region. Slot `alloc_base` is the
+    // **The result slot**: one 8-byte cell just past every body's region, where a `return`-family
+    // opcode leaves the method's value. See [`CompiledCode::result_base`] — the status word no
+    // longer carries it.
+    let result_base: i32 = bodies.iter().map(|b| b.method.max_locals as i32 + b.max_depth as i32).sum();
+    // Where the **allocation log** starts: right after the result slot. Slot `alloc_base` is the
     // record count, and record `r` is the pair at `alloc_base + 1 + 2r`.
-    let alloc_base: i32 = bodies.iter().map(|b| b.method.max_locals as i32 + b.max_depth as i32).sum();
+    let alloc_base: i32 = result_base + 1;
 
-    emit_body(&mut a, &bodies, 0, env, &frame, alloc_base, &mut st)?;
+    emit_body(&mut a, &bodies, 0, env, &frame, Layout { result_base, alloc_base }, &mut st)?;
 
     // The safepoint exit stubs, one per loop header, parked here at the end of the function so a
     // taken poll costs the loop body nothing but the `jcc` — the stub itself never shares a cache
-    // line with the loop. Each is two instructions: pack this pc with `Status::SAFEPOINT` and
-    // leave through the shared epilogue. Nothing is marshalled out: `istore`/`iinc` wrote straight
-    // through to the caller's buffer, so it is already current.
-    for &pc in &bodies[0].osr {
-        a.bind(st.exits[pc].expect("every loop header has an exit stub"));
-        a.mov_ri(T0, Status::safepoint_value(pc as u32));
-        a.jmp(st.epilogue);
+    // line with the loop. Leave through the shared epilogue with `Status::SAFEPOINT` and this
+    // site's key.
+    //
+    // **In the root's own body that is two instructions**, and it always was: the header's operand
+    // stack is empty by construction and `istore`/`iinc` wrote the locals straight through to the
+    // caller's buffer, so there is nothing to marshal.
+    //
+    // **In an inlined body it is a deopt stub that reports a poll** (group 3, stage 1). The
+    // *callee's* stack is empty at its header, but its callers are each in the middle of an
+    // invoke with live operands, and those frames have to come back. So the same [`spill_chain`]
+    // the deopt stubs use runs here, and the only difference between the two stubs is the status
+    // word — which is exactly right: a poll and a guard leave from the same kind of place, and
+    // only the reason differs.
+    for (b, body) in bodies.iter().enumerate() {
+        for &pc in &body.osr {
+            a.bind(st.exits[b][pc].expect("every loop header has an exit stub"));
+            if b != 0 {
+                spill_chain(&mut a, &bodies, &frame, st.regs, b, pc);
+            }
+            a.mov_ri(T0, Status::safepoint_value(site_key(&bodies, &st.sites, b, pc)));
+            a.jmp(st.epilogue);
+        }
     }
 
     // **The deopt stubs**, one per guarded pc, parked here for the same reason the poll exits are:
@@ -2973,21 +4439,8 @@ pub fn compile_with_regs<'a>(
     // instruction was entered with.
     for &(b, pc) in &st.sites {
         a.bind(st.deopt[b][pc].expect("a guarded pc has a stub"));
-        let (mut cur, mut cur_pc, mut child_args) = (b, pc, 0usize);
-        loop {
-            let body = &bodies[cur];
-            let depth = body.state[cur_pc].as_ref().expect("a guarded pc is reachable").stack.len();
-            // Everything below the arguments of the call this frame is in the middle of — for the
-            // innermost frame, which is in the middle of nothing, that is its whole stack.
-            for k in 0..depth - child_args {
-                let home = operand_home(&frame, st.regs, body.frame_base + k as u32);
-                let src = in_reg(&mut a, home, T0);
-                a.mov_mr(Mem::at(LOCALS, 8 * (body.spill_base as i32 + k as i32)), src);
-            }
-            let Some((caller, invoke)) = body.parent else { break };
-            (child_args, cur, cur_pc) = (body.arg_slots, caller, invoke);
-        }
-        let key = site_key(&st.sites, b, pc);
+        spill_chain(&mut a, &bodies, &frame, st.regs, b, pc);
+        let key = site_key(&bodies, &st.sites, b, pc);
         a.mov_ri(
             T0,
             match st.allocs.contains(&(b, pc)) {
@@ -3010,13 +4463,14 @@ pub fn compile_with_regs<'a>(
     // code can leave from, the kind of every local the body touches and of every live operand.
     // Nothing is derived here that the fixed point did not already establish, which is the point —
     // there is exactly one type map.
-    // The poll exits are root sites by construction (only the root may loop); the guards are
-    // wherever they are, and the two are collected into one table keyed by what native code
+    // The poll exits and the guards are collected into one table keyed by what native code
     // reports. Sorted by key so the table is deterministic and a binary search stays possible.
-    let mut resume_sites: Vec<ResumeSite> = bodies[0]
-        .osr
+    // A pc that is *both* a loop header and a guard yields one site, not two — the state to
+    // rebuild is the same either way, and only the status word differs.
+    let mut resume_sites: Vec<ResumeSite> = bodies
         .iter()
-        .map(|&pc| (0usize, pc))
+        .enumerate()
+        .flat_map(|(b, body)| body.osr.iter().map(move |&pc| (b, pc)))
         .chain(st.sites.iter().copied())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -3042,8 +4496,8 @@ pub fn compile_with_regs<'a>(
     let stack_base = bodies[0].spill_base;
     // The deepest chain a deopt can hand back: the root plus its longest run of expansions.
     let frame_depth = (0..bodies.len()).map(|b| chain_len(&bodies, b)).max().unwrap_or(1) as u32;
-    // A method with no `new` carries no log and the caller has nothing to replay — which is every
-    // method compiled before this step, so none of them pays a slot for the feature.
+    // A method that allocates nothing — no `new`, no `newarray`, no `anewarray` — carries no log
+    // and the caller has nothing to replay, so it pays no slot for the feature.
     let alloc_records = match st.allocs.is_empty() {
         true => 0,
         false => ALLOC_LOG_RECORDS,
@@ -3057,15 +4511,28 @@ pub fn compile_with_regs<'a>(
         touched_locals,
         stack_slots: native_slots,
         stack_base,
+        result_base: result_base as u32,
         alloc_base: alloc_base as u32,
         alloc_records,
         buffer_slots: alloc_base as u32 + log_slots,
         osr_entries: bodies[0].osr.iter().map(|&pc| pc as u32).collect(),
         resume_sites,
         frame_depth,
-        returns_reference: return_kind(method.descriptor) == Kind::Reference,
+        returns: return_kind(method.descriptor),
         returns_void: returns_void(method.descriptor),
     })
+}
+
+/// **The two whole-compilation buffer offsets** every body needs and none of them owns: where the
+/// method's result goes, and where the allocation log starts. Both sit past the last body's region,
+/// so they are a property of the tree rather than of any one node — which is exactly why they are
+/// passed down as a pair rather than derived inside [`emit_body`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Layout {
+    /// [`CompiledCode::result_base`], as an `i64`-slot index.
+    result_base: i32,
+    /// [`CompiledCode::alloc_base`], as an `i64`-slot index. Always `result_base + 1`.
+    alloc_base: i32,
 }
 
 /// The **labels and stubs** one compilation accumulates, kept apart from the bodies so the emitter
@@ -3084,11 +4551,14 @@ struct Frames {
     /// `Status::DEOPT` — the `new`s. Same stub shape, same state, different reason; see
     /// [`Status::ALLOC`] for why the difference is worth a status of its own.
     allocs: BTreeSet<(usize, usize)>,
-    /// The **root's** loop headers: where an on-stack entry lands (past the poll).
-    /// Root-only, because an inlined body may not contain a loop at all.
+    /// The **root's** loop headers: where an on-stack entry lands (past the poll). Root-only —
+    /// an inlined body may loop (group 3, stage 1) but may never be *entered* at one of its
+    /// headers, so it has no label of this kind.
     osr_labels: Vec<Option<Label>>,
-    /// The stub each of those headers polls out through.
-    exits: Vec<Option<Label>>,
+    /// The stub each loop header polls out through, **per body**: an inlined header's stub has to
+    /// rebuild a whole call chain, so it is a different stub from the root's and needs its own
+    /// label.
+    exits: Vec<Vec<Option<Label>>>,
     /// The one shared exit: every `return`, every poll and every deopt leaves through it.
     epilogue: Label,
     /// **How many operand-stack positions are register-resident** in this compilation — see
@@ -3117,18 +4587,64 @@ fn chain_len(bodies: &[Body], b: usize) -> usize {
 /// expanded callee share the root's single invoke pc, and even one would collide with a real pc of
 /// the root. So it is numbered past [`MAX_CODE_LEN`], which no bytecode pc can reach because
 /// [`scan_body`] refuses a body longer than that.
-fn site_key(sites: &BTreeSet<(usize, usize)>, b: usize, pc: usize) -> u32 {
+fn site_key(bodies: &[Body], sites: &BTreeSet<(usize, usize)>, b: usize, pc: usize) -> u32 {
     match b {
         0 => pc as u32,
         _ => {
-            let n = sites
+            let n = inlined_sites(bodies, sites)
                 .iter()
-                .filter(|&&(body, _)| body != 0)
                 .position(|&site| site == (b, pc))
                 .expect("every inlined site is in the table it is being numbered against");
             MAX_CODE_LEN as u32 + n as u32
         }
     }
+}
+
+/// **Spills the live operands of the whole call chain** at the site `(b, pc)`, innermost frame
+/// first, into the buffer slots [`resume_site`] says the interpreter will read them from.
+///
+/// The locals are not here and never were: `istore`/`iinc` write straight through to the caller's
+/// buffer whichever body they are in, and the emitted call wrote the callee's arguments. Only the
+/// operand stacks live in the native frame, and only they vanish with it.
+///
+/// Two details carry the correctness, and they are the same two [`resume_site`] states:
+///
+///  - a caller's operands are spilled **minus the call's arguments**. Those operands became the
+///    callee's locals, they are already in the callee's region, and re-materialising them on the
+///    caller's stack would push each argument twice;
+///  - the depth of each frame is the one **on entry to** the instruction it is stopped at, which is
+///    what the type map records and what the pc handed back names.
+///
+/// Written once because both stubs need it: a guard's, and — since group 3's first stage — an
+/// inlined loop header's safepoint poll, whose callers are just as much in the middle of a call.
+fn spill_chain(a: &mut Asm, bodies: &[Body], frame: &super::x64::Frame, regs: u32, b: usize, pc: usize) {
+    let (mut cur, mut cur_pc, mut child_args) = (b, pc, 0usize);
+    loop {
+        let body = &bodies[cur];
+        let depth = body.state[cur_pc].as_ref().expect("a resume site is reachable").stack.len();
+        // Everything below the arguments of the call this frame is in the middle of — for the
+        // innermost frame, which is in the middle of nothing, that is its whole stack.
+        for k in 0..depth - child_args {
+            let home = operand_home(frame, regs, body.frame_base + k as u32);
+            let src = in_reg(a, home, T0);
+            a.mov_mr(Mem::at(LOCALS, 8 * (body.spill_base as i32 + k as i32)), src);
+        }
+        let Some((caller, invoke)) = body.parent else { break };
+        (child_args, cur, cur_pc) = (body.arg_slots, caller, invoke);
+    }
+}
+
+/// **Every resume site of an inlined body**, in a deterministic order: the guards, plus (since
+/// group 3's first stage) the loop headers that poll. The two are numbered from one sequence
+/// because they are one kind of thing — a place native code can hand a half-finished call chain
+/// back — and because a pc can perfectly well be both.
+fn inlined_sites(bodies: &[Body], sites: &BTreeSet<(usize, usize)>) -> BTreeSet<(usize, usize)> {
+    let polls = bodies
+        .iter()
+        .enumerate()
+        .skip(1)
+        .flat_map(|(b, body)| body.osr.iter().map(move |&pc| (b, pc)));
+    sites.iter().copied().filter(|&(b, _)| b != 0).chain(polls).collect()
 }
 
 /// **The whole interpreter state at one resume site**: the root frame, and every frame above it
@@ -3173,7 +4689,7 @@ fn resume_site(
     // Collected innermost-first; the interpreter pushes outermost-first.
     frames.reverse();
     ResumeSite {
-        key: site_key(sites, b, pc),
+        key: site_key(bodies, sites, b, pc),
         pc: root_pc as u32,
         locals: touched_locals.iter().map(|&slot| root_state.local(slot)).collect(),
         // The root's own stack, minus the arguments of the call it is in the middle of (nothing,
@@ -3212,14 +4728,17 @@ fn emit_body(
     b: usize,
     env: &Environment,
     frame: &super::x64::Frame,
-    alloc_base: i32,
+    layout: Layout,
     st: &mut Frames,
 ) -> Result<(), Ineligible> {
     let body = &bodies[b];
     let code = body.method.code;
     let unit = body.method.unit;
-    let alloc_count = Mem::at(LOCALS, 8 * alloc_base);
-    let alloc_first = 8 * (alloc_base + 1);
+    let alloc_count = Mem::at(LOCALS, 8 * layout.alloc_base);
+    let alloc_first = 8 * (layout.alloc_base + 1);
+    // Where a `return`-family opcode of the **root** leaves its value. An inlined body's `return`
+    // never touches it: its result is an operand of its caller, not a boundary value.
+    let result = Mem::at(LOCALS, 8 * layout.result_base);
     // Operand-stack position `k` of **this body** -> native slot `frame_base + k`, which since step
     // 10 is a [`CACHE`] register or a frame slot depending only on that index ([`operand_home`]).
     // The closures exist so each mapping is written down once; `frame.local` panics on an
@@ -3238,21 +4757,50 @@ fn emit_body(
         if body.osr.contains(&pc) {
             a.mov_rm(T0, Mem::at(POLL, 0));
             a.cmp_ri(T0, 0);
-            a.jcc(Cond::Ne, st.exits[pc].expect("every loop header has an exit stub"));
-            a.bind(st.osr_labels[pc].expect("every loop header has an OSR label"));
+            a.jcc(Cond::Ne, st.exits[b][pc].expect("every loop header has an exit stub"));
+            // Only the **root** can be entered on-stack, so only the root's headers carry the
+            // label the entry dispatch jumps to. An inlined header polls and nothing more.
+            if b == 0 {
+                a.bind(st.osr_labels[pc].expect("every root loop header has an OSR label"));
+            }
         }
         let op = code[pc];
         // The label every guard of *this* instruction branches to. Created only for the opcodes
         // that have one, so no unbound label is ever left behind; the arms below that never deopt
         // are handed the epilogue, which they never name.
-        let deopt = match guards(op) {
+        // An **inline cache** is a guard like any other, but whether a given invoke has one is a
+        // property of the site rather than of the opcode: a `private` method reached by
+        // `invokevirtual` is statically bound and checks nothing. So the question is asked of the
+        // body this invoke expanded to, not of the byte.
+        let cached = body
+            .children
+            .get(&pc)
+            .is_some_and(|&child| bodies[child].guard != Guard::Static);
+        let deopt = match guards(op) || cached {
             true => {
                 let label = a.new_label();
                 st.deopt[b][pc] = Some(label);
                 st.sites.insert((b, pc));
-                // A `new`'s stub is the same stub, reporting a different reason — see
+                // An allocation's stub is the same stub, reporting a different reason — see
                 // [`Status::ALLOC`].
-                if op == 0xbb {
+                //
+                // **The two array opcodes report `ALLOC` for all four of their guards**, including
+                // the two that are not about allocation at all (a negative count, a count over
+                // [`MAX_INLINE_ARRAY_BYTES`]). One stub per pc is a property of this structure —
+                // the site is keyed by its pc and carries one status — and splitting it would buy
+                // a *statistic*, not a behaviour: `Outcome::AllocFailed` and `Outcome::Deopt` hand
+                // back the same rebuilt state and resume at the same instruction, so the
+                // interpreter re-executes the `newarray` and throws the `NegativeArraySizeException`
+                // either way.
+                //
+                // Which of the two is the *better* statistic is not obvious, and it is worth
+                // saying why `ALLOC` is not merely the cheap answer. `Status::DEOPT` feeds the
+                // "this method keeps failing a guard" counter, whose purpose is to stop OSR from
+                // re-entering a loop that cannot make progress natively. A negative count throws,
+                // so the loop it is in does not continue; an oversized count is the ordinary case
+                // of a big array, which recurs, and which is exactly the "this is not native
+                // code's job" shape `ALLOC` was introduced for. Neither wants the loop retired.
+                if matches!(op, 0xbb..=0xbd) {
                     st.allocs.insert((b, pc));
                 }
                 label
@@ -3346,29 +4894,82 @@ fn emit_body(
                 a.mov_mr(alloc_count, T0);
             }
 
+            // --- newarray / anewarray: the same bump, over a run-time size -------------------
+            //
+            // Everything that makes an inline allocation sound is `new`'s and is unchanged: the
+            // `lock xadd` on the interpreter's own cursor word, the failure mode that leaves the
+            // cursor past the end exactly as `EdenArena::alloc` does, the deferred log record, and
+            // the `Status::ALLOC` exit. What is new is that the size is an operand — see
+            // [`emit_array_alloc`] for the guard, the loop and the length word that costs.
+            //
+            // `anewarray` is the same code with a different resolved width: a reference element is
+            // one heap offset wide and `null` is the offset `0`, so the slots the zeroing loop
+            // wrote are already the null-filled array JVMS asks for. Nothing about a reference
+            // array needs a write barrier here, because nothing is *stored* into it.
+            0xbc | 0xbd => {
+                let of = match op {
+                    0xbc => ArrayOf::Primitive(code[pc + 1]),
+                    _ => ArrayOf::Reference(u16::from_be_bytes([code[pc + 1], code[pc + 2]])),
+                };
+                let index = match of {
+                    ArrayOf::Primitive(atype) => u16::from(atype),
+                    ArrayOf::Reference(index) => index,
+                };
+                let ty = (env.array)(unit, of).ok_or(Ineligible::UnresolvedClass { pc, index })?;
+                let capacity = array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
+                // `d - 1` both ways round: the count comes off this position and the reference goes
+                // back onto it.
+                emit_array_alloc(a, env.heap, ty, capacity, home(d - 1), alloc_count, alloc_first, deopt);
+            }
+
             // --- constants: materialise the immediate, store it at the new top ---------------
             // `aconst_null` (0x01) is here too: `null` is the reference `0`, and a reference is
             // carried in a slot exactly as an `int` is — eight bytes, no tag. What tells the two
             // apart is the type map, and nothing else needs to.
-            0x01..=0x08 | 0x10 | 0x11 | 0x12 | 0x13 => {
+            // `fconst_0/1/2` (0x0b–0x0d) and `dconst_0/1` (0x0e/0x0f) are here too, and they are
+            // the strongest statement of what a floating-point value *is* in this tier: a
+            // constant `1.0f` is the immediate `0x3F800000`, materialised by the same `mov` that
+            // materialises an `int`. No SSE instruction is involved in producing one.
+            //
+            // `lconst_0`/`lconst_1` (0x09/0x0a) and `ldc2_w` (0x14) are here too, and the only
+            // thing that changes for them is the *width of the immediate*: `mov_ri` materialises a
+            // full 64-bit constant (a `movabs` when it does not fit 32 bits), so a `long` literal
+            // costs one instruction like every other constant. There is no high half to write
+            // separately — a `long` is one slot in this tier, exactly as it is one `Value::Long` in
+            // the interpreter.
+            // 0x01–0x14: `aconst_null` through `ldc2_w` — every opcode that pushes a constant.
+            0x01..=0x14 => {
                 let (_, value) = decode(code, pc, &body.method, env)?;
                 let value = value.expect("the constant opcodes always decode a value");
-                // A sign-extended i32 immediate: the normalisation invariant holds on entry to
-                // the stack, by construction. Straight into the operand's home when it has one, so
-                // a cached push is *one* instruction rather than a materialise and a store.
+                // For an `int` this is a sign-extended i32, so the normalisation invariant holds on
+                // entry to the stack by construction; for a `long` it is the value itself, which
+                // needs no invariant at all. Straight into the operand's home when it has one, so a
+                // cached push is *one* instruction rather than a materialise and a store.
                 let w = work_reg(home(d));
-                a.mov_ri(w, value as i64);
+                a.mov_ri(w, value);
                 write_home(a, home(d), w);
             }
 
-            // --- iload / aload, in all their forms -------------------------------------------
-            // One 8-byte `mov` either way. A reference is a heap *offset*, which is a small
+            // --- iload / aload / lload, in all their forms ------------------------------------
+            // One 8-byte `mov` for all three. A reference is a heap *offset*, which is a small
             // non-negative number, so it needs no normalisation and no separate move; the pair of
-            // opcodes exists in the bytecode for the verifier's benefit, not for the machine's.
-            0x15 | 0x19 | 0x1a..=0x1d | 0x2a..=0x2d => {
+            // `int`/reference opcodes exists in the bytecode for the verifier's benefit, not for
+            // the machine's.
+            //
+            // **`lload` joins them without a line of its own, and that is the point of the layout.**
+            // A `long` occupies buffer slot `locals_base + i` whole, and slot `i + 1` is the
+            // JVMS-inaccessible high half that neither side ever writes — so "read eight bytes from
+            // the low slot" is the entire instruction, the same one an `iload` emits. What the two
+            // do not share is the *check*: `lload` needed both slots to be in range and to be the
+            // matching `Long`/`Cat2High` pair, and that happened in `decode` and `transfer`.
+            // 0x15–0x2d: the five generic loads and their twenty `_0..3` forms, in one range.
+            0x15..=0x2d => {
                 let i = match op {
-                    0x15 | 0x19 => code[pc + 1] as u16,
+                    0x15..=0x19 => code[pc + 1] as u16,
                     0x1a..=0x1d => (op - 0x1a) as u16,
+                    0x1e..=0x21 => (op - 0x1e) as u16,
+                    0x22..=0x25 => (op - 0x22) as u16,
+                    0x26..=0x29 => (op - 0x26) as u16,
                     _ => (op - 0x2a) as u16,
                 };
                 let w = work_reg(home(d));
@@ -3376,11 +4977,18 @@ fn emit_body(
                 write_home(a, home(d), w);
             }
 
-            // --- istore / astore, in all their forms -----------------------------------------
-            0x36 | 0x3a | 0x3b..=0x3e | 0x4b..=0x4e => {
+            // --- istore / astore / lstore, in all their forms ---------------------------------
+            // The mirror image, and `lstore` joins for the same reason: eight bytes into the low
+            // slot, and the high slot deliberately untouched — writing it would be the one thing
+            // that could make this tier and the interpreter disagree about where a `long` is.
+            // 0x36–0x4e: the five generic stores and their twenty `_0..3` forms.
+            0x36..=0x4e => {
                 let i = match op {
-                    0x36 | 0x3a => code[pc + 1] as u16,
+                    0x36..=0x3a => code[pc + 1] as u16,
                     0x3b..=0x3e => (op - 0x3b) as u16,
+                    0x3f..=0x42 => (op - 0x3f) as u16,
+                    0x43..=0x46 => (op - 0x43) as u16,
+                    0x47..=0x4a => (op - 0x47) as u16,
                     _ => (op - 0x4b) as u16,
                 };
                 let v = in_reg(a, home(d - 1), T0);
@@ -3406,12 +5014,12 @@ fn emit_body(
             0xc4 => {
                 let i = u16::from_be_bytes([code[pc + 2], code[pc + 3]]);
                 match code[pc + 1] {
-                    0x15 | 0x19 => {
+                    0x15..=0x19 => {
                         let w = work_reg(home(d));
                         a.mov_rm(w, lcl(i));
                         write_home(a, home(d), w);
                     }
-                    0x36 | 0x3a => {
+                    0x36..=0x3a => {
                         let v = in_reg(a, home(d - 1), T0);
                         a.mov_mr(lcl(i), v);
                     }
@@ -3426,21 +5034,29 @@ fn emit_body(
                 }
             }
 
-            // --- getstatic of an int ---------------------------------------------------------
-            // A 32-bit **sign-extending** load from a baked-in address. Two things are load-bearing
-            // and neither is obvious: the static occupies 4 bytes (the interpreter's `putstatic`
-            // writes it with `write_u32`), so a 64-bit load would drag in the neighbouring slot;
-            // and `movsxd` is what puts the value into the normalised form every other opcode here
-            // assumes of its inputs. `T1` holds the address only for the one instruction that uses
-            // it — nothing is live across an opcode boundary.
+            // --- getstatic of an int or a long -------------------------------------------------
+            // **The kind decides the width, and the width is the whole of the difference.**
+            //
+            // An `int` static occupies 4 bytes (the interpreter's `putstatic` writes it with
+            // `write_u32`), so it is a 32-bit **sign-extending** load: eight bytes would drag in the
+            // neighbouring slot, and `movsxd` is what puts the value into the normalised form every
+            // other `int` opcode here assumes of its inputs.
+            //
+            // A `long` static occupies 8 (`write_u64`), so it is a plain 64-bit `mov` — and there
+            // is nothing to normalise, because the value fills the slot. Reading one four bytes at
+            // a time would be the silent kind of wrong: correct for every value below 2^31 and
+            // garbage above it.
+            //
+            // `T1` holds the address only for the one instruction that uses it — nothing is live
+            // across an opcode boundary — and is never a [`CACHE`] register, so the load may land
+            // straight in the operand's home.
             0xb2 => {
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-                let address = (env.static_int)(unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
+                let (address, kind) =
+                    (env.static_field)(unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
                 a.mov_ri(T1, address as i64);
-                // `T1` holds the address and is never a [`CACHE`] register, so the load may land
-                // straight in the operand's home.
                 let w = work_reg(home(d));
-                a.movsxd_rm(w, Mem::at(T1, 0));
+                heap_load(a, kind, w, Mem::at(T1, 0));
                 write_home(a, home(d), w);
             }
 
@@ -3452,12 +5068,14 @@ fn emit_body(
             // nothing observable was written, and re-reading the heap reads the same bytes (no
             // other thread runs while native code is on this stack).
             //
-            // Then the offset becomes an address ([`heap_address`]) and the field is a 32-bit
-            // **sign-extending** load: an `int` field is four bytes (the interpreter writes it with
-            // `write_u32`), and `movsxd` is what re-establishes the normalisation invariant.
+            // Then the offset becomes an address ([`heap_address`]) and the field is read at the
+            // width its kind says: four bytes **sign-extending** for an `int` (the interpreter
+            // writes it with `write_u32`, and `movsxd` re-establishes the normalisation invariant),
+            // eight for a `long` (`write_u64`, and nothing to normalise).
             0xb4 => {
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-                let offset = (env.int_field)(unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
+                let (offset, kind) =
+                    (env.field)(unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
                 // The guard reads the receiver into scratch and **leaves its home alone**, so the
                 // deopt stub above still finds the operand where the resume map says it is.
                 read_home(a, T0, home(d - 1));
@@ -3465,8 +5083,66 @@ fn emit_body(
                 a.jcc(Cond::E, deopt);
                 heap_address(a, env.heap, T0, T1);
                 let w = work_reg(home(d - 1));
-                a.movsxd_rm(w, Mem::at(T0, offset as i32));
+                heap_load(a, kind, w, Mem::at(T0, offset as i32));
                 write_home(a, home(d - 1), w);
+            }
+
+            // --- checkcast / instanceof -------------------------------------------------------
+            // **An equality test, and a deopt for everything else.** JVMS defines both in terms of
+            // subtyping — subclass, interface, array covariance — which is a walk over class
+            // metadata and not something an instruction stream does. So native code answers only
+            // the case it can answer in three instructions, the **exact** class, and hands the
+            // method back for every other one; the interpreter then re-executes this very
+            // instruction and decides by its full path, throwing the `ClassCastException` if that
+            // is the answer. This tier computes no hierarchy and, as everywhere, throws nothing.
+            //
+            // Three things carry it:
+            //
+            //  - **`null` never deopts.** JVMS: a `null` passes any `checkcast` and is an
+            //    `instanceof` of nothing. Both are decided here, with no dereference — which is
+            //    also what keeps the guard from reading the header of address `eden_base + 0`.
+            //  - **The immediate is a *pinned* mirror offset**, so the comparison is valid for the
+            //    life of the VM rather than until the next collection. It is compared against the
+            //    first word of the object's header, which `objects_operations::allocate` writes as
+            //    that same offset — the two sides are one quantity, not two derivations of it.
+            //  - **Nothing is written before the guard.** `checkcast` writes nothing at all (the
+            //    reference stays in its home, which is what makes the opcode transparent), and
+            //    `instanceof` writes its `0`/`1` only on paths that have already committed. So the
+            //    pc a deopt reports names an instruction that has not run.
+            //
+            // The mirror goes through `T2` rather than through a `cmp r, imm32`: an offset is a
+            // `u32` and may not fit a signed 32-bit immediate, and a truncated compare would be the
+            // silent kind of wrong — right for every small heap and wrong above 2 GiB.
+            0xc0 | 0xc1 => {
+                let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
+                let mirror = (env.class_mirror)(unit, index).ok_or(Ineligible::UnresolvedClass { pc, index })?;
+                let null = a.new_label();
+                read_home(a, T0, home(d - 1));
+                a.cmp_ri(T0, 0);
+                a.jcc(Cond::E, null);
+                heap_address(a, env.heap, T0, T1);
+                a.mov_rm32(T1, Mem::at(T0, 0)); // the header's class_id
+                a.mov_ri(T2, i64::from(mirror));
+                a.cmp_rr(T1, T2);
+                a.jcc(Cond::Ne, deopt);
+                match op {
+                    // `checkcast`: the reference is already where it belongs, so both arms of the
+                    // null test converge on doing nothing at all. That is the opcode's semantics
+                    // exactly — a cast that succeeds is invisible.
+                    0xc0 => a.bind(null),
+                    // `instanceof`: `1` on the exact match, `0` for `null`. When the operand's home
+                    // is a frame slot, `w` is `T0` — which on the null path still holds the zero
+                    // the `cmp` just tested, and `xor` makes that explicit rather than assumed.
+                    _ => {
+                        let (w, done) = (work_reg(home(d - 1)), a.new_label());
+                        a.mov_ri(w, 1);
+                        a.jmp(done);
+                        a.bind(null);
+                        a.xor_rr(w, w);
+                        a.bind(done);
+                        write_home(a, home(d - 1), w);
+                    }
+                }
             }
 
             // --- arraylength ------------------------------------------------------------------
@@ -3511,7 +5187,7 @@ fn emit_body(
                 a.imul_rri(T1, T1, env.heap.int_element as i32);
                 a.add_rr(T0, T1);
                 let w = work_reg(home(d - 2));
-                a.movsxd_rm(w, Mem::at(T0, env.heap.int_array_data as i32));
+                a.movsxd_rm(w, Mem::at(T0, env.heap.array_data as i32));
                 write_home(a, home(d - 2), w);
             }
 
@@ -3528,10 +5204,16 @@ fn emit_body(
             // resolved (see `decode`).
             0xb3 => {
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-                let address = (env.static_int)(unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
+                let (address, kind) =
+                    (env.static_field)(unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
+                writable(pc, kind)?;
                 a.mov_ri(T1, address as i64);
                 let v = in_reg(a, home(d - 1), T0);
-                a.mov_mr32(Mem::at(T1, 0), v);
+                // The mirror image of the load's width choice, and the one that is *destructive* if
+                // it is wrong: a 4-byte store into a `long` static would leave the top half of the
+                // old value in place, and an 8-byte store into an `int` static would overwrite its
+                // neighbour.
+                heap_store(a, kind, Mem::at(T1, 0), v);
             }
 
             // --- putfield of an int -----------------------------------------------------------
@@ -3543,13 +5225,15 @@ fn emit_body(
             // resume rather than restart.
             0xb5 => {
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-                let offset = (env.int_field)(unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
+                let (offset, kind) =
+                    (env.field)(unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
+                writable(pc, kind)?;
                 read_home(a, T0, home(d - 2)); // the receiver, under the value
                 a.cmp_ri(T0, 0);
                 a.jcc(Cond::E, deopt);
                 heap_address(a, env.heap, T0, T1);
                 let v = in_reg(a, home(d - 1), T1); // the value
-                a.mov_mr32(Mem::at(T0, offset as i32), v);
+                heap_store(a, kind, Mem::at(T0, offset as i32), v);
             }
 
             // --- iastore ----------------------------------------------------------------------
@@ -3575,7 +5259,7 @@ fn emit_body(
                 a.imul_rri(T1, T1, env.heap.int_element as i32);
                 a.add_rr(T0, T1);
                 let v = in_reg(a, home(d - 1), T1); // ...and the value, on top of both
-                a.mov_mr32(Mem::at(T0, env.heap.int_array_data as i32), v);
+                a.mov_mr32(Mem::at(T0, env.heap.array_data as i32), v);
             }
 
             // --- binary arithmetic: lhs at d-2, rhs at d-1, result overwrites lhs -------------
@@ -3596,6 +5280,351 @@ fn emit_body(
                     _ => Alu::Imul,
                 }, w, home(d - 1));
                 a.movsxd_rr(w, w);
+                write_home(a, home(d - 2), w);
+            }
+
+            // --- ladd / lsub / lmul / land / lor / lxor -------------------------------------
+            // **The same instructions as their `int` twins, minus the `movsxd`** — and the missing
+            // instruction is the whole difference between the two types in this tier.
+            //
+            // An `int` lives 32 bits wide in a 64-bit register, so every operation that can carry
+            // past bit 31 has to be truncated and re-sign-extended afterwards to be Java's
+            // wraparound (`Integer.MAX_VALUE + 1` is `Integer.MIN_VALUE`). A `long` *is* the
+            // register: `add r64, r64` overflows exactly where `Long.MAX_VALUE + 1` overflows and
+            // wraps exactly the way JLS §15.18.2 says it does, in the hardware. There is no
+            // normalisation invariant for a `long` because there is no unused half to normalise —
+            // and emitting a `movsxd` here would not be redundant, it would be **wrong**, since it
+            // would throw away the top 32 bits of every result.
+            0x61 | 0x65 | 0x69 | 0x7f | 0x81 | 0x83 => {
+                let w = work_reg(home(d - 2));
+                read_home(a, w, home(d - 2));
+                alu_home(a, match op {
+                    0x61 => Alu::Add,
+                    0x65 => Alu::Sub,
+                    0x69 => Alu::Imul,
+                    0x7f => Alu::And,
+                    0x81 => Alu::Or,
+                    _ => Alu::Xor,
+                }, w, home(d - 1));
+                write_home(a, home(d - 2), w);
+            }
+
+            // --- lneg -----------------------------------------------------------------------
+            // `neg` and nothing else. `-Long.MIN_VALUE` is `Long.MIN_VALUE`, which is what a
+            // 64-bit two's-complement `neg` computes; the `int` form needs a `movsxd` after it for
+            // precisely the reason this one does not.
+            0x75 => {
+                let w = work_reg(home(d - 1));
+                read_home(a, w, home(d - 1));
+                a.neg(w);
+                write_home(a, home(d - 1), w);
+            }
+
+            // --- lshl / lshr / lushr --------------------------------------------------------
+            // **The trap that is not one.** The `int` shifts emit an explicit `and rcx, 31`,
+            // because Java masks an `int` count to 5 bits (JLS §15.19) while x86 masks a *64-bit*
+            // shift to 6 — so the hardware and the language disagree and the instruction stream
+            // has to say which one wins.
+            //
+            // For a `long` they agree exactly. JLS §15.19 masks a `long` count to **6 bits**
+            // (`s & 0x3f`), and `shl r64, cl` masks `CL` to the same 6 bits. So the mask is not
+            // omitted as an optimisation — there is nothing to mask, and adding an `and rcx, 63`
+            // would be a no-op instruction documenting a difference that does not exist.
+            //
+            // It holds for a *negative* count too, which is where it would break if it broke: a
+            // count of -1 arrives sign-extended, `CL` is `0xFF`, x86 uses `0x3F` = 63, and Java
+            // computes `-1 & 0x3f` = 63. The same answer, by the same masking.
+            //
+            // `lushr` needs no zero-extension either, and for the same reason `ladd` needs no
+            // `movsxd`: the value fills the register, so `shr r64, cl` *is* the logical shift of
+            // the whole `long`. (The `int` form has to widen from 32 bits first, or `-1 >>> 1`
+            // answers -1.) So the three are one `sh*` instruction apiece, with nothing around them.
+            //
+            // The `CL` conflict does not arise here any more than it does for the `int` shifts —
+            // no [`CACHE`] register is `RCX`.
+            0x79 | 0x7b | 0x7d => {
+                read_home(a, T1, home(d - 1)); // the `int` count, on top of the `long`
+                let w = work_reg(home(d - 2));
+                read_home(a, w, home(d - 2));
+                match op {
+                    0x79 => a.shl_cl(w),
+                    0x7b => a.sar_cl(w),
+                    _ => a.shr_cl(w),
+                }
+                write_home(a, home(d - 2), w);
+            }
+
+            // --- ldiv / lrem ------------------------------------------------------------------
+            // **The one place `long` is harder than `int`, and it is the exact opposite of what the
+            // `int` arm says.** `idiv` on 64-bit registers holding 32-bit values cannot overflow:
+            // `Integer.MIN_VALUE / -1` is `2^31`, which fits an `i64` quotient, and the mandatory
+            // `movsxd` truncates it back to `Integer.MIN_VALUE` as JLS §15.17.2 requires. There is
+            // no wider register to do the same trick in for a `long`: `Long.MIN_VALUE / -1` is
+            // `2^63`, which does **not** fit, so the `idiv` raises `#DE` — a Windows structured
+            // exception, arriving in a thread that has no handler for it. It is not a wrong number,
+            // it is a crash.
+            //
+            // So a `-1` divisor is branched around rather than divided by, and the two answers are
+            // written out instead:
+            //
+            //   * `x / -1` is `-x`, and a 64-bit `neg` gives `Long.MIN_VALUE` for
+            //     `Long.MIN_VALUE` — which is what JLS §15.17.2 prescribes;
+            //   * `x % -1` is `0` for every `x`, `Long.MIN_VALUE` included (§15.17.3).
+            //
+            // A **zero** divisor is the other `#DE` and is handled as it is for `int`: an explicit
+            // guard that **deopts**, so the interpreter re-runs the instruction and throws a proper
+            // `ArithmeticException`. The `-1` case is deliberately *not* a deopt — it is a perfectly
+            // ordinary result, and deopting on it would retire the method's on-stack entry for a
+            // value programs really do divide by.
+            //
+            // The `RDX:RAX` conflict does not arise: `cqo`/`idiv` clobber exactly `RAX` and `RDX`,
+            // neither of which is in [`CACHE`].
+            0x6d | 0x71 => {
+                read_home(a, T1, home(d - 1)); // the divisor
+                a.cmp_ri(T1, 0);
+                a.jcc(Cond::E, deopt);
+                read_home(a, T0, home(d - 2)); // the dividend
+                let result = if op == 0x6d { T0 } else { T2 }; // quotient in RAX, remainder in RDX
+                let divide = a.new_label();
+                let done = a.new_label();
+                a.cmp_ri(T1, -1);
+                a.jcc(Cond::Ne, divide);
+                // Divisor is -1: no division at all. `ldiv` negates the dividend in place (it is
+                // already in `T0`, which is `ldiv`'s result register); `lrem` answers zero.
+                match op {
+                    0x6d => a.neg(T0),
+                    _ => a.xor_rr(T2, T2),
+                }
+                a.jmp(done);
+                a.bind(divide);
+                a.cqo(); // sign-extend RAX into RDX:RAX -- idiv's dividend is the pair
+                a.idiv(T1);
+                a.bind(done);
+                write_home(a, home(d - 2), result);
+            }
+
+            // --- lcmp -------------------------------------------------------------------------
+            // `1` if `v1 > v2`, `-1` if `v1 < v2`, `0` if equal — the three-way compare every Java
+            // `long` comparison goes through (`javac` emits `lcmp` and then an `if<cond>` against
+            // zero, so this `int` is nearly always consumed by the very next instruction).
+            //
+            // It is one `cmp` and two `setcc`s: `(v1 > v2) - (v1 < v2)` is exactly the three-valued
+            // function, with no branch and no table. `setcc` does not touch the flags, so the
+            // second one reads the same comparison as the first; it writes only the low byte, hence
+            // the `movzx` on each. The result is a small `int`, so it satisfies the normalisation
+            // invariant by construction — a `movsxd` would be a no-op and is not emitted.
+            0x94 => {
+                read_home(a, T0, home(d - 2)); // v1
+                read_home(a, T1, home(d - 1)); // v2
+                a.cmp_rr(T0, T1);
+                a.setcc(Cond::G, T2);
+                a.movzx_rr8(T2, T2);
+                // `T0` held `v1` and is dead from here; reusing it costs no fourth register.
+                a.setcc(Cond::L, T0);
+                a.movzx_rr8(T0, T0);
+                a.sub_rr(T2, T0);
+                write_home(a, home(d - 2), T2);
+            }
+
+            // --- i2l / l2i --------------------------------------------------------------------
+            // Both are one `movsxd`, and they are the same instruction for opposite reasons.
+            //
+            // `i2l` widens. The normalisation invariant already makes an `int` in a slot the
+            // 64-bit sign-extension of its value, so the bits are *already* the `long` — this
+            // instruction changes nothing and is emitted anyway, as three bytes that make the
+            // invariant a fact of the instruction stream rather than a property to be re-argued at
+            // every future opcode that produces an `int`.
+            //
+            // `l2i` narrows: JLS §5.1.3 says take the low 32 bits, and `movsxd r64, r32` takes them
+            // and re-establishes the `int` invariant in one go. It is exactly the instruction that
+            // follows every `int` arithmetic opcode here, doing exactly the same job.
+            0x85 | 0x88 => {
+                let w = work_reg(home(d - 1));
+                read_home(a, w, home(d - 1));
+                a.movsxd_rr(w, w);
+                write_home(a, home(d - 1), w);
+            }
+
+            // --- fadd / fsub / fmul / fdiv and their `double` twins ---------------------------
+            //
+            // **Six instructions, and four of them are moves.** The operands come out of their
+            // ordinary homes as bit patterns, go into `XMM0`/`XMM1`, meet one SSE instruction, and
+            // come straight back out. Nothing floating-point is ever live across an instruction
+            // boundary — see [`F0`] for why that is the design rather than a limitation.
+            //
+            // The width shows up twice and means the same thing both times: `movd` for a `float`
+            // (32 bits, and the write back to a general-purpose register zero-extends, which
+            // re-establishes the boundary form for free) and `movq` for a `double` (64 bits, which
+            // fills the slot). Using `movq` for a float would carry the junk above bit 31 into the
+            // XMM register, where `addss` would ignore it and `movq` back out would then spill it
+            // into the caller's buffer — wrong bytes for a value nothing reads, which is the kind
+            // of bug that only shows up in a deopt state comparison.
+            //
+            // **No rounding-mode management and no `x87`.** SSE scalar arithmetic is IEEE-754
+            // binary32/binary64 under `MXCSR`'s default round-to-nearest-even, which is exactly
+            // what JLS §15.4 requires and what nothing in this VM changes. The 80-bit x87 stack,
+            // whose excess precision made pre-SSE JVMs need `strictfp`, is not involved at all.
+            0x62 | 0x66 | 0x6a | 0x6e | 0x63 | 0x67 | 0x6b | 0x6f => {
+                let double = matches!(op, 0x63 | 0x67 | 0x6b | 0x6f);
+                read_home(a, T0, home(d - 2)); // the left operand...
+                read_home(a, T1, home(d - 1)); // ...and the right, on top of it
+                match double {
+                    true => {
+                        a.movq_xr(F0, T0);
+                        a.movq_xr(F1, T1);
+                    }
+                    false => {
+                        a.movd_xr(F0, T0);
+                        a.movd_xr(F1, T1);
+                    }
+                }
+                match op {
+                    0x62 => a.addss(F0, F1),
+                    0x66 => a.subss(F0, F1),
+                    0x6a => a.mulss(F0, F1),
+                    0x6e => a.divss(F0, F1),
+                    0x63 => a.addsd(F0, F1),
+                    0x67 => a.subsd(F0, F1),
+                    0x6b => a.mulsd(F0, F1),
+                    _ => a.divsd(F0, F1),
+                }
+                let w = work_reg(home(d - 2));
+                match double {
+                    true => a.movq_rx(w, F0),
+                    false => a.movd_rx(w, F0),
+                }
+                write_home(a, home(d - 2), w);
+            }
+
+            // --- frem / drem: the two opcodes with no instruction ------------------------------
+            //
+            // SSE has no scalar remainder. The x87 `fprem` exists but computes a *partial*
+            // remainder — it may need to be iterated, its loop condition is a flag in the x87
+            // status word, and using it at all means owning x87 state this tier deliberately has
+            // none of. So the compiled form of `frem` is an **unconditional deopt**: everything
+            // before it in the method ran natively, the interpreter takes over at exactly this pc,
+            // and it computes `a - (b * trunc(a / b))` the way JLS §15.17.3 says.
+            //
+            // That is a better answer than refusing the method, and the reason is the resume
+            // protocol rather than anything about floats: a deopt names an instruction that has not
+            // run, so a `frem` on a **cold** branch costs nothing whatsoever — the method compiles,
+            // runs natively, and never reaches it. On a hot branch it costs one boundary crossing
+            // per call, which is worse than being compiled and better than not being compiled at
+            // all only when the loop is elsewhere. The honest summary is that this is a placeholder
+            // with the right shape, and the shape is what lets a real `frem` be dropped in later
+            // without touching anything else.
+            0x72 | 0x73 => a.jmp(deopt),
+
+            // --- fneg / dneg: a bit flip, not an arithmetic negation ---------------------------
+            //
+            // JVMS says so outright: the result is the operand **with its sign bit inverted**. That
+            // is not the same as `0.0 - x` — for `x = 0.0` subtraction gives `0.0` and negation
+            // gives `-0.0`, and for a NaN subtraction may quiet it while negation must not. So the
+            // instruction is an `xor` in a general-purpose register, and no SSE register is
+            // involved: the value is already the bits, and this is an operation on bits.
+            0x76 | 0x77 => {
+                let w = work_reg(home(d - 1));
+                read_home(a, w, home(d - 1));
+                a.mov_ri(T1, match op {
+                    0x76 => 0x8000_0000,
+                    _ => i64::MIN,
+                });
+                a.xor_rr(w, T1);
+                write_home(a, home(d - 1), w);
+            }
+
+            // --- fcmpl / fcmpg / dcmpl / dcmpg ------------------------------------------------
+            //
+            // The three-way compare `javac` puts in front of every floating-point branch, and the
+            // one place in this group where IEEE-754 differs from every integer comparison: a
+            // **NaN compares unordered** with everything, itself included. The two spellings of
+            // each opcode exist for exactly that case and differ in nothing else —
+            // `fcmpg` answers `1` for an unordered comparison and `fcmpl` answers `-1` — so that a
+            // `javac`-generated `a < b` and `a > b` both come out false when either is NaN,
+            // whichever way round the compare was emitted.
+            //
+            // `ucomis*` reports it in the **parity** flag, which is what [`Cond::P`] reads. The
+            // ordered path is then the same `seta`/`setb`/`sub` as `lcmp`: `(v1 > v2) - (v1 < v2)`,
+            // no branch and no table. Note `ucomis*` sets `CF` (not `SF`/`OF`), so the *unsigned*
+            // conditions are the correct ones here — the signed ones a `long` compare uses would
+            // be reading flags this instruction does not set.
+            //
+            // `-0.0 == 0.0` falls out of the hardware, which is what JVMS wants: `ucomis*` compares
+            // them equal, and the answer is 0.
+            0x95..=0x98 => {
+                let double = matches!(op, 0x97 | 0x98);
+                read_home(a, T0, home(d - 2)); // v1
+                read_home(a, T1, home(d - 1)); // v2
+                match double {
+                    true => {
+                        a.movq_xr(F0, T0);
+                        a.movq_xr(F1, T1);
+                        a.ucomisd(F0, F1);
+                    }
+                    false => {
+                        a.movd_xr(F0, T0);
+                        a.movd_xr(F1, T1);
+                        a.ucomiss(F0, F1);
+                    }
+                }
+                let unordered = a.new_label();
+                let done = a.new_label();
+                a.jcc(Cond::P, unordered);
+                // Ordered. `setcc` and `movzx` both leave the flags alone, so the second `setcc`
+                // reads the same comparison as the first; `T0` held `v1` and is dead from here.
+                a.setcc(Cond::A, T2);
+                a.movzx_rr8(T2, T2);
+                a.setcc(Cond::B, T0);
+                a.movzx_rr8(T0, T0);
+                a.sub_rr(T2, T0);
+                a.jmp(done);
+                a.bind(unordered);
+                // The whole of the difference between the `l` and `g` forms.
+                a.mov_ri(T2, match op {
+                    0x96 | 0x98 => 1,
+                    _ => -1,
+                });
+                a.bind(done);
+                write_home(a, home(d - 2), T2);
+            }
+
+            // --- the widening conversions: i2f / i2d / l2f / l2d / f2d / d2f -------------------
+            //
+            // Each is one SSE instruction between two moves, and the interesting one is that `i2f`
+            // and `l2f` are the **same** instruction. `cvtsi2ss` reads a signed 64-bit integer, and
+            // an `int` in this tier is already the 64-bit sign-extension of its value (the
+            // normalisation invariant), so converting it as an `i64` gives the answer converting it
+            // as an `i32` would. The map is what knows they are different opcodes.
+            //
+            // Rounding is `MXCSR`'s round-to-nearest-even throughout, which is what JLS §5.1.2 says
+            // for the widenings that can lose precision (`l2f`, `l2d` past 2^53) and §5.1.3 for
+            // `d2f`. Nothing here changes the rounding mode, and nothing else in this VM does.
+            //
+            // **The narrowing conversions to integers are not here**, and the omission is
+            // deliberate: `f2i`/`f2l`/`d2i`/`d2l` are saturating and NaN-aware in Java (NaN gives
+            // 0, out of range gives `MIN`/`MAX`) and give the "integer indefinite" value for all
+            // three cases on x86. See [`decode`].
+            0x86 | 0x87 | 0x89 | 0x8a | 0x8d | 0x90 => {
+                read_home(a, T0, home(d - 1));
+                let produces_double = matches!(op, 0x87 | 0x8a | 0x8d);
+                match op {
+                    0x86 | 0x89 => a.cvtsi2ss(F0, T0), // i2f / l2f — one instruction for both
+                    0x87 | 0x8a => a.cvtsi2sd(F0, T0), // i2d / l2d
+                    0x8d => {
+                        a.movd_xr(F0, T0); // f2d
+                        a.cvtss2sd(F0, F0);
+                    }
+                    _ => {
+                        a.movq_xr(F0, T0); // d2f
+                        a.cvtsd2ss(F0, F0);
+                    }
+                }
+                let w = work_reg(home(d - 1));
+                match produces_double {
+                    true => a.movq_rx(w, F0),
+                    false => a.movd_rx(w, F0),
+                }
+                write_home(a, home(d - 1), w);
             }
 
             // --- bitwise: no normalisation needed (see the module docs for the proof) --------
@@ -3825,26 +5854,35 @@ fn emit_body(
                 a.jmp(st.labels[b][default].expect("the switch default is reachable and has a label"));
             }
 
-            // --- ireturn / areturn ------------------------------------------------------------
-            // The whole OK path in one instruction: a 32-bit load zero-extends, which puts the
-            // value in the low half and status 0 (`Status::OK`) in the high half at once.
+            // --- ireturn / areturn / lreturn / freturn / dreturn ------------------------------
+            // **All five are the same two instructions**, and that they are is the point of the
+            // boundary contract: the result slot is 64 bits and does not care what is in them, so
+            // the widest value in the subset needs no more of it than the narrowest and a `float`
+            // needs no floating-point register to leave in.
             //
-            // **The same instruction returns a reference.** A reference is a heap offset, so the
-            // zero-extension that carries an `int`'s bit pattern carries an offset's *value* — and
-            // `decode` has already refused the method if this VM's heap could ever exceed the 32
-            // bits available (`Ineligible::HeapOutOfReach`). Which of the two the caller has been
-            // handed is [`CompiledCode::returns_reference`], read from the descriptor, so the
-            // question is never asked of the bits themselves.
+            // **Two stores, and they say two different things.** The value goes to the buffer's
+            // result slot — all 64 bits of it, whatever its type — and `RAX` is zeroed, which is
+            // `Status::OK` with an empty key. Splitting them is the whole of the boundary change:
+            // while the status shared the register, a result had 32 bits and no `long` fitted.
+            //
+            // The operand is moved **whole**, not truncated. For an `int` the normalisation
+            // invariant already makes the 64-bit register the sign-extension of the value, so the
+            // caller's `raw as i32` is exact; for a reference it is a heap offset, which is
+            // non-negative and now crosses at its full width rather than through a `u32`. Which of
+            // the three the caller has been handed is [`CompiledCode::returns`], read from
+            // the descriptor, so the question is never asked of the bits themselves.
             //
             // **An inlined body's return is not an exit** (step 8). There is no boundary to cross
             // and no status to pack: the value is written where the invoke's result belongs on the
             // *caller's* operand stack — an ordinary 8-byte slot move, since it stays an operand —
             // and control jumps past the invoke. That is the whole of the return half of a call.
-            0xac | 0xb0 => match body.parent {
+            0xac..=0xb0 => match body.parent {
                 None => {
-                    // The 32-bit read is the value *and* `Status::OK` in the high half; from a
-                    // cached operand it is `mov eax, r9d`, whose zero-extension says the same thing.
-                    read_home32(a, T0, home(d - 1));
+                    let v = in_reg(a, home(d - 1), T0);
+                    a.mov_mr(result, v);
+                    // `Status::OK` is zero, so the status word is a two-byte `xor eax, eax`. It
+                    // comes *after* the store, since `in_reg` may well have handed back `T0`.
+                    a.xor_rr(T0, T0);
                     a.jmp(st.epilogue);
                 }
                 Some((caller, at)) => {
@@ -3853,16 +5891,18 @@ fn emit_body(
                     let v = in_reg(a, home(d - 1), T0);
                     let into = operand_home(frame, regs, result_slot(bodies, b));
                     write_home(a, into, v);
-                    a.jmp(st.labels[caller][at + 3].expect("the instruction after an invoke is reachable"));
+                    let past = at + invoke_len(bodies[caller].method.code[at]) as usize;
+                    a.jmp(st.labels[caller][past].expect("the instruction after an invoke is reachable"));
                 }
             },
 
             // --- return (void) ----------------------------------------------------------------
-            // There is no value, so the whole of the exit is the status word: `Status::OK` is 0 and
-            // the low half is ignored by the caller (a `void` method's `Outcome::Returned` carries
-            // nothing — see [`CompiledCode::returns_void`]). Zeroing the register outright, rather
-            // than leaving whatever the last opcode happened to put there, keeps the status half
-            // provably `OK` without depending on any of them.
+            // There is no value, so the whole of the exit is the status word: `Status::OK` is 0,
+            // and the **result slot is deliberately not written** — a `void` method's
+            // [`Outcome::Returned`] carries nothing and the caller must not read it (see
+            // [`CompiledCode::returns_void`]). Zeroing the register outright, rather than leaving
+            // whatever the last opcode happened to put there, keeps the status provably `OK`
+            // without depending on any of them.
             //
             // Inlined, it is the same jump past the invoke with nothing written: a `void` call
             // leaves the caller's operand stack exactly as deep as the arguments left it.
@@ -3872,9 +5912,91 @@ fn emit_body(
                     a.jmp(st.epilogue);
                 }
                 Some((caller, at)) => {
-                    a.jmp(st.labels[caller][at + 3].expect("the instruction after an invoke is reachable"))
+                {
+                    let past = at + invoke_len(bodies[caller].method.code[at]) as usize;
+                    a.jmp(st.labels[caller][past].expect("the instruction after an invoke is reachable"))
+                }
                 }
             },
+
+            // --- athrow: the exception is an operand, and the throw is the interpreter's -------
+            //
+            // **Zero exception handling in native code**, and this one instruction is the whole of
+            // how that is kept true now that a method may throw explicitly. `athrow` compiles to an
+            // unconditional deopt at its own pc, and the deopt stub does the only thing that
+            // matters: it spills the operand stack, whose **top entry is the exception**, typed
+            // `Kind::Reference` by the map. The interpreter is handed a frame at the athrow's pc
+            // with that exception on the stack, re-executes the athrow itself, and does the real
+            // unwinding — handler tables, monitors, the backtrace, all of it by its ordinary path.
+            //
+            // Nothing new is emitted for it, which is the point: `frem` established the shape (an
+            // opcode with no instruction is a jump to the stub) and `getfield`'s null guard
+            // established the state transfer. `athrow` is those two facts and no third one.
+            //
+            // **The order rule is satisfied trivially.** The rule is that a deopt names an
+            // instruction whose observable effect has not been applied; here the deopt *is* the
+            // instruction, so there is no effect to be after.
+            //
+            // ## The interaction with the handler restriction, stated because it looks like one
+            //
+            // A method with a non-empty exception table compiles but gets **no OSR entries and no
+            // safepoint polls** ([`Method::has_handlers`]), because a handler is an edge the
+            // forward walk never follows, so the state at a handler's pc is not the state this map
+            // computed for it. An `athrow` inside such a method is not that case and does not
+            // weaken it:
+            //
+            //  - the deopt is an **exit**, at a pc native code reached along edges the walk *did*
+            //    follow, so the state it hands back is exactly what the map says;
+            //  - the handler edge is then taken by the **interpreter**, out of an ordinary frame
+            //    for this method, with this method's own table — the `JdWrite.guarded` shape, where
+            //    a deopt is caught in the very frame that was rebuilt and the frame goes on being
+            //    interpreted;
+            //  - and no handler can fire *while native code runs*, because native code still throws
+            //    nothing. That claim did not change: an `athrow` does not throw here, it leaves.
+            //
+            // Inlined, it is the same jump to the same stub, and the stub rebuilds the whole chain.
+            // The rebuilt caller sits at the pc of the invoke — which is where the interpreter
+            // parks a caller during a real call — so a handler of the *caller* whose range covers
+            // that invoke catches exactly as it would have without inlining.
+            0xbf => a.jmp(deopt),
+
+            // --- monitorenter / monitorexit: a permanent deopt --------------------------------
+            //
+            // A monitor acquire is a **scheduler** operation: it can park the thread, put it in
+            // `BLOCKED`, run the wait-set, and it is keyed by a heap offset the collector may move
+            // between one execution and the next. None of that is expressible as instructions, and
+            // unlike `frem` it never will be at this tier — so this is not a placeholder with the
+            // right shape, it is the answer.
+            //
+            // Refusing the *method* was the alternative and it is strictly worse, for the reason
+            // `frem`'s arm gives: a deopt names an instruction that has not run, so everything
+            // **before** the `monitorenter` still runs natively. A method whose shape is "loop, then
+            // synchronize" gets its loop compiled and pays one boundary crossing where it locks.
+            //
+            // > **Nothing after a `monitorenter` ever runs natively, in this method, on any path.**
+            //
+            // That is not a consequence of the emitted jump — it is decided one pass earlier, by
+            // [`decode`] typing both opcodes `Flow::Return`. The scan therefore never walks past
+            // them, so the code beyond has no state, no label and no emitted bytes, and does not
+            // have to be in the subset at all. It also means no back-edge beyond a `monitorenter`
+            // can become an OSR entry, so there is no way back *in* either. The monitor is acquired
+            // once, by the interpreter, and released by the interpreter — it can never be left
+            // unbalanced by a native frame, because there is no native frame after it.
+            //
+            // The cost, stated rather than hidden: a method that locks at its *first* instruction
+            // now compiles to a stub that deopts immediately, where before it was refused outright.
+            // That is one boundary crossing per call for no work done — the same trade `frem` makes
+            // for a `frem` at pc 0, and it is accepted here for the same reason (one rule, applied
+            // uniformly, beats a size heuristic on the compile path).
+            //
+            // **`synchronized` methods are a different exclusion and stay one.** `ACC_SYNCHRONIZED`
+            // is a *flag*, not an opcode: there is no bytecode for the interpreter to re-execute, so
+            // there is no pc a deopt could name to make the acquire happen. The lock is taken by
+            // `push_frame` before the JIT's dispatch point is reached and released by `pop_frame`,
+            // and the dispatch is gated on `lock.is_none()`, so such a method is never *entered* at
+            // the top by native code and is never inlined (`jit_callee` checks `is_synchronized`).
+            // The exclusion is structural, it is elsewhere, and this arm does not touch it.
+            0xc2 | 0xc3 => a.jmp(deopt),
 
             // --- invokestatic / invokespecial: the callee's body, expanded here ----------------
             //
@@ -3900,10 +6022,53 @@ fn emit_body(
             // the heap. So the first observable effect inside the expansion is still the callee's
             // own first effect, still preceded by its own guards, and a deopt anywhere in the
             // callee still names an instruction that has not run.
-            0xb7 | 0xb8 => {
+            // **Step F2 adds the guard in front of it**, and nothing else about the shape changes.
+            // A speculatively bound call — `invokevirtual` or `invokeinterface`, expanded for the
+            // one receiver class the VM has seen here — first checks that the receiver really is of
+            // that class, and deopts if it is not:
+            //
+            // ```text
+            //   receiver == null?             -> deopt   (the interpreter throws the NPE)
+            //   header class_id == the class? -> fall into the body
+            //   otherwise                     -> deopt   (the interpreter dispatches by vtable)
+            // ```
+            //
+            // Three things make it sound, and they are the three [`Guard`] documents:
+            //
+            //  - **The immediate is a pinned mirror offset**, so the comparison is valid for the
+            //    life of the VM rather than until the next collection — the same fact `checkcast`
+            //    rests on, and the same word `objects_operations::allocate` writes into a header.
+            //  - **Nothing is written before it.** The guard reads the receiver out of its home and
+            //    computes in `T0`/`T1`/`T2` only; the argument copy that follows is the call's first
+            //    write, and it happens after the last `jcc`. So a miss reports a pc whose
+            //    instruction has not run, and the operand stack it hands back still carries the
+            //    receiver and every argument — which is exactly what the interpreter needs to
+            //    perform the call itself.
+            //  - **`null` is a miss, not a dereference.** It is tested before the header is read,
+            //    so the guard never touches the address `eden_base + 0`; the interpreter then
+            //    re-executes the invoke and raises the `NullPointerException` for it, as this tier
+            //    raises nothing.
+            0xb6..=0xb9 => {
                 let child = *body.children.get(&pc).expect("plan expanded every invoke it accepted");
                 let (base, locals) = (bodies[child].locals_base as i32, bodies[child].method.max_locals);
                 let args = bodies[child].arg_slots as u16;
+                if bodies[child].guard != Guard::Static {
+                    // The receiver is the **bottom-most** of the operands this call consumes — the
+                    // slot that becomes the callee's local 0.
+                    read_home(a, T0, home(d - args));
+                    a.cmp_ri(T0, 0);
+                    a.jcc(Cond::E, deopt);
+                }
+                if let Guard::ExactClass(mirror) = bodies[child].guard {
+                    heap_address(a, env.heap, T0, T1);
+                    a.mov_rm32(T1, Mem::at(T0, 0)); // the header's class_id
+                    // Through `T2` rather than a `cmp r, imm32`: an offset is a `u32` and may not
+                    // fit a signed 32-bit immediate, and a truncated compare would be right for
+                    // every small heap and wrong above 2 GiB.
+                    a.mov_ri(T2, i64::from(mirror));
+                    a.cmp_rr(T1, T2);
+                    a.jcc(Cond::Ne, deopt);
+                }
                 for k in 0..args {
                     let v = in_reg(a, home(d - args + k), T0);
                     a.mov_mr(Mem::at(LOCALS, 8 * (base + k as i32)), v);
@@ -3914,7 +6079,7 @@ fn emit_body(
                         a.mov_mr(Mem::at(LOCALS, 8 * (base + i as i32)), T0);
                     }
                 }
-                emit_body(a, bodies, child, env, frame, alloc_base, st)?;
+                emit_body(a, bodies, child, env, frame, layout, st)?;
             }
 
             _ => return Err(Ineligible::Opcode { pc, opcode: op }),
@@ -3932,6 +6097,67 @@ fn emit_body(
     Ok(())
 }
 
+/// **Reads a field or a static into `dst` at the width its kind says**, and extends it into the
+/// boundary form that kind requires. Written once because `getfield` and `getstatic` must agree to
+/// the byte with each other *and* with the interpreter's own accessors, and a disagreement is the
+/// silent kind: right for every small value and wrong above it.
+///
+/// | kind | bytes | extension | why |
+/// |---|---|---|---|
+/// | `Long`, `Double` | 8 | none needed | the value fills the slot |
+/// | `Float` | 4 | **zero** | the boundary form of a float is its pattern zero-extended |
+/// | `Reference` | 4 | **zero** | a heap offset is unsigned, and is compared unsigned |
+/// | `Int` (and the rest) | 4 | **sign** | the normalisation invariant every `int` opcode assumes |
+///
+/// The `Float` row is the one worth pausing on. A four-byte *sign*-extending load of a float whose
+/// bit 31 is set — i.e. any negative float — would fill the upper half with ones, and nothing would
+/// notice: `movd` reads the low half and `JitValue::of` truncates. It would show up only as
+/// different bytes in a spilled deopt state, which is exactly the sort of difference that is
+/// impossible to attribute later.
+///
+/// The `Reference` row (group 2) is the same trap with teeth. A heap offset is a `u32` and the
+/// interpreter reads one as `heap.read_u32(at) as usize` — *zero*-extended. Sign-extending one
+/// whose bit 31 happens to be set would produce a negative `i64`, which
+/// [`heap_address`]'s **unsigned** `cmp`/`jb` would then route to the wrong base and which a deopt
+/// would spill as a `Value::Reference` made of arithmetic. It costs nothing to be right: `mov r32,
+/// m32` is one byte shorter than `movsxd` and is what the interpreter's own accessor means.
+fn heap_load(a: &mut Asm, kind: Kind, dst: Reg, at: Mem) {
+    match kind {
+        Kind::Long | Kind::Double => a.mov_rm(dst, at),
+        Kind::Float | Kind::Reference => a.mov_rm32(dst, at),
+        _ => a.movsxd_rm(dst, at),
+    }
+}
+
+/// The mirror image of [`heap_load`]: writes `src` at the width its kind says. Eight bytes for a
+/// category-2 value, four for everything else — which for a `float` is its whole IEEE pattern and
+/// for an `int` is the whole of its value, both lossless because of the invariants above.
+/// **The one rule of group 2, stated once**: a field of this kind may be *read* by compiled code,
+/// and may it be *written*?
+///
+/// Every kind but [`Kind::Reference`] may. A reference store owes the collector's write barrier —
+/// the interpreter's `HeapService::store_reference`, which records an old→young pointer in the
+/// remembered set — and there is no instruction that runs one. See
+/// [`Ineligible::ReferenceWrite`] for the whole argument, including why it is checked here rather
+/// than refused by the VM's resolvers.
+///
+/// Called from **both** passes: `decode`, where it is the eligibility answer, and the emitter,
+/// where it can no longer fire and is kept anyway — an emitter that could be reached with a
+/// reference here would emit a barrier-less store, and a `Result` costs nothing next to that.
+fn writable(pc: usize, kind: Kind) -> Result<(), Ineligible> {
+    match kind {
+        Kind::Reference => Err(Ineligible::ReferenceWrite { pc }),
+        _ => Ok(()),
+    }
+}
+
+fn heap_store(a: &mut Asm, kind: Kind, at: Mem, src: Reg) {
+    match kind {
+        Kind::Long | Kind::Double => a.mov_mr(at, src),
+        _ => a.mov_mr32(at, src),
+    }
+}
+
 /// Whether the opcode at a pc emits **deopt guards** — i.e. whether that pc needs a stub and a
 /// [`ResumeSite`].
 ///
@@ -3942,12 +6168,18 @@ fn guards(op: u8) -> bool {
     matches!(
         op,
         0x6c | 0x70 // idiv / irem: a zero divisor
+        | 0x6d | 0x71 // ldiv / lrem: a zero divisor (the `MIN / -1` case is computed, not deopted)
+        | 0x72 | 0x73 // frem / drem: no instruction exists, so the guard is unconditional
         | 0xb4      // getfield: a null receiver
         | 0xbe      // arraylength: a null array
         | 0x2e      // iaload: a null array, or an index out of range
         | 0xb5      // putfield: a null receiver
         | 0x4f      // iastore: a null array, or an index out of range
         | 0xbb      // new: Eden full, or this excursion's allocation log full
+        | 0xbc | 0xbd // newarray / anewarray: those two, plus a negative or oversized count
+        | 0xc0 | 0xc1 // checkcast / instanceof: anything but the *exact* class (null never deopts)
+        | 0xbf      // athrow: unconditional — every exception is the interpreter's (group 5)
+        | 0xc2 | 0xc3 // monitorenter / monitorexit: unconditional — a monitor is the scheduler's
     )
 }
 
@@ -4021,6 +6253,217 @@ fn alloc_bounds(heap: Heap, size: u32) -> Option<(i32, i32)> {
     Some((i32::try_from(bump).ok()?, i32::try_from(limit).ok()?))
 }
 
+/// The largest **array** this tier allocates inline, in bytes — header included.
+///
+/// Where [`MAX_INLINE_ALLOC`] bounds *code size* (a `new` zeroes with a straight run of stores, so
+/// its length is linear in the object's), this bounds **run time**: an array is zeroed by a loop of
+/// four instructions whatever its length, so the code is the same size for `byte[1]` and
+/// `byte[1<<20]`. What a big one would cost instead is a long stretch of machine code with **no
+/// safepoint poll in it** — the zeroing loop cannot poll, because a poll exit has to name a
+/// bytecode pc and half a zeroed array is not a state any pc describes. So the cap is what keeps
+/// the un-interruptible span short: 4 KiB is 512 iterations of an 8-byte store, which is a span
+/// short enough that a poll arriving one instruction later cannot matter.
+///
+/// **The number itself is not measured, and should not be read as if it were.** What is argued
+/// above is the *shape* — that there has to be a cap at all, because the loop cannot poll — and
+/// 4 KiB is a defensible first value for it, not a tuned one. The interpreter's own path for a big
+/// array is a `fetch_add` and a bulk `zero`, which this loop has no structural advantage over, so
+/// the plausible direction of a future change is downward as much as upward. Whoever measures this
+/// milestone's allocation numbers should treat it as a knob and say what it wants to be.
+///
+/// Handing big arrays to the interpreter is what every tier-1 JIT does, and here it costs a
+/// [`Status::ALLOC`] exit rather than a refusal: the *method* still compiles, and only the oversized
+/// allocation leaves.
+///
+/// In elements: `byte[4084]`, `char[2042]`, `int[1021]`, `long[510]`.
+const MAX_INLINE_ARRAY_BYTES: i32 = 4096;
+
+/// The one immediate a compiled `newarray`/`anewarray` needs that a compiled `new` does not have to
+/// know at compile time: **Eden's capacity**, against which the emitted code checks a reservation
+/// whose stride it only computes at run time. `None` when this tier must not allocate inline.
+///
+/// [`alloc_bounds`] can fold the stride into its limit (`capacity - bump`) because it knows the
+/// size; here the size is `ARRAY_HEADER_SIZE + count * element` with `count` in a register, so the
+/// emitted check is the un-folded form — `old_cursor + bump > capacity` — which is the *same*
+/// predicate as [`EdenArena::alloc`]'s `offset > capacity || bump > capacity - offset`, just
+/// without the underflow-avoiding split a Rust `usize` needs and a 64-bit register does not.
+///
+/// The capacity is the **smaller** of the arena's own and Eden's declared extent, for exactly the
+/// reason [`alloc_bounds`] takes that minimum: an object in the gap between them would have an
+/// offset at or past `eden_end`, and [`heap_address`] would then translate it against Old's base.
+///
+/// [`EdenArena::alloc`]: crate::jvm::interpreter::eden_arena::EdenArena::alloc
+fn array_alloc_bounds(heap: Heap) -> Option<i32> {
+    // A zero header would make `bump` zero for `count == 0`, and the zeroing loop is a **do-while**
+    // — it would then store eight bytes *below* the block. The loop is written that way because it
+    // is what fits in three registers, and this is where the premise it rests on ("the smallest
+    // reserved stride is `ARRAY_HEADER_SIZE` rounded up, i.e. never zero") is checked rather than
+    // assumed. No real VM configuration has a headerless array; a `Heap::default()` does.
+    if heap.eden_cursor == 0 || heap.array_data == 0 {
+        return None;
+    }
+    let capacity = heap.eden_capacity.min((heap.eden_end as usize).checked_sub(heap.null_page as usize)?);
+    // A `cmp r64, imm32` operand compared **unsigned**, so it has to be a non-negative `i32`.
+    //
+    // Nothing here requires the capacity to exceed [`MAX_INLINE_ARRAY_BYTES`], and it deliberately
+    // does not: an Eden smaller than one inline array is a perfectly legal configuration, and the
+    // right answer for it is that every allocation fails the bounds check and leaves through
+    // `Status::ALLOC` — not that the whole method is refused. A refusal would cost the *rest* of
+    // the method's compiled code for a condition the allocation site handles by itself.
+    i32::try_from(capacity).ok()
+}
+
+/// **The whole of a compiled `newarray`/`anewarray`**, shared by both because the two differ only
+/// in how the [`ArrayType`] was resolved — one from an `atype` byte, one from a pool index.
+///
+/// `count_home` is the home of the *count* operand on entry and of the *reference* on exit: the
+/// instruction pops one and pushes one, so they are the same operand position, and nothing may be
+/// written there until the last guard is behind us.
+///
+/// # What is different from a compiled `new`, and it is one thing
+///
+/// **The size is an operand.** `ARRAY_HEADER_SIZE + count * element` with `count` in a register,
+/// and every difference below follows from that:
+///
+///  1. **Two guards `new` does not have**, and they come *before* the reservation because the
+///     order rule ("guards before effects") does not care why a guard exists. A negative count is
+///     a `NegativeArraySizeException`, which this tier does not throw — so it leaves, and the
+///     interpreter re-executes the instruction and throws it. A count whose array would exceed
+///     [`MAX_INLINE_ARRAY_BYTES`] leaves too, and the interpreter allocates it. The size is
+///     computed in **64 bits**, where `count * element` cannot overflow (`2^31 * 8 = 2^34`), which
+///     is why the cap check is a comparison and not an overflow check.
+///  2. **The zeroing is a loop**, not a run of stores. It runs *downwards*, from the last 8-byte
+///     word to the first, and that is not a stylistic choice: the block's base address has to
+///     survive the loop (the header, the length word and the reference are all computed from it),
+///     and a descending loop can use it as the loop *bound* — `cmp cur, base; ja` — where an
+///     ascending one would need a fourth register for the end. Three scratch registers is all this
+///     tier has, so the direction is what makes the loop fit. It is a do-while, which is correct
+///     because the smallest possible block is `ARRAY_HEADER_SIZE` rounded up, i.e. never zero.
+///
+///     **`rep stosq` was the alternative and is the wrong instruction here.** It hard-wires `RDI`
+///     (destination), `RCX` (count) and `RAX` (value) — which in this compiler are respectively
+///     *not a scratch register at all*, [`T1`] (also the mandatory shift-count register) and
+///     [`T0`]. Using it would mean either shuffling three fixed registers around every allocation
+///     or teaching the operand-stack cache to avoid them, and the win is a few cycles on blocks
+///     that are at most 512 words. The four-instruction loop needs no register the tier does not
+///     already own.
+///  3. **The zeroing covers the rounded stride, not the logical size.** The reservation is
+///     `(size + 7) & !7` bytes and all of them are exclusively ours, so zeroing the slack is safe;
+///     zeroing only `size` would leave up to seven bytes of whatever the last collection left
+///     behind sitting at the tail of, say, a `char[3]` (18 logical bytes, 24 reserved) — invisible
+///     to a Java program that reads `a[0..3]`, and visible to anything that reads the array's
+///     bytes. The interpreter's arena zeroes only the logical `n`, which is *weaker*, and the
+///     difference is unobservable precisely because the slack is between objects.
+///  4. **The length word carries the unrounded `count`.** It is re-read from its home rather than
+///     recovered from the size, which is the same thing in fewer instructions and cannot be off by
+///     a rounding.
+///
+/// Everything else is `new`'s, deliberately and to the byte: the same `lock xadd` on the same
+/// cursor word, the same "a failed bounds check leaves the cursor past the end" failure mode the
+/// interpreter's own `EdenArena::alloc` has, the same deferred `(offset, size)` log record, and the
+/// same `Status::ALLOC` exit. The log record's `size` is the **logical** one, because that is what
+/// the collector copies when it evacuates.
+#[allow(clippy::too_many_arguments)]
+fn emit_array_alloc(
+    a: &mut Asm,
+    heap: Heap,
+    ty: ArrayType,
+    capacity: i32,
+    count_home: Home,
+    alloc_count: Mem,
+    alloc_first: i32,
+    deopt: Label,
+) {
+    let element = ty.element as i32;
+    let header = heap.array_data as i32;
+    // The machine address of arena-local byte 0 — `new`'s `eden_base + null_page`, i.e. the address
+    // a reservation's raw cursor value is an offset from.
+    let block = heap.eden_base.wrapping_add(heap.null_page as usize) as i64;
+
+    // (1) Room in this excursion's log? Nothing has happened yet if not.
+    a.mov_rm(T0, alloc_count);
+    a.cmp_ri(T0, ALLOC_LOG_RECORDS as i32);
+    a.jcc(Cond::Ae, deopt);
+
+    // (2) A non-negative count. `NegativeArraySizeException` is the interpreter's to throw.
+    read_home(a, T1, count_home);
+    a.cmp_ri(T1, 0);
+    a.jcc(Cond::L, deopt);
+
+    // (3) An array this tier is willing to zero inline. Signed `count` is now known non-negative,
+    // so the 64-bit product is exact and the unsigned compare is the signed one.
+    a.imul_rri(T0, T1, element);
+    a.add_ri(T0, header);
+    a.cmp_ri(T0, MAX_INLINE_ARRAY_BYTES);
+    a.jcc(Cond::A, deopt);
+
+    // (4) Reserve, by the arena's own arithmetic: bump by `(size + 7) & !7`, and fail when the
+    // cursor the bump produced is past the capacity. `T1` keeps a copy of the stride because
+    // `xadd` consumes its source; the *count* is what is dropped here, and it is re-read from its
+    // home below, which is untouched until the very last instruction of this sequence.
+    a.add_ri(T0, 7);
+    a.and_ri(T0, -8);
+    a.mov_rr(T1, T0);
+    a.mov_ri(T2, heap.eden_cursor as i64);
+    a.lock_xadd_mr(Mem::at(T2, 0), T0); // T0 <- the previous cursor: our block's arena-local offset
+    a.add_rr(T1, T0);
+    a.cmp_ri(T1, capacity);
+    a.jcc(Cond::A, deopt); // unsigned; a cursor left past the end stays past it, exactly as in `alloc`
+
+    // (5) The block's machine address, and the only value that lives across the loop below.
+    a.mov_ri(T1, block);
+    a.add_rr(T1, T0);
+
+    // (6) Zero the reserved stride, downwards, using the base as the bound.
+    read_home(a, T0, count_home);
+    a.imul_rri(T2, T0, element);
+    a.add_ri(T2, header + 7);
+    a.and_ri(T2, -8);
+    a.add_rr(T2, T1); // one past the last reserved byte
+    a.xor_rr(T0, T0);
+    let zero = a.new_label();
+    a.bind(zero);
+    a.sub_ri(T2, 8);
+    a.mov_mr(Mem::at(T2, 0), T0);
+    a.cmp_rr(T2, T1);
+    a.jcc(Cond::A, zero);
+
+    // (7) The header's `class_id`, and the `length` word — the **original** count, over the zero
+    // the loop just wrote there.
+    a.mov_ri(T0, i64::from(ty.class_id));
+    a.mov_mr32(Mem::at(T1, 0), T0);
+    read_home(a, T0, count_home);
+    a.mov_mr32(Mem::at(T1, heap.array_length as i32), T0);
+
+    // (8) Record it for the trampoline to replay. The record's address goes in `T2` and the count
+    // is bumped first, so `T0` is free for the two words — the logical size, then the offset.
+    a.mov_rm(T0, alloc_count);
+    a.imul_rri(T2, T0, 16);
+    a.add_rr(T2, LOCALS);
+    a.add_ri(T0, 1);
+    a.mov_mr(alloc_count, T0);
+    read_home(a, T0, count_home);
+    a.imul_rri(T0, T0, element);
+    a.add_ri(T0, header);
+    a.mov_mr(Mem::at(T2, alloc_first + 8), T0);
+    // The reference is the address back into offset space, which is the one subtraction in this
+    // module that goes that way. `T1` still holds the address; nothing else does.
+    //
+    // **The base subtracted here is [`Heap::eden_base`], not `block`**, and the two differ by
+    // exactly the null page. `block` is the arena's own base — address of *arena-local* byte 0 —
+    // while a reference is a **heap offset**, which is `local + null_page`; `eden_base` is
+    // pre-biased to be the address of heap offset 0 precisely so that one subtraction answers it.
+    // Subtracting `block` instead yields the arena-local offset, whose first value is `0` — i.e.
+    // the very first array a compiled method allocates would come back as `null`.
+    a.mov_ri(T0, (heap.eden_base as i64).wrapping_neg());
+    a.add_rr(T0, T1);
+    a.mov_mr(Mem::at(T2, alloc_first), T0);
+
+    // (9) And the reference is the instruction's result — the first write to an operand home, and
+    // the instruction that finally consumes the count's slot.
+    write_home(a, count_home, T0);
+}
+
 fn heap_address(a: &mut Asm, heap: Heap, reg: Reg, scratch: Reg) {
     let have_base = a.new_label();
     a.cmp_ri(reg, heap.eden_end as i32);
@@ -4070,10 +6513,15 @@ mod tests {
             &Method { unit: 0, code, max_locals, descriptor, is_static, has_handlers: false },
             &Environment {
                 int_const: &|_, index| int_const(index),
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                class_mirror: &|_, _| None,
                 heap: Heap::default(),
                 poll_word: &TEST_POLL as *const _ as usize,
             },
@@ -4095,10 +6543,22 @@ mod tests {
         // rejected outright rather than compiled up to that point.
         let err = compile(&[0x1a, 0xb8, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
         assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xb8 });
-        // The same for a monitor, a `long` load, and a `wide` wrapping something unsupported.
-        for op in [0xbfu8, 0x16, 0xc2] {
+        // The same for an `f2i` and a `d2i` — the narrowing float-to-integer conversions are the
+        // one part of the floating-point group deliberately left out (see `decode`).
+        //
+        // **`athrow` (0xbf) and the monitors (0xc2/0xc3) used to be in this list and are not any
+        // more**: group 5 compiles all three to an unconditional deopt. What they do reject here is
+        // an operand of the wrong kind, which is a different claim and is checked below.
+        for op in [0x8bu8, 0x8e] {
             let err = compile(&[0x03, op, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
             assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: op }, "0x{op:02x} must be rejected");
+        }
+        // All three of group 5's opcodes pop a **reference**, so an `int` under one is a type error
+        // rather than an unknown opcode — the pop is what types the operand the resume site hands
+        // back, and getting it wrong would rebuild a frame throwing an `int`.
+        for op in [0xbfu8, 0xc2, 0xc3] {
+            let err = compile(&[0x03, op, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
+            assert_eq!(err, Ineligible::WrongType { pc: 1 }, "0x{op:02x} pops a reference");
         }
         // `return` (0xb1) is in the subset since step 7, but only in a `void` method — here the
         // descriptor says `()I`, so it is a type error rather than an unknown opcode.
@@ -4130,7 +6590,9 @@ mod tests {
         let c = compile_as(&[0xb1], 1, "()V", false, &no_constants).unwrap();
         assert!(!c.code.is_empty());
         assert!(c.returns_void);
-        assert!(!c.returns_reference);
+        // `void` is not a kind this tier carries, and `returns` is meaningless when `returns_void`
+        // is set — the result slot was never written.
+        assert_eq!(c.returns, Kind::Opaque);
         // And the shape that made it worth having: a `void` method with an observable effect.
         // iload_0; putstatic #1; return — refused only because this environment resolves nothing.
         let err = compile_as(&[0x1a, 0xb3, 0x00, 0x01, 0xb1], 1, "(I)V", true, &no_constants).unwrap_err();
@@ -4230,12 +6692,15 @@ mod tests {
 
     #[test]
     fn the_status_packing_round_trips() {
-        assert_eq!(Status::unpack(0), Outcome::Returned(0));
-        assert_eq!(Status::unpack(42), Outcome::Returned(42));
-        // A negative int is carried as its *zero-extended* 32-bit pattern, so the high half
-        // stays free for the status -- that is why `ireturn` is a 32-bit load.
-        assert_eq!(Status::unpack(0xFFFF_FFFF), Outcome::Returned(-1));
-        assert_eq!(Status::unpack(0x8000_0000), Outcome::Returned(i32::MIN));
+        // `Status::OK` carries **no value**: the result is in the buffer's result slot, so every
+        // one of these low halves is meaningless and every one of them decodes the same way. That
+        // is the property the `long` widening needed — a status word that cannot be confused with
+        // a result, whatever the result's width.
+        assert_eq!(Status::unpack(Status::ok_value()), Outcome::Returned);
+        assert_eq!(Status::unpack(0), Outcome::Returned);
+        assert_eq!(Status::unpack(42), Outcome::Returned);
+        assert_eq!(Status::unpack(0xFFFF_FFFF), Outcome::Returned);
+        assert_eq!(Status::unpack(0x8000_0000), Outcome::Returned);
         // A deopt now carries the pc it gave up at, which is what the interpreter resumes from.
         assert_eq!(Status::unpack(Status::deopt_value(0)), Outcome::Deopt(0));
         assert_eq!(Status::unpack(Status::deopt_value(4095)), Outcome::Deopt(4095));
@@ -4339,6 +6804,97 @@ mod tests {
         // the interpreter has to be handed to re-execute it and throw.
         assert_eq!(divides.resume_sites[0].stack, vec![Kind::Int, Kind::Int]);
         assert_eq!(divides.stack_base, 2, "the operand spill starts past the two locals");
-        assert_eq!(divides.buffer_slots, 4);
+        assert_eq!(divides.result_base, 4, "the result slot follows the spill area");
+        // Two locals, two spill slots and the one result slot — and no allocation log, since the
+        // method contains no `new`.
+        assert_eq!(divides.buffer_slots, 5);
+    }
+
+    #[test]
+    fn an_athrow_hands_the_exception_back_as_the_top_of_the_rebuilt_stack() {
+        // The one thing a compiled `athrow` has to get right, checked where it is decided rather
+        // than through a Java program: the resume site at the athrow's pc must carry the exception
+        // as its **top operand**, typed `Kind::Reference`. That is what the deopt stub spills and
+        // what the interpreter pushes before re-executing the instruction; a site one entry short,
+        // or one entry mistyped, is a rebuilt frame throwing something that is not the exception.
+        //
+        //  0: aload_0        the exception (slot 0 is a reference by the descriptor)
+        //  1: athrow
+        let c = compile_as(&[0x2a, 0xbf], 1, "(Ljava/lang/Throwable;)I", true, &no_constants).unwrap();
+        assert_eq!(c.resume_sites.len(), 1, "the athrow is the only site");
+        assert_eq!(c.resume_sites[0].pc, 1, "the site names the athrow itself, which has not run");
+        assert_eq!(c.resume_sites[0].stack, vec![Kind::Reference], "the exception, as a reference");
+
+        // ...and with a live stack under it, which is the shape a `throw` inside an expression
+        // makes. `iload_1; iload_2; aload_0; athrow` leaves two `int`s below the exception, and all
+        // three have to come back in that order.
+        let deep =
+            compile_as(&[0x1b, 0x1c, 0x2a, 0xbf], 3, "(Ljava/lang/Throwable;II)I", true, &no_constants)
+                .unwrap();
+        assert_eq!(deep.resume_sites.len(), 1);
+        assert_eq!(deep.resume_sites[0].pc, 3);
+        assert_eq!(deep.resume_sites[0].stack, vec![Kind::Int, Kind::Int, Kind::Reference]);
+
+        // Nothing follows an athrow, so a method that ends with one needs no exit at all — and a
+        // *value*-returning descriptor is no obstacle, because no `ireturn` is reached.
+        assert!(!c.code.is_empty());
+        assert!(c.osr_entries.is_empty(), "an athrow is not a loop header");
+    }
+
+    #[test]
+    fn nothing_after_a_monitorenter_is_part_of_the_compilation() {
+        // The load-bearing half of the monitor decision is not the emitted jump — it is that the
+        // scan **stops**, so the code past the lock does not have to be in the subset. This is the
+        // proof, and it is deliberately built out of a byte that is not an opcode at all:
+        //
+        //  0: aload_0         the lock
+        //  1: monitorenter    -> unconditional deopt, and the end of the walk
+        //  2: 0xfe            `impdep1` — not in the subset, not in *any* subset
+        //  3: aload_0
+        //  4: monitorexit
+        //  5: iconst_1
+        //  6: ireturn
+        let code = [0x2a, 0xc2, 0xfe, 0x2a, 0xc3, 0x04, 0xac];
+        let c = compile_as(&code, 1, "(Ljava/lang/Object;)I", true, &no_constants).unwrap();
+        assert_eq!(c.resume_sites.len(), 1, "only the monitorenter; the rest was never walked");
+        assert_eq!(c.resume_sites[0].pc, 1);
+        assert_eq!(c.resume_sites[0].stack, vec![Kind::Reference], "the lock object");
+        // The same bytes with the monitorenter taken out are refused at 0xfe, which is what makes
+        // the assertion above a statement about the monitor rather than about this byte.
+        let err = compile_as(&[0x2a, 0x57, 0xfe, 0xac], 1, "(Ljava/lang/Object;)I", true, &no_constants)
+            .unwrap_err();
+        assert_eq!(err, Ineligible::Opcode { pc: 2, opcode: 0xfe });
+    }
+
+    #[test]
+    fn a_loop_before_a_monitorenter_is_compiled_and_the_monitor_is_the_only_exit() {
+        //  0: iconst_0
+        //  1: istore_1        i = 0
+        //  2: iload_1         <- loop header, stack empty
+        //  3: sipush 100
+        //  6: if_icmpge +9    -> 15
+        //  9: iinc 1, 1
+        // 12: goto -10        -> 2
+        // 15: aload_0
+        // 16: monitorenter    -> the deopt, with the loop already run natively
+        // 17: 0xfe            never walked
+        let code = [
+            0x03, 0x3c, 0x1b, 0x11, 0x00, 0x64, 0xa2, 0x00, 0x09, 0x84, 0x01, 0x01, 0xa7, 0xff,
+            0xf6, 0x2a, 0xc2, 0xfe,
+        ];
+        let c = compile_as(&code, 2, "(Ljava/lang/Object;)I", true, &no_constants).unwrap();
+        // The loop is a real loop: its header is an on-stack entry point and a poll site, exactly
+        // as it would be without the monitor below it. (A `synchronized` *block* in Java always
+        // carries an exception table, which suppresses both — this is the machine-level shape,
+        // where nothing else is in the way.)
+        assert_eq!(c.osr_entries, vec![2], "the loop header is still an entry");
+        // Two sites: the poll at the header, and the monitor. Both name a pc that has not run.
+        let sites: Vec<u32> = c.resume_sites.iter().map(|s| s.pc).collect();
+        assert_eq!(sites, vec![2, 16]);
+        let monitor = c.resume_sites.iter().find(|s| s.pc == 16).expect("the monitorenter");
+        assert_eq!(monitor.stack, vec![Kind::Reference]);
+        // `i` is written through by the loop, so the interpreter is handed the iteration native
+        // code stopped at rather than a slot it has to guess about.
+        assert_eq!(c.touched_locals, vec![0, 1]);
     }
 }

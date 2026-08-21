@@ -1184,6 +1184,68 @@ mod tests {
         assert!(!heap.allocations().iter().any(|a| a.offset == old), "old reclaimed");
     }
 
+    /// **A `Class<…>` mirror does not move when the Old generation is compacted.**
+    ///
+    /// This is the fact — and until now the *untested* fact — that a whole family of baked-in
+    /// immediates rests on: the F3 JIT compiles `checkcast`, `instanceof` and `ldc Foo.class` to a
+    /// comparison against, or a materialisation of, a mirror's **heap offset**, and `getstatic` to
+    /// an absolute address inside one. Every one of those is a constant in the instruction stream
+    /// and can never be re-read, so a mirror that relocated would leave compiled code comparing
+    /// against, and handing out, an address that now belongs to some other object. The same
+    /// assumption is why `class_id` header words are never rewritten by the compactor.
+    ///
+    /// It is asserted as a *contrast*: an ordinary Old object of the same size, allocated right
+    /// behind the mirror, must slide down into the hole in front of it. Without that half the test
+    /// would pass on a compactor that simply moved nothing.
+    #[test]
+    fn a_class_mirror_is_pinned_across_a_compaction() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        // Old, in address order: a block that becomes the hole to compact into, an ordinary object,
+        // and the mirror behind it. The order matters — a pinned block stops everything behind it
+        // from sliding past, so the object that must move has to sit *in front* of the mirror. Both
+        // survivors are header-only, so `reference_slots` is empty and neither has an outgoing edge
+        // to rewrite.
+        let hole = heap.malloc_old(64);
+        let plain = heap.malloc_old(16);
+        let mirror = heap.malloc_old(16);
+        heap.write_u32(mirror, 0);
+        heap.write_u32(plain, 0);
+        heap.free(hole);
+
+        let uuid = metaspace.class_id("Pinned").to_string();
+        metaspace.set_class_object(&uuid, mirror);
+
+        // The mirror is a root by virtue of being one; `plain` is passed as a VM-held root so that
+        // it is live and therefore a candidate for relocation.
+        let mut extra_roots = [plain];
+        let report = compact(&metaspace, &mut heap, &mut [], &mut extra_roots);
+
+        assert!(
+            !report.relocations.contains_key(&mirror),
+            "the mirror at {mirror} was relocated to {:?} — every baked-in mirror offset in              compiled code is now stale",
+            report.relocations.get(&mirror)
+        );
+        assert!(
+            heap.allocations().iter().any(|a| a.offset == mirror),
+            "the mirror is still allocated at its original offset"
+        );
+        assert_eq!(
+            metaspace.class_object(&uuid),
+            Some(mirror),
+            "and the metaspace's mirror index still names it"
+        );
+        // The contrast: an unpinned neighbour of the same size *does* slide into the hole.
+        assert_eq!(
+            report.relocations.get(&plain),
+            Some(&heap.floor()),
+            "the ordinary object should have been packed down to the Old floor"
+        );
+    }
+
     #[test]
     fn minor_gc_preserves_survivors_through_a_full_run() {
         use crate::jvm::class_file::ClassFile;
@@ -1868,11 +1930,13 @@ mod tests {
     /// Shared by the cheap correctness check below and by `bench_baseline` at the end of the
     /// module, so a benchmark can never drift from the value it is supposed to compute.
     ///
-    /// **These runs respect `JVM_JIT`**, which is on by default, so two of the five are no longer
+    /// **These runs respect `JVM_JIT`**, which is on by default, so most of the five are no longer
     /// pure interpreter measurements: `BmLoop` has been compiled since F3 step 3 and `BmVirtual`
-    /// since step 5 (its `f` overrides are `aload_0; getfield; …; ireturn`). Read this table as an
-    /// interpreter baseline only with `JVM_JIT=0` set; `burst::jit_tests::bench_jit` is the
-    /// harness that measures the two arms against each other on purpose.
+    /// since step 5 (its `f` overrides are `aload_0; getfield; …; ireturn`). `bench_baseline` says
+    /// which engine it measured in its own header and marks the workloads native code took part
+    /// of, so the table no longer has to be read with that caveat in mind — but the caveat is the
+    /// reason it says so. `burst::jit_tests::bench_jit` is the harness that measures the two arms
+    /// against each other on purpose.
     const BENCH_WORKLOADS: [(&str, i32, &str); 5] = [
         ("java/BmLoop.class", 161265, "frame-local arithmetic + branches"),
         ("java/BmInvoke.class", 252624, "invokestatic (recursive fib)"),
@@ -1912,8 +1976,20 @@ mod tests {
         // and one of its deopts lands at a pc where the conflicted slot holds a stale reference
         // from the previous iteration. If "a conflicted slot is dead" were wrong, or if the stale
         // value were anything but a well-typed `Value`, this is where it would show.
+        //
+        // `JxRich` (group 2) is here for the **`os-gil`** arm specifically. Its `volatile` accesses
+        // are compiled to plain `mov`s, and the entire licence for that is that no other thread
+        // runs a Java opcode while a native frame is on this stack — which is a claim about the
+        // substrate, and `os-gil` is the only substrate that has sibling OS threads *and* the JIT
+        // on. Its own differential (`burst::jit_tests`) runs on `green` alone, where the claim is
+        // trivially true and therefore untested. VOLATILE-REVISIT-OS-PARALLEL.
         for (class_file, expected) in
-            [("java/JrRef.class", 604164), ("java/JrPoll.class", 977804), ("java/JmDead.class", 854257)]
+            [
+                ("java/JrRef.class", 604164),
+                ("java/JrPoll.class", 977804),
+                ("java/JmDead.class", 854257),
+                ("java/JxRich.class", 353090),
+            ]
         {
             assert_eq!(run_int(class_file), expected, "{class_file} (green)");
             assert_eq!(run_int_os(class_file), expected, "{class_file} (os-gil)");
@@ -2514,6 +2590,25 @@ mod tests {
         }
     }
 
+    /// **How many opcodes this workload executes with the JIT forced off** — the reference the
+    /// timed runs' counts are read against, and the whole of what makes the `ns/opcode` column
+    /// honest.
+    ///
+    /// Untimed on purpose: it is not a measurement, it is the denominator's alibi. A timed run that
+    /// counts *fewer* opcodes than this did part of its work in native code, and dividing its wall
+    /// time by what the interpreter had left to do is the artefact `BmLoop` produced when it
+    /// reported ~6624 ns/op over 620 opcodes. The JIT is switched **programmatically** (the same
+    /// reason the differential tests do: `cargo test` shares one process, so touching `JVM_JIT`
+    /// here would touch it for every test running at that moment), which also means this reference
+    /// is right whatever the environment says.
+    fn bench_interpreted_opcodes(class_file: &str) -> usize {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_counting_tuned;
+        let (metaspace, frame) = bench_setup(class_file);
+        let (_, steps, stats) = execute_counting_tuned(metaspace, frame, Some(false), None, |_| {});
+        assert_eq!(stats, crate::burst::code_cache::JitStats::default(), "the reference run must compile nothing");
+        steps
+    }
+
     /// The same run on the **os-gil** substrate (real OS threads + GIL). No opcode count comes
     /// back from that engine, and none is needed: these workloads are single-threaded and
     /// deterministic, so they execute exactly the opcodes green counted — only the per-opcode
@@ -2543,7 +2638,9 @@ mod tests {
     // The column that matters is **ns/opcode** — time divided by the opcodes actually executed
     // (`SharedVm::steps`, handed back by `execute_counting`). Absolute times only say how big a
     // workload is; ns/opcode says how expensive the engine is, and stays comparable when a
-    // workload is resized. `green` is the measurement substrate: it is single-threaded and
+    // workload is resized. **It is a metric of the interpreter and of nothing else**, which is why
+    // it is now printed only for a workload no native code touched — see the note above the test.
+    // `green` is the measurement substrate: it is single-threaded and
     // deterministic, so the opcode count is identical run to run and there is no scheduling
     // noise. (`gil_overhead_bench`, below, contrasts the same five against `os-gil`; it lives in
     // its own test because the GIL makes that an order of magnitude slower to collect.)
@@ -2580,21 +2677,46 @@ mod tests {
     //     be slower, so the minimum is the least-perturbed sample. If the spread within one arm
     //     is wider than the effect you are claiming, you have not measured the effect yet.
     // ---------------------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------
+    // **Two things this table used to lie about**, both fixed in place rather than annotated.
+    //
+    //  1. *The header.* It said "interpreter baseline" unconditionally, and the JIT's default
+    //     became **on** several steps ago — so the words were wrong for every run anybody had
+    //     made since. The engine is now read from `JitCache::enabled_by_env`, i.e. from the same
+    //     line `from_env` reads, and the header says which one it measured and names the flag
+    //     that changes it.
+    //  2. *The `ns/opcode` column.* Dividing wall time by "opcodes the interpreter executed" is
+    //     the right metric for an interpreter and an **artefact** for anything else: once a
+    //     workload's loop is compiled, the numerator is the whole run and the denominator is only
+    //     what was left over. `BmLoop` reported ~6624 ns/op over 620 opcodes that way — a number
+    //     three orders of magnitude off, printed with two decimal places. So each workload is
+    //     also run once with the JIT forced **off** (`bench_interpreted_opcodes`, untimed), and a
+    //     timed run that counts fewer opcodes than that reference is one native code did part of:
+    //     the column prints `jit` and the `native` column says how much.
+    // ---------------------------------------------------------------------------------------
     #[test]
-    #[ignore = "benchmark: prints the interpreter baseline table, asserts no timing"]
+    #[ignore = "benchmark: prints the green baseline table, asserts no timing"]
     fn bench_baseline() {
         const RUNS: usize = 6; // 1 warm-up (discarded) + 5 measured
 
+        let jit = crate::burst::code_cache::JitCache::enabled_by_env();
+        let engine = match jit {
+            true => "JIT on (the default) — set JVM_JIT=0 for the interpreter baseline",
+            false => "interpreter only (JVM_JIT=0) — unset it for the JIT",
+        };
+
         eprintln!();
-        eprintln!("interpreter baseline — green, median of {} runs (1 warm-up discarded)", RUNS - 1);
+        eprintln!("green, median of {} runs (1 warm-up discarded) — {engine}", RUNS - 1);
         eprintln!(
-            "{:<10} {:>10} {:>12} {:>14} {:>11}  dimension",
-            "workload", "value", "median", "opcodes", "ns/opcode"
+            "{:<10} {:>10} {:>12} {:>14} {:>8} {:>11}  dimension",
+            "workload", "value", "median", "opcodes", "native", "ns/opcode"
         );
-        eprintln!("{}", "-".repeat(96));
+        eprintln!("{}", "-".repeat(105));
 
         for (class_file, expected, dimension) in BENCH_WORKLOADS {
             let short = class_file.trim_start_matches("java/").trim_end_matches(".class");
+            // The denominator's alibi, collected before the clock starts and never timed.
+            let interpreted = bench_interpreted_opcodes(class_file);
             let mut times = Vec::with_capacity(RUNS - 1);
             let (mut value, mut opcodes) = (0, 0);
             for run in 0..RUNS {
@@ -2609,16 +2731,33 @@ mod tests {
             }
             times.sort();
             let green_median = median(&times);
+            // Fewer opcodes than the interpreter needed for the same program means native code did
+            // the difference, and the ratio is what makes the `—` in the last column readable
+            // rather than merely cautious.
+            let compiled_away = interpreted.saturating_sub(opcodes);
+            let (native, per_opcode) = match compiled_away {
+                0 => ("—".to_string(), format!("{:>11.2}", green_median.as_nanos() as f64 / opcodes as f64)),
+                n => (
+                    format!("{:.0}%", 100.0 * n as f64 / interpreted.max(1) as f64),
+                    format!("{:>11}", "jit"),
+                ),
+            };
             eprintln!(
-                "{:<10} {:>10} {:>11.1?} {:>14} {:>11.2}  {}",
-                short,
-                value,
-                green_median,
-                opcodes,
-                green_median.as_nanos() as f64 / opcodes as f64,
-                dimension
+                "{:<10} {:>10} {:>11.1?} {:>14} {:>8} {}  {}",
+                short, value, green_median, opcodes, native, per_opcode, dimension
             );
         }
+        eprintln!();
+        eprintln!(
+            "  native: share of this workload's interpreted opcodes that native code took over."
+        );
+        eprintln!(
+            "  ns/opcode is printed only when it means something — i.e. when the whole run was"
+        );
+        eprintln!(
+            "  interpreted. Where native code did part of the work, wall time over the opcodes it"
+        );
+        eprintln!("  left behind is an artefact, not a per-opcode cost, so the column says `jit`.");
         eprintln!();
     }
 

@@ -57,17 +57,8 @@ pub fn newarray(
     frame: &mut Frame,
     atype: u8,
 ) -> Result<(), &'static str> {
-    let (array_class, elem_size) = match atype {
-        4 => ("[Z", 1),  // T_BOOLEAN (stored as a byte)
-        5 => ("[C", 2),  // T_CHAR
-        6 => ("[F", 4),  // T_FLOAT
-        7 => ("[D", 8),  // T_DOUBLE (category-2: 8-byte elements)
-        8 => ("[B", 1),  // T_BYTE
-        9 => ("[S", 2),  // T_SHORT
-        10 => ("[I", 4), // T_INT
-        11 => ("[J", 8), // T_LONG (category-2)
-        _ => panic!("newarray: unknown primitive atype {atype}"),
-    };
+    let (array_class, elem_size) = primitive_array_class(atype)
+        .unwrap_or_else(|| panic!("newarray: unknown primitive atype {atype}"));
     let count = pop_count(frame)?; // negative length → NegativeArraySizeException
     let offset = allocate_array(metaspace, heap, array_class, count, elem_size)?; // full heap → OOM
     frame.push(Value::Reference(offset));
@@ -91,11 +82,7 @@ pub fn anewarray(
         .and_then(|cf| cf.class_name(cp_index))
         .expect("anewarray: cp_index does not point to a Class constant")
         .to_string();
-    let array_class = if element.starts_with('[') {
-        format!("[{element}")
-    } else {
-        format!("[L{element};")
-    };
+    let array_class = reference_array_class(&element);
     let count = pop_count(frame)?; // negative length → NegativeArraySizeException
     // A reference element is one heap offset wide.
     let offset = allocate_array(metaspace, heap, &array_class, count, SLOT_SIZE)?; // full heap → OOM
@@ -306,6 +293,57 @@ pub fn array_class_mirror(
     let offset = heap.malloc_old(HEADER_SIZE);
     metaspace.set_class_object(&uuid, offset);
     offset
+}
+
+/// The array class a `newarray`'s `atype` operand names, and the width of one of its elements —
+/// JVMS §6.5's table, which is the same one [`newarray`] switches on. Public so the JIT reads the
+/// *same* table rather than a copy of it: an `atype` the two decode differently is an array whose
+/// header says one type and whose elements are laid out for another.
+pub fn primitive_array_class(atype: u8) -> Option<(&'static str, usize)> {
+    Some(match atype {
+        4 => ("[Z", 1),
+        5 => ("[C", 2),
+        6 => ("[F", 4),
+        7 => ("[D", 8),
+        8 => ("[B", 1),
+        9 => ("[S", 2),
+        10 => ("[I", 4),
+        11 => ("[J", 8),
+        _ => return None,
+    })
+}
+
+/// The array class a `anewarray`'s **element** class name implies — `Dog` → `[LDog;`, but `[J` →
+/// `[[J`, since an element that is itself an array already carries a descriptor. The same two lines
+/// [`anewarray`] runs, extracted so the JIT cannot drift from it.
+pub fn reference_array_class(element: &str) -> String {
+    match element.starts_with('[') {
+        true => format!("[{element}"),
+        false => format!("[L{element};"),
+    }
+}
+
+/// What the JIT bakes into a compiled `newarray`/`anewarray`: the `(class_id, element_width)` of
+/// the array class `array_class` — see `burst::compile::ArrayType`.
+///
+/// **Read-only, and that is the whole design constraint**, exactly as for
+/// [`jit_instance`][super::objects_operations::jit_instance]: it takes `&MetaspaceService`, so it
+/// cannot mint a Class ID and — crucially — cannot allocate the mirror. [`array_class_mirror`] does
+/// both, and a compilation that allocates is a compilation that can collect, which would break the
+/// one invariant the whole tier stands on.
+///
+/// So `None` — "do not compile this method" — unless **both** hold:
+///
+///  1. the array class already has a Class ID minted, and
+///  2. its `Class<…>` mirror already exists, at an offset that fits the `u32` the header word is.
+///
+/// Both become true the first time the *interpreter* allocates an array of this class, which for a
+/// method hot enough to be offered to this tier has almost always already happened. There is no
+/// initialisation state to check, unlike `new`: an array class has no `<clinit>` and no statics.
+pub fn jit_array_class(metaspace: &MetaspaceService, array_class: &str) -> Option<(u32, u32)> {
+    let uuid = metaspace.class_id_read(array_class)?;
+    let class_id = u32::try_from(metaspace.class_object(uuid)?).ok()?;
+    Some((class_id, array_element_width(array_class) as u32))
 }
 
 /// `arraylength` (0xbe): pop an array reference, push its `length`. A null array is
@@ -587,17 +625,9 @@ pub fn newarray_read(
     atype: u8,
     idx: usize,
 ) -> Option<()> {
-    let (array_class, elem_size) = match atype {
-        4 => ("[Z", 1),
-        5 => ("[C", 2),
-        6 => ("[F", 4),
-        7 => ("[D", 8),
-        8 => ("[B", 1),
-        9 => ("[S", 2),
-        10 => ("[I", 4),
-        11 => ("[J", 8),
-        _ => return None, // unknown atype → escalate (the write path panics, matching `run_one`)
-    };
+    // The same table the write path and the JIT read — see [`primitive_array_class`]. An unknown
+    // atype escalates here rather than panicking, which is what `run_one` does on this path.
+    let (array_class, elem_size) = primitive_array_class(atype)?;
     let n = match frame.pop() {
         Value::Int(n) => n,
         other => {
@@ -632,12 +662,8 @@ pub fn anewarray_read(
     let array_class = {
         let caller = metaspace.class_of(frame.method());
         let element = metaspace.get(caller)?.class_name(cp_index)?;
-        // Same naming as the write path: an array element is already a descriptor.
-        if element.starts_with('[') {
-            format!("[{element}")
-        } else {
-            format!("[L{element};")
-        }
+        // Same naming as the write path and as the JIT — see [`reference_array_class`].
+        reference_array_class(element)
     };
     let n = match frame.pop() {
         Value::Int(n) => n,

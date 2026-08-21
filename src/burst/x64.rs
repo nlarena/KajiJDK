@@ -140,6 +140,11 @@ pub enum Cond {
     S = 8,
     /// sign clear
     Ns = 9,
+    /// **parity even** -- after `ucomis*`, "the comparison was unordered", i.e. one of the operands
+    /// was a NaN. The only condition code in this file that is not about integers.
+    P = 10,
+    /// parity odd -- after `ucomis*`, "the comparison was ordered".
+    Np = 11,
     /// signed `<`
     L = 12,
     /// signed `>=`
@@ -170,6 +175,8 @@ impl Cond {
             Cond::A => Cond::Be,
             Cond::S => Cond::Ns,
             Cond::Ns => Cond::S,
+            Cond::P => Cond::Np,
+            Cond::Np => Cond::P,
             Cond::L => Cond::Ge,
             Cond::Ge => Cond::L,
             Cond::Le => Cond::G,
@@ -937,6 +944,244 @@ impl Frame {
     }
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// SSE: the scalar floating-point subset.
+// ---------------------------------------------------------------------------------------------
+
+/// An **SSE register**, `XMM0`–`XMM15`. Numbered exactly as [`Reg`] is — the low 3 bits go into
+/// ModRM and bit 3 becomes the matching REX bit — because that is what the encoding says, not
+/// because the two banks are related.
+///
+/// Only `XMM0`–`XMM5` are **volatile** under the Microsoft x64 ABI; `XMM6`–`XMM15` must be saved
+/// and restored by the callee, and saving one costs a 16-byte-aligned spill slot the frame does
+/// not have. [`compile`][crate::burst::compile] uses `XMM0`/`XMM1` only, so no compiled function
+/// touches a register it would owe anything for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+#[repr(u8)]
+pub enum Xmm {
+    Xmm0 = 0,
+    Xmm1 = 1,
+    Xmm2 = 2,
+    Xmm3 = 3,
+    Xmm4 = 4,
+    Xmm5 = 5,
+    Xmm6 = 6,
+    Xmm7 = 7,
+    Xmm8 = 8,
+    Xmm9 = 9,
+    Xmm10 = 10,
+    Xmm11 = 11,
+    Xmm12 = 12,
+    Xmm13 = 13,
+    Xmm14 = 14,
+    Xmm15 = 15,
+}
+
+impl Xmm {
+    /// The architectural register number, 0–15.
+    pub fn code(self) -> u8 {
+        self as u8
+    }
+
+    /// The low 3 bits — what fits in a ModRM field.
+    pub fn low3(self) -> u8 {
+        (self as u8) & 7
+    }
+
+    /// `XMM8`–`XMM15`: the high bit a REX prefix must carry.
+    pub fn is_extended(self) -> bool {
+        (self as u8) >= 8
+    }
+
+    /// Volatile (caller-saved) under the Microsoft x64 ABI: `XMM0`–`XMM5`. The rest are
+    /// callee-saved, which is why nothing here uses them.
+    pub fn is_volatile(self) -> bool {
+        (self as u8) <= 5
+    }
+}
+
+/// The mandatory prefix that selects an SSE instruction's *operand form*. It is not a decoration:
+/// `0F 58 /r` with no prefix is `addps` (four packed singles), with `F3` it is `addss` (one
+/// scalar single), with `F2` it is `addsd` (one scalar double) and with `66` it is `addpd`. Every
+/// one of them runs; only one of them is the Java opcode.
+///
+/// **The prefix comes before REX**, which is the trap this type exists to make unmissable: a REX
+/// byte emitted ahead of the `F3` would be treated as a stray prefix and silently ignored, leaving
+/// `XMM8`–`XMM15` encoded as `XMM0`–`XMM7`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Sse {
+    /// No prefix — `ucomiss`.
+    None,
+    /// `66` — the packed-double / `movd`/`movq` / `ucomisd` form.
+    Op66,
+    /// `F3` — scalar **single** precision.
+    F3,
+    /// `F2` — scalar **double** precision.
+    F2,
+}
+
+impl Sse {
+    fn byte(self) -> Option<u8> {
+        match self {
+            Sse::None => None,
+            Sse::Op66 => Some(0x66),
+            Sse::F3 => Some(0xF3),
+            Sse::F2 => Some(0xF2),
+        }
+    }
+}
+
+/// **The two things an encoding needs from a register**: the three bits that go in its ModRM field
+/// and the fourth that goes in REX. Bundling them is what lets an SSE instruction's helper take one
+/// argument per operand instead of two — and, more usefully, what lets the same helper take an
+/// `Xmm` on one side and a [`Reg`] on the other, which is exactly what `movd`/`movq` need.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Field(u8, bool);
+
+impl From<Xmm> for Field {
+    fn from(r: Xmm) -> Field {
+        Field(r.low3(), r.is_extended())
+    }
+}
+
+impl From<Reg> for Field {
+    fn from(r: Reg) -> Field {
+        Field(r.low3(), r.is_extended())
+    }
+}
+
+impl Asm {
+    /// The shared shape of every SSE instruction below: `[prefix] [REX] 0F <opcode> /r`, with
+    /// `reg` in `ModRM.reg` and `rm` in `ModRM.rm`, both register-direct.
+    ///
+    /// The argument order is the *encoding's*, not the mnemonic's, and the two differ for exactly
+    /// one family here (`movd`/`movq` **from** an XMM puts the XMM in `ModRM.reg`), which is why
+    /// each wrapper spells out which of its operands is which.
+    fn sse_rr(&mut self, prefix: Sse, w: bool, opcode: u8, reg: Field, rm: Field) {
+        if let Some(p) = prefix.byte() {
+            self.byte(p);
+        }
+        self.rex(w, reg.1, rm.1, false);
+        self.byte(0x0F);
+        self.byte(opcode);
+        self.modrm(0b11, reg.0, rm.0);
+    }
+
+    /// `movd dst, src32` — `66 0F 6E /r`. Moves the **low 32 bits** of a general-purpose register
+    /// into an XMM and **zeroes the upper 96**, which is what makes it the right instruction for a
+    /// Java `float`: the boundary carries a float as its 32-bit pattern zero-extended, and this
+    /// turns that back into a well-formed scalar single with no junk above it.
+    pub fn movd_xr(&mut self, dst: Xmm, src: Reg) {
+        self.sse_rr(Sse::Op66, false, 0x6E, dst.into(), src.into());
+    }
+
+    /// `movd dst32, src` — `66 0F 7E /r`, the inverse. Writes 32 bits into a general-purpose
+    /// register, and because every 32-bit write on x86-64 zero-extends, the upper half of `dst`
+    /// comes back **zero** — which re-establishes the float boundary form without a second
+    /// instruction. **The XMM operand is in `ModRM.reg` here**, the opposite of `movd_xr`.
+    pub fn movd_rx(&mut self, dst: Reg, src: Xmm) {
+        self.sse_rr(Sse::Op66, false, 0x7E, src.into(), dst.into());
+    }
+
+    /// `movq dst, src` — `66 REX.W 0F 6E /r`: all 64 bits of a general-purpose register into an
+    /// XMM's low quadword, upper 64 zeroed. The `double` twin of [`movd_xr`][Asm::movd_xr].
+    pub fn movq_xr(&mut self, dst: Xmm, src: Reg) {
+        self.sse_rr(Sse::Op66, true, 0x6E, dst.into(), src.into());
+    }
+
+    /// `movq dst, src` — `66 REX.W 0F 7E /r`, the inverse. **The XMM is in `ModRM.reg`.**
+    pub fn movq_rx(&mut self, dst: Reg, src: Xmm) {
+        self.sse_rr(Sse::Op66, true, 0x7E, src.into(), dst.into());
+    }
+
+    /// `addss dst, src` — `F3 0F 58 /r`.
+    pub fn addss(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F3, false, 0x58, dst.into(), src.into());
+    }
+
+    /// `subss dst, src` — `F3 0F 5C /r`.
+    pub fn subss(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F3, false, 0x5C, dst.into(), src.into());
+    }
+
+    /// `mulss dst, src` — `F3 0F 59 /r`.
+    pub fn mulss(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F3, false, 0x59, dst.into(), src.into());
+    }
+
+    /// `divss dst, src` — `F3 0F 5E /r`.
+    pub fn divss(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F3, false, 0x5E, dst.into(), src.into());
+    }
+
+    /// `addsd dst, src` — `F2 0F 58 /r`.
+    pub fn addsd(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F2, false, 0x58, dst.into(), src.into());
+    }
+
+    /// `subsd dst, src` — `F2 0F 5C /r`.
+    pub fn subsd(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F2, false, 0x5C, dst.into(), src.into());
+    }
+
+    /// `mulsd dst, src` — `F2 0F 59 /r`.
+    pub fn mulsd(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F2, false, 0x59, dst.into(), src.into());
+    }
+
+    /// `divsd dst, src` — `F2 0F 5E /r`.
+    pub fn divsd(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F2, false, 0x5E, dst.into(), src.into());
+    }
+
+    /// `ucomiss lhs, rhs` — `0F 2E /r`, the **unordered** scalar-single compare.
+    ///
+    /// It sets `ZF`/`PF`/`CF` and clears `OF`/`SF`/`AF`, and the case that matters is the fourth:
+    /// if either operand is a NaN the result is *unordered* — `ZF=PF=CF=1` — which is neither
+    /// "above" nor "below" nor "equal". Reading it with [`Cond::P`] is what lets `fcmpg` and
+    /// `fcmpl` differ in the one place JVMS says they do.
+    ///
+    /// `ucomis*` is chosen over `comis*` deliberately: the latter raises an invalid-operation
+    /// exception on a *quiet* NaN, and Java's comparisons raise nothing at all.
+    pub fn ucomiss(&mut self, lhs: Xmm, rhs: Xmm) {
+        self.sse_rr(Sse::None, false, 0x2E, lhs.into(), rhs.into());
+    }
+
+    /// `ucomisd lhs, rhs` — `66 0F 2E /r`, the scalar-double twin of [`ucomiss`][Asm::ucomiss].
+    pub fn ucomisd(&mut self, lhs: Xmm, rhs: Xmm) {
+        self.sse_rr(Sse::Op66, false, 0x2E, lhs.into(), rhs.into());
+    }
+
+    /// `cvtsi2ss dst, src` — `F3 REX.W 0F 2A /r`: a **signed 64-bit integer** to a scalar single,
+    /// rounded by the current `MXCSR` mode (round-to-nearest-even, which nothing here changes and
+    /// which is what JLS §5.1.2 prescribes for `i2f` and `l2f`).
+    ///
+    /// The 64-bit form serves both Java opcodes: an `int` arrives sign-extended into 64 bits (the
+    /// normalisation invariant), so converting it as an `i64` gives the same answer as converting
+    /// it as an `i32` would.
+    pub fn cvtsi2ss(&mut self, dst: Xmm, src: Reg) {
+        self.sse_rr(Sse::F3, true, 0x2A, dst.into(), src.into());
+    }
+
+    /// `cvtsi2sd dst, src` — `F2 REX.W 0F 2A /r`. The `double` twin, for `i2d` and `l2d`.
+    pub fn cvtsi2sd(&mut self, dst: Xmm, src: Reg) {
+        self.sse_rr(Sse::F2, true, 0x2A, dst.into(), src.into());
+    }
+
+    /// `cvtss2sd dst, src` — `F3 0F 5A /r`: a scalar single widened to a double (`f2d`). Exact for
+    /// every finite input, and NaN-preserving.
+    pub fn cvtss2sd(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F3, false, 0x5A, dst.into(), src.into());
+    }
+
+    /// `cvtsd2ss dst, src` — `F2 0F 5A /r`: a scalar double narrowed to a single (`d2f`), rounded
+    /// by `MXCSR` — round-to-nearest-even, which is what JLS §5.1.3 requires.
+    pub fn cvtsd2ss(&mut self, dst: Xmm, src: Xmm) {
+        self.sse_rr(Sse::F2, false, 0x5A, dst.into(), src.into());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -953,6 +1198,96 @@ mod tests {
     // Every expectation below cites Intel SDM Vol. 2 opcode + ModRM reasoning. These catch the
     // errors execution can mask by luck (e.g. a swapped ModRM.reg/rm that is a no-op when both
     // operands are RAX).
+
+
+    // -- SSE: the scalar floating-point subset -------------------------------------------------
+    //
+    // Two things are checked here that execution can hide. The **prefix order** — a mandatory
+    // `F3`/`F2`/`66` must come *before* the REX byte, and getting it backwards leaves the REX
+    // ignored, so `xmm8` silently encodes as `xmm0` and every test on `xmm0`/`xmm1` still passes.
+    // And the **operand direction** of `movd`/`movq`, which is the one family whose two directions
+    // are different opcodes with the XMM on opposite sides of ModRM.
+
+    #[test]
+    fn sse_arithmetic_prefixes_select_the_scalar_form() {
+        // F3 0F 58 /r = ADDSS. ModRM = 11 000 001 = C1 (dst in reg, src in rm).
+        assert_eq!(enc(|a| a.addss(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF3, 0x0F, 0x58, 0xC1]);
+        // F2 0F 58 /r = ADDSD -- the same opcode, a different prefix, a different instruction.
+        assert_eq!(enc(|a| a.addsd(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF2, 0x0F, 0x58, 0xC1]);
+        // (No prefix at all would be ADDPS: four packed singles. It would run, and it would be
+        // the wrong Java opcode -- which is why the prefix is part of the encoding, not a flag.)
+        assert_eq!(enc(|a| a.subss(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF3, 0x0F, 0x5C, 0xC1]);
+        assert_eq!(enc(|a| a.subsd(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF2, 0x0F, 0x5C, 0xC1]);
+        assert_eq!(enc(|a| a.mulss(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF3, 0x0F, 0x59, 0xC1]);
+        assert_eq!(enc(|a| a.mulsd(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF2, 0x0F, 0x59, 0xC1]);
+        assert_eq!(enc(|a| a.divss(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF3, 0x0F, 0x5E, 0xC1]);
+        assert_eq!(enc(|a| a.divsd(Xmm::Xmm0, Xmm::Xmm1)), vec![0xF2, 0x0F, 0x5E, 0xC1]);
+        // The operand order is not symmetric: dst=1, src=0 -> ModRM = 11 001 000 = C8.
+        assert_eq!(enc(|a| a.addsd(Xmm::Xmm1, Xmm::Xmm0)), vec![0xF2, 0x0F, 0x58, 0xC8]);
+    }
+
+    #[test]
+    fn sse_rex_comes_after_the_mandatory_prefix() {
+        // addsd xmm8, xmm1 -> the prefix, then REX.R (44), then the opcode. Emitting REX first
+        // would make the CPU read F2 as a stray prefix and the REX as data: xmm8 would become
+        // xmm0 and the bug would be invisible on any test that used xmm0.
+        assert_eq!(enc(|a| a.addsd(Xmm::Xmm8, Xmm::Xmm1)), vec![0xF2, 0x44, 0x0F, 0x58, 0xC1]);
+        // addsd xmm0, xmm9 -> REX.B (41), ModRM = 11 000 001 = C1.
+        assert_eq!(enc(|a| a.addsd(Xmm::Xmm0, Xmm::Xmm9)), vec![0xF2, 0x41, 0x0F, 0x58, 0xC1]);
+        // Both extended: REX.R|REX.B = 45.
+        assert_eq!(enc(|a| a.addsd(Xmm::Xmm15, Xmm::Xmm8)), vec![0xF2, 0x45, 0x0F, 0x58, 0xF8]);
+    }
+
+    #[test]
+    fn movd_and_movq_swap_which_side_the_xmm_is_on() {
+        // 66 0F 6E /r = MOVD xmm, r/m32 -- the XMM is ModRM.reg. movd xmm0, eax -> C0.
+        assert_eq!(enc(|a| a.movd_xr(Xmm::Xmm0, Reg::Rax)), vec![0x66, 0x0F, 0x6E, 0xC0]);
+        // 66 0F 7E /r = MOVD r/m32, xmm -- the XMM is *still* ModRM.reg, and the GP register is
+        // now the rm. movd eax, xmm0 -> C0 as well, which is why the two directions have to be
+        // separate functions rather than one with swapped arguments.
+        assert_eq!(enc(|a| a.movd_rx(Reg::Rax, Xmm::Xmm0)), vec![0x66, 0x0F, 0x7E, 0xC0]);
+        // The asymmetry shows the moment the registers differ. movd xmm0, rcx: reg=0, rm=1 -> C1.
+        assert_eq!(enc(|a| a.movd_xr(Xmm::Xmm0, Reg::Rcx)), vec![0x66, 0x0F, 0x6E, 0xC1]);
+        // movd ecx, xmm0: reg=0 (the xmm), rm=1 (rcx) -> C1 too, but a different opcode byte.
+        assert_eq!(enc(|a| a.movd_rx(Reg::Rcx, Xmm::Xmm0)), vec![0x66, 0x0F, 0x7E, 0xC1]);
+        // movd xmm1, rax: reg=1, rm=0 -> C8.
+        assert_eq!(enc(|a| a.movd_xr(Xmm::Xmm1, Reg::Rax)), vec![0x66, 0x0F, 0x6E, 0xC8]);
+        // The 64-bit forms are the same encodings with REX.W, which is what makes them `movq`.
+        assert_eq!(enc(|a| a.movq_xr(Xmm::Xmm0, Reg::Rax)), vec![0x66, 0x48, 0x0F, 0x6E, 0xC0]);
+        assert_eq!(enc(|a| a.movq_rx(Reg::Rax, Xmm::Xmm0)), vec![0x66, 0x48, 0x0F, 0x7E, 0xC0]);
+        // ...and REX carries the GP register's high bit on the rm side for `movq_rx`.
+        assert_eq!(enc(|a| a.movq_rx(Reg::R9, Xmm::Xmm0)), vec![0x66, 0x49, 0x0F, 0x7E, 0xC1]);
+        assert_eq!(enc(|a| a.movq_xr(Xmm::Xmm0, Reg::R9)), vec![0x66, 0x49, 0x0F, 0x6E, 0xC1]);
+    }
+
+    #[test]
+    fn sse_compares_and_conversions() {
+        // 0F 2E /r = UCOMISS: the one SSE instruction here with **no** mandatory prefix.
+        assert_eq!(enc(|a| a.ucomiss(Xmm::Xmm0, Xmm::Xmm1)), vec![0x0F, 0x2E, 0xC1]);
+        // 66 0F 2E /r = UCOMISD.
+        assert_eq!(enc(|a| a.ucomisd(Xmm::Xmm0, Xmm::Xmm1)), vec![0x66, 0x0F, 0x2E, 0xC1]);
+        // F3 REX.W 0F 2A /r = CVTSI2SS xmm, r64.
+        assert_eq!(enc(|a| a.cvtsi2ss(Xmm::Xmm0, Reg::Rax)), vec![0xF3, 0x48, 0x0F, 0x2A, 0xC0]);
+        // F2 REX.W 0F 2A /r = CVTSI2SD xmm, r64.
+        assert_eq!(enc(|a| a.cvtsi2sd(Xmm::Xmm0, Reg::Rax)), vec![0xF2, 0x48, 0x0F, 0x2A, 0xC0]);
+        assert_eq!(enc(|a| a.cvtsi2sd(Xmm::Xmm1, Reg::R10)), vec![0xF2, 0x49, 0x0F, 0x2A, 0xCA]);
+        // F3 0F 5A /r = CVTSS2SD (widen); F2 0F 5A /r = CVTSD2SS (narrow). Same opcode byte, and
+        // the prefix is the whole difference between them.
+        assert_eq!(enc(|a| a.cvtss2sd(Xmm::Xmm0, Xmm::Xmm0)), vec![0xF3, 0x0F, 0x5A, 0xC0]);
+        assert_eq!(enc(|a| a.cvtsd2ss(Xmm::Xmm0, Xmm::Xmm0)), vec![0xF2, 0x0F, 0x5A, 0xC0]);
+    }
+
+    #[test]
+    fn the_parity_condition_encodes_and_inverts() {
+        // JP rel32 = 0F 8A, i.e. tttn = 10 -- the condition `ucomis*` sets for a NaN operand, and
+        // the only non-integer condition in this file.
+        assert_eq!(Cond::P.tttn(), 10);
+        assert_eq!(Cond::Np.tttn(), 11);
+        assert_eq!(Cond::P.inverse(), Cond::Np);
+        assert_eq!(Cond::Np.inverse(), Cond::P);
+        // SETP al = 0F 9A C0.
+        assert_eq!(enc(|a| a.setcc(Cond::P, Reg::Rax)), vec![0x0F, 0x9A, 0xC0]);
+    }
 
     #[test]
     fn mov_rr_operand_order() {

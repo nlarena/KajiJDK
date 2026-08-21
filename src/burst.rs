@@ -4,7 +4,9 @@
 //! the other way round — so the naive interpreter stays the correctness oracle it is meant to be:
 //!
 //! - [`x64`] — a small x86-64 assembler that emits into a `Vec<u8>`: the frame-local integer
-//!   subset (moves, arithmetic, shifts, compares, branches with forward labels, prologue/epilogue).
+//!   subset (moves, arithmetic, shifts, compares, branches with forward labels, prologue/epilogue)
+//!   and the scalar SSE subset (`movd`/`movq` between the two banks, the four arithmetic forms in
+//!   both precisions, `ucomis*`, and the widening conversions).
 //! - [`exec_mem`] — W^X executable memory: pages are allocated **RW**, written, flipped to **RX**,
 //!   and only then called through a typed function pointer. Windows-only (`VirtualAlloc` &
 //!   friends), hence the `cfg` — `x64` itself is pure byte emission and builds anywhere, so its

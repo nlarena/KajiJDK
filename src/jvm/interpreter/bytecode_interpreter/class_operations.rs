@@ -201,8 +201,9 @@ fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_c
     mirror + HEADER_SIZE + slots * SLOT_SIZE
 }
 
-/// The **machine address** of the `int` static named by `cp_index` in `caller`'s constant pool —
-/// what the JIT bakes into a compiled `getstatic` (see [`burst::compile`][crate::burst::compile]).
+/// The **machine address** of the primitive static named by `cp_index` in `caller`'s constant pool,
+/// and **which kind it is** — what the JIT bakes into a compiled `getstatic`/`putstatic` (see
+/// [`burst::compile`][crate::burst::compile]).
 ///
 /// Read-only in every sense, and that is the whole design: it takes `&MetaspaceService` and
 /// `&HeapService`, so it cannot load a class, mint a Class ID, allocate a mirror or run a
@@ -211,9 +212,21 @@ fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_c
 ///
 /// `None` — "do not compile this method" — unless **all five** hold:
 ///
-///  1. the constant-pool entry is a `FieldRef` whose descriptor is exactly `I`, so the slot is the
-///     4 bytes a compiled `movsxd r, dword [addr]` will read (a `J`/`D` static is 8 and a
-///     reference is a heap offset the JIT has no business dereferencing);
+///  1. the constant-pool entry is a `FieldRef` whose descriptor is one this tier has a
+///     representation for — `I`, `F`, `J`, `D`, or (group 2) a **reference**, `L…;` or `[…`. That
+///     is not a formality: it fixes the **width** of the access, and they are different
+///     instructions. `I`, `F` and a reference are 4-byte slots (sign-extending, zero-extending and
+///     zero-extending respectively — a heap offset is unsigned and the interpreter's own
+///     `getstatic` reads one with `read_u32(at) as usize`); `J` and `D` are 8, read and written
+///     whole, and it is `place_field` that has already aligned them to an even slot pair so the 8
+///     bytes are contiguous and start where this address says.
+///
+///     A reference static is answered for so that a compiled **`getstatic`** can read one. Writing
+///     it stays out — a reference store owes the collector's write barrier — but that refusal is
+///     the compiler's (`burst::compile::writable`), not this resolver's, so the read is not lost
+///     with the write. Note that the *slot* is what is pinned here, not what it holds: the value is
+///     loaded at run time, so a young object the collector later moves is no more a problem for
+///     compiled code than it is for the interpreter;
 ///  2. some class in the named class's superclass chain — all of them already **loaded** — declares
 ///     it `static`;
 ///  3. that declaring class is **initialised** (`InitState::Done`). Compiled code cannot trigger a
@@ -226,16 +239,28 @@ fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_c
 ///     `gc::compact` keeps them in its **pinned** set, so the offset never moves; the byte region
 ///     is pre-reserved to the max heap and never reallocates, so the address never moves either.
 ///     Those two facts together are what make baking the address in sound at all.
-pub fn static_int_address(
+pub fn jit_static_field(
     metaspace: &MetaspaceService,
     heap: &HeapService,
     caller: &str,
     cp_index: u16,
-) -> Option<usize> {
+) -> Option<(usize, crate::burst::compile::Kind)> {
     let (named, field, descriptor) = metaspace.get(caller)?.fieldref_target(cp_index)?;
-    if descriptor != "I" {
-        return None;
-    }
+    // The descriptor decides both halves of the answer: which kind the compiler's type map carries,
+    // and how many bytes the emitted access touches. `place_field` gives a `J` two slots and starts
+    // it on an even one, so its eight bytes are the pair beginning at the address computed below.
+    let (kind, width) = match descriptor {
+        "I" => (crate::burst::compile::Kind::Int, SLOT_SIZE),
+        "F" => (crate::burst::compile::Kind::Float, SLOT_SIZE),
+        "J" => (crate::burst::compile::Kind::Long, 2 * SLOT_SIZE),
+        "D" => (crate::burst::compile::Kind::Double, 2 * SLOT_SIZE),
+        // A reference static: one 4-byte slot holding a heap **offset**, exactly as `putstatic`
+        // writes it (`heap.write_u32(at, r as u32)`). Every other descriptor — `B`, `C`, `S`, `Z`
+        // — is refused, not because it could not be read but because `place_field`/`write_u32`
+        // give it a width this pair has never agreed on.
+        d if d.starts_with('L') || d.starts_with('[') => (crate::burst::compile::Kind::Reference, SLOT_SIZE),
+        _ => return None,
+    };
     let declaring = static_declaring_class_read(metaspace, named, field)?;
     if metaspace.init_state(&declaring) != crate::jvm::interpreter::metaspace::InitState::Done {
         return None;
@@ -256,11 +281,41 @@ pub fn static_int_address(
         }
         acc = next;
     }
-    heap.address_of(mirror + HEADER_SIZE + start? * SLOT_SIZE, SLOT_SIZE)
+    Some((heap.address_of(mirror + HEADER_SIZE + start? * SLOT_SIZE, width)?, kind))
+}
+
+/// The **heap offset of the `Class<…>` mirror** of the class named at `cp_index` in `caller`'s
+/// pool — what the JIT bakes into a `checkcast`, an `instanceof` and a class-literal `ldc`.
+///
+/// It is exactly the word [`objects_operations::allocate`] writes into an object's header
+/// `class_id`, which is the whole point: the compiled guard compares the header against this
+/// immediate, so the two sides are the same quantity resolved by the same lookup rather than two
+/// derivations that could drift.
+///
+/// Read-only in every sense, like [`jit_static_field`]: `&MetaspaceService` cannot mint a Class ID,
+/// load a class or allocate a mirror. So the answer is `None` for a class the interpreter has never
+/// **prepared** — which refuses the method rather than preparing it, because a compilation that
+/// allocates is a compilation that can collect. It also means an array class (`[I`, `[LFoo;`) is
+/// answered for only once some array of it has actually been created, since that is when
+/// `array_class_mirror` mints one.
+///
+/// **Why baking the offset in is sound**, and it is one fact rather than a hope: a mirror is
+/// allocated with `malloc_old` and is in the **pinned** set `gc::compact` refuses to relocate
+/// (`class_object_offsets`), so its offset is fixed for the life of the VM. It is the same fact
+/// that lets `getstatic` bake in a static's address, and it is exactly the fact an interned
+/// `String` does *not* have.
+///
+/// **Not [`jit_instance`][objects_operations::jit_instance]**, which answers the same `class_id`
+/// but additionally demands the class be *initialised*: `new` is a first active use and a
+/// `checkcast` is not, so requiring it here would refuse methods for a reason the JVMS has not got.
+pub fn jit_class_mirror(metaspace: &MetaspaceService, caller: &str, cp_index: u16) -> Option<u32> {
+    let name = metaspace.get(caller)?.class_name(cp_index)?;
+    let uuid = metaspace.class_id_read(name)?;
+    u32::try_from(metaspace.class_object(uuid)?).ok()
 }
 
 /// [`static_declaring_class`] without the loading — `None` where the other would have pulled a
-/// superclass off the classpath. The read-only half of the pair, for [`static_int_address`].
+/// superclass off the classpath. The read-only half of the pair, for [`jit_static_field`].
 fn static_declaring_class_read(metaspace: &MetaspaceService, start: &str, field: &str) -> Option<String> {
     let mut current = Some(start.to_string());
     while let Some(class_name) = current.take() {

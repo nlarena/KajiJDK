@@ -458,36 +458,51 @@ fn resolve_field_site_read(
     Some(site)
 }
 
-/// The **JIT's** field resolver: the byte offset of the `getfield` at `(method, pc)` inside its
-/// receiver, and `None` unless the field is a **non-`volatile` instance `int`**.
+/// The **JIT's** field resolver: the byte offset of the `getfield`/`putfield` at `(method, pc)`
+/// inside its receiver **and what kind of value is there**, or `None` unless the field is a
+/// non-`volatile` instance field of a primitive type.
 ///
-/// It is [`resolve_field_site_read`] with two extra conditions, and both are deliberate rather
-/// than incidental:
+/// It is [`resolve_field_site_read`] plus one translation, and **both of the conditions it used to
+/// add are gone** — group 2 of the F3-JIT widening removed them, each for its own reason:
 ///
-///  - **`int` only.** The compiled subset has no other width to put on its operand stack, and the
-///    kind decides the load: an `int` field is four bytes and sign-extends, a reference field would
-///    be four bytes that mean something else entirely.
-///  - **non-`volatile` only.** A volatile read is an `Acquire`, which on x86-64 a plain `mov`
-///    already is — so this could be allowed and would even be correct. It is refused anyway: the
-///    JIT runs only where a single thread executes at a time, so "volatile" has no observable
-///    meaning to it, and leaning on an architecture's memory model in generated code is a claim
-///    this tier should make explicitly, in its own step, or not at all.
+///  - **Every kind, references included.** The kind decides the *width* and the *extension* of the
+///    emitted access — four bytes sign-extending for an `int`, four zero-extending for a `float` or
+///    a **reference**, eight for a `long` or a `double` — so it is handed back rather than left to
+///    be inferred, which is why the answer is a pair and not just an offset. A reference field used
+///    to be refused here because a compiled `putfield` of one would need the GC write barrier; that
+///    rule is still absolute, but it now lives where it belongs, in the compiler
+///    (`burst::compile::writable`, `Ineligible::ReferenceWrite`), so that *reading* a reference —
+///    which owes nothing to the collector, since no barrier is involved and no object graph changes
+///    — is not refused along with it. This resolver answers what the field *is*; the compiler
+///    decides what may be done with it.
+///  - **`volatile` too, now** — for reads *and* for primitive writes. VOLATILE-REVISIT-OS-PARALLEL.
+///    The argument is **not** x86-TSO. It is that the JIT runs only on `green` (one OS thread) and
+///    `os-gil` (the thread holds the one global lock for the whole opcode, the native call
+///    included), so while compiled code is on this stack **no other thread executes a single
+///    opcode**. There is no concurrency for an `Acquire`/`Release` to order and no observer for an
+///    8-byte `long` access to tear in front of, so a plain `mov` is not merely permitted, it is the
+///    same execution. Enabling the JIT on `os-parallel` **invalidates this** and every volatile
+///    access here must then be revisited — grep the marker above.
 ///
 /// Read-only (`&MetaspaceService`), like every other resolver the compiler is handed — compiling
 /// must not load a class or run a `<clinit>`. It does *fill* the resolved-site cache, which is a
 /// pure function of `(method, pc)` and therefore not a change to the VM's state in any sense the
 /// program can observe.
-pub fn jit_int_field_offset(
+pub fn jit_field_site(
     metaspace: &MetaspaceService,
     method: MethodId,
     pc: usize,
     cp_index: u16,
-) -> Option<u32> {
+) -> Option<(u32, crate::burst::compile::Kind)> {
     let site = resolve_field_site_read(metaspace, method, pc, cp_index)?;
-    match site.kind == FieldKind::Int && !site.volatile {
-        true => u32::try_from(site.offset).ok(),
-        false => None,
-    }
+    let kind = match site.kind {
+        FieldKind::Int => crate::burst::compile::Kind::Int,
+        FieldKind::Long => crate::burst::compile::Kind::Long,
+        FieldKind::Float => crate::burst::compile::Kind::Float,
+        FieldKind::Double => crate::burst::compile::Kind::Double,
+        FieldKind::Reference => crate::burst::compile::Kind::Reference,
+    };
+    Some((u32::try_from(site.offset).ok()?, kind))
 }
 
 /// Read-only `getfield`. `Some(())` = read the field and pushed it (ran concurrently); `None` =
@@ -646,7 +661,7 @@ fn instance_field_slots_read(metaspace: &MetaspaceService, name: &str) -> usize 
 /// at `cp_index` in `caller`'s constant pool — see `burst::compile::Instance`.
 ///
 /// Read-only in every sense, and that is the design, exactly as for
-/// [`static_int_address`][super::class_operations::static_int_address]: it takes
+/// [`jit_static_field`][super::class_operations::jit_static_field]: it takes
 /// `&MetaspaceService`, so it cannot load a class, mint a Class ID, allocate a mirror or run a
 /// `<clinit>`. Compilation must not have side effects on the VM's state, and the signature is what
 /// enforces that rather than a comment.

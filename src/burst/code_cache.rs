@@ -60,22 +60,35 @@
 //! stack, since the native frame slots holding it die with the frame. [`CompiledCode::buffer_slots`]
 //! is the length the contract requires and [`JitCache::install`] is where it is sized.
 //!
-//! Two kinds cross, and step 5 is where the second arrived: an `int` (sign-extended) and a
-//! **reference** (its heap offset). A `long`, a `double` or a `float` still cannot be marshalled at
-//! all, and a slot holding one abandons the call — but the compiled code provably never *reads*
-//! such a slot, so that is a fallback rather than a correctness guard.
+//! **Every kind of value crosses now**, and each is one 64-bit word: an `int` sign-extended, a
+//! **reference** as its heap offset, a `long` whole, a `float` as its 32-bit IEEE pattern
+//! zero-extended, and a `double` as its 64-bit pattern.
+//!
+//! Two of those are worth stating because they are the surprises. **A `long` needs no special
+//! handling on this side at all**: the interpreter keeps a `Value::Long` in one local slot and as
+//! one entry on its operand stack, and so does the compiled side, so the two layouts are the same
+//! layout rather than two that agree — what the category-2 rules cost is confined to the compiler's
+//! index arithmetic (see `Kind::Long`). And **a float crosses as bits, not as a number**: compiled
+//! code never holds one in a floating-point register across an instruction boundary, so there is no
+//! second bank for this boundary to know about (see `Kind::Float`).
+//!
+//! What can still abandon a call is a slot the compiler could not type at all — which, now that
+//! every descriptor form has a kind, means only a descriptor that could not be parsed. The compiled
+//! code provably never *reads* such a slot, so it is a fallback rather than a correctness guard.
 //!
 //! # The tag, and which direction needs it
 //!
-//! An `i64` in the scratch buffer does not say whether it is an `int` or an offset, and the two are
-//! not interchangeable at the far end: an offset put back into a frame as a `Value::Int` is a live
-//! object the collector can no longer see *or relocate*, and an `int` put back as a
-//! `Value::Reference` is a pointer made of arithmetic. Neither fails where the mistake is.
+//! An `i64` in the scratch buffer does not say which of the five kinds it is, and they are not
+//! interchangeable at the far end: an offset put back into a frame as a `Value::Int` is a live
+//! object the collector can no longer see *or relocate*, an `int` put back as a `Value::Reference`
+//! is a pointer made of arithmetic, a `long` put back as either is read at the wrong width, and a
+//! `float` put back as an `int` is its exponent and mantissa read as a number. None of them fails
+//! where the mistake is.
 //!
 //! Going **in**, the tag is not needed: the compiler derived its entry types from the method's own
 //! descriptor, so a disagreement with the frame would mean the descriptor was wrong — the
 //! verifier's business. Coming **out**, it is needed and it is carried: [`JitValue`] pairs each
-//! value with its kind, taken from [`CompiledCode::returns_reference`] for a return and from
+//! value with its kind, taken from [`CompiledCode::returns`] for a return and from
 //! [`CompiledCode::resume_sites`] — the type map at that exact pc — for everything a
 //! [`ResumeState`] contains, operand stack included.
 //!
@@ -91,28 +104,67 @@ use super::compile::{CompiledCode, Ineligible, Kind, Outcome, ResumeSite, Status
 
 /// A value crossing back from native code, with its **kind** attached.
 ///
-/// The bits are the same either way — a reference is a heap offset, and the protocol carries 32 of
-/// them exactly as it carries an `int` (see [`Status`]). What differs is what the interpreter must
-/// build out of them, and getting that wrong is the one mistake in this milestone that does not
-/// fail where the bug is: an offset stored as a `Value::Int` is a live object the collector can no
-/// longer see. So the kind travels *with* the value rather than being re-derived at the far end —
-/// from the descriptor for a return ([`CompiledCode::returns_reference`]), from the type map for a
+/// The bits are the same whichever kind it is — a boundary word is 64 bits and carries an `int`
+/// sign-extended, a heap offset, or a whole `long` (see [`Status`]). What differs is what the
+/// interpreter must build out of them, and getting that wrong is the one mistake in this milestone
+/// that does not fail where the bug is: an offset stored as a `Value::Int` is a live object the
+/// collector can no longer see. So the kind travels *with* the value rather than being re-derived
+/// at the far end —
+/// from the descriptor for a return ([`CompiledCode::returns`]), from the type map for a
 /// local or an operand ([`CompiledCode::resume_sites`]).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// `Eq` is deliberately absent, exactly as it is on the interpreter's own `Value`: a `Float`
+/// wraps an `f32`, which is only `PartialEq` because `NaN != NaN`. Nothing uses one as a map key,
+/// so `PartialEq` is all the equality this type is entitled to.
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum JitValue {
     Int(i32),
     /// A heap **offset**, `0` for `null`.
     Reference(usize),
+    /// A `long` — the whole 64-bit word, which is what a buffer slot is.
+    ///
+    /// It has no analogue of the `int`'s normalisation invariant and needs none: a `long` fills the
+    /// slot, so there is no upper half to have got out of step with a lower one. Category-2 costs
+    /// this side of the boundary nothing at all — the interpreter's `Value::Long` is one entry on
+    /// its operand stack and one local slot, and so is this.
+    Long(i64),
+    /// A `float`, built from the **low 32 bits** of the boundary word — see [`Kind::Float`], which
+    /// is where the "a float travels as its bit pattern" convention is stated.
+    Float(f32),
+    /// A `double`, built from all 64.
+    Double(f64),
 }
 
 impl JitValue {
-    /// Reads the low 32 bits of a boundary word as `kind`. A reference is **zero**-extended: an
-    /// offset is never negative, and sign-extending one would turn a heap past 2 GiB into a
-    /// nonsense pointer rather than into an error.
+    /// Reads one 64-bit buffer word as `kind`.
+    ///
+    /// An `int` is truncated to its low 32 bits, which is exact rather than lossy: the
+    /// normalisation invariant makes every `int` in a slot the sign-extension of its value, so the
+    /// upper half is a copy of bit 31 and dropping it loses nothing. A **reference** is a heap
+    /// offset, read whole — it is never negative, and since the boundary stopped squeezing a value
+    /// through the low half of `RAX` there is no 32-bit window left to truncate it to.
     fn of(kind: Kind, raw: i64) -> Option<JitValue> {
         match kind {
             Kind::Int => Some(JitValue::Int(raw as i32)),
-            Kind::Reference => Some(JitValue::Reference(raw as u32 as usize)),
+            Kind::Reference => Some(JitValue::Reference(raw as usize)),
+            Kind::Long => Some(JitValue::Long(raw)),
+            // **A float is bits, not a number, until exactly here.** Compiled code carries the
+            // 32-bit IEEE pattern in an ordinary 64-bit slot (zero-extended) and only ever puts it
+            // in an SSE register for the length of one arithmetic opcode; this is the one place it
+            // becomes an `f32` again. `from_bits` is bit-exact and NaN-preserving, which matters:
+            // Java distinguishes NaN payloads no more than this does, but a conversion through a
+            // numeric type would quiet a signalling NaN and change the bits.
+            Kind::Float => Some(JitValue::Float(f32::from_bits(raw as u32))),
+            Kind::Double => Some(JitValue::Double(f64::from_bits(raw as u64))),
+            // **The high half of a category-2 local**, and the third reason to leave a slot alone.
+            //
+            // JVMS §2.6.1 makes it unreadable, so it holds no value, and neither side ever wrote
+            // one there: the interpreter's `lstore` puts a whole `Value::Long` in the *low* slot,
+            // and so does compiled code. What the interpreter's frame happens to hold at `n + 1` is
+            // therefore whatever it held before the `long` arrived — a real, well-typed `Value` —
+            // and leaving it is both safe for the collector and correct, because the slot is dead
+            // by the same argument `Conflict` is: nothing can read it, since every read is an
+            // equality check against a kind this is not.
+            Kind::Cat2High => None,
             // **The two kinds that are not values, and the one place `None` is an answer rather
             // than a failure**: a local the caller is told to leave alone.
             //
@@ -139,9 +191,21 @@ impl JitValue {
     /// site could not have been installed, and if the invariant were ever broken this stops loudly
     /// instead of quietly re-running a method.
     fn of_value(kind: Kind, raw: i64) -> JitValue {
-        match JitValue::of(kind, raw) {
-            Some(value) => value,
-            None => unreachable!("compile refuses a resume site whose operands or inlined frames are untypable"),
+        match kind {
+            // **The one kind that names a value here and no value in [`JitValue::of`]**, because
+            // the two callers are asking different questions. An inlined frame does not exist yet,
+            // so its high slot has to be written with *something*; the emitted call zeroed it and
+            // nothing since has touched it, so `Value::Int(0)` is not a stand-in but literally what
+            // is in that slot — and it is what `Frame::reset_for_call` would have put there. The
+            // root frame's high slot is a different case (there is an existing `Value` to keep),
+            // which is why `of` skips it instead.
+            Kind::Cat2High => JitValue::Int(0),
+            _ => match JitValue::of(kind, raw) {
+                Some(value) => value,
+                None => {
+                    unreachable!("compile refuses a resume site whose operands or inlined frames are untypable")
+                }
+            },
         }
     }
 }
@@ -235,6 +299,9 @@ enum Entry {
         slots: usize,
         /// Where operand-stack position 0 lands in the buffer: the callee's `max_locals`.
         stack_base: usize,
+        /// **Where a returned value lands** in the buffer — see [`CompiledCode::result_base`]. Read
+        /// on [`Outcome::Returned`] and only when the method returns something.
+        result_base: usize,
         /// Where this code's **allocation log** starts in the buffer, and how many records it
         /// holds — `0` for a method that contains no `new`, which carries no log at all. See
         /// [`CompiledCode::alloc_base`].
@@ -251,7 +318,7 @@ enum Entry {
         frame_depth: usize,
         /// Whether this method's descriptor returns a reference — i.e. what the 32 bits of an
         /// [`Outcome::Returned`] mean.
-        returns_reference: bool,
+        returns: Kind,
         /// Whether this method returns `void`, in which case an [`Outcome::Returned`] carries no
         /// value at all and its 32 bits mean nothing.
         returns_void: bool,
@@ -284,7 +351,7 @@ pub enum Decision {
 /// are the locals, here is the operand stack, here is the pc — carry on". It is built by
 /// [`JitCache::resume_state`] out of the caller's buffer and the compiler's type map for that exact
 /// pc, so every value arrives tagged as the `int` or the reference it is.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ResumeState {
     /// The bytecode pc **the frame the interpreter is holding** resumes at. **The instruction there
     /// has not run** — see the write/pc rule in [`compile`][super::compile].
@@ -309,7 +376,7 @@ pub struct ResumeState {
 /// Everything here is complete rather than differential, and that is the difference from the root
 /// frame: there is no existing frame whose untouched slots could be left alone, so `locals` is every
 /// slot of the method, in order, already tagged.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct VirtualState {
     /// The method this frame runs — the interpreter's own `MethodId`, as [`VirtualFrame::unit`][super::compile::VirtualFrame::unit].
     pub unit: usize,
@@ -324,7 +391,7 @@ pub struct VirtualState {
 /// How a crossing into native code ended. The two ways native code can hand control back *without*
 /// the method being over are folded into the one type the interpreter matches on, and since step 6
 /// they carry the same thing: a whole interpreter state.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum OsrResult {
     /// The method ran to one of its exits and its frame is finished. `Some` is the value an
     /// `ireturn`/`areturn` handed back; `None` is a `void` method's `return`, which hands back
@@ -366,6 +433,15 @@ pub struct JitStats {
     /// the excursion's allocation log was. Counted apart from `deopts` because it is a capacity
     /// condition that clears by itself, not a guard the method keeps failing.
     pub alloc_exits: usize,
+    /// **Interpreter frames rebuilt that inlining had removed**, summed over every exit — see
+    /// [`ResumeState::inlined`].
+    ///
+    /// It is the only statistic that distinguishes an exit *from inside an expansion* from an exit
+    /// out of the root's own body, and that is exactly what group 3's two stages needed a number
+    /// for: a poll at an inlined loop header, and a miss at an inline cache, both leave through a
+    /// site whose state is a whole call chain. A test that only checked the answer would pass just
+    /// as well against a compilation that never expanded anything.
+    pub virtual_frames: usize,
 }
 
 /// One thread's compiled methods, invocation counters and scratch buffer.
@@ -407,6 +483,20 @@ impl JitCache {
     /// start-up never pay for a scan. Override with `JVM_JIT_THRESHOLD`.
     pub const THRESHOLD: u32 = 32;
 
+    /// **What `JVM_JIT` says**, read exactly as [`from_env`][JitCache::from_env] reads it — and the
+    /// only place that decision is written down.
+    ///
+    /// It is `pub` for one reason: a *harness* has to be able to say which engine it just measured.
+    /// `bench_baseline` used to print "interpreter baseline" unconditionally, which stopped being
+    /// true the moment the JIT's default became on, and a header that has to be re-derived from a
+    /// second reading of the same variable is a header that will drift again.
+    pub fn enabled_by_env() -> bool {
+        !matches!(
+            std::env::var("JVM_JIT").ok().as_deref().map(str::trim),
+            Some("0" | "off" | "false" | "no")
+        )
+    }
+
     /// A cache configured from the environment.
     ///
     /// - `JVM_JIT=0` (or `off`/`false`) disables the JIT completely: no counters, no scans, no
@@ -420,10 +510,7 @@ impl JitCache {
     ///   switch the step-10 measurement flips, and it is a runtime one so that both arms are the
     ///   same binary — see [`JitCache::regs`].
     pub fn from_env() -> Self {
-        let enabled = !matches!(
-            std::env::var("JVM_JIT").ok().as_deref().map(str::trim),
-            Some("0" | "off" | "false" | "no")
-        );
+        let enabled = Self::enabled_by_env();
         let threshold = std::env::var("JVM_JIT_THRESHOLD")
             .ok()
             .and_then(|v| v.trim().parse::<u32>().ok())
@@ -591,12 +678,13 @@ impl JitCache {
                 touched: compiled.touched_locals,
                 slots,
                 stack_base: compiled.stack_base as usize,
+                result_base: compiled.result_base as usize,
                 alloc_base: compiled.alloc_base as usize,
                 alloc_records: compiled.alloc_records as usize,
                 osr_entries: compiled.osr_entries,
                 resume: compiled.resume_sites,
                 frame_depth: compiled.frame_depth as usize,
-                returns_reference: compiled.returns_reference,
+                returns: compiled.returns,
                 returns_void: compiled.returns_void,
                 osr_open: true,
             },
@@ -612,7 +700,8 @@ impl JitCache {
     ///
     /// `local(i)` yields the interpreter's local slot `i` as an `i64` — `v as i64` for a
     /// `Value::Int(v)`, the offset for a `Value::Reference`, and **`None` for anything else**
-    /// (a `long`, a `double`, a `float`), which abandons the call.
+    /// (a `double`, a `float`), which abandons the call. A `long` marshals like any other value:
+    /// one slot, all 64 bits.
     ///
     /// `Some(Returned(v))` when native code ran the method to its exit; `Some(Safepoint(state))` or
     /// `Some(Deopt(state))` when it stopped part-way, in which case the caller must **rebuild its
@@ -739,6 +828,15 @@ impl JitCache {
         ResumeState { pc: site.pc, locals, stack, inlined }
     }
 
+    /// [`Self::resume_state`] plus the one thing every caller wants counted: **how many frames
+    /// inlining had removed** at this site. Every exit that hands a state back goes through here,
+    /// so [`JitStats::virtual_frames`] cannot drift from what was actually rebuilt.
+    fn resumed(&mut self, key: usize, site_key: u32) -> ResumeState {
+        let state = self.resume_state(key, site_key);
+        self.stats.virtual_frames += state.inlined.len();
+        state
+    }
+
     /// **How many interpreter frames a deopt out of `key` can produce** — 1 for a method with
     /// nothing inlined. See [`CompiledCode::frame_depth`] for why the caller must check it against
     /// its own frame limit *before* entering: inlining hides the invokes it expanded, and with them
@@ -771,8 +869,9 @@ impl JitCache {
             native,
             touched,
             slots,
-            returns_reference,
+            returns,
             returns_void,
+            result_base,
             alloc_base,
             alloc_records,
             ..
@@ -780,11 +879,9 @@ impl JitCache {
         else {
             return None;
         };
-        let returns = match returns_reference {
-            true => Kind::Reference,
-            false => Kind::Int,
-        };
+        let returns = *returns;
         let returns_void = *returns_void;
+        let result_base = *result_base;
         let (alloc_base, alloc_records) = (*alloc_base, *alloc_records);
         debug_assert!(self.scratch.len() >= *slots, "the scratch buffer was sized at install time");
         for &i in touched {
@@ -832,16 +929,21 @@ impl JitCache {
             }
         }
         match Status::unpack(raw) {
-            // The descriptor decided which of the two this is, back when the method was compiled;
-            // `JitValue::of` never sees `Opaque` here because a method that returns a `long`, a
-            // `float` or nothing at all has no exit in the subset and never compiled.
-            Outcome::Returned(value) => match returns_void {
-                // A `void` method's `return` carries nothing; the 32 bits are not a value and must
-                // not be turned into one.
+            // The value is in the buffer's **result slot**, not in the status word — that is the
+            // boundary contract the `long` work rests on. The descriptor decided which kind it is,
+            // back when the method was compiled; `JitValue::of` never sees `Opaque` here because a
+            // method that returns a `float` or a `double` has no exit in the subset and never
+            // compiled.
+            Outcome::Returned => match returns_void {
+                // A `void` method's `return` writes nothing to the result slot, so reading it would
+                // hand the interpreter whatever the previous excursion left there.
                 true => Some(OsrResult::Returned(None)),
-                false => Some(OsrResult::Returned(Some(JitValue::of_value(returns, value as i64)))),
+                false => {
+                    let raw = self.scratch[result_base];
+                    Some(OsrResult::Returned(Some(JitValue::of_value(returns, raw))))
+                }
             },
-            Outcome::Safepoint(pc) => Some(OsrResult::Safepoint(self.resume_state(key, pc))),
+            Outcome::Safepoint(pc) => Some(OsrResult::Safepoint(self.resumed(key, pc))),
             Outcome::Deopt(pc) => {
                 self.stats.deopts += 1;
                 // A deopt out of an on-stack entry closes OSR for this method for good — see
@@ -852,7 +954,7 @@ impl JitCache {
                         *osr_open = false;
                     }
                 }
-                Some(OsrResult::Deopt(self.resume_state(key, pc)))
+                Some(OsrResult::Deopt(self.resumed(key, pc)))
             }
             // A `new` that could not take its fast path. The state contract is a deopt's, so the
             // caller is told the same thing; what is deliberately *not* done here is the two things
@@ -864,7 +966,7 @@ impl JitCache {
             // one that omits them.
             Outcome::AllocFailed(pc) => {
                 self.stats.alloc_exits += 1;
-                Some(OsrResult::Deopt(self.resume_state(key, pc)))
+                Some(OsrResult::Deopt(self.resumed(key, pc)))
             }
         }
     }
@@ -884,11 +986,16 @@ mod tests {
             &Method { unit: 0, code, max_locals, descriptor: signature, is_static: true, has_handlers: false },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| None,
+                array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: Heap::default(),
+                class_mirror: &|_, _| None,
                 poll_word: c.poll_address(),
             },
         )
@@ -1291,7 +1398,7 @@ mod tests {
                 eden_capacity: self.bytes.len(),
                 null_page: Self::NULL_PAGE as u32,
                 array_length: 8,
-                int_array_data: 12,
+                array_data: 12,
                 int_element: 4,
             }
         }
@@ -1305,11 +1412,16 @@ mod tests {
             &Method { unit: 0, code, max_locals, descriptor: signature, is_static: true, has_handlers: false },
             &Environment {
                 int_const: &|_, _| None,
-                static_int: &|_, _| None,
-                int_field: &|_, _, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
                 instance: &|_, _| Some(Instance { size: 16, class_id: 0x77 }),
+                array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: eden.heap(),
+                class_mirror: &|_, _| None,
                 poll_word: c.poll_address(),
             },
         )

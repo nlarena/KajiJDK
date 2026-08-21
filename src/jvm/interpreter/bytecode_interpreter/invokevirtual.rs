@@ -114,6 +114,13 @@ impl Exec<'_> {
             // the slot and differ in it. A missing method is a NoSuchMethodError (linkage).
             SiteKind::Vtable(slot) => {
                 let mirror_offset = self.shared.heap.read_u32(receiver) as usize;
+                // **The inline cache's one observation** (milestone F2). The word is already in
+                // hand — it is the header this dispatch is about to index a vtable with — so
+                // recording it costs one `Relaxed` store, and it is the entire profile the JIT
+                // gets. By the time a method is compiled this site has run at least as many times
+                // as the invocation counter demanded, so a site that really is monomorphic has
+                // written the same value every one of them. See `MethodBody::receiver_classes`.
+                self.shared.metaspace.set_receiver_class(caller, pc, mirror_offset as u32);
                 match self.shared.metaspace.vtable_method_at_mirror(mirror_offset, slot) {
                     Some(callee) => callee,
                     None => return self.throw_exception("java/lang/NoSuchMethodError"),

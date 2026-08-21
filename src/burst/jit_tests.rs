@@ -83,11 +83,12 @@ fn every_opcode_in_the_subset_agrees_with_the_interpreter() {
     // the arithmetic, bits and shifts, every conditional branch on both operand shapes, `dup`, a
     // back-edge, and a divisor that varies. 12214432 is what `java JtOps` prints.
     let stats = differential("java/JtOps.class", 12_214_432);
-    // Eight helpers, every one of them inside the subset; `run` itself is not (it is full of
-    // invokes). Since F3 step 3 `run`'s own loop makes it hot from the inside, so it is scanned
-    // once and refused once — where before it was never looked at at all.
-    assert_eq!(stats.compiled, 8, "all eight helpers should compile");
-    assert_eq!(stats.rejected, 1, "`run` is now scanned, from its back-edge, and refused");
+    // Eight helpers, every one of them inside the subset — **and `run` itself**, since group 3's
+    // first stage. What used to refuse it was one of its callees looping: an inlined body with a
+    // back-edge was refused outright, because only the root's headers polled. Now an inlined
+    // header polls too, so the whole of `run` is one compilation.
+    assert_eq!(stats.compiled, 9, "the eight helpers, and `run` now that a callee may loop");
+    assert_eq!(stats.rejected, 0, "nothing is refused any more");
     assert_eq!(stats.deopts, 0, "no divisor is ever zero here");
     assert_eq!(stats.unmarshallable, 0, "every local of a static int method is an Int");
 }
@@ -114,13 +115,17 @@ fn a_hot_method_with_an_inner_loop_agrees_with_the_interpreter() {
     // The measurement workload, checked for correctness so `bench_jit` can never drift from a
     // program that computes something else. 832880 is what `java JtLoop` prints.
     let stats = differential("java/JtLoop.class", 832_880);
-    assert_eq!(stats.compiled, 1, "only `mix` is in the subset");
-    // Before step 3 this was `3000 - THRESHOLD + 1`: the first 32 calls were interpreted while
-    // the invocation counter climbed. Now `mix`'s own 300-iteration loop pushes it over the
-    // threshold **during its first call**, so that call finishes in native code (entered
-    // on-stack) and every later one enters at the top: 1 + 2999.
-    assert_eq!(stats.native_calls, 3000);
-    assert_eq!(stats.osr_entries, 1, "exactly one of them was the on-stack entry");
+    // `mix`, and — since group 3's first stage — `run`, whose 3000-iteration loop calls it: `mix`
+    // loops, so inlining it used to be refused outright and `run` with it.
+    assert_eq!(stats.compiled, 2, "`mix`, and `run` now that its looping callee may be inlined");
+    // **The count collapsed, and that is the feature.** Before this stage the interpreter executed
+    // `run`'s 3000 invokes and entered native code at each one. Now `run` is itself compiled with
+    // `mix` expanded inside it, so the whole nest is one excursion and the interpreter never
+    // reaches the invoke at all.
+    assert_eq!(stats.native_calls, 33);
+    // Two on-stack entries, one per compiled method: each is made hot from inside its own loop and
+    // so finishes its first call in native code.
+    assert_eq!(stats.osr_entries, 2);
     assert_eq!(stats.safepoint_exits, 0, "nothing raises the poll here");
 }
 
@@ -133,20 +138,20 @@ fn the_benchmark_workloads_that_are_still_controls_are_unaffected() {
     //  - `BmInvoke`: `bmFib` calls itself, and `run` calls `bmFib`. Step 8 expands calls, but not
     //    a **recursive** one — a callee already on the inline path would expand for ever, and the
     //    cycle check refuses it by identity. So both methods stay out.
-    //  - `BmArray`: every `iastore` is inside `run`, which begins `new int[1024]`. That is
-    //    `newarray`, **not** `new` — step 7 compiles the object allocation and not the array one,
-    //    because an array's size is a runtime value and its zeroing therefore a loop rather than a
-    //    run of stores. So it stays a control, on a narrower reason than before.
+    // Three workloads used to be here and are not any more. Step 5 took `BmVirtual` (its three `f`
+    // overrides are `aload_0; getfield; …; ireturn`), step 9 took `BmField` — the last one the JIT
+    // had never been able to touch at all — and the **array-allocation step took `BmArray`**, whose
+    // `run` begins `new int[1024]` and was held out by that one opcode alone. See
+    // [`bmvirtual_is_the_workload_step_5_took_from_the_controls`],
+    // [`bmfield_is_the_workload_step_9_took_from_the_controls`] and
+    // [`bmarray_is_the_workload_the_array_step_took_from_the_controls`].
     //
-    // Two workloads used to be here and are not any more. Step 5 took `BmVirtual` (its three `f`
-    // overrides are `aload_0; getfield; …; ireturn`), and **step 9 took `BmField`** — the last one
-    // the JIT had never been able to touch at all. See
-    // [`bmvirtual_is_the_workload_step_5_took_from_the_controls`] and
-    // [`bmfield_is_the_workload_step_9_took_from_the_controls`].
+    // So `BmInvoke` is the **last** control, and that is worth saying plainly: this milestone's
+    // measurement table now has exactly one row whose two arms are the same interpreted run.
     //
-    // Pinning it here means the measurement table cannot quietly become a comparison of two
-    // identical runs: if a future change makes any of these compile, this test says so first.
-    for (class_file, expected) in [("java/BmInvoke.class", 252_624), ("java/BmArray.class", 615_180)] {
+    // Pinning it here means the table cannot quietly become a comparison of two identical runs: if
+    // a future change makes it compile, this test says so first.
+    for (class_file, expected) in [("java/BmInvoke.class", 252_624)] {
         let (off, off_steps, _) = run(class_file, false);
         let (on, on_steps, stats) = run(class_file, true);
         assert_eq!(off, expected, "{class_file}");
@@ -156,6 +161,41 @@ fn the_benchmark_workloads_that_are_still_controls_are_unaffected() {
         assert_eq!(stats.native_calls, 0, "{class_file}");
     }
 
+}
+
+#[test]
+fn bmarray_is_the_workload_the_array_step_took_from_the_controls() {
+    // **One opcode was the whole of it.** `BmArray.run` is `iaload`/`iastore` in a doubly nested
+    // loop — the exact shape this tier has compiled since step 4 — behind a single `new int[1024]`
+    // on its first line. A method is compiled whole or not at all, so that one `newarray` held the
+    // other seventeen million opcodes out, and the workload stayed a zero-effect control through
+    // six steps that had nothing to do with arrays.
+    //
+    // It is worth being precise about *why* an array allocation is a step of its own and an object
+    // allocation was not, because "arrays too" sounds like a widening and is really a new shape:
+    // `new`'s size is a compile-time constant, so its zeroing is a straight run of stores and its
+    // Eden bounds check folds the stride into an immediate. An array's size is
+    // `header + count * width` with `count` in a **register**, so the same three things become a
+    // guard on the count, a zeroing *loop*, and a bounds check whose stride is computed at run
+    // time. See `burst::compile::emit_array_alloc`.
+    //
+    // 615180 is what `java BmArray` prints.
+    let stats = differential("java/BmArray.class", 615_180);
+    assert_eq!(stats.compiled, 1, "`run`, and there is nothing else in the file");
+    assert_eq!(stats.rejected, 0);
+    // Entered exactly once, on-stack: `run` is called once and loops a million times inside it.
+    assert_eq!(stats.osr_entries, 1);
+    assert_eq!(stats.native_calls, 1, "one entry, and it never comes back until the method returns");
+    // **Nothing leaves.** The single allocation is 1024 ints — 4108 bytes, over
+    // `MAX_INLINE_ARRAY_BYTES` — so it is *not* allocated inline; it deopts... and that would be an
+    // `alloc_exit`. It is not one, because the allocation happens **before** the loop, on the very
+    // first call, when the method is still cold and interpreted. By the time the back-edge counter
+    // makes `run` hot, the array already exists and the compiled entry is at the loop header.
+    // That is the honest shape of this workload: the array step is what let it compile, and the
+    // array allocation itself never runs natively in it.
+    assert_eq!(stats.alloc_exits, 0);
+    assert_eq!(stats.deopts, 0, "every index is in range and the array is never null");
+    assert_eq!(stats.unmarshallable, 0);
 }
 
 #[test]
@@ -224,17 +264,22 @@ fn every_shape_of_loop_agrees_with_the_interpreter() {
     // a loop that cannot be compiled at all, and a loop whose body deopts halfway. 4706660 is what
     // `java OsJit` prints.
     let stats = differential("java/OsJit.class", 4_706_660);
-    // `longLoop`, `earlyExit`, `nested`, `triple`, `divLoop`. Not `neverEnters` (its back-edge is
-    // never taken and it is called once, so nothing ever counts it hot), not `uncompilable`, not
-    // `deopting` or `run` (no loop, one call each).
-    assert_eq!(stats.compiled, 5);
-    assert_eq!(stats.rejected, 1, "`uncompilable` is scanned once, from its back-edge, and refused");
-    // Every one of the five was reached **on-stack**: not one of them is called often enough for
+    // `longLoop`, `earlyExit`, `nested`, `triple`, `divLoop` — **and `uncompilable`**, which is no
+    // longer any such thing: its `int[] a = new int[16]` was the one opcode holding it out, and the
+    // array-allocation step compiles it. Its name is now a fossil, and it is left alone on purpose:
+    // renaming it would lose the record of a method that *was* refused for six steps and then was
+    // not, which is exactly what a coverage file is for.
+    //
+    // Not `neverEnters` (its back-edge is never taken and it is called once, so nothing ever counts
+    // it hot), not `deopting` or `run` (no loop, one call each).
+    assert_eq!(stats.compiled, 6);
+    assert_eq!(stats.rejected, 0, "nothing in this file is outside the subset any more");
+    // Every one of the six was reached **on-stack**: not one of them is called often enough for
     // the invocation counter to matter, and three of them are called exactly once.
-    assert_eq!(stats.osr_entries, 5);
-    // Six native calls: those five, plus `earlyExit`'s second call, which by then enters at the
+    assert_eq!(stats.osr_entries, 6);
+    // Seven native calls: those six, plus `earlyExit`'s second call, which by then enters at the
     // top like any ordinary compiled call.
-    assert_eq!(stats.native_calls, 6);
+    assert_eq!(stats.native_calls, 7);
     assert_eq!(stats.deopts, 1, "`divLoop` gives up at the zero divisor and the interpreter throws");
     assert_eq!(stats.safepoint_exits, 0, "nothing raises the poll here");
     assert_eq!(stats.unmarshallable, 0);
@@ -557,8 +602,10 @@ fn the_wide_prefix_agrees_with_the_interpreter() {
     // middle of the next instruction and emit something arbitrary — which is exactly the kind of
     // bug that produces a plausible-looking wrong number rather than a crash.
     let stats = differential("java/WdWide.class", -3_390_500);
-    assert_eq!(stats.compiled, 2, "`bump` and `deep`");
-    assert_eq!(stats.rejected, 1, "`run` is scanned from its back-edge and refused (invokes)");
+    // `bump` and `deep` — and, since group 3 raised the byte budget to two kilobytes, `run` too:
+    // `deep` is a 264-slot method and expanding it was what used to exceed the old one.
+    assert_eq!(stats.compiled, 3, "`bump`, `deep`, and `run` with both of them expanded into it");
+    assert_eq!(stats.rejected, 0, "`run` is no longer refused");
     assert_eq!(stats.unmarshallable, 0, "every one of `deep`'s 264 slots holds an Int");
     assert_eq!(stats.deopts, 0);
 }
@@ -570,8 +617,13 @@ fn both_switch_opcodes_agree_with_the_interpreter() {
     // with a `continue` that makes a switch arm a back-edge, and with keys that miss every case so
     // the `default` arm is taken. 301975 is what `java WdSwitch` prints.
     let stats = differential("java/WdSwitch.class", 301_975);
-    assert_eq!(stats.compiled, 5, "all five helpers");
-    assert_eq!(stats.rejected, 1, "`run` itself");
+    // **Two, not five, and the drop is the point.** `run` used to be refused (its callees loop) and
+    // its 3000 invokes each made a helper hotter until all five compiled on their own. Since group
+    // 3's first stage `run` compiles with the helpers expanded inside it, so the interpreter stops
+    // executing those invokes and the helpers' own counters stop climbing: only the two that were
+    // already hot when `run` was compiled have a compilation of their own.
+    assert_eq!(stats.compiled, 2, "`run`, with the helpers inlined, plus the one already hot");
+    assert_eq!(stats.rejected, 0, "`run` is no longer refused");
     assert_eq!(stats.deopts, 0);
 }
 
@@ -583,12 +635,18 @@ fn getstatic_of_an_int_agrees_with_the_interpreter() {
     // allocates hard enough between the calls to force collections — which a baked-in address must
     // survive. 246189 is what `java WdStatic` prints.
     let stats = differential("java/WdStatic.class", 246_189);
-    // `own`, `inherited`, `far`, `mutable`, `mixed`. Not `notAnInt` (a `String` static, so the
-    // resolver refuses it), not `churn` (an array), not `run` (invokes).
-    assert_eq!(stats.compiled, 5);
-    assert_eq!(stats.rejected, 3, "`notAnInt`, `churn` and `run`, each scanned once");
+    // `own`, `inherited`, `far`, `mutable`, `mixed` — **and `churn`**, which the array-allocation
+    // step added: it is `new int[16]` in a loop, and it was refused for that opcode alone.
+    // Not `notAnInt` (a `String` static, so the resolver refuses it), not `run` (invokes).
+    assert_eq!(stats.compiled, 6);
+    assert_eq!(stats.rejected, 2, "`notAnInt` and `run`, each scanned once");
     assert_eq!(stats.deopts, 0);
     assert_eq!(stats.unmarshallable, 0);
+    // `churn` is the reason this workload was written — it allocates hard enough to force
+    // collections between the other calls — and now it allocates *natively*, 16-int arrays at a
+    // time, until Eden or the excursion's log fills. Those exits are what says the compiled
+    // `newarray` is really running here rather than merely having been emitted.
+    assert!(stats.alloc_exits > 0, "`churn`'s arrays fill Eden and the method is handed back");
 }
 
 // =============================================================================================
@@ -646,10 +704,12 @@ fn a_write_inside_an_inlined_callee_is_applied_exactly_once() {
     // failures included, and is folded into the answer — so re-running the write would print 500
     // pokes instead of 400 and the number would move. 50000 is what `java JiOrder` prints.
     let stats = differential("java/JiOrder.class", 59_300);
-    // `step`, with `poke` expanded into it. Not `run`, which builds the array with `newarray` —
-    // still outside the subset, which is what makes `step` the root of the compilation.
-    assert_eq!(stats.compiled, 1, "`step`, with `poke` inlined");
-    assert_eq!(stats.rejected, 1, "`run`, for its `newarray`");
+    // `step`, with `poke` expanded into it — and `run`, which builds the array and which the
+    // array-allocation step brought in (it was refused for its `newarray` alone). `step` is still
+    // the root of its own compilation: `run` calls it through an invoke the inliner declines, so
+    // the deopt below still hands back the two-frame chain this test is about.
+    assert_eq!(stats.compiled, 2, "`step` with `poke` inlined, and `run`");
+    assert_eq!(stats.rejected, 0);
     // 100 of the 400 calls index past the end; the ones before `step` got hot are interpreted.
     assert_eq!(stats.deopts, 93, "one deopt per index out of range reached in native code");
 }
@@ -673,8 +733,10 @@ fn a_rebuilt_virtual_frame_hands_references_back_as_references() {
     // runs; when one does fire it fires in an ordinary interpreter frame, which is what a deopt
     // rebuilds, and this tier needs to know nothing about it.
     let stats = differential("java/JiRef.class", 11_900);
-    assert_eq!(stats.compiled, 1, "`outer`, with `at` inlined");
-    assert_eq!(stats.rejected, 1, "`run`, for its `newarray`");
+    // `outer`, with `at` inlined — and `run`, which the array-allocation step brought in: it was
+    // refused for its `newarray` alone.
+    assert_eq!(stats.compiled, 2, "`outer` with `at` inlined, and `run`");
+    assert_eq!(stats.rejected, 0);
     assert_eq!(stats.deopts, 93, "one deopt per index out of range reached in native code");
 }
 
@@ -691,9 +753,14 @@ fn nested_inlining_rebuilds_every_frame_in_the_chain() {
     // after the call would read the wrong operands. `inner` catches its own exception so that
     // arithmetic actually runs. 134200 is what `java JiNest` prints.
     let stats = differential("java/JiNest.class", 134_200);
-    assert_eq!(stats.compiled, 1, "`outer`, with `middle` and `inner` expanded into it");
-    assert_eq!(stats.rejected, 1, "`run`, for its `newarray`");
+    // `outer`, with `middle` and `inner` expanded into it — and, since group 3 raised the depth
+    // bound to four, `run` as well: its `newarray` was never the refusal, the chain below it was.
+    assert_eq!(stats.compiled, 2, "`outer` with its two expansions, and `run`");
+    assert_eq!(stats.rejected, 0);
     assert_eq!(stats.deopts, 93, "one deopt per index out of range reached in native code");
+    // Each of those deopts is two frames deep inside the expansion, so the chain is rebuilt every
+    // time — which is the thing this test is named for.
+    assert_eq!(stats.virtual_frames, 187);
 }
 
 #[test]
@@ -859,6 +926,78 @@ fn merges_with_a_non_empty_operand_stack_need_no_reconciliation() {
 }
 
 // =============================================================================================
+// Group 5: the opcodes that leave — `athrow`, and the monitors.
+// =============================================================================================
+
+#[test]
+fn an_explicit_throw_is_caught_by_the_handler_of_the_frame_the_deopt_rebuilt() {
+    // The whole of group 5's `athrow` claim, asked of a whole VM: native code contains no exception
+    // handling at all, so a compiled `athrow` deopts at its own pc with the exception on the
+    // reconstructed operand stack, and the interpreter re-executes it and unwinds.
+    //
+    // `JeThrow` walks the three shapes that fail differently (see the file): a throw caught in the
+    // very frame the deopt rebuilt — which is the interaction worth checking, since a method with
+    // an exception table compiles but gets no OSR and no polls — a throw that leaves the method
+    // entirely, and a throw with both frames' operand stacks live, including a **reference** in the
+    // caller's.
+    //
+    // Two things in that file exist so this cannot pass by luck, and they are worth knowing about
+    // before editing it: the exception is an `IllegalStateException` rather than a
+    // `RuntimeException` (so a deopt that handed back `null` would throw an NPE that escapes the
+    // `catch` instead of being absorbed by it), and the outer arms compare the caught object's
+    // **identity** against the field it came from (so a spill of the wrong register cannot pass as
+    // "the right type"). 35825 is what `java JeThrow` of JDK 25 prints.
+    let stats = differential_regs("java/JeThrow.class", 35_825);
+    // **Four, and which four is the interesting part.** `caughtHere` and `propagates` are compiled
+    // because they are called directly. `catcher` and `deepThrow` are compiled *and contain an
+    // invoke*, so their compiling at all is the proof that the callee was **inlined** — a call this
+    // tier cannot expand is an `Ineligible::Opcode` and the method is refused outright. So the
+    // athrow inside `propagates` and the one inside `bang` are each reached in an expanded body,
+    // with the caller's frame rebuilt above the callee's by the same deopt.
+    //
+    // `bang` and `use` are *not* in the count, and that is the ordinary shape rather than a
+    // surprise: their invocation counters were incremented only while `deepThrow` was interpreted,
+    // so they stop one short of the threshold on the very call that compiles their caller and are
+    // never entered through the interpreter again.
+    assert_eq!(stats.compiled, 4, "`caughtHere`, `propagates`, `catcher` and `deepThrow`");
+    // **Every deopt here is an athrow, and that is arithmetic rather than a hope.** The only other
+    // guard in the file is `100 / k` in `caughtHere`, which is reached only on the path where `k`
+    // is not zero. So the count is the number of throws: over 4000 iterations, one per multiple of
+    // 7 (571), of 5 (800), of 11 (363) and of 13 (307) — 2041, less the handful of early calls
+    // made while each method's invocation counter was still climbing.
+    assert!(stats.deopts > 2000, "{} deopts, and every one of them is an athrow", stats.deopts);
+    // ...and the exception really did have to be materialised as a *reference*. Nothing here can
+    // marshal badly on the way in, so a non-zero count would mean a slot the map could not type.
+    assert_eq!(stats.unmarshallable, 0);
+}
+
+#[test]
+fn a_loop_before_a_monitorenter_still_runs_natively() {
+    // The shape group 5 exists for. `JeSync.loopThenSync` is a compilable loop followed by a
+    // `synchronized` block whose body is deliberately **outside** the subset, and it compiles
+    // anyway: the scan stops at the `monitorenter` (`Flow::Return`), so the code past the lock is
+    // not part of the compilation and does not have to be expressible. Before group 5 the method
+    // was refused at that byte and its loop was interpreted.
+    //
+    // 465141 is what `java JeSync` of JDK 25 prints.
+    let stats = differential_regs("java/JeSync.class", 465_141);
+    // Two methods reach native code and both of them stop at their monitor: 3000 calls each, every
+    // one of which enters, runs its 64-iteration loop and then deopts. The equality is what pins
+    // the behaviour — a `monitorenter` that fell through instead of deopting would show up here as
+    // a count far below the number of entries, and one that refused the method would show up as
+    // nothing compiled at all.
+    assert_eq!(stats.compiled, 2, "`loopThenSync` and `syncSimple`");
+    assert_eq!(stats.native_calls, stats.deopts, "every entry ends at the monitor, none returns");
+    assert!(stats.deopts > 5000, "{} deopts: one per call, twice per iteration", stats.deopts);
+    // `syncMethod` is the *other* exclusion and it is structural: `ACC_SYNCHRONIZED` is a flag, not
+    // an opcode, the interpreter takes its monitor before the JIT's dispatch point is reached, and
+    // that dispatch is gated on there being no monitor. So it is never offered, never scanned and
+    // never refused — which is why it is absent from both counters rather than present in
+    // `rejected`. `run` itself is the one refusal: its loop calls a method that loops.
+    assert_eq!(stats.rejected, 1, "`run`; `syncMethod` is never even offered");
+}
+
+// =============================================================================================
 // The coverage census.
 // =============================================================================================
 
@@ -876,9 +1015,11 @@ fn merges_with_a_non_empty_operand_stack_need_no_reconciliation() {
 ///    *initialised* already, which this cannot know without a running VM — so the census is an
 ///    upper bound on the opcode subset rather than a prediction of what a given run compiles.
 ///  - Step 7 put `return` (0xb1) in the subset, so `void` methods — `<init>`, every setter, `main`
-///    — are no longer structurally excluded and count towards the ceiling. What is still out is a
-///    method returning a `long`, a `double` or a `float`: the packed return protocol has 32 bits
-///    for a value, which is a limit of the boundary rather than of the opcode subset.
+///    — are no longer structurally excluded and count towards the ceiling. The wide-types step then
+///    added `lreturn`, `freturn` and `dreturn` at once, by moving the returned value out of the
+///    status register and into the caller's buffer: once a result is 64 type-agnostic bits, **no
+///    return type is a reason not to compile a method**, and the ceiling is simply every method
+///    with a `Code` attribute whose descriptor parses.
 ///  - Step 8 made a compilation span **more than one class file**, so the whole corpus (and
 ///    `boot/`, for `java.lang.Object.<init>`) is loaded before anything is offered. The `invoke`
 ///    stub is an upper bound in the same two ways the others are — it cannot know whether a class
@@ -892,6 +1033,25 @@ fn merges_with_a_non_empty_operand_stack_need_no_reconciliation() {
 ///    never been able to touch, and its shape — an object allocated inside a loop — is the
 ///    commonest one in real Java there is. A corpus of small test programs simply does not contain
 ///    many loops that allocate.
+///
+/// # The split, and why a count of `Ineligible` variants is not an answer
+///
+/// Four of the variants this table tallies name a **position and an index** and say nothing about
+/// the thing at it, so their counts add up causes that have nothing in common and no shared fix:
+/// `UnresolvedField` covers a `char` field and a `long` one alike; `NonIntegerConstant` covers a
+/// `String` and a `MethodHandle`. Three widenings' worth of work had already gone into that pile
+/// without the pile ever being separated, so "how much is left" was unanswerable from this table.
+///
+/// The resolver *knows* — it is the one that read the descriptor — so it now writes down what it
+/// saw on its way out ([`Refusals`]) and the census reads it back when the compilation it aborted
+/// comes back as an error. That is a note kept **by the census's own stubs**, not a widening of
+/// `Ineligible`: the compiler's error type stays a position and an index, which is all `burst` is
+/// entitled to know (it has never had a constant pool and is not getting one for a report).
+///
+/// Two causes the split structurally cannot see, and both are said out loud in the output rather
+/// than left as a silent zero: an **uninitialised declaring class** (the stubs accept
+/// unconditionally — the same upper-bound caveat as everywhere else here), and **`volatile`**,
+/// which stopped being a refusal at all in group 2.
 #[test]
 #[ignore = "census: prints the compiled subset's coverage over the java/ corpus"]
 fn subset_census() {
@@ -915,7 +1075,7 @@ fn subset_census() {
         eden_capacity: 256,
         null_page: 8,
         array_length: 8,
-        int_array_data: 12,
+        array_data: 12,
         int_element: 4,
     };
 
@@ -930,6 +1090,122 @@ fn subset_census() {
                 false => {}
             }
         }
+    }
+
+    /// **What kind a field of this descriptor holds**, as the census's `getfield`/`getstatic` stubs
+    /// answer it — the same table the VM's own `jit_field_site`/`jit_static_field` use, restated
+    /// here because the census reads class files with no VM behind them.
+    ///
+    /// `L…;` and `[…` are group 2's addition and they answer [`Kind::Reference`]. The four
+    /// remaining primitives (`B`, `C`, `S`, `Z`) are still `None`: they are stored at widths this
+    /// tier's loads have never agreed on, and the *real* resolver refuses them too, so accepting
+    /// them here would make the census measure a compiler that does not exist.
+    fn census_field_kind(descriptor: &str) -> Option<crate::burst::compile::Kind> {
+        use crate::burst::compile::Kind;
+        Some(match descriptor {
+            "I" => Kind::Int,
+            "F" => Kind::Float,
+            "J" => Kind::Long,
+            "D" => Kind::Double,
+            d if d.starts_with('L') || d.starts_with('[') => Kind::Reference,
+            _ => return None,
+        })
+    }
+
+    /// **Why a field descriptor is not one this tier can hold**, in the resolver's own terms.
+    ///
+    /// [`census_field_kind`] answers `None` for exactly one reason, and it is worth naming rather
+    /// than counting: `B`, `C`, `S` and `Z` are stored at 1 and 2 bytes, and this tier's loads and
+    /// stores have no encoding for those widths ([`x64`][super::x64] can `mov` 4 and 8 bytes and
+    /// nothing else). Everything else that reaches here is a malformed descriptor.
+    fn census_field_cause(descriptor: &str) -> &'static str {
+        match descriptor {
+            "B" | "Z" => "byte/boolean — a 1-byte access this tier cannot encode",
+            "C" | "S" => "char/short — a 2-byte access this tier cannot encode",
+            _ => "descriptor is not a field type",
+        }
+    }
+
+    /// The **constant-pool tag** at `index`, as a word — what a refused `ldc` was actually naming.
+    ///
+    /// `NonIntegerConstant` is the compiler's answer for "no resolver would take this", and it
+    /// mixes causes that are not remotely alike: a `String` is refused because this VM has no
+    /// interning table (see the module docs), while a `MethodHandle` or a `Dynamic` is refused
+    /// because nothing in this tier could ever materialise one. The census can tell them apart
+    /// because, unlike `burst`, it is holding the constant pool.
+    ///
+    /// The pool is **1-based** in the class file and 0-based in the `Vec`, exactly as every
+    /// resolver on `ClassFile` handles it — getting that wrong reads the entry before the one the
+    /// `ldc` named, which for a `String` is its `Utf8` and looks entirely plausible.
+    fn census_constant_tag(class: &ClassFile, index: u16) -> &'static str {
+        use crate::jvm::parser::constant_pool::ConstantPoolEntry as E;
+        let Some(at) = index.checked_sub(1) else { return "index 0" };
+        match class.constant_pool.get(at as usize) {
+            Some(E::Utf8(_)) => "Utf8",
+            Some(E::Integer(_)) => "Integer",
+            Some(E::Float(_)) => "Float",
+            Some(E::Long(_)) => "Long",
+            Some(E::Double(_)) => "Double",
+            Some(E::Class { .. }) => "Class",
+            Some(E::String { .. }) => "String",
+            Some(E::MethodHandle { .. }) => "MethodHandle",
+            Some(E::MethodType { .. }) => "MethodType",
+            Some(E::Dynamic { .. }) => "Dynamic",
+            _ => "something else",
+        }
+    }
+
+    /// **Why a constant of this tag is not one this tier can bake into the instruction stream.**
+    /// One line per tag, because the reasons genuinely differ and only one of them is a decision
+    /// this project could revisit tomorrow.
+    fn census_constant_cause(tag: &str) -> &'static str {
+        match tag {
+            // The one that is a *VM* fact rather than a compiler one: `strings::intern` keeps no
+            // table and allocates a fresh Eden `String` per execution, so there is no permanent
+            // offset to bake — and baking one would make `"a" == "a"` true where the interpreter
+            // says false. See the module docs.
+            "String" => "no interning table in this VM: a fresh Eden String per execution",
+            "MethodHandle" | "MethodType" | "Dynamic" => "nothing in this tier can materialise one",
+            _ => "no resolver in the subset answers for it",
+        }
+    }
+
+    /// A field descriptor with its package stripped — `Ljava/util/concurrent/Semaphore;` becomes
+    /// `LSemaphore;`. Purely so the split table stays a table; the column is about the *kind* of
+    /// thing the field holds, and the package never changes the answer.
+    fn census_short_descriptor(descriptor: &str) -> String {
+        match descriptor.rsplit('/').next() {
+            Some(tail) if tail != descriptor => format!("L{tail}"),
+            _ => descriptor.to_string(),
+        }
+    }
+
+    /// **What a census stub said no to, and why** — the split the coarse `Ineligible` variants
+    /// cannot carry.
+    ///
+    /// `UnresolvedStatic`, `UnresolvedField` and `NonIntegerConstant` each name a *position* and an
+    /// *index* and nothing about the thing at it, so a tally of them mixes "a `char` field" with "a
+    /// `String` constant" under one line. The resolver knows better — it is the one that read the
+    /// descriptor — so it writes down what it saw on the way out, and the census reads it back when
+    /// the compilation it aborted comes back as an error.
+    ///
+    /// **Why "the last refusal" is the right one**, and not a heuristic: every one of these
+    /// resolvers is consulted through `.ok_or(…)?`, so a `None` from any of them ends the
+    /// compilation on that line. There is no path on which a refused field is recorded and the
+    /// compilation continues past it. The index is carried and checked against the error's anyway,
+    /// so a mismatch degrades to "unattributed" rather than to a wrong answer.
+    #[derive(Default)]
+    struct Refusals {
+        /// `(index, pool tag)` of the last constant no resolver would take.
+        constant: Option<(u16, &'static str)>,
+        /// `(index, descriptor)` of the last static the stub refused.
+        static_field: Option<(u16, String)>,
+        /// `(index, descriptor)` of the last instance field the stub refused.
+        field: Option<(u16, String)>,
+        /// The descriptor of the last field that resolved **as a reference**. `ReferenceWrite`
+        /// carries no index at all — it is a rule of the compiler rather than of the resolver — so
+        /// this is the only way to say which field it was about.
+        reference: Option<String>,
     }
 
     /// The operand-stack values a call to `descriptor` consumes, receiver included — the number the
@@ -999,6 +1275,11 @@ fn subset_census() {
     let mut bodies: Vec<crate::jvm::parser::Code> = Vec::new(); // unit -> its parsed `Code`
     let mut population: Vec<usize> = Vec::new(); // the units drawn from `java/`, i.e. what is censused
     let mut by_name: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    // Class name -> index in `classes`, so a target can be looked for **up the superclass chain**
+    // the way the VM's own resolver does. Without it an inherited method — `Sub.m()` declared on
+    // `Base` — is a miss here and refuses the caller, which is an under-count of the compiler
+    // rather than a property of it.
+    let mut by_class: BTreeMap<String, usize> = BTreeMap::new();
     let mut files = 0usize;
 
     for (from_java, path) in
@@ -1024,6 +1305,7 @@ fn subset_census() {
                 population.push(unit);
             }
         }
+        by_class.entry(name.clone()).or_insert(ci);
         classes.push((name, class));
     }
 
@@ -1031,41 +1313,121 @@ fn subset_census() {
     let mut returns_value = 0usize;
     let mut compiled: Vec<String> = Vec::new();
     let mut reasons: BTreeMap<String, usize> = BTreeMap::new();
+    // The **split**: the same refusals, attributed to what the resolver actually saw. Kept apart
+    // from `reasons` so the coarse table stays comparable with every earlier step's.
+    let mut split: BTreeMap<(&'static str, String), usize> = BTreeMap::new();
+    let notes = std::cell::RefCell::new(Refusals::default());
 
     for &root in &population {
         let class = class_of(&classes, &units, root);
         let member = &class.methods[units[root].1];
         methods += 1;
         // The **ceiling**, and every step so far has moved it. It is the set of methods whose
-        // *exit* this tier can express: step 5 added `areturn` (methods returning a reference)
-        // and step 7 added `return` (methods returning `void` — `<init>` and every setter,
-        // which together are a large fraction of any real corpus). What remains permanently
-        // out is `long`/`double`/`float`, and that is a limit of the **boundary** — the packed
-        // `RAX = (status << 32) | value` has 32 bits for the value — rather than of the subset.
+        // *exit* this tier can express: step 5 added `areturn` (methods returning a reference),
+        // step 7 added `return` (methods returning `void` — `<init>` and every setter, which
+        // together are a large fraction of any real corpus), and the category-2 step added
+        // `lreturn`, `freturn` and `dreturn`. Those last three came from changing the **boundary**
+        // rather than the opcode set: the old packed `RAX = (status << 32) | value` had 32 bits for
+        // a result and no `long` fitted, so moving the value into the caller's buffer is what let
+        // `J` in — and once it was 64 type-agnostic bits, `F` and `D` cost nothing more. Nothing is
+        // out of the ceiling any more: every descriptor this tier can parse has an exit.
         let descriptor = class.utf8(member.descriptor_index).unwrap_or("");
         let returns = descriptor.rsplit(')').next().unwrap_or("");
-        if matches!(returns, "I" | "Z" | "B" | "S" | "C" | "V") || returns.starts_with(['L', '[']) {
+        if matches!(returns, "I" | "Z" | "B" | "S" | "C" | "V" | "J" | "F" | "D") || returns.starts_with(['L', '[']) {
             returns_value += 1;
         }
+        // A fresh slate per method: what a *previous* method's resolver refused says nothing about
+        // this one, and an attribution carried across would be worse than none.
+        *notes.borrow_mut() = Refusals::default();
         let result = crate::burst::compile::compile(
             &shape(&classes, &units, &bodies, root),
             &crate::burst::compile::Environment {
-                int_const: &|unit, index| class_of(&classes, &units, unit).integer_constant(index),
-                static_int: &|unit, index| {
-                    // The stub: any `int` static resolves, to an address no code here will run.
-                    match class_of(&classes, &units, unit).fieldref_target(index) {
-                        Some((_, _, "I")) => Some(poll),
-                        _ => None,
+                // The four constant resolvers, each of which **writes down what it refused**: a
+                // `None` from all of them is the compiler's `NonIntegerConstant`, which names an
+                // index and says nothing about what is at it. Recording the pool tag here is what
+                // turns that one line into the split table below — and it is free, because the
+                // pool is right there.
+                int_const: &|unit, index| {
+                    let class = class_of(&classes, &units, unit);
+                    let answer = class.integer_constant(index);
+                    if answer.is_none() {
+                        notes.borrow_mut().constant = Some((index, census_constant_tag(class, index)));
+                    }
+                    answer
+                },
+                long_const: &|unit, index| {
+                    let class = class_of(&classes, &units, unit);
+                    let answer = class.long_constant(index);
+                    if answer.is_none() {
+                        notes.borrow_mut().constant = Some((index, census_constant_tag(class, index)));
+                    }
+                    answer
+                },
+                float_const: &|unit, index| {
+                    let class = class_of(&classes, &units, unit);
+                    let answer = class.float_constant(index).map(f32::to_bits);
+                    if answer.is_none() {
+                        notes.borrow_mut().constant = Some((index, census_constant_tag(class, index)));
+                    }
+                    answer
+                },
+                double_const: &|unit, index| {
+                    let class = class_of(&classes, &units, unit);
+                    let answer = class.double_constant(index).map(f64::to_bits);
+                    if answer.is_none() {
+                        notes.borrow_mut().constant = Some((index, census_constant_tag(class, index)));
+                    }
+                    answer
+                },
+                static_field: &|unit, index| {
+                    // The stub: any static this tier has a representation for resolves, to an
+                    // address no code here will run. The **kind** is what the descriptor says,
+                    // because it is what fixes the width of the access and therefore what the
+                    // census is counting.
+                    //
+                    // And when it does *not* resolve, the descriptor it read is written down. The
+                    // compiler's `UnresolvedStatic` carries a pc and an index, which is exactly the
+                    // information that does not distinguish "a `char` static" from "a `long` one"
+                    // — and the whole point of the split is that those two answers had different
+                    // fates in groups 1 and 4.
+                    let (_, _, descriptor) = class_of(&classes, &units, unit).fieldref_target(index)?;
+                    match census_field_kind(descriptor) {
+                        Some(kind) => {
+                            if kind == crate::burst::compile::Kind::Reference {
+                                notes.borrow_mut().reference = Some(descriptor.to_string());
+                            }
+                            Some((poll, kind))
+                        }
+                        None => {
+                            notes.borrow_mut().static_field = Some((index, descriptor.to_string()));
+                            None
+                        }
                     }
                 },
-                // The same shape of stub for `getfield`/`putfield`: any `int` instance field
-                // resolves, to an offset no code here will touch. Like the static stub it
-                // cannot know about `volatile` or about a layout that is not loaded, so the
-                // census stays an **upper bound** on what a running VM would accept.
-                int_field: &|unit, _, index| {
-                    match class_of(&classes, &units, unit).fieldref_target(index) {
-                        Some((_, _, "I")) => Some(0),
-                        _ => None,
+                // The same shape of stub for `getfield`/`putfield`: any instance field of a kind
+                // this tier represents resolves, to an offset no code here will touch. Like the
+                // static stub it cannot know about a layout that is not loaded, so the census
+                // stays an **upper bound** on what a running VM would accept. It *can* now stop
+                // caring about `volatile`, which the real resolver no longer refuses either —
+                // see `jit_field_site`, VOLATILE-REVISIT-OS-PARALLEL.
+                field: &|unit, _, index| {
+                    let (_, _, descriptor) = class_of(&classes, &units, unit).fieldref_target(index)?;
+                    match census_field_kind(descriptor) {
+                        Some(kind) => {
+                            // A field that resolves *as a reference* is the one the compiler may
+                            // still refuse, one line later, if the opcode writes it
+                            // (`Ineligible::ReferenceWrite`). That variant carries no index — it is
+                            // the compiler's rule, not the resolver's answer — so this is the only
+                            // place the descriptor behind it can be captured.
+                            if kind == crate::burst::compile::Kind::Reference {
+                                notes.borrow_mut().reference = Some(descriptor.to_string());
+                            }
+                            Some((0, kind))
+                        }
+                        None => {
+                            notes.borrow_mut().field = Some((index, descriptor.to_string()));
+                            None
+                        }
                     }
                 },
                 // The same shape of stub again for `new`: every class resolves, to a small
@@ -1073,6 +1435,21 @@ fn subset_census() {
                 // class to be *initialised*, which this cannot know — so, once more, an upper
                 // bound rather than a prediction.
                 instance: &|_, _| Some(crate::burst::compile::Instance { size: 16, class_id: 1 }),
+                // ...and for `newarray`/`anewarray`. The **element width is real** — decoded from
+                // the `atype` through the interpreter's own table, and 4 for every reference array
+                // — because the width is what the emitted arithmetic depends on and stubbing it
+                // would make the census measure a different compiler. The mirror offset is a
+                // plausible constant: a running VM requires the array class's `Class<…>` to exist
+                // already, which this cannot know. Upper bound, exactly like the two stubs above.
+                array: &|_, of| {
+                    use crate::burst::compile::ArrayOf;
+                    use crate::jvm::interpreter::bytecode_interpreter::array_operations;
+                    let element = match of {
+                        ArrayOf::Primitive(atype) => array_operations::primitive_array_class(atype)?.1,
+                        ArrayOf::Reference(_) => 4,
+                    };
+                    Some(crate::burst::compile::ArrayType { class_id: 1, element: element as u32 })
+                },
                 // And the same shape once more for the **call** (step 8): a `Methodref` naming a
                 // method in the table resolves to that method's body, with no check that the class
                 // is initialised or that the method is not `synchronized`, and no walk up the
@@ -1080,20 +1457,55 @@ fn subset_census() {
                 // like every stub above; the third makes it a slight *under*-count, and is left as
                 // the simpler thing because a direct hit is what `super()` and every constructor
                 // call already are.
+                //
+                // **Milestone F2 widens it to all four invokes.** A dispatched call
+                // (`invokevirtual`, `invokeinterface`) is bound in a running VM to the class the
+                // interpreter has actually seen at that site; the census has run nothing, so it
+                // answers with the site's **static** owner and a stand-in mirror. That keeps it the
+                // upper bound it has always been — a real VM additionally needs the site to have
+                // executed, and needs the class it saw to be the one whose body is expanded — and
+                // it is the same licence the `new`, `newarray` and field stubs already take.
                 invoke: &|unit, pc, index| {
                     let class = class_of(&classes, &units, unit);
                     let code = &bodies[unit].code;
-                    if !matches!(code.get(pc), Some(0xb7 | 0xb8)) {
+                    let op = *code.get(pc)?;
+                    if !matches!(op, 0xb6..=0xb9) {
                         return None;
                     }
                     let (owner, name, desc) = class.methodref_target(index)?;
-                    let target = *by_name.get(&(owner.to_string(), name.to_string(), desc.to_string()))?;
+                    // Resolution walks **up** from the owner, as JVMS §5.4.3.3 does: `Sub.m()` may
+                    // well be `Base.m()`. Bounded by the chain's length, and a class outside the
+                    // corpus simply ends the walk — the census stays an upper bound on a *loaded*
+                    // world, never a claim about one it cannot see.
+                    let mut owner = owner.to_string();
+                    let target = loop {
+                        if let Some(&unit) = by_name.get(&(owner.clone(), name.to_string(), desc.to_string())) {
+                            break unit;
+                        }
+                        let ci = *by_class.get(&owner)?;
+                        let up = classes[ci].1.class_name(classes[ci].1.super_class)?;
+                        if up == owner {
+                            return None;
+                        }
+                        owner = up.to_string();
+                    };
                     Some(crate::burst::compile::Callee {
                         method: shape(&classes, &units, &bodies, target),
-                        arg_slots: census_arg_slots(desc, code[pc] == 0xb7),
+                        arg_slots: census_arg_slots(desc, op != 0xb8),
+                        guard: match op {
+                            0xb6 | 0xb9 => crate::burst::compile::Guard::ExactClass(1),
+                            _ => crate::burst::compile::Guard::Static,
+                        },
                     })
                 },
                 heap: CENSUS_HEAP,
+                // The `checkcast`/`instanceof`/`ldc Foo.class` stub: **any `CONSTANT_Class`**
+                // resolves, to a plausible mirror offset no code here compares against. Asking
+                // `class_name` rather than answering unconditionally is load-bearing — it is what
+                // keeps an `ldc` of a **`String`** refused, which it must be (see the module docs).
+                // A running VM additionally requires the mirror to exist already, which this cannot
+                // know: upper bound, exactly like the `new` and `newarray` stubs above.
+                class_mirror: &|unit, index| class_of(&classes, &units, unit).class_name(index).map(|_| 1),
                 poll_word: poll,
             },
         );
@@ -1121,6 +1533,56 @@ fn subset_census() {
                 let variant = format!("{other:?}");
                 let head = variant.split([' ', '(']).next().unwrap_or("?");
                 *reasons.entry(head.to_string()).or_default() += 1;
+                // ...and the three variants that *do* mix incompatible causes get a second line
+                // saying which cause it was. The index in the note is checked against the error's
+                // rather than assumed: an attribution that cannot be proved is reported as one that
+                // was not made, which is the only honest degradation for a table like this.
+                use crate::burst::compile::Ineligible as I;
+                let note = notes.borrow();
+                let detail = match other {
+                    I::UnresolvedStatic { index, .. } => Some((
+                        "UnresolvedStatic",
+                        match &note.static_field {
+                            Some((at, d)) if *at == index => {
+                                format!("{:<26} {}", census_short_descriptor(d), census_field_cause(d))
+                            }
+                            _ => format!("#{index:<25} the fieldref itself does not resolve"),
+                        },
+                    )),
+                    I::UnresolvedField { index, .. } => Some((
+                        "UnresolvedField",
+                        match &note.field {
+                            Some((at, d)) if *at == index => {
+                                format!("{:<26} {}", census_short_descriptor(d), census_field_cause(d))
+                            }
+                            _ => format!("#{index:<25} the fieldref itself does not resolve"),
+                        },
+                    )),
+                    I::NonIntegerConstant { index, .. } => Some((
+                        "NonIntegerConstant",
+                        match &note.constant {
+                            Some((at, tag)) if *at == index => {
+                                format!("{:<26} {}", *tag, census_constant_cause(tag))
+                            }
+                            _ => format!("#{index:<25} unattributed"),
+                        },
+                    )),
+                    I::ReferenceWrite { .. } => Some((
+                        "ReferenceWrite",
+                        match &note.reference {
+                            Some(d) => format!(
+                                "{:<26} {}",
+                                census_short_descriptor(d),
+                                "a reference field: needs the GC write barrier"
+                            ),
+                            None => "unattributed".to_string(),
+                        },
+                    )),
+                    _ => None,
+                };
+                if let Some((variant, detail)) = detail {
+                    *split.entry((variant, detail)).or_default() += 1;
+                }
             }
         }
     }
@@ -1129,10 +1591,10 @@ fn subset_census() {
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
 
     eprintln!();
-    eprintln!("F3 step 9 — compiled-subset census over {files} class files");
+    eprintln!("F3 — compiled-subset census over {files} class files (wide types in: long, float, double)");
     eprintln!("methods with a Code attribute: {methods}");
     eprintln!(
-        "...of those, with an expressible exit: {returns_value}   <- the ceiling: `ireturn`/`areturn`/`return`"
+        "...of those, with an expressible exit: {returns_value}   <- the ceiling: every return opcode"
     );
     eprintln!(
         "methods that compile:          {}   ({:.0}% of the ceiling)",
@@ -1140,10 +1602,49 @@ fn subset_census() {
         100.0 * compiled.len() as f64 / returns_value.max(1) as f64
     );
     eprintln!();
-    eprintln!("the twenty most common reasons for refusing the rest:");
-    for (reason, count) in ranked.iter().take(20) {
+    eprintln!("every reason for refusing the rest, most common first:");
+    for (reason, count) in &ranked {
         eprintln!("  {count:>5}  {reason}");
     }
+
+    // **The split.** Four of the variants above name a position and an index and nothing about the
+    // thing at it, so their counts mix causes with nothing in common: a `char` field and a `long`
+    // one, a `String` constant and a `MethodHandle`. This is the same refusals, attributed.
+    eprintln!();
+    eprintln!("the four variants that mix causes, split by what the resolver actually saw:");
+    // A fixed order with the **zeros printed**. A variant that has stopped happening is the most
+    // valuable row in this table — it is what a widening was for — and leaving it out would make it
+    // indistinguishable from one nobody instrumented.
+    for variant in ["UnresolvedStatic", "UnresolvedField", "NonIntegerConstant", "ReferenceWrite"] {
+        let mut rows: Vec<_> = split.iter().filter(|((v, _), _)| *v == variant).collect();
+        rows.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+        let total: usize = rows.iter().map(|(_, n)| **n).sum();
+        eprintln!("  {variant} — {total}");
+        match rows.is_empty() {
+            true => eprintln!("      (none left over this corpus)"),
+            false => {
+                for ((_, detail), count) in rows {
+                    eprintln!("      {count:>4}  {detail}");
+                }
+            }
+        }
+    }
+    // The two causes this table structurally **cannot** see, said plainly rather than left as a
+    // silent zero. Both are properties of a *running* VM, and the census has none behind it:
+    //
+    //  - **an uninitialised declaring class.** `getstatic`, `putstatic`, `new` and an inlined call
+    //    all require it, and the stubs above accept unconditionally. This is the same "upper bound"
+    //    caveat the header carries, restated where it would otherwise be mistaken for a zero.
+    //  - **`volatile`.** It stopped being a refusal at all in group 2 — the real resolver answers
+    //    for a volatile field like any other, and the emitter uses a plain `mov` on the strength of
+    //    the substrate rather than of x86-TSO. So its absence here is not blindness; there is
+    //    nothing to see. (VOLATILE-REVISIT-OS-PARALLEL: that changes the day this tier runs on the
+    //    parallel substrate.)
+    eprintln!();
+    eprintln!("  not visible to a static census, and not zero: a declaring class that is not");
+    eprintln!("  initialised yet (every stub above accepts unconditionally). `volatile` is not");
+    eprintln!("  in the list because it stopped being a refusal in group 2, not because it is");
+    eprintln!("  invisible here.");
     eprintln!();
     eprintln!("the {} methods that compile:", compiled.len());
     for name in &compiled {
@@ -1220,6 +1721,38 @@ fn references_agree_with_the_interpreter() {
 }
 
 // =============================================================================================
+// Group 2: reference fields, `volatile`, `checkcast`/`instanceof`, and the class literal.
+// =============================================================================================
+
+#[test]
+fn richer_references_agree_with_the_interpreter() {
+    // `JxRich` is group 2's coverage file, and each of its methods is one question:
+    // `chain`/`viaStatic` (a reference out of a `getfield`/`getstatic`, dereferenced again),
+    // `nullable` (a null reference loaded and only tested — which must not deopt),
+    // `readVi`/`bumpVi`/`readVl`/`setVl`/`readVstat`/`bumpVstat`/`readVr` (`volatile` at every
+    // width the subset has, plus a reference **read**), `cast`/`isLeaf` (the exact class natively,
+    // a genuine subtype and a failure by deopt) and `leafClass` (a pinned mirror by identity).
+    // 353090 is what `java JxRich` of JDK 25 prints.
+    let stats = differential("java/JxRich.class", 353_090);
+    // All thirteen helpers, and nothing else: `run` allocates and invokes, and the four
+    // constructors run twice each — far short of the threshold — so they are never even scanned.
+    assert_eq!(stats.compiled, 13, "every helper in the file compiles");
+    assert_eq!(stats.rejected, 1, "`run`, scanned once from its own back-edge and refused");
+    assert_eq!(stats.unmarshallable, 0, "every local here is a reference, an int or a long");
+    // **The deopt count is the assertion about `checkcast`, and it is exact.** Four calls per round
+    // are not an exact class hit — `cast(sub)`, `cast(other)`, `isLeaf(sub)`, `isLeaf(other)` — and
+    // every one of them after its method goes native must give up. `cast` is called three times a
+    // round, so it is warm from round 10 (21 of its bad calls are still interpreted); `isLeaf` four
+    // times, so it is warm from round 7 (15 interpreted). 800 - 21 + 800 - 15.
+    //
+    // What the number also says is what is **not** in it. `nullable` reads a reference field that
+    // is `null` on half its calls and never deopts; `isLeaf(null)` answers `0` natively; and
+    // `readVr(withNull)` returns `null` out of a compiled method. A compiler that treated a zero
+    // reference as a guard failure would add 1200 to this count.
+    assert_eq!(stats.deopts, 779 + 785, "one per non-exact cast or type test, and nothing else");
+}
+
+// =============================================================================================
 // Step 6: the real deopt, and the writes it made safe.
 // =============================================================================================
 
@@ -1264,19 +1797,22 @@ fn the_write_workloads_are_the_measurement_bmfield_and_bmarray_cannot_be() {
     //
     // 649216 and 685184 are what `java JdArray` and `java JdField` print.
     let array = differential("java/JdArray.class", 649_216);
-    assert_eq!(array.compiled, 1, "`pass`; `run` allocates the array");
-    assert_eq!(array.rejected, 1, "`run`, scanned once from its back-edge");
+    // `pass`, and — since group 3's first stage — `run`: its callee loops, which used to refuse the
+    // expansion outright, and the `newarray` it does is only an *exit*, never a refusal.
+    assert_eq!(array.compiled, 2, "`pass`, and `run` now that a looping callee may be inlined");
+    assert_eq!(array.rejected, 0, "`run` is no longer refused");
     assert_eq!(array.deopts, 0, "no index is ever out of range");
-    // Every one of the thousand calls reaches native code, including the *first*: `pass`'s own
-    // 1024-iteration loop takes it past the threshold from the inside, so that call finishes
-    // on-stack and the other 999 enter at the top.
-    assert_eq!(array.native_calls, 1000);
-    assert_eq!(array.osr_entries, 1);
+    // **Thirty-three, not a thousand.** The thousand invokes are inside `run`, which is now itself
+    // compiled with `pass` expanded into it, so the interpreter never executes them.
+    assert_eq!(array.native_calls, 33);
+    assert_eq!(array.osr_entries, 2, "one per compiled method, each hot from inside its own loop");
 
     let field = differential("java/JdField.class", 685_184);
     // `churn`, plus `java.lang.Object.<init>` (a bare `return`, in the subset since step 7) which
-    // every `new JdBox()` in `run` reaches. `run` itself still allocates and is still refused.
-    assert_eq!(field.compiled, 2, "`churn` and `Object.<init>`; `run` allocates the box");
+    // every `new JdBox()` in `run` reaches — and, since group 3's first stage, `run` itself: it
+    // allocates, but an allocation is an *exit* (`Status::ALLOC`), never a refusal, and what did
+    // refuse it was `churn`'s loop.
+    assert_eq!(field.compiled, 3, "`churn`, `Object.<init>`, and `run`");
     assert_eq!(field.deopts, 0, "no receiver is ever null");
     assert_eq!(field.unmarshallable, 0, "the receiver marshals as its heap offset");
 }
@@ -1316,8 +1852,14 @@ fn the_poll_hands_references_back_as_references() {
     // First without touching the poll at all: both arms agree, and the compiled loops really are
     // entered on-stack with references in their locals.
     let quiet = differential("java/JrPoll.class", 977_804);
-    assert_eq!(quiet.compiled, 4, "`walk`, `carry`, `sameness` and `Object.<init>` (a bare `return`)");
-    assert_eq!(quiet.osr_entries, 2, "`walk` and `carry` are each entered in the middle of a loop");
+    // `walk`, `carry`, `sameness`, `Object.<init>` (a bare `return`) — and, since group 3's first
+    // stage, `run`, whose looping callees may now be expanded into it.
+    assert_eq!(quiet.compiled, 5, "the four, and `run` now that a looping callee may be inlined");
+    // `run` allocates, so it leaves through `Status::ALLOC` every time Eden's fast path or the
+    // excursion's allocation log fills — and an allocation exit deliberately does *not* close
+    // on-stack entry, so each one is followed by another entry at the loop header.
+    assert_eq!(quiet.osr_entries, 41);
+    assert_eq!(quiet.alloc_exits, 38, "`run`'s allocations, resumed and re-entered");
     assert_eq!(quiet.safepoint_exits, 0, "nothing raises the poll in this arm");
     assert_eq!(quiet.unmarshallable, 0);
 
@@ -1332,6 +1874,122 @@ fn the_poll_hands_references_back_as_references() {
     );
     assert_eq!(stats.unmarshallable, 0, "a reference must marshal, in both directions");
     assert_eq!(stats.deopts, 0, "nothing here is null and no index is out of range");
+}
+
+// =============================================================================================
+// Group 3: the calls that were not inlinable — a loop inside an expansion, and the inline cache.
+// =============================================================================================
+
+#[test]
+fn an_inlined_loop_polls_and_hands_back_the_frame_it_removed() {
+    // Stage 1's whole claim, asked end to end. `JcLoop.inner` loops, which until this stage refused
+    // its expansion outright and every caller with it; now its header carries a poll, and a poll
+    // taken there has to materialise the frame `inner` never had — plus the caller's, which in
+    // `flat` is holding a live operand at the time (the first call's result). 433870 is what
+    // `java JcLoop` of JDK 25 prints.
+    use std::sync::atomic::Ordering;
+
+    let quiet = differential("java/JcLoop.class", 433_870);
+    // `inner`, `flat`, `nested`, `sameness`, `run` — and `java.lang.Object.<init>`, a bare `return`
+    // reached by every `new JcLoop(…)`. `inner` compiles on its own account as well as being
+    // expanded into the other two, because `run` calls the pair often enough to make it hot before
+    // either of them is.
+    assert!(quiet.compiled >= 4, "only {} compiled — was anything inlined?", quiet.compiled);
+    assert_eq!(quiet.deopts, 0, "nothing here is null and no index is out of range");
+    assert_eq!(quiet.unmarshallable, 0);
+
+    // Now with the poll **held up for the whole run**, which is the interesting arm: every entry
+    // into `flat` or `nested` reaches an inlined loop header, finds the poll set, and leaves
+    // through a stub that has to spill two frames' operand stacks and name a resume site that no
+    // bytecode pc of the root can name. Thousands of times.
+    let (value, stats) = with_poll_on("java/JcLoop.class", |poll| poll.store(1, Ordering::Release));
+    assert_eq!(value, 433_870, "the answer must not depend on when the poll fires");
+    assert!(
+        stats.safepoint_exits > 500,
+        "only {} exits — did an inlined header ever poll?",
+        stats.safepoint_exits
+    );
+    // **The sharp assertion.** A poll at a *root* loop header rebuilds nothing: the locals were
+    // written through and the header's stack is empty. Only a poll inside an expansion produces a
+    // frame that did not exist, so a non-zero count here is the proof that stage 1's mechanism
+    // fired at all — without it this test would pass just as happily against a compiler that still
+    // refused every looping callee.
+    assert!(
+        stats.virtual_frames > 100,
+        "only {} frames rebuilt — did a poll ever fire *inside* an expansion?",
+        stats.virtual_frames
+    );
+    // The identity checks inside `run` are what make this more than an arithmetic agreement: the
+    // interpreter collects in the gaps between the poll firing and native code being re-entered,
+    // so a reference handed back with the wrong tag would be a stale offset by the next round.
+    assert_eq!(stats.unmarshallable, 0, "a reference must marshal, in both directions");
+    assert_eq!(stats.deopts, 0, "a poll is not a guard failure");
+}
+
+#[test]
+fn the_inline_cache_hits_a_monomorphic_site_and_deopts_a_drifting_one() {
+    // Stage 2 (milestone F2), and the one failure mode it has: running the **wrong body**. `JcIc`
+    // warms three dispatched sites with a `JcAlpha` — which is the class each guard is compiled
+    // against — and then hands two of them a `JcBeta` that overrides both halves with different
+    // arithmetic. A cache without a guard, or with a guard that does not deopt, computes
+    // `JcAlpha`'s answer for a `JcBeta` and the sum moves. 624722 is what `java JcIc` of JDK 25
+    // prints, and the interpreter arm is checked against it too.
+    let stats = differential("java/JcIc.class", 624_722);
+    // **The guard fires, in bulk.** The drifting half of the run is 40 rounds × 200 iterations at
+    // each of two sites, and every one of those calls is a miss: the receiver is a `JcBeta` and the
+    // baked class is `JcAlpha`. A count in the thousands is the proof that the compiled code really
+    // did contain a class check rather than an unconditional expansion.
+    assert!(stats.deopts > 5_000, "only {} deopts — did the guard ever miss?", stats.deopts);
+    assert!(stats.compiled > 0);
+    // **And it fires at the inner level too.** Most of those misses are at a site in the root's own
+    // body, where a deopt rebuilds nothing. `relay` is the one that is not: its own receiver never
+    // changes class, so `through` is expanded — and the call *inside* that expansion is guarded on
+    // a receiver that does drift. A miss there has to materialise a frame that never existed, one
+    // per entry into `relay` (the interpreter finishes the call from there), so this counts the
+    // forty-odd entries in the drifting half. Zero would mean nothing was ever expanded at all.
+    assert!(
+        stats.virtual_frames > 20,
+        "only {} frames rebuilt — did a guard inside an expansion ever miss?",
+        stats.virtual_frames
+    );
+    assert_eq!(stats.unmarshallable, 0, "a receiver marshals as its heap offset");
+}
+
+#[test]
+fn a_call_site_that_never_ran_no_longer_refuses_the_method() {
+    // The **cold call site**. `JcCold.hot` loops two hundred times per call and never once takes the
+    // branch that calls `cold`, so that site's F0 cache cell stays at zero — and a zero used to
+    // refuse the whole method, because the cache is where the compiler learns what an invoke binds
+    // to. A statically bound call needs nothing from the receiver, so the metaspace can answer it
+    // read-only instead (see `MetaspaceService::resolved_call_readonly`), and this is the test that
+    // says it does: without the fallback `hot` is refused, `run` is refused with it, and nothing is
+    // compiled at all.
+    //
+    // 229973 is what `java JcCold` of JDK 25 prints. The second half of `run` then **takes** the
+    // branch, so the body compiled for a site that had never executed is also the body that runs.
+    let stats = differential("java/JcCold.class", 229_973);
+    assert_eq!(stats.compiled, 2, "`hot`, and `run` with it expanded inside");
+    assert_eq!(stats.rejected, 0, "a cold site is no longer a refusal");
+    assert_eq!(stats.deopts, 0, "nothing here guards on anything");
+}
+
+#[test]
+fn the_harness_shapes_go_through_the_inline_cache() {
+    // The benchmark harness's own polymorphism (`BmShape`/`BmSq`/`BmCir`/`BmTri`), asked in a shape
+    // this tier's subset can express — `BmVirtual.run` reads its receivers out of a `BmShape[]` and
+    // `aaload` is outside the subset, so that method does not compile and F2 leaves the control
+    // workload exactly where it was.
+    //
+    // 745120 is what `java JcShapes` of JDK 25 prints.
+    let stats = differential("java/JcShapes.class", 745_120);
+    // **Forty deopts, and the number is the whole result.** `steady` is monomorphic and is called
+    // 40 × 300 times: not one of those misses. `rotate` is genuinely polymorphic — one call site,
+    // three receiver classes, rotating — and is entered 40 times: each entry runs until the first
+    // receiver that is not the baked class, deopts once, and is interpreted from there. So a
+    // polymorphic site costs one deopt per entry and a monomorphic one costs none, which is
+    // precisely the trade a monomorphic cache makes.
+    assert_eq!(stats.deopts, 40, "one per entry into `rotate`; `steady` never misses");
+    assert_eq!(stats.unmarshallable, 0);
 }
 
 // =============================================================================================
@@ -1445,12 +2103,16 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
         },
         &Environment {
             int_const: &|_, _| None,
-            static_int: &|_, _| None,
-            int_field: &|_, _, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
             instance: &|_, i| {
                 objects_operations::jit_instance(&metaspace, "BmField", i)
                     .map(|(size, class_id)| Instance { size, class_id })
             },
+            array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: crate::burst::compile::Heap {
                 eden_base: bases.eden,
@@ -1461,9 +2123,10 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
                 eden_capacity: bases.eden_capacity,
                 null_page: bases.null_page as u32,
                 array_length: 8,
-                int_array_data: 12,
+                array_data: 12,
                 int_element: 4,
             },
+            class_mirror: &|_, _| None,
             poll_word: &JIT_GC_POLL as *const _ as usize,
         },
     )
@@ -1477,7 +2140,9 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
     let raw = f(buffer.as_mut_ptr(), 0);
     let object = match Status::unpack(raw) {
-        Outcome::Returned(v) => v as u32 as usize,
+        // The status word says only *that* it returned; the reference is in the result slot, which
+        // is where the boundary contract puts every returned value.
+        Outcome::Returned => buffer[compiled.result_base as usize] as usize,
         other => panic!("the allocation should have taken its fast path, got {other:?}"),
     };
     let base = compiled.alloc_base as usize;
@@ -1551,6 +2216,365 @@ fn an_unlogged_allocation_is_exactly_the_corruption_the_replay_prevents() {
 /// The poll word the GC tests compile against; never raised.
 #[cfg(windows)]
 static JIT_GC_POLL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+
+
+
+// ---------------------------------------------------------------------------------------------
+// The `long` group (F3, category-2 types). Two workloads, and they ask different questions: does
+// the arithmetic follow the JLS where it differs from `int`'s, and does the *value* survive every
+// crossing of the boundary. Both expectations are what a real `java` of JDK 25 prints.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn long_semantics_agree_with_the_interpreter_and_with_the_jls() {
+    // Twenty observations, each one a place where carrying an `int`'s habits over to a `long`
+    // gives a plausible wrong answer: a `movsxd` after the arithmetic, a 5-bit shift mask, an
+    // unguarded `idiv`. 1048575 is what `java JwSem` prints.
+    let stats = differential("java/JwSem.class", 1_048_575);
+    // The two `x / 0` calls deopt, exactly as their `int` twins do in `JtSem`: native code refuses,
+    // the interpreter re-runs the instruction and throws, and the Java `catch` sees it. That the
+    // score includes those bits is the proof that a `long` deopt is invisible to the program.
+    assert_eq!(stats.deopts, 2, "one deopt per division by zero, and none for MIN / -1");
+    assert_eq!(stats.unmarshallable, 0, "a `long` local marshals like any other");
+}
+
+#[test]
+fn a_long_survives_every_crossing_of_the_boundary() {
+    // Twelve observations across the four crossings a `long` can make — a deopt with `long`s live
+    // on the operand stack, a safepoint poll out of a compiled loop with a `long` accumulator,
+    // 8-byte fields and statics, and on-stack entry into a loop already part-way along. Every
+    // constant has bits in both halves, so a value reconstructed from one slot or spilled four
+    // bytes wide is wrong rather than merely suspicious. 4095 is what `java JwState` prints.
+    let stats = differential("java/JwState.class", 4_095);
+    assert!(stats.osr_entries > 0, "the 200000-lap loops must be entered on-stack");
+    assert_eq!(stats.deopts, 1, "the one zero divisor, and nothing else gives up");
+}
+
+#[test]
+fn float_and_double_semantics_agree_with_the_interpreter_and_with_the_jls() {
+    // Nineteen observations across the four places IEEE-754 behaves like nothing else in this
+    // subset: single precision really being single (one prefix byte away from double), a NaN
+    // comparing unordered (all `fcmpl`/`fcmpg` disagree about), a signed zero (invisible to `==`,
+    // and what makes `fneg` a bit flip rather than a subtraction), and a division that answers
+    // infinity where the integer arms deopt. 524287 is what `java JwFloat` prints.
+    let stats = differential("java/JwFloat.class", 524_287);
+    // **The `frem`/`drem` deopts, and nothing else gives up.** There is no SSE scalar remainder, so
+    // those two opcodes compile to an unconditional deopt and the interpreter finishes the method —
+    // which is why the score includes their bit at all. Every other floating-point operation here
+    // ran natively.
+    assert!(stats.deopts > 0, "frem/drem must be reaching their deopt");
+    assert_eq!(stats.unmarshallable, 0, "a float and a double marshal like any other value");
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Array allocation (`newarray` / `anewarray`). What is new here, and it is the whole of it: the
+// size is an **operand**. Everything below is an observation that can only go wrong because of
+// that — a count that is negative, a count too big to zero inline, a payload whose length is not a
+// multiple of eight, and a length word that must carry the count the program asked for rather than
+// the one the arena rounded to.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn array_allocation_agrees_with_the_interpreter() {
+    // `JaArray` asks all five at once and folds every answer into one number, so a single wrong
+    // byte anywhere moves it. 549311 is what `java JaArray` prints.
+    let stats = differential("java/JaArray.class", 549_311);
+    // `fill`, `chars`, `bytes`, `refs`, `big`, `neg` — every method whose body is an allocation and
+    // the arithmetic around it. Not `scanChars`/`scanBytes`/`countNulls` (`caload`, `baload` and
+    // `aaload` are outside the subset), and not `run` (a `try`/`catch` around invokes).
+    assert_eq!(stats.compiled, 6);
+    assert_eq!(stats.rejected, 4, "the three scanners and `run`");
+    // **The negative count is not a deopt**, and that is deliberate rather than incidental: the
+    // guard rides the same stub as the Eden-full one, which reports `Status::ALLOC`. The two are
+    // the same rebuilt state resumed at the same instruction, so what the interpreter does next is
+    // identical; the difference is only which counter moves, and `ALLOC` is the one that does not
+    // retire the enclosing loop. See `burst::compile`'s `newarray` arm.
+    assert_eq!(stats.deopts, 0, "nothing here fails a guard that is about a *value*");
+    // Two reasons to leave, and the count says which one dominates: `big`'s 1200-int array is 4812
+    // bytes, over `MAX_INLINE_ARRAY_BYTES`, so **every** call to it after the 32 that made it hot
+    // leaves — 368 of the 400 rounds — and `neg(-1)` adds the one negative count. That the number
+    // is ~368 rather than ~400 is itself the statement that a method is entered only once hot.
+    assert!(
+        (360..=380).contains(&stats.alloc_exits),
+        "one exit per round for `big`, plus the negative count: got {}",
+        stats.alloc_exits
+    );
+    assert_eq!(stats.unmarshallable, 0, "an array reference marshals like any other reference");
+}
+
+// =============================================================================================
+// Array allocation, against the **real** heap and the **real** collector.
+//
+// The differential above says the whole VM computes the same number with the JIT as without it.
+// These say the things a differential structurally cannot: what the bytes in Eden look like
+// immediately after native code wrote them, and whether the collector can see, type, size, move
+// and remap an array it did not allocate.
+// =============================================================================================
+
+/// Compiles `iload_0; newarray <atype>; areturn` — a whole method whose only instruction that
+/// matters is the allocation — against a real `HeapService`.
+///
+/// The `array` resolver is the VM's own, so this drives the real path: `array_class_mirror` must
+/// already have been called for the class, or the resolver answers `None` and the method is refused
+/// (which is checked at the call sites rather than assumed).
+#[cfg(windows)]
+fn compile_newarray(
+    heap: &crate::jvm::interpreter::heap::HeapService,
+    metaspace: &MetaspaceService,
+    atype: u8,
+    descriptor: &str,
+) -> Result<crate::burst::compile::CompiledCode, crate::burst::compile::Ineligible> {
+    use crate::burst::compile::{ArrayOf, ArrayType, Environment, Method};
+    use crate::jvm::interpreter::bytecode_interpreter::array_operations;
+
+    let bases = heap.jit_bases();
+    let code = [0x1a, 0xbc, atype, 0xb0]; // iload_0; newarray atype; areturn
+    crate::burst::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 1, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, of| {
+                let ArrayOf::Primitive(atype) = of else { return None };
+                let (class, _) = array_operations::primitive_array_class(atype)?;
+                array_operations::jit_array_class(metaspace, class)
+                    .map(|(class_id, element)| ArrayType { class_id, element })
+            },
+            invoke: &|_, _, _| None,
+            heap: crate::burst::compile::Heap {
+                eden_base: bases.eden,
+                other_base: bases.other,
+                eden_end: bases.eden_end as u32,
+                max_offset: bases.max_offset,
+                eden_cursor: bases.eden_cursor,
+                eden_capacity: bases.eden_capacity,
+                null_page: bases.null_page as u32,
+                array_length: array_operations::LENGTH_OFFSET as u32,
+                array_data: array_operations::ARRAY_HEADER_SIZE as u32,
+                int_element: array_operations::array_element_width("[I") as u32,
+            },
+            class_mirror: &|_, _| None,
+            poll_word: &JIT_GC_POLL as *const _ as usize,
+        },
+    )
+}
+
+/// Runs `compiled` with `count` in local 0, replays its allocation log into `heap` exactly as the
+/// trampoline does, and returns `(reference, logged_size)`. Panics unless the allocation took its
+/// fast path — a `Status::ALLOC` here would mean the test measured the interpreter.
+#[cfg(windows)]
+fn run_newarray(
+    compiled: &crate::burst::compile::CompiledCode,
+    heap: &crate::jvm::interpreter::heap::HeapService,
+    count: i64,
+) -> (usize, usize) {
+    use crate::burst::compile::{Outcome, Status};
+    use crate::burst::exec_mem::ExecMem;
+
+    let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
+    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
+    buffer[0] = count; // local 0 — the count, marshalled as the interpreter marshals an `Int`
+    // SAFETY: the same contract `JitCache::enter` satisfies — a live `[i64]` at least
+    // `buffer_slots` long, and an entry pc of 0.
+    let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
+    let array = match Status::unpack(f(buffer.as_mut_ptr(), 0)) {
+        Outcome::Returned => buffer[compiled.result_base as usize] as usize,
+        other => panic!("the allocation should have taken its fast path, got {other:?}"),
+    };
+    let base = compiled.alloc_base as usize;
+    assert_eq!(buffer[base], 1, "exactly one array was logged");
+    assert_eq!(buffer[base + 1] as usize, array, "...and it is the one that came back");
+    let size = buffer[base + 2] as usize;
+    for r in 0..buffer[base] as usize {
+        heap.log_jit_allocation(buffer[base + 1 + 2 * r] as usize, buffer[base + 2 + 2 * r] as usize);
+    }
+    (array, size)
+}
+
+/// **The zeroing test, and the only place the 8-byte rounding is observable.**
+///
+/// A `char[3]` is 18 logical bytes — `[class_id(4) | mark(4) | length(4) | 3 * 2]` — and the arena
+/// reserves 24. Its three elements sit at byte 12, 14 and **16**, which is past `18 & !7 = 16`: so
+/// a zeroing loop that rounded the wrong way would leave the last element holding whatever the
+/// previous occupant of those bytes left behind, and every *other* element would still look right.
+///
+/// Making that observable needs Eden to be **dirty**, which is arranged rather than hoped for: the
+/// front of the arena is filled with `0xFF` through the interpreter's own accessors and then
+/// recycled by a collection with no live roots, which resets the cursor and leaves the bytes
+/// exactly where they were. The next reservation lands on top of a known non-zero pattern.
+#[test]
+#[cfg(windows)]
+fn a_compiled_array_is_zeroed_to_the_rounded_stride() {
+    use crate::jvm::interpreter::bytecode_interpreter::array_operations::{
+        self, ARRAY_HEADER_SIZE, LENGTH_OFFSET,
+    };
+    use crate::jvm::interpreter::gc;
+    use crate::jvm::interpreter::heap::HeapService;
+
+    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut heap = HeapService::new();
+    // The mirror has to exist before anything is compiled — minting one allocates, and a
+    // compilation may not. The refusal is checked rather than assumed.
+    assert!(
+        array_operations::jit_array_class(&metaspace, "[C").is_none(),
+        "an array class with no mirror yet must not be allocatable by compiled code"
+    );
+    assert!(
+        compile_newarray(&heap, &metaspace, 5, "(I)[C").is_err(),
+        "...and a method containing that `newarray` must be refused outright"
+    );
+    array_operations::array_class_mirror(&mut metaspace, &mut heap, "[C");
+
+    // ---- dirty Eden, then recycle it -------------------------------------------------------
+    let scratch = heap.malloc(64);
+    for b in 0..64 {
+        heap.write_u8(scratch + b, 0xFF);
+    }
+    heap.commit_pending();
+    let mut threads = vec![rooted_thread(vec![Frame::new(0, 1, vec![Value::Int(0)])])];
+    gc::minor(&metaspace, &mut heap, &mut threads, 15, &mut []);
+    assert_eq!(heap.read_u8(scratch), 0xFF, "recycling Eden resets the cursor, not the bytes");
+
+    // ---- allocate a `char[3]` in native code -----------------------------------------------
+    let compiled = compile_newarray(&heap, &metaspace, 5, "(I)[C").expect("`[C` has a mirror now");
+    let (array, size) = run_newarray(&compiled, &heap, 3);
+    assert_eq!(array, scratch, "the reservation lands exactly where the dirty bytes are");
+
+    // **The length word carries the count the program asked for** — not the rounded stride, and
+    // not a byte count. Three is the number `arraylength` has to answer.
+    assert_eq!(heap.read_u32(array + LENGTH_OFFSET), 3);
+    // The logical size — 12 + 6 — is what the collector copies and what the interpreter's own
+    // `allocate_array` would have logged. Not 24.
+    assert_eq!(size, ARRAY_HEADER_SIZE + 3 * 2, "the log carries the logical size, not the stride");
+    // Every element is zero, **including the third**, which begins at byte 16 and would survive a
+    // loop that stopped at `size & !7`.
+    for i in 0..3 {
+        assert_eq!(heap.read_u16(array + ARRAY_HEADER_SIZE + 2 * i), 0, "element {i}");
+    }
+    // And the slack up to the reserved stride is zero too. Nothing reads it, which is exactly why
+    // it is worth pinning: it is the part of the claim no other test can notice being wrong.
+    for b in ARRAY_HEADER_SIZE + 6..24 {
+        assert_eq!(heap.read_u8(array + b), 0, "slack byte {b}");
+    }
+    // The bytes past the reservation are **still dirty**, which is the other half of the same
+    // claim: the loop zeroed our block and not one byte more.
+    assert_eq!(heap.read_u8(array + 24), 0xFF, "the next object's bytes are not ours to zero");
+}
+
+/// **The GC-integration test for arrays**, and the counterpart of
+/// [`an_object_allocated_by_compiled_code_survives_a_minor_collection`]: an array native code
+/// allocated must be indistinguishable, to the collector, from one the interpreter allocated —
+/// *scannable* (its header names its array class), *evacuable* (its logged size covers the header,
+/// the length word and the payload) and *remappable* (the root holding it is rewritten).
+///
+/// The **length** is the part an object cannot test: it is a word the collector never interprets
+/// and copies blindly, so a logged size that omitted it — or a length written before the zeroing
+/// rather than after — would come out the far side as a zero-length array, and every read of it
+/// would then be an `ArrayIndexOutOfBoundsException` a long way from here.
+#[test]
+#[cfg(windows)]
+fn an_array_allocated_by_compiled_code_survives_a_minor_collection() {
+    use crate::jvm::interpreter::bytecode_interpreter::array_operations::{
+        self, ARRAY_HEADER_SIZE, LENGTH_OFFSET,
+    };
+    use crate::jvm::interpreter::gc;
+    use crate::jvm::interpreter::heap::HeapService;
+
+    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut heap = HeapService::new();
+    let class_id = array_operations::array_class_mirror(&mut metaspace, &mut heap, "[I") as u32;
+
+    // ---- allocate an `int[4]` in native code -----------------------------------------------
+    let bases = heap.jit_bases();
+    let compiled = compile_newarray(&heap, &metaspace, 10, "(I)[I").expect("`[I` has a mirror");
+    let (array, size) = run_newarray(&compiled, &heap, 4);
+    // The compiler's answer must be the interpreter's: header, length word and four ints, which is
+    // exactly what `allocate_array` lays out and therefore exactly what the collector will copy.
+    assert_eq!(size, ARRAY_HEADER_SIZE + 4 * 4, "header, length word and four ints");
+    assert_eq!(heap.read_u32(array), class_id, "the header compiled code wrote types the array");
+    assert_eq!(heap.read_u32(array + LENGTH_OFFSET), 4);
+
+    assert!(array >= bases.null_page && array < bases.eden_end, "allocated in Eden");
+    assert!(!heap.allocations().iter().any(|a| a.offset == array), "not logged until committed");
+    heap.commit_pending();
+    let entry = heap.allocations().iter().find(|a| a.offset == array).expect("committed");
+    assert_eq!(entry.size, size, "the collector will copy exactly this many bytes");
+
+    // ---- elements written through the *interpreter's* accessor -----------------------------
+    // So "intact" below is a claim about bytes rather than about the compiler agreeing with itself.
+    for i in 0..4u32 {
+        heap.write_u32(array + ARRAY_HEADER_SIZE + 4 * i as usize, 0x1000_0000 + i);
+    }
+
+    // ---- collect, with the reference held in a frame ---------------------------------------
+    let mut threads = vec![rooted_thread(vec![Frame::new(0, 1, vec![Value::Reference(array)])])];
+    let report = gc::minor(&metaspace, &mut heap, &mut threads, 15, &mut []);
+    assert!(report.copied > 0, "something was evacuated");
+
+    // ---- survived, moved, intact, and remapped ---------------------------------------------
+    let moved = match threads[0].frames[0].locals()[0] {
+        Value::Reference(offset) => offset,
+        other => panic!("the root stopped being a reference: {other:?}"),
+    };
+    assert_ne!(moved, array, "a minor collection evacuates out of Eden");
+    assert!(moved >= bases.eden_end, "...and the new home is outside Eden");
+    assert_eq!(heap.read_u32(moved), class_id, "the header travelled with it");
+    assert_eq!(heap.read_u32(moved + LENGTH_OFFSET), 4, "and so did the length word");
+    for i in 0..4u32 {
+        let at = moved + ARRAY_HEADER_SIZE + 4 * i as usize;
+        assert_eq!(heap.read_u32(at), 0x1000_0000 + i, "element {i}");
+    }
+    assert!(heap.allocations().iter().any(|a| a.offset == moved && a.size == size));
+    // Nothing dangles: the post-collection verifier walks every frame and every object slot.
+    gc::verify_heap(&metaspace, &heap, &threads);
+}
+
+/// The counterpart, and the one that would fail silently in production: an **array** native code
+/// allocated but the trampoline did not log is invisible to the collector, and the verifier says
+/// so. The object twin of this test is not enough on its own — an array's log record is the one
+/// whose `size` is computed at run time, so it is the one a refactor can get wrong without touching
+/// a constant.
+#[test]
+#[cfg(windows)]
+#[should_panic(expected = "DANGLING")]
+fn an_unlogged_array_is_exactly_the_corruption_the_replay_prevents() {
+    use crate::burst::compile::{Outcome, Status};
+    use crate::burst::exec_mem::ExecMem;
+    use crate::jvm::interpreter::bytecode_interpreter::array_operations;
+    use crate::jvm::interpreter::gc;
+    use crate::jvm::interpreter::heap::HeapService;
+
+    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut heap = HeapService::new();
+    array_operations::array_class_mirror(&mut metaspace, &mut heap, "[I");
+    let compiled = compile_newarray(&heap, &metaspace, 10, "(I)[I").expect("`[I` has a mirror");
+
+    // Run it and deliberately *drop* the log — the one line `JitCache::enter` must never lose.
+    let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
+    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
+    buffer[0] = 4;
+    // SAFETY: as in `run_newarray`.
+    let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
+    let array = match Status::unpack(f(buffer.as_mut_ptr(), 0)) {
+        Outcome::Returned => buffer[compiled.result_base as usize] as usize,
+        other => panic!("the allocation should have taken its fast path, got {other:?}"),
+    };
+    assert_eq!(buffer[compiled.alloc_base as usize], 1, "native code did record it");
+
+    let threads = vec![rooted_thread(vec![Frame::new(0, 1, vec![Value::Reference(array)])])];
+    heap.commit_pending();
+    gc::verify_heap(&metaspace, &heap, &threads);
+}
+
+
+
 
 
 

@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use crate::jvm::class_file::ClassFile;
 use crate::jvm::parser::code::ExceptionTableEntry;
@@ -224,6 +224,27 @@ struct MethodBody {
     /// contend for the same cell, and keeping them apart means the field cache's payload layout
     /// and this one's stay independent.
     call_sites: Vec<AtomicU64>,
+    /// **The last receiver class seen at each dispatched call site** (milestone F2, the
+    /// monomorphic inline cache): the heap offset of the `Class<…>` mirror the `invokevirtual` or
+    /// `invokeinterface` at `pc` last dispatched on, or `0` for "never executed". One cell per code
+    /// byte, alongside [`Self::call_sites`] and allocated on the same condition.
+    ///
+    /// **Why a *last* rather than a count, a majority or a history.** The JIT compiles a method
+    /// only once its counter has run out, which is thirty-two invocations or a loop's worth of
+    /// back-edges — so by the time this word is read it has been written thirty-two times, and at a
+    /// site that really is monomorphic every one of those writes was the same value. Nothing
+    /// cleverer buys anything a guard does not already provide: a wrong guess is not a wrong answer,
+    /// it is a deopt, and the interpreter dispatches the call by its full path. What a wrong guess
+    /// costs is speed at that site, which is the thing this whole tier is allowed to be wrong about.
+    ///
+    /// It is *not* part of the packed [`Self::call_sites`] word, which has no room for another 32
+    /// bits, and it is deliberately not a `Vec<AtomicU64>`: a mirror offset is a `u32` by the same
+    /// boundary argument every heap offset here crosses on.
+    ///
+    /// `AtomicU32` and `Relaxed`, for exactly the reason the two site caches are: the word is
+    /// self-contained, publishes no other memory, and two threads writing different receivers race
+    /// to a value that is a real receiver either way.
+    receiver_classes: Vec<AtomicU32>,
     /// The slot width of the callee's own arguments, **receiver-first**: `[1, param widths…]`.
     /// Parsed once here instead of by a fresh `param_slot_widths` `Vec` on every call — laying a
     /// call's operands into the callee's locals is the last thing every invoke does, and it used
@@ -682,6 +703,37 @@ impl MetaspaceService {
         Some(id)
     }
 
+    /// **The read-only half of [`Self::resolve_call`]**, for the JIT: the target of `caller_class`'s
+    /// methodref `index` **if it has already been resolved**, and `None` otherwise. Loads nothing,
+    /// parses nothing, and inserts nothing.
+    ///
+    /// It exists for the *cold call site*. `burst` normally learns what an invoke binds to from the
+    /// F0 quickened site, which the interpreter fills the first time it executes that pc — a better
+    /// filter than resolution, because it offers inlining only for calls that have really happened.
+    /// But a hot method can perfectly well contain a call it has never made: a branch that has not
+    /// been taken yet, an error path, a `if (debug) log(…)`. Such a site leaves its cache cell at
+    /// zero, and one of them used to refuse the whole method.
+    ///
+    /// It does not have to, and this is the narrow condition under which it does not: a statically
+    /// bound call needs nothing from the receiver, so all the site was ever going to tell us is
+    /// *which method* — and that answer is already sitting in the two resolution caches whenever
+    /// **some** site in this class, or any site anywhere, has resolved the same triple. Reading it
+    /// back is free of the two things compilation may not do: it cannot load a class (the `classes`
+    /// lookup is a plain `get`) and it cannot fail with a linkage error (a resolution that is in the
+    /// cache is one that already succeeded).
+    ///
+    /// What it deliberately does **not** do is resolve from scratch. A methodref whose class has
+    /// never been loaded stays unanswered, because loading it here would be a compilation with a
+    /// side effect, and a `<clinit>` is exactly the thing compiled code cannot run.
+    pub fn resolved_call_readonly(&self, caller_class: &str, index: u16) -> Option<MethodId> {
+        if let Some(&id) = self.resolved_calls.get(&(caller_class.to_string(), index)) {
+            return Some(id);
+        }
+        let cf = self.classes.get(caller_class)?;
+        let (class, name, descriptor) = cf.methodref_target(index)?;
+        self.resolved.get(&(class.to_string(), name.to_string(), descriptor.to_string())).copied()
+    }
+
     /// Resolves a method by name+descriptor to a [`MethodId`], loading its class
     /// and parsing its `Code` the first time, then caching the handle. `None` if
     /// the class can't be loaded or the method has no body.
@@ -723,6 +775,13 @@ impl MetaspaceService {
             true => (0..code.len()).map(|_| AtomicU64::new(0)).collect(),
             false => Vec::new(),
         };
+        // The inline cache's observations (F2). Only a method that can *dispatch* — one whose bytes
+        // contain an `invokevirtual` or an `invokeinterface` — pays for the table; a body full of
+        // `invokestatic`s is statically bound and has nothing to observe.
+        let receiver_classes = match code.iter().any(|&b| b == 0xb6 || b == 0xb9) {
+            true => (0..code.len()).map(|_| AtomicU32::new(0)).collect(),
+            false => Vec::new(),
+        };
         // `[1, param widths…]` — receiver-first, so an instance call takes the whole slice and a
         // static one takes `[1..]`. Parsed here, once, instead of per call.
         let mut slot_widths = vec![1];
@@ -740,6 +799,7 @@ impl MetaspaceService {
             static_,
             field_sites,
             call_sites,
+            receiver_classes,
             slot_widths,
             intrinsic: classify_intrinsic(class, name, descriptor),
         });
@@ -880,6 +940,26 @@ impl MetaspaceService {
         }
     }
 
+    /// The **last receiver class** the dispatched call at `pc` of `method` was made on — the heap
+    /// offset of its `Class<…>` mirror — or `0` for a site that has never run (and for a `pc` with
+    /// no cell at all). See [`MethodBody::receiver_classes`]; this is the JIT's only source of
+    /// profile, and `0` is what makes a never-executed site simply not inlinable.
+    pub fn receiver_class(&self, method: MethodId, pc: usize) -> u32 {
+        match self.methods[method].receiver_classes.get(pc) {
+            Some(cell) => cell.load(Ordering::Relaxed),
+            None => 0,
+        }
+    }
+
+    /// Records the receiver class of the dispatched call at `pc`. One `Relaxed` store on a path
+    /// that has already read the same word out of the object's header, and a `pc` with no cell is a
+    /// silent no-op — exactly like the two site caches above.
+    pub fn set_receiver_class(&self, method: MethodId, pc: usize, mirror: u32) {
+        if let Some(cell) = self.methods[method].receiver_classes.get(pc) {
+            cell.store(mirror, Ordering::Relaxed);
+        }
+    }
+
     /// A resolved method's argument slot widths **with the receiver's slot in front**
     /// (`[1, param widths…]`) — what an instance call (`invokevirtual`/`invokespecial`/
     /// `invokeinterface`) lays its `[receiver, args…]` out by. Precomputed at resolution.
@@ -939,6 +1019,36 @@ impl MetaspaceService {
         signature: SignatureId,
     ) -> Option<MethodId> {
         self.build_vtable_at_mirror(mirror)?;
+        let name = self.class_name_at_mirror(mirror)?;
+        let (want_name, want_descriptor) = self.signatures.get(signature as usize)?;
+        self.vtables
+            .get(name)?
+            .iter()
+            .find(|e| e.name == *want_name && e.descriptor == *want_descriptor)
+            .map(|e| e.method)
+    }
+
+    /// **The read-only twin of [`Self::vtable_method_at_mirror`]**, for the JIT (milestone F2).
+    ///
+    /// Compiling is deliberately unable to change the VM's state — it is triggered by a counter, at
+    /// a moment the interpreter did not choose for its side effects — so it may not build a vtable
+    /// the way the `&mut self` form does. It does not have to: this is asked only about a class the
+    /// interpreter has **already dispatched on** at this very call site, and dispatching is what
+    /// built the table. A `None` here therefore means "not yet", and the honest answer to "not yet"
+    /// is to refuse the inline rather than to prepare for it.
+    pub fn vtable_method_at_mirror_readonly(&self, mirror: usize, slot: usize) -> Option<MethodId> {
+        let name = self.class_name_at_mirror(mirror)?;
+        self.vtables.get(name)?.get(slot).map(|e| e.method)
+    }
+
+    /// The `invokeinterface` twin of [`Self::vtable_method_at_mirror_readonly`]: the same read-only
+    /// lookup, searching the receiver class's own table for an interned signature instead of
+    /// indexing it by a slot no interface has.
+    pub fn vtable_method_at_mirror_by_signature_readonly(
+        &self,
+        mirror: usize,
+        signature: SignatureId,
+    ) -> Option<MethodId> {
         let name = self.class_name_at_mirror(mirror)?;
         let (want_name, want_descriptor) = self.signatures.get(signature as usize)?;
         self.vtables
