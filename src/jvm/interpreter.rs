@@ -2,6 +2,7 @@
 //! disassembling it). Starts minimal — integer arithmetic in a single method —
 //! and grows from there.
 
+pub mod apt;
 pub mod bytecode_interpreter;
 pub mod frame;
 pub mod gc;

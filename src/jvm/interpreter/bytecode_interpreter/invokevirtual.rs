@@ -211,6 +211,7 @@ impl Exec<'_> {
                 &mut self.shared.metaspace,
                 &mut self.shared.heap,
                 &mut self.shared.console,
+                &mut self.shared.apt,
             );
             if let Some(value) = result {
                 self.top().push(value);
@@ -370,6 +371,7 @@ impl Exec<'_> {
                 &mut self.shared.metaspace,
                 &mut self.shared.heap,
                 &mut self.shared.console,
+                &mut self.shared.apt,
             );
             if let Some(value) = result {
                 self.top().push(value);

@@ -281,13 +281,15 @@ impl Parser {
 
     /// Parsea **una** declaración de nivel superior (tipo o módulo) y la agrega.
     fn top_decl(&mut self, types: &mut Vec<ClassDecl>, module: &mut Option<ModuleDecl>) -> Result<()> {
+        // El doc comment se captura antes de los modificadores: cuelga del token que abre la declaración.
+        let doc = self.peek().doc.clone();
         let (modifiers, annotations) = self.modifiers()?;
         // `module-info.java` (§7.7): una **declaración de módulo** en vez de tipos. `module`/`open`
         // son keywords **restringidas** (identificadores); no llevan modificadores.
         if module.is_none() && modifiers.is_empty() && self.at_module_decl() {
             *module = Some(self.module_decl(annotations)?);
         } else {
-            types.push(self.class_decl(modifiers, annotations)?);
+            types.push(self.class_decl(doc, modifiers, annotations)?);
         }
         Ok(())
     }
@@ -647,7 +649,7 @@ impl Parser {
 
     // ---- clase / interfaz ----
 
-    fn class_decl(&mut self, modifiers: Vec<Modifier>, annotations: Vec<Annotation>) -> Result<ClassDecl> {
+    fn class_decl(&mut self, doc: Option<String>, modifiers: Vec<Modifier>, annotations: Vec<Annotation>) -> Result<ClassDecl> {
         use TokenKind as T;
         let pos = self.pos();
         // `record`/`@interface` son formas contextuales; `record` exige `record Nombre(` para
@@ -731,7 +733,7 @@ impl Parser {
             }
         }
         self.expect(T::RBrace)?;
-        Ok(ClassDecl { pos, annotations, modifiers, kind, name, type_params, components, extends, extends_annos, implements, implements_annos, permits, enum_constants, members, annotation_defaults })
+        Ok(ClassDecl { pos, doc, annotations, modifiers, kind, name, type_params, components, extends, extends_annos, implements, implements_annos, permits, enum_constants, members, annotation_defaults })
     }
 
     /// ¿Estamos ante `record Nombre(`? (`record` es keyword contextual — un identificador).
@@ -901,6 +903,8 @@ impl Parser {
             return Ok(constants);
         }
         loop {
+            // El doc comment cuelga del token que abre la constante (antes de sus anotaciones).
+            let doc = self.peek().doc.clone();
             // Anotaciones sobre la constante (`@Deprecated FOO`): ahora se **retienen**.
             let mut annotations = Vec::new();
             while self.at(T::MonkeysAt) {
@@ -912,7 +916,7 @@ impl Parser {
             if self.at(T::LBrace) {
                 self.skip_balanced(T::LBrace, T::RBrace)?;
             }
-            constants.push(EnumConstant { annotations, name, args });
+            constants.push(EnumConstant { doc, annotations, name, args });
             if !self.eat(T::Comma) || self.at(T::Semi) || self.at(T::RBrace) {
                 break;
             }
@@ -927,6 +931,8 @@ impl Parser {
         members: &mut Vec<Member>,
         defaults: &mut Vec<(String, AnnotationValue)>,
     ) -> Result<()> {
+        // El doc comment se captura antes de los modificadores: cuelga del token que abre el miembro.
+        let doc = self.peek().doc.clone();
         let (modifiers, annotations) = self.modifiers()?;
         let pos = self.pos();
 
@@ -945,7 +951,7 @@ impl Parser {
             return Ok(());
         }
         if self.at_type_decl() {
-            let nested = self.class_decl(modifiers, annotations)?;
+            let nested = self.class_decl(doc, modifiers, annotations)?;
             members.push(Member::Type(nested));
             return Ok(());
         }
@@ -966,6 +972,7 @@ impl Parser {
             let body = self.method_body()?;
             members.push(Member::Method(MethodDecl {
                 pos,
+                doc,
                 annotations,
                 modifiers,
                 type_params,
@@ -999,6 +1006,7 @@ impl Parser {
             let body = self.method_body()?;
             members.push(Member::Method(MethodDecl {
                 pos,
+                doc,
                 annotations,
                 modifiers,
                 type_params,
@@ -1018,7 +1026,7 @@ impl Parser {
                 // anotaciones se replican a cada declarador (`@Foo int a, b;` anota los dos).
                 let fty = p.extra_array_dims(ty.clone())?;
                 let init = if p.eat(TokenKind::Eq) { Some(p.var_init(&fty)?) } else { None };
-                Ok(FieldDecl { pos, annotations: annotations.clone(), modifiers: modifiers.clone(), ty: fty, name: nm, init, type_annos: type_annos.clone() })
+                Ok(FieldDecl { pos, doc: doc.clone(), annotations: annotations.clone(), modifiers: modifiers.clone(), ty: fty, name: nm, init, type_annos: type_annos.clone() })
             };
             let first = declare(self, name)?;
             members.push(Member::Field(first));
@@ -1248,8 +1256,9 @@ impl Parser {
         // detección mira más allá de los modificadores (`final class C` no es un local `final`).
         if self.local_class_ahead() {
             let pos = self.pos();
+            let doc = self.peek().doc.clone();
             let (modifiers, annotations) = self.modifiers()?;
-            let decl = self.class_decl(modifiers, annotations)?;
+            let decl = self.class_decl(doc, modifiers, annotations)?;
             out.push(Stmt::new(pos, StmtKind::LocalClass(decl)));
         } else if let Some(decls) = self.try_local_decls()? {
             self.expect(TokenKind::Semi)?;
@@ -2742,6 +2751,56 @@ mod tests {
     fn type_use_annotations_are_accepted() {
         // §9.7.4: se aceptan sin error (se descartan). Cubre el argumento de tipo y el tipo suelto.
         parse_src("class C { java.util.List<@NonNull String> f; @Foo int g() { return 0; } }");
+    }
+
+    // ---- javadoc (etapa 1): los doc comments `/** */` se retienen y cuelgan de su declaración ----
+
+    #[test]
+    fn doc_comment_is_attached_to_method() {
+        let cu = parse_src(
+            "class T {\n\
+             /** Suma dos enteros. */\n\
+             int add(int a, int b) { return a + b; }\n\
+             }",
+        );
+        let Member::Method(m) = &cu.types[0].members[0] else { panic!("esperaba un método") };
+        assert_eq!(m.name, "add");
+        let doc = m.doc.as_deref().expect("el método debe conservar su doc comment");
+        assert!(doc.contains("Suma dos enteros"), "doc capturado: {doc:?}");
+    }
+
+    #[test]
+    fn plain_block_comment_is_not_a_doc_comment() {
+        // `/* normal */` es un comentario de bloque común: no debe adjuntarse como doc.
+        let cu = parse_src("class T { /* normal */ int add(int a, int b) { return a + b; } }");
+        let Member::Method(m) = &cu.types[0].members[0] else { panic!("esperaba un método") };
+        assert_eq!(m.doc, None, "un `/* */` normal no es doc comment");
+    }
+
+    #[test]
+    fn empty_block_comment_slashstarstarslash_is_not_a_doc_comment() {
+        // `/**/` es un bloque vacío, no un doc comment (el char tras `/*` es `*`, pero el siguiente es `/`).
+        let cu = parse_src("class T { /**/ int add(int a, int b) { return a + b; } }");
+        let Member::Method(m) = &cu.types[0].members[0] else { panic!("esperaba un método") };
+        assert_eq!(m.doc, None, "`/**/` no es doc comment");
+    }
+
+    #[test]
+    fn doc_comment_is_attached_to_class_field_and_enum_constant() {
+        let cu = parse_src(
+            "/** La clase. */\n\
+             class T {\n\
+             /** El campo. */ int f;\n\
+             }",
+        );
+        assert!(cu.types[0].doc.as_deref().unwrap().contains("La clase"));
+        let Member::Field(fld) = &cu.types[0].members[0] else { panic!("esperaba un campo") };
+        assert!(fld.doc.as_deref().unwrap().contains("El campo"));
+
+        let cu2 = parse_src("enum E { /** La constante. */ A, B }");
+        let cs = &cu2.types[0].enum_constants;
+        assert!(cs[0].doc.as_deref().unwrap().contains("La constante"));
+        assert_eq!(cs[1].doc, None, "`B` no lleva doc comment");
     }
 
     #[test]

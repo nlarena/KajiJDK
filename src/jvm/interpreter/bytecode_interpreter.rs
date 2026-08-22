@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
+use super::apt;
 use super::frame::{Frame, Value};
 use super::gc;
 use super::heap::HeapService;
@@ -416,6 +417,12 @@ struct SharedVm {
     /// driver's stop-the-world handshake instead of collecting inline. The serialised paths
     /// (green, `os-gil`, and the `os` serialised fallback) leave it `false` and collect inline.
     gc_by_driver: bool,
+    /// **APT fase 3.** El modelo de elementos reificado (la tabla de `javac`, compartida por
+    /// `Arc`, + la caché de identidad `SymbolId → SymElement`), o `None` en una corrida normal
+    /// (sin procesador). Los `native` de `jdk/internal/apt/SymElement` lo leen a través del
+    /// `natives::dispatch`. `SharedVm` sigue siendo `Send + Sync` (el driver `os` la comparte y
+    /// spawnea hilos) porque la tabla lo es — ver [`apt`](super::apt) para el porqué.
+    apt: Option<apt::AptContext>,
 }
 
 // H3 *ownership* border (see `docs/H3_ownership.md` §1). The two fields below are the split:
@@ -517,8 +524,16 @@ impl JVM {
                 halt: false,
                 exit_status: None,
                 gc_by_driver: false,
+                apt: None,
             },
         }
+    }
+
+    /// Ata el **modelo APT** (fase 3) a este VM: mueve la tabla de `javac` + su caché de
+    /// identidad adentro, para que los `native` de `SymElement` la lean. Sin esto, esos
+    /// `native` no tienen contexto y fallan (una corrida normal nunca los toca).
+    pub fn set_apt(&mut self, apt: apt::AptContext) {
+        self.shared.apt = Some(apt);
     }
 
     /// Borrows this owner as an interpreter [`Exec`] **view** — the receiver every opcode
@@ -526,6 +541,67 @@ impl JVM {
     /// parallel driver will instead pair a thread-local `RunningCtx` with a shared `SharedVm`.
     pub fn exec(&mut self) -> Exec<'_> {
         Exec { shared: &mut self.shared, running: &mut self.running }
+    }
+
+    /// **APT fase 4:** recupera el texto que un `StringWriter` registrado por el Filer acumuló,
+    /// invocando su `toString()` de forma **reentrante** —una llamada virtual iniciada por el VM
+    /// ([`Exec::call_virtual`])— en vez de leer el `StringBuilder` privado del writer a mano. Corre
+    /// sobre el **mismo heap** que pobló el programa, así que hay que llamarlo con el intérprete que
+    /// corrió el procesador, no con uno nuevo.
+    ///
+    /// Es seguro llamarlo después de que el programa retornó del todo (la pila de frames quedó
+    /// vacía): empujamos un frame **ancla** desechable para que la llamada tenga un llamador donde
+    /// depositar el resultado —con la pila vacía, `call_virtual` mandaría el valor de vuelta como
+    /// resultado del programa y se perdería—. El ancla nunca se ejecuta; se descarta al terminar.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn read_generated_text(&mut self, writer_ref: usize) -> String {
+        // La clase de runtime del writer (su header apunta al mirror), para resolver `toString`.
+        let class_id = self.shared.heap.read_u32(writer_ref) as usize;
+        let runtime = match self.shared.metaspace.class_name_at_mirror(class_id) {
+            Some(name) => name.to_string(),
+            None => return String::new(),
+        };
+        let callee = self
+            .shared
+            .metaspace
+            .vtable_slot(&runtime, "toString", "()Ljava/lang/String;")
+            .and_then(|slot| self.shared.metaspace.vtable_method(&runtime, slot));
+        let Some(callee) = callee else { return String::new() };
+        let max_locals = self.shared.metaspace.max_locals(callee);
+
+        // El ancla: un frame que sostiene al writer como receptor (así sigue siendo raíz del GC
+        // durante la llamada) y le da a `call_virtual` un stack donde dejar el `String` de vuelta.
+        self.running.frames.push(Frame::for_call(
+            callee,
+            max_locals,
+            vec![Value::Reference(writer_ref)],
+            &[1],
+        ));
+        let result =
+            self.exec().call_virtual(writer_ref, "toString", "()Ljava/lang/String;", Vec::new());
+        let text = match result {
+            Some(Value::Reference(string_ref)) => strings::read(&self.shared.heap, string_ref),
+            _ => String::new(),
+        };
+        self.running.frames.pop(); // descartar el ancla
+        text
+    }
+}
+
+// ---- APT fase 3: reificación de elementos (ver `super::apt`) -------------------------------------
+impl Exec<'_> {
+    /// El `SymElement` del heap que reifica `sym`, a través del [`apt::AptContext`] atado con
+    /// [`JVM::set_apt`]. Destructura `shared` en campos disjuntos (`apt` ⊥ `metaspace` ⊥ `heap`)
+    /// —el mismo truco del borrow sin `unsafe` que usan los ganchos JVMTI—. Panica si no hay
+    /// contexto APT atado (es un error de programación: solo se llama en una corrida de procesador).
+    // Capa 1: por ahora solo lo ejercita el test de `apt`; el `run_processor` que lo llamará desde
+    // el bytecode de un procesador es la capa siguiente.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn apt_element_for(&mut self, sym: crate::javac::symbol::SymbolId) -> usize {
+        let SharedVm { apt, metaspace, heap, .. } = &mut *self.shared;
+        apt.as_mut()
+            .expect("apt_element_for sin un AptContext atado (usar JVM::set_apt)")
+            .element_for(sym, metaspace, heap)
     }
 }
 
@@ -3490,6 +3566,39 @@ impl Exec<'_> {
         grew.then(|| self.top().pop())
     }
 
+    // ---- primitivas para el driver de annotation processing (APT fase 2, `interpreter::apt`) ----
+    //
+    // El round loop de JSR 269 vive en `apt.rs` (módulo hermano), que orquesta estos tres pasos
+    // sobre un `Exec`; se exponen `pub(super)` porque tocan `shared` (privado de este módulo). Son
+    // deliberadamente delgadas: instanciar/resolver/llamar, la misma maquinaria que la inicialización
+    // de clases usa internamente, pero disparable desde afuera con un nombre de clase concreto.
+
+    /// Carga + prepara (mirror) + inicializa (`<clinit>`) la clase `class` y aloca una instancia
+    /// *cero-inicializada* de ella (sin correr `<init>`, que el driver invoca aparte con sus args).
+    /// `None` si la inicialización de la clase lanzó (queda en `pending_exception`).
+    pub(super) fn apt_new_instance(&mut self, class: &str) -> Option<usize> {
+        class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, class);
+        self.ensure_initialized(class);
+        if self.running.pending_exception.is_some() {
+            return None;
+        }
+        Some(objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, class))
+    }
+
+    /// Resuelve un método `class.name descriptor` a su [`MethodId`] (cargando la clase si hace
+    /// falta), para que el driver arme el `call_java` correspondiente. `None` si no existe / no
+    /// tiene cuerpo.
+    pub(super) fn apt_resolve(&mut self, class: &str, name: &str, descriptor: &str) -> Option<MethodId> {
+        self.shared.metaspace.resolve_method(class, name, descriptor)
+    }
+
+    /// Si el driver quedó con una excepción pendiente (una inicialización o un `process` que
+    /// escapó), la retira y devuelve el nombre interno de su clase — para reporte. `None` si no hay.
+    pub(super) fn apt_take_pending(&mut self) -> Option<String> {
+        let exc = self.running.pending_exception.take()?;
+        Some(self.exception_class_name(exc))
+    }
+
     /// Calls a method **on an object**, dispatched by its runtime class — the virtual
     /// call an intrinsic needs when the answer depends on user code.
     ///
@@ -3523,6 +3632,7 @@ impl Exec<'_> {
                 &mut self.shared.metaspace,
                 &mut self.shared.heap,
                 &mut self.shared.console,
+                &mut self.shared.apt,
             );
         }
         let mut widths = vec![1]; // the receiver, then each parameter at its own width

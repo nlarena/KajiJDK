@@ -8,10 +8,12 @@
 //! Right now there's one: `PrintStream.println(int)`, so `System.out.println(n)`
 //! prints for real — the wall the whole interpreter has been building toward.
 
+use std::cell::RefCell;
 use std::fmt::Write;
 
 use crate::jvm::class_file::ClassFile;
 
+use super::apt::AptContext;
 use super::bytecode_interpreter::class_operations;
 use super::bytecode_interpreter::objects_operations::{field_offset, HEADER_SIZE};
 use super::frame::Value;
@@ -19,11 +21,51 @@ use super::heap::HeapService;
 use super::metaspace::MetaspaceService;
 use super::strings;
 
+// --- APT fase 4: el canal lateral del Filer -------------------------------------------------------
+//
+// El `Filer` de un procesador de anotaciones fabrica archivos fuente en tiempo de ejecución. Cada
+// `createSourceFile(name)` que hace el procesador crea un `StringWriter` que recibe el texto
+// generado, y necesita quedar **registrado** para que el round loop lo drene una vez que el
+// procesador retorna. La bytecode no puede escribir directamente en estado del compilador, así que
+// `KajiFiler.nativeRegisterSourceFile` empuja acá `(nombre, offset del StringWriter en el heap)`.
+//
+// Es un `thread_local` a propósito: el intérprete verde corre en un solo hilo, y cada test de
+// `cargo test` (que corren en paralelo, un hilo por test) ve su propio Filer sin pisarse con otro.
+
+/// Lo que un procesador registró vía su `Filer`: los archivos fuente pendientes, en orden de
+/// creación, cada uno como `(nombre, writer_ref)` donde `writer_ref` es el offset en el heap del
+/// `StringWriter` que acumula su texto.
+#[derive(Default)]
+pub struct FilerState {
+    pub pending: Vec<(String, u32)>,
+}
+
+thread_local! {
+    /// El Filer **armado** en este hilo, o `None` si no hay ninguno corriendo. Los nativos del
+    /// Filer solo registran cuando está armado, así que una llamada suelta a `createSourceFile`
+    /// fuera de una ronda de procesamiento no rompe nada (se descarta).
+    static FILER: RefCell<Option<FilerState>> = const { RefCell::new(None) };
+}
+
+/// **Arma** el canal del Filer en este hilo — llamar antes de correr un procesador. Reemplaza
+/// cualquier estado previo por uno vacío.
+pub fn install_filer() {
+    FILER.with(|f| *f.borrow_mut() = Some(FilerState::default()));
+}
+
+/// **Desarma** el canal y devuelve todo lo que el procesador registró, en orden de creación. Si no
+/// había Filer armado, devuelve un vector vacío.
+pub fn drain_filer() -> Vec<(String, u32)> {
+    FILER.with(|f| f.borrow_mut().take().map(|state| state.pending).unwrap_or_default())
+}
+
 /// Runs the native method `class.name descriptor` with `args` (slot 0 is the
 /// receiver for an instance method), returning its result (`None` for `void`).
 /// `heap` lets a native read object memory (e.g. an object's header); anything the
 /// method "prints" is appended to `out` — the program's stdout, which the caller
-/// surfaces (the visualizer shows it; a headless run would flush it).
+/// surfaces (the visualizer shows it; a headless run would flush it). `apt` is the
+/// reified compiler model (APT fase 3), or `None` outside a processor run — the
+/// `jdk/internal/apt/SymElement` natives read the symbol table through it.
 pub fn dispatch(
     class: &str,
     name: &str,
@@ -32,6 +74,7 @@ pub fn dispatch(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
     out: &mut String,
+    apt: &mut Option<AptContext>,
 ) -> Option<Value> {
     match (class, name, descriptor) {
         // --- I/O: PrintStream.println --------------------------------------------
@@ -46,6 +89,14 @@ pub fn dispatch(
         // println(String): the arg is a heap String reference; read its bytes back.
         ("java/io/PrintStream", "println", "(Ljava/lang/String;)V") => {
             let _ = writeln!(out, "{}", strings::read(heap, reference(&args[1])));
+            None
+        }
+        // APT (fase 2): salida de un processor durante el round loop. `System.out.println` todavía
+        // no compila en este javac (la resolución de `System.out` como campo estático falla), así
+        // que un processor imprime por este native estático — el mínimo `Messager` delegando a Rust.
+        // `args[0]` es la referencia al String (método estático: sin receptor).
+        ("javax/annotation/processing/AptTrace", "trace", "(Ljava/lang/String;)V") => {
+            let _ = writeln!(out, "{}", strings::read(heap, reference(&args[0])));
             None
         }
 
@@ -262,6 +313,25 @@ pub fn dispatch(
             Some(Value::Reference(mirror))
         }
 
+        // --- APT fase 3: el modelo de elementos reificado (ver `super::apt`) -----
+        // El receptor es un `jdk/internal/apt/SymElement`: su campo `int sym` es el `SymbolId`
+        // en la tabla de `javac` (viva en este mismo proceso, atada con `JVM::set_apt`). Leemos
+        // ese id, indexamos la tabla y devolvemos `Symbol.name` como un `String` internado — el
+        // mismo patrón que `Class.getName` (leer una identidad del metaspace → `strings::intern`),
+        // pero contra la tabla del compilador en vez del metaspace. Capa 1: solo el nombre.
+        (
+            "jdk/internal/apt/SymElement",
+            "getSimpleName" | "getQualifiedName",
+            "()Ljava/lang/String;",
+        ) => {
+            let this = reference(&args[0]);
+            let sym_offset = field_offset(metaspace, "jdk/internal/apt/SymElement", "sym");
+            let sym = heap.read_u32(this + sym_offset) as usize;
+            let apt = apt.as_ref().expect("SymElement native sin un AptContext (usar JVM::set_apt)");
+            let text = apt.table().symbol(sym).name.clone();
+            Some(Value::Reference(strings::intern(metaspace, heap, &text)))
+        }
+
         // --- String -------------------------------------------------------------
         ("java/lang/String", "length", "()I") => {
             // The receiver is a heap String; its length word holds the UTF-8 byte count.
@@ -283,6 +353,20 @@ pub fn dispatch(
             let text = strings::read(heap, reference(&args[0]));
             let hash = text.bytes().fold(0i32, |h, b| h.wrapping_mul(31).wrapping_add(b as i32));
             Some(Value::Int(hash))
+        }
+        // valueOf(char[], offset, count): the seam KajiLibrary builds every String through —
+        // `StringBuilder.toString`, `substring`, `Writer.write(String)`'s inverse, etc. A `char[]`
+        // stores UTF-16 code units two bytes wide (after the 12-byte array header); we slice
+        // `[offset, offset+count)`, decode them, and intern the text as a fresh heap String.
+        ("java/lang/String", "valueOf", "([CII)Ljava/lang/String;") => {
+            const ARRAY_HEADER: usize = 12; // object header (8) + length word (4)
+            let array = reference(&args[0]);
+            let start = int(&args[1]) as usize;
+            let count = int(&args[2]) as usize;
+            let units: Vec<u16> =
+                (0..count).map(|i| heap.read_u16(array + ARRAY_HEADER + (start + i) * 2)).collect();
+            let text = String::from_utf16_lossy(&units);
+            Some(Value::Reference(strings::intern(metaspace, heap, &text)))
         }
         // startsWith(prefix): whether the receiver begins with the argument String.
         ("java/lang/String", "startsWith", "(Ljava/lang/String;)Z") => {
@@ -324,6 +408,23 @@ pub fn dispatch(
                 heap.store_reference(object, at, reference(&args[2]));
             }
             Some(Value::Int(matched as i32))
+        }
+
+        // --- APT fase 4: registro de un archivo fuente del Filer ----------------
+        // `KajiFiler.createSourceFile(name)` acaba acá: args[0] es el `KajiFiler` receptor, args[1]
+        // el nombre (una `String` del heap) y args[2] el `StringWriter` recién creado que recibirá
+        // el texto. Guardamos `(nombre, offset del writer)` en el canal lateral del hilo; el round
+        // loop lo drena con `drain_filer` y recupera el texto con `read_generated_text`. Si no hay
+        // Filer armado (`install_filer` no corrió), el registro se descarta en silencio.
+        ("javax/annotation/processing/KajiFiler", "nativeRegisterSourceFile", "(Ljava/lang/String;Ljava/io/StringWriter;)V") => {
+            let name = strings::read(heap, reference(&args[1]));
+            let writer_ref = reference(&args[2]) as u32;
+            FILER.with(|f| {
+                if let Some(state) = f.borrow_mut().as_mut() {
+                    state.pending.push((name, writer_ref));
+                }
+            });
+            None
         }
 
         _ => panic!("no native implementation for {class}.{name}{descriptor}"),

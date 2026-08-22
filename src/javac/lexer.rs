@@ -21,6 +21,10 @@ struct Lexer {
     pos: usize,
     line: u32,
     col: u32,
+    /// El contenido del último doc comment (`/** … */`) visto en la trivia, sin delimitadores,
+    /// a la espera de adjuntarse al próximo token real. Se limpia (con `.take()`) al emitir ese
+    /// token. Los `//` y `/* */` normales no lo tocan; un doc comment nuevo pisa al anterior.
+    pending_doc: Option<String>,
 }
 
 impl Lexer {
@@ -30,7 +34,7 @@ impl Lexer {
         if chars.first() == Some(&'\u{feff}') {
             chars.remove(0);
         }
-        Lexer { chars, pos: 0, line: 1, col: 1 }
+        Lexer { chars, pos: 0, line: 1, col: 1, pending_doc: None }
     }
 
     fn peek(&self) -> Option<char> {
@@ -64,7 +68,7 @@ impl Lexer {
             self.skip_trivia()?;
             let (line, col) = (self.line, self.col);
             let Some(c) = self.peek() else {
-                tokens.push(Token { kind: TokenKind::Eof, text: String::new(), line, col });
+                tokens.push(Token { kind: TokenKind::Eof, text: String::new(), line, col, doc: self.pending_doc.take() });
                 return Ok(tokens);
             };
             let (kind, text) = if is_ident_start(c) {
@@ -78,7 +82,7 @@ impl Lexer {
             } else {
                 self.scan_operator()?
             };
-            tokens.push(Token { kind, text, line, col });
+            tokens.push(Token { kind, text, line, col, doc: self.pending_doc.take() });
         }
     }
 
@@ -98,8 +102,15 @@ impl Lexer {
                     }
                 }
                 Some('/') if self.peek_at(1) == Some('*') => {
-                    self.bump();
-                    self.bump();
+                    // Doc comment (`/** … */`) sii el char tras `/*` es `*` y el siguiente **no**
+                    // es `/` (así `/**/` es un bloque vacío normal, no un doc comment).
+                    let is_doc = self.peek_at(2) == Some('*') && self.peek_at(3) != Some('/');
+                    self.bump(); // /
+                    self.bump(); // *
+                    if is_doc {
+                        self.bump(); // el `*` extra del delimitador `/**`
+                    }
+                    let mut content = String::new();
                     loop {
                         match self.peek() {
                             None => return Err(self.error("comentario de bloque sin cerrar")),
@@ -108,10 +119,17 @@ impl Lexer {
                                 self.bump();
                                 break;
                             }
-                            _ => {
+                            Some(c) => {
+                                if is_doc {
+                                    content.push(c);
+                                }
                                 self.bump();
                             }
                         }
+                    }
+                    if is_doc {
+                        // El último doc comment antes del próximo token gana.
+                        self.pending_doc = Some(content);
                     }
                 }
                 _ => return Ok(()),

@@ -392,6 +392,7 @@ fn gen_class(
                     &this_internal,
                     &super_internal,
                     is_interface,
+                    class.kind == TypeKind::Enum,
                     rt,
                     tu,
                     &mut bootstraps,
@@ -478,6 +479,7 @@ fn gen_class(
         .collect();
     if !statics.is_empty() {
         let clinit = MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             return_annos: Vec::new(),
             pos: Pos::default(),
@@ -499,6 +501,7 @@ fn gen_class(
             &this_internal,
             &super_internal,
             false,
+            class.kind == TypeKind::Enum,
             rt,
             tu,
             &mut bootstraps,
@@ -834,7 +837,22 @@ fn super_internal(
 }
 
 fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<SymbolId> {
-    table.resolve_type(scope, name).or_else(|| table.external(name))
+    if let Some(id) = table.resolve_type(scope, name).or_else(|| table.external(name)) {
+        return Some(id);
+    }
+    // Cualificado / **anidado** (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`): por nombre simple
+    // (externo registrado así) o, si no, resolviendo el `outer` y bajando a su miembro-tipo. Sin esto,
+    // el descriptor de un `Map.Entry<..>` en firma se emitía borrado a `Object` y el `Signature` con el
+    // nombre crudo `Map/Entry` en vez del binario `java/util/Map$Entry`.
+    if let Some((outer, simple)) = name.rsplit_once('.') {
+        if let Some(id) = table.external(simple) {
+            return Some(id);
+        }
+        if let Some(oid) = resolve_type_id(table, scope, outer) {
+            return super::attribute::nested_type_in(table, oid, simple);
+        }
+    }
+    None
 }
 
 fn class_flags(mods: &[Modifier]) -> u16 {
@@ -1079,7 +1097,13 @@ fn class_signature(
 /// La `MethodSignature` (§4.7.9.1) de un método, o `None` si no usa genéricos. Las variables de tipo
 /// de la **clase** resuelven por el `scope`; solo las **propias** del método (que viven en otro
 /// scope) se pasan explícitas en `tvars`.
-fn method_signature(table: &SymbolTable, scope: ScopeId, m: &MethodDecl) -> Option<String> {
+fn method_signature(table: &SymbolTable, scope: ScopeId, m: &MethodDecl, is_enum: bool) -> Option<String> {
+    // El constructor de un `enum` lleva **siempre** `Signature: ()V` (§8.9.2): su descriptor arranca
+    // con los dos parámetros sintéticos `(String, int)` que `java.lang.Enum` exige, pero la firma
+    // *declarada* los elide, así que javac emite el atributo para registrar la firma sin ellos.
+    if m.is_constructor && is_enum {
+        return Some("()V".to_string());
+    }
     let tvars: HashSet<String> = m.type_params.iter().map(|tp| tp.name.clone()).collect();
 
     let params_g = m.params.iter().any(|p| sig_is_generic(table, scope, &tvars, &p.ty));
@@ -1263,6 +1287,7 @@ fn gen_method(
     this_internal: &str,
     super_internal: &str,
     is_interface: bool,
+    is_enum: bool,
     rt: &std::collections::HashSet<String>,
     tu: &TypeUseInfo,
     bootstraps: &mut Vec<BootstrapMethod>,
@@ -1273,7 +1298,7 @@ fn gen_method(
     let descriptor_index = pool.utf8(&method_descriptor(table, scope, m));
     let annotations = build_annotations(pool, table, scope, &m.annotations, rt, tu);
     // `Signature` (§4.7.9): parámetros de tipo del método + params/retorno/throws genéricos.
-    let signature = method_signature(table, scope, m).map(|s| pool.utf8(&s));
+    let signature = method_signature(table, scope, m, is_enum).map(|s| pool.utf8(&s));
     // `MethodParameters` (§4.7.24): los nombres (+ flags) de los parámetros formales.
     let parameters = build_method_parameters(pool, m);
     // `RuntimeVisibleTypeAnnotations` (§4.7.20) del método, juntando: parámetros de tipo (`<@Foo T>`,
@@ -1441,6 +1466,11 @@ fn gen_method(
     let mut method_flags = class_flags(&m.modifiers);
     if is_interface && !m.modifiers.contains(&Modifier::Private) {
         method_flags |= ACC_PUBLIC;
+    }
+    // El método sintético `$values()` de un `enum` (§8.9.3) —el que arma el arreglo `$VALUES`— lleva
+    // `ACC_SYNTHETIC`, igual que el campo `$VALUES`. Real javac: `$values()` = `0x100a`.
+    if m.name == "$values" {
+        method_flags |= ACC_SYNTHETIC;
     }
     MethodInfo {
         access_flags: method_flags,
@@ -3367,7 +3397,7 @@ impl<'a> Emitter<'a> {
             }
             // `yield e` de una switch-expresión embebida (las lowerable las baja el desugar a
             // asignaciones): deja el valor en la pila y salta al fin del switch más interno.
-            StmtKind::Yield(e) => self.yield_value(e),
+            StmtKind::Yield(e) => self.yield_value(e, false),
             // Estas tendrían que haber desaparecido en el desugar: si llegan acá es un bug de esa pasada.
             StmtKind::ForEach { .. } | StmtKind::Assert { .. } => {
                 self.unsupported(s.pos, "una construcción que el desugar debía haber bajado")
@@ -3540,11 +3570,14 @@ impl<'a> Emitter<'a> {
         self.yield_targets.push((end, cat, vt));
         for (i, c) in cases.iter().enumerate() {
             self.bind(arms[i]);
+            // El brazo **físicamente último** cae al `end` sin `goto` (fiel a javac): su valor queda
+            // en la pila y `bind(end)` toma esa pila real. Los demás saltan al `end`.
+            let tail = i == cases.len() - 1;
             match &c.body {
                 // `case X -> v` en una expresión es el *yield* de `v`.
                 SwitchBody::Arrow(b) if matches!(b.kind, StmtKind::Expr(_)) => {
                     if let StmtKind::Expr(v) = &b.kind {
-                        self.yield_value(v);
+                        self.yield_value(v, tail);
                     }
                 }
                 // `case X -> throw …`: transfiere el control por su cuenta, no yieldea.
@@ -3558,8 +3591,10 @@ impl<'a> Emitter<'a> {
     }
 
     /// Emite un `yield v`: evalúa `v`, lo ajusta al tipo de la switch-expresión (para que todos los
-    /// brazos coincidan en el destino) y salta a su fin.
-    fn yield_value(&mut self, v: &Expr) {
+    /// brazos coincidan en el destino) y salta a su fin. Con `tail = true` es el brazo físicamente
+    /// último: deja el valor en la pila y **cae** al `end` sin `goto` (así lo emite javac);
+    /// `reachable` queda en `true` para que `bind(end)` guarde la pila real.
+    fn yield_value(&mut self, v: &Expr, tail: bool) {
         let Some((end, cat, vt)) = self.yield_targets.last().cloned() else {
             return self.unsupported(v.pos, "un `yield` fuera de una switch-expresión");
         };
@@ -3567,6 +3602,9 @@ impl<'a> Emitter<'a> {
         self.convert(category(&self.ty_of(v)), cat);
         self.pop(1);
         self.push(vt);
+        if tail {
+            return; // cae al `end` con el valor en la pila
+        }
         self.jump(GOTO, end);
         self.reachable = false;
     }
@@ -3749,7 +3787,14 @@ impl<'a> Emitter<'a> {
             self.stack = vec![VType::Object("java/lang/Throwable".to_string())];
             self.max_stack = self.max_stack.max(1);
             self.locals_t = entry_locals.clone();
-            self.block_scoped(&f.0);
+            // Aparcar la excepción en un local **libre** (por encima de todo local del método y del
+            // propio `finally`) en vez de dejarla en la pila mientras corre el `finally`: así el
+            // `finally` usa la pila sin restricciones, como emite javac.
+            let park = self.max_locals.max(body_max_slot(&f.0));
+            self.set_local(park, VType::Object("java/lang/Throwable".to_string()));
+            self.store(4, park); // astore park: saca la excepción de la pila
+            self.block_scoped(&f.0); // el `finally` corre con la pila limpia
+            self.load(4, park); // aload park: la recupera para re-lanzarla
             self.op(ATHROW);
             self.pop(1);
             self.reachable = false;
@@ -4174,7 +4219,20 @@ impl<'a> Emitter<'a> {
             self.op(count as u8);
             self.op(0);
         } else {
-            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            // El owner del `Methodref` de una invocación **virtual** es el **tipo estático del
+            // receptor**, no la clase que *declara* el método (§5.4.3.3): para un receptor implícito o
+            // `this`, ese tipo es la clase actual. Sin esto, `ordinal()` heredado de `java.lang.Enum`
+            // emitía owner `java/lang/Enum`; javac emite la propia clase (`Enums`). Se acota a virtual y
+            // a receptor implícito/`this` — `invokespecial`/`invokestatic`/`super` no se tocan.
+            let receiver_is_self = match &call.kind {
+                ExprKind::Call { target, .. } => {
+                    matches!(target.as_deref(), None | Some(Expr { kind: ExprKind::This, .. }))
+                }
+                _ => false,
+            };
+            let owner_internal =
+                if receiver_is_self { self.this_class.clone() } else { class_internal };
+            let mref = self.pool.methodref(&owner_internal, &mname, &desc);
             self.op(INVOKEVIRTUAL);
             self.u16(mref);
         }
@@ -7806,6 +7864,93 @@ mod tests {
         assert_eq!(class_sig(&e).as_deref(), Some("Ljava/lang/Enum<LColor;>;"));
     }
 
+    // ---- fidelidad byte-exacta del codegen de `enum` (corpus `Enums.java`) ----
+
+    /// Todos los `Methodref` de la clase resueltos a `(owner, nombre, descriptor)`.
+    fn method_refs(jvm: &ClassFile) -> Vec<(String, String, String)> {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        let mut out = Vec::new();
+        for e in &jvm.constant_pool {
+            let CP::MethodRef { class_index, name_and_type_index } = e else { continue };
+            let Some(owner) = jvm.class_name(*class_index) else { continue };
+            if let Some(CP::NameAndType { name_index, descriptor_index }) =
+                jvm.constant_pool.get((*name_and_type_index - 1) as usize)
+            {
+                if let (Some(n), Some(d)) = (jvm.utf8(*name_index), jvm.utf8(*descriptor_index)) {
+                    out.push((owner.to_string(), n.to_string(), d.to_string()));
+                }
+            }
+        }
+        out
+    }
+
+    /// ¿Alguna entrada `Utf8` del pool contiene `needle`?
+    fn pool_mentions(jvm: &ClassFile, needle: &str) -> bool {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        jvm.constant_pool.iter().any(|e| matches!(e, CP::Utf8(s) if s.contains(needle)))
+    }
+
+    #[test]
+    fn an_enum_valueof_delegates_to_enum_valueof() {
+        // §8.9.3: `valueOf(String)` delega en `Enum.valueOf(Class, String)` con un `checkcast` a `E`,
+        // byte a byte como javac. Ya no arma la cadena de `equals` + `IllegalArgumentException`.
+        let jvm = compiled_class("enum E { A, B }", "E");
+        let refs = method_refs(&jvm);
+        assert!(
+            refs.iter().any(|(o, n, d)| o == "java/lang/Enum"
+                && n == "valueOf"
+                && d == "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;"),
+            "`valueOf` debe delegar en `Enum.valueOf`: {refs:?}",
+        );
+        assert!(
+            !pool_mentions(&jvm, "IllegalArgumentException"),
+            "el viejo camino con `IllegalArgumentException` ya no se emite",
+        );
+    }
+
+    #[test]
+    fn an_enum_factors_the_values_array_into_a_synthetic_values_method() {
+        // javac factoriza la construcción de `$VALUES` en un método sintético `private static E[]
+        // $values()` que el `<clinit>` invoca con `invokestatic`.
+        let jvm = compiled_class("enum E { A, B }", "E");
+        assert!(
+            has_method(&jvm, "$values", "()[LE;", super::ACC_PRIVATE | super::ACC_STATIC | ACC_SYNTHETIC),
+            "`$values` debe ser `private static synthetic ()[LE;`",
+        );
+        let refs = method_refs(&jvm);
+        assert!(
+            refs.iter().any(|(o, n, d)| o == "E" && n == "$values" && d == "()[LE;"),
+            "el `<clinit>` debe invocar `$values`: {refs:?}",
+        );
+    }
+
+    #[test]
+    fn an_enum_virtual_call_on_this_targets_the_enum_class_not_the_declaring_class() {
+        // §5.4.3.3: el owner del `Methodref` de una invocación virtual es el **tipo estático del
+        // receptor**. `ordinal()` heredado de `java.lang.Enum`, llamado sin receptor, apunta a la propia
+        // clase (`E`), no a `java/lang/Enum` — igual que javac.
+        let jvm = compiled_class("enum E { A, B; public int code() { return ordinal() + 1; } }", "E");
+        let refs = method_refs(&jvm);
+        let ordinal: Vec<_> = refs.iter().filter(|(_, n, _)| n == "ordinal").collect();
+        assert!(!ordinal.is_empty(), "hay una invocación a `ordinal`: {refs:?}");
+        assert!(
+            ordinal.iter().all(|(o, _, _)| o == "E"),
+            "el owner de `ordinal()` es la clase enum `E`, no `java/lang/Enum`: {ordinal:?}",
+        );
+    }
+
+    #[test]
+    fn an_enum_constructor_gets_a_void_signature_that_elides_the_synthetic_params() {
+        // §8.9.2: el ctor de un `enum` lleva siempre `Signature: ()V` — su descriptor arranca con los
+        // dos parámetros sintéticos `(String, int)`, pero la firma declarada los elide.
+        let jvm = compiled_class("enum E { A, B }", "E");
+        assert_eq!(
+            method_sig(&jvm, "<init>").as_deref(),
+            Some("()V"),
+            "el ctor del enum lleva `Signature: ()V`",
+        );
+    }
+
     #[test]
     fn a_generic_superclass_is_in_the_class_signature() {
         let src = "class Base<T> {} class Node<T> extends Base<T> {}";
@@ -8061,5 +8206,85 @@ mod tests {
             jvm.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("PermittedSubclasses")),
             "`Shape` debe llevar el atributo PermittedSubclasses",
         );
+    }
+
+    // ---- APT fase 4: el mecanismo del Filer ----
+
+    /// De punta a punta: un programa corre en la VM, usa el `Filer` para fabricar `Foo`, escribe su
+    /// fuente en el `StringWriter` que el Filer le entrega, y el lado Rust **recupera** ese texto.
+    /// Ejercita Filer → StringWriter → nativo → cola → lectura reentrante (el `toString()` del
+    /// writer invocado por el VM sobre el **mismo heap** que corrió el programa). Es el hito mínimo
+    /// del Filer; el re-enganche al round loop (fase 2) queda aparte.
+    #[test]
+    fn the_filer_hands_generated_source_back_to_rust() {
+        use crate::jvm::interpreter::natives::{drain_filer, install_filer};
+
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_filer_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Compila una unidad (contra KajiLibrary + lo ya emitido en `dir`) y escribe cada clase bajo
+        // su ruta de paquete, para que el classpath de runtime la resuelva por nombre interno.
+        let kaji = PathBuf::from("KajiLibrary");
+        let compile_into = |source: &str| {
+            let classes = crate::javac::compile_cp(source, &[kaji.clone(), dir.clone()])
+                .expect("la fuente del Filer debe compilar");
+            for (internal, bytes) in classes {
+                let path = dir.join(format!("{internal}.class"));
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, bytes).unwrap();
+            }
+        };
+
+        // Los archivos reales de KajiLibrary (el entregable), en orden de dependencia:
+        // KajiFiler crea un KajiSourceFile, así que este último se compila primero.
+        compile_into(
+            &std::fs::read_to_string(kaji.join("javax/annotation/processing/KajiSourceFile.java")).unwrap(),
+        );
+        compile_into(
+            &std::fs::read_to_string(kaji.join("javax/annotation/processing/KajiFiler.java")).unwrap(),
+        );
+        // El manejador de prueba: usa el Filer como lo haría un procesador de anotaciones.
+        // `w` se maneja como el `StringWriter` concreto que el Filer entrega: el VM propio todavía
+        // no le da slot de vtable a un método **abstracto** heredado (p. ej. `Writer.close()`), así
+        // que resolver `close()` contra el tipo estático `Writer` fallaría. Ortogonal al Filer.
+        compile_into(
+            "package javax.annotation.processing; \
+             import javax.tools.JavaFileObject; import java.io.StringWriter; \
+             public class FilerDriver { \
+                 public static int drive() { \
+                     Filer f = new KajiFiler(); \
+                     JavaFileObject jfo = f.createSourceFile(\"Foo\"); \
+                     StringWriter w = (StringWriter) jfo.openWriter(); \
+                     w.write(\"class Foo {}\"); \
+                     w.close(); \
+                     return 0; \
+                 } \
+             }",
+        );
+
+        // Boot = KajiLibrary (StringWriter, Filer, ...) + boot/; app = las clases recién compiladas.
+        let mut ms = MetaspaceService::new(vec![kaji.clone(), PathBuf::from("boot")], vec![dir.clone()]);
+        let driver = ms
+            .resolve_method("javax/annotation/processing/FilerDriver", "drive", "()I")
+            .expect("FilerDriver.drive resuelto");
+        let max_locals = ms.max_locals(driver);
+        let mut jvm = JVM::new(ms, Frame::for_call(driver, max_locals, Vec::new(), &[]));
+
+        // Armar el Filer, correr el programa, drenar lo registrado y recuperar el texto de cada uno.
+        install_filer();
+        for _ in 0..100_000 {
+            if let Step::Return(_) = jvm.exec().step() {
+                break;
+            }
+        }
+        let pending = drain_filer();
+        let recovered: Vec<(String, String)> = pending
+            .into_iter()
+            .map(|(name, writer_ref)| (name, jvm.read_generated_text(writer_ref as usize)))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(recovered, vec![("Foo".to_string(), "class Foo {}".to_string())]);
     }
 }

@@ -18,6 +18,58 @@ impl Exec<'_> {
     /// the site, so the first execution folds it into the method's call-site cache and every
     /// later one reads a `MethodId` out of a single indexed atomic load — no `String`, no
     /// `HashMap`, no intrinsic-name compares. See `super::call_site`.
+    /// `Enum.valueOf(Class<E>, String)` (§8.9.3): la constante del enum con ese `name`. El
+    /// `valueOf(String)` que javac genera en cada enum delega acá (mismo bytecode que javac).
+    /// Sin reflexión: se inicializa la clase enum, se lee su `$VALUES` (el `E[]` sintético) y se
+    /// compara el `name` de cada constante; si ninguna matchea, `IllegalArgumentException`.
+    fn enum_value_of(&mut self, args: &[Value]) -> Step {
+        use crate::jvm::interpreter::bytecode_interpreter::array_operations::{
+            ARRAY_HEADER_SIZE, LENGTH_OFFSET,
+        };
+        use crate::jvm::interpreter::bytecode_interpreter::objects_operations::field_offset;
+        use crate::jvm::interpreter::strings;
+
+        let Value::Reference(class_ref) = args[0] else {
+            return self.throw_exception("java/lang/IllegalArgumentException");
+        };
+        let enum_class = match self.shared.metaspace.class_name_at_mirror(class_ref) {
+            Some(n) => n.to_string(),
+            None => return self.throw_exception("java/lang/IllegalArgumentException"),
+        };
+        let name_ref = match args[1] {
+            Value::Reference(0) => return self.throw_exception("java/lang/NullPointerException"),
+            Value::Reference(r) => r,
+            _ => return self.throw_exception("java/lang/IllegalArgumentException"),
+        };
+        let target = strings::read(&self.shared.heap, name_ref);
+
+        // El `$VALUES` se puebla en el `<clinit>` del enum; garantizar que corrió.
+        self.ensure_initialized(&enum_class);
+        if let Some(step) = self.take_pending_throw() {
+            return step;
+        }
+
+        let addr = class_operations::static_slot(
+            &mut self.shared.metaspace,
+            &mut self.shared.heap,
+            &enum_class,
+            "$VALUES",
+        );
+        let array = self.shared.heap.read_u32(addr) as usize;
+        let len = self.shared.heap.read_u32(array + LENGTH_OFFSET) as usize;
+        let name_off = field_offset(&mut self.shared.metaspace, &enum_class, "name");
+        for i in 0..len {
+            let elem = self.shared.heap.read_u32(array + ARRAY_HEADER_SIZE + i * 4) as usize;
+            let elem_name = self.shared.heap.read_u32(elem + name_off) as usize;
+            if strings::read(&self.shared.heap, elem_name) == target {
+                self.top().push(Value::Reference(elem));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+        }
+        self.throw_exception("java/lang/IllegalArgumentException")
+    }
+
     pub(super) fn invokestatic(&mut self) -> Step {
         let caller = self.frame().method();
         let pc = self.frame().pc();
@@ -75,6 +127,16 @@ impl Exec<'_> {
                 args.push(frame.pop());
             }
             args.reverse();
+        }
+
+        // `Enum.valueOf(Class, String)` (§8.9.3): javac genera en cada enum un `valueOf(String)` que
+        // delega en este método de `java.lang.Enum`. Lo interceptamos y lo resolvemos leyendo el
+        // `$VALUES` de la clase enum (sin reflexión) en vez de correr el cuerpo (que en la boot lib es
+        // un stub `return null`).
+        if self.shared.metaspace.class_of(callee) == "java/lang/Enum"
+            && self.shared.metaspace.name(callee) == "valueOf"
+        {
+            return self.enum_value_of(&args);
         }
 
         // The methods the VM intercepts instead of running. Which ones those are is a property of
@@ -202,6 +264,7 @@ impl Exec<'_> {
                 &mut self.shared.metaspace,
                 &mut self.shared.heap,
                 &mut self.shared.console,
+                &mut self.shared.apt,
             );
             if let Some(value) = result {
                 self.top().push(value);
