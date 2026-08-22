@@ -48,6 +48,28 @@ public abstract class InputStream implements Closeable {
         return 0;
     }
 
+    // --- mark / reset ---
+    //
+    // A caller that needs to look ahead and then un-look (a parser deciding which branch to
+    // take) marks a position, reads on, and resets back to it. This lives on InputStream
+    // rather than in a separate interface so that ANY stream can be asked; markSupported()
+    // is how a source that cannot rewind answers honestly, and the defaults below are
+    // exactly that answer. `readlimit` is the caller's promise about how far it will read
+    // before resetting, which is what lets a buffered stream size its safety margin.
+    //
+    // Note the JDK's reset() throws IOException here; the whole of KajiLibrary's java.io is
+    // still throws-free (see IOException), so this signals with an unchecked exception.
+    public void mark(int readlimit) {
+    }
+
+    public void reset() {
+        throw new UnsupportedOperationException("mark/reset not supported");
+    }
+
+    public boolean markSupported() {
+        return false;
+    }
+
     public void close() {
     }
 }

@@ -1,7 +1,6 @@
 package java.lang;
 
-// KajiLibrary's java.lang.RuntimeException — the unchecked branch (§11.2): thrown at
-// runtime by the VM or by code, and not required to be declared or caught.
+// KajiLibrary's java.lang.RuntimeException — the superclass of unchecked exceptions.
 public class RuntimeException extends Exception {
 
     public RuntimeException() {
@@ -9,5 +8,13 @@ public class RuntimeException extends Exception {
 
     public RuntimeException(String message) {
         super(message);
+    }
+
+    public RuntimeException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public RuntimeException(Throwable cause) {
+        super(cause);
     }
 }

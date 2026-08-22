@@ -38,4 +38,8 @@ public class Object {
     public final native void notifyAll();
 
     public final native void wait();
+
+    // Timed wait: park until notified or until `timeout` milliseconds elapse (`0` = wait
+    // with no timeout, per the JLS). The VM measures the deadline on its opcode clock.
+    public final native void wait(long timeout);
 }

@@ -10,4 +10,15 @@ public class Error extends Throwable {
     public Error(String message) {
         super(message);
     }
+
+    // Errors carry a cause like any other Throwable: a VM error is often the visible
+    // symptom of something thrown further down (an ExceptionInInitializerError wrapping
+    // whatever the static initialiser threw is the classic case).
+    public Error(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public Error(Throwable cause) {
+        super(cause);
+    }
 }

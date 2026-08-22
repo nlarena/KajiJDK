@@ -114,6 +114,34 @@ public final class StringBuilder implements CharSequence, Appendable {
         return this;
     }
 
+    // long → its decimal representation. Same negative-space trick as the int overload, so
+    // Long.MIN_VALUE (whose magnitude overflows a positive long) comes out right. 20 chars is
+    // the widest result ("-9223372036854775808").
+    public StringBuilder append(long l) {
+        if (l == 0) {
+            return append('0');
+        }
+        boolean neg = l < 0;
+        if (l > 0) {
+            l = -l;
+        }
+        char[] tmp = new char[20];
+        int p = 20;
+        while (l < 0) {
+            int digit = (int) -(l % 10);
+            p = p - 1;
+            tmp[p] = (char) ('0' + digit);
+            l = l / 10;
+        }
+        if (neg) {
+            append('-');
+        }
+        for (int k = p; k < 20; k++) {
+            append(tmp[k]);
+        }
+        return this;
+    }
+
     // --- CharSequence ---
 
     public int length() {

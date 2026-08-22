@@ -1,0 +1,46 @@
+package java.util.function;
+
+import java.util.Objects;
+
+// KajiLibrary's java.util.function.Predicate<T> — a boolean-valued test on a T (the shape
+// filters and conditionals bind to). Its single abstract method is `test`; the default
+// `and`/`or`/`negate` build compound predicates from lambdas.
+public interface Predicate<T> {
+
+    boolean test(T t);
+
+    // Short-circuiting AND of this and `other`.
+    default Predicate<T> and(Predicate<? super T> other) {
+        Objects.requireNonNull(other);
+        return (T t) -> this.test(t) && other.test(t);
+    }
+
+    // The logical negation of this predicate.
+    default Predicate<T> negate() {
+        return (T t) -> !this.test(t);
+    }
+
+    // Short-circuiting OR of this and `other`.
+    default Predicate<T> or(Predicate<? super T> other) {
+        Objects.requireNonNull(other);
+        return (T t) -> this.test(t) || other.test(t);
+    }
+
+    // The predicate "is equal to this reference", by Object.equals — with null handled up
+    // front so the returned predicate never calls equals on a null target.
+    public static <T> Predicate<T> isEqual(Object targetRef) {
+        if (targetRef == null) {
+            return (T object) -> object == null;
+        }
+        return (T object) -> targetRef.equals(object);
+    }
+
+    // The negation of `target`, as a static so it can be written in prefix position
+    // (`Predicate.not(String::isEmpty)`) — the instance `negate` needs a receiver, which a
+    // bare method reference does not yet have.
+    public static <T> Predicate<T> not(Predicate<? super T> target) {
+        Objects.requireNonNull(target);
+        Predicate<? super T> negated = target.negate();
+        return (Predicate<T>) negated;
+    }
+}

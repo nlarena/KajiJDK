@@ -34,6 +34,16 @@ public abstract class Writer implements Closeable, Flushable, Appendable {
         this.write(cbuf, 0, n);
     }
 
+    // Write a slice of a String without the caller having to cut a substring first — the
+    // point being to avoid allocating a copy of text that is about to be copied again.
+    public void write(String str, int off, int len) {
+        char[] cbuf = new char[len];
+        for (int i = 0; i < len; i++) {
+            cbuf[i] = str.charAt(off + i);
+        }
+        this.write(cbuf, 0, len);
+    }
+
     // --- Appendable (each returns this Writer, covariant with Appendable) ---
 
     public Writer append(char c) {

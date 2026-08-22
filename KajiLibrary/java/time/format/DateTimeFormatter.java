@@ -33,6 +33,12 @@ public final class DateTimeFormatter {
         return new DateTimeFormatter(pattern);
     }
 
+    // Package-private seam for DateTimeFormatterBuilder.append(DateTimeFormatter), which composes
+    // by concatenating patterns. Not public: the JDK has no such accessor, so it would be an EXTRA.
+    String pattern() {
+        return this.pattern;
+    }
+
     public String format(TemporalAccessor temporal) {
         StringBuilder out = new StringBuilder();
         String p = this.pattern;

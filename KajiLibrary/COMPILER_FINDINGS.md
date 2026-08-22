@@ -8,21 +8,27 @@ The library is compiled with the frozen snapshot `bin/javac-frozen.exe` (`--emit
 
 Legend: ✅ fixed (in `src/javac` + regression test, folded into the snapshot) · ⬜ open.
 
+**Numbering:** findings raised from the **library session are numbered from #100 up** (#100, #101, …),
+originally to avoid colliding with the compiler session running in parallel (which was still in the
+low numbers); their repros are `finding_1NN.java`. **The two ranges have since converged** — the
+compiler session now also numbers in the 1xx range (#113–#117). No duplicates so far, but **check the
+highest number in this file before claiming a new one**, whichever session you are.
+
 **Versioned repros:** `KajiLibrary/repros/finding_NN.java` — self-contained, one per finding.
 Run from the repo root: `cargo run -- --emit KajiLibrary/repros/finding_09.java` (or
 `target/debug/javac.exe --emit …`). The binary prints diagnostics but **exits 0** — judge by the
 message, not the exit code. For emission-only bugs (#6) inspect with `bin/javap-clon.exe -v`.
 
-**Status (2026-08-07): ALL findings #1–#22 are ✅ FIXED in `src/javac`**, each with a regression test.
-Verified on the unified build (this javac + the refactored JVM with OS-threads/GIL): `cargo test --lib`
-is **768 green, 0 failing**. #1–#12 are additionally folded into `bin/javac-frozen.exe`. #19 was a
-**performance** item (slow `-cp` finder), not a correctness bug; #20 / #21 / #22 were the dangerous
-ones — silent wrong codegen (a `new` with a qualified name → dropped body), dropped enum machinery for
-a named-package enum (java.time went degenerate on disk), and a dangling superclass reference — none of
-which the API-shape gate can catch; all three are closed. **Nothing open.**
-(Historical note: #1–#12 were closed by 2026-08-03; #13–#22 surfaced 2026-08-04..06 dogfooding H3
-collections/streams, H4 java.time, H5 java.util.regex and H6 java.util.Formatter, and were closed since.
-The per-finding entries below keep their original reports for the record.)
+**Status (2026-08-03): all of #1–#12 are fixed in `src/javac` and folded into `bin/javac-frozen.exe`**
+(regression tests: `cargo test --lib`, 658 green; snapshot refreshed and verified). #10 and the
+interface-nested-enum half of #12 were already in the live build; the rest were fixed across this and
+earlier sessions. **Open now: #13–#20** (found 2026-08-04 dogfooding H3 — collections retrofits and
+streams — H4 — java.time — H5 — java.util.regex — and H6 — java.util.Formatter; repros in
+`KajiLibrary/repros/`, workarounds in the library — see Priority at the bottom). #19 is a
+**performance** item, not a correctness bug; **#20 is silent wrong codegen** (a `new` with a qualified
+name) that the shape gate can't catch. **#21 (was CRITICAL — enum machinery dropped for a
+named-package enum) is ✅ FIXED** in `src/javac` (regression test added); the library still needs to
+recompile java.time (its enums were degenerate on disk) to unblock H6-T5 `%t`.
 (See the "Build gotcha" note before rebuilding — build to a local-disk `CARGO_TARGET_DIR`, not the USB
 `target/debug`.)
 
@@ -137,10 +143,65 @@ unaffected (it doesn't link the executables).
 
 ---
 
-## Fixed (#13–#22 — logged as open, now all closed)
+## Open
 
-_Every finding below was open when first found; all are now ✅ FIXED with a passing regression test
-(`cargo test --lib`, 768 green). The original reports are kept for the record._
+- **#116 — the implicit `public` of an interface member isn't applied to `static` methods.**
+  In an interface every member is implicitly `public` (JLS §9.4). We apply that to *abstract*
+  methods but not to *static* ones: `static ClassDesc of(String)` came out package-private
+  (`flags: (0x0008) ACC_STATIC`), while `String descriptorString();` in the same interface
+  correctly got `ACC_PUBLIC | ACC_ABSTRACT`. A package-private static on an interface isn't even
+  expressible in Java, so the emitted class file is one no `javac` could produce.
+  - Repro: `public interface I { static I of(String s) { return null; } String d(); }`
+    → `javap -p` shows `static I of(java.lang.String)` where the reference shows `public static`.
+  - Workaround in KajiLibrary: `java.lang.constant.ClassDesc.of` spells out `public static`.
+
+- **#117 — a fully-qualified type name isn't resolved in a type position.**
+  Writing the package on the type instead of importing it fails to resolve, even though the class
+  is on the classpath and the very same type resolves fine once imported.
+  - Repro: `private final java.lang.constant.ClassDesc constantType;`
+    → `error: no se encuentra el símbolo: java.lang.constant.ClassDesc`; adding
+    `import java.lang.constant.ClassDesc;` and writing `ClassDesc` compiles.
+  - Observed on a field declaration (the first occurrence in the file); ctor/method parameter and
+    return positions in the same class used the same qualified name, so the fix is presumably one
+    place in name resolution rather than per-position.
+  - Workaround in KajiLibrary: `Enum.EnumDesc` imports `ClassDesc` instead of qualifying it.
+
+- **#115 — `volatile` on a field is dropped: `ACC_VOLATILE` is never emitted.**
+  A field declared `private volatile boolean interrupted;` comes out as `flags: (0x0002) ACC_PRIVATE`;
+  the reference `.class` has `(0x0042) ACC_PRIVATE, ACC_VOLATILE`. This is not cosmetic — the
+  interpreter keys the memory model off exactly that bit (`MemberInfo::is_volatile()` →
+  `Ordering::Release`/`Acquire` on `putfield`/`getfield`, and a real `AtomicU64` for `long`), so a
+  dropped flag silently downgrades the field to `Relaxed`. Under the green scheduler nothing shows
+  (one carrier, no real parallelism); under the OS-parallel substrate it is a genuine data race.
+  - Repro: any `volatile` field → `javap -v` shows no `ACC_VOLATILE`.
+  - Blocks: KajiLibrary's `java.lang.Thread` can't take over from `boot/`'s until this is fixed —
+    its `interrupted` flag is written by *another* thread (the interrupter) and read by this one,
+    which is precisely the case `volatile` exists for. The source is written and compiles; it is
+    a strict superset of `boot`'s Thread **except** for this flag.
+
+- **#113 — the enhanced-`for` desugaring erases a generic return type to `Object` instead of to its erasure.**
+  A for-each over a generic collection emits the `iterator()` call site with descriptor
+  `()Ljava/lang/Object;`, but the declared method erases to `()Ljava/util/Iterator;`. The descriptors
+  don't match, so resolution fails at run time with `NoSuchMethodError` (the VM looks the call up by
+  exact descriptor). The erasure of `Iterator<E>` is `Iterator`, never `Object` — `Object` would only
+  be right for an unbounded *type variable* return (`E`), not for a parameterized type.
+  - Repro: `ArrayList<String> l = new ArrayList<>(); l.add("x"); for (String s : l) { ... }`
+    → `invokevirtual java/util/ArrayList.iterator:()Ljava/lang/Object;` while
+    `javap -s KajiLibrary/java/util/ArrayList.class` reports `descriptor: ()Ljava/util/Iterator;`.
+  - Impact: **every** for-each over a KajiLibrary collection is unusable; the indexed form
+    (`for (int i = 0; i < l.size(); i++)`) works fine, so it's specific to the desugaring.
+
+- **#114 — a concat whose operand has no matching `append` overload is silently dropped (no error).**
+  `"Thread-" + tid` (a `long`) emitted **nothing at all** for the right-hand side — the ctor came out
+  as `aload_0; putfield name`, i.e. a `putfield` with an empty stack, which the verifier/interpreter
+  then rejects as *operand stack underflow*. Root cause was a **library** gap (`StringBuilder` had no
+  `append(long)`), now fixed on the KajiLibrary side; but the compiler behaviour is the real bug:
+  a missing overload must be a **compile error**, never a silently empty expression that produces
+  invalid bytecode. `String + int` and `String + String` were fine, so it's the overload-lookup
+  failure path that's unguarded.
+  - Repro (before the library fix): `long t = 7L; String c = "y" + t;` → `astore` with nothing pushed.
+  - Note: `append(double)` / `append(float)` / `append(Object)` are still missing from
+    `StringBuilder`, so concatenating those types will hit the same silent-drop today.
 
 - **#13 — ✅ FIXED. enclosing-instance capture is broken for a class declared inside a *generic* class.**
   Turned out to be **two** independent things, both now resolved:
@@ -401,14 +462,134 @@ _Every finding below was open when first found; all are now ✅ FIXED with a pas
     and both recompile + gate clean. So #15's supertype-graph walk does cover it — the old snapshot was
     simply stale.
 
+- **#100 — ⬜ a bounded type variable erases to `java.lang.Object` instead of to its leftmost bound
+  (JLS §4.6).** Our javac emits `Object` as the erasure of every type variable, ignoring any `extends`
+  bound. Verified in isolation (`finding_100.java`): in `interface X<A extends Annotation, T>`,
+  - `void single(A)` → we emit `(Ljava/lang/Object;)V`; JDK emits `(Ljava/lang/annotation/Annotation;)V`
+  - `<U extends Comparable<U>> void cmp(U)` → we emit `(Ljava/lang/Object;)V`; JDK `(Ljava/lang/Comparable;)V`
+  - `void obj(T)` (unbounded) → both emit `(Ljava/lang/Object;)V` (correct)
+  So the bound is simply not consulted when computing a type variable's erasure. **Impact:** any
+  method/field whose signature mentions a bounded type variable gets the wrong descriptor — a shape-gate
+  MISMATCH, and (worse) it breaks overriding: an override written with the concrete bound type won't
+  match the `Object`-erased inherited method. Surfaced building `jakarta.validation` (Bean Validation):
+  `ConstraintValidator<A extends Annotation, T>.initialize(A)` erases to `(Object)V` vs the reference's
+  `(Annotation)V`. Likely a general priority once the current work needs bounded generics widely.
+  - Repro: `KajiLibrary/repros/finding_100.java` (`javap -s` the emitted interface).
+  - Library handling: the source is kept faithful (`initialize(A)`); the erased-descriptor divergence is
+    allowlisted (`tools/api_shape_allow.txt`) until the fix lands, then the snapshot is refreshed, the
+    classes recompiled, and the allowlist entry removed. No clean library-only workaround exists that
+    both keeps the generic signature and fixes the erasure.
+
+- **#101 — ⬜ a qualified reference to a nested type, `Outer.Nested`, is not resolved.** Only the simple
+  name `Nested` (in scope or via a single-type import) resolves; writing `Outer.Nested` fails with
+  `no se encuentra el símbolo: Outer.Nested`. Verified in isolation (`finding_101.java`): both the
+  same-file self-qualified form (`finding_101.Flag`) and the cross-file form (a sibling naming
+  `Outer.Flag` with `Outer` on the classpath) fail, while `Flag[]` (simple name) compiles. So name
+  resolution doesn't walk from an enclosing type to its member type through the `Outer.Nested` form.
+  Same family as **#20** (a qualified `new` name is miscompiled) — the compiler struggles with
+  qualified names generally. Surfaced building `jakarta.validation.constraints.Email`, whose
+  `flags()` returns `Pattern.Flag[]` (`Pattern.Flag` being a *sibling file's* nested enum).
+  - **Worse — the import form is silent wrong codegen, not a fix.** Importing the nested type and using
+    the simple name (`import …Pattern.Flag; … Flag[] flags();`) makes it *compile*, but the emitted
+    descriptor uses `Object` for the cross-file nested type — e.g. `Flag[]` → `[Ljava/lang/Object;`
+    (not `[Ljakarta/validation/constraints/Pattern$Flag;`), and a **non-array** param `Path.Node`
+    (imported) → `Ljava/lang/Object;` (not `Ljakarta/validation/Path$Node;`, seen in
+    `TraversableResolver.isReachable`/`isCascadable`). So a **same-file** nested reference works and
+    emits the right type (`Pattern.flags()` → `Pattern$Flag[]`), but any **cross-file** nested reference
+    has *no* clean workaround: `Outer.Nested` won't compile, and the imported simple name silently emits
+    `Object` (array or not). Where the divergence is only in the descriptor, the faithful source is kept
+    and the entry allowlisted (`TraversableResolver`); where it corrupts an annotation element, the
+    member is omitted (`Email.flags()`).
+  - Repro: `KajiLibrary/repros/finding_101.java`.
+  - Library handling: `Email.flags()` is **omitted** (subset) rather than shipping a wrong `Object[]`
+    descriptor; it returns once cross-file nested resolution is fixed.
+  - **Update (2026-08-13): it also bites SAME-PACKAGE, different-file.** `java.util.SequencedMap` and
+    `java.util.NavigableMap` import `java.util.Map.Entry` and use the simple name `Entry`; every method
+    returning it emits `()Ljava/lang/Object;` instead of `()Ljava/util/Map$Entry;` (8 allowlisted
+    entries). So the trigger is the nested type living in another **file**, not another package — the
+    same compilation unit is what makes `Map.Entry` work inside `Map.java` itself.
+
+- **#102 — ⬜ a call to a method returning an array of a *cross-package* reference type is generated
+  with an `Object[]` return descriptor.** Compiling a class that does `Field[] fs = c.getDeclaredFields()`
+  (where `c` is a `java.lang.Class` and `getDeclaredFields()` is declared `()[Ljava/lang/reflect/Field;`)
+  emits the `invokevirtual` with descriptor **`()[Ljava/lang/Object;`** instead of
+  `()[Ljava/lang/reflect/Field;`. The **declared** method reads back correctly (`javap -s` on our
+  `Class.class` shows `()[Ljava/lang/reflect/Field;`), and the JDK javac emits the right call — so it's
+  the **call-site codegen** that erases the array element type to `Object` when the element is a
+  reference type from another package (here `java.lang.reflect.Field`, imported into a default-package
+  class). At the VM this call then fails `vtable_slot` (no `getDeclaredFields()[Ljava/lang/Object;`
+  exists) → `NoSuchMethodError`. A same-package array-element return (`repro102.Elem[] make()`) compiles
+  the call **correctly**, both same-file and cross-file — so the trigger is the cross-package element
+  type (family of #100/#101: reference-type erasure/resolution in codegen).
+  - Evidence: `java/AnnoRead.java` compiled with the frozen javac → `Object[]` call (VM throws
+    `NoSuchMethodError`); the *same* source compiled with the JDK javac → `[Ljava/lang/reflect/Field;`
+    call, and the reflection test passes (`reads_constraint_annotations_off_fields` = 102101).
+  - **This blocks the Bean Validation *engine*:** a reference `Validator` compiled by the frozen javac
+    can't call `Class.getDeclaredFields()`. The runtime side is done and verified (getDeclaredFields /
+    Field.get / the annotation-reading natives all work when the caller is compiled by the JDK javac);
+    the engine waits on this fix (or a `Reflect.declaredFields(Class)` helper typed `Object[]` as a
+    library workaround).
+
+- **#103 — ⬜ missing `int`→`long` widening (`i2l`) on assignment and method arguments.** An `int`
+  value used where a `long` is required must be widened with `i2l` (JLS §5.1.2, widening primitive
+  conversion). The frozen javac omits it: `long t = 5;` emits `iconst_5; lstore_0` (should be
+  `iconst_5; i2l; lstore_0`), and `obj.wait(5)` (a call to `wait(J)V`) emits `iconst_5; invokevirtual`
+  with **no `i2l`** — pushing an `int` where the callee reads a `long`. Only an explicit `long` literal
+  is correct: `obj.wait(5L)` → `ldc2_w 5L; invokevirtual`. Our lenient, `Value`-tagged interpreter masks
+  it for arithmetic (an `Int` in a long slot still adds), but any consumer that distinguishes the two —
+  a native reading the argument, or the real JVM's bytecode verifier (which would reject `int` on the
+  stack for a `long` parameter) — breaks. Surfaced building `Object.wait(long)` for the JSR 166 locks:
+  `wait(5)` was read as `wait(0)` (= indefinite wait per the JLS) → deadlock. Worked around at the VM by
+  reading the timeout leniently as `Int` or `Long`; the real fix is to emit `i2l` (and, generally, the
+  right widening conversion) at the point an `int` expression is used in a `long`/`float`/`double`
+  context. Repro: `repros/finding_103.java`.
+  - **Update (2026-08-13, JSR 166 C3): #103 bites *library* code, not just fixtures.** Two live
+    defects it caused in KajiLibrary: `CountDownLatch.getCount()` compiled its `long n = count;`
+    (int field) to `getfield …:I; lstore` with no `i2l`, so the returned value was int-tagged and the
+    caller's `lcmp` against `0L` **panicked the VM**; and `TimeUnit.convert(Duration)` passed an int
+    `nano` to the long parameter of `cvt`, silently mis-converting. **An explicit `(long)` cast DOES
+    emit `i2l` correctly** (`long n = (long) count;` → `getfield; i2l; lstore`), so that is the
+    library-side workaround, applied in both places. Standing rule for KajiLibrary until this is
+    fixed: never rely on implicit int→long widening — write the cast, and use `L` literals. Likely the same gap exists for `int`→`float`/`double` and
+  `long`→`float`/`double` widenings in the same positions — worth checking together.
+
+- **#104 — ⬜ the class reader ignores a classpath method's `Exceptions` attribute.** When the
+  frozen javac loads a class from `-cp` and checks an override, it does not read the overridden
+  method's `throws` clause (the `Exceptions` attribute) — so an override that declares the *same*
+  checked exception reads as **wider** and is rejected ("declara lanzar `X`, más ancho que lo que
+  permite `<iface>` §8.4.8.3"). The **write** side is correct: our compiled `Condition.class` carries
+  `Exceptions: throws java.lang.InterruptedException` (JDK `javap` shows it) — it's the **read** side
+  that drops it. Surfaced implementing `Condition.await() throws InterruptedException` in a class that
+  `implements` our subset `Condition`. Workaround: since the KajiLibrary bodies raise no checked
+  exception (our `Object.wait`/`wait(long)` are declared without `throws`), the overriding methods
+  simply **omit** `throws` — a narrower throws is always a valid override. Fix: parse the `Exceptions`
+  attribute in the class-file reader so classpath `throws` clauses are honoured.
+
+- **#105 — ⬜ `monitorexit` is not emitted on an early `return` inside a `synchronized` block.** A
+  `synchronized (obj) { … return …; … }` must release the monitor on **every** exit path. The frozen
+  javac emits the `monitorexit` for the fall-through exit and installs the exception handler
+  (`… monitorexit; athrow`, covering `throw`s and implicit exceptions) — but an **early `return`**
+  inside the block jumps straight out with **no `monitorexit`**, leaking the monitor. Concretely, in
+  `ReentrantLock.lock()` the reentrant fast path `if (owner == me) { holdCount++; return; }` compiled to
+  `… putfield holdCount; return` with no `monitorexit` before it (the `monitorenter` was never undone).
+  Every reentrant call leaked one level; after 100 iterations the internal `sync` monitor sat at
+  `owner=<dead thread>, count=100`, so no other thread could ever acquire it → deadlock (the VM's
+  `execute` returned `None`, nothing runnable). **Synchronized *methods* (`ACC_SYNCHRONIZED`) are
+  unaffected** — the VM releases their monitor on frame exit, on any path — which is why the `atomic.*`
+  classes (all synchronized methods) work. Only synchronized *blocks* with an early `return` leak.
+  Workaround: write such methods **single-exit** — compute into a local inside the block and `return`
+  it *after* the block; keep `throw` inside (the exception handler releases correctly). Fix: duplicate
+  the `monitorexit` before every early `return` inside a synchronized block (what the real javac does
+  via the synthesized finally). This is the most impactful finding of the JSR 166 work — any
+  synchronized block with an early return is silently broken. Repro: `repros/finding_105.java`.
+
 ---
 
 ## Priority
 
-**All closed — #1–#22 fixed** (verified by `cargo test --lib`, 768 green). Nothing left to prioritize;
-the list below is kept as the historical impact order the findings were worked in (highest-impact
-first). Each still has a **versioned repro** in `KajiLibrary/repros/` and had a KajiLibrary workaround
-while it was open.
+**Open: #13–#17** (#1–#12 fixed and in `bin/javac-frozen.exe`). These five surfaced while retrofitting
+the collections and writing the streams (H3). Each has a **versioned repro** and a KajiLibrary
+workaround, so none blocks the library — they're quality items. Rough impact order:
 
 - **#21 — ✅ FIXED (was TOP PRIORITY, CRITICAL regression).** Root cause: the desugar's FQN for the
   member-synthesis lookup didn't include the **package**, so a **named-package** enum lost all its
@@ -436,11 +617,374 @@ while it was open.
   so it can ship broken bytecode unnoticed. Two-part fix: resolve qualified names in `new`, and make a
   `new` of an unresolved type a hard error instead of a silently-empty body.
 
-Repros live in `KajiLibrary/repros/finding_NN.java`. **Run them with their setup** — some need `-cp`
-or the bootstrap classes; a naive `--emit` can hit an unrelated classpath error (e.g. `finding_09`
-reports a missing `size` when `List` binds to the JDK's, not the real #9 error). The "still failing
-(✗)" comments inside some repros predate their fix — the authoritative check is the regression suite.
+Repros for all open findings live in `KajiLibrary/repros/finding_NN.java` (13–17 added this session),
+each confirmed to reproduce against the current `bin/javac-frozen.exe` — re-verify against the live
+`target/debug` before/after fixing.
 
-Status (2026-08-07): **#1–#22 all fixed** — verified by `cargo test --lib` (**768 green, 0 failing**)
-on the unified build (this javac + the refactored JVM with OS-threads/GIL). #1–#12 are also folded into
-`bin/javac-frozen.exe`. **Nothing open.**
+Status (2026-08-04): fixed and folded into `bin/javac-frozen.exe` — **#1–#12**. Open — **#13, #14,
+#15, #16, #17, #18** (found dogfooding H3 collections/streams and H4 java.time; workarounds applied
+in KajiLibrary; repros `finding_13`…`finding_18` in `KajiLibrary/repros/`) plus **#19** (performance;
+`-cp` finder slowness, found dogfooding H5 java.util.regex; no single-file repro — needs a stale `-cp`)
+and **#20** (silent wrong codegen — a `new` with a qualified name drops the body to `areturn`; found
+dogfooding H6 java.util.Formatter; repro `finding_20.java`) and **#21** (CRITICAL regression — the
+compiler drops ALL enum machinery; every enum unusable, H4/java.time silently broken; both frozen and
+live javac; repro `finding_21.java`).
+
+- **#106 — ⬜ resolution/erasure defects surfaced building the JPA metamodel & criteria packages.**
+  Three related codegen/resolution issues in interfaces with rich generics (jakarta.persistence.metamodel):
+  (a) a **qualified** reference to a JDK type in a signature does not resolve — `java.lang.reflect.Member`,
+  `java.util.Collection/List/Set/Map`, `java.sql.Date` all fail as `no se encuentra el símbolo`; the fix is
+  an `import` + simple name (same family as the `java.lang.reflect.Field` note and #101). (b) A simple-name
+  type that exists in **both** `java.lang.reflect` and the current (same) package resolves to the JDK one:
+  `Type<X> getType()` (meant as `jakarta.persistence.metamodel.Type`) emits `()Ljava/lang/reflect/Type;`.
+  An explicit `import jakarta.persistence.metamodel.Type;` fixes it **inconsistently** (worked for
+  IdentifiableType, not SingularAttribute/MapAttribute) — those two are allowlisted. (c) A generic return
+  whose element involves a type variable + wildcard (`Set<Attribute<? super X, ?>>`) can erase the whole
+  return to `Object` (`()Ljava/lang/Object;` instead of `()Ljava/util/Set;`) — the #100 family. Net: the
+  metamodel compiles and gates with 2 allowlisted `Type` divergences; criteria (P5) hits the same class of
+  issues at larger scale. Fix direction: honor qualified JDK-type references in the class-file reader/finder;
+  prefer same-package over non-imported java.lang.reflect for simple names; erase parameterized returns to
+  their raw type, not Object.
+
+- **#108 — ⬜ a chained call through an INTERFACE-typed intermediate is silently dropped (and
+  corrupts the stack).** `lock.writeLock().lock();` — where `writeLock()` returns the interface
+  `java.util.concurrent.locks.Lock` — compiles to a single stray `pop`: **both** calls vanish, and the
+  `pop` runs on an empty stack. Chaining through a **class**-typed intermediate is fine
+  (`c.inner().act()`, `c.sb().append("x")` both emit correctly), so the trigger is the *interface*
+  receiver of the second call. Binding the intermediate to a local first is a correct workaround
+  (`Lock w = lock.writeLock(); w.lock();` → `invokevirtual` + `invokeinterface`, both emitted).
+  This is the most dangerous class of defect we have seen — worse than #20: it is **silent wrong
+  codegen that the shape gate cannot catch** (the enclosing class's API is unchanged), and it deletes
+  the very operation the caller asked for. Found building `ReentrantReadWriteLock`: every
+  `lock.writeLock().lock()` / `.unlock()` in the behaviour fixture compiled to nothing, so the test
+  "passed the lock" while never locking. Repro: `repros/finding_108.java`.
+  - **Related (extension of #102): a cross-package NESTED type as a return type erases to `Object`.**
+    With `readLock()` declared to return the JDK-faithful covariant nested type
+    `ReentrantReadWriteLock.ReadLock`, the call site emitted
+    `readLock:()Ljava/lang/Object;` → `NoSuchMethodError` at run time. The class finder appears not to
+    resolve `Outer$Inner` names from the classpath. KajiLibrary's `ReentrantReadWriteLock` therefore
+    declares `readLock()`/`writeLock()` as returning the **`Lock` interface** — a descriptor the JDK
+    class also has (it emits exactly that bridge), so the gate still matches — and the code runs.
+
+- **#109 — ⬜ a boolean-valued conditional expression is rejected as "operando no numérico".** The
+  ternary `o == null ? e == null : o.equals(e)` — both branches `boolean` — fails to compile; an
+  int-valued (`c ? 1 : 0`) or reference-valued (`c ? null : "x"`) ternary compiles fine, so the
+  conditional operator's type is being computed numerically instead of by JLS §15.25 (which folds a
+  both-`boolean` conditional to `boolean`). Surfaced writing the null-safe equality used by the
+  concurrent collections. Workaround: an explicit `if`/`else` helper —
+  `private static boolean eq(Object a, Object b)` — used by `CopyOnWriteArrayList`,
+  `ArrayBlockingQueue` and `LinkedBlockingQueue`.
+
+- **#110 — ✅ FIXED (library session, 2026-08-18) — a STATIC field of a *classpath* class was read
+  with `getfield` instead of `getstatic`.**
+  `Integer.MAX_VALUE` compiles to `aload_0; getfield java/lang/Integer.MAX_VALUE:I` — the wrong opcode
+  *and* a bogus receiver (`this`, or whatever happens to be on the stack in a static method). At the VM
+  this is `field_offset: field not found in the class or its superclasses`. A static declared in the
+  **same compilation unit** compiles correctly (`getstatic`), so the defect is in the class-file reader:
+  it does not record `ACC_STATIC` for fields loaded from `-cp` (the same blind spot as #104's
+  `Exceptions` attribute). **Scope is large:** every reference to an enum constant of a separately
+  compiled class (`TimeUnit.SECONDS`, `ChronoField.YEAR`, `Month.JANUARY`, `Locale.US`…) is broken at
+  run time, which is why it went unnoticed — java.time and the formatter were validated by self-tests
+  in *real* Java plus the shape gate, never executed on our VM. Worked around in KajiLibrary by writing
+  the literal (`2147483647` in LinkedBlockingQueue) and by taking the unit-free constructor path in
+  Executors; fixture code uses `TimeUnit.valueOf("MILLISECONDS")`, since static *methods* resolve fine.
+  Repro: `repros/finding_110.java`.
+
+- **#111 — ⬜ a method call on a receiver whose static type is a TYPE VARIABLE is silently dropped.**
+  `boolean viaTypeVar(Object o) { return value.equals(o); }` (where `value` is a `T` field) compiles to
+  **`aload_1; areturn`** — the argument is returned, as a reference, from a `boolean` method; the call
+  never happens. Binding the receiver to an `Object` local first compiles correctly
+  (`aload; invokevirtual Object.equals; ireturn`). This is the same silent-drop family as #108 (there
+  the receiver was interface-typed), and just as dangerous: the shape gate cannot see it, and the
+  emitted method does something entirely different from its source. Found in
+  `ConcurrentHashMap.remove(key, value)`, which ended up branching on its own argument instead of
+  comparing values. Repro: `repros/finding_111.java`.
+
+- **#112 — ✅ FIXED (library session, 2026-08-18) — a `static final` primitive constant was neither
+  folded nor initialized.** For
+  `private static final int NEW = 0;` the compiler writes the value **only** into the field's
+  `ConstantValue` attribute — it emits no `<clinit>`, and it reads the field at use sites with
+  `getstatic` rather than folding the constant in (JLS §13.1 requires constant expressions to be folded;
+  real javac emits `iconst_0`, so a JDK class never depends on the VM applying ConstantValue for
+  primitives). Our VM does not apply `ConstantValue` at class initialization, so **every such constant
+  reads back as 0**. Found in `FutureTask`, whose four state constants (`NEW`/`COMPLETED`/`FAILED`/
+  `CANCELLED`) were all 0: `state = COMPLETED` left the task indistinguishable from unfinished, so
+  `get()` waited forever and the VM ran out of runnable threads. Either half is a fix — fold constants
+  in the compiler (preferred, matches javac) or honour `ConstantValue` in the runtime. Worked around by
+  dropping `final`, which forces a real `<clinit>`. Repro: `repros/finding_112.java`.
+
+- **#118 — the varargs flag is never emitted, and a spread call to a *classpath* varargs method is
+  silently DELETED.** Two halves, the second being silent wrong codegen the shape gate cannot see.
+  - **Write side:** a `T...` parameter gets the right descriptor (`[Ljava/lang/Object;`) but the method
+    never gets ACC_VARARGS — ours `flags: (0x0009) ACC_PUBLIC, ACC_STATIC` where real javac emits
+    `(0x0089)` with the varargs bit. Pre-existing and library-wide: `java/lang/String.class`'s two
+    `format` methods lack it too, so `Method.isVarArgs()` answers false for all of them.
+  - **Read side (the dangerous half):** with the flag absent, a caller compiled against that `.class`
+    cannot tell the method is varargs, finds no applicable overload for a spread call, and emits
+    **nothing** — no diagnostic, no `invokestatic`, no `anewarray`. Verified independently:
+    `Va.join("-", "a", "b")` compiles to `ldc "-"; ldc "a"; ldc "b"; areturn`, which returns `"b"` and
+    strands two operands on the stack (bytecode the real JVM verifier would reject). The no-argument
+    form `Va.join("-")` is deleted the same way — no empty array is built.
+  - **Correct forms:** passing the array explicitly (`Va.join("-", parts)`) compiles right, and so does
+    a **same-file** varargs call — there the compiler still has the source AST and never consults the
+    flag, which is why this went unnoticed.
+  - Same unguarded overload-lookup-failure path as **#114** (a call that resolves to nothing must be a
+    compile error, never an empty expression); closest relatives are #108 and #111.
+  - **Impact:** `PrintWriter.printf`/`format` as compiled are *correct* — their bodies pass the
+    already-built array straight through — but any future KajiLibrary or user code writing
+    `pw.printf("x=%d", n)`, or `String.format("%s", x)` against our own `java/lang` on the `-cp`, will
+    silently compile to nothing. Worth fixing before anything downstream uses printf-style calls.
+  - Repro: `repros/finding_118.java` (compile `Va118` first, then the caller with `-cp`).
+
+- **#119 — a type from a SUBPACKAGE of `java.lang` erases to `java.lang.Object` in the descriptor of
+  a call site in another compilation unit.** Our `java/lang/ref/WeakReference.class` declares
+  `(Ljava/lang/Object;Ljava/lang/ref/ReferenceQueue;)V`, but a caller compiled against it emits
+  `invokespecial java/lang/ref/WeakReference."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V` —
+  verified independently. Affects parameters, returns and constructors alike
+  (`ReferenceQueue poll()` becomes `()Ljava/lang/Object;`). Identical hierarchies placed in `zz.ref`,
+  `a.b.c` or a single-segment package all compile correctly, so it is specific to subpackages of
+  `java.lang` — plausibly the simple-name lookup falling back to the hard-coded `JAVA_LANG` path
+  (`java.lang.ReferenceQueue`), missing, and stubbing the type as Object instead of reporting an
+  error. Same "resolution failure becomes silence" root as #108/#111/#118.
+  - **LIVE IMPACT:** `java.util.WeakHashMap` compiles and gates clean but **cannot run** — every
+    WeakReference construction and every `ReferenceQueue.poll()` links to a descriptor that does not
+    exist (NoSuchMethodError). There is **no source-level workaround**; the source is correct Java.
+  - Repro: `repros/finding_119.java`.
+
+- **#120 — a call to a method the receiver only INHERITS from an EXTERNAL superclass is silently
+  deleted, leaving verifier-invalid bytecode.** `WeakReference.get()` is declared on `Reference`;
+  calling it through a `WeakReference`-typed receiver emits no invoke at all — `return w.get();`
+  compiles to a bare `0: areturn` **with an empty operand stack** (verified independently). That is
+  worse than #108/#111, which at least left the arguments behind. Seen in the wild as `astore 5` with
+  nothing pushed. Inheritance within the same compilation unit is fine, so this is another
+  classpath-reader blind spot, alongside #110 (ACC_STATIC), #104 (Exceptions) and #118 (ACC_VARARGS):
+  the reader does not carry the supertype's method table.
+  - **Workaround:** cast the receiver to the class that *declares* the method —
+    `Reference r = (Reference) w; r.get();` emits the `invokevirtual`. The plain widening assignment
+    `Reference r = w;` is rejected outright ("tipo incompatible"), so the cast is required. Applied in
+    `WeakHashMap`'s entry wrapper.
+  - Repro: `repros/finding_120.java`.
+
+- **#121 — `super(...)` fails to resolve when the target constructor takes a PARAMETERIZED type
+  mentioning the superclass's type variable.** `abstract class G<E> { G(Class<E> t) {} }` with
+  `class Sub<E> extends G<E> { Sub(Class<E> t) { super(t); } }` reports "el generador de bytecode
+  todavia no soporta un super(...)/this(...) que no resolvio a ningun constructor". It is a
+  *resolution* failure, not a codegen gap: the constructor exists and the argument type matches
+  exactly. Works with `int`, `Object`, a bare `E`, or `Class<?>` on a non-generic superclass; fails
+  identically with a user-defined `Box<E>`, within one file and across files.
+  - This is exactly the shape of the JDK's `EnumSet(Class<E>, Enum[])`, so KajiLibrary's `EnumSet`
+    was given a no-argument constructor with the subclass assigning the field directly.
+  - Repro: `repros/finding_121.java`.
+
+- **#101 — additional manifestation, worse than the descriptor erasure already documented.** A class
+  implementing a nested interface via an import (`final class LhmEntry<K,V> implements Entry<K,V>`
+  with `import java.util.Map.Entry;`) emits an **empty `interfaces[]` table**: javap shows the
+  interface only from the `Signature` attribute, and the constant pool has no `Map$Entry` Class entry
+  at all. So the implements clause is silently DROPPED, not merely erased. Harmless where the library
+  only passes such an object around by its concrete type, but any call through a `Map.Entry`-typed
+  receiver would fail at run time.
+
+- **#122 — overload resolution counts a class's declaration and its interface's re-declaration as
+  two distinct candidates.** `ExecutorCompletionService<V>` declares `submit(Callable<V>)` and
+  implements `CompletionService<V>`, which declares the same method. A call through the *class*-typed
+  receiver is rejected as "la referencia a `submit` es ambigua"; typing the local as the interface
+  compiles fine. This is not ordinary ambiguity — the two candidates are the same method, one being
+  the implementation of the other, and JLS 15.12.2.5 removes such duplicates before the
+  most-specific test. It bites any class that implements an interface and re-declares its methods,
+  which is the normal shape for a concrete implementation.
+  - Workaround in the library: fixtures declare the local with the interface type.
+
+- **#123 — a covariant override is rejected when the override's return type inherits its
+  relationship to the overridden type from a CLASSPATH generic hierarchy.** `SetJoin<Z,E> extends
+  PluralJoin<Z,Set<E>,E>` narrows `PluralAttribute<? super Z, Set<E>, E> getModel()` to
+  `SetAttribute<? super Z, E> getModel()`, which is legal because the classpath declares
+  `SetAttribute<X,E> extends PluralAttribute<X, Set<E>, E>`. The compiler rejects it with
+  *"el retorno de `getModel` no es compatible con el de `PluralJoin`: SetAttribute no es un subtipo
+  de PluralAttribute"* — note the message names the **erasures**, so the check is failing before any
+  generic reasoning: the super-interface chain of an external type is not being consulted for the
+  return-type subtype test. Same failure, same shape, in `CollectionJoin` and `ListJoin`.
+  - **Live impact:** these are 3 of the 7 jakarta.persistence classes still missing; there is no
+    source-level workaround (widening the return to `PluralAttribute` would diverge from the API).
+  - Sibling of #120 (a supertype's *method table* isn't read from the classpath): here it's the
+    supertype *chain* that isn't read. Both point at the same gap in the class-file reader.
+  - Repro: pending — the minimal form needs the hierarchy split across a classpath, which tripped
+    finding #4 (a same-package unqualified reference isn't auto-loaded) before it could be reduced.
+
+- **#124 — a field initializer in an INTERFACE synthesizes a constructor ON THE INTERFACE.** Any
+  initialized interface field (`interface I { int VALUE = 7; }`) is lowered as if it belonged to a
+  class: the emitted interface gains
+  `public default I(); Code: aload_0; invokespecial Object.<init>; bipush 7; putstatic VALUE:I; return`.
+  Two defects in one method:
+  1. **An interface must never declare `<init>`.** Its fields are implicitly `public static final`
+     (JLS §9.3) and are initialized in `<clinit>` (JVMS §2.9.2). The method is also emitted as
+     `default` — an interface method *with a body* — and begins `aload_0; invokespecial
+     Object.<init>` against a `this` that cannot exist.
+  2. **The field is therefore never assigned.** Nothing calls that constructor, so the value
+     survives only in the field's `ConstantValue`, which our VM does not apply — compounding #112.
+     With a non-constant initializer (`int C = "abc".length();`) there is no `ConstantValue` either,
+     so the field is unconditionally zero.
+  - Surfaced writing `java.text.CharacterIterator`, whose `char DONE` is part of the JDK contract.
+  - **The API-shape gate DOES catch this one**, as an `EXTRA <init>()V` — a rare case where the
+    gate sees a codegen defect, because the bogus member is *added* to the public surface rather
+    than silently miscompiled. (Contrast #110/#112/#119, which the gate cannot see at all.)
+  - Repro: `KajiLibrary/repros/finding_124.java` (both the constant and the computed shapes).
+  - Library handling: `CharacterIterator.DONE` is **omitted** — a missing member is a legal subset,
+    a spurious one is not — and the implementations use the literal `'￿'`. It returns once
+    this is fixed.
+  - Fix direction: the lowering that moves field initializers into constructors must check the
+    enclosing type's kind. For an interface — and for a `static` field of a class — the initializer
+    belongs in `<clinit>`, and no `<init>` may be synthesized for an interface at all.
+
+- **#101 — the `import` sidestep for a nested type compiles but emits the WRONG descriptor.**
+  Previously recorded as a clean workaround ("importing a nested type works"). It is not: with
+  `import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;`,
+  `void removeAttributeNodes(PersistentAttributeType t)` compiles, and emits
+  `(Ljava/lang/Object;)V` instead of `(Ljakarta/persistence/metamodel/Attribute$PersistentAttributeType;)V`.
+  So the class links against a method that does not exist — the same shape as the original #101
+  erasure, just reached through the workaround. Found emitting `jakarta.persistence.Graph`;
+  allowlisted there, and the entry comes out when #101 is fixed.
+
+---
+
+## Los dos fixes de esta sesion (#110 y #112) — nota para el merge
+
+Ambos se arreglaron en `src/javac`, que es dominio de la sesion de compilador: **revisar antes de
+mergear**. Cada cambio lleva su comentario en el codigo explicando el bug, no solo el que.
+
+**#110 — `classfile.rs` tiraba los access flags del campo.** El loop de campos hacia
+`r.u2()?; // access` y seguia de largo, asi que `ExtField` no sabia si el campo era estatico.
+`enter.rs::build_external` creaba el simbolo con `modifiers: Vec::new()`, y `codegen::field_info`
+decide el opcode justamente por ese `modifiers` — o sea que "no es estatico" era el default
+silencioso para **todo** campo del classpath. Cambios: `ExtField.is_static`, poblado desde
+`ACC_STATIC`, y propagado como `Modifier::Static` en `build_external`. El codegen no se toco: ya
+elegia bien, le mentian los datos.
+
+**#112 — no habia plegado de constantes.** Se agrego:
+- `classfile.rs`: el pool retiene los valores (`Integer`/`Long`/`Float`/`Double`/`String`, antes
+  salteados como `Other`) y `read_attributes` devuelve el `ConstantValue` ademas del `Signature`.
+- `symbol.rs`: mapa lateral `field_consts: SymbolId -> FieldConst` (+ `set_field_const`/`field_const`),
+  al lado de `resolved_map`.
+- `enter.rs`: lo puebla para los campos del classpath (desde `ConstantValue`) y para los declarados
+  en la fuente, usando **el mismo predicado** (`const_field_value`) que decide el atributo — si
+  divergieran, el campo se emitiria con valor y se leeria sin el.
+- `codegen.rs`: `read_field` pliega antes de emitir nada, con `push_const`. De paso se unifico
+  `ConstVal` con `classfile::FieldConst`, que eran el mismo tipo duplicado.
+
+Verificado con `javap` sobre bytecode emitido (fixtures en el scratchpad): `Integer.MAX_VALUE` sale
+`ldc int 2147483647` y `Long.MIN_VALUE` sale `ldc2_w` (antes: `getfield`); un `static final int` de la
+propia fuente sale `bipush 7`; y un estatico NO constante (`ChronoUnit.NANOS`, `IsoChronology.INSTANCE`)
+sale `getstatic`, que es el caso de las 26 clases medidas. **La suite de Rust NO se pudo correr**: el
+linker MSVC (`link.exe`) desaparecio del entorno a mitad de sesion — `cargo` falla con "linker not
+found" incluso para binarios que habia linkeado 20 minutos antes. Correr `cargo test` antes de mergear.
+
+**Impacto medido antes del fix** (scripts `scan110.py`/`scan112.py`, sobre los `.class` emitidos):
+26 clases con al menos un `getfield` a un campo estatico (21 de ellas `java.time`, mas `Formatter`,
+`TimeUnit` y 2 de jakarta), y 14 clases declarando 65 constantes que leian 0. Union: 34 clases que
+gateaban limpio y no podian correr. Vale versionar esos scripts como chequeo de regresion.
+
+---
+
+## jakarta.persistence — cerrado en 203/203, con 10 metodos omitidos (2026-08-18)
+
+Las 6 clases que faltaban entraron. Ninguna necesito un fix de compilador: entraron **omitiendo el
+miembro que no compila**, que el gate acepta porque compara la superficie declarada y exige
+SUBCONJUNTO, no igualdad. Queda anotado para que nadie lo lea como "la API esta completa".
+
+| Clase | Omitido | Por que | Vuelve cuando |
+|---|---|---|---|
+| `SetJoin` / `CollectionJoin` / `ListJoin` | `getModel()` | #123 | se arregle #123 |
+| `MapJoin` | `getModel()`, `entry()` | #123 / #101 | se arreglen #123 y #101 |
+| `CriteriaBuilder` | `currentDate()`, `currentTime()`, `currentTimestamp()` | piden `java.sql`, otro modulo | exista `java.sql` (arrastra `java.util.Date`) |
+| `CriteriaBuilder` | `toBigDecimal()`, `toBigInteger()` | piden `java.math` | exista `java.math` |
+
+El `getModel()` omitido **se hereda** de `PluralJoin`, asi que la unica perdida real es el retorno
+covariante (un llamador recibe `PluralAttribute` en vez de `SetAttribute` y tiene que castear).
+
+`CriteriaBuilder` ademas lleva **14 entradas de allowlist, todas del #100**: una variable de tipo
+acotada erasa a `Object` en vez de a su cota (`N extends Number` -> `Number`, `Y extends Comparable`
+-> `Comparable`, `C extends Collection` -> `Collection`, `M extends Map` -> `Map`). La fuente declara
+la cota correctamente; lo que sale mal es el descriptor. Son 14 metodos que **no linkearian** contra
+un llamador real — hoy no importa porque JPA es gate-only y no ejecuta, pero importa el dia que si.
+
+`PersistenceProviderResolverHolder` es la unica cuyo **cuerpo** es nuestro y no el de la spec: la
+version de referencia descubre proveedores con `ServiceLoader`, cachea por class loader con
+`WeakReference` y loguea con `java.util.logging`, nada de lo cual existe. Como tampoco hay ningun
+proveedor que descubrir, el resolver por defecto devuelve lista vacia — honesto en vez de simulado —
+y `setPersistenceProviderResolver` sigue funcionando, que es el punto de la indireccion.
+
+- **#125 — el emisor no soporta `super.metodo(...)`.** `super.write(b, off, len)` en un override falla
+  con "el generador de bytecode todavia no soporta `super`". La invocacion explicita de constructor
+  (`super(...)`, §8.8.7.1) SI anda: lo que falta es el acceso calificado por `super` a un metodo
+  (§15.11.2), que es un `invokespecial` sobre el receptor `this` con el metodo del supertipo.
+  - Repro: cualquier clase que extienda otra y llame `super.m()` en el override de `m`.
+  - **Es la forma canonica de "extender sin reemplazar"**, asi que aparece apenas se escribe una
+    jerarquia de decoradores: lo encontraron `GZIPOutputStream.write` (que quiere sumar el CRC a lo
+    que ya hace `DeflaterOutputStream.write`) y `GZIPInputStream.read`.
+  - **Agrava un workaround ya documentado:** la nota de #14 dice "evitarlos o usar `super.m()`" — esa
+    salida no existe hoy.
+  - Workaround en la biblioteca: (a) si el cuerpo del padre son dos lineas, inlinearlas; (b) si no,
+    mover el cuerpo del padre a un metodo package-private con otro nombre y que el hijo llame a ese
+    (heredado, sin calificar); (c) si el override solo delegaba, borrarlo y heredar.
+
+- **#126 — el RETORNO de un override contra un supertipo del CLASSPATH se erasa a `Object`.**
+  `CallSite` (clase abstracta) declara `public abstract MethodHandle getTarget()`. Compilada sola,
+  emite `()Ljava/lang/invoke/MethodHandle;` — correcto. Pero al compilar `MutableCallSite extends
+  CallSite` con `CallSite.class` en el `-cp`, el override `public final MethodHandle getTarget()`
+  emite `()Ljava/lang/Object;`.
+  - **Lo revelador: el PARAMETRO del mismo tipo sale bien.** `setTarget(MethodHandle)` en la misma
+    clase emite `(Ljava/lang/invoke/MethodHandle;)V`. O sea que el tipo resuelve perfecto; lo que
+    se pierde es especificamente el retorno **cuando el metodo es un override**.
+  - Se disparo en las tres subclases de `CallSite` (`getTarget` y `dynamicInvoker`), 6 metodos.
+  - Familia de #123 (override covariante contra jerarquia del classpath), pero **mas amplio**: aca
+    no hay covarianza — el tipo de retorno es EL MISMO que el del supertipo.
+  - Sin workaround de fuente: declarar el tipo, calificarlo o importarlo dan lo mismo. Allowlist.
+
+- **#127 — un `default` NEGATIVO de una anotacion se descarta en silencio.** Para
+  `int secondPrecision() default -1;` el emisor no escribe el atributo `AnnotationDefault`: el
+  metodo sale sin default. Con `default 255` (positivo) el atributo se emite bien, asi que el
+  disparador es el **menos unario** en la posicion de valor por defecto.
+  - Visto en `jakarta.persistence.Column.secondPrecision`.
+  - **El gate NO puede verlo**: un `default` no esta en el descriptor, asi que la clase pasa con
+    `0 mismatch` mientras el valor desaparece. Lo caza `tools/check_jpa_defaults.py`, que compara
+    los `AnnotationDefault` uno por uno contra el jar de referencia.
+  - Consecuencia real: una anotacion sin su default NO es la misma anotacion — un proveedor que
+    lea `secondPrecision` recibe "sin especificar" en vez de -1.
+  - Familia del patron del dia: cuando algo no se puede representar, se emite silencio en vez de
+    un error.
+  - **Ampliacion: tampoco se emite un default con valor de ANOTACION.** Para
+    `ForeignKey foreignKey() default @ForeignKey(value = ConstraintMode.PROVIDER_DEFAULT);` la
+    fuente compila sin error y el `.class` sale igual de mudo, sin `AnnotationDefault`. Afecta a
+    `JoinColumn`, `JoinColumns` y `AssociationOverride` en jakarta.persistence.
+    Los defaults simples (int positivo, String, boolean, constante de enum, array vacio) SI se
+    emiten bien, asi que el emisor cubre las formas constantes y se calla en las otras dos:
+    el menos unario y la anotacion anidada.
+
+- **#128 — no hay forma de escribir un caracter ASTRAL en una constante.** Son dos fallas
+  independientes que se tapan la salida entre si.
+  - **(a) El escape del rango subrogado se rechaza.** `"\ud834\udd60"` falla con "literal string
+    invalido", y `'\ud800'` con "literal char invalido". Un String de Java es UTF-16, asi que el par
+    subrogado es la forma **portable y canonica** de escribir U+1D160 — es lo que emite el propio
+    javac. Causa: el lexer decodifica cada `\uXXXX` a un `char` de Rust, y D800..DFFF no es un
+    `char` de Rust valido. **Los escapes del BMP andan perfecto en ambos tipos de literal**; el
+    rango subrogado es lo unico que falla, y es exactamente el que hace falta.
+  - **(b) El emisor escribe UTF-8 estandar donde va UTF-8 MODIFICADO.** Escribiendo el caracter
+    directo en la fuente UTF-8 la compilacion pasa, pero el `.class` sale mal formado: para U+1D160
+    emite `f0 9d 85 a0` (4 bytes, UTF-8 estandar) cuando `CONSTANT_Utf8` exige el par subrogado con
+    cada mitad en 3 bytes (`ed a0 b4 ed b5 a0`). **Nuestro propio cargador lo rechaza con
+    `BadUtf8`**, asi que no es "no estandar pero anda": no carga. El `javap` del JDK tampoco lo
+    imprime, muestra `???`.
+  - **El gate NO puede verlo**: nada de esto esta en un descriptor. La clase pasa con `0 mismatch` y
+    despues no carga.
+  - Encontrado escribiendo el smoke test de `java.text.Normalizer`, cuyo caso astral hubo que sacar.
+    El algoritmo si esta validado sobre todo el rango 0..0x10FFFF, pero contra el JDK, no sobre
+    nuestra VM: hoy no se puede escribir el caso de prueba.
+  - Sin workaround. Se puede construir el String en tiempo de ejecucion desde los `int` del par
+    (`(char) 0xd834`), que es lo que hace `NormImpl`, pero una **constante** astral es inalcanzable.
+  - Arreglo: (a) que el lexer guarde unidades de codigo UTF-16 (`u16`) en vez de `char` de Rust;
+    (b) que el emisor de `CONSTANT_Utf8` haga el encoding modificado — subrogados en 3 bytes cada
+    uno, y `NUL` como `c0 80`.
+  - **`NUL` tiene el mismo defecto, comprobado.** `"A\u0000B"` emite el byte `00` crudo en vez de
+    `c0 80`. Nuestro cargador lo acepta (el largo da 3, correcto) porque decodifica UTF-8 a secas,
+    pero el formato prohibe el byte `00` dentro de `CONSTANT_Utf8`: una JVM real rechaza la clase.
+    Es el mismo bug del emisor que (b), y por eso conviene arreglar los dos juntos.
+  - Repro: `repros/finding_128.java`.

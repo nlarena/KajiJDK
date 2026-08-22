@@ -28,6 +28,15 @@ public final class String implements Comparable<String>, CharSequence {
     // StringBuilder.toString() and substring produce fresh Strings.
     public static native String valueOf(char[] data, int offset, int count);
 
+    // The text of any object. Native because it has to work for `null` too (a real call to
+    // `toString()` would NPE), and because it is what a string concatenation lowers its
+    // non-String operands to — the VM services it before any Java frame exists.
+    public static native String valueOf(Object obj);
+
+    // Prefix test. Native rather than a `charAt` loop: comparing the two inline character
+    // stores directly is a single pass in the VM, and this is hot in name/descriptor matching.
+    public native boolean startsWith(String prefix);
+
     // --- real Java, layered on the primitives above ---
 
     public boolean isEmpty() {
