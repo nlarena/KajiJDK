@@ -558,6 +558,61 @@ fn cat_width(rt: &RType) -> u16 {
     matches!(rt, RType::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
 }
 
+/// El **máximo slot** (índice + ancho) que usa cualquier local del cuerpo, recorriendo todas las
+/// sentencias anidadas. Sirve para reservar un slot **temporal por encima de todo local declarado**
+/// —el que guarda el valor de un `return` mientras corre un `finally` inyectado (§14.20.2)—, de modo
+/// que nunca pise el `int y` del propio `finally`. Los pattern-switch ya vienen bajados a `LocalVar`
+/// desde el desugar, así que sus *bindings* se cuentan como cualquier local.
+fn body_max_slot(stmts: &[Stmt]) -> u16 {
+    stmts.iter().map(stmt_max_slot).max().unwrap_or(0)
+}
+
+fn stmt_max_slot(s: &Stmt) -> u16 {
+    let mut m = s.local.as_ref().map_or(0, |l| l.slot + cat_width(&l.ty));
+    match &s.kind {
+        StmtKind::If { then, els, .. } => {
+            m = m.max(stmt_max_slot(then));
+            if let Some(e) = els {
+                m = m.max(stmt_max_slot(e));
+            }
+        }
+        StmtKind::While { body, .. }
+        | StmtKind::Do { body, .. }
+        | StmtKind::ForEach { body, .. }
+        | StmtKind::Labeled { body, .. } => m = m.max(stmt_max_slot(body)),
+        StmtKind::For { init, body, .. } => {
+            if let Some(i) = init {
+                m = m.max(stmt_max_slot(i));
+            }
+            m = m.max(stmt_max_slot(body));
+        }
+        StmtKind::Block(b) => m = m.max(body_max_slot(&b.0)),
+        StmtKind::Synchronized { body, .. } => m = m.max(body_max_slot(&body.0)),
+        StmtKind::Try { resources, body, catches, finally } => {
+            m = m.max(body_max_slot(resources)).max(body_max_slot(&body.0));
+            for c in catches {
+                if let Some(sl) = c.slot {
+                    m = m.max(sl + 1);
+                }
+                m = m.max(body_max_slot(&c.body.0));
+            }
+            if let Some(f) = finally {
+                m = m.max(body_max_slot(&f.0));
+            }
+        }
+        StmtKind::Switch { cases, .. } => {
+            for c in cases {
+                match &c.body {
+                    SwitchBody::Arrow(st) => m = m.max(stmt_max_slot(st)),
+                    SwitchBody::Colon(sts) => m = m.max(body_max_slot(sts)),
+                }
+            }
+        }
+        _ => {}
+    }
+    m
+}
+
 /// El nombre para un `CHECKCAST` sobre `rt`: el interno de la clase, o el descriptor de un array.
 fn checkcast_name(table: &SymbolTable, rt: &RType) -> String {
     match rt {
@@ -1364,6 +1419,9 @@ fn gen_method(
     }
 
     if let Some(body) = &m.body {
+        // Reservar los temporales por encima de **todo** local del método (incluidos los de los
+        // `finally`), para que un `return` que inyecta un `finally` no le pise sus variables.
+        e.temp_base = e.max_locals.max(body_max_slot(&body.0));
         e.block_scoped(&body.0);
     }
     // Un `void`/constructor puede omitir el `return` final; lo agregamos.
@@ -2655,6 +2713,15 @@ struct Emitter<'a> {
     /// de posición-bytecode (cast 0x47, `instanceof` 0x43, `new` 0x44, local 0x40), cada uno con el
     /// offset del opcode como `target_info`. Se llenan al emitir cada instrucción.
     code_type_annotations: Vec<Vec<u8>>,
+    /// Los bloques `finally` que **encierran** el punto actual (el más interno al final). Un
+    /// `return` que sale de un `try` corre estos bloques antes de retornar (§14.20.2): la v69 no
+    /// tiene `jsr`/`ret`, así que el `finally` se **inyecta** en cada salida abrupta, igual que en la
+    /// salida normal.
+    finally_stack: Vec<Block>,
+    /// Primer slot **libre** por encima de todos los locales del método: de ahí sale el temporal que
+    /// guarda el valor de un `return` mientras corre un `finally` inyectado, para no pisar los locales
+    /// de ese `finally` (que tienen slot fijo de la pasada 2).
+    temp_base: u16,
 }
 
 /// Un destino de salto todavía sin dirección: se resuelve al final, parcheando los operandos.
@@ -2670,6 +2737,9 @@ struct Breakable {
     brk: Label,
     /// El destino de un `continue` — `None` si no es un bucle.
     cont: Option<Label>,
+    /// Profundidad del `finally_stack` cuando se abrió esta sentencia. Un `break`/`continue` que
+    /// salta acá cruza —y por lo tanto debe correr— los `finally` que se apilaron **después** (§14.20.2).
+    finally_depth: usize,
 }
 
 impl<'a> Emitter<'a> {
@@ -2695,6 +2765,8 @@ impl<'a> Emitter<'a> {
             rt,
             tu,
             code_type_annotations: Vec::new(),
+            finally_stack: Vec::new(),
+            temp_base: 0,
             bytes: Vec::new(),
             stack: Vec::new(),
             max_stack: 0,
@@ -3141,10 +3213,31 @@ impl<'a> Emitter<'a> {
                     Some(e) => {
                         let cat = category(&self.ty_of(e));
                         self.expr(e);
-                        self.op(IRETURN + cat);
-                        self.pop(1);
+                        if self.finally_stack.is_empty() {
+                            self.op(IRETURN + cat);
+                            self.pop(1);
+                        } else {
+                            // Salida **abrupta** de un `try` (§14.20.2): el valor no puede quedar en la
+                            // pila mientras corre el `finally` (que la usa), así que se guarda en un
+                            // temporal por encima de todo local, se corren los `finally` pendientes, y
+                            // se recarga antes del `ireturn`. Es lo que hace javac (`istore`/…/`iload`).
+                            let tmp = self.temp_base;
+                            let vt = self.stack.last().cloned().unwrap_or(VType::Top);
+                            self.set_local(tmp, vt);
+                            self.store(cat, tmp);
+                            let saved = self.temp_base;
+                            self.temp_base += stack_width(cat) as u16;
+                            self.run_pending_finallys();
+                            self.temp_base = saved;
+                            self.load(cat, tmp);
+                            self.op(IRETURN + cat);
+                            self.pop(1);
+                        }
                     }
-                    None => self.op(RETURN),
+                    None => {
+                        self.run_pending_finallys();
+                        self.op(RETURN);
+                    }
                 }
                 self.reachable = false; // lo que siga solo se alcanza por un salto
             }
@@ -3170,7 +3263,7 @@ impl<'a> Emitter<'a> {
                 let end = self.new_label();
                 self.bind(top);
                 self.branch_if(cond, end, false);
-                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(top) });
+                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(top), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
                 self.jump(GOTO, top);
@@ -3182,7 +3275,7 @@ impl<'a> Emitter<'a> {
                 let cont = self.new_label();
                 let end = self.new_label();
                 self.bind(top);
-                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont) });
+                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
                 self.bind(cont); // un `continue` va a reevaluar la condición
@@ -3203,7 +3296,7 @@ impl<'a> Emitter<'a> {
                 if let Some(c) = cond {
                     self.branch_if(c, end, false);
                 }
-                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont) });
+                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
                 self.bind(cont);
@@ -3216,14 +3309,16 @@ impl<'a> Emitter<'a> {
                 self.close_scope(); // cierra el scope de la variable del `for`
             }
             StmtKind::Break(label) => match self.break_target(label.as_deref()) {
-                Some(t) => {
+                Some((t, depth)) => {
+                    self.run_finallys_down_to(depth); // §14.20.2: correr los `finally` que el salto cruza
                     self.jump(GOTO, t);
                     self.reachable = false;
                 }
                 None => self.unsupported(s.pos, "un `break` sin destino (¿lo dejó pasar el flujo?)"),
             },
             StmtKind::Continue(label) => match self.continue_target(label.as_deref()) {
-                Some(t) => {
+                Some((t, depth)) => {
+                    self.run_finallys_down_to(depth);
                     self.jump(GOTO, t);
                     self.reachable = false;
                 }
@@ -3259,6 +3354,7 @@ impl<'a> Emitter<'a> {
                         label: Some(label.clone()),
                         brk: end,
                         cont: None,
+                        finally_depth: self.finally_stack.len(),
                     });
                     self.stmt(body);
                     self.blocks.pop();
@@ -3281,21 +3377,26 @@ impl<'a> Emitter<'a> {
 
     /// El destino de un `break`: la sentencia más interna de la que se puede salir, o la que lleve
     /// la etiqueta pedida.
-    fn break_target(&self, label: Option<&str>) -> Option<Label> {
+    fn break_target(&self, label: Option<&str>) -> Option<(Label, usize)> {
         match label {
-            None => self.blocks.last().map(|b| b.brk),
-            Some(l) => self.blocks.iter().rev().find(|b| b.label.as_deref() == Some(l)).map(|b| b.brk),
+            None => self.blocks.last().map(|b| (b.brk, b.finally_depth)),
+            Some(l) => self
+                .blocks
+                .iter()
+                .rev()
+                .find(|b| b.label.as_deref() == Some(l))
+                .map(|b| (b.brk, b.finally_depth)),
         }
     }
 
     /// El destino de un `continue`: el **bucle** más interno (un `switch` interpuesto no cuenta), o
     /// el que lleve la etiqueta pedida.
-    fn continue_target(&self, label: Option<&str>) -> Option<Label> {
+    fn continue_target(&self, label: Option<&str>) -> Option<(Label, usize)> {
         self.blocks
             .iter()
             .rev()
             .find(|b| b.cont.is_some() && label.is_none_or(|l| b.label.as_deref() == Some(l)))
-            .and_then(|b| b.cont)
+            .map(|b| (b.cont.unwrap(), b.finally_depth))
     }
 
     /// `switch` como **sentencia**, ya reducido a un selector `int`: los de `String`, `enum` y con
@@ -3391,7 +3492,7 @@ impl<'a> Emitter<'a> {
         // Los locales declarados en un `case:` viven en el bloque del `switch` (§14.11.2), un solo
         // scope que envuelve todos los grupos; una flecha con `{ }` abre además su propio bloque.
         self.open_scope();
-        self.blocks.push(Breakable { label: lbl, brk: end, cont: None });
+        self.blocks.push(Breakable { label: lbl, brk: end, cont: None, finally_depth: self.finally_stack.len() });
         for (i, c) in cases.iter().enumerate() {
             self.bind(arms[i]);
             match &c.body {
@@ -3529,18 +3630,49 @@ impl<'a> Emitter<'a> {
         self.bind(after);
     }
 
+    /// Inyecta los `finally` pendientes para una salida **abrupta** (un `return`), del más interno al
+    /// más externo. Cada bloque se emite con el stack de `finally` **truncado** a los que lo encierran,
+    /// para que un `return` dentro de un `finally` corra solo los de más afuera (nunca a sí mismo). El
+    /// stack se restaura al terminar, porque el `try` que llama sigue usándolo para sus otras salidas.
+    fn run_pending_finallys(&mut self) {
+        self.run_finallys_down_to(0);
+    }
+
+    /// Como [`run_pending_finallys`](Self::run_pending_finallys) pero solo los `finally` **por encima**
+    /// de `target_depth` — los que un `break`/`continue` cruza al saltar a una sentencia envolvente que
+    /// se abrió con esa profundidad (los de más adentro que el destino, no el destino ni los de afuera).
+    fn run_finallys_down_to(&mut self, target_depth: usize) {
+        let pending = self.finally_stack.clone();
+        for i in (target_depth..pending.len()).rev() {
+            self.finally_stack.truncate(i);
+            self.block_scoped(&pending[i].0);
+        }
+        self.finally_stack = pending;
+    }
+
     /// `try { … } catch (E e) { … } [finally { … }]`.
     ///
     /// El cuerpo protegido queda en `[start, end)`; cada `catch` instala una entrada en la tabla de
     /// excepciones. Al entrar a un *handler* la JVM **limpia la pila y deja ahí la excepción**, así
     /// que su frame lleva `stack = [E]` y arranca guardándola en el slot de su variable.
     ///
-    /// El `finally` se emite **duplicado** (§14.20.2): una copia en la salida normal y otra en un
-    /// handler *catch-all* (`catch_type = 0`) que lo corre y re-lanza — la v69 ya no admite `jsr`.
+    /// El `finally` se emite **duplicado** (§14.20.2): una copia en **cada** salida —normal, `return`,
+    /// `break`/`continue` (inyectada donde ocurre la salida abrupta)— y otra en un handler *catch-all*
+    /// (`catch_type = 0`) que además protege los cuerpos de los `catch`, lo corre y re-lanza. La v69 ya
+    /// no admite `jsr`/`ret`, así que duplicar es la única vía.
     fn try_stmt(&mut self, body: &Block, catches: &[CatchClause], finally: &Option<Block>) {
         let entry_locals = self.locals_t.clone();
         let start = self.bytes.len();
+        // Mientras se emite el cuerpo, este `finally` queda **pendiente**: un `return` de adentro lo
+        // corre (§14.20.2). Se saca antes de emitir la copia de la salida normal (que ya es el `finally`
+        // en sí y no debe correrse a sí misma).
+        if let Some(f) = finally {
+            self.finally_stack.push(f.clone());
+        }
         self.block_scoped(&body.0);
+        if finally.is_some() {
+            self.finally_stack.pop();
+        }
         let end = self.bytes.len();
         let after = self.new_label();
         if self.reachable {
@@ -3551,6 +3683,10 @@ impl<'a> Emitter<'a> {
             self.reachable = false;
         }
 
+        // Rango de cada cuerpo de `catch`, para que el `finally` catch-all también lo proteja: si un
+        // `catch` **lanza**, el `finally` debe correr igual (§14.20.2). Sin esto, un `throw` en el
+        // `catch` se escapaba sin ejecutar el `finally`.
+        let mut catch_ranges: Vec<(usize, usize)> = Vec::new();
         for c in catches {
             let handler = self.bytes.len();
             let exc = c
@@ -3576,8 +3712,18 @@ impl<'a> Emitter<'a> {
                 self.op(POP);
                 self.pop(1);
             }
+            // El `finally` también encierra el cuerpo del `catch`: un `return` de acá lo corre.
+            if let Some(f) = finally {
+                self.finally_stack.push(f.clone());
+            }
             for s in &c.body.0 {
                 self.stmt(s);
+            }
+            if finally.is_some() {
+                self.finally_stack.pop();
+                // El cuerpo del `catch` va de su handler hasta acá (antes de la copia del `finally` de
+                // salida normal): ese rango también lo protege el catch-all de más abajo.
+                catch_ranges.push((handler, self.bytes.len()));
             }
             if self.reachable {
                 if let Some(f) = finally {
@@ -3613,6 +3759,18 @@ impl<'a> Emitter<'a> {
                 handler_pc: handler as u16,
                 catch_type: 0, // cualquier Throwable
             });
+            // …y sobre cada cuerpo de `catch` (rangos disjuntos del cuerpo del `try`): un `throw` ahí
+            // adentro pasa por el mismo catch-all, que corre el `finally` y re-lanza.
+            for (cs, ce) in &catch_ranges {
+                if ce > cs {
+                    self.exceptions.push(ExceptionEntry {
+                        start_pc: *cs as u16,
+                        end_pc: *ce as u16,
+                        handler_pc: handler as u16,
+                        catch_type: 0,
+                    });
+                }
+            }
         }
         self.bind(after);
     }
@@ -5825,6 +5983,47 @@ mod tests {
         let src = "public class M { public static int f(int n) { int r = 0; \
                    try { r = 1; } finally { r = r + 10; } return r; } }";
         assert_eq!(run_int(src, "M", "f", vec![0]), 11);
+    }
+
+    #[test]
+    fn finally_runs_when_the_try_returns() {
+        // §14.20.2: un `return` **dentro** del `try` corre el `finally` antes de retornar. Antes se
+        // salteaba (el `return` emitía `ireturn` directo). `m(5)` retorna 5 **y** deja `r = 99`.
+        let src = "public class M { static int r = 0; \
+                   static int m(int x) { try { return x; } finally { r = 99; } } \
+                   public static int f(int n) { int v = m(5); return v * 1000 + r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 5099);
+    }
+
+    #[test]
+    fn finally_runs_when_the_catch_returns() {
+        // El `finally` también corre cuando la salida abrupta es un `return` del `catch`.
+        // `m(-3)` lanza → el `catch` retorna -1, el `finally` deja `r = 7` ⇒ -1*1000 + 7.
+        let src = "public class M { static int r = 0; \
+                   static int m(int x) { try { if (x < 0) throw new RuntimeException(); return x; } \
+                   catch (RuntimeException e) { return -1; } finally { r = 7; } } \
+                   public static int f(int n) { int v = m(-3); return v * 1000 + r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), -993);
+    }
+
+    #[test]
+    fn finally_runs_when_a_break_leaves_the_try() {
+        // Un `break` que **sale** de un `try` cruza y corre su `finally` (§14.20.2). Antes emitía el
+        // `goto` de salida directo, salteándolo: `m()` daba 0 en vez de 1.
+        let src = "public class M { static int r = 0; public static int f(int n) { \
+                   for (int i = 0; i < 3; i++) { try { break; } finally { r = r + 1; } } return r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 1);
+    }
+
+    #[test]
+    fn finally_runs_when_the_catch_throws() {
+        // Un `throw` en el `catch` no se escapa sin correr el `finally`: el catch-all también protege
+        // el cuerpo del `catch`. `inner` deja `r = 5` antes de propagar; el `f` de afuera lo atrapa.
+        let src = "public class M { static int r = 0; \
+                   static void inner() { try { throw new RuntimeException(); } \
+                   catch (RuntimeException e) { throw new RuntimeException(); } finally { r = 5; } } \
+                   public static int f(int n) { try { inner(); } catch (RuntimeException e) {} return r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 5);
     }
 
     #[test]
