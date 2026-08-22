@@ -139,6 +139,35 @@ pub struct HeapService {
 /// The GC sets it during the mark phase; it's 0 (unmarked) the rest of the time.
 const MARK_OFFSET: usize = 4;
 
+/// Where the heap's bytes actually are, for a caller that must reach them without going through
+/// an accessor — today exactly one: the JIT ([`HeapService::jit_bases`]).
+///
+/// Both bases are **biased**, i.e. each is the address that heap offset `0` *would* have in its
+/// buffer, so `base + offset` is the address of any offset that buffer serves. That is what lets
+/// compiled code do the whole translation in a compare and an `add`; it also means neither number
+/// is a pointer to anything and neither should ever be dereferenced as one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct JitBases {
+    /// Biased base for offsets **below** [`eden_end`][JitBases::eden_end] — Eden's arena.
+    pub eden: usize,
+    /// Biased base for every other offset — the survivor spaces and Old, in `memory`.
+    pub other: usize,
+    /// The first offset not served by Eden.
+    pub eden_end: usize,
+    /// One past the largest offset the heap can ever hand out (the pre-reserved capacity).
+    pub max_offset: usize,
+    /// Machine address of **Eden's bump cursor** — the word a compiled `new` reserves through, with
+    /// a `lock xadd` that is the same operation [`EdenArena::alloc`]'s `fetch_add` is. Boxed at the
+    /// arena, so this address outlives every move of the heap.
+    pub eden_cursor: usize,
+    /// Eden's capacity in bytes: the bound the arena checks a reservation against, and therefore
+    /// the bound compiled code must check it against too.
+    pub eden_capacity: usize,
+    /// The **null page**: the heap offset of arena-local byte 0. A reservation at arena-local `l`
+    /// is the heap offset `l + null_page`, which is the reference the program sees.
+    pub null_page: usize,
+}
+
 impl HeapService {
     /// A heap sized to [`DEFAULT_SIZE`], zero-filled, with the cursor past the
     /// reserved null page (so no real allocation ever lands at offset 0 = `null`).
@@ -274,6 +303,97 @@ impl HeapService {
         self.memory.len()
     }
 
+    /// The **machine address** of heap offset `offset`, for the one consumer that needs a raw
+    /// pointer rather than an offset: the JIT, which bakes the address of an `int` static into an
+    /// instruction stream (`burst::compile`'s `getstatic`).
+    ///
+    /// `None` unless the whole `size`-byte span lies in `memory` **outside Eden**, and that
+    /// exclusion is the point rather than an omission. Eden's bytes live in a different buffer
+    /// ([`Self::eden`]) *and* Eden is evacuated by every minor collection, so no address in it can
+    /// be baked into anything. The intended caller only ever asks about a `Class<…>` mirror, which
+    /// `malloc_old` puts in Old and `gc::compact` pins there.
+    ///
+    /// The address is stable for the life of the VM, and so is the bounds check, for two separate
+    /// reasons that are both worth naming because a caller bakes the answer into machine code and
+    /// never asks again:
+    ///
+    ///  - `memory` is **pre-reserved to the maximum heap** at startup and therefore never
+    ///    reallocates (see [`DEFAULT_MAX_HEAP`]), so `as_ptr()` is a constant;
+    ///  - the only caller of [`Self::resize`] is `malloc_old`'s growth path, so `memory.len()` is
+    ///    **monotonically non-decreasing**. A major collection moves `old_cursor` down but never
+    ///    shrinks the region ([`Self::reset_after_compaction`]), so an offset that was in bounds
+    ///    once stays in bounds.
+    ///
+    /// What this function does *not* and cannot promise is that the object at `offset` stays alive
+    /// or stays put — that is the caller's to establish, and for pinned mirrors it is
+    /// `gc::compact`'s pinned set.
+    pub fn address_of(&self, offset: usize, size: usize) -> Option<usize> {
+        let end = offset.checked_add(size)?;
+        if offset < self.eden_end() || end > self.memory.len() {
+            return None;
+        }
+        Some(self.memory.as_ptr() as usize + offset)
+    }
+
+    /// The two **bases** that turn a heap *offset* into a machine address, plus where the boundary
+    /// between them is and how far the heap can ever reach — everything the JIT needs to emit a
+    /// field or array read without calling back into the VM.
+    ///
+    /// It is two bases and not one because the heap is two buffers: Eden's bytes live in
+    /// [`Self::eden`] (a fixed-size arena) and everything else in [`Self::memory`] (a `Vec`
+    /// pre-reserved to the maximum heap). Both are **biased** by construction, so the compiled
+    /// sequence is a comparison and one `add` — see `burst::compile`'s `heap_address`.
+    ///
+    /// Every number here is stable for the VM's life, and the reasons are the same two that make
+    /// [`Self::address_of`] safe to bake in, now applied to the base rather than to one offset:
+    /// neither buffer ever reallocates (the `Vec` is pre-reserved past its maximum, the arena is
+    /// fixed at construction), and the region boundaries are set once from the environment.
+    /// **Liveness is still not promised** — that a given offset names a live object is the caller's
+    /// to establish, and for compiled code it is the fact that no collection can run while native
+    /// code is on the stack.
+    pub fn jit_bases(&self) -> JitBases {
+        JitBases {
+            // The arena is addressed from its own byte 0, which is heap offset `NULL_PAGE`; biasing
+            // the base by that is what lets compiled code add the *heap* offset unmodified.
+            eden: self.eden.base_address().wrapping_sub(NULL_PAGE),
+            other: self.memory.as_ptr() as usize,
+            eden_end: self.eden_end(),
+            // The `Vec`'s capacity is the maximum the region can ever grow to (`resize` panics past
+            // it), so no offset it hands out can reach this. Old is the highest region, so this
+            // bounds every one of them.
+            max_offset: self.memory.capacity(),
+            eden_cursor: self.eden.cursor_address(),
+            eden_capacity: self.eden.capacity(),
+            null_page: NULL_PAGE,
+        }
+    }
+
+    /// Records an object **compiled code has already allocated in Eden** in this thread's pending
+    /// log — the one part of an allocation native code cannot do for itself.
+    ///
+    /// An Eden allocation is four things: reserve the bytes (an atomic bump), zero them, write the
+    /// `class_id` header, and *log the object* so the collector can find it. Compiled code does the
+    /// first three inline; the fourth is a `Mutex<Vec<Allocation>>` push, which is not something an
+    /// instruction stream can do. So it is **deferred**: the compiled `new` writes `(offset, size)`
+    /// into a flat array in the caller's buffer and the JIT trampoline replays it through here the
+    /// instant native code returns.
+    ///
+    /// Deferring it is sound for the same single reason everything else in this tier is: the log is
+    /// drained only by [`Self::commit_pending`], which is called only from the interpreter's GC
+    /// entry (`Exec::parked`), and **no collection can run while native code is on this thread's
+    /// stack**. So there is no moment at which a collector could look at the heap and not see one
+    /// of these objects — the window between the bump and this call contains no GC by construction.
+    ///
+    /// `size` must be the object's *logical* size (header plus fields), not the 8-byte-rounded
+    /// stride the arena bumps by: that is what the interpreter's own `malloc` logs, and the minor
+    /// collector copies exactly `size` bytes when it evacuates.
+    pub fn log_jit_allocation(&self, offset: usize, size: usize) {
+        self.pending[self.current_thread]
+            .lock()
+            .unwrap()
+            .push(Allocation { offset, size, gen: Gen::Young, age: 0 });
+    }
+
     /// Bytes handed out so far across all three regions (Eden + the live survivor +
     /// Old) — the heap's occupancy, for the GC triggers and the visualizer.
     pub fn used(&self) -> usize {
@@ -405,6 +525,38 @@ impl HeapService {
             .unwrap()
             .push(Allocation { offset, size, gen: Gen::Young, age: 0 });
         Some(offset)
+    }
+
+    /// Fallible [`Self::malloc`] for **bytecode** allocations (`new` / `newarray` /
+    /// `anewarray` / `multianewarray`): same Eden-then-Old policy, but when the request
+    /// fits neither Eden nor Old within the pre-reserved max heap it returns `None`
+    /// instead of the "heap exhausted" panic — the opcode turns that into a catchable
+    /// `java.lang.OutOfMemoryError` (JVMS §6.3). Internal VM allocations (interned
+    /// strings, mirrors, promotions) keep the panicking `malloc`/`malloc_old` path.
+    pub fn try_malloc(&mut self, n: usize) -> Option<usize> {
+        if let Some(local) = self.eden.alloc(n) {
+            let offset = local + NULL_PAGE;
+            self.pending[self.current_thread]
+                .lock()
+                .unwrap()
+                .push(Allocation { offset, size: n, gen: Gen::Young, age: 0 });
+            return Some(offset);
+        }
+        if self.can_alloc_old(n) {
+            Some(self.malloc_old(n))
+        } else {
+            None // truly exhausted: Old would have to grow past JVM_GC_MAX_HEAP
+        }
+    }
+
+    /// Whether an **Old** allocation of `n` bytes can be satisfied without growing the
+    /// region past its pre-reserved max capacity: a free-list hole big enough, or a
+    /// bump that stays within `JVM_GC_MAX_HEAP`. Mirrors [`Self::bump_old`]'s two paths,
+    /// so `can_alloc_old(n) == true` guarantees `malloc_old(n)` won't hit the
+    /// "heap exhausted" panic in [`Self::resize`].
+    pub fn can_alloc_old(&self, n: usize) -> bool {
+        self.free_list.iter().any(|b| b.size >= n)
+            || self.old_cursor.checked_add(n).is_some_and(|end| end <= self.memory.capacity())
     }
 
     /// Allocates `n` bytes directly in the **Old** generation and logs it as `Old`.
@@ -601,6 +753,20 @@ impl HeapService {
         }
     }
 
+    /// Bounds-checked [`Self::read_u32`] — `None` if `offset` isn't a readable 4-byte word (out of
+    /// range in Old/survivor, or past Eden). For diagnostics over *untrusted* offsets (e.g. a
+    /// possibly-dangling reference in [`super::gc::verify_heap`]), where a raw read could panic.
+    pub fn try_read_u32(&self, offset: usize) -> Option<u32> {
+        match self.in_eden(offset) {
+            Some(a) if a + 4 <= self.eden.capacity() => Some(unsafe { self.eden.read_u32(a) }),
+            Some(_) => None,
+            None if offset + 4 <= self.memory.len() => {
+                Some(u32::from_le_bytes(self.memory[offset..offset + 4].try_into().unwrap()))
+            }
+            None => None,
+        }
+    }
+
     /// Writes a 64-bit value at `offset`, little-endian — for **category-2** values
     /// (`long`/`double`), 8 bytes wide.
     pub fn write_u64(&mut self, offset: usize, value: u64) {
@@ -666,6 +832,19 @@ impl HeapService {
             }
             None => false,
         }
+    }
+
+    /// Lock-free **compare-and-set** of a `u32` field if the object is in Eden (H5): `Some(swapped)`
+    /// with the atomic CAS done, `None` if it's in Old (the caller escalates to the locked native).
+    /// Takes `&self`, so concurrent CASes on young `AtomicInteger`s never touch the VM write lock.
+    pub fn cas_u32_eden(&self, offset: usize, expected: u32, new: u32) -> Option<bool> {
+        self.in_eden(offset).map(|a| unsafe { self.eden.cas_u32(a, expected, new) })
+    }
+
+    /// Lock-free compare-and-set of a `u64` field (an `AtomicLong`) if in Eden. See
+    /// [`Self::cas_u32_eden`].
+    pub fn cas_u64_eden(&self, offset: usize, expected: u64, new: u64) -> Option<bool> {
+        self.in_eden(offset).map(|a| unsafe { self.eden.cas_u64(a, expected, new) })
     }
 
     /// Writes a single byte — for `byte[]`/`boolean[]` elements (1 byte wide).

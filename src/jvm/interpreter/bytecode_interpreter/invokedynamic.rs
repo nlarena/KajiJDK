@@ -10,17 +10,15 @@
 //!
 //! ## How we model it
 //!
-//! A faithful implementation would need the whole `java.lang.invoke` machinery —
-//! `MethodHandle`, `MethodType`, `MethodHandles.Lookup` — plus factories like
-//! `LambdaMetafactory` that **spin a new class at runtime**. That is a large subsystem,
-//! and most of it is Java code we do not have.
+//! Most bootstrap methods here are **intrinsics**: we resolve the handle to its
+//! `(class, name)`, recognise the factory, and synthesise the call site's behaviour in Rust —
+//! exactly the "a method the VM resolves by itself" definition from `docs/intrinsecos.md`.
 //!
-//! So we take the same route as the rest of our `java.lang`: **the bootstrap methods are
-//! intrinsics**. We resolve the handle to its `(class, name)`, recognise the factory,
-//! and synthesise the call site's behaviour in Rust — exactly the "a method the VM
-//! resolves by itself" definition from `docs/intrinsecos.md`. The call site is rebuilt
-//! per execution rather than cached, which is semantically identical for the pure
-//! factories below (with no JIT, the linkage cost buys us nothing yet).
+//! `LambdaMetafactory` is the exception, and the one that's *not* an intrinsic anymore: it
+//! **spins a real class** at runtime (via the `.class` writer — see [`super::lambda_factory`])
+//! implementing the functional interface and forwarding to the implementation, exactly as the
+//! JDK does. The produced object is then an ordinary instance, dispatched through the normal
+//! itable path (`invokeinterface`) with no shortcut.
 //!
 //! ## What is supported
 //!
@@ -31,10 +29,10 @@
 //!   next *constant* bootstrap argument, and every other character is literal text.
 //! - `makeConcat`: no recipe — just the arguments, in order.
 //!
-//! `LambdaMetafactory` is deliberately absent: it needs a runtime-generated class
-//! implementing the functional interface, which is its own milestone.
+//! `LambdaMetafactory.metafactory` — lambdas and method references — spins the implementing
+//! class (see above).
 
-use super::{class_operations, objects_operations, Exec, LambdaShape};
+use super::{array_operations, class_operations, lambda_factory, objects_operations, Exec};
 use crate::jvm::class_file::MethodHandleKind;
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::heap::HeapService;
@@ -198,15 +196,26 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
                     !implementation.kind.names_a_field(),
                     "metafactory: the implementation handle must name a method, not a field"
                 );
+                // The 1st static argument is the SAM's own (erased) type — the descriptor the spun
+                // class's method must carry to override the interface method.
+                let sam_descriptor = bootstrap
+                    .arguments
+                    .first()
+                    .and_then(|&i| class.method_type_descriptor(i))
+                    .expect("metafactory: the 1st static argument must be a MethodType (the SAM type)")
+                    .to_string();
                 Bootstrap::Lambda {
-                    implementation_class: implementation.class.to_string(),
-                    implementation_name: implementation.name.to_string(),
-                    implementation_descriptor: implementation.descriptor.to_string(),
-                    // The call site's *return* type is the functional interface; its
-                    // parameters are exactly what the lambda captured.
+                    // The call site's *return* type is the functional interface; its parameters are
+                    // exactly what the lambda captured. Its *name* is the SAM method's name.
                     interface: return_class(descriptor).unwrap_or_else(|| {
                         panic!("metafactory: call site '{descriptor}' must return an interface")
                     }),
+                    sam_name: site_name.to_string(),
+                    sam_descriptor,
+                    implementation_kind: implementation.kind.to_byte(),
+                    implementation_class: implementation.class.to_string(),
+                    implementation_name: implementation.name.to_string(),
+                    implementation_descriptor: implementation.descriptor.to_string(),
                 }
             }
             (class, name) => panic!(
@@ -255,33 +264,58 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             self.top().push(Value::Int(selected));
         }
         Bootstrap::Lambda {
+            interface,
+            sam_name,
+            sam_descriptor,
+            implementation_kind,
             implementation_class,
             implementation_name,
             implementation_descriptor,
-            interface,
         } => {
-            let implementation = self
-                .shared.metaspace
-                .resolve_method(implementation_class, implementation_name, implementation_descriptor)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "metafactory: cannot resolve the implementation \
-                         {implementation_class}.{implementation_name}{implementation_descriptor}"
-                    )
-                });
+            // Every lambda body and static method reference javac emits is a static implementation.
+            assert_eq!(
+                *implementation_kind, 6,
+                "metafactory: only REF_invokeStatic implementations are spun so far \
+                 (an instance method reference is kind {implementation_kind})"
+            );
 
-            // One synthetic class per **call site** — stable, so a lambda created in a
-            // loop doesn't mint a class per iteration. The captured values live in each
-            // object, which is what keeps two closures over different values apart.
+            // One spun class per **call site** — stable, so a lambda created in a loop doesn't mint
+            // a class per iteration. Its captured values live in each *instance* (fields), which is
+            // what keeps two closures over different values apart. Generate + define it once.
             let synthetic = format!("{caller}$${interface}$${cp_index}");
-            self.shared.lambdas.entry(synthetic.clone()).or_insert_with(|| LambdaShape {
-                implementation,
-                captures: params.clone(),
-            });
+            if self.shared.metaspace.get(&synthetic).is_none() {
+                let bytes = lambda_factory::generate_lambda_class(
+                    &synthetic,
+                    interface,
+                    sam_name,
+                    sam_descriptor,
+                    implementation_class,
+                    implementation_name,
+                    implementation_descriptor,
+                    &params,
+                );
+                let class = crate::jvm::class_file::ClassFile::from_bytes(&bytes)
+                    .expect("metafactory: the spun lambda class must parse");
+                self.shared.metaspace.add(synthetic.clone(), class);
+            }
 
-            let offset =
-                allocate_lambda(&mut self.shared.metaspace, &mut self.shared.heap, &synthetic, &args, &params);
-            self.top().push(Value::Reference(offset));
+            // Instantiate: allocate, then run the constructor with the captured values — after which
+            // the object is an ordinary instance, dispatched through the normal vtable/itable path
+            // (no shortcut). The captures are the constructor's parameters, in order.
+            class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, &synthetic);
+            let object =
+                objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, &synthetic);
+            let ctor_descriptor = format!("({})V", params.concat());
+            let ctor = self
+                .shared.metaspace
+                .resolve_method(&synthetic, "<init>", &ctor_descriptor)
+                .expect("metafactory: the spun class must have its constructor");
+            let mut widths = vec![1];
+            widths.extend(MetaspaceService::param_slot_widths(&ctor_descriptor));
+            let mut ctor_args = vec![Value::Reference(object)];
+            ctor_args.extend(args.iter().cloned());
+            self.call_java(ctor, ctor_args, &widths);
+            self.top().push(Value::Reference(object));
         }
         Bootstrap::ObjectMethods { method, record_class, components } => {
             match method.as_str() {
@@ -444,20 +478,46 @@ fn dynamic_constant(&mut self, owner: &str, cp_index: u16) -> Value {
         )
     };
 
+    // The invocation is **library code in Java**, not a Rust intrinsic. Materialise the target as
+    // a `MethodHandle`, pack the arguments into an `Object[]`, and call the Java
+    // `ConstantBootstraps.invoke(lookup, name, type, handle, args)` — whose whole body is
+    // `return handle.invokeWithArguments(args);`. This is the payoff of giving the VM
+    // `MethodHandle.invoke`: `ConstantBootstraps` moves out of Rust. The target is
+    // `REF_invokeStatic` (asserted above), so kind 6; `lookup`/`name`/`type` aren't modelled
+    // (access checks + result adaptation), and our `invoke` ignores them, so they pass as null.
+    //
+    // Order matters for GC safety: materialise the handle (Old-allocated → pinned) **before**
+    // resolving the arguments — arg resolution allocates in Eden (nested condys) and can move
+    // young objects, but the Old handle survives — then build the `Object[]` (Old) with the
+    // freshly-resolved args still live. And the condy cache is now a GC root (`condy_roots`), so
+    // the minor GC these allocations trigger keeps the *already-cached* constants alive and remaps
+    // them, instead of leaving them stale.
+    let handle =
+        self.materialize_method_handle(6, &target_class, &target_name, &target_descriptor);
     // Resolving an argument can recurse right back here for a nested condy.
     let args: Vec<Value> =
         argument_indices.iter().map(|&i| self.static_argument(owner, i)).collect();
-    let widths = MetaspaceService::param_slot_widths(&target_descriptor);
-
-    let target = self
+    let args_array =
+        array_operations::build_object_array(&mut self.shared.metaspace, &mut self.shared.heap, &args);
+    let cb_invoke = self
         .shared.metaspace
-        .resolve_method(&target_class, &target_name, &target_descriptor)
-        .unwrap_or_else(|| {
-            panic!("condy: cannot resolve {target_class}.{target_name}{target_descriptor}")
-        });
+        .resolve_method(
+            CONSTANT_BOOTSTRAPS,
+            "invoke",
+            "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/Class;\
+             Ljava/lang/invoke/MethodHandle;[Ljava/lang/Object;)Ljava/lang/Object;",
+        )
+        .expect("condy: ConstantBootstraps.invoke must resolve");
+    let call_args = vec![
+        Value::Reference(0), // lookup
+        Value::Reference(0), // name
+        Value::Reference(0), // type
+        Value::Reference(handle),
+        Value::Reference(args_array),
+    ];
     let value = self
-        .call_java(target, args, &widths)
-        .expect("condy: the bootstrap target must return a value");
+        .call_java(cb_invoke, call_args, &[1, 1, 1, 1, 1])
+        .expect("condy: ConstantBootstraps.invoke must return a value");
 
     self.shared.condy_in_progress.remove(&key);
     self.shared.condy.insert(key, value);
@@ -583,73 +643,6 @@ fn reference_field(&mut self, object: usize, field: &str) -> usize {
 }
 } // impl JVM
 
-/// Allocates the object a lambda call site produces: a header naming its synthetic class,
-/// followed by the captured values laid out at their own widths.
-///
-/// The synthetic class gets a header-only mirror, the same shape `anewarray` gives array
-/// classes — it exists to give the object an identity the dispatch can recognise, not to
-/// hold statics.
-///
-/// A captured **reference** is only safe because the synthetic class registers its
-/// reference-slot layout with the metaspace, which is where the collector looks. Without
-/// that the capture would be invisible to the GC: never marked, and never rewritten when
-/// the object it points at moves.
-fn allocate_lambda(
-    metaspace: &mut MetaspaceService,
-    heap: &mut HeapService,
-    synthetic: &str,
-    captured: &[Value],
-    descriptors: &[String],
-) -> usize {
-    let uuid = metaspace.class_id(synthetic).to_string();
-    let mirror = match metaspace.class_object(&uuid) {
-        Some(offset) => offset,
-        None => {
-            let offset = heap.malloc_old(objects_operations::HEADER_SIZE);
-            metaspace.set_class_object(&uuid, offset);
-            offset
-        }
-    };
-
-    // The layout depends only on the descriptors, so it is the same for every instance
-    // this call site ever produces — declare it once, alongside the mirror.
-    let mut within = objects_operations::HEADER_SIZE;
-    let mut reference_slots = Vec::new();
-    for descriptor in descriptors {
-        if matches!(descriptor.as_bytes().first(), Some(b'L' | b'[')) {
-            reference_slots.push(within);
-        }
-        within += capture_width(descriptor);
-    }
-    metaspace.set_synthetic_reference_slots(synthetic, reference_slots);
-
-    let offset = heap.malloc(within);
-    heap.write_u32(offset, mirror as u32);
-
-    let mut at = offset + objects_operations::HEADER_SIZE;
-    for (value, descriptor) in captured.iter().zip(descriptors) {
-        match value {
-            Value::Int(n) => heap.write_u32(at, *n as u32),
-            Value::Float(f) => heap.write_u32(at, f.to_bits()),
-            Value::Long(n) => heap.write_u64(at, *n as u64),
-            Value::Double(d) => heap.write_u64(at, d.to_bits()),
-            // Through the barrier gateway, like every other reference store: a lambda
-            // living in Old that captures a young object is exactly the `old→young`
-            // pointer the remembered set exists to catch.
-            Value::Reference(target) => heap.store_reference(offset, at, *target),
-        }
-        at += capture_width(descriptor);
-    }
-    offset
-}
-
-/// The heap width of a captured value: category-2 primitives take 8 bytes, the rest 4.
-fn capture_width(descriptor: &str) -> usize {
-    match descriptor.as_bytes().first() {
-        Some(b'J' | b'D') => 8,
-        _ => 4,
-    }
-}
 
 /// A record's `toString`: `Name[a=1, b=2]`, using the class's **simple** name — the part
 /// after the last `/` (package) and `$` (nesting).
@@ -839,13 +832,17 @@ enum Bootstrap {
     /// `ObjectMethods.bootstrap`: one entry serves a record's three methods, so the call
     /// site's `method` name is what selects the behaviour.
     ObjectMethods { method: String, record_class: String, components: Vec<Component> },
-    /// `LambdaMetafactory.metafactory`: the method the lambda body compiled to, and the
-    /// functional interface the produced object must satisfy.
+    /// `LambdaMetafactory.metafactory`: everything needed to **spin the implementing class** — the
+    /// functional interface and its single abstract method (name + own descriptor), plus the
+    /// implementation the SAM forwards to.
     Lambda {
+        interface: String,
+        sam_name: String,
+        sam_descriptor: String,
+        implementation_kind: u8,
         implementation_class: String,
         implementation_name: String,
         implementation_descriptor: String,
-        interface: String,
     },
 }
 

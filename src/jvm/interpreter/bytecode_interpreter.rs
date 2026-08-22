@@ -39,6 +39,12 @@ pub mod stack_operations;
 pub mod objects_operations;
 pub mod variable_operations;
 
+/// Spins the implementing class a `LambdaMetafactory` call site produces (via the `.class` writer).
+pub mod lambda_factory;
+
+/// The per-call-site resolution cache the four invoke modules below share (F0 quickening).
+mod call_site;
+
 /// The four invoke opcodes — one module each. Unlike the per-family helpers above
 /// (which act on a single `&mut Frame`), these drive the whole call stack, so each
 /// contributes an `impl JVM` method that `step()` dispatches to.
@@ -189,32 +195,16 @@ pub struct GreenThread {
     /// non-terminated thread is *safe* (`status != Runnable || at_safepoint`) before moving
     /// objects, then unparks the safepoint-parked ones. See `os_parallel_loop`.
     pub at_safepoint: bool,
+    /// `LockSupport.unpark` **permit** (binary): set when unparked while *not* parked, so the next
+    /// `park()` returns immediately instead of blocking — the token semantics that makes an
+    /// unpark-before-park not get lost. `park()` consumes it.
+    pub park_permit: bool,
+    /// Whether this thread is currently blocked in `LockSupport.park()` (as opposed to a monitor
+    /// `wait` or `sleep`). `unpark` uses it to decide between waking the thread and just leaving a
+    /// permit.
+    pub parked: bool,
 }
 
-/// What a lambda call site produced: everything needed to run the interface method on
-/// the object it created.
-///
-/// A real JVM answers `LambdaMetafactory` by **spinning a class** at runtime that
-/// implements the functional interface and forwards to the implementation method. We
-/// don't have to: we own the dispatch, so a synthetic class name plus this record is
-/// enough — `invokeinterface` recognises the receiver and jumps straight to
-/// `implementation`, prepending the values the lambda captured.
-///
-/// That is the one place our design is *simpler* than HotSpot's rather than a
-/// compromise: class generation exists in the JDK because the JVM interface is fixed
-/// from the outside, and ours isn't.
-/// One shape per **call site**, not per instance: the captured *values* live in each
-/// lambda object (a closure created in a loop must not share them), while everything
-/// static about the site lives here.
-pub struct LambdaShape {
-    /// The method the lambda body compiled to — for a lambda, javac's synthetic
-    /// `lambda$…` static; for a method reference, the referenced method itself.
-    pub implementation: MethodId,
-    /// Descriptors of the captured values, in the order the implementation takes them:
-    /// they are its **leading** parameters, ahead of the interface method's arguments.
-    /// Doubles as the object's field layout, since each is read back at its own width.
-    pub captures: Vec<String>,
-}
 
 /// A read-only snapshot of one thread for the visualizer: its id, scheduling state,
 /// the method it's currently in, and whether it's the running thread.
@@ -248,6 +238,103 @@ struct RunningCtx {
     code: Vec<u8>,
     /// The `MethodId` whose bytecode currently lives in `code` (`None` before the first fill).
     code_method: Option<MethodId>,
+    /// Floors for exception unwinding: while a `call_java`-driven nested execution runs (a
+    /// `<clinit>`, an intrinsic callback), its synthetic base frame index sits here. An exception
+    /// that reaches a floor with no handler stops there — surfacing to the VM via
+    /// `pending_exception` — instead of tearing through the code that made the call. A stack,
+    /// because such calls nest.
+    exception_floor: Vec<usize>,
+    /// An exception that unwound out of a `call_java` boundary (heap offset of the throwable),
+    /// waiting for the caller to re-deliver it — e.g. a `<clinit>` failure re-thrown by the
+    /// opcode that triggered initialization.
+    pending_exception: Option<usize>,
+    /// **Frame pool** (Fase F): retired frames, kept for the next call instead of being dropped.
+    /// A method call used to allocate two `Vec`s (the callee's `locals` and its operand stack)
+    /// and free them again on `return`; that is ~72 ns of pure allocator traffic on a call that
+    /// does nothing else, and it is the single biggest cost `BmInvoke` measures. Recycling the
+    /// frame keeps both buffers *at the capacity the last call grew them to*, so the steady state
+    /// is zero allocation per call — which also subsumes the older "reserve the exact capacity"
+    /// idea, since the capacity is simply inherited.
+    ///
+    /// **It is not a GC root, and it must never become one.** The collector's roots are the
+    /// frames in `threads[*].frames` (see `gc::roots`, `gc::minor`, `gc::compact` and
+    /// `gc::verify_heap`, which all walk exactly that); this pool lives in the per-thread
+    /// `RunningCtx`, which none of them can see, and no path swaps a pooled frame into a thread
+    /// slot — the swaps in `parked`/`activate`/`deactivate`/`switch_to`/`reach_safepoint` move
+    /// the whole `frames` `Vec`, never a single frame, and never touch this field. That is safe
+    /// only because every frame is [`Frame::scrub`]bed on its way in: a pooled frame holds no
+    /// `Value::Reference` for the collector to miss (no leak) and none for a reuse to inherit
+    /// (no stale reference). [`RunningCtx::recycle`] is the one door in, and it enforces that.
+    ///
+    /// The same scrubbing is what makes the pool safe to *share*. In OS mode each thread owns its
+    /// `RunningCtx`, but in green mode one `RunningCtx` serves every green thread, so a frame
+    /// retired by one thread is routinely handed to another. Nothing crosses with it: a pooled
+    /// frame is an empty buffer, not a frame — no locals, no operands, no monitor, no method.
+    ///
+    /// Bounded: the pool is a cache, not a graveyard. Past `FRAME_POOL_CAP` frames the extra ones
+    /// are simply dropped — a call chain deeper than that pays the old allocation price at its
+    /// tip, while the hot, shallow part of every stack stays pooled.
+    frame_pool: Vec<Frame>,
+    /// **The JIT's code cache** (Fase F, F3): this thread's compiled methods, their invocation
+    /// counters and the marshalling buffer. See [`crate::burst::code_cache`] for why both the code
+    /// *and* the counter live per-thread rather than on `MethodBody` — the short version is that
+    /// `ExecMem` is not `Send`, so the code cannot be shared, and a counter that lived apart from
+    /// the code it decides about would give two threads two different answers to "is this method
+    /// compiled?".
+    ///
+    /// This is also what keeps the JIT off the `os` parallel substrate: the two dispatch points
+    /// ([`Exec::try_compiled_call`] and [`Exec::try_osr`]) check the mode before touching this
+    /// field, so compiled code never runs where a stop-the-world handshake could be waiting on it.
+    jit: crate::burst::code_cache::JitCache,
+    /// Whether a **back-edge** in `code_method` is worth reporting to the JIT — refreshed with the
+    /// bytecode cache (they are keyed by the same method) and cleared the moment the JIT's answer
+    /// about this method becomes final.
+    ///
+    /// It exists to keep the overwhelmingly common case free. Almost every loop in a real program
+    /// is in a method the JIT will never compile, and that loop's back-edge must not pay a hash
+    /// probe per iteration to be told so again. `JitCache::watches_back_edges` returns `false`
+    /// permanently for such a method, so caching the `false` is sound; the `true` direction is
+    /// only ever an *extra* probe, never a wrong one.
+    osr_watch: bool,
+}
+
+impl RunningCtx {
+    /// How many retired frames one thread keeps. A stack may be `MAX_FRAMES` (2000) deep and,
+    /// in green mode, one `RunningCtx` serves *every* green thread, so an unbounded pool would
+    /// hold on to the high-water mark of the whole program's stack usage. 128 covers ordinary
+    /// call depth (the deepest recursion in the suite and the benchmarks is well under it) at a
+    /// negligible resident cost.
+    const FRAME_POOL_CAP: usize = 128;
+
+    /// A frame for `method`, armed with `args` — recycled from the pool when one is available,
+    /// freshly allocated when it is empty. The two paths must produce *identical* frames; they
+    /// share [`Frame::reset_for_call`] so they cannot drift.
+    fn new_frame(
+        &mut self,
+        method: MethodId,
+        max_locals: usize,
+        args: Vec<Value>,
+        slot_widths: &[usize],
+    ) -> Frame {
+        match self.frame_pool.pop() {
+            Some(mut frame) => {
+                debug_assert!(frame.is_scrubbed(), "a pooled frame must hold no values");
+                frame.reset_for_call(method, max_locals, args, slot_widths);
+                frame
+            }
+            None => Frame::for_call(method, max_locals, args, slot_widths),
+        }
+    }
+
+    /// Returns a retired frame to the pool, **scrubbed** — the single door in, so "a pooled frame
+    /// holds no reference" is a property of this function rather than of every call site. Frames
+    /// beyond the cap are dropped.
+    fn recycle(&mut self, mut frame: Frame) {
+        if self.frame_pool.len() < Self::FRAME_POOL_CAP {
+            frame.scrub();
+            self.frame_pool.push(frame);
+        }
+    }
 }
 
 /// The **shared VM state** — everything that is *not* private to a single thread. In OS mode
@@ -270,10 +357,6 @@ struct SharedVm {
     /// Object monitors for `synchronized`, keyed by the lock object's heap offset.
     /// Created lazily on first `monitorenter`.
     monitors: std::collections::HashMap<usize, Monitor>,
-    /// Synthetic classes minted for lambda call sites, keyed by class name. A real JVM
-    /// *generates a class* here; we don't need to, because we own the dispatch — see
-    /// [`LambdaShape`].
-    lambdas: std::collections::HashMap<String, LambdaShape>,
     /// Resolved **dynamic constants** (condy), keyed by the class and pool index that
     /// named them. Caching is not an optimisation here: a condy is a *constant*, so it
     /// must be computed once — and the same one is routinely shared, as when every case
@@ -308,6 +391,11 @@ struct SharedVm {
     /// at the top of their loop and exit (mirrors the green scheduler abandoning workers
     /// when `main` ends).
     halt: bool,
+    /// Set by `System.exit(status)` — the VM's **exit status**, and the fact that the program
+    /// was terminated deliberately rather than by `main` returning. Every driver reads it: the
+    /// green scheduler stops even when a *worker* called `exit`, and an OS-mode main thread woken
+    /// by the `halt` above returns this status as the program's result. `None` = no `exit` call.
+    exit_status: Option<i32>,
     /// **`os` parallel driver only.** When set, [`Exec::safepoint`] *defers* collection to the
     /// driver's stop-the-world handshake instead of collecting inline. The serialised paths
     /// (green, `os-gil`, and the `os` serialised fallback) leave it `false` and collect inline.
@@ -336,6 +424,23 @@ pub struct Exec<'a> {
     running: &'a mut RunningCtx,
 }
 
+/// Where [`Exec::push_frame_locked`] gets the callee's argument **slot widths** from.
+///
+/// Every invoke ends by laying `[receiver?, args…]` into the callee's locals, a `long`/`double`
+/// taking two slots. That used to mean `param_slot_widths(descriptor)` — a fresh `Vec` and a
+/// re-parse of the descriptor — on *every* call. The widths only depend on the callee's
+/// descriptor, though, so [`MetaspaceService`] now parses them once at method resolution and
+/// [`Self::OfCallee`] just borrows that table. [`Self::Slice`] stays for the callers whose
+/// descriptor is *not* the callee's declared one: a spun lambda's constructor, and a
+/// `MethodHandle` invocation (where kind 6, static, has no receiver slot at all).
+enum Widths<'a> {
+    /// Widths the caller built itself, from a descriptor it owns.
+    Slice(&'a [usize]),
+    /// The callee's own precomputed table — with the receiver's leading slot for an instance
+    /// call (`invokevirtual`/`invokespecial`/`invokeinterface`), without it for a `static` one.
+    OfCallee { receiver: bool },
+}
+
 impl JVM {
     /// Starts an interpreter whose call stack holds just the `entry` frame, run
     /// against `metaspace` (which it takes ownership of, to resolve calls), with a
@@ -360,11 +465,12 @@ impl JVM {
                     os_handle: None,
                     os_spawned: true, // the main thread is driven by execute_os_gil's own thread
                     at_safepoint: false,
+                    park_permit: false,
+                    parked: false,
                 }],
                 next_thread_id: 1,
                 java_thread_counter: 1, // main's lazily-built object takes 0; first `new Thread()` takes 1
                 monitors: std::collections::HashMap::new(),
-                lambdas: std::collections::HashMap::new(),
                 condy: std::collections::HashMap::new(),
                 condy_in_progress: std::collections::HashSet::new(),
                 heap: HeapService::new(),
@@ -376,6 +482,7 @@ impl JVM {
                 gc_requested: false,
                 mode: ThreadMode::from_env(),
                 halt: false,
+                exit_status: None,
                 gc_by_driver: false,
             },
         }
@@ -418,13 +525,15 @@ impl Exec<'_> {
     /// what came out live vs garbage. Mark-only for now — nothing is freed; the
     /// visualizer triggers this (on `espacio`) to *show* reachability.
     pub fn gc_mark(&mut self) -> gc::MarkReport {
-        self.parked(|m, h, t| gc::mark(m, h, t))
+        let (_keys, refs) = self.condy_roots();
+        self.parked(|m, h, t| gc::mark(m, h, t, &refs))
     }
 
     /// Runs a full GC cycle — mark **and sweep**: reclaims every unreachable object
     /// into the heap's free list. Returns the report (its `garbage` = what was freed).
     pub fn gc_sweep(&mut self) -> gc::MarkReport {
-        self.parked(|m, h, t| gc::sweep(m, h, t))
+        let (_keys, refs) = self.condy_roots();
+        self.parked(|m, h, t| gc::sweep(m, h, t, &refs))
     }
 
     /// The GC compaction policy in effect (read from the environment at startup),
@@ -436,7 +545,9 @@ impl Exec<'_> {
     /// Runs a **mark-compact**: relocates live objects into one contiguous run and
     /// fixes the references to them. Returns what moved / how much was reclaimed.
     pub fn gc_compact(&mut self) -> gc::CompactReport {
-        let report = self.parked(|m, h, t| gc::compact(m, h, t));
+        let (keys, mut refs) = self.condy_roots();
+        let report = self.parked(|m, h, t| gc::compact(m, h, t, &mut refs));
+        self.restore_condy_roots(&keys, &refs);
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
         report
@@ -458,6 +569,32 @@ impl Exec<'_> {
             .collect();
     }
 
+    /// The condy cache's live references, as parallel `(key, offset)` lists. A resolved dynamic
+    /// constant lives for the program but is reachable only from this VM table — not any frame or
+    /// mirror — so a moving GC must be told to keep it alive and to remap it. Non-reference
+    /// constants (e.g. an `int` condy) are neither a root nor movable, so they're skipped.
+    fn condy_roots(&self) -> (Vec<(String, u16)>, Vec<usize>) {
+        let mut keys = Vec::new();
+        let mut refs = Vec::new();
+        for (key, value) in &self.shared.condy {
+            if let Value::Reference(offset) = value {
+                if *offset != 0 {
+                    keys.push(key.clone());
+                    refs.push(*offset);
+                }
+            }
+        }
+        (keys, refs)
+    }
+
+    /// Writes the GC-remapped condy references back into the cache (the collector rewrote the
+    /// `refs` list in place through its forwarding map).
+    fn restore_condy_roots(&mut self, keys: &[(String, u16)], refs: &[usize]) {
+        for (key, &offset) in keys.iter().zip(refs) {
+            self.shared.condy.insert(key.clone(), Value::Reference(offset));
+        }
+    }
+
     /// Drop monitors whose lock object is no longer allocated (it was collected), so a
     /// later allocation reusing that offset can't inherit a stale monitor.
     fn prune_dead_monitors(&mut self) {
@@ -471,7 +608,9 @@ impl Exec<'_> {
     /// frequent; the visualizer can trigger it, and the safepoint runs it when Eden fills.
     pub fn gc_minor(&mut self) -> gc::MinorReport {
         let tenure = self.shared.gc_policy.tenure;
-        let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
+        let (keys, mut refs) = self.condy_roots();
+        let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure, &mut refs));
+        self.restore_condy_roots(&keys, &refs);
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
         report
@@ -523,7 +662,9 @@ impl Exec<'_> {
         // gate the old `JVM_GC_AUTO` guarded was about an incomplete mark, long fixed).
         if self.shared.heap.eden_used() * 10 >= self.shared.heap.eden_capacity() * 9 {
             let tenure = self.shared.gc_policy.tenure;
-            let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure));
+            let (keys, mut refs) = self.condy_roots();
+            let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure, &mut refs));
+            self.restore_condy_roots(&keys, &refs);
             self.remap_monitor_keys(&report.relocations); // young objects moved → fix monitor keys
             self.prune_dead_monitors();
             let _ = writeln!(
@@ -547,6 +688,12 @@ impl Exec<'_> {
         if let Some(cause) = cause {
             self.collect(cause);
         }
+        // Opt-in (`JVM_GC_VERIFY`) post-GC consistency check: assert no reference dangles. Runs
+        // inside `parked` so the running thread's stack is in its slot and the scan spans every
+        // frame. Off by default (a full-heap walk); a stress/CI safety net for moving-GC remap bugs.
+        if self.shared.gc_policy.verify {
+            self.parked(|m, h, t| gc::verify_heap(m, h, t));
+        }
     }
 
     /// Runs one collection cycle: mark-and-sweep, then compact if the heap is
@@ -558,17 +705,29 @@ impl Exec<'_> {
         // A full collection is generational: a minor first (evacuate/promote the young),
         // then the major over Old (sweep, and compact if fragmented). All over every
         // thread's roots, so it runs inside `parked`.
+        let (keys, mut refs) = self.condy_roots();
         let (live, garbage, compacted, minor_reloc, compact_reloc) = self.parked(|m, h, t| {
-            let minor = gc::minor(m, h, t, policy.tenure);
-            let report = gc::sweep(m, h, t);
+            // `refs` (the condy roots) is threaded through and rewritten in place by each moving
+            // phase, so it stays current: minor evacuates+remaps, sweep keeps it alive, compact
+            // remaps again. Written back to the cache below.
+            let minor = gc::minor(m, h, t, policy.tenure, &mut refs);
+            // Soft references are given back only under **memory pressure**: a collection the
+            // heap asked for (occupancy / out-of-space / allocation rate) clears them, an
+            // explicit `System.gc()` does not — see `gc::SoftPolicy`.
+            let report = if cause == gc::GcCause::Explicit {
+                gc::sweep(m, h, t, &refs)
+            } else {
+                gc::sweep_under_pressure(m, h, t, &refs)
+            };
             let (compacted, compact_reloc) = if gc::should_compact(h, &policy) {
-                let c = gc::compact(m, h, t);
+                let c = gc::compact(m, h, t, &mut refs);
                 (c.reclaimed, c.relocations)
             } else {
                 (0, std::collections::HashMap::new())
             };
             (report.live.len(), report.garbage.len(), compacted, minor.relocations, compact_reloc)
         });
+        self.restore_condy_roots(&keys, &refs);
         // Objects moved (minor evacuation, then compaction) → relocate the monitor map keys,
         // applied minor-then-compact (the composition), then drop monitors on dead objects.
         self.remap_monitor_keys(&minor_reloc);
@@ -624,6 +783,9 @@ impl Exec<'_> {
         if self.running.code_method != Some(method) {
             self.running.code = self.shared.metaspace.code(method).to_vec();
             self.running.code_method = Some(method);
+            // The JIT's back-edge verdict is keyed by the same method, so it is refreshed by the
+            // same compare — see `RunningCtx::osr_watch`.
+            self.running.osr_watch = self.running.jit.watches_back_edges(method);
         }
     }
 
@@ -703,6 +865,12 @@ impl Exec<'_> {
     /// `run_one` directly so a `<clinit>` runs to completion without yielding.
     pub fn step(&mut self) -> Step {
         if let Step::Return(value) = self.run_one() {
+            // `System.exit` ends the **VM**, not just the calling thread: report its status as
+            // the program's result no matter which thread ran it (a worker's ordinary return
+            // would only terminate that thread — see below).
+            if self.shared.exit_status.is_some() {
+                return Step::Return(value);
+            }
             // The current thread's last frame returned.
             if self.running.current == 0 {
                 return Step::Return(value); // the main thread finished → program result
@@ -809,6 +977,38 @@ impl Exec<'_> {
                 handle.unpark();
             }
         }
+    }
+
+    /// `System.exit(status)` (JLS §12.8): terminate the **whole VM** right now, from whichever
+    /// thread called it. Not a return and not a throw — the JVM does *not* unwind: no `finally`
+    /// runs, no `catch` sees anything, no caller resumes. So we simply **drop this thread's whole
+    /// frame stack** and report `Step::Return(Some(status))`, which every driver already reads as
+    /// "this stack is done"; `exit_status` (+ `halt` in OS mode) carries the same decision to the
+    /// other threads, so the *program* result is `status` even when a worker called `exit`.
+    ///
+    /// Out of scope: **shutdown hooks**. They would have to run Java code on the termination path
+    /// — the one path that must not execute bytecode — so `exit` here is unconditionally final.
+    /// For the same reason, calling `exit` from inside a VM-driven callback (a `<clinit>`, a
+    /// `MethodHandle` intrinsic) is not supported: those drive `run_one` against a frame floor
+    /// this bypasses.
+    pub(super) fn vm_exit(&mut self, status: i32) -> Step {
+        self.shared.exit_status = Some(status);
+        self.shared.halt = true; // OS mode: workers see it at the top of their loop and exit
+        // No `pop_frame` loop: that would release monitors and run the unwind bookkeeping, which
+        // is exactly the "orderly shutdown" `exit` is defined *not* to do.
+        //
+        // So these frames are **dropped, not pooled** (Fase F) — the one place a frame leaves the
+        // stack without passing through `pop_frame`. Both reasons point the same way. Correctness:
+        // pooling them would mean scrubbing them, and `clear()` on the whole `Vec` already
+        // destroys every reference just as completely, with no way for a live one to slip into the
+        // pool. Value: the pool exists to make the *next* call cheap, and on this path there is no
+        // next call — the VM is over. Recycling up to 2000 frames on the termination path would be
+        // pure work for a pool nobody will read.
+        self.running.frames.clear();
+        if self.shared.mode.uses_os_threads() {
+            self.unpark_all(); // wake parked threads (including main) so they see `halt`
+        }
+        Step::Return(Some(Value::Int(status)))
     }
 
     /// Spawns a green thread for `Thread.start()`: it runs the receiver's `run()`
@@ -945,6 +1145,8 @@ impl Exec<'_> {
             os_handle: None,
             os_spawned: false, // the OS driver launches this slot's std::thread on the next tick
             at_safepoint: false,
+            park_permit: false,
+            parked: false,
         });
     }
 
@@ -1050,6 +1252,16 @@ impl Exec<'_> {
         Step::Continue
     }
 
+    /// The most frames a thread's call stack may hold before the VM throws
+    /// `StackOverflowError` (JVMS §6.3). Every `invoke*` funnels through
+    /// [`Self::push_frame_locked`], so this one bound covers all Java-to-Java calls;
+    /// [`Self::call_java`] applies it to VM-pushed synthetic frames too. 2000 is far more
+    /// than any legitimate call chain in this project needs, yet small enough that an
+    /// infinite recursion overflows (and the test runs) quickly. Throwing never pushes a
+    /// frame (`throw_exception` allocates a bare object and unwinds), so the throw itself
+    /// cannot re-overflow.
+    const MAX_FRAMES: usize = 2000;
+
     /// Builds and pushes the callee's frame, **taking its monitor first** when `lock` is
     /// `Some` — a `synchronized` method, whose lock object is the receiver (instance) or the
     /// `Class` mirror (static). The frame remembers the monitor so `pop_frame` releases it on
@@ -1057,14 +1269,33 @@ impl Exec<'_> {
     /// are restored to the caller's stack and the thread is parked, so the scheduler reruns
     /// this same invoke — and retries the acquire — once the thread is woken. `lock` is
     /// `None` for the common, unsynchronized case (a plain push, no monitor work).
+    ///
+    /// **Deliberately not done — the third `Vec`.** With the frame pooled (Fase F), the one
+    /// allocation a call still makes is the `operands` buffer each invoke fills before calling
+    /// here. Popping the operands *directly* into the pooled frame's `locals` would remove it,
+    /// and it was measured as the smaller half of the win — but that buffer is not merely a
+    /// carrier. `invokestatic` hands the same values to `natives::dispatch` and to the intrinsic
+    /// arms, both of which run *before* any callee frame exists; and the contended-monitor path
+    /// below pushes them back onto the caller's operand stack so the invoke can replay
+    /// unchanged. Both would then have to read their arguments back out of a half-built callee
+    /// frame, at the category-2 slot offsets rather than in argument order, on a path that must
+    /// also stay re-entrant (an intrinsic can `call_java` straight back into another invoke).
+    /// That is a far wider blast radius than the pool itself, for less of the gain, so it stays
+    /// a note here instead of a change.
     fn push_frame_locked(
         &mut self,
         callee: MethodId,
         max_locals: usize,
         operands: Vec<Value>,
-        widths: &[usize],
+        widths: Widths<'_>,
         lock: Option<usize>,
     ) -> Step {
+        // Depth limit first (JVMS §6.3) — before any monitor work, so an overflow can't
+        // acquire a lock it would then leak. The popped operands are simply discarded:
+        // the unwind clears the caller's stack anyway on its way to the handler.
+        if self.running.frames.len() >= Self::MAX_FRAMES {
+            return self.throw_exception("java/lang/StackOverflowError");
+        }
         if let Some(obj) = lock {
             if !self.acquire_monitor(obj) {
                 // Contended: undo the operand pop so the invoke replays cleanly on retry.
@@ -1076,33 +1307,675 @@ impl Exec<'_> {
                 return Step::Continue;
             }
         }
-        let mut frame = Frame::for_call(callee, max_locals, operands, widths);
+        // The widths either come from the caller (a descriptor it built itself — a lambda's
+        // constructor, a `MethodHandle`'s target) or straight off the callee's precomputed table,
+        // which is the F0-quickened path: no `Vec`, no descriptor re-parse. The frame itself comes
+        // from this thread's pool (Fase F) whenever one is parked there — same frame, no
+        // allocation. The metaspace borrow (`shared`) and the pool (`running`) are disjoint
+        // fields, so the widths can be read straight into `new_frame`.
+        let mut frame = match widths {
+            Widths::Slice(widths) => self.running.new_frame(callee, max_locals, operands, widths),
+            Widths::OfCallee { receiver: true } => {
+                let widths = self.shared.metaspace.receiver_slot_widths(callee);
+                self.running.new_frame(callee, max_locals, operands, widths)
+            }
+            Widths::OfCallee { receiver: false } => {
+                let widths = self.shared.metaspace.param_slot_widths_of(callee);
+                self.running.new_frame(callee, max_locals, operands, widths)
+            }
+        };
         if let Some(obj) = lock {
             frame.set_monitor(obj);
         }
+        // ---- The JIT's one dispatch point (Fase F, F3) ------------------------------------
+        // Here and nowhere else. Everything a compiled call needs is already true at this line:
+        // the frame exists, so the arguments are laid out in the callee's locals at their
+        // category-2 offsets — the compiled code marshals exactly what the interpreter would
+        // have read. A method that runs natively never becomes a frame at all; its value goes
+        // straight onto the caller's operand stack and the caller steps past the invoke, which
+        // is precisely what the matching `ireturn` would have done.
+        //
+        // A `synchronized` callee is excluded: its monitor was acquired just above and releasing
+        // it is `pop_frame`'s job, so a call that never pushes a frame would leak the lock. (No
+        // method in the compiled subset can be synchronized in practice — the subset has no way
+        // to observe a lock — but the exclusion is structural rather than incidental.)
+        // `deopted` is the chain a deopt inside an **inlined** callee rebuilt (F3 step 8). It is
+        // empty for every other outcome, and for every method with nothing inlined.
+        let mut deopted = Vec::new();
+        if lock.is_none() {
+            if let Some(value) = self.try_compiled_call(callee, &mut frame, &mut deopted) {
+                self.running.recycle(frame);
+                self.advance_past_call();
+                // `None` is a `void` callee (step 7): the frame is finished and the caller steps
+                // past the invoke exactly as it does for a value-returning one, but nothing lands
+                // on its operand stack — which is precisely what the matching `return` would do.
+                if let Some(value) = value {
+                    self.top().push(value);
+                }
+                return Step::Continue;
+            }
+        }
         self.running.frames.push(frame);
+        // On top of it, the frames the expansion had flattened away — outermost first, so the last
+        // one pushed is the one holding the instruction native code could not do.
+        self.running.frames.extend(deopted);
         Step::Continue
     }
 
+    /// The marshalling **in**: one interpreter `Value` as the bare `i64` compiled code works in.
+    ///
+    /// Every kind crosses, and they cross identically — an `int` sign-extended (which establishes the
+    /// normalisation invariant the generated arithmetic relies on) and a reference as its **heap
+    /// offset**, which is what a `Value::Reference` already is. `None` is every other kind, and it
+    /// abandons the call — which, now that every primitive has a representation, only a slot the
+    /// compiler could not type at all can produce. The compiled code provably never reads such a
+    /// slot (the type map refuses to compile a read of one), so `None` here only ever means a slot
+    /// the code declared but cannot touch.
+    ///
+    /// Nothing is *checked* against the compiler's type map on this side, and that is deliberate
+    /// rather than an omission: the map's entry state comes from the method's own descriptor, so a
+    /// disagreement between it and the frame would mean the descriptor was wrong — the verifier's
+    /// business, not the JIT's. The direction that *is* checked is the one coming back, where a
+    /// mistake would be invisible: see [`JitCache::osr_writeback`].
+    fn marshal(value: Value) -> Option<i64> {
+        match value {
+            Value::Int(v) => Some(v as i64),
+            Value::Reference(offset) => Some(offset as i64),
+            // A `long` is category-2 and it still marshals as **one** slot, because that is what it
+            // is on both sides: the interpreter keeps a whole `Value::Long` in the low local slot
+            // and leaves the high one untouched, and so does compiled code. The high slot marshals
+            // as whatever it holds — `Value::Int(0)` for a frame nobody wrote it in — and nothing
+            // ever reads it (`Kind::Cat2High` fails every kind check in `burst::compile`).
+            Value::Long(v) => Some(v),
+            // A `float` and a `double` cross as their **IEEE bit patterns**, not as numbers: the
+            // boundary has no floating-point register in it, and compiled code works in the bits
+            // until the moment an SSE instruction needs them. `to_bits` on an `f32` gives a `u32`,
+            // so `as i64` zero-extends -- which is exactly the boundary form `burst::compile`'s
+            // `Kind::Float` describes.
+            Value::Float(v) => Some(v.to_bits() as i64),
+            Value::Double(v) => Some(v.to_bits() as i64),
+        }
+    }
+
+    /// The marshalling **out**: a kind-tagged boundary value as the interpreter's `Value`.
+    fn from_jit(value: crate::burst::code_cache::JitValue) -> Value {
+        match value {
+            crate::burst::code_cache::JitValue::Int(v) => Value::Int(v),
+            crate::burst::code_cache::JitValue::Reference(offset) => Value::Reference(offset),
+            crate::burst::code_cache::JitValue::Long(v) => Value::Long(v),
+            crate::burst::code_cache::JitValue::Float(v) => Value::Float(v),
+            crate::burst::code_cache::JitValue::Double(v) => Value::Double(v),
+        }
+    }
+
+    /// **Puts a half-finished compiled method back into an interpreter frame** (F3 step 6): the
+    /// locals native code wrote, the operand stack it was holding, and the pc it stopped at.
+    ///
+    /// This is the whole of "a real deopt" on this side of the boundary. Before it, a method that
+    /// could not go on was simply re-run from its first byte, which is indistinguishable from a
+    /// first execution *only* while compiled code writes nothing observable — the restriction that
+    /// kept `putfield`, `iastore` and `putstatic` out of the subset. Here the frame is made to be
+    /// the state native code was in, so the interpreter continues instead of repeating.
+    ///
+    /// Three things are load-bearing:
+    ///
+    ///  - **The pc names an instruction that has not run.** Every deopt guard is emitted before its
+    ///    instruction's first observable effect, so resuming there re-executes that instruction
+    ///    exactly once in total. See `burst::compile`'s write/pc rule.
+    ///  - **The stack is cleared first.** Both callers hand over a frame whose stack is provably
+    ///    empty (a fresh callee frame, or a loop header), and the state carries the whole stack, so
+    ///    anything already there would be a duplicate.
+    ///  - **The values are tagged.** A heap offset put back as a `Value::Int` is a live object the
+    ///    collector can no longer see or relocate — and this frame is a GC root the moment it is
+    ///    interpreted again. The kinds come from the compiler's type map at this exact pc, and a
+    ///    local the map cannot type is absent from the state rather than guessed at.
+    ///  - **The frames inlining removed come back too** (F3 step 8). A guard inside an expanded
+    ///    callee has to hand back the whole call chain, not one state, so this returns the frames
+    ///    *above* the one it was given and the caller pushes them on top of it. The frame handed in
+    ///    is left at the pc of the **invoke** with the arguments already gone from its stack, which
+    ///    is exactly where the interpreter parks a caller during a real call — so when the rebuilt
+    ///    callee returns, `advance_past_call` steps the caller over the invoke and pushes the
+    ///    result, with no machinery that did not already exist.
+    fn resume_from_jit(
+        frame: &mut Frame,
+        state: &crate::burst::code_cache::ResumeState,
+    ) -> Vec<Frame> {
+        for &(slot, value) in &state.locals {
+            frame.store(slot as usize, Self::from_jit(value));
+        }
+        frame.clear_stack();
+        for &value in &state.stack {
+            frame.push(Self::from_jit(value));
+        }
+        frame.jump(state.pc as usize);
+        // Each inlined frame is built whole — every local, then the operand stack — because unlike
+        // the frame above there is nothing of it in existence to leave alone. `Frame::new` is the
+        // ordinary constructor, so these are frames like any other: not synthetic (they were
+        // reached through an invoke, and their `return` must step the caller over it) and holding
+        // no monitor (a `synchronized` callee is never inlined).
+        state
+            .inlined
+            .iter()
+            .map(|virt| {
+                let locals: Vec<Value> = virt.locals.iter().map(|&v| Self::from_jit(v)).collect();
+                let mut rebuilt = Frame::new(virt.unit, locals.len(), locals);
+                for &value in &virt.stack {
+                    rebuilt.push(Self::from_jit(value));
+                }
+                rebuilt.jump(virt.pc as usize);
+                rebuilt
+            })
+            .collect()
+    }
+
+    /// Runs `callee` as **native code** if the JIT has it, compiling it first if this call is the
+    /// one that makes it hot. `None` means "interpret `frame`" — from its first byte when native
+    /// code was never entered, and from wherever native code stopped when it was (this method has
+    /// already moved `frame` there).
+    ///
+    /// There are four such paths, and they are worth naming because together they are the whole
+    /// fallback story:
+    ///
+    /// 1. **The `os` parallel substrate.** The safepoint poll now exists (F3 step 3), but the JIT
+    ///    is still switched off there — see [`Self::try_osr`] for what is missing and why. In
+    ///    `green` and `os-gil` the guarantee compiled code needs holds trivially: no interpreter
+    ///    opcode (and therefore no GC) runs anywhere while the native call is on this thread's
+    ///    stack.
+    /// 2. **Not hot yet, or not eligible.** One `HashMap` probe, then straight back.
+    /// 3. **A local that cannot be marshalled.** Every `Value` a well-formed descriptor can put in
+    ///    a slot marshals now — a reference as its heap offset, a `long` as its whole 64 bits, a
+    ///    `float`/`double` as its IEEE pattern — so this path has narrowed to slots the compiler
+    ///    could not type at all, and in practice never fires.
+    /// 4. **A deopt** — a zero divisor, a `null` receiver or array, or an array index out of
+    ///    range. Since step 6 this one is *not* "never having tried": native code hands back the
+    ///    pc it stopped at together with the locals and the operand stack, `frame` is made to be
+    ///    that state ([`Self::resume_from_jit`]), and the interpreter carries on from there — it
+    ///    re-executes the one instruction that could not be done natively and raises the proper
+    ///    exception. Native code decides only that it cannot proceed, never *which* exception.
+    ///    A **safepoint** exit during an ordinary call takes the same road.
+    /// 5. **Not enough frame headroom.** Inlining flattens a call chain away, so a deopt out of
+    ///    compiled code can hand back several frames at once — and the depth checks the interpreter
+    ///    would have made at each expanded invoke were never run. Refusing to *enter* when the
+    ///    chain would not fit is the only point at which refusing still costs nothing; see
+    ///    [`JitCache::frames_needed`][crate::burst::code_cache::JitCache::frames_needed].
+    ///
+    /// `deopted` receives the frames a deopt inside an inlined callee rebuilt, outermost first. The
+    /// caller pushes them **after** `frame`, which is the frame they were called from.
+    fn try_compiled_call(
+        &mut self,
+        callee: MethodId,
+        frame: &mut Frame,
+        deopted: &mut Vec<Frame>,
+    ) -> Option<Option<Value>> {
+        use crate::burst::code_cache::{Decision, OsrResult};
+
+        if self.shared.mode == ThreadMode::OsParallel {
+            return None;
+        }
+        match self.running.jit.on_entry(callee) {
+            Decision::Interpret => return None,
+            Decision::Ready => {}
+            Decision::Compile => self.compile_method(callee),
+        }
+        // `frame` is not on the stack yet, so the chain this call could leave behind is
+        // `frames.len()` plus everything the compilation stands for.
+        if self.running.frames.len() + self.running.jit.frames_needed(callee) > Self::MAX_FRAMES {
+            return None;
+        }
+        // `jit` and `heap` are disjoint fields of two disjoint halves of `Exec`, so the call can
+        // hand the cache a closure that logs straight into the heap. That is not a convenience: the
+        // objects native code allocated are invisible to the collector until this runs, and making
+        // it an argument of the call is what stops a caller from forgetting it.
+        let (jit, heap) = (&mut self.running.jit, &self.shared.heap);
+        let outcome = jit.run(
+            callee,
+            |slot| Self::marshal(frame.load(slot as usize)),
+            |offset, size| heap.log_jit_allocation(offset, size),
+        );
+        match outcome? {
+            // The outer `Some` is "native code finished the method"; the inner one is its value, and
+            // `None` there is a `void` return — nothing to push.
+            OsrResult::Returned(value) => Some(value.map(Self::from_jit)),
+            // Not a return: the frame becomes the state native code stopped in and the caller
+            // pushes it, so interpretation continues at that pc rather than at the method's first
+            // byte. That difference is the whole of step 6.
+            OsrResult::Safepoint(state) | OsrResult::Deopt(state) => {
+                *deopted = Self::resume_from_jit(frame, &state);
+                None
+            }
+        }
+    }
+
+    /// Scans `method` once and hands the result to the code cache — the answer to a
+    /// `Decision::Compile`, whichever counter asked for it (invocations or back-edges).
+    ///
+    /// The compiler needs the bytecode, a way to resolve an `ldc` to an integer constant, a way to
+    /// resolve a `getstatic` to an address, and the address of this thread's safepoint poll word —
+    /// and *only* those, which is why `burst` needs to know nothing about constant pools, mirrors
+    /// or class initialisation: each unresolvable index is simply a `None` and the method is
+    /// refused.
+    ///
+    /// Every resolver takes `&` borrows of the metaspace and the heap, so **compiling cannot change
+    /// the VM's state**: no class is loaded, no mirror allocated, no `<clinit>` run on the way to a
+    /// decision. That is deliberate — compilation is triggered from an invocation counter or a
+    /// back-edge counter, i.e. at moments the interpreter has not chosen for their side effects.
+    /// (The `getfield` resolver does *fill* the F0 resolved-site cache, whose cells are atomic and
+    /// whose contents are a pure function of `(method, pc)`. That is a memoisation, not a state
+    /// change: the same word the next interpreted execution of that site would have written.)
+    fn compile_method(&mut self, method: MethodId) {
+        let max_locals = self.shared.metaspace.max_locals(method);
+        let poll = self.running.jit.poll_address();
+        // F3 step 10: how many operand-stack positions this compilation keeps in registers. Read
+        // from the cache (and therefore from `JVM_JIT_REGS`, or from the measurement's programmatic
+        // override) rather than fixed here, so both arms of the comparison are one binary.
+        let regs = self.running.jit.cache_regs();
+        let result = {
+            let metaspace = &self.shared.metaspace;
+            let heap = &self.shared.heap;
+            let shape = Self::jit_shape(metaspace, method);
+            let bases = heap.jit_bases();
+            crate::burst::compile::compile_with_regs(
+                &shape,
+                &crate::burst::compile::Environment {
+                    // Every resolver is qualified by the **unit** — the `MethodId` of the body the
+                    // index was read from. Before step 8 there was only one, so the qualifier was
+                    // implicit and the caller's class was always the right one to ask; an inlined
+                    // callee brings its own constant pool, and reading its `ldc #7` out of the
+                    // caller's pool is exactly the silent mistake the parameter prevents.
+                    int_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.integer_constant(index))
+                    },
+                    // `ldc2_w`, and only for a `CONSTANT_Long`: `long_constant` answers `None` for
+                    // a `CONSTANT_Double`, which is how a `double` literal stays outside the subset
+                    // without `burst` knowing what a constant pool is.
+                    long_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.long_constant(index))
+                    },
+                    // The two floating-point pools, handed over as **bit patterns**: that is what
+                    // the generated code bakes in as an immediate, and it is what keeps a NaN's
+                    // payload from being quieted by a trip through an `f32`/`f64` value.
+                    float_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.float_constant(index)).map(f32::to_bits)
+                    },
+                    double_const: &|unit, index| {
+                        metaspace.get(metaspace.class_of(unit)).and_then(|cf| cf.double_constant(index)).map(f64::to_bits)
+                    },
+                    static_field: &|unit, index| {
+                        class_operations::jit_static_field(metaspace, heap, metaspace.class_of(unit), index)
+                    },
+                    field: &|unit, pc, index| objects_operations::jit_field_site(metaspace, unit, pc, index),
+                    // `new`: the instance's size and header word, resolved read-only and refused
+                    // unless the class is already initialised — compiled code cannot run a
+                    // `<clinit>` any more than it can for a `getstatic`.
+                    instance: &|unit, index| {
+                        objects_operations::jit_instance(metaspace, metaspace.class_of(unit), index)
+                            .map(|(size, class_id)| crate::burst::compile::Instance { size, class_id })
+                    },
+                    // `newarray`/`anewarray`: the array class's mirror and its element width,
+                    // resolved read-only. Unlike `new` there is no `<clinit>` to wait for — an
+                    // array class has none — but the *mirror* must already exist, because minting
+                    // one allocates and compilation may not. Naming the class is this side's job
+                    // (a constant pool and a descriptor are not things `burst` knows about); all
+                    // it hands over is the operand it read.
+                    array: &|unit, of| {
+                        use crate::burst::compile::ArrayOf;
+                        let class = match of {
+                            ArrayOf::Primitive(atype) => {
+                                array_operations::primitive_array_class(atype)?.0.to_string()
+                            }
+                            ArrayOf::Reference(index) => {
+                                let caller = metaspace.class_of(unit);
+                                let element = metaspace.get(caller)?.class_name(index)?;
+                                array_operations::reference_array_class(element)
+                            }
+                        };
+                        array_operations::jit_array_class(metaspace, &class)
+                            .map(|(class_id, element)| crate::burst::compile::ArrayType { class_id, element })
+                    },
+                    invoke: &|unit, pc, index| Self::jit_callee(metaspace, unit, pc, index),
+                    // Where the heap is, and the three layout constants an array read needs — each
+                    // taken from the module that owns it, so compiled code and the interpreter
+                    // cannot come to disagree about where a `length` word or an element sits.
+                    heap: crate::burst::compile::Heap {
+                        eden_base: bases.eden,
+                        other_base: bases.other,
+                        eden_end: bases.eden_end.min(u32::MAX as usize) as u32,
+                        max_offset: bases.max_offset,
+                        eden_cursor: bases.eden_cursor,
+                        eden_capacity: bases.eden_capacity,
+                        null_page: bases.null_page.min(u32::MAX as usize) as u32,
+                        array_length: array_operations::LENGTH_OFFSET as u32,
+                        array_data: array_operations::ARRAY_HEADER_SIZE as u32,
+                        int_element: array_operations::array_element_width("[I") as u32,
+                    },
+                    // `checkcast`/`instanceof`/`ldc Foo.class`: the target class's **pinned**
+                    // mirror offset, read-only. `None` for a class the interpreter has never
+                    // prepared, which refuses the method — minting a mirror allocates, and
+                    // compiling may not.
+                    class_mirror: &|unit, index| {
+                        class_operations::jit_class_mirror(metaspace, metaspace.class_of(unit), index)
+                    },
+                    poll_word: poll,
+                },
+                regs,
+            )
+        };
+        self.running.jit.install(method, result, max_locals);
+    }
+
+    /// One method body in the shape [`burst::compile`][crate::burst::compile] wants it — the root
+    /// of a compilation, or (step 8) a callee about to be inlined into one.
+    ///
+    /// Its `unit` is the `MethodId` itself, which is what makes the compiler's resolvers able to ask
+    /// about the right constant pool and its cycle check able to recognise a method it is already
+    /// inside.
+    fn jit_shape(metaspace: &MetaspaceService, method: MethodId) -> crate::burst::compile::Method<'_> {
+        crate::burst::compile::Method {
+            unit: method,
+            code: metaspace.code(method),
+            max_locals: metaspace.max_locals(method),
+            descriptor: metaspace.descriptor(method),
+            is_static: metaspace.is_static(method),
+            has_handlers: !metaspace.exception_table(method).is_empty(),
+        }
+    }
+
+    /// **Which calls this tier may inline** (F3 step 8): the callee the invoke at `(unit, pc)`
+    /// binds to, or `None` for every call it must not expand.
+    ///
+    /// `None` is the ordinary answer and never an error — the compiler treats it exactly as it
+    /// treats an opcode outside the whitelist, so this is where the VM decides what inlining means
+    /// without `burst` learning anything about dispatch or class initialisation. What has to hold
+    /// for a `Some`, and why:
+    ///
+    ///  - **Statically bound.** `invokestatic` and `invokespecial` only. An `invokevirtual` binds on
+    ///    the receiver's runtime class, and this tier has no way to emit the type guard that would
+    ///    make a guess safe, so it is refused outright rather than speculated on.
+    ///  - **It has a body.** A `native` or `abstract` method has no bytecode to inline, and the
+    ///    intrinsics the interpreter intercepts (`System.exit`, `Thread.sleep`, …) are not bytecode
+    ///    either — they are interpreter actions, and inlining the body they *appear* to have would
+    ///    skip the interception entirely.
+    ///  - **Not `synchronized`.** There is no monitor acquire in an instruction stream, and a
+    ///    compiled frame is not one the unlock path could find.
+    ///  - **Its class is initialised.** The same requirement `getstatic` and `new` already have, for
+    ///    the same reason: entering a method is a first active use, and compiled code cannot run a
+    ///    `<clinit>`.
+    ///  - **`NoTarget` is not inlinable.** A constructor chain is allowed to bottom out at a
+    ///    `java.lang.Object.<init>` that is not on the classpath, and the interpreter's answer there
+    ///    is to drop the operands and move on. That is an interpreter decision with no body behind
+    ///    it, so there is nothing to expand.
+    ///
+    /// # Why the resolution is the **call-site cache** rather than the resolver
+    ///
+    /// `MetaspaceService::resolve_call` takes `&mut self` — it may load a class — and compiling is
+    /// deliberately unable to change the VM's state (see [`Self::compile_method`]): it is triggered
+    /// by a counter, at a moment the interpreter did not choose for its side effects. So the answer
+    /// comes from the **F0 quickened call site**, which is a read-only load of a word the
+    /// interpreter itself wrote the first time it executed this invoke.
+    ///
+    /// That is not a compromise, it is a better filter than resolution would be: a site with a
+    /// cached target is one the interpreter has *actually executed*, so inlining is offered only
+    /// for calls that have really happened, and a cold branch full of calls costs nothing.
+    fn jit_callee<'m>(
+        metaspace: &'m MetaspaceService,
+        unit: MethodId,
+        pc: usize,
+        index: u16,
+    ) -> Option<crate::burst::compile::Callee<'m>> {
+        use call_site::{CallSite, SiteKind};
+        use crate::burst::compile::Guard;
+
+        let code = metaspace.code(unit);
+        // The four constant-pool-indexed invokes. The index is the site's own and is checked
+        // against the opcode's operand bytes, so a cache entry can never be read for a pc that is
+        // not this invoke.
+        let op = *code.get(pc)?;
+        if !matches!(op, 0xb6..=0xb9) {
+            return None;
+        }
+        if u16::from_be_bytes([*code.get(pc + 1)?, *code.get(pc + 2)?]) != index {
+            return None;
+        }
+        // **A cold site is still inlinable when the call is statically bound.** The F0 cache is
+        // filled by *executing* the invoke, so a call on a branch this method has never taken
+        // leaves its cell at zero — and one such call used to refuse the whole method, however hot
+        // the rest of it was. For `invokestatic` and `invokespecial` nothing about the receiver is
+        // involved, so the only thing the site was going to say is which method; when that has
+        // already been resolved from somewhere, the metaspace can answer it read-only. See
+        // `MetaspaceService::resolved_call_readonly` for why that is free of side effects and free
+        // of linkage errors. A cold *dispatched* site stays refused: there is no receiver class to
+        // speculate on, and inventing one is not a speculation, it is a guess.
+        let site = match CallSite::unpack(metaspace.call_site(unit, pc)) {
+            Some(site) => site,
+            None if matches!(op, 0xb7 | 0xb8) => {
+                let caller = metaspace.class_of(unit);
+                let callee = metaspace.resolved_call_readonly(caller, index)?;
+                call_site::CallSite {
+                    kind: SiteKind::Direct(callee),
+                    arg_count: metaspace.arg_count(callee),
+                    initialized: false,
+                }
+            }
+            None => return None,
+        };
+        // **Which body, and what has to be true for it to be the right one** (milestone F2).
+        //
+        // A statically bound site answers itself: `Direct` *is* the target, whatever the receiver.
+        // A dispatched site does not, and this is where the inline cache is decided — the class the
+        // interpreter last dispatched on at this very pc, and the method that class's table selects
+        // for it. Both come out of read-only tables: the profile is a `Relaxed` load of a word the
+        // interpreter wrote, and the vtable lookup refuses rather than builds (see
+        // `vtable_method_at_mirror_readonly`), because compiling may not change the VM's state.
+        //
+        // A `0` mirror is a site that has **never executed** — a call down a cold branch of a hot
+        // method — and it is not a failure: the honest answer for a call that has never happened is
+        // that this tier has nothing to speculate on, so the method is refused exactly as it was
+        // before F2.
+        let (callee, guard) = match site.kind {
+            // `invokestatic` has no receiver, and the interpreter's `invokespecial` never looks at
+            // one; but its `invokevirtual` throws the `NullPointerException` before it dispatches,
+            // even for the `private` nestmate target that lands here — so that one case owes a null
+            // check to keep native code and the interpreter agreeing.
+            SiteKind::Direct(callee) => (callee, if op == 0xb6 { Guard::NotNull } else { Guard::Static }),
+            SiteKind::Vtable(slot) => {
+                let mirror = metaspace.receiver_class(unit, pc);
+                let callee = metaspace.vtable_method_at_mirror_readonly(mirror as usize, slot)?;
+                (callee, Guard::ExactClass(mirror))
+            }
+            SiteKind::Signature(signature) => {
+                let mirror = metaspace.receiver_class(unit, pc);
+                let callee = metaspace.vtable_method_at_mirror_by_signature_readonly(mirror as usize, signature)?;
+                (callee, Guard::ExactClass(mirror))
+            }
+            // `NoTarget` has no body; `ArrayClone` and the two `MethodHandle` kinds are interpreter
+            // actions with no bytecode behind them at all.
+            _ => return None,
+        };
+        if metaspace.is_native(callee)
+            || metaspace.is_synchronized(callee)
+            || metaspace.intrinsic(callee) != crate::jvm::interpreter::metaspace::Intrinsic::None
+            || metaspace.code(callee).is_empty()
+            || !metaspace.declaring_class_initialized(callee)
+        {
+            return None;
+        }
+        // The operands the call consumes: the descriptor's arguments, plus the receiver for every
+        // instance call — which is all three of `invokevirtual`, `invokespecial` and
+        // `invokeinterface`. The VM's own number, so it cannot drift from what the interpreter pops.
+        let receiver = usize::from(op != 0xb8);
+        Some(crate::burst::compile::Callee {
+            method: Self::jit_shape(metaspace, callee),
+            arg_slots: metaspace.arg_count(callee) + receiver,
+            guard,
+        })
+    }
+
+    /// The **back-edge hook** (F3 step 3): called after every backward branch, with the pc the
+    /// branch landed on. It counts the loop, compiles the method if this is the iteration that
+    /// makes it hot, and — if the compiled code has an entry point *at this very pc* — enters
+    /// native code **on-stack**, in the middle of a method the interpreter is already running.
+    ///
+    /// `Some(step)` means native code ran the method to its `ireturn` and the frame is gone;
+    /// `None` means carry on interpreting, which is what every refusal amounts to.
+    ///
+    /// # Why the state transfer *in* is only the locals and a pc
+    ///
+    /// The compiler offers entry points **only at back-edge targets where the operand stack is
+    /// provably empty** (see [`burst::compile`][crate::burst::compile]). So there is no operand
+    /// stack to hand over on the way in: the locals are marshalled into the JIT's flat buffer
+    /// exactly as an ordinary compiled call marshals them — same contract, same guard, same
+    /// fallback if a slot holds something this tier cannot carry. The runtime `stack().is_empty()`
+    /// check below is the belt to the compiler's braces — one comparison, and it makes the
+    /// contract checkable at the boundary rather than only provable away from it.
+    ///
+    /// Coming **out** is no longer symmetrical, and that is F3 step 6: native code can now stop at
+    /// any guarded pc, where the operand stack is whatever the expression happened to be
+    /// half-through, so both non-return exits hand back a whole `ResumeState` and
+    /// [`Self::resume_from_jit`] pours it into this frame.
+    ///
+    /// # The three ways back
+    ///
+    /// - **Returned** — the loop ran on to the method's `ireturn`. Push the value and let
+    ///   [`Self::ireturn`] do the rest, so an OSR return and a bytecode return are literally the
+    ///   same code path (including "was this the entry frame?" and "step past the invoke").
+    /// - **Safepoint or deopt** — the poll fired, or a guard could not be satisfied. Rebuild this
+    ///   frame from the state and carry on interpreting at the pc it names. For a poll the thread
+    ///   then reaches its safepoint by the ordinary route, which is why nothing about the GC has to
+    ///   be reachable from native code; for a deopt the interpreter executes the instruction native
+    ///   code could not and raises the proper exception. Either way the loop has made progress, so
+    ///   a re-entry later starts from further along.
+    /// - **Nothing** — not compiled, no entry point at this pc, an unmarshallable local. All are
+    ///   safe for one reason: **native code was never entered**, so this `Frame` is untouched and
+    ///   carrying on interpreting from this pc is indistinguishable from never having tried.
+    ///
+    /// # Why this is still off on `os` (parallel)
+    ///
+    /// The poll is exactly the mechanism that substrate was waiting for — a compiled loop can now
+    /// be pulled out for a stop-the-world handshake. Two things are still missing, and the second
+    /// is a judgement rather than code: the lock-free fast path ([`run_frame_local`]) would need
+    /// its own hook, since it never reaches `run_one` and a compiled loop would therefore never be
+    /// *entered* there; and the poll word — one per thread — would have to be raised for all of
+    /// them by [`coordinate_gc`]. Neither is hard. But that substrate has an open stale-reference
+    /// bug of its own, and putting native frames into its stop-the-world handshake while that is
+    /// unresolved would confound two investigations at once. It stays off until that one closes.
+    ///
+    /// **A third thing joined the list with group 2**: VOLATILE-REVISIT-OS-PARALLEL. Compiled code
+    /// now reads and writes `volatile` fields with plain `mov`s, and the licence for that is
+    /// precisely that *no other thread runs* while a native frame is on this stack — true on
+    /// `green` and on `os-gil`, false by definition on `os`. Turning the JIT on here is therefore
+    /// not only the two mechanical changes above: every volatile access the emitter produces has to
+    /// be given a real ordering (and a `long` a real atomic) first. Grep the marker.
+    fn try_osr(&mut self, target_pc: usize) -> Option<Step> {
+        use crate::burst::code_cache::{Decision, OsrResult};
+
+        // The cheap gate: one boolean, refreshed by `sync_code_cache`. A loop inside a method the
+        // JIT has already refused — which is nearly every loop in a real program — never gets past
+        // this line, so it costs a comparison per iteration rather than a hash probe.
+        if !self.running.osr_watch || self.shared.mode == ThreadMode::OsParallel {
+            return None;
+        }
+        let method = self.frame().method();
+        match self.running.jit.on_back_edge(method) {
+            Decision::Interpret => {
+                // Not warm yet, or refused for good; `watches_back_edges` tells the two apart and
+                // a `false` from it is permanent.
+                self.running.osr_watch = self.running.jit.watches_back_edges(method);
+                return None;
+            }
+            Decision::Compile => {
+                self.compile_method(method);
+                self.running.osr_watch = self.running.jit.watches_back_edges(method);
+            }
+            Decision::Ready => {}
+        }
+        if !self.frame().stack().is_empty() {
+            return None;
+        }
+        // The same headroom check the ordinary entry makes, and for the same reason (F3 step 8) —
+        // except that here the frame is already on the stack, so only `frames_needed - 1` of them
+        // would be *new*. Saturating because a method that failed to install answers `0`, and "one
+        // fewer than none" is none rather than a wrapped `usize`.
+        let new_frames = self.running.jit.frames_needed(method).saturating_sub(1);
+        if self.running.frames.len() + new_frames > Self::MAX_FRAMES {
+            return None;
+        }
+        let outcome = {
+            // `jit` and `frames` are disjoint fields of one context; splitting the borrow here is
+            // what lets the marshalling closure read the very frame the cache is about to run
+            // native code for.
+            let RunningCtx { jit, frames, .. } = &mut *self.running;
+            let heap = &self.shared.heap;
+            let frame = frames.last_mut().expect("a back-edge implies a running frame");
+            let outcome = jit.run_osr(
+                method,
+                target_pc as u32,
+                |slot| Self::marshal(frame.load(slot as usize)),
+                |offset, size| heap.log_jit_allocation(offset, size),
+            );
+            // Typed, and typed **per pc**: the compiler's map says which of these `i64`s is an
+            // `int` and which is a heap offset at exactly the pc native code stopped at, and says
+            // nothing at all about the slots it proved compiled code cannot have written (those are
+            // simply absent, so this frame keeps whatever it already held).
+            let mut deopted = Vec::new();
+            if let Some(OsrResult::Safepoint(state) | OsrResult::Deopt(state)) = &outcome {
+                deopted = Self::resume_from_jit(frame, state);
+            }
+            frames.extend(deopted);
+            outcome
+        };
+        // That call may have closed OSR for this method (a deopt from a loop header does), so
+        // re-read the verdict instead of carrying a stale `true` into the next iteration.
+        self.running.osr_watch = self.running.jit.watches_back_edges(method);
+        match outcome {
+            // Both non-return exits have already put this frame into the state native code left,
+            // at the pc it left from, so "carry on interpreting" is literally all that is left.
+            None | Some(OsrResult::Safepoint(_)) | Some(OsrResult::Deopt(_)) => None,
+            Some(OsrResult::Returned(value)) => {
+                debug_assert!(self.frame().stack().is_empty(), "the entry contract is an empty stack");
+                match value {
+                    Some(value) => {
+                        self.top().push(Self::from_jit(value));
+                        Some(self.ireturn())
+                    }
+                    // A `void` method's `return` (step 7): the same frame teardown with nothing
+                    // handed back, so the two exits stay literally the interpreter's own.
+                    None => Some(self.return_void()),
+                }
+            }
+        }
+    }
+
     /// Pops the current (top) frame, **releasing its monitor first** if it ran a
-    /// `synchronized` method. Returns the popped frame (so callers can read e.g.
-    /// `is_synthetic`).
+    /// `synchronized` method, then **recycles it into this thread's frame pool**. Returns
+    /// whether the frame was *synthetic* — the one thing the callers still need to know
+    /// (`return_void`/`ireturn` must not advance a caller that never executed an `invoke`).
+    ///
+    /// It returns that flag rather than the `Frame` itself precisely so the frame can go to the
+    /// pool here: handing it back would put its lifetime — and therefore its stale references —
+    /// in the caller's hands, at four call sites, on the two hottest paths in the interpreter.
+    /// One owner, one scrub. (`false` for a pop off an empty stack, which cannot happen: every
+    /// caller has just looked at the top frame.)
     ///
     /// All frame removal — normal `return` *and* exception unwind — funnels through here so
     /// a synchronized method's lock can never leak: there is no `monitorexit` opcode to drop
-    /// it, so the VM must, on whichever exit path the frame leaves by.
+    /// it, so the VM must, on whichever exit path the frame leaves by. `vm_exit` is the sole
+    /// exception, and deliberately so — see there.
     ///
     /// Performance note: this puts a monitor check on the `return` path, which *every* call
     /// traverses though the overwhelming majority are not synchronized — we pay one branch
     /// (`frame.monitor().is_some()`) per return to keep the release in a single, unbypassable
     /// place. A production VM keeps the synchronized path off the hot return path (and uses
     /// biased/thin locks); here we trade a little speed for one obvious release site.
-    fn pop_frame(&mut self) -> Option<Frame> {
-        let popped = self.running.frames.pop();
-        if let Some(obj) = popped.as_ref().and_then(Frame::monitor) {
+    fn pop_frame(&mut self) -> bool {
+        let Some(frame) = self.running.frames.pop() else {
+            return false;
+        };
+        if let Some(obj) = frame.monitor() {
             self.release_monitor(obj);
         }
-        popped
+        let synthetic = frame.is_synthetic();
+        self.running.recycle(frame);
+        synthetic
     }
 
     /// `Object.wait()`: release the monitor **fully** (saving the recursion count), park
@@ -1236,6 +2109,44 @@ impl Exec<'_> {
         Step::Continue
     }
 
+    /// `LockSupport.park()`: block the current thread until unparked — unless it already holds a
+    /// **permit** (an `unpark` that arrived first), which it consumes and returns at once. `park`
+    /// and `unpark` both escalate to the write path, so they're serialised: the permit check and
+    /// the block happen atomically, so an unpark can't be lost between them. Spurious wakeups are
+    /// allowed (a caller loops on its condition), which is what makes this safe to build AQS on.
+    fn thread_park(&mut self) -> Step {
+        let current = self.running.current;
+        if self.shared.threads[current].park_permit {
+            self.shared.threads[current].park_permit = false;
+            self.advance_past_call();
+            return Step::Continue;
+        }
+        self.shared.threads[current].block_call_pc = self.frame().pc();
+        self.shared.threads[current].parked = true;
+        self.block(current, ThreadStatus::Waiting);
+        self.advance_past_call();
+        Step::Continue
+    }
+
+    /// `LockSupport.unpark(thread)`: hand `thread_obj` a permit. If it's parked in `park()`, wake
+    /// it; otherwise store the permit so its next `park()` returns immediately. `unpark(null)` and
+    /// unparking a thread with no slot (not started / terminated) are no-ops.
+    fn thread_unpark(&mut self, thread_obj: usize) {
+        if thread_obj == 0 {
+            return;
+        }
+        let idx = match self.shared.threads.iter().position(|t| t.thread_obj == thread_obj) {
+            Some(i) => i,
+            None => return,
+        };
+        if self.shared.threads[idx].parked {
+            self.shared.threads[idx].parked = false;
+            self.make_runnable(idx);
+        } else {
+            self.shared.threads[idx].park_permit = true;
+        }
+    }
+
     /// A timed block (`Thread.sleep` or `Object.wait(ms)`) reached its deadline: clear it
     /// and make the thread runnable. For a timed `wait`, also pull the thread out of its
     /// monitor's wait-set so the re-acquire path resumes it — the deadline acting as a
@@ -1330,8 +2241,9 @@ impl Exec<'_> {
         // Keep the code cache current with the top frame before dispatch — a no-op compare
         // unless a frame change (invoke/return/unwind) landed us in a different method.
         self.sync_code_cache();
+        let pc_before = self.pc();
         let opcode = self.current_code()[self.pc()];
-        match opcode {
+        let step = match opcode {
             // iadd / isub / imul — integer arithmetic
             0x60 => {
                 arithmetic_operations::iadd(self.top());
@@ -1926,10 +2838,18 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_class_at(cp_index); // first active use: run <clinit>
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of allocating
+                }
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
-                class_operations::new(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
-                self.top().advance(3);
-                Step::Continue
+                // A full heap returns Err → the VM throws a catchable OutOfMemoryError.
+                match class_operations::new(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index) {
+                    Ok(()) => {
+                        self.top().advance(3);
+                        Step::Continue
+                    }
+                    Err(exc) => self.throw_exception(exc),
+                }
             }
 
             // getstatic (0xb2) / putstatic (0xb3): read/write a *static* field in the
@@ -1941,6 +2861,9 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_field_owner_at(cp_index); // first active use: run <clinit>
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of touching the static field
+                }
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 class_operations::getstatic(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
@@ -1953,6 +2876,9 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.initialize_field_owner_at(cp_index); // first active use: run <clinit>
+                if let Some(step) = self.take_pending_throw() {
+                    return step; // <clinit> failed → throw instead of touching the static field
+                }
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
                 class_operations::putstatic(&mut self.shared.metaspace, &mut self.shared.heap, frame, cp_index);
                 self.top().advance(3);
@@ -2084,7 +3010,7 @@ impl Exec<'_> {
             }
             0x53 => {
                 let frame = self.running.frames.last_mut().expect("no frame on the call stack");
-                let r = array_operations::aastore(&mut self.shared.heap, frame);
+                let r = array_operations::aastore(&mut self.shared.metaspace, &mut self.shared.heap, frame);
                 self.after_array_op(r, 1)
             }
 
@@ -2180,47 +3106,113 @@ impl Exec<'_> {
             0xc3 => self.monitor_exit(),
 
             other => todo!("opcode 0x{other:02x} not implemented yet"),
+        };
+
+        // ---- The back-edge hook (Fase F, F3 step 3) ---------------------------------------
+        // A **backward** branch is the interpreter's evidence that a loop is hot, and the one
+        // place a compiled version of *this* method could be entered mid-flight. It is recognised
+        // here rather than in each of the eleven branch arms: a branch opcode neither pushes nor
+        // pops a frame, so "the top frame's pc moved backwards" is exactly a back-edge and nothing
+        // else. `Step::Continue` and a non-empty stack are both implied by that, and both are
+        // checked anyway — the second inside `try_osr`, whose entry contract needs it.
+        if matches!(step, Step::Continue) && is_branch(opcode) {
+            if let Some(frame) = self.running.frames.last() {
+                let target = frame.pc();
+                if target < pc_before {
+                    if let Some(step) = self.try_osr(target) {
+                        return step; // native code ran the method to its `ireturn`
+                    }
+                }
+            }
         }
+        step
     }
 
     /// `return` (0xb1): end a `void` method (a constructor here). Pop the frame; if
     /// it was the entry the program is done (with no value), else the caller resumes
     /// — nothing is handed back, unlike `ireturn`.
     fn return_void(&mut self) -> Step {
-        let popped = self.pop_frame();
+        let synthetic = self.pop_frame();
         if self.running.frames.is_empty() {
             return Step::Return(None);
         }
         // A synthetic `<clinit>` frame wasn't reached via an invoke, so the caller's
         // pc must NOT advance — the instruction that triggered init resumes as-is.
-        if !popped.is_some_and(|f| f.is_synthetic()) {
+        if !synthetic {
             self.advance_past_call();
         }
         Step::Continue
     }
 
     /// Ensures `class` is **initialized** before its first active use (JVMS §5.5):
-    /// runs its `<clinit>` exactly once, *after* its superclass is initialized. The
+    /// runs its `<clinit>` exactly once, *after* its superclass and the superinterfaces
+    /// that declare default methods are initialized (see below, and JVMS §5.5). The
     /// `<clinit>` runs synchronously — pushed as a synthetic frame and stepped to
     /// completion — so it finishes before the triggering instruction proceeds.
     /// `InProgress` short-circuits re-entrant uses (a class touching itself mid-init).
     fn ensure_initialized(&mut self, class: &str) {
         match self.shared.metaspace.init_state(class) {
             InitState::Done | InitState::InProgress => return,
+            InitState::Erroneous => {
+                // A prior initialization threw: the class is permanently unusable — every active
+                // use now fails with NoClassDefFoundError (JVMS §5.5).
+                let ncdfe = self.new_exception_object("java/lang/NoClassDefFoundError");
+                self.running.pending_exception = Some(ncdfe);
+                return;
+            }
             InitState::NotStarted => {}
         }
         self.shared.metaspace.set_init_state(class, InitState::InProgress);
 
-        // Superclass first — initializing Dog initializes Animal (then Object).
+        // Superclass first — initializing Dog initializes Animal (then Object). If the superclass
+        // fails to initialize, this class can't either; it becomes erroneous and the failure
+        // propagates unchanged.
         if let Some(superclass) = self.shared.metaspace.superclass_name(class) {
             self.ensure_initialized(&superclass);
+            if self.running.pending_exception.is_some() {
+                self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                return;
+            }
+        }
+
+        // Then the superinterfaces that declare **default methods** — and only those (JVMS §5.5).
+        // Merely implementing an interface is not an active use of it: an interface holding just
+        // constants and abstract methods stays uninitialized until someone reads one of its own
+        // non-constant static fields. A default method, though, is code the instance can run, so
+        // the interface has to be initialized alongside the class. Symmetrically, initializing an
+        // *interface* initializes none of its superinterfaces — `default_method_superinterfaces`
+        // returns nothing for one. A failure propagates exactly like the superclass's.
+        for iface in self.shared.metaspace.default_method_superinterfaces(class) {
+            self.ensure_initialized(&iface);
+            if self.running.pending_exception.is_some() {
+                self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                return;
+            }
         }
 
         // Run the class's `<clinit>` (if it has one) to completion. It is the
         // argument-less, result-less case of [`Self::call_java`] — the same VM-pushed
-        // frame driven by the same nested loop.
+        // frame driven by the same nested loop. If it completes abruptly, mark the class
+        // erroneous and, unless the exception is already an Error, wrap it in
+        // ExceptionInInitializerError (JVMS §5.5) before it reaches the triggering code.
         if let Some(clinit) = self.shared.metaspace.resolve_method(class, "<clinit>", "()V") {
             self.call_java(clinit, Vec::new(), &[]);
+            if let Some(exc) = self.running.pending_exception.take() {
+                self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                let exc_class = self.exception_class_name(exc);
+                let is_error = class_operations::is_subtype(
+                    &mut self.shared.metaspace,
+                    &exc_class,
+                    "java/lang/Error",
+                );
+                let delivered = if is_error {
+                    exc
+                } else {
+                    self.new_exception_object("java/lang/ExceptionInInitializerError")
+                };
+                self.running.pending_exception = Some(delivered);
+                return;
+            }
         }
         self.shared.metaspace.set_init_state(class, InitState::Done);
     }
@@ -2249,20 +3241,43 @@ impl Exec<'_> {
         args: Vec<Value>,
         widths: &[usize],
     ) -> Option<Value> {
+        // VM-pushed synthetic frames count against the same depth limit (JVMS §6.3).
+        // `call_java` reports failure through `pending_exception` (see the return below),
+        // so the overflow surfaces the same way any exception escaping the callee would —
+        // as a bare object, like the NoClassDefFoundError in `ensure_initialized`.
+        if self.running.frames.len() >= Self::MAX_FRAMES {
+            let soe = self.new_exception_object("java/lang/StackOverflowError");
+            self.running.pending_exception = Some(soe);
+            return None;
+        }
         let max_locals = self.shared.metaspace.max_locals(method);
         let base = self.running.frames.len();
         // The caller's stack is where a returning value lands, so its depth before the
         // call is what tells us afterwards whether anything came back.
         let depth_before = self.running.frames.last().map_or(0, |f| f.stack().len());
 
-        let mut frame = Frame::for_call(method, max_locals, args, widths);
+        // Pooled like any other call (Fase F). A synthetic frame leaves the stack the same two
+        // ways an ordinary one does — a `return`/`ireturn`, or the unwind stopping at this call's
+        // `exception_floor` — and both go through `pop_frame`, so it is recycled and scrubbed on
+        // exactly the same path. `mark_synthetic` comes *after* the reset, which clears the flag.
+        let mut frame = self.running.new_frame(method, max_locals, args, widths);
         frame.mark_synthetic();
         self.running.frames.push(frame);
+        // Mark this call's boundary: an exception that reaches `base` with no handler stops there
+        // (see `unwind_with`) and surfaces via `pending_exception` rather than unwinding further.
+        self.running.exception_floor.push(base);
 
         // Drive it on the *current* thread — `run_one`, not `step`, so the scheduler
         // can't interleave another thread in the middle of a VM-initiated call.
         while self.running.frames.len() > base {
             self.run_one();
+        }
+        self.running.exception_floor.pop();
+
+        // The callee threw and it unwound out to our boundary: there is no return value, and the
+        // exception stays pending for our caller to re-deliver.
+        if self.running.pending_exception.is_some() {
+            return None;
         }
 
         let grew = self.running.frames.last().is_some_and(|f| f.stack().len() > depth_before);
@@ -2367,9 +3382,34 @@ impl Exec<'_> {
             return;
         }
 
+        // A **MethodType** constant → materialise a `MethodType` carrying the descriptor. `javac`
+        // never emits an `ldc` of one (they live in the pool only as bootstrap arguments), so this
+        // path is reached only through hand-written class files — the `.class` writer.
+        let method_type = self
+            .shared.metaspace
+            .get(&caller)
+            .and_then(|cf| cf.method_type_descriptor(cp_index))
+            .map(str::to_string);
+        if let Some(descriptor) = method_type {
+            let object = self.materialize_method_type(&descriptor);
+            self.top().push(Value::Reference(object));
+            return;
+        }
+
+        // A **MethodHandle** constant → materialise a `MethodHandle` naming its target (kind, class,
+        // member, descriptor). Same "hand-written only" story as `MethodType`.
+        let method_handle = self.shared.metaspace.get(&caller).and_then(|cf| cf.method_handle(cp_index)).map(
+            |h| (h.kind.to_byte() as i32, h.class.to_string(), h.name.to_string(), h.descriptor.to_string()),
+        );
+        if let Some((kind, class, name, descriptor)) = method_handle {
+            let object = self.materialize_method_handle(kind, &class, &name, &descriptor);
+            self.top().push(Value::Reference(object));
+            return;
+        }
+
         panic!(
-            "ldc: unsupported constant at #{cp_index} (String/Integer/Float/Class modelled; \
-             MethodHandle/MethodType/Dynamic still pending — see docs/invokedynamic-ruta.md)"
+            "ldc: unsupported constant at #{cp_index} (String/Integer/Float/Class/MethodType/\
+             MethodHandle modelled; Dynamic still pending — see docs/invokedynamic-ruta.md)"
         );
     }
 
@@ -2417,14 +3457,14 @@ impl Exec<'_> {
     /// otherwise the value lands on the caller's operand stack and it resumes.
     fn ireturn(&mut self) -> Step {
         let value = self.top().pop();
-        let popped = self.pop_frame();
+        let synthetic = self.pop_frame();
         if self.running.frames.is_empty() {
             return Step::Return(Some(value));
         }
         // Same rule as `return_void`: a frame the VM pushed itself wasn't reached through
         // an invoke, so there is no call instruction to step over — advancing would move
         // the caller's pc by the width of whatever opcode happens to sit there.
-        if !popped.is_some_and(|f| f.is_synthetic()) {
+        if !synthetic {
             self.advance_past_call();
         }
         self.top().push(value);
@@ -2459,6 +3499,18 @@ impl Exec<'_> {
     }
 }
 
+/// The **branch family**: the opcodes that set the pc themselves, and therefore the only ones
+/// whose execution can leave a frame at a *lower* pc than it started at. That is what makes
+/// "opcode is a branch **and** the pc went backwards" an exact test for a loop back-edge, which is
+/// what [`Exec::try_osr`] is hung on.
+///
+/// `jsr`/`ret` and the two `switch`es are deliberately excluded. They can jump backwards too, but
+/// none of them is in the compiled subset, so counting their jumps would buy nothing but hash
+/// probes in methods that can never be compiled.
+fn is_branch(opcode: u8) -> bool {
+    matches!(opcode, 0x99..=0xa7 | 0xc6 | 0xc7 | 0xc8)
+}
+
 /// Runs the entry method to completion, returning its result. Thin driver over
 /// [`JVM::step`] — the same loop the visualizer runs, minus the pausing.
 pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
@@ -2476,6 +3528,82 @@ pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
         ThreadMode::OsGil => execute_os_gil(metaspace, entry),
         // Real OS threads without the GIL (H3, in progress — still shares the os-gil engine).
         ThreadMode::OsParallel => execute_os_parallel(metaspace, entry),
+    }
+}
+
+/// Like [`execute`] but on the **green** engine unconditionally (ignoring `JVM_THREADS`), and
+/// hands back the **opcode count** alongside the result: `self.shared.steps`, the logical clock
+/// `run_one` ticks once per instruction, read after the program returns.
+///
+/// This is measurement plumbing, not a second engine — the loop body is `execute`'s green arm,
+/// verbatim. It exists because absolute times say nothing on their own: a workload's *time /
+/// opcodes* (ns per opcode) is the figure that survives a change of workload size, and the
+/// counter it needs is private to [`SharedVm`] and dropped when `execute` returns.
+pub fn execute_counting(metaspace: MetaspaceService, entry: Frame) -> (Option<Value>, usize) {
+    let (value, steps, _) = execute_counting_with_jit(metaspace, entry, None);
+    (value, steps)
+}
+
+/// [`execute_counting`] with the JIT forced on (`Some(true)`), forced off (`Some(false)`) or left
+/// to `JVM_JIT` (`None`), and the JIT's counters handed back alongside the opcode count.
+///
+/// Two jobs, one function. The **differential tests** run a workload twice — once each way — and
+/// assert the same answer; the **benchmark** needs the counters to prove a workload actually
+/// compiled something before any timing it reports means anything. Both use the programmatic
+/// switch rather than `JVM_JIT=0` because `cargo test` runs its tests in threads of one process,
+/// where mutating the environment would mutate it for every test running at that moment.
+pub fn execute_counting_with_jit(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    jit: Option<bool>,
+) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
+    execute_counting_with_jit_and_poll(metaspace, entry, jit, |_| {})
+}
+
+/// [`execute_counting_with_jit`] that first hands `observe` this run's **safepoint poll word**.
+///
+/// It is the only way in from outside: the word belongs to the `JitCache` inside the interpreter
+/// this function builds, and — deliberately — is *not* process-global, so no other run can see it
+/// (see [`JitCache::poll_word`][crate::burst::code_cache::JitCache::poll_word]). Raising it makes
+/// every compiled loop in *this* run leave native code at its next loop header, which is what the
+/// safepoint half of F3 step 3 has to be tested against: `observe` may keep the `Arc` and raise it
+/// from another OS thread while the program runs.
+pub fn execute_counting_with_jit_and_poll(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    jit: Option<bool>,
+    observe: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
+) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
+    execute_counting_tuned(metaspace, entry, jit, None, observe)
+}
+
+/// [`execute_counting_with_jit_and_poll`] with the **operand-stack register cache** (F3 step 10)
+/// forced to a size as well — `None` leaves it to `JVM_JIT_REGS`.
+///
+/// The same reasoning as `jit` itself: the step-10 measurement runs a workload with the allocator on
+/// and off *inside one process*, so both arms are the same machine code at the same addresses and
+/// this machine's code-layout noise is structurally absent from the comparison rather than averaged
+/// out of it. Mutating `JVM_JIT_REGS` instead would mutate it for every test sharing the process.
+pub fn execute_counting_tuned(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    jit: Option<bool>,
+    regs: Option<u32>,
+    observe: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
+) -> (Option<Value>, usize, crate::burst::code_cache::JitStats) {
+    let mut interp = JVM::new(metaspace, entry);
+    interp.shared.mode = ThreadMode::Green; // measure the deterministic substrate, whatever the env says
+    if let Some(enabled) = jit {
+        interp.running.jit.set_enabled(enabled);
+    }
+    if let Some(regs) = regs {
+        interp.running.jit.set_cache_regs(regs);
+    }
+    observe(interp.running.jit.poll_word());
+    loop {
+        if let Step::Return(value) = interp.exec().step() {
+            return (value, interp.shared.steps, interp.running.jit.stats());
+        }
     }
 }
 
@@ -2552,7 +3680,10 @@ fn os_thread_loop(shared_arc: &Arc<Mutex<SharedVm>>, idx: usize) -> Option<Value
         let tick = {
             let mut guard = shared_arc.lock().unwrap();
             if guard.halt {
-                return None; // main has finished — workers exit
+                // Main has finished — workers exit. When the halt came from `System.exit`,
+                // main itself lands here too (a worker raised it), so hand back the status:
+                // it is the program's result. A plain main-returned halt leaves it `None`.
+                return guard.exit_status.map(Value::Int);
             }
             match guard.threads[idx].status {
                 ThreadStatus::Terminated => return None,
@@ -2994,6 +4125,32 @@ fn run_read_shared(shared: &SharedVm, ctx: &mut RunningCtx) -> Option<Step> {
             frame.advance(3);
             Some(Step::Continue)
         }
+        // invokevirtual — only `AtomicInteger`/`AtomicLong.compareAndSet` is handled here, as a
+        // **lock-free CAS** on an Eden field (H5 widened, like W3's reads). Every other virtual
+        // call escalates to the write path; so does a CAS on an Old receiver (the locked native).
+        0xb6 => {
+            let cp_index = u16::from_be_bytes([ctx.code[pc + 1], ctx.code[pc + 2]]);
+            let method = ctx.frames.last()?.method();
+            let is_long = {
+                let caller = shared.metaspace.class_of(method);
+                let (class, name, _descriptor) =
+                    shared.metaspace.get(caller)?.methodref_target(cp_index)?;
+                match (class, name) {
+                    ("java/util/concurrent/atomic/AtomicInteger", "compareAndSet") => false,
+                    ("java/util/concurrent/atomic/AtomicLong", "compareAndSet") => true,
+                    _ => return None, // any other virtual call → escalate
+                }
+            };
+            let class = if is_long {
+                "java/util/concurrent/atomic/AtomicLong"
+            } else {
+                "java/util/concurrent/atomic/AtomicInteger"
+            };
+            let frame = ctx.frames.last_mut().unwrap();
+            objects_operations::atomic_cas_read(&shared.metaspace, &shared.heap, frame, class, is_long)?;
+            frame.advance(3);
+            Some(Step::Continue)
+        }
         // arraylength — push the array's length. Escalates on a null array.
         0xbe => {
             let frame = ctx.frames.last_mut().unwrap();
@@ -3115,7 +4272,7 @@ fn os_parallel_loop(
         let tick: OsTick = {
             let mut g = shared_arc.write().unwrap();
             if g.halt {
-                return None;
+                return g.exit_status.map(Value::Int); // `System.exit` status, else a plain halt
             }
             match g.threads[idx].status {
                 ThreadStatus::Terminated => return None,
@@ -3180,22 +4337,37 @@ fn os_parallel_loop(
 /// Reach a GC safepoint: sync our frames into our slot (so the collector can walk and remap
 /// them), mark ourselves safe, park until the coordinator clears `gc_pending`, then reload the
 /// (possibly remapped) frames.
+///
+/// The first swap is **guarded** by `had_local_frames`: only deactivate into the slot when our
+/// frames are actually local. A thread that entered here already deactivated (it blocked in
+/// `join`/`wait`, so its frames are already in its slot and `running.frames` is empty) must LEAVE
+/// them in the slot — an unconditional swap would pull them back out, empty the slot, and hide our
+/// roots from the very collect we are stopping for (the collector scans slots, not our local
+/// `running`). Symmetrically we only reload what we swapped out; if we never swapped, the frames
+/// stay in the slot and the write-path reload (`if running.frames.is_empty()`) picks them up when
+/// the thread next becomes `Runnable`.
 fn reach_safepoint(
     shared_arc: &Arc<RwLock<SharedVm>>,
     gc_pending: &Arc<AtomicBool>,
     running: &mut RunningCtx,
     idx: usize,
 ) {
+    let had_local_frames;
     {
         let mut g = shared_arc.write().unwrap();
-        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+        had_local_frames = !running.frames.is_empty();
+        if had_local_frames {
+            std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+        }
         g.threads[idx].at_safepoint = true;
     }
     while gc_pending.load(Ordering::Acquire) {
         thread::park();
     }
     let mut g = shared_arc.write().unwrap();
-    std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+    if had_local_frames {
+        std::mem::swap(&mut running.frames, &mut g.threads[idx].frames);
+    }
     g.threads[idx].at_safepoint = false;
 }
 
@@ -3256,5 +4428,84 @@ fn spawn_pending_parallel(
             os_parallel_loop(&child_shared, &child_gc, i);
         });
         shared.threads[i].os_handle = Some(handle.thread().clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The frame pool's one rule (Fase F): **a frame in the pool holds no reference.** If one
+    /// did, the collector would never see it (the pool is not a root — `gc::roots`, `gc::minor`,
+    /// `gc::compact` and `gc::verify_heap` all walk `threads[*].frames`), so a moving collection
+    /// would leave it un-remapped and the next call to reuse that frame would read a pointer to
+    /// where the object used to be. This is the same failure shape as the stale-frame bug
+    /// `verify_heap_catches_a_dangling_frame_reference` guards against, arrived at from the
+    /// other side.
+    #[test]
+    fn a_recycled_frame_carries_no_value_into_the_pool() {
+        let mut ctx = RunningCtx::default();
+        let mut frame = Frame::for_call(0, 3, vec![Value::Reference(0x1000)], &[1]);
+        frame.store(1, Value::Reference(0x2000));
+        frame.push(Value::Reference(0x3000));
+        frame.push(Value::Int(7));
+        frame.set_monitor(0x4000);
+
+        ctx.recycle(frame);
+
+        let pooled = ctx.frame_pool.last().expect("the frame went into the pool");
+        assert!(pooled.locals().is_empty(), "a pooled frame must expose no locals");
+        assert!(pooled.stack().is_empty(), "a pooled frame must expose no operands");
+        assert_eq!(pooled.monitor(), None, "a pooled frame must hold no monitor");
+        assert!(pooled.is_scrubbed());
+        // And nothing the collector could reach: `remap_references` visits every value a frame
+        // exposes, so a scrubbed frame must offer it none.
+        let seen = std::cell::Cell::new(0);
+        ctx.frame_pool[0].remap_references(|off| {
+            seen.set(seen.get() + 1);
+            off
+        });
+        assert_eq!(seen.get(), 0, "a pooled frame must offer the collector nothing to remap");
+    }
+
+    /// Reuse must be indistinguishable from a fresh allocation: same locals (arguments laid out
+    /// at their category-2 offsets, the rest `Int(0)`), empty operand stack, pc 0, not synthetic,
+    /// no monitor — nothing inherited from the frame's previous occupant.
+    #[test]
+    fn a_reused_frame_is_identical_to_a_fresh_one() {
+        let mut ctx = RunningCtx::default();
+        let mut dirty = Frame::for_call(7, 4, vec![Value::Reference(0x1000)], &[1]);
+        dirty.store(3, Value::Reference(0x2000));
+        dirty.push(Value::Reference(0x3000));
+        dirty.set_monitor(0x4000);
+        dirty.mark_synthetic();
+        dirty.advance(42);
+        ctx.recycle(dirty);
+
+        // Same arguments through the pooled path and the fresh path.
+        let args = vec![Value::Long(9), Value::Int(5)];
+        let widths = [2, 1];
+        let reused = ctx.new_frame(3, 5, args.clone(), &widths);
+        assert!(ctx.frame_pool.is_empty(), "the pooled frame was taken, not copied");
+        let fresh = Frame::for_call(3, 5, args, &widths);
+
+        assert_eq!(reused.locals(), fresh.locals());
+        assert_eq!(reused.locals(), &[Value::Long(9), Value::Int(0), Value::Int(5), Value::Int(0), Value::Int(0)]);
+        assert_eq!(reused.stack(), fresh.stack());
+        assert_eq!(reused.pc(), fresh.pc());
+        assert_eq!(reused.method(), fresh.method());
+        assert_eq!(reused.is_synthetic(), fresh.is_synthetic());
+        assert_eq!(reused.monitor(), fresh.monitor());
+    }
+
+    /// The pool is a cache, not a graveyard: past its cap the extra frames are dropped, so a
+    /// pathologically deep call chain can't leave a `MAX_FRAMES`-sized pool behind.
+    #[test]
+    fn the_frame_pool_is_bounded() {
+        let mut ctx = RunningCtx::default();
+        for _ in 0..(RunningCtx::FRAME_POOL_CAP + 50) {
+            ctx.recycle(Frame::new(0, 2, Vec::new()));
+        }
+        assert_eq!(ctx.frame_pool.len(), RunningCtx::FRAME_POOL_CAP);
     }
 }

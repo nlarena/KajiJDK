@@ -44,6 +44,15 @@ pub fn parse(bytes: &[u8]) -> Vec<Annotation> {
     out
 }
 
+/// The type descriptors (`Lpkg/Name;`) of every annotation in an annotations
+/// attribute body, in order. This is the *runtime* view of the attribute — what
+/// `Class.isAnnotationPresent` matches on — as opposed to the rendering above,
+/// which javap uses. Element values are ignored: presence is a question about
+/// the annotation's type alone.
+pub fn type_descriptors(cf: &ClassFile, info: &[u8]) -> Vec<String> {
+    parse(info).iter().filter_map(|a| cf.utf8(a.type_index).map(str::to_string)).collect()
+}
+
 fn parse_annotation(r: &mut ClassReader) -> Option<Annotation> {
     let type_index = r.read_u16().ok()?;
     let n = r.read_u16().ok()?;

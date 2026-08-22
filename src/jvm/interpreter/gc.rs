@@ -35,13 +35,31 @@ pub struct MarkReport {
 
 /// Runs the **mark** phase and reports what's live vs garbage. Mark-only: it sets
 /// mark bits but frees nothing — sweeping/compacting is a later step.
-pub fn mark(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &[GreenThread]) -> MarkReport {
+pub fn mark(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+) -> MarkReport {
+    mark_with(metaspace, heap, threads, condy_roots, SoftPolicy::Retain)
+}
+
+/// [`mark`], with an explicit **soft-reference** policy ([`SoftPolicy`]): under `Retain`
+/// a `SoftReference`'s referent is traced as an ordinary strong edge (so it survives);
+/// under `Clear` it is traced weakly, exactly like a `WeakReference`'s.
+fn mark_with(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+    soft: SoftPolicy,
+) -> MarkReport {
     // 1. Start from a clean slate — last pass's marks are stale.
     heap.clear_all_marks();
 
     // 2. Seed the worklist with the roots, and trace transitively. `seen` guards
     //    against cycles (object A → B → A) and re-visiting shared objects.
-    let mut worklist = roots(metaspace, heap, threads);
+    let mut worklist = roots(metaspace, heap, threads, condy_roots);
     let mut seen: HashSet<usize> = HashSet::new();
     while let Some(offset) = worklist.pop() {
         if offset == 0 || !seen.insert(offset) {
@@ -51,7 +69,7 @@ pub fn mark(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &[Gre
         // Follow each outgoing *strong* reference: `strong_reference_slots` gives the
         // heap addresses of this object's reference words, **minus** the weak `referent`
         // of a `java.lang.ref.Reference` — so a weakly-referenced object isn't kept alive.
-        for slot in strong_reference_slots(metaspace, heap, offset) {
+        for slot in strong_reference_slots(metaspace, heap, offset, soft) {
             worklist.push(heap.read_u32(slot) as usize);
         }
     }
@@ -69,8 +87,38 @@ pub fn mark(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &[Gre
 /// Old free list ([`HeapService::free`], which coalesces). Young garbage is left to the minor
 /// collector — freeing a young object here would put a young-range hole on the Old free
 /// list. Returns the mark report.
-pub fn sweep(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &[GreenThread]) -> MarkReport {
-    let report = mark(metaspace, heap, threads);
+pub fn sweep(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+) -> MarkReport {
+    sweep_with(metaspace, heap, threads, condy_roots, SoftPolicy::Retain)
+}
+
+/// [`sweep`] for a heap **under memory pressure** — the collection that is allowed to
+/// give soft caches back. Identical to `sweep` except that `SoftReference` referents are
+/// traced weakly, so an otherwise-unreachable one is cleared, enqueued and reclaimed just
+/// like a weak referent. See [`SoftPolicy`] for which trigger picks which.
+pub fn sweep_under_pressure(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+) -> MarkReport {
+    sweep_with(metaspace, heap, threads, condy_roots, SoftPolicy::Clear)
+}
+
+/// The shared body of [`sweep`] / [`sweep_under_pressure`], parameterised by the
+/// soft-reference policy.
+fn sweep_with(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &[GreenThread],
+    condy_roots: &[usize],
+    soft: SoftPolicy,
+) -> MarkReport {
+    let report = mark_with(metaspace, heap, threads, condy_roots, soft);
     // Clear weakly-reachable referents and enqueue their references — *before* freeing,
     // while the dead referents are still identifiable.
     process_weak_references(metaspace, heap);
@@ -174,7 +222,13 @@ impl Minor<'_> {
 /// Old→young roots are found here by scanning **all** Old objects (and the mirrors).
 /// That's correct but not yet cheap — a write barrier + remembered set (next phase)
 /// will narrow it to just the Old objects that actually hold young pointers.
-pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut [GreenThread], tenure: u8) -> MinorReport {
+pub fn minor(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &mut [GreenThread],
+    tenure: u8,
+    condy_roots: &mut [usize],
+) -> MinorReport {
     // Snapshot the pre-collection log: the young objects (the collection set) and the
     // Old objects (kept as-is, and scanned as roots).
     let young_info: HashMap<usize, (usize, u8)> = heap
@@ -231,6 +285,13 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
             m.evacuate(t.thread_obj);
         }
     }
+    // 2c. VM-held roots the frames don't cover — the condy cache's resolved constants. Evacuate
+    //     each so it survives; the caller's copies are rewritten to their new homes below.
+    for &r in condy_roots.iter() {
+        if r != 0 && m.heap.in_collection_set(r) {
+            m.evacuate(r);
+        }
+    }
 
     // 3. Cheney scan: copy reachable young transitively, fixing each copied object's
     //    own reference slots as it's scanned at its new address.
@@ -245,6 +306,10 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
     for frame in threads.iter_mut().flat_map(|t| t.frames.iter_mut()) {
         frame.remap_references(|off| forward.get(&off).copied().unwrap_or(off));
     }
+    // ...and the caller's condy roots (in place), so the condy cache points at the new homes.
+    for r in condy_roots.iter_mut() {
+        *r = forward.get(r).copied().unwrap_or(*r);
+    }
     // A thread parked in `wait()` remembers the monitor object to re-acquire — move it too.
     for t in threads.iter_mut() {
         if let Some((obj, count)) = t.wait_reacquire {
@@ -255,6 +320,7 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
             t.thread_obj = forward.get(&t.thread_obj).copied().unwrap_or(t.thread_obj);
         }
     }
+
 
     // 5. Rebuild the remembered set for the next cycle: a holder is kept iff it still
     //    points into the young generation (its targets survived as survivors). The
@@ -284,6 +350,57 @@ pub fn minor(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut
     m.heap.reset_after_minor(new_log);
 
     MinorReport { copied, promoted, reclaimed: young_total.saturating_sub(survived), relocations: forward }
+}
+
+/// **Post-GC heap verifier** (opt-in, `JVM_GC_VERIFY`). Asserts the invariant a moving collector
+/// must preserve: *every* reference the program can still reach — in any thread's frame (operand
+/// stack + locals) and in any live object's reference slots — points at a live allocation, a
+/// `Class` mirror, or null. A reference outside that set is a **dangling pointer**: an object the
+/// collector moved or freed without rewriting this holder. Panicking here catches the exact
+/// collection that broke the invariant, with the holder and target named — instead of a later,
+/// far-removed "could not resolve the receiver" when the stale pointer is finally dereferenced.
+///
+/// Must run with every thread's stack in its slot (i.e. inside [`Exec::parked`]), so `threads`
+/// spans all live frames. O(live set) — hence gated off by default.
+pub fn verify_heap(metaspace: &MetaspaceService, heap: &HeapService, threads: &[GreenThread]) {
+    let mut live: HashSet<usize> = heap.allocations().iter().map(|a| a.offset).collect();
+    for (_uuid, _name, off) in metaspace.class_object_offsets() {
+        live.insert(off);
+    }
+    let describe = |off: usize| {
+        // Bounds-checked read: `off` may be out of range (a truly wild pointer), so never a raw read.
+        let class = heap
+            .try_read_u32(off)
+            .and_then(|header| metaspace.class_name_at_mirror(header as usize))
+            .unwrap_or("<unresolved>");
+        format!("{off} (region={:?}, header→{class})", heap.region_of(off))
+    };
+    // Frame roots — the receivers/locals a stale value would crash on.
+    for (ti, t) in threads.iter().enumerate() {
+        for (fi, frame) in t.frames.iter().enumerate() {
+            for value in frame.stack().iter().chain(frame.locals()) {
+                if let Value::Reference(off) = value {
+                    assert!(
+                        *off == 0 || live.contains(off),
+                        "verify_heap: DANGLING frame reference {} in thread[{ti}] frame#{fi}",
+                        describe(*off)
+                    );
+                }
+            }
+        }
+    }
+    // Object reference slots — a missed old→young remap or an un-rewritten field.
+    for holder in heap.allocations().iter().map(|a| a.offset).collect::<Vec<_>>() {
+        for slot in reference_slots(metaspace, heap, holder) {
+            let target = heap.read_u32(slot) as usize;
+            assert!(
+                target == 0 || live.contains(&target),
+                "verify_heap: DANGLING field {}->{} @slot {slot}",
+                describe(holder),
+                describe(target)
+            );
+        }
+    }
 }
 
 /// Recomputes the remembered set from scratch by scanning every Old object for a young
@@ -392,6 +509,12 @@ pub struct GcPolicy {
     /// Tenuring threshold: a young object promoted to Old after surviving this many
     /// minor collections.
     pub tenure: u8,
+    /// **Post-GC heap verification** (`JVM_GC_VERIFY`, off by default). When set, every collection
+    /// ends with a full scan asserting that no reference — in any frame or any live object — dangles
+    /// (points outside the live set). A full-heap walk per GC, so it's for stress/CI, not production;
+    /// it turns a rare, deferred "stale receiver" crash into an immediate, diagnosed failure *at* the
+    /// offending collection.
+    pub verify: bool,
 }
 
 impl Default for GcPolicy {
@@ -405,6 +528,7 @@ impl Default for GcPolicy {
             occupancy_ratio: DEFAULT_OCCUPANCY_RATIO,
             rate_horizon: DEFAULT_RATE_HORIZON,
             tenure: DEFAULT_TENURE,
+            verify: false,
         }
     }
 }
@@ -423,6 +547,7 @@ impl GcPolicy {
             occupancy_ratio: env_f64("JVM_GC_OCCUPANCY", d.occupancy_ratio),
             rate_horizon: env_usize("JVM_GC_RATE_HORIZON", d.rate_horizon),
             tenure: env_usize("JVM_GC_TENURE", d.tenure as usize) as u8,
+            verify: env_bool("JVM_GC_VERIFY", d.verify),
         }
     }
 
@@ -529,10 +654,15 @@ pub struct CompactReport {
 /// follow moved objects), but *inter-object* references (a field pointing at a moved
 /// object) are left until the slot walk exists. Safe for object graphs without such
 /// references (e.g. the demos).
-pub fn compact(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &mut [GreenThread]) -> CompactReport {
+pub fn compact(
+    metaspace: &MetaspaceService,
+    heap: &mut HeapService,
+    threads: &mut [GreenThread],
+    condy_roots: &mut [usize],
+) -> CompactReport {
     // 1. Mark — only the live get relocated — then process weak references (clear dead
     //    referents + enqueue) before anything moves.
-    mark(metaspace, heap, &*threads);
+    mark(metaspace, heap, &*threads, condy_roots);
     process_weak_references(metaspace, heap);
 
     // Pinned set: the mirror offsets (they stay put).
@@ -577,6 +707,10 @@ pub fn compact(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &m
     //    (a) frame roots (every thread): precise, since `Value` is tagged.
     for frame in threads.iter_mut().flat_map(|t| t.frames.iter_mut()) {
         frame.remap_references(|off| *forward.get(&off).unwrap_or(&off));
+    }
+    //    (a'') the caller's condy roots (in place), so the condy cache follows moved Old constants.
+    for r in condy_roots.iter_mut() {
+        *r = *forward.get(r).unwrap_or(r);
     }
     //    (a') a thread parked in `wait()` remembers its monitor object — move that too.
     //         Its `Thread` object is a root as well (see the minor collector).
@@ -626,8 +760,18 @@ pub fn compact(metaspace: &MetaspaceService, heap: &mut HeapService, threads: &m
 ///    loaded). The references held in their *static* slots are reached by tracing
 ///    the mirror, the same way an object's instance fields are — see
 ///    [`reference_slots`].
-fn roots(metaspace: &MetaspaceService, _heap: &HeapService, threads: &[GreenThread]) -> Vec<usize> {
+fn roots(
+    metaspace: &MetaspaceService,
+    _heap: &HeapService,
+    threads: &[GreenThread],
+    extra: &[usize],
+) -> Vec<usize> {
     let mut roots = Vec::new();
+
+    // Resolved dynamic constants (the condy cache) and any other VM-held references the caller
+    // passes are roots: they live for the program (e.g. a pattern-`switch`'s `EnumDesc` labels)
+    // but are reachable only from the VM's own tables, not from any frame or mirror.
+    roots.extend(extra.iter().copied().filter(|&r| r != 0));
 
     // Stacks + locals of every frame on every thread's call stack. `Value` is tagged,
     // so this is *precise*: we add exactly the references, never an int that looks like one.
@@ -658,17 +802,73 @@ fn roots(metaspace: &MetaspaceService, _heap: &HeapService, threads: &[GreenThre
 
 // --- weak references (`java.lang.ref`) ------------------------------------------
 
+/// Whether a collection may clear **soft** references — our memory-pressure policy for
+/// `java.lang.ref.SoftReference`.
+///
+/// A soft referent is supposed to survive "while there is room" and be dropped only when
+/// the heap is tight. Rather than imitate HotSpot's clock/free-space heuristic, we make
+/// the rule deterministic and observable: the *cause* of the collection decides.
+///
+///  - [`SoftPolicy::Retain`] — the mark traces a soft referent as an ordinary **strong**
+///    edge. It is therefore marked, so [`process_weak_references`] skips it and the sweep
+///    never frees it: a soft referent always survives.
+///  - [`SoftPolicy::Clear`] — the mark traces it **weakly**, exactly like a
+///    `WeakReference`'s, so an otherwise-unreachable referent is cleared, enqueued and
+///    reclaimed in the same pass.
+///
+/// The wiring lives in the interpreter's `collect`: a collection caused by memory pressure
+/// ([`GcCause::OutOfSpace`] / [`GcCause::Occupancy`] / [`GcCause::AllocationRate`]) clears;
+/// an explicit [`GcCause::Explicit`] `System.gc()` retains — as does a standalone
+/// [`compact`], which runs after the sweep in the same cycle and must not second-guess it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SoftPolicy {
+    /// There is room: soft referents are kept alive.
+    Retain,
+    /// The heap is under pressure: soft referents die like weak ones.
+    Clear,
+}
+
 /// The strong outgoing references of an object — [`reference_slots`] minus the **weak**
 /// `referent` of a `java.lang.ref.Reference`. The major **mark** uses this so an object
 /// isn't kept alive merely because a weak reference points at it. (Compaction and the
 /// minor still use the full slot set: compaction must relocate a *surviving* referent,
 /// and the minor deliberately keeps young referents alive — see the module note.)
-fn strong_reference_slots(metaspace: &MetaspaceService, heap: &HeapService, offset: usize) -> Vec<usize> {
+fn strong_reference_slots(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    offset: usize,
+    soft: SoftPolicy,
+) -> Vec<usize> {
     let mut slots = reference_slots(metaspace, heap, offset);
-    if let Some(referent) = referent_slot(metaspace, heap, offset) {
+    if let Some(referent) = weak_referent_slot(metaspace, heap, offset, soft) {
         slots.retain(|&s| s != referent);
     }
     slots
+}
+
+/// The referent slot this collection treats as **weak**: every `Reference`'s — except a
+/// `SoftReference`'s while the policy is [`SoftPolicy::Retain`], which stays a strong edge.
+/// That single exception *is* the soft-reference policy; everything downstream (clearing,
+/// enqueueing, freeing) then follows from the mark bits.
+fn weak_referent_slot(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    offset: usize,
+    soft: SoftPolicy,
+) -> Option<usize> {
+    if soft == SoftPolicy::Retain && is_soft_reference(metaspace, heap, offset) {
+        return None;
+    }
+    referent_slot(metaspace, heap, offset)
+}
+
+/// Whether the object at `offset` is a `java.lang.ref.SoftReference` (or a subclass).
+fn is_soft_reference(metaspace: &MetaspaceService, heap: &HeapService, offset: usize) -> bool {
+    let Some(class) = metaspace.class_name_at_mirror(heap.read_u32(offset) as usize) else {
+        return false;
+    };
+    let class = class.to_string();
+    is_subclass_of(metaspace, &class, "java/lang/ref/SoftReference")
 }
 
 /// The heap address of the `referent` field, if `offset` is a `java.lang.ref.Reference`
@@ -681,12 +881,18 @@ fn referent_slot(metaspace: &MetaspaceService, heap: &HeapService, offset: usize
     Some(offset + field_byte_offset(metaspace, &class, "referent")?)
 }
 
-/// Whether `class` is `java.lang.ref.Reference` or a subclass — walking the superclass
-/// chain (immutably).
+/// Whether `class` is `java.lang.ref.Reference` or a subclass — i.e. whether its
+/// `referent` field is the GC-managed one.
 fn is_reference_subclass(metaspace: &MetaspaceService, class: &str) -> bool {
+    is_subclass_of(metaspace, class, "java/lang/ref/Reference")
+}
+
+/// Whether `class` is `ancestor` or a subclass of it — walking the superclass chain
+/// (immutably).
+fn is_subclass_of(metaspace: &MetaspaceService, class: &str, ancestor: &str) -> bool {
     let mut current = Some(class.to_string());
     while let Some(name) = current {
-        if name == "java/lang/ref/Reference" {
+        if name == ancestor {
             return true;
         }
         current = metaspace.get(&name).and_then(|cf| cf.class_name(cf.super_class).map(str::to_string));
@@ -784,13 +990,6 @@ fn reference_slots(metaspace: &MetaspaceService, heap: &HeapService, offset: usi
         Some(name) => name.to_string(),
         None => return Vec::new(),
     };
-    // A **synthetic** class (one the VM minted, like a lambda's) has no class file to
-    // read a layout from, so it declares one. Without this its captured references would
-    // be invisible to the collector: never marked, never rewritten when the object moves.
-    if let Some(slots) = metaspace.synthetic_reference_slots(&class) {
-        return slots.iter().map(|&within| offset + within).collect();
-    }
-
     if class.starts_with('[') {
         array_reference_slots(heap, offset, &class)
     } else {
@@ -875,6 +1074,36 @@ fn is_reference_descriptor(cf: &ClassFile, descriptor_index: u16) -> bool {
 mod tests {
     use super::*;
 
+    // The verifier (`JVM_GC_VERIFY`) must actually *fire* on a dangling pointer — a no-op check is
+    // worse than none. A thread holds a reference to an offset nothing ever allocated (empty heap):
+    // `verify_heap` must catch it. This is the shape of the real os-parallel bug — a stale frame
+    // reference — reduced to its essence, so the safety net is proven to work.
+    #[test]
+    #[should_panic(expected = "DANGLING frame reference")]
+    fn verify_heap_catches_a_dangling_frame_reference() {
+        use super::super::bytecode_interpreter::ThreadStatus;
+        use super::super::frame::Frame;
+        let metaspace = MetaspaceService::new(vec![], vec![]);
+        let heap = HeapService::new();
+        let thread = GreenThread {
+            id: 0,
+            status: ThreadStatus::Runnable,
+            frames: vec![Frame::new(0, 1, vec![Value::Reference(0x9999)])],
+            thread_obj: 0,
+            wait_reacquire: None,
+            joining_on: None,
+            sleep_until: None,
+            interrupt_pending: false,
+            block_call_pc: 0,
+            os_handle: None,
+            os_spawned: false,
+            at_safepoint: false,
+            park_permit: false,
+            parked: false,
+        };
+        verify_heap(&metaspace, &heap, &[thread]);
+    }
+
     #[test]
     fn only_sub_object_holes_count_as_fragments() {
         // Fragmentation is an Old-generation concern (it has the free list), so these
@@ -950,9 +1179,71 @@ mod tests {
         // No roots (no frames) → both are unreachable. The major sweep reclaims the
         // **Old** garbage and leaves the young object to the minor collector.
         heap.commit_pending(); // W2b: the real GC entry (`parked`) flushes pending Eden first
-        sweep(&metaspace, &mut heap, &[]);
+        sweep(&metaspace, &mut heap, &[], &[]);
         assert!(heap.allocations().iter().any(|a| a.offset == young), "young kept");
         assert!(!heap.allocations().iter().any(|a| a.offset == old), "old reclaimed");
+    }
+
+    /// **A `Class<…>` mirror does not move when the Old generation is compacted.**
+    ///
+    /// This is the fact — and until now the *untested* fact — that a whole family of baked-in
+    /// immediates rests on: the F3 JIT compiles `checkcast`, `instanceof` and `ldc Foo.class` to a
+    /// comparison against, or a materialisation of, a mirror's **heap offset**, and `getstatic` to
+    /// an absolute address inside one. Every one of those is a constant in the instruction stream
+    /// and can never be re-read, so a mirror that relocated would leave compiled code comparing
+    /// against, and handing out, an address that now belongs to some other object. The same
+    /// assumption is why `class_id` header words are never rewritten by the compactor.
+    ///
+    /// It is asserted as a *contrast*: an ordinary Old object of the same size, allocated right
+    /// behind the mirror, must slide down into the hole in front of it. Without that half the test
+    /// would pass on a compactor that simply moved nothing.
+    #[test]
+    fn a_class_mirror_is_pinned_across_a_compaction() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        // Old, in address order: a block that becomes the hole to compact into, an ordinary object,
+        // and the mirror behind it. The order matters — a pinned block stops everything behind it
+        // from sliding past, so the object that must move has to sit *in front* of the mirror. Both
+        // survivors are header-only, so `reference_slots` is empty and neither has an outgoing edge
+        // to rewrite.
+        let hole = heap.malloc_old(64);
+        let plain = heap.malloc_old(16);
+        let mirror = heap.malloc_old(16);
+        heap.write_u32(mirror, 0);
+        heap.write_u32(plain, 0);
+        heap.free(hole);
+
+        let uuid = metaspace.class_id("Pinned").to_string();
+        metaspace.set_class_object(&uuid, mirror);
+
+        // The mirror is a root by virtue of being one; `plain` is passed as a VM-held root so that
+        // it is live and therefore a candidate for relocation.
+        let mut extra_roots = [plain];
+        let report = compact(&metaspace, &mut heap, &mut [], &mut extra_roots);
+
+        assert!(
+            !report.relocations.contains_key(&mirror),
+            "the mirror at {mirror} was relocated to {:?} — every baked-in mirror offset in              compiled code is now stale",
+            report.relocations.get(&mirror)
+        );
+        assert!(
+            heap.allocations().iter().any(|a| a.offset == mirror),
+            "the mirror is still allocated at its original offset"
+        );
+        assert_eq!(
+            metaspace.class_object(&uuid),
+            Some(mirror),
+            "and the metaspace's mirror index still names it"
+        );
+        // The contrast: an unpinned neighbour of the same size *does* slide into the hole.
+        assert_eq!(
+            report.relocations.get(&plain),
+            Some(&heap.floor()),
+            "the ordinary object should have been packed down to the Old floor"
+        );
     }
 
     #[test]
@@ -1318,6 +1609,632 @@ mod tests {
     }
 
     #[test]
+    fn atomic_integer_cas() {
+        // H5: AtomicInteger built on the native compareAndSet — direct CAS (success + failure),
+        // get, incrementAndGet, getAndAdd, addAndGet. → 30, confirmed vs real java.
+        assert_eq!(run_int("java/Cas.class"), 30);
+    }
+
+    #[test]
+    fn count_down_latch_releases_waiters() {
+        // H6: three worker threads block on CountDownLatch.await(); main counts the latch to zero,
+        // releasing them all, and each increments a shared AtomicInteger → 3. Oracle green ≡ os-gil
+        // ≡ os (the latch is monitor-based: wait/notifyAll over real threads).
+        assert_eq!(run_int("java/CdlTest.class"), 3); // green
+        assert_eq!(run_int_os("java/CdlTest.class"), 3); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CdlTest.class"), 3); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn aqs_lock_serialises() {
+        // H6: a lock built on AbstractQueuedSynchronizer (state CAS + a park/unpark waiter queue).
+        // Three workers, 100 guarded non-atomic increments each → 300 iff acquire/release serialise.
+        // In os (real parallelism) a broken AQS loses updates (<300) or hangs; green/os-gil agree.
+        assert_eq!(run_int("java/AqsLockTest.class"), 300); // green
+        assert_eq!(run_int_os("java/AqsLockTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/AqsLockTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn lock_support_park_unpark() {
+        // H6 (AQS foundation): LockSupport.park/unpark with permit semantics. Three workers
+        // park-loop until a flag is set; main sets it and unparks each → 3. The permit makes an
+        // unpark-before-park not get lost, so it's correct under any ordering (green/os-gil/os).
+        assert_eq!(run_int("java/ParkTest.class"), 3); // green
+        assert_eq!(run_int_os("java/ParkTest.class"), 3); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/ParkTest.class"), 3); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn condition_await_and_signal() {
+        // H6: Condition on a ReentrantLock. Three workers `await()` (releasing the lock, blocking)
+        // until main sets `ready` and `signalAll()`s; each re-acquires the lock, sees ready, and
+        // increments → 3. Exercises the fully-release / re-acquire dance across real threads.
+        assert_eq!(run_int("java/CondTest.class"), 3); // green
+        assert_eq!(run_int_os("java/CondTest.class"), 3); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CondTest.class"), 3); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn cyclic_barrier_holds_all_parties() {
+        // H6: CyclicBarrier(3) — each worker increments `before`, waits, then checks before==3;
+        // that holds for all three only if the barrier held everyone until the last arrived → 3.
+        assert_eq!(run_int("java/BarrierTest.class"), 3); // green
+        assert_eq!(run_int_os("java/BarrierTest.class"), 3); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/BarrierTest.class"), 3); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn array_blocking_queue_producer_consumer() {
+        // H6 volume: ArrayBlockingQueue(4) — three producers put 100 tokens each, main takes all
+        // 300 and sums → 300 iff the bounded queue blocks/wakes correctly (notFull/notEmpty over a
+        // ReentrantLock). Small capacity forces real put-while-full / take-while-empty blocking.
+        assert_eq!(run_int("java/AbqTest.class"), 300); // green
+        assert_eq!(run_int_os("java/AbqTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/AbqTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn delay_queue_releases_in_expiration_order() {
+        // H6 volume: DelayQueue — 10 items put in reverse (largest delay first); take() releases each
+        // only once its delay elapsed, earliest-expiration first, via a timed wait. Out in ascending
+        // id (0..9) → 10.
+        assert_eq!(run_int("java/DqTest.class"), 10); // green
+        assert_eq!(run_int_os("java/DqTest.class"), 10); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/DqTest.class"), 10); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn priority_blocking_queue_orders_across_producers() {
+        // H6 volume: PriorityBlockingQueue — 3 producers put 300 distinct-priority items concurrently;
+        // after they join, main takes all 300 and they come out in strictly ascending order (the
+        // min-heap orders regardless of insertion order/thread) → 300.
+        assert_eq!(run_int("java/PqTest.class"), 300); // green
+        assert_eq!(run_int_os("java/PqTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/PqTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn completable_future_then_compose_flattens() {
+        // H6 volume: CompletableFuture.thenCompose — the mapping function returns another future
+        // (async double on the pool); thenCompose flattens CF<CF<Box>> → CF<Box>, so get() yields
+        // the doubled value 42, not a nested future.
+        assert_eq!(run_int("java/CcComposeTest.class"), 42); // green
+        assert_eq!(run_int_os("java/CcComposeTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CcComposeTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn completable_future_supply_then_apply_chain() {
+        // H6 volume: CompletableFuture — supplyAsync (on a ThreadPoolExecutor) → thenApply → get().
+        // The supplier produces Box(21), thenApply doubles it to Box(42), get() blocks for the chain
+        // → 42. Exercises complete()/dependent firing + the blocking get() handshake.
+        assert_eq!(run_int("java/CfTest.class"), 42); // green
+        assert_eq!(run_int_os("java/CfTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CfTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn completable_future_exceptionally_recovers_pool_failure() {
+        // H6 volume: CompletableFuture.exceptionally — the supplier throws on the pool, so supplyAsync
+        // completes the future EXCEPTIONALLY (captures the Throwable); exceptionally() recovers it to
+        // 99, so get() returns the recovered value instead of throwing. Exercises the failure-capture
+        // path and downstream propagation → recovery.
+        assert_eq!(run_int("java/CeTest.class"), 99); // green
+        assert_eq!(run_int_os("java/CeTest.class"), 99); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CeTest.class"), 99); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn class_is_annotation_present_reads_runtime_visible_annotations() {
+        // A7 #9: runtime annotations (JSR 175) — Class.isAnnotationPresent. @AnMark is declared
+        // @Retention(RUNTIME), so javac writes a RuntimeVisibleAnnotations attribute (§4.7.16)
+        // holding "LAnMark;" into AnMarked.class; the native reads that attribute off the mirror's
+        // class file and matches descriptors. Score 20 (present on AnMarked) + 12 (absent on the
+        // unannotated AnPlain) + 10 (absent on int.class, a mirror with no class file) = 42.
+        assert_eq!(run_int("java/AnTest.class"), 42); // green
+        assert_eq!(run_int_os("java/AnTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/AnTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn class_get_name_reports_dotted_names() {
+        // A7 #8: Class.getName()/getSimpleName() — minimal reflection. getClass() hands back the
+        // mirror; getName() reads the class name off it in JDK format (dotted binary name), so the
+        // unpackaged test class reports "GnTest" and a `String.class` literal reports
+        // "java.lang.String"; getSimpleName() yields the trailing segment. Score
+        // 10 (getName on own class) + 12 (getName on String.class) + 20 (getSimpleName) = 42.
+        assert_eq!(run_int("java/GnTest.class"), 42); // green
+        assert_eq!(run_int_os("java/GnTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/GnTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn completable_future_then_combine_merges_two_futures() {
+        // H6 volume: CompletableFuture.thenCombine — two futures run independently on the pool (20 and
+        // 22); thenCombine waits for BOTH and merges them with a summing BiFunction → 42. The internal
+        // AtomicInteger gate makes the merge run exactly once, when the second future completes.
+        assert_eq!(run_int("java/CkTest.class"), 42); // green
+        assert_eq!(run_int_os("java/CkTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CkTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn autoboxing_wrappers_box_unbox_and_cache_identity() {
+        // A7 #5 (JLS §5.1.7, JSR 201): autoboxing. javac lowers `Integer a = 5` to
+        // Integer.valueOf and `int b = a` to intValue(); our boot wrappers supply those
+        // methods plus the mandated valueOf caches, so boxing 100 twice yields the SAME
+        // object (== true, +10) while 200 boxes fresh (== false, +10). Also: box/unbox
+        // round-trip (+5), equals against a reboxed literal (+5), Boolean's canonical
+        // TRUE (+4), Character's ASCII cache (+4), Long round-trip (+4) → 42. Before the
+        // wrappers existed, `Integer a = 5` died with NoSuchMethodError on valueOf.
+        //
+        // NOTE: BxTest triggers Long.<clinit> FIRST (fresh heap) on purpose. Initializing
+        // Long at a near-full Eden reproduces an OPEN os-parallel-only GC bug at ~50%: a
+        // spurious ArithmeticException out of bytecode that contains no division (green
+        // and os-gil are unaffected, and JVM_GC_VERIFY stays silent — control-flow state,
+        // not heap refs, gets corrupted). Deterministic-ish reproducers are kept in
+        // java/BxDbgT.java and java/BxDbgY.java (Long section last).
+        assert_eq!(run_int("java/BxTest.class"), 42); // green
+        assert_eq!(run_int_os("java/BxTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/BxTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn throwable_carries_message_and_stack_trace() {
+        // A6 loose ends: a RuntimeException thrown several frames deep carries a detail message
+        // (getMessage → "boom"), renders "java.lang.RuntimeException: boom" (toString reads the
+        // runtime class name), and the VM captured a backtrace at throw time so printStackTrace()
+        // runs without faulting. Score 10 (message) + 20 (toString) = 30. If any piece were broken
+        // — null message, bad field offset, unwritten backtrace — the run would panic, not return 30.
+        assert_eq!(run_int("java/ExcTest.class"), 30); // green
+        assert_eq!(run_int_os("java/ExcTest.class"), 30); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/ExcTest.class"), 30); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn aastore_throws_array_store_exception_on_covariant_mismatch() {
+        // A7 item 3 (JVMS §6.5): `aastore`'s dynamic assignability check. An AsDog[] held
+        // through an AsAnimal[] variable (array covariance) accepts an AsDog (+10), rejects
+        // an AsCat with ArrayStoreException caught by the test (+20), and always accepts
+        // null (+12) → 42. Before the fix the bad store silently corrupted the array.
+        assert_eq!(run_int("java/AsTest.class"), 42); // green
+        assert_eq!(run_int_os("java/AsTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/AsTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn phantom_and_soft_references_follow_their_strengths() {
+        // The two reference strengths above `WeakReference`. A `PhantomReference`'s `get()`
+        // is null **always** — even while the referent is strongly reachable — and the
+        // reference lands on its `ReferenceQueue` only once the referent dies. A
+        // `SoftReference`'s referent, by contrast, **survives** an ordinary `System.gc()`:
+        // our policy (`SoftPolicy`) only clears soft referents on a collection the heap
+        // itself asked for (occupancy / out-of-space / allocation rate). 42 = all six
+        // observations held.
+        assert_eq!(run_int("java/RfTest.class"), 42);
+        assert_eq!(run_int_os("java/RfTest.class"), 42);
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/RfTest.class"), 42);
+        }
+    }
+
+    #[test]
+    fn interface_default_methods_resolve_and_dispatch() {
+        // A7 (JSR 335): default methods. DefA inherits f/g as defaults (DefSub's f shadows DefI's —
+        // maximally-specific); DefB's class override beats both. Dispatched via invokeinterface
+        // (interface-typed receiver), invokevirtual (class-typed receiver), plus a static interface
+        // method. 2 + 10 + 3 + 100 = 115. Before the fix: NoSuchMethodError (the vtable never
+        // folded superinterface defaults).
+        assert_eq!(run_int("java/DefProbe.class"), 115); // green
+        assert_eq!(run_int_os("java/DefProbe.class"), 115); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/DefProbe.class"), 115); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn stack_overflow_is_a_catchable_error() {
+        // A7 #4 (JVMS §6.3): infinite recursion (`deep(n + 1)` with no base case) must not blow up
+        // the process — when the frame stack hits MAX_FRAMES, the invoke throws a catchable
+        // java.lang.StackOverflowError instead of pushing. The test catches it and returns 42.
+        // Before the fix: `Vec<Frame>` grew without bound until the host process died.
+        assert_eq!(run_int("java/SoTest.class"), 42); // green
+        assert_eq!(run_int_os("java/SoTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/SoTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn system_exit_terminates_the_vm_with_its_status() {
+        // A7 #11 (JLS §12.8): `System.exit(42)` ends the VM *at the call*. It is not a return
+        // and not a throw, so nothing unwinds: the `return 1` after it, the enclosing `finally`
+        // (which would set ExMarker.value = 7), and the caller's `100 + value + ExMarker.value`
+        // are all dead code. The program's result is the exit status itself — 42, not 108.
+        // `Runtime.getRuntime().availableProcessors()` guards the call, so the singleton and its
+        // native are exercised on the way in. Before: no `exit` at all (NoSuchMethodError).
+        assert_eq!(run_int("java/ExTest.class"), 42); // green
+        assert_eq!(run_int_os("java/ExTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/ExTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn uncaught_exception_terminates_thread_not_vm() {
+        // A7 #2 (JVMS §2.10): a worker throws a RuntimeException nobody catches. The VM prints
+        // `Exception in thread "Thread-N" ...` + the captured trace to the console and terminates
+        // just that thread (joiners wake, main keeps running) — before the fix the whole VM
+        // panicked on any uncaught exception. TERMINATED check (40) + main alive (2) = 42.
+        assert_eq!(run_int("java/UncTest.class"), 42); // green
+        assert_eq!(run_int_os("java/UncTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/UncTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn object_clone_copies_fields_and_honors_cloneable_opt_in() {
+        // A7 #6 (JLS §10.7): Object.clone() + Cloneable. A CnPoint (implements Cloneable)
+        // clones to a distinct object carrying its fields; mutating the clone leaves the
+        // original untouched (7 + 7 + 8 + 2 + 5 = 29). A CnPlain (no Cloneable) gets
+        // CloneNotSupportedException, caught (+2 = 31). A CnVec override delegates to
+        // super.clone() — the invokespecial path — and the copied field comes through
+        // (+4 = 35). An int[] clones to a distinct array with the elements copied —
+        // arrays are implicitly Cloneable (+7 = 42). Before the fix, `clone` existed
+        // nowhere: resolution died with NoSuchMethodError.
+        assert_eq!(run_int("java/CnTest.class"), 42); // green
+        assert_eq!(run_int_os("java/CnTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/CnTest.class"), 42); // os (parallel)
+        }
+    }
+
+    /// The **measurement workloads** (`java/Bm*.java`), each stressing one dimension of the
+    /// interpreter, with the result the real `java` of JDK 25 gives for the same class file.
+    /// Shared by the cheap correctness check below and by `bench_baseline` at the end of the
+    /// module, so a benchmark can never drift from the value it is supposed to compute.
+    ///
+    /// **These runs respect `JVM_JIT`**, which is on by default, so most of the five are no longer
+    /// pure interpreter measurements: `BmLoop` has been compiled since F3 step 3 and `BmVirtual`
+    /// since step 5 (its `f` overrides are `aload_0; getfield; …; ireturn`). `bench_baseline` says
+    /// which engine it measured in its own header and marks the workloads native code took part
+    /// of, so the table no longer has to be read with that caveat in mind — but the caveat is the
+    /// reason it says so. `burst::jit_tests::bench_jit` is the harness that measures the two arms
+    /// against each other on purpose.
+    const BENCH_WORKLOADS: [(&str, i32, &str); 5] = [
+        ("java/BmLoop.class", 161265, "frame-local arithmetic + branches"),
+        ("java/BmInvoke.class", 252624, "invokestatic (recursive fib)"),
+        ("java/BmField.class", 973376, "new + getfield/putfield (allocates → GC)"),
+        ("java/BmArray.class", 615180, "iaload/iastore over one array"),
+        ("java/BmVirtual.class", 861237, "invokevirtual, polymorphic receiver"),
+    ];
+
+    #[test]
+    fn benchmark_workloads_return_their_expected_values() {
+        // The guard that keeps the baseline honest. `bench_baseline` is `#[ignore]`, so nothing
+        // in a normal run would notice if one of these workloads started throwing, returning
+        // early, or computing something else entirely — it would still report a tidy ns/opcode,
+        // just for a different program. This runs all five in green and pins their results.
+        for (class_file, expected, dimension) in BENCH_WORKLOADS {
+            assert_eq!(run_int(class_file), expected, "{class_file} ({dimension})");
+        }
+    }
+
+    #[test]
+    fn reference_workloads_agree_across_every_substrate() {
+        // The F3 step-5 workloads through the **three-substrate oracle**, which is the strongest
+        // differential test the project has and costs nothing extra here: the JIT is on in `green`
+        // and `os-gil` and off in `os` (parallel), so an agreement between the three is an
+        // agreement between compiled and interpreted execution of the same program — and these two
+        // programs are the ones whose compiled code holds *references* in native frames.
+        //
+        // `os-gil` matters in its own right: it is the substrate where a compiled frame coexists
+        // with sibling OS threads, and the whole no-stack-maps argument rests on the claim that the
+        // one global lock is held across the native call, so no sibling can collect while it runs.
+        // `JmDead` (F3 step 9) joins them for a reason of its own, and it is a **collector** reason
+        // rather than a type-system one. Its three hot methods all carry a local slot the type map
+        // calls `Kind::Conflict` — two edges, two kinds, no answer — and the write-back's response
+        // to one of those is to write *nothing*, leaving the interpreter's frame holding a value
+        // native code may have overwritten. That frame is a GC root the instant it is interpreted
+        // again, the workload allocates 1 500-odd objects to make sure the collector looks at it,
+        // and one of its deopts lands at a pc where the conflicted slot holds a stale reference
+        // from the previous iteration. If "a conflicted slot is dead" were wrong, or if the stale
+        // value were anything but a well-typed `Value`, this is where it would show.
+        //
+        // `JxRich` (group 2) is here for the **`os-gil`** arm specifically. Its `volatile` accesses
+        // are compiled to plain `mov`s, and the entire licence for that is that no other thread
+        // runs a Java opcode while a native frame is on this stack — which is a claim about the
+        // substrate, and `os-gil` is the only substrate that has sibling OS threads *and* the JIT
+        // on. Its own differential (`burst::jit_tests`) runs on `green` alone, where the claim is
+        // trivially true and therefore untested. VOLATILE-REVISIT-OS-PARALLEL.
+        for (class_file, expected) in
+            [
+                ("java/JrRef.class", 604164),
+                ("java/JrPoll.class", 977804),
+                ("java/JmDead.class", 854257),
+                ("java/JxRich.class", 353090),
+            ]
+        {
+            assert_eq!(run_int(class_file), expected, "{class_file} (green)");
+            assert_eq!(run_int_os(class_file), expected, "{class_file} (os-gil)");
+            for _ in 0..5 {
+                assert_eq!(run_int_os_parallel(class_file), expected, "{class_file} (os)");
+            }
+        }
+    }
+
+    #[test]
+    fn nested_array_stores_survive_minor_gc() {
+        // Regression for two latent bugs the new aastore check exposed: (1) synthetic array-class
+        // mirrors were Eden-allocated — a minor GC moved (or collected) them while the metaspace
+        // index and array headers kept the stale offset, so a later lookup resolved a *different*
+        // class and a valid `holder[i] = new long[8]` store threw a spurious ArrayStoreException;
+        // (2) `anewarray` named a nested array's class `[L[J;` instead of `[[J`. The test churns
+        // garbage between stores of `[J` into `[[J` to force minor GCs → all 64 stores succeed.
+        assert_eq!(run_int("java/AsGcProbe.class"), 64); // green
+        assert_eq!(run_int_os("java/AsGcProbe.class"), 64); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/AsGcProbe.class"), 64); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn uncaught_exception_handler_runs_in_java() {
+        // A7 #12: Thread.setUncaughtExceptionHandler. An exception escaping run() is no longer
+        // just printed — the VM calls the handler back **in Java**, on the dying thread, with the
+        // stack already unwound (the last frame is kept alive one moment longer precisely so the
+        // exception has a GC root while that Java call allocates). Handler ran exactly once (10)
+        // with the right Thread (8) and the very Throwable that escaped (8), message intact (6),
+        // thread still TERMINATED afterwards (4), ThreadGroup inherited from the creator (3), and
+        // sleep(long,int)/onSpinWait not faulting (3) = 42 — the same 42 a real JDK returns for
+        // this file, which is what pins the semantics.
+        assert_eq!(run_int("java/UhTest.class"), 42); // green
+        assert_eq!(run_int_os("java/UhTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/UhTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn thread_local_isolates_values_per_thread() {
+        // A6 loose ends: Thread peripherals. Four OS threads each store id*7 into the SAME
+        // ThreadLocal, interleave, then read it back — each sees only its own value (per-thread
+        // isolation via a list hanging off currentThread()). Sum 0+7+14+21 = 42. Also validates
+        // priority/daemon getters/setters + setPriority range check (sabotages to -1 on misbehavior).
+        assert_eq!(run_int("java/TlTest.class"), 42); // green
+        assert_eq!(run_int_os("java/TlTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/TlTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn heap_exhaustion_throws_catchable_out_of_memory_error() {
+        // A7 (JVMS §6.3): OutOfMemoryError. Each recursion frame roots a 512 KiB long[] in a
+        // local (frame locals are GC roots), so no collection can reclaim anything and the
+        // 16 MiB max heap truly fills after ~31 frames; the failing `newarray` then throws a
+        // *catchable* OutOfMemoryError (`try_malloc` → Err → throw_exception) instead of
+        // panicking the VM ("heap exhausted"), and run()'s catch returns 42. Single-threaded
+        // → deterministic in all three modes.
+        assert_eq!(run_int("java/OmTest.class"), 42); // green
+        assert_eq!(run_int_os("java/OmTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/OmTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn class_init_pulls_in_only_default_declaring_superinterfaces() {
+        // A7 #13 (JVMS §5.5): implementing an interface is not, by itself, an active use of it.
+        // Initializing a class runs the `<clinit>` of its superinterfaces — direct *and* indirect —
+        // that declare a **default** method (+8 direct, +4 indirect: their code can run on the
+        // instance), and of no others (+8: a constants-and-abstracts interface stays untouched).
+        // Initializing an *interface* runs its own `<clinit>` (+4) but never a superinterface's,
+        // not even one declaring a default (+8). The skipped ones are merely deferred, not broken:
+        // reading their own non-constant static field initializes them on the spot (+5 +5) = 42.
+        // Before the fix `ensure_initialized` walked only `superclass_name`, so a default-method
+        // interface's `<clinit>` never ran (the measured score was 30).
+        assert_eq!(run_int("java/IiTest.class"), 42); // green
+        assert_eq!(run_int_os("java/IiTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/IiTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn clinit_failure_wraps_in_exception_in_initializer_error() {
+        // A6 loose end (JVMS §5.5): a static initializer that throws. The failure now (a) propagates
+        // to the triggering code — before the fix it was silently swallowed and the read returned 0 —
+        // (b) is wrapped in ExceptionInInitializerError (the thrown RuntimeException is not an Error),
+        // and (c) leaves the class erroneous, so a second use throws NoClassDefFoundError. 3 + 5 = 8.
+        assert_eq!(run_int("java/ClinitProbe.class"), 8); // green
+        assert_eq!(run_int_os("java/ClinitProbe.class"), 8); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/ClinitProbe.class"), 8); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn scheduled_executor_one_shot_delays() {
+        // H6 volume: ScheduledThreadPoolExecutor.schedule() — 5 delayed one-shot tasks each increment
+        // a guarded counter and count down a latch; main awaits the latch (all 5 provably ran) → 5.
+        assert_eq!(run_int("java/SchedTest.class"), 5); // green
+        assert_eq!(run_int_os("java/SchedTest.class"), 5); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/SchedTest.class"), 5); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn scheduled_executor_fixed_rate_periodic() {
+        // H6 volume: scheduleAtFixedRate() — a periodic task fires repeatedly, incrementing a counter
+        // capped at 10 (deterministic) and releasing a latch at 10; main awaits, then shuts down → 10.
+        assert_eq!(run_int("java/SchedRateTest.class"), 10); // green
+        assert_eq!(run_int_os("java/SchedRateTest.class"), 10); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/SchedRateTest.class"), 10); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn linked_blocking_queue_two_lock_producer_consumer() {
+        // H6 volume: LinkedBlockingQueue (two-lock: putLock at the tail, takeLock at the head, so
+        // producers and the consumer run in parallel). Three producers put 100 tokens each; main
+        // takes all 300 and counts → 300 iff no node is lost/duplicated and notEmpty wakes correctly.
+        assert_eq!(run_int("java/LbqTest.class"), 300); // green
+        assert_eq!(run_int_os("java/LbqTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/LbqTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn concurrent_hash_map_concurrent_puts_and_value_lookup() {
+        // H6 volume: ConcurrentHashMap — 3 workers put 100 distinct keys each (300 entries across
+        // the lock stripes) with no lost entry, then a value-based get() with a rebuilt key finds
+        // its value (dispatching key.hashCode()/equals()). size(300) + found(1) = 301.
+        assert_eq!(run_int("java/ChmTest.class"), 301); // green
+        assert_eq!(run_int_os("java/ChmTest.class"), 301); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/ChmTest.class"), 301); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn thread_pool_executor_runs_all_tasks() {
+        // H6 volume: ThreadPoolExecutor(4) runs 300 guarded-increment tasks — the pool must run each
+        // exactly once on its worker threads (poison-pill shutdown drains the queue first) and the
+        // ReentrantLock serialises them → exactly 300.
+        assert_eq!(run_int("java/PoolTest.class"), 300); // green
+        assert_eq!(run_int_os("java/PoolTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/PoolTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn executor_submit_future_get() {
+        // H6 volume: submit() returns a Future; get() blocks until the pool ran the task (which sets
+        // 42) → 42. Exercises the FutureTask completion handshake (run() notifyAll, get() waits).
+        assert_eq!(run_int("java/PoolFutureTest.class"), 42); // green
+        assert_eq!(run_int_os("java/PoolFutureTest.class"), 42); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/PoolFutureTest.class"), 42); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn reentrant_read_write_lock_readers_and_writers() {
+        // H6 volume: ReentrantReadWriteLock — three writers do 100 guarded increments each while
+        // two readers read concurrently under the read lock. The write lock's mutual exclusion
+        // gives an exact 300 (no lost update); readers exercise the shared path without deadlock.
+        assert_eq!(run_int("java/RwLockTest.class"), 300); // green
+        assert_eq!(run_int_os("java/RwLockTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/RwLockTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn reentrant_lock_serialises_and_reenters() {
+        // H6: ReentrantLock taken reentrantly (lock/lock, unlock/unlock). Three workers, 100
+        // guarded non-atomic increments each → 300 iff the lock both serialises and re-enters.
+        assert_eq!(run_int("java/LockTest.class"), 300); // green
+        assert_eq!(run_int_os("java/LockTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/LockTest.class"), 300); // os (parallel)
+        }
+    }
+
+    // RELIABLE reproduction of the os-parallel stale-reference bug (see the project memory
+    // `os-parallel-gc-stale-ref-heisenbug`). 12 workers run an allocation storm (constant minor GCs)
+    // while `main` holds every worker reference across the storm, then dispatches `join` on each. In
+    // `os` (real parallelism) a worker/array reference in a frame is occasionally left un-remapped by
+    // a minor collection, so a later `invokevirtual` resolves the receiver to the wrong (reused)
+    // offset → NoSuchMethodError / IllegalThreadStateException / "could not resolve the receiver".
+    //
+    // **`green` and `os-gil` always pass; only `os` crashes**, ~every run. Kept `#[ignore]` because
+    // it currently fails: it is the standing repro for the unresolved bug, not a passing check. Run
+    // it with `cargo test --release -- --ignored gc_race_stress` (add `JVM_GC_VERIFY=1` to catch a
+    // botched remap at the offending collection). The green/os-gil asserts confirm the oracle result.
+    #[test]
+    #[ignore = "reliable repro of the unresolved os-parallel stale-ref bug; os path crashes"]
+    fn gc_race_stress() {
+        assert_eq!(run_int("java/GcRace.class"), 12); // green
+        assert_eq!(run_int_os("java/GcRace.class"), 12); // os-gil
+        for _ in 0..40 {
+            assert_eq!(run_int_os_parallel("java/GcRace.class"), 12); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn semaphore_gives_mutual_exclusion() {
+        // H6: a binary Semaphore(1) as a mutex. Three workers each do 100 NON-atomic increments of
+        // a shared int under the permit — no update is lost only if the permit truly serializes
+        // them → 300. In os (real parallelism) an unguarded increment would race and fall short.
+        assert_eq!(run_int("java/SemTest.class"), 300); // green
+        assert_eq!(run_int_os("java/SemTest.class"), 300); // os-gil
+        for _ in 0..10 {
+            assert_eq!(run_int_os_parallel("java/SemTest.class"), 300); // os (parallel)
+        }
+    }
+
+    #[test]
+    fn atomic_long_and_reference_cas() {
+        // H5: AtomicLong (64-bit CAS) + AtomicReference (identity CAS, store through the write
+        // barrier). → 201 + "b".length() = 202, confirmed vs real java.
+        assert_eq!(run_int("java/AtomicMix.class"), 202);
+    }
+
+    #[test]
+    fn atomic_integer_cas_under_contention() {
+        // H5: three threads each `incrementAndGet` a shared AtomicInteger 1000× — the retry loop
+        // over compareAndSet must lose no updates → 3000. Oracle green ≡ os-gil ≡ os (the CAS is
+        // serialized on the write lock in os), then hammer os to signal races/deadlocks.
+        assert_eq!(run_int("java/CasStress.class"), 3000); // green (reference)
+        assert_eq!(run_int_os("java/CasStress.class"), 3000); // os-gil (serialized)
+        for _ in 0..20 {
+            assert_eq!(run_int_os_parallel("java/CasStress.class"), 3000); // os (parallel)
+        }
+    }
+
+    #[test]
     fn os_parallel_stress() {
         // Real parallelism (H3 1d) + the widened fast-path set (int/long arith, shifts,
         // conversions, refs, if_acmp). Three workers run a lock-free frame-local compute loop
@@ -1333,6 +2250,128 @@ mod tests {
         for _ in 0..20 {
             assert_eq!(run_int_os_parallel("java/ParallelStress.class"), 68126370); // os (parallel)
         }
+    }
+
+    #[test]
+    fn method_handle_find_static_and_invoke() {
+        // 0xba / java.lang.invoke object model: `MethodHandles.lookup().findStatic(...)` builds a
+        // MethodHandle, and signature-polymorphic `invoke` calls it. `id("hello")` round-trips the
+        // string through the handle; `.length()` = 5. Confirmed against real `java`.
+        assert_eq!(run_int("java/MHInvoke.class"), 5);
+    }
+
+    #[test]
+    fn method_handle_with_primitive_int_type() {
+        // MH-d (primitives): `int.class` → `Integer.TYPE` (a primitive Class mirror via
+        // `Class.getPrimitiveClass`); `methodType(int.class, int.class)` → "(I)I"; the handle
+        // invokes `twice(21)` with a plain int (call site `(I)I`, no boxing). → 42, vs real `java`.
+        assert_eq!(run_int("java/MHInt.class"), 42);
+    }
+
+    #[test]
+    fn method_handle_virtual_dispatch() {
+        // MH-d (kind 5, invokeVirtual): `findVirtual(String, "length", ()I).invoke("hello")`
+        // dispatches on the receiver → 5. Confirmed vs real `java`.
+        assert_eq!(run_int("java/MHVirtual.class"), 5);
+    }
+
+    #[test]
+    fn method_handle_constructor() {
+        // MH-d (kind 8, newInvokeSpecial): `findConstructor(Box, (int)void).invoke(42)` allocates a
+        // Box, runs its `<init>`, and hands back the new object; `b.get()` → 42. Vs real `java`.
+        assert_eq!(run_int("java/MHCtor.class"), 42);
+    }
+
+    #[test]
+    fn method_handle_invoke_with_arguments_spreads() {
+        // `MethodHandle.invokeWithArguments(Object[])` spreads the array into the handle — the VM
+        // primitive that a Java `ConstantBootstraps.invoke` is built on. `id("spread!")` → length 7.
+        assert_eq!(run_int("java/MHSpread.class"), 7);
+    }
+
+    #[test]
+    fn ldc_of_method_type_and_method_handle_constants() {
+        // MH-b: `ldc` of `CONSTANT_MethodType` / `CONSTANT_MethodHandle` — constants `javac` never
+        // emits, so this is the first thing exercised only through **hand-written class files**
+        // built with the `.class` writer (`crate::javac::class_writer`). The class does:
+        //   ldc MethodType "(I)I"; .descriptorString().length()   → 4
+        //   ldc MethodHandle(invokeStatic id:(String)String); .invoke("hello").length()  → 5
+        //   iadd → 9
+        // Loading + running it proves both `ldc` materialisers and, transitively, `invoke`.
+        use crate::javac::class_writer::{ClassFile, MethodInfo};
+        let be = |v: u16| [(v >> 8) as u8, v as u8];
+
+        let mut cf = ClassFile::new();
+        cf.access_flags = 0x0021; // ACC_PUBLIC | ACC_SUPER
+        cf.this_class = cf.pool.class("MHLdc");
+        cf.super_class = cf.pool.class("java/lang/Object");
+
+        let mt = cf.pool.method_type("(I)I");
+        let mt_desc = cf.pool.methodref(
+            "java/lang/invoke/MethodType",
+            "descriptorString",
+            "()Ljava/lang/String;",
+        );
+        let len = cf.pool.methodref("java/lang/String", "length", "()I");
+        let mh = cf.pool.method_handle(6, "MHLdc", "id", "(Ljava/lang/String;)Ljava/lang/String;");
+        let hello = cf.pool.string("hello");
+        let invoke = cf.pool.methodref(
+            "java/lang/invoke/MethodHandle",
+            "invoke",
+            "(Ljava/lang/String;)Ljava/lang/String;",
+        );
+        let run_name = cf.pool.utf8("run");
+        let run_desc = cf.pool.utf8("()I");
+        let id_name = cf.pool.utf8("id");
+        let id_desc = cf.pool.utf8("(Ljava/lang/String;)Ljava/lang/String;");
+
+        let mut code = Vec::new();
+        code.push(0x13); // ldc_w MethodType "(I)I"
+        code.extend(be(mt));
+        code.push(0xb6); // invokevirtual MethodType.descriptorString ()String
+        code.extend(be(mt_desc));
+        code.push(0xb6); // invokevirtual String.length ()I  → 4
+        code.extend(be(len));
+        code.push(0x13); // ldc_w MethodHandle(invokeStatic MHLdc.id)
+        code.extend(be(mh));
+        code.push(0x13); // ldc_w "hello"
+        code.extend(be(hello));
+        code.push(0xb6); // invokevirtual MethodHandle.invoke (String)String  (signature-poly) → "hello"
+        code.extend(be(invoke));
+        code.push(0xb6); // invokevirtual String.length ()I  → 5
+        code.extend(be(len));
+        code.push(0x60); // iadd  → 9
+        code.push(0xac); // ireturn
+
+        cf.methods.push(MethodInfo {
+            access_flags: 0x0009, // ACC_PUBLIC | ACC_STATIC
+            name_index: run_name,
+            descriptor_index: run_desc,
+            max_stack: 3,
+            max_locals: 0,
+            code,
+            stack_map: None,
+            exceptions: Vec::new(),
+            ..Default::default() // hand-built class file: only `Code`
+        });
+        // static String id(String s) { return s; }  — the MethodHandle's target.
+        cf.methods.push(MethodInfo {
+            access_flags: 0x0009,
+            name_index: id_name,
+            descriptor_index: id_desc,
+            max_stack: 1,
+            max_locals: 1,
+            code: vec![0x2a, 0xb0], // aload_0; areturn
+            stack_map: None,
+            exceptions: Vec::new(),
+            ..Default::default() // hand-built class file: only `Code`
+        });
+
+        // Write the hand-built class to a temp file and run it (loads MethodType/MethodHandle from boot/).
+        let path = std::env::temp_dir().join("kaji_mh_ldc_MHLdc.class");
+        std::fs::write(&path, cf.to_bytes()).expect("write hand-built class");
+        assert_eq!(run_int(path.to_str().unwrap()), 9);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -1519,5 +2558,257 @@ mod tests {
         assert_eq!(base.auto_cause(50, 10, 0, 0), Some(GcCause::AllocationRate));
         // Low and slow → nothing warranted.
         assert_eq!(base.auto_cause(10, 100, 0, 0), None);
+    }
+
+    /// Loads a workload class and builds the frame for its `run()I` — everything that is
+    /// *not* execution, so the benchmark's clock never measures class loading or parsing.
+    fn bench_setup(class_file: &str) -> (MetaspaceService, crate::jvm::interpreter::frame::Frame) {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::frame::Frame;
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let class = ClassFile::from_path(class_file).expect("load class");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        (metaspace, Frame::new(entry, max_locals, Vec::new()))
+    }
+
+    /// One timed **green** run: the workload's result, the number of opcodes it executed, and
+    /// the wall time of the execution alone.
+    fn bench_green(class_file: &str) -> (i32, usize, std::time::Duration) {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_counting;
+        let (metaspace, frame) = bench_setup(class_file);
+        let start = std::time::Instant::now();
+        let (value, steps) = execute_counting(metaspace, frame);
+        let elapsed = start.elapsed();
+        match value {
+            Some(Value::Int(v)) => (v, steps, elapsed),
+            other => panic!("expected an int result, got {other:?}"),
+        }
+    }
+
+    /// **How many opcodes this workload executes with the JIT forced off** — the reference the
+    /// timed runs' counts are read against, and the whole of what makes the `ns/opcode` column
+    /// honest.
+    ///
+    /// Untimed on purpose: it is not a measurement, it is the denominator's alibi. A timed run that
+    /// counts *fewer* opcodes than this did part of its work in native code, and dividing its wall
+    /// time by what the interpreter had left to do is the artefact `BmLoop` produced when it
+    /// reported ~6624 ns/op over 620 opcodes. The JIT is switched **programmatically** (the same
+    /// reason the differential tests do: `cargo test` shares one process, so touching `JVM_JIT`
+    /// here would touch it for every test running at that moment), which also means this reference
+    /// is right whatever the environment says.
+    fn bench_interpreted_opcodes(class_file: &str) -> usize {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_counting_tuned;
+        let (metaspace, frame) = bench_setup(class_file);
+        let (_, steps, stats) = execute_counting_tuned(metaspace, frame, Some(false), None, |_| {});
+        assert_eq!(stats, crate::burst::code_cache::JitStats::default(), "the reference run must compile nothing");
+        steps
+    }
+
+    /// The same run on the **os-gil** substrate (real OS threads + GIL). No opcode count comes
+    /// back from that engine, and none is needed: these workloads are single-threaded and
+    /// deterministic, so they execute exactly the opcodes green counted — only the per-opcode
+    /// overhead (lock + unlock around every instruction) differs, which is the point.
+    fn bench_os_gil(class_file: &str) -> (i32, std::time::Duration) {
+        use crate::jvm::interpreter::bytecode_interpreter::execute_os_gil;
+        let (metaspace, frame) = bench_setup(class_file);
+        let start = std::time::Instant::now();
+        let value = execute_os_gil(metaspace, frame);
+        let elapsed = start.elapsed();
+        match value {
+            Some(Value::Int(v)) => (v, elapsed),
+            other => panic!("expected an int result, got {other:?}"),
+        }
+    }
+
+    /// The median of a set of samples (they are pre-sorted by the caller).
+    fn median(sorted: &[std::time::Duration]) -> std::time::Duration {
+        sorted[sorted.len() / 2]
+    }
+
+    // The **baseline harness** for the optimisation track (quickening → superinstructions →
+    // inline caching → JIT). It measures; it optimises nothing. Five workloads, each stressing
+    // one dimension (see `BENCH_WORKLOADS` and `java/Bm*.java`), are run 6× each: the first run
+    // is discarded as warm-up and the median of the other 5 is reported.
+    //
+    // The column that matters is **ns/opcode** — time divided by the opcodes actually executed
+    // (`SharedVm::steps`, handed back by `execute_counting`). Absolute times only say how big a
+    // workload is; ns/opcode says how expensive the engine is, and stays comparable when a
+    // workload is resized. **It is a metric of the interpreter and of nothing else**, which is why
+    // it is now printed only for a workload no native code touched — see the note above the test.
+    // `green` is the measurement substrate: it is single-threaded and
+    // deterministic, so the opcode count is identical run to run and there is no scheduling
+    // noise. (`gil_overhead_bench`, below, contrasts the same five against `os-gil`; it lives in
+    // its own test because the GIL makes that an order of magnitude slower to collect.)
+    //
+    // `#[ignore]` because it is a measurement, not a check — several seconds of pure CPU, and a
+    // timing assert would be a flaky test on shared hardware. The *correctness* of these same
+    // workloads is checked, cheaply and unconditionally, by
+    // `benchmark_workloads_return_their_expected_values`. Run it with:
+    //
+    //     cargo test --release --lib bench_baseline -- --ignored --nocapture
+    //
+    // ---------------------------------------------------------------------------------------
+    // **How to read this table — the measurement protocol.** Learned the hard way on the F
+    // track, and it applies to every optimisation this harness is used to judge.
+    //
+    // The dominant noise here is **code layout**, not the program. Any edit relinks the crate
+    // and reshuffles function addresses, alignment and branch-predictor aliasing; on this
+    // machine the resulting swing is **±3–12% per workload** — larger than the honest effect of
+    // most changes worth making. It is not subtle: adding a `HashMap` field that was never read
+    // moved a *control* workload by +3.4%. So a number from this table is only evidence when it
+    // was collected like this:
+    //
+    //  1. **Never compare a single binary before and after.** That difference is the change and
+    //     the relayout added together, and you cannot tell which one you are looking at.
+    //  2. **Latin square.** Keep *both* binaries built and run them interleaved in mirrored
+    //     orders (A B B A / B A A B …), so run position, thermal drift and background load fall
+    //     on both arms equally. Same binaries in every position — never rebuild mid-experiment.
+    //  3. **Zero-effect controls.** `BmLoop` and `BmArray` execute no `invoke` at all, so any
+    //     change to the call path *must* leave them flat. When they move with the target, what
+    //     moved was the layout: subtract their shift from the target's and report **both** the
+    //     raw and the normalised figure, never the raw one alone.
+    //  4. **Medians, and enough of them.** Report the median across invocations (each of which
+    //     is already a median of 5 runs), and quote the minimum too: an interrupted run can only
+    //     be slower, so the minimum is the least-perturbed sample. If the spread within one arm
+    //     is wider than the effect you are claiming, you have not measured the effect yet.
+    // ---------------------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------
+    // **Two things this table used to lie about**, both fixed in place rather than annotated.
+    //
+    //  1. *The header.* It said "interpreter baseline" unconditionally, and the JIT's default
+    //     became **on** several steps ago — so the words were wrong for every run anybody had
+    //     made since. The engine is now read from `JitCache::enabled_by_env`, i.e. from the same
+    //     line `from_env` reads, and the header says which one it measured and names the flag
+    //     that changes it.
+    //  2. *The `ns/opcode` column.* Dividing wall time by "opcodes the interpreter executed" is
+    //     the right metric for an interpreter and an **artefact** for anything else: once a
+    //     workload's loop is compiled, the numerator is the whole run and the denominator is only
+    //     what was left over. `BmLoop` reported ~6624 ns/op over 620 opcodes that way — a number
+    //     three orders of magnitude off, printed with two decimal places. So each workload is
+    //     also run once with the JIT forced **off** (`bench_interpreted_opcodes`, untimed), and a
+    //     timed run that counts fewer opcodes than that reference is one native code did part of:
+    //     the column prints `jit` and the `native` column says how much.
+    // ---------------------------------------------------------------------------------------
+    #[test]
+    #[ignore = "benchmark: prints the green baseline table, asserts no timing"]
+    fn bench_baseline() {
+        const RUNS: usize = 6; // 1 warm-up (discarded) + 5 measured
+
+        let jit = crate::burst::code_cache::JitCache::enabled_by_env();
+        let engine = match jit {
+            true => "JIT on (the default) — set JVM_JIT=0 for the interpreter baseline",
+            false => "interpreter only (JVM_JIT=0) — unset it for the JIT",
+        };
+
+        eprintln!();
+        eprintln!("green, median of {} runs (1 warm-up discarded) — {engine}", RUNS - 1);
+        eprintln!(
+            "{:<10} {:>10} {:>12} {:>14} {:>8} {:>11}  dimension",
+            "workload", "value", "median", "opcodes", "native", "ns/opcode"
+        );
+        eprintln!("{}", "-".repeat(105));
+
+        for (class_file, expected, dimension) in BENCH_WORKLOADS {
+            let short = class_file.trim_start_matches("java/").trim_end_matches(".class");
+            // The denominator's alibi, collected before the clock starts and never timed.
+            let interpreted = bench_interpreted_opcodes(class_file);
+            let mut times = Vec::with_capacity(RUNS - 1);
+            let (mut value, mut opcodes) = (0, 0);
+            for run in 0..RUNS {
+                let (v, steps, elapsed) = bench_green(class_file);
+                assert_eq!(v, expected, "{short}: wrong result");
+                if run > 0 {
+                    // The warm-up run pays for first-touch page faults and CPU frequency ramp-up.
+                    assert_eq!(steps, opcodes, "{short}: opcode count is not deterministic");
+                    times.push(elapsed);
+                }
+                (value, opcodes) = (v, steps);
+            }
+            times.sort();
+            let green_median = median(&times);
+            // Fewer opcodes than the interpreter needed for the same program means native code did
+            // the difference, and the ratio is what makes the `—` in the last column readable
+            // rather than merely cautious.
+            let compiled_away = interpreted.saturating_sub(opcodes);
+            let (native, per_opcode) = match compiled_away {
+                0 => ("—".to_string(), format!("{:>11.2}", green_median.as_nanos() as f64 / opcodes as f64)),
+                n => (
+                    format!("{:.0}%", 100.0 * n as f64 / interpreted.max(1) as f64),
+                    format!("{:>11}", "jit"),
+                ),
+            };
+            eprintln!(
+                "{:<10} {:>10} {:>11.1?} {:>14} {:>8} {}  {}",
+                short, value, green_median, opcodes, native, per_opcode, dimension
+            );
+        }
+        eprintln!();
+        eprintln!(
+            "  native: share of this workload's interpreted opcodes that native code took over."
+        );
+        eprintln!(
+            "  ns/opcode is printed only when it means something — i.e. when the whole run was"
+        );
+        eprintln!(
+            "  interpreted. Where native code did part of the work, wall time over the opcodes it"
+        );
+        eprintln!("  left behind is an artefact, not a per-opcode cost, so the column says `jit`.");
+        eprintln!();
+    }
+
+    // The **GIL tax**: the same five workloads on `green` and on `os-gil`, side by side. Both
+    // run the identical single-threaded program, so the opcode count is the same on both and
+    // green's count is used for each — the whole difference is the per-opcode cost of taking
+    // and releasing the one `Mutex<SharedVm>` around every instruction, which the ratio column
+    // states directly. Separate from `bench_baseline` (and named so its filter doesn't pick this
+    // up) because os-gil is ~an order of magnitude slower, i.e. minutes rather than seconds:
+    //
+    //     cargo test --release --lib gil_overhead_bench -- --ignored --nocapture
+    #[test]
+    #[ignore = "benchmark: green vs os-gil per-opcode cost; minutes of CPU"]
+    fn gil_overhead_bench() {
+        const RUNS: usize = 4; // 1 warm-up (discarded) + 3 measured
+
+        eprintln!();
+        eprintln!("GIL tax — median of {} runs (1 warm-up discarded)", RUNS - 1);
+        eprintln!(
+            "{:<10} {:>12} {:>11} {:>12} {:>11} {:>10}",
+            "workload", "green", "ns/opcode", "os-gil", "ns/opcode", "os-gil/green"
+        );
+        eprintln!("{}", "-".repeat(72));
+        for (class_file, expected, _) in BENCH_WORKLOADS {
+            let short = class_file.trim_start_matches("java/").trim_end_matches(".class");
+            let (mut green_times, mut os_times) = (Vec::new(), Vec::new());
+            let mut opcodes = 0;
+            for run in 0..RUNS {
+                let (v, steps, elapsed) = bench_green(class_file);
+                assert_eq!(v, expected, "{short} (green): wrong result");
+                opcodes = steps;
+                let (v, os_elapsed) = bench_os_gil(class_file);
+                assert_eq!(v, expected, "{short} (os-gil): wrong result");
+                if run > 0 {
+                    green_times.push(elapsed);
+                    os_times.push(os_elapsed);
+                }
+            }
+            green_times.sort();
+            os_times.sort();
+            let (green, os) = (median(&green_times), median(&os_times));
+            eprintln!(
+                "{:<10} {:>11.1?} {:>11.2} {:>12.1?} {:>11.2} {:>9.1}x",
+                short,
+                green,
+                green.as_nanos() as f64 / opcodes as f64,
+                os,
+                os.as_nanos() as f64 / opcodes as f64,
+                os.as_nanos() as f64 / green.as_nanos() as f64,
+            );
+        }
+        eprintln!();
     }
 }

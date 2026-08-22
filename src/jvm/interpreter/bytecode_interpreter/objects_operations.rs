@@ -13,7 +13,7 @@
 
 use crate::jvm::interpreter::frame::{Frame, Value};
 use crate::jvm::interpreter::heap::HeapService;
-use crate::jvm::interpreter::metaspace::MetaspaceService;
+use crate::jvm::interpreter::metaspace::{MetaspaceService, MethodId};
 use std::sync::atomic::Ordering;
 
 /// Bytes for one field slot — 4 bytes. Most types take one slot; the **category-2**
@@ -64,23 +64,196 @@ pub fn allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: 
     offset
 }
 
+/// Fallible twin of [`allocate`] for the `new` **opcode**: `None` when the heap is
+/// exhausted (neither Eden nor Old within `JVM_GC_MAX_HEAP` can fit the instance),
+/// so the opcode can throw a catchable `java.lang.OutOfMemoryError` (JVMS §6.3)
+/// instead of panicking the VM. Internal VM allocations (exception objects, interned
+/// strings, mirrors, `Thread` objects) keep the panicking [`allocate`] — their failure
+/// paths aren't cleanly recoverable mid-operation, so exhaustion there stays fatal.
+pub fn try_allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> Option<usize> {
+    let slots = instance_field_slots(metaspace, name);
+    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let offset = heap.try_malloc(size)?;
+    let uuid = metaspace.class_id(name).to_string();
+    let class_id = metaspace.class_object(&uuid).unwrap_or(0) as u32;
+    heap.write_u32(offset, class_id);
+    Some(offset)
+}
+
+/// Like [`allocate`], but in the **Old** generation (`malloc_old`) — for objects the VM builds
+/// while holding *young* references in Rust locals it can't root (a condy's target `MethodHandle`,
+/// its `Object[]` args). Old allocation never triggers a minor GC and Old objects don't move, so
+/// those Rust-held references stay valid across the build. Callers must store references into the
+/// resulting object with the write barrier ([`HeapService::store_reference`]) so an Old→young
+/// pointer is remembered.
+pub fn allocate_old(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {
+    let slots = instance_field_slots(metaspace, name);
+    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let offset = heap.malloc_old(size);
+    let uuid = metaspace.class_id(name).to_string();
+    let class_id = metaspace.class_object(&uuid).unwrap_or(0) as u32;
+    heap.write_u32(offset, class_id);
+    offset
+}
+
+/// `Object.clone()`'s copy step: allocates a fresh instance of `class` and copies every
+/// instance field of `source` into it verbatim — the **shallow** copy of JLS §10.7 (reference
+/// fields copy the reference, so original and clone share the pointees). The Cloneable check
+/// happens at the call site (the invoke interception, which can throw); this is just the copy.
+///
+/// Old-allocated (see [`allocate_old`]): `source` is held in a Rust local across this
+/// allocation, and an Eden allocation could trigger a minor GC that moves it. Old allocation
+/// never GCs and Old objects don't move, so `source` stays valid for the whole copy. Reference
+/// fields go in through the write barrier ([`HeapService::store_reference`]) so the clone's
+/// Old→young pointers land in the remembered set.
+pub fn clone_instance(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    source: usize,
+    class: &str,
+) -> usize {
+    let clone = allocate_old(metaspace, heap, class);
+    // Fold the single placement rule over the super-first layout — the same walk the
+    // field offsets use, so every field (and its alignment padding) lands where it came from.
+    let mut slots = 0;
+    for (descriptor, _) in layout_fields_mut(metaspace, class) {
+        let (start, next) = place_field(slots, &descriptor);
+        let at = HEADER_SIZE + start * SLOT_SIZE;
+        match descriptor.as_bytes().first() {
+            // Category-2 (long/double): one 8-byte copy.
+            Some(b'J') | Some(b'D') => {
+                let value = heap.read_u64(source + at);
+                heap.write_u64(clone + at, value);
+            }
+            // Reference: copy the pointer through the barrier gateway (shallow — shared pointee).
+            Some(b'L') | Some(b'[') => {
+                let value = heap.read_u32(source + at) as usize;
+                heap.store_reference(clone, clone + at, value);
+            }
+            // Everything else is one 4-byte slot.
+            _ => {
+                let value = heap.read_u32(source + at);
+                heap.write_u32(clone + at, value);
+            }
+        }
+        slots = next;
+    }
+    clone
+}
+
+// ---- F0 quickening: the per-call-site field cache ------------------------------------------
+//
+// A `getfield`/`putfield` at a given `(method, pc)` always names the **same** constant-pool
+// entry, and a class's layout is fixed once the class is loaded — so resolving that site is a
+// pure function computed once and reused. Without the cache every execution paid three or four
+// `String` allocations plus a full rebuild of the class's super-first field list (a fresh
+// `Vec<(String, String)>` walking the whole superclass chain) just to fold it back down to one
+// offset. Here that whole resolution collapses to a single indexed atomic load of a `Copy` word
+// living in the method's own [`MethodId`]-indexed body (`MetaspaceService::field_site`).
+
+/// How to read/write the bytes of a field — the descriptor's first byte, decided **once** at
+/// resolution so the hot path never touches the descriptor string again.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum FieldKind {
+    /// `Z`/`B`/`C`/`S`/`I` — one 4-byte slot read back as an `Int`.
+    Int,
+    /// `J` — category-2, 8 bytes.
+    Long,
+    /// `D` — category-2, 8 bytes, `f64` bits.
+    Double,
+    /// `F` — 4 bytes, `f32` bits.
+    Float,
+    /// `L…;`/`[…` — 4 bytes read back as a `Reference`.
+    Reference,
+}
+
+/// Everything a field access needs to know about its site, resolved once: **where** the field
+/// sits in the object, **how wide** it is, and whether it is `volatile` (which the H4 lock-free
+/// read path turns into `Acquire`/`Release`). `Copy` and packable into one `u64`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct FieldSite {
+    /// Byte offset of the field inside the object (header included) — what [`field_offset`] returns.
+    offset: usize,
+    kind: FieldKind,
+    volatile: bool,
+}
+
+impl FieldSite {
+    /// Packs the site into the cache's `u64`: `[offset: 32 | kind: 3 | volatile: 1 | present: 1]`.
+    /// Bit 0 is always set, so the cache's zero-initialised cell is an unambiguous "unresolved".
+    fn pack(self) -> u64 {
+        1 | ((self.volatile as u64) << 1) | ((self.kind as u64) << 2) | ((self.offset as u64) << 32)
+    }
+
+    /// The inverse of [`Self::pack`] — `None` for the unresolved sentinel (`0`). This is the whole
+    /// hot path: a shift and a mask, no allocation and no hashing.
+    fn unpack(bits: u64) -> Option<FieldSite> {
+        if bits & 1 == 0 {
+            return None;
+        }
+        let kind = match (bits >> 2) & 0b111 {
+            1 => FieldKind::Long,
+            2 => FieldKind::Double,
+            3 => FieldKind::Float,
+            4 => FieldKind::Reference,
+            _ => FieldKind::Int,
+        };
+        Some(FieldSite { offset: (bits >> 32) as usize, kind, volatile: bits & 0b10 != 0 })
+    }
+}
+
+/// The access width a field `descriptor` implies — the same first-byte test the uncached code
+/// did inline, hoisted to resolution time.
+fn field_kind(descriptor: &str) -> FieldKind {
+    match descriptor.as_bytes().first() {
+        Some(b'J') => FieldKind::Long,
+        Some(b'D') => FieldKind::Double,
+        Some(b'F') => FieldKind::Float,
+        Some(b'L') | Some(b'[') => FieldKind::Reference,
+        _ => FieldKind::Int,
+    }
+}
+
+/// The resolved [`FieldSite`] of the field access at `(method, pc)`, from the cache on a hit and
+/// by full resolution (loading classes as needed) on a miss — which then fills the cache. Write
+/// path: `&mut MetaspaceService`, so it can never fail the way the read path can. `op` only
+/// names the opcode in the panic message for a malformed `FieldRef`.
+fn resolve_field_site(
+    metaspace: &mut MetaspaceService,
+    method: MethodId,
+    pc: usize,
+    cp_index: u16,
+    op: &str,
+) -> FieldSite {
+    if let Some(site) = FieldSite::unpack(metaspace.field_site(method, pc)) {
+        return site;
+    }
+    let caller = metaspace.class_of(method).to_string();
+    let (named, field, descriptor) = {
+        let cf = metaspace.get(&caller).expect("caller class is loaded");
+        let Some((c, n, d)) = cf.fieldref_target(cp_index) else { panic!("{op}: bad FieldRef") };
+        (c.to_string(), n.to_string(), d.to_string())
+    };
+    // `field_offset` loads the whole superclass chain, so the volatility walk right after it
+    // (read-only, `get`) always sees every class it needs.
+    let offset = field_offset(metaspace, &named, &field);
+    let site =
+        FieldSite { offset, kind: field_kind(&descriptor), volatile: field_is_volatile_read(metaspace, &named, &field) };
+    metaspace.set_field_site(method, pc, site.pack());
+    site
+}
+
 /// `putfield` (0xb5): pop a value and an object reference, and write the value into
 /// the object's field on the heap. The field is named by `cp_index` (a `FieldRef`
 /// in the current method's class); its byte offset inside the object comes from the
-/// layout via [`field_offset`].
+/// site cache ([`resolve_field_site`], which folds the layout on the first execution only).
 pub fn putfield(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
     frame: &mut Frame,
     cp_index: u16,
 ) -> Result<(), &'static str> {
-    let caller = metaspace.class_of(frame.method()).to_string();
-    let (declaring, field) = {
-        let cf = metaspace.get(&caller).expect("caller class is loaded");
-        let (c, n, _d) = cf.fieldref_target(cp_index).expect("putfield: bad FieldRef");
-        (c.to_string(), n.to_string())
-    };
-    let field_off = field_offset(metaspace, &declaring, &field);
+    let field_off = resolve_field_site(metaspace, frame.method(), frame.pc(), cp_index, "putfield").offset;
 
     // Stack shape is [objectref, value]: pop the value first, then the receiver. The
     // *value's* type tells us the width to write — a `long` is 8 bytes, an int or
@@ -103,36 +276,29 @@ pub fn putfield(
 }
 
 /// `getfield` (0xb4): pop an object reference and push the value of one of its
-/// fields, read from the heap. Mirror of [`putfield`]. The field descriptor decides
-/// how to read the bytes back — a reference field yields a `Reference`, anything
-/// else an `Int`.
+/// fields, read from the heap. Mirror of [`putfield`]. The field's [`FieldKind`] — resolved
+/// once with its offset — decides how to read the bytes back: a reference field yields a
+/// `Reference`, a `long`/`double` reads 8 bytes, anything else an `Int`.
 pub fn getfield(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
     frame: &mut Frame,
     cp_index: u16,
 ) -> Result<(), &'static str> {
-    let caller = metaspace.class_of(frame.method()).to_string();
-    let (named, field, descriptor) = {
-        let cf = metaspace.get(&caller).expect("caller class is loaded");
-        let (c, n, d) = cf.fieldref_target(cp_index).expect("getfield: bad FieldRef");
-        (c.to_string(), n.to_string(), d.to_string())
-    };
-    let field_off = field_offset(metaspace, &named, &field);
+    let site = resolve_field_site(metaspace, frame.method(), frame.pc(), cp_index, "getfield");
 
     let object = match frame.pop() {
         Value::Reference(0) => return Err(NULL_POINTER), // null receiver → NPE
         Value::Reference(offset) => offset,
         _ => panic!("getfield: expected an object reference"),
     };
-    // The descriptor decides the width to read: a `long` is 8 bytes (category-2), a
-    // reference or int 4. (`double` would also be 8, once it's in the value model.)
-    let value = match descriptor.as_bytes().first() {
-        Some(b'J') => Value::Long(heap.read_u64(object + field_off) as i64),
-        Some(b'D') => Value::Double(f64::from_bits(heap.read_u64(object + field_off))),
-        Some(b'F') => Value::Float(f32::from_bits(heap.read_u32(object + field_off))),
-        Some(b'L') | Some(b'[') => Value::Reference(heap.read_u32(object + field_off) as usize),
-        _ => Value::Int(heap.read_u32(object + field_off) as i32),
+    let at = object + site.offset;
+    let value = match site.kind {
+        FieldKind::Long => Value::Long(heap.read_u64(at) as i64),
+        FieldKind::Double => Value::Double(f64::from_bits(heap.read_u64(at))),
+        FieldKind::Float => Value::Float(f32::from_bits(heap.read_u32(at))),
+        FieldKind::Reference => Value::Reference(heap.read_u32(at) as usize),
+        FieldKind::Int => Value::Int(heap.read_u32(at) as i32),
     };
     frame.push(value);
     Ok(())
@@ -171,15 +337,23 @@ fn layout_fields_mut(metaspace: &mut MetaspaceService, class: &str) -> Vec<(Stri
 }
 
 /// Read-only twin of [`layout_fields_mut`] (uses `get`; stops at the first unloaded super).
-fn layout_fields_ref(metaspace: &MetaspaceService, class: &str) -> Vec<(String, String)> {
+/// The `bool` is **completeness**: `true` when the walk ran off the top of the hierarchy (a class
+/// declaring no superclass), `false` when it stopped early because a named superclass wasn't
+/// loaded — in which case the list is missing that prefix and every offset folded from it is too
+/// small. Only a *complete* layout is worth caching (see [`resolve_field_site_read`]).
+fn layout_fields_ref(metaspace: &MetaspaceService, class: &str) -> (Vec<(String, String)>, bool) {
     let mut chain: Vec<Vec<(String, String)>> = Vec::new();
     let mut current = Some(class.to_string());
+    let mut complete = true;
     while let Some(name) = current.take() {
-        let Some(cf) = metaspace.get(&name) else { break };
+        let Some(cf) = metaspace.get(&name) else {
+            complete = false;
+            break;
+        };
         current = cf.class_name(cf.super_class).map(|s| s.to_string());
         chain.push(own_instance_fields(cf));
     }
-    chain.into_iter().rev().flatten().collect()
+    (chain.into_iter().rev().flatten().collect(), complete)
 }
 
 /// A class's own non-static fields as `(descriptor, name)`, in declaration order.
@@ -247,6 +421,90 @@ fn instance_field_slots(metaspace: &mut MetaspaceService, name: &str) -> usize {
 // the read path succeeds; if a class on the path somehow isn't loaded they return `None` and the
 // driver **escalates** to the write path (which resolves it).
 
+/// Read-path twin of [`resolve_field_site`]: the site cache on a hit, a read-only resolution
+/// (`get`, never loading) on a miss — `None` when that resolution can't complete, which is
+/// exactly today's escalation condition.
+///
+/// It **also fills** the cache, with `&MetaspaceService`, because the cells are atomic. That's
+/// the point: a workload that only ever runs `getfield` on the W3 path (os-parallel readers)
+/// would otherwise never populate a single site and stay on the slow path forever. The race is
+/// benign — a site's resolution is a pure function of `(method, pc)` and the class layouts, so
+/// every thread that fills a cell writes the *same* word, and a `u64` store is indivisible, so no
+/// reader can observe a half-written entry.
+///
+/// The **completeness** guard is what keeps that sound: if the walk stopped at an unloaded
+/// superclass the offsets are wrong (the missing prefix shifts them), so we use the value for
+/// this one escalating access but never cache it. Concretely, a `getfield` on a `null` receiver
+/// resolves the site *before* it discovers the null — without the guard it could immortalise a
+/// bad offset from a class whose chain wasn't loaded yet.
+fn resolve_field_site_read(
+    metaspace: &MetaspaceService,
+    method: MethodId,
+    pc: usize,
+    cp_index: u16,
+) -> Option<FieldSite> {
+    if let Some(site) = FieldSite::unpack(metaspace.field_site(method, pc)) {
+        return Some(site);
+    }
+    let caller = metaspace.class_of(method);
+    let (named, field, descriptor) = metaspace.get(caller)?.fieldref_target(cp_index)?;
+    let (layout, complete) = layout_fields_ref(metaspace, named);
+    let offset = field_offset_in(&layout, field)?;
+    let site =
+        FieldSite { offset, kind: field_kind(descriptor), volatile: field_is_volatile_read(metaspace, named, field) };
+    if complete {
+        metaspace.set_field_site(method, pc, site.pack());
+    }
+    Some(site)
+}
+
+/// The **JIT's** field resolver: the byte offset of the `getfield`/`putfield` at `(method, pc)`
+/// inside its receiver **and what kind of value is there**, or `None` unless the field is a
+/// non-`volatile` instance field of a primitive type.
+///
+/// It is [`resolve_field_site_read`] plus one translation, and **both of the conditions it used to
+/// add are gone** — group 2 of the F3-JIT widening removed them, each for its own reason:
+///
+///  - **Every kind, references included.** The kind decides the *width* and the *extension* of the
+///    emitted access — four bytes sign-extending for an `int`, four zero-extending for a `float` or
+///    a **reference**, eight for a `long` or a `double` — so it is handed back rather than left to
+///    be inferred, which is why the answer is a pair and not just an offset. A reference field used
+///    to be refused here because a compiled `putfield` of one would need the GC write barrier; that
+///    rule is still absolute, but it now lives where it belongs, in the compiler
+///    (`burst::compile::writable`, `Ineligible::ReferenceWrite`), so that *reading* a reference —
+///    which owes nothing to the collector, since no barrier is involved and no object graph changes
+///    — is not refused along with it. This resolver answers what the field *is*; the compiler
+///    decides what may be done with it.
+///  - **`volatile` too, now** — for reads *and* for primitive writes. VOLATILE-REVISIT-OS-PARALLEL.
+///    The argument is **not** x86-TSO. It is that the JIT runs only on `green` (one OS thread) and
+///    `os-gil` (the thread holds the one global lock for the whole opcode, the native call
+///    included), so while compiled code is on this stack **no other thread executes a single
+///    opcode**. There is no concurrency for an `Acquire`/`Release` to order and no observer for an
+///    8-byte `long` access to tear in front of, so a plain `mov` is not merely permitted, it is the
+///    same execution. Enabling the JIT on `os-parallel` **invalidates this** and every volatile
+///    access here must then be revisited — grep the marker above.
+///
+/// Read-only (`&MetaspaceService`), like every other resolver the compiler is handed — compiling
+/// must not load a class or run a `<clinit>`. It does *fill* the resolved-site cache, which is a
+/// pure function of `(method, pc)` and therefore not a change to the VM's state in any sense the
+/// program can observe.
+pub fn jit_field_site(
+    metaspace: &MetaspaceService,
+    method: MethodId,
+    pc: usize,
+    cp_index: u16,
+) -> Option<(u32, crate::burst::compile::Kind)> {
+    let site = resolve_field_site_read(metaspace, method, pc, cp_index)?;
+    let kind = match site.kind {
+        FieldKind::Int => crate::burst::compile::Kind::Int,
+        FieldKind::Long => crate::burst::compile::Kind::Long,
+        FieldKind::Float => crate::burst::compile::Kind::Float,
+        FieldKind::Double => crate::burst::compile::Kind::Double,
+        FieldKind::Reference => crate::burst::compile::Kind::Reference,
+    };
+    Some((u32::try_from(site.offset).ok()?, kind))
+}
+
 /// Read-only `getfield`. `Some(())` = read the field and pushed it (ran concurrently); `None` =
 /// escalate to the write path (null receiver or an unloaded class). On escalation the operand
 /// stack is left exactly as it was (the popped receiver is pushed back).
@@ -256,13 +514,7 @@ pub fn getfield_read(
     frame: &mut Frame,
     cp_index: u16,
 ) -> Option<()> {
-    let caller = metaspace.class_of(frame.method()).to_string();
-    let cf = metaspace.get(&caller)?;
-    let (named, field, descriptor) = {
-        let (c, n, d) = cf.fieldref_target(cp_index)?;
-        (c.to_string(), n.to_string(), d.to_string())
-    };
-    let field_off = field_offset_read(metaspace, &named, &field)?;
+    let site = resolve_field_site_read(metaspace, frame.method(), frame.pc(), cp_index)?;
     let receiver = frame.pop();
     let object = match receiver {
         Value::Reference(0) => {
@@ -278,14 +530,14 @@ pub fn getfield_read(
     // A `volatile` field reads with `Acquire`, so it sees everything published by the matching
     // `Release` write (H4). For an Eden object that's a real atomic acquire; for an Old object the
     // enclosing `.read()` lock already orders it. Non-volatile fields stay `Relaxed` (plain read).
-    let volatile = field_is_volatile_read(metaspace, &named, &field);
-    let at = object + field_off;
-    let value = match descriptor.as_bytes().first() {
-        Some(b'J') => Value::Long(read_u64_field(heap, at, volatile) as i64),
-        Some(b'D') => Value::Double(f64::from_bits(read_u64_field(heap, at, volatile))),
-        Some(b'F') => Value::Float(f32::from_bits(read_u32_field(heap, at, volatile))),
-        Some(b'L') | Some(b'[') => Value::Reference(read_u32_field(heap, at, volatile) as usize),
-        _ => Value::Int(read_u32_field(heap, at, volatile) as i32),
+    let volatile = site.volatile;
+    let at = object + site.offset;
+    let value = match site.kind {
+        FieldKind::Long => Value::Long(read_u64_field(heap, at, volatile) as i64),
+        FieldKind::Double => Value::Double(f64::from_bits(read_u64_field(heap, at, volatile))),
+        FieldKind::Float => Value::Float(f32::from_bits(read_u32_field(heap, at, volatile))),
+        FieldKind::Reference => Value::Reference(read_u32_field(heap, at, volatile) as usize),
+        FieldKind::Int => Value::Int(read_u32_field(heap, at, volatile) as i32),
     };
     frame.push(value);
     Some(())
@@ -339,13 +591,7 @@ pub fn putfield_read(
     frame: &mut Frame,
     cp_index: u16,
 ) -> Option<()> {
-    let caller = metaspace.class_of(frame.method()).to_string();
-    let (declaring, field) = {
-        let cf = metaspace.get(&caller)?;
-        let (c, n, _d) = cf.fieldref_target(cp_index)?;
-        (c.to_string(), n.to_string())
-    };
-    let field_off = field_offset_read(metaspace, &declaring, &field)?;
+    let site = resolve_field_site_read(metaspace, frame.method(), frame.pc(), cp_index)?;
 
     // Stack is [object, value]: pop the value, then the receiver — restoring both on escalation.
     let value = frame.pop();
@@ -363,9 +609,8 @@ pub fn putfield_read(
         }
     };
 
-    let volatile = field_is_volatile_read(metaspace, &declaring, &field);
-    let order = if volatile { Ordering::Release } else { Ordering::Relaxed };
-    let at = object + field_off;
+    let order = if site.volatile { Ordering::Release } else { Ordering::Relaxed };
+    let at = object + site.offset;
     let wrote = match value {
         // Reference store → the GC write barrier isn't lock-free yet → escalate.
         Value::Reference(_) => false,
@@ -387,7 +632,7 @@ pub fn putfield_read(
 /// Read-only twin of [`field_offset`] — `None` if the field's declaring class isn't loaded
 /// (its fields never appear in the partial layout list, so the fold finds no match → escalate).
 fn field_offset_read(metaspace: &MetaspaceService, named_class: &str, field: &str) -> Option<usize> {
-    field_offset_in(&layout_fields_ref(metaspace, named_class), field)
+    field_offset_in(&layout_fields_ref(metaspace, named_class).0, field)
 }
 
 /// Read-only twin of [`allocate`] for the W2c lock-free `.read()` path: computes the instance
@@ -409,7 +654,87 @@ pub fn allocate_read(
 
 /// Read-only twin of [`instance_field_slots`] (uses `get`; stops at any unloaded super).
 fn instance_field_slots_read(metaspace: &MetaspaceService, name: &str) -> usize {
-    total_slots(&layout_fields_ref(metaspace, name))
+    total_slots(&layout_fields_ref(metaspace, name).0)
+}
+
+/// What the JIT bakes into a compiled `new`: the instance's `(size, class_id)` for the class named
+/// at `cp_index` in `caller`'s constant pool — see `burst::compile::Instance`.
+///
+/// Read-only in every sense, and that is the design, exactly as for
+/// [`jit_static_field`][super::class_operations::jit_static_field]: it takes
+/// `&MetaspaceService`, so it cannot load a class, mint a Class ID, allocate a mirror or run a
+/// `<clinit>`. Compilation must not have side effects on the VM's state, and the signature is what
+/// enforces that rather than a comment.
+///
+/// `None` — "do not compile this method" — unless **all four** hold:
+///
+///  1. the constant-pool entry is a `Class` whose name resolves;
+///  2. that class is **initialised** (`InitState::Done`). `new` is a first active use, so an
+///     uninitialised class would have to run its `<clinit>` — and compiled code cannot run
+///     anything. This is the same requirement `getstatic` has, refused for the same reason, and
+///     cached just as permanently;
+///  3. its Class ID is minted (i.e. it is *prepared*), so the layout below is the real one;
+///  4. its `Class<…>` mirror exists, and its offset fits the `u32` the header word is. The mirror is
+///     `malloc_old`ed and pinned against `gc::compact`, so that offset never moves — which is what
+///     makes baking it in sound.
+///
+/// The size is the **logical** one — `[header | inherited fields | own fields]`, each field at its
+/// width-aware slot — computed by the very same walk [`allocate`] uses, because compiled code and
+/// the interpreter must not come to disagree about how big a `Point` is.
+pub fn jit_instance(metaspace: &MetaspaceService, caller: &str, cp_index: u16) -> Option<(u32, u32)> {
+    let class_name = metaspace.get(caller)?.class_name(cp_index)?.to_string();
+    if metaspace.init_state(&class_name) != crate::jvm::interpreter::metaspace::InitState::Done {
+        return None;
+    }
+    let uuid = metaspace.class_id_read(&class_name)?;
+    let class_id = u32::try_from(metaspace.class_object(uuid)?).ok()?;
+    let slots = instance_field_slots_read(metaspace, &class_name);
+    let size = u32::try_from(HEADER_SIZE + slots * SLOT_SIZE).ok()?;
+    Some((size, class_id))
+}
+
+/// Read-path (lock-free) `AtomicInteger`/`AtomicLong.compareAndSet` (H5, widened like W3): when the
+/// receiver is an **Eden** object, do a real atomic `compare_exchange` on its `value` field under
+/// the shared `.read()` lock — no VM write lock. `Some(())` = did the CAS and pushed the boolean;
+/// `None` = escalate to the locked native (an Old receiver, or the class isn't loaded). The stack
+/// top is `[receiver, expected, new]`; on escalation it's left untouched. (`AtomicReference` is
+/// never intercepted — its store needs the GC write barrier, which the write path owns.)
+pub fn atomic_cas_read(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    frame: &mut Frame,
+    class: &str,
+    is_long: bool,
+) -> Option<()> {
+    let field_off = field_offset_read(metaspace, class, "value")?;
+    // Peek `[receiver, expected, new]` (owned copies) so the stack borrow ends before we mutate it.
+    let (receiver, expected, new) = {
+        let stack = frame.stack();
+        let top = stack.len();
+        if top < 3 {
+            return None;
+        }
+        let receiver = match stack[top - 3] {
+            Value::Reference(0) => return None, // null → escalate (the native throws NPE)
+            Value::Reference(offset) => offset,
+            _ => return None,
+        };
+        (receiver, stack[top - 2], stack[top - 1])
+    };
+    let at = receiver + field_off;
+    let swapped = if is_long {
+        let (Value::Long(expected), Value::Long(new)) = (expected, new) else { return None };
+        heap.cas_u64_eden(at, expected as u64, new as u64)? // None (Old) → escalate
+    } else {
+        let (Value::Int(expected), Value::Int(new)) = (expected, new) else { return None };
+        heap.cas_u32_eden(at, expected as u32, new as u32)?
+    };
+    // The CAS ran (Eden): drop the three arguments and push the boolean result.
+    frame.pop();
+    frame.pop();
+    frame.pop();
+    frame.push(Value::Int(swapped as i32));
+    Some(())
 }
 
 #[cfg(test)]
@@ -436,6 +761,44 @@ mod tests {
         // Category-1 fields never pad.
         assert_eq!(place_field(1, "I"), (1, 2));
         assert_eq!(place_field(3, "Ljava/lang/Object;"), (3, 4));
+    }
+
+    /// Pack → unpack is the identity for every `(offset, kind, volatile)` a field site can hold,
+    /// and the zero cell reads back as "unresolved". The F0 field cache rests entirely on this:
+    /// a site that unpacked to a different offset or width would read the *wrong bytes* of an
+    /// object — silently, with no other test in the suite positioned to notice.
+    #[test]
+    fn field_site_packing_round_trips() {
+        assert_eq!(FieldSite::unpack(0), None, "the zero cell is the unresolved sentinel");
+
+        let kinds =
+            [FieldKind::Int, FieldKind::Long, FieldKind::Double, FieldKind::Float, FieldKind::Reference];
+        for kind in kinds {
+            // 0 and a full 32-bit offset bracket the field's range; 8 and 12 are the first two
+            // real field offsets (`HEADER_SIZE` = 8, one slot = 4).
+            for offset in [0usize, 8, 12, 0xffff_ffff] {
+                for volatile in [false, true] {
+                    let site = FieldSite { offset, kind, volatile };
+                    let packed = site.pack();
+                    assert_ne!(packed & 1, 0, "a packed site always sets the present bit");
+                    assert_eq!(
+                        FieldSite::unpack(packed),
+                        Some(site),
+                        "round-trip of {site:?} through {packed:#018x}"
+                    );
+                }
+            }
+        }
+
+        // The descriptor's first byte is what picks the kind — the test the hot path no longer runs.
+        assert_eq!(field_kind("J"), FieldKind::Long);
+        assert_eq!(field_kind("D"), FieldKind::Double);
+        assert_eq!(field_kind("F"), FieldKind::Float);
+        assert_eq!(field_kind("Ljava/lang/String;"), FieldKind::Reference);
+        assert_eq!(field_kind("[I"), FieldKind::Reference);
+        for primitive in ["Z", "B", "C", "S", "I"] {
+            assert_eq!(field_kind(primitive), FieldKind::Int, "{primitive} is a 4-byte int slot");
+        }
     }
 
     /// Every offset a fold produces for a category-2 field is 8-aligned, whatever the mix of

@@ -6,6 +6,10 @@ package java.lang;
 // it also clears the thread's interrupt status. (In the real JDK it extends Exception;
 // same here.)
 public class InterruptedException extends Exception {
+    public InterruptedException(String message) {
+        super(message);
+    }
+
     public InterruptedException() {
     }
 }

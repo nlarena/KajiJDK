@@ -15,11 +15,27 @@ public class Object {
     // compute it itself). We use the object's heap offset.
     public native int hashCode();
 
+    // Reference equality by default — the base contract every value type refines
+    // (`String`, boxed primitives, records, hash-map keys override it). Not native:
+    // the default *is* just identity (`==`); overrides supply value semantics.
+    public boolean equals(Object obj) {
+        return this == obj;
+    }
+
+    // Shallow copy — a new object of the receiver's *runtime* class with every field
+    // copied verbatim (references included: original and clone then share the pointees).
+    // Native: only the VM knows the object's size and layout, and the copy must bypass
+    // constructors. `protected` + the Cloneable opt-in (JLS §10.7): the VM throws
+    // CloneNotSupportedException for a receiver whose class doesn't implement Cloneable.
+    protected native Object clone() throws CloneNotSupportedException;
+
     // Monitor signalling — the condition-variable half of `synchronized`. All native:
     // they manipulate the VM's scheduler (suspend/wake threads on this object's
     // monitor), which plain bytecode can't reach. Must be called holding the monitor.
-    public final native void wait();        // release the monitor + sleep until notified
-    public final native void wait(long ms); // ...or return after `ms` ms even without notify
+    // `throws InterruptedException`: the runtime intrinsic raises it when the waiter is
+    // interrupted, so the signature must say so — otherwise a caller can't legally catch it.
+    public final native void wait() throws InterruptedException;        // release the monitor + sleep until notified
+    public final native void wait(long ms) throws InterruptedException; // ...or return after `ms` ms even without notify
     public final native void notify();      // wake one waiter
     public final native void notifyAll();   // wake all waiters
 }

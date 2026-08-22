@@ -913,11 +913,18 @@ fn transfer(
                 pop(&mut state, &name, pc)?; // count
                 state.stack.push(VType::Reference(primitive_array_type(bytes[pc + 1]).to_string()));
             }
-            // anewarray → pop the count, push the reference array's type.
+            // anewarray → pop the count, push the reference array's type. An array element
+            // is already a descriptor (`new long[n][]` names `[J`) → just prepend `[`, the
+            // same naming the interpreter uses; only a class/interface element wraps in `L…;`.
             0xbd => {
                 let element = class.class_name(u2(bytes, pc)).unwrap_or("?");
                 pop(&mut state, &name, pc)?; // count
-                state.stack.push(VType::Reference(format!("[L{element};")));
+                let array_type = if element.starts_with('[') {
+                    format!("[{element}")
+                } else {
+                    format!("[L{element};")
+                };
+                state.stack.push(VType::Reference(array_type));
             }
             // multianewarray → pop one count per dimension, push the array type. The
             // Class constant already *is* the array descriptor (`[[I`), unlike

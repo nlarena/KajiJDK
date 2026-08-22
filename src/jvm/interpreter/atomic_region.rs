@@ -56,6 +56,14 @@ impl AtomicRegion {
         self.bytes
     }
 
+    /// The **machine address** of byte 0 of the region — for the one consumer that needs a raw
+    /// base rather than an accessor: the JIT, which bakes it into an instruction stream and never
+    /// asks again. Stable for the region's whole life, because `cells` is a `Box<[…]>` that is
+    /// allocated once and never reallocates (moving the *region* moves the box, not the bytes).
+    pub fn base_address(&self) -> usize {
+        self.cells.as_ptr() as usize
+    }
+
     /// A raw pointer to byte `offset`, carrying the provenance of the enclosing 8-byte cell. The
     /// caller must keep the access (`u32`/`u64`) within that cell — guaranteed for 4-aligned `u32`
     /// and 8-aligned `u64` offsets, which never straddle a cell.
@@ -148,6 +156,49 @@ impl AtomicRegion {
         unsafe { (*AtomicU64::from_ptr(self.byte_ptr(offset).cast())).store(value, order) }
     }
 
+    /// Atomic **compare-and-exchange** of a 4-byte slot: if it holds `current`, replace it with
+    /// `new`. `Ok(prev)` on success, `Err(prev)` on failure — the CAS primitive H5's lock-free
+    /// `AtomicInteger.compareAndSet` rides. Two threads racing on the same slot are serialised by
+    /// the hardware, so at most one sees its expected value.
+    ///
+    /// # Safety
+    /// As [`Self::load_u32`].
+    #[inline]
+    pub unsafe fn compare_exchange_u32(
+        &self,
+        offset: usize,
+        current: u32,
+        new: u32,
+        success: Ordering,
+        failure: Ordering,
+    ) -> Result<u32, u32> {
+        debug_assert_eq!(offset % 4, 0, "u32 atomic needs a 4-aligned offset");
+        unsafe {
+            (*AtomicU32::from_ptr(self.byte_ptr(offset).cast()))
+                .compare_exchange(current, new, success, failure)
+        }
+    }
+
+    /// Atomic compare-and-exchange of an 8-byte (`long`) slot. See [`Self::compare_exchange_u32`].
+    ///
+    /// # Safety
+    /// As [`Self::load_u64`].
+    #[inline]
+    pub unsafe fn compare_exchange_u64(
+        &self,
+        offset: usize,
+        current: u64,
+        new: u64,
+        success: Ordering,
+        failure: Ordering,
+    ) -> Result<u64, u64> {
+        debug_assert_eq!(offset % 8, 0, "u64 atomic needs an 8-aligned offset");
+        unsafe {
+            (*AtomicU64::from_ptr(self.byte_ptr(offset).cast()))
+                .compare_exchange(current, new, success, failure)
+        }
+    }
+
     /// Copy `len` bytes from `[offset, offset+len)` into an owned `Vec`, byte-by-byte (a
     /// contiguous `&[u8]` can't span cells). Each byte is a `Relaxed` atomic load, so this is
     /// sound even if another thread is atomically touching neighbouring bytes.
@@ -223,6 +274,40 @@ mod tests {
         writer.join().unwrap();
         // The Acquire saw the Release, so the prior `data = 42` is visible — never the stale 0.
         assert_eq!(observed.join().unwrap(), 42);
+    }
+
+    /// **Concurrent CAS** (H5): four threads each increment a shared `u32` slot via a
+    /// compare-exchange retry loop. If the CAS weren't truly atomic, updates would be lost and the
+    /// total would fall short; a data race would trip Miri. Run under `cargo +nightly miri test`.
+    #[test]
+    fn concurrent_compare_exchange_loses_no_updates() {
+        const THREADS: u32 = 4;
+        const PER_THREAD: u32 = 50;
+        let r = Arc::new(AtomicRegion::new(8));
+
+        let handles: Vec<_> = (0..THREADS)
+            .map(|_| {
+                let r = Arc::clone(&r);
+                std::thread::spawn(move || {
+                    for _ in 0..PER_THREAD {
+                        loop {
+                            let cur = unsafe { r.load_u32(0, Ordering::Relaxed) };
+                            if unsafe {
+                                r.compare_exchange_u32(0, cur, cur + 1, Ordering::AcqRel, Ordering::Acquire)
+                            }
+                            .is_ok()
+                            {
+                                break;
+                            }
+                        }
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(unsafe { r.load_u32(0, Ordering::Relaxed) }, THREADS * PER_THREAD);
     }
 
     /// **No tearing** on a `long`/`double` (`u64`) slot: one thread flips it between two values

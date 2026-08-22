@@ -1,6 +1,6 @@
 //! The in-memory model of a parsed `.class` file.
 
-use super::parser::attributes::bootstrap_methods;
+use super::parser::attributes::{annotations, bootstrap_methods};
 use super::parser::{
     attribute, code, constant_pool, member, AttributeInfo, ClassReader, Code, ConstantPoolEntry,
     MemberInfo, ParseError,
@@ -52,6 +52,22 @@ impl MethodHandleKind {
             9 => Self::InvokeInterface,
             _ => return None,
         })
+    }
+
+    /// The `REF_*` byte (JVMS Table 5.4.3.5-A) — the inverse of [`from_byte`]. Used to carry the
+    /// kind into a materialised `MethodHandle` object (an `ldc` of a `MethodHandle` constant).
+    pub fn to_byte(self) -> u8 {
+        match self {
+            Self::GetField => 1,
+            Self::GetStatic => 2,
+            Self::PutField => 3,
+            Self::PutStatic => 4,
+            Self::InvokeVirtual => 5,
+            Self::InvokeStatic => 6,
+            Self::InvokeSpecial => 7,
+            Self::NewInvokeSpecial => 8,
+            Self::InvokeInterface => 9,
+        }
     }
 
     /// Whether the handle's pool index names a **field** (kinds 1–4) rather than a
@@ -110,8 +126,15 @@ impl ClassFile {
         // Read the whole file into an owned Vec<u8>. `?` turns an io::Error into
         // a ParseError via the `From` impl.
         let bytes = std::fs::read(path)?;
+        Self::from_bytes(&bytes)
+    }
+
+    /// Parses a class from raw `.class` bytes — for classes the VM **generates at runtime**
+    /// (a lambda's implementing class, spun by the metafactory through the `.class` writer)
+    /// rather than reading from disk. Same parser as [`from_path`], minus the file read.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseError> {
         // The reader borrows those bytes; it lives only for this function.
-        let mut reader = ClassReader::new(&bytes);
+        let mut reader = ClassReader::new(bytes);
 
         // --- Fixed-position header (first 10 bytes, identical in every .class) ---
         let magic = reader.read_u32()?;
@@ -330,6 +353,17 @@ impl ClassFile {
         Some(MethodHandleRef { kind, class, name, descriptor })
     }
 
+    /// The descriptor a `CONSTANT_MethodType` constant names (§4.4.9) — e.g.
+    /// `"(Ljava/lang/String;)Ljava/lang/String;"`. `None` if `index` isn't a `MethodType`. Used by
+    /// `ldc` to materialise a `MethodType` object; `javac` never emits this, so it's exercised only
+    /// through hand-written class files (the `.class` writer).
+    pub fn method_type_descriptor(&self, index: u16) -> Option<&str> {
+        match self.constant_pool.get((index.checked_sub(1)?) as usize)? {
+            ConstantPoolEntry::MethodType { descriptor_index } => self.utf8(*descriptor_index),
+            _ => None,
+        }
+    }
+
     /// Parses the class's `BootstrapMethods` attribute (§4.7.23) — the table an
     /// `invokedynamic` indexes into. Empty when the class has no indy call sites.
     pub fn bootstrap_methods(&self) -> Vec<bootstrap_methods::BootstrapMethod> {
@@ -337,6 +371,18 @@ impl ClassFile {
             .iter()
             .find(|a| self.utf8(a.name_index) == Some("BootstrapMethods"))
             .map(|a| bootstrap_methods::parse(&a.info))
+            .unwrap_or_default()
+    }
+
+    /// The type descriptors (`Lpkg/Name;`) of the class's `RuntimeVisibleAnnotations`
+    /// (§4.7.16) — the annotations written on the class itself that survive to
+    /// runtime (`RetentionPolicy.RUNTIME`). Empty when the class carries none.
+    /// Backs `Class.isAnnotationPresent`.
+    pub fn runtime_visible_annotation_types(&self) -> Vec<String> {
+        self.attributes
+            .iter()
+            .find(|a| self.utf8(a.name_index) == Some("RuntimeVisibleAnnotations"))
+            .map(|a| annotations::type_descriptors(self, &a.info))
             .unwrap_or_default()
     }
 

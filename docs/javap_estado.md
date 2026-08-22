@@ -67,6 +67,16 @@ quoting de nombres de clase array.
 - **JDK 25** descargado en **`.jdk25_tmp/`** *(gitignored, ~650 MB)*:
   `jdk-25.0.3+9` + **7379 clases de `java.base`** extraídas en `.jdk25_tmp/classes/`.
   Listas en `.jdk25_tmp/{all_classes,half1,half2}.txt`.
+  > ⚠️ **Hace falta también para los tests de `javac` (Fase B), no solo para `javap`.** El
+  > `ClassFinder` (`src/javac/enter.rs`) busca los tipos externos en
+  > `.jdk25_tmp/classes/java.base` **antes** que en `boot/`, porque necesita la jerarquía
+  > *real* (`Integer <: Number`, firmas genéricas, anotaciones del JDK); `boot/` es el runtime
+  > mínimo del intérprete y solo sirve de respaldo. Como el directorio es **gitignored**, en un
+  > clon nuevo no existe y ~16 tests de `javac` fallan por eso — **no son bugs del compilador**.
+  > Regenerarlo desde cualquier JDK 25 instalado (~1 min, no hace falta bajar nada):
+  > ```
+  > jimage extract --include /java.base/** --dir .jdk25_tmp/classes "$JDK/lib/modules"
+  > ```
 - **`tools/diffcheck.py`** *(versionado)* — harness diferencial: batchea `javap`
   (amortiza el arranque de JVM, ~30x más rápido), paraleliza, categoriza
   divergencias y reporta progreso.
