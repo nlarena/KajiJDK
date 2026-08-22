@@ -3,6 +3,7 @@
 //! the whole call stack, not just one frame), dispatched from `step()`.
 
 use super::call_site::{CallSite, SiteKind};
+use super::class_operations;
 use super::{Exec, Step, Widths};
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::metaspace::{Intrinsic, MethodId};
@@ -33,6 +34,14 @@ impl Exec<'_> {
             SiteKind::Direct(callee) => callee,
             _ => unreachable!("invokestatic sites are always statically bound"),
         };
+
+        // Accesibilidad (JPMS): la clase dueña del método resuelto tiene que ser visible para
+        // quien llama. Va acá, sobre el `callee` ya resuelto y antes de cualquier efecto.
+        {
+            let caller_class = self.shared.metaspace.class_of(caller).to_string();
+            let callee_class = self.shared.metaspace.class_of(callee).to_string();
+            class_operations::check_access(&self.shared.metaspace, &caller_class, &callee_class);
+        }
 
         // First active use of the callee's class triggers its initialization. Once that class is
         // `Done` the check can never do anything again (JVMS §5.5 has no transition out of it),

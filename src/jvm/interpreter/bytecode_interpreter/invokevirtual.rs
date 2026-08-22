@@ -238,7 +238,11 @@ impl Exec<'_> {
         let caller_class = self.shared.metaspace.class_of(caller).to_string();
         let cf = self.shared.metaspace.get(&caller_class).expect("caller class is loaded");
         let (c, n, d) = cf.methodref_target(cp_index).expect("invokevirtual: bad methodref");
-        (c.to_string(), n.to_string(), d.to_string())
+        let (c, n, d) = (c.to_string(), n.to_string(), d.to_string());
+        // Accesibilidad (JPMS): se chequea la **referencia simbólica** —la clase que nombra el
+        // pool—, no la del receptor en runtime: es la resolución, no el despacho.
+        class_operations::check_access(&self.shared.metaspace, &caller_class, &c);
+        (c, n, d)
     }
 
     /// Classifies a cold `invokevirtual` site into the [`SiteKind`] it will keep for good: the

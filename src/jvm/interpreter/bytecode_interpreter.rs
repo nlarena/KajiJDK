@@ -39,6 +39,14 @@ pub mod stack_operations;
 pub mod objects_operations;
 pub mod variable_operations;
 
+// Fase I — el depurador (JPDA). Aditivo sobre el interprete: los ganchos de `Exec`
+// mas abajo son lo unico que lo conecta.
+pub mod bridge;
+pub mod debug_info;
+pub mod jdi;
+pub mod jdwp;
+pub mod jvmti;
+
 /// Spins the implementing class a `LambdaMetafactory` call site produces (via the `.class` writer).
 pub mod lambda_factory;
 
@@ -345,6 +353,14 @@ impl RunningCtx {
 /// `Mutex` still stands in — is the boundary the split needs.
 struct SharedVm {
     metaspace: MetaspaceService,
+    /// **JVMTI** (hito I): el agente de depuración atacheado, o `None`. Vive en el estado compartido
+    /// (los ganchos corren sobre `Exec`); al disparar un evento se destructura `SharedVm` en campos
+    /// disjuntos (`agent` ⊥ los del `env`), el mismo truco del borrow sin `unsafe`.
+    agent: Option<Box<dyn jvmti::JvmtiAgent + Send + Sync>>,
+    breakpoints: jvmti::BreakpointTable,
+    field_watches: jvmti::FieldWatchTable,
+    caps: jvmti::Capabilities,
+    single_step: bool,
     /// All green threads (the **registry**). `threads[running.current]` is the running one
     /// (its `frames` empty — the live stack is in `running.frames`); the rest keep their stacks.
     threads: Vec<GreenThread>,
@@ -442,6 +458,18 @@ enum Widths<'a> {
 }
 
 impl JVM {
+    pub fn step(&mut self) -> Step {
+        self.exec().step()
+    }
+
+    /// **Atachea un agente de depuración** (JVMTI, hito I) con sus capabilities, y le dispara `vm_init`.
+    /// Sin agente, `step()` no paga nada (el *fast-path* de `caps.any()`).
+    pub fn attach_agent(&mut self, agent: Box<dyn jvmti::JvmtiAgent + Send + Sync>, caps: jvmti::Capabilities) {
+        self.shared.agent = Some(agent);
+        self.shared.caps = caps;
+        self.exec().fire_vm_init();
+    }
+
     /// Starts an interpreter whose call stack holds just the `entry` frame, run
     /// against `metaspace` (which it takes ownership of, to resolve calls), with a
     /// fresh empty heap.
@@ -452,6 +480,11 @@ impl JVM {
             running: RunningCtx { current: 0, frames: vec![entry], ..Default::default() },
             shared: SharedVm {
                 metaspace,
+                agent: None,
+                breakpoints: jvmti::BreakpointTable::default(),
+                field_watches: jvmti::FieldWatchTable::default(),
+                caps: jvmti::Capabilities::default(),
+                single_step: false,
                 threads: vec![GreenThread {
                     id: 0,
                     status: ThreadStatus::Runnable,
@@ -493,6 +526,175 @@ impl JVM {
     /// parallel driver will instead pair a thread-local `RunningCtx` with a shared `SharedVm`.
     pub fn exec(&mut self) -> Exec<'_> {
         Exec { shared: &mut self.shared, running: &mut self.running }
+    }
+}
+
+// ---- ganchos JVMTI (hito I) sobre `Exec` --------------------------------------------------------
+//
+// Los campos del depurador viven en `SharedVm`; los ganchos corren sobre `Exec` (donde viven `step`,
+// los `push`/`pop_frame` y `unwind_with`). El truco del borrow: al disparar un evento se destructura
+// `self.shared` en campos disjuntos (`agent` ⊥ heap/metaspace/breakpoints/…), y `self.running.frames`
+// es otro campo aparte — todo `&mut` independiente, sin `unsafe`.
+impl Exec<'_> {
+    fn fire_vm_init(&mut self) {
+        let thread_ids: Vec<usize> = self.shared.threads.iter().map(|t| t.id).collect();
+        let SharedVm { agent, breakpoints, single_step, field_watches, heap, metaspace, .. } = &mut *self.shared;
+        let frames = &mut self.running.frames;
+        if let Some(agent) = agent {
+            let mut env = jvmti::JvmtiEnv::new(frames, breakpoints, single_step, field_watches, Some(&*heap), &thread_ids, metaspace);
+            agent.vm_init(&mut env);
+        }
+    }
+
+    /// `breakpoint`/`single_step` del opcode a punto de ejecutarse. Fast-path por `caps`.
+    fn fire_debug_events(&mut self) {
+        if !self.shared.caps.any() || self.running.frames.is_empty() {
+            return;
+        }
+        let thread = self.shared.threads[self.running.current].id;
+        let (method, location) = {
+            let f = self.running.frames.last().unwrap();
+            (f.method(), f.pc() as u32)
+        };
+        let hit_bp = self.shared.caps.breakpoint && self.shared.breakpoints.contains(method, location);
+        let do_ss = self.shared.caps.single_step && self.shared.single_step;
+        if !hit_bp && !do_ss {
+            return;
+        }
+        let thread_ids: Vec<usize> = self.shared.threads.iter().map(|t| t.id).collect();
+        let SharedVm { agent, breakpoints, single_step, field_watches, heap, metaspace, .. } = &mut *self.shared;
+        let frames = &mut self.running.frames;
+        if let Some(agent) = agent {
+            let mut env = jvmti::JvmtiEnv::new(frames, breakpoints, single_step, field_watches, Some(&*heap), &thread_ids, metaspace);
+            if hit_bp {
+                agent.breakpoint(&mut env, thread, method, location);
+            }
+            if do_ss {
+                agent.single_step(&mut env, thread, method, location);
+            }
+        }
+    }
+
+    fn fire_method_entry(&mut self, callee: MethodId) {
+        if !self.shared.caps.method_entry {
+            return;
+        }
+        let thread = self.shared.threads[self.running.current].id;
+        let thread_ids: Vec<usize> = self.shared.threads.iter().map(|t| t.id).collect();
+        let SharedVm { agent, breakpoints, single_step, field_watches, heap, metaspace, .. } = &mut *self.shared;
+        let frames = &mut self.running.frames;
+        if let Some(agent) = agent {
+            let mut env = jvmti::JvmtiEnv::new(frames, breakpoints, single_step, field_watches, Some(&*heap), &thread_ids, metaspace);
+            agent.method_entry(&mut env, thread, callee);
+        }
+    }
+
+    fn fire_method_exit(&mut self) {
+        if !self.shared.caps.method_exit || self.running.frames.is_empty() {
+            return;
+        }
+        if self.running.frames.last().unwrap().is_synthetic() {
+            return;
+        }
+        let method = self.running.frames.last().unwrap().method();
+        let thread = self.shared.threads[self.running.current].id;
+        let thread_ids: Vec<usize> = self.shared.threads.iter().map(|t| t.id).collect();
+        let SharedVm { agent, breakpoints, single_step, field_watches, heap, metaspace, .. } = &mut *self.shared;
+        let frames = &mut self.running.frames;
+        if let Some(agent) = agent {
+            let mut env = jvmti::JvmtiEnv::new(frames, breakpoints, single_step, field_watches, Some(&*heap), &thread_ids, metaspace);
+            agent.method_exit(&mut env, thread, method);
+        }
+    }
+
+    pub(super) fn fire_exception(&mut self, exception: usize) {
+        if !self.shared.caps.exception || self.running.frames.is_empty() {
+            return;
+        }
+        let (method, location) = {
+            let f = self.running.frames.last().unwrap();
+            (f.method(), f.pc() as u32)
+        };
+        let thread = self.shared.threads[self.running.current].id;
+        let thread_ids: Vec<usize> = self.shared.threads.iter().map(|t| t.id).collect();
+        let SharedVm { agent, breakpoints, single_step, field_watches, heap, metaspace, .. } = &mut *self.shared;
+        let frames = &mut self.running.frames;
+        if let Some(agent) = agent {
+            let mut env = jvmti::JvmtiEnv::new(frames, breakpoints, single_step, field_watches, Some(&*heap), &thread_ids, metaspace);
+            agent.exception(&mut env, thread, exception, method, location);
+        }
+    }
+
+    /// `field_access`/`field_modification` para el campo del opcode a punto de ejecutarse, si está
+    /// vigilado. Decodifica el opcode de campo y resuelve el *fieldref* read-only, leyendo objeto/valor
+    /// de la pila (aún sin popear).
+    fn fire_field_watchpoint(&mut self) {
+        if !(self.shared.caps.field_access || self.shared.caps.field_modification)
+            || self.running.frames.is_empty()
+        {
+            return;
+        }
+        let (method, pc) = {
+            let f = self.running.frames.last().unwrap();
+            (f.method(), f.pc())
+        };
+        let code = self.shared.metaspace.code(method);
+        let op = match code.get(pc) {
+            Some(&b) if matches!(b, 0xb2 | 0xb3 | 0xb4 | 0xb5) => b,
+            _ => return,
+        };
+        let (Some(&hi), Some(&lo)) = (code.get(pc + 1), code.get(pc + 2)) else {
+            return;
+        };
+        let cp_index = u16::from_be_bytes([hi, lo]);
+        let caller = self.shared.metaspace.class_of(method).to_string();
+        let Some((class, field)) = self
+            .shared
+            .metaspace
+            .get(&caller)
+            .and_then(|cf| cf.fieldref_target(cp_index))
+            .map(|(c, n, _d)| (c.to_string(), n.to_string()))
+        else {
+            return;
+        };
+        let is_write = matches!(op, 0xb3 | 0xb5);
+        let is_static = matches!(op, 0xb2 | 0xb3);
+        let watched = if is_write {
+            self.shared.caps.field_modification
+                && self.shared.field_watches.watches_modification(&class, &field)
+        } else {
+            self.shared.caps.field_access && self.shared.field_watches.watches_access(&class, &field)
+        };
+        if !watched {
+            return;
+        }
+        let (object, new_value) = {
+            let stack = self.running.frames.last().unwrap().stack();
+            let obj_of = |v: Option<&Value>| match v {
+                Some(Value::Reference(o)) => *o,
+                _ => 0,
+            };
+            if is_static {
+                (0usize, stack.last().copied())
+            } else if is_write {
+                (obj_of(stack.len().checked_sub(2).and_then(|i| stack.get(i))), stack.last().copied())
+            } else {
+                (obj_of(stack.last()), None)
+            }
+        };
+        let thread = self.shared.threads[self.running.current].id;
+        let location = pc as u32;
+        let thread_ids: Vec<usize> = self.shared.threads.iter().map(|t| t.id).collect();
+        let SharedVm { agent, breakpoints, single_step, field_watches, heap, metaspace, .. } = &mut *self.shared;
+        let frames = &mut self.running.frames;
+        if let Some(agent) = agent {
+            let mut env = jvmti::JvmtiEnv::new(frames, breakpoints, single_step, field_watches, Some(&*heap), &thread_ids, metaspace);
+            if is_write {
+                agent.field_modification(&mut env, thread, method, location, &class, &field, object, new_value.unwrap_or(Value::Int(0)));
+            } else {
+                agent.field_access(&mut env, thread, method, location, &class, &field, object);
+            }
+        }
     }
 }
 
@@ -864,6 +1066,8 @@ impl Exec<'_> {
     /// `run_one` does the actual opcode, and class init (`ensure_initialized`) drives
     /// `run_one` directly so a `<clinit>` runs to completion without yielding.
     pub fn step(&mut self) -> Step {
+        self.fire_debug_events(); // JVMTI (hito I): breakpoint / single-step, antes del opcode
+        self.fire_field_watchpoint();
         if let Step::Return(value) = self.run_one() {
             // `System.exit` ends the **VM**, not just the calling thread: report its status as
             // the program's result no matter which thread ran it (a worker's ordinary return
@@ -1356,6 +1560,7 @@ impl Exec<'_> {
             }
         }
         self.running.frames.push(frame);
+        self.fire_method_entry(callee); // JVMTI (hito I): se entró al método recién apilado
         // On top of it, the frames the expansion had flattened away — outermost first, so the last
         // one pushed is the one holding the instruction native code could not do.
         self.running.frames.extend(deopted);
@@ -1967,6 +2172,7 @@ impl Exec<'_> {
     /// place. A production VM keeps the synchronized path off the hot return path (and uses
     /// biased/thin locks); here we trade a little speed for one obvious release site.
     fn pop_frame(&mut self) -> bool {
+        self.fire_method_exit(); // JVMTI (hito I): se sale del frame tope (return o unwind)
         let Some(frame) = self.running.frames.pop() else {
             return false;
         };
@@ -3372,6 +3578,8 @@ impl Exec<'_> {
                     &class_name,
                 )
             } else {
+                // Un literal de clase también es una resolución.
+                class_operations::check_access(&self.shared.metaspace, &caller, &class_name);
                 class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, &class_name);
                 self.shared.metaspace.class_mirror(&class_name).unwrap_or_else(|| {
                     // Pushing a null mirror would be a silently wrong answer.

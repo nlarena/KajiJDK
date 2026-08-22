@@ -41,6 +41,7 @@ impl Exec<'_> {
     /// frame top-down for a matching handler, popping the ones that don't catch it,
     /// until one does (jump into its `catch`) or the stack empties (uncaught).
     fn unwind_with(&mut self, exception: usize) -> Step {
+        self.fire_exception(exception); // JVMTI (hito I): la excepción empieza a desenrollar
         let exc_class = self
             .shared.metaspace
             .class_name_at_mirror(self.shared.heap.read_u32(exception) as usize)

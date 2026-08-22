@@ -262,6 +262,14 @@ pub struct MetaspaceService {
     /// The **bootstrap** loader's directories — searched *first* (delegation). Home
     /// of the core classes (`java.lang.*`).
     bootstrap: Vec<PathBuf>,
+    /// The module graph of the image, when the VM booted from one. `None` means the VM
+    /// booted from plain directories — there are no modules, so the JPMS access rule has
+    /// nothing to say and every access is allowed.
+    configuration: Option<crate::jvm::modules::Configuration>,
+    /// A **runtime image** the bootstrap loader reads from, when the VM was booted with
+    /// one instead of plain directories — the `lib/modules` of a jlink image. Consulted
+    /// after the bootstrap directories, so a directory can still shadow it.
+    boot_image: Option<crate::jvm::jimage::BootImage>,
     /// The **application** loader's directories — the user classpath, searched only
     /// if the bootstrap loader didn't find the class.
     application: Vec<PathBuf>,
@@ -323,11 +331,68 @@ pub struct MetaspaceService {
 }
 
 impl MetaspaceService {
+    /// Boots the bootstrap loader from a **runtime image** (`lib/modules`) instead of only
+    /// directories. Returns whether the image could be opened.
+    pub fn boot_from_image(&mut self, path: &str) -> bool {
+        self.boot_image = crate::jvm::jimage::BootImage::open(path);
+        // Los módulos de la imagen ya están resueltos por construcción: lo que hace falta
+        // es la relación de legibilidad sobre ellos, que es lo que la regla de acceso mira.
+        self.configuration = self
+            .boot_image
+            .as_ref()
+            .map(|i| crate::jvm::modules::Configuration::of(i.module_descriptors()));
+        self.boot_image.is_some()
+    }
+
+    /// The module that defines a class, or `None` when the VM booted from directories.
+    pub fn module_of(&self, class: &str) -> Option<&str> {
+        self.boot_image.as_ref()?.module_of(class)
+    }
+
+    /// Whether code in `from` may use the type `to`, per JPMS (JLS §7.7, JVMS §5.4.4).
+    ///
+    /// Two conditions, and **both** are needed — this is the pair people conflate:
+    /// `from`'s module must **read** `to`'s, *and* `to`'s module must **export** the
+    /// package to it. Readability alone is not access: a module can read another and
+    /// still be barred from its internal packages.
+    ///
+    /// Everything is allowed when there is no module graph (a VM booted from
+    /// directories), when either class has no owning module, or within one module.
+    pub fn can_access(&self, from: &str, to: &str) -> bool {
+        let Some(configuration) = &self.configuration else { return true };
+        let (Some(from_module), Some(to_module)) = (self.module_of(from), self.module_of(to))
+        else {
+            return true;
+        };
+        if from_module == to_module {
+            return true;
+        }
+        let package = to.rsplit_once('/').map_or(String::new(), |(p, _)| p.replace('/', "."));
+        configuration.reads(from_module, to_module)
+            && configuration.exports_to(to_module, &package, from_module)
+    }
+
+    /// How many classes the boot image offers, or `0` when the VM booted from directories.
+    pub fn boot_image_classes(&self) -> usize {
+        self.boot_image.as_ref().map_or(0, |i| i.len())
+    }
+
+    /// Los nombres binarios de todas las clases cargadas, en orden determinístico (para el snapshot de
+    /// depuración: `VirtualMachine.AllClasses`/`ClassesBySignature`; ordenar mantiene estable el
+    /// `referenceTypeID` de una clase dentro de una sesión).
+    pub fn loaded_class_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.classes.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
     /// A metaspace whose loaders search `bootstrap` first, then `application`
     /// (the JVM's parent-first delegation).
     pub fn new(bootstrap: Vec<PathBuf>, application: Vec<PathBuf>) -> Self {
         MetaspaceService {
             bootstrap,
+            boot_image: None,
+            configuration: None,
             application,
             loaders: HashMap::new(),
             classes: HashMap::new(),
@@ -1083,6 +1148,14 @@ impl MetaspaceService {
     fn find_on_classpath(&self, name: &str) -> Option<(ClassFile, ClassLoader)> {
         for dir in &self.bootstrap {
             if let Some(class) = Self::read_class(dir, name) {
+                return Some((class, ClassLoader::Bootstrap));
+            }
+        }
+        // The image is part of the *bootstrap* loader: a class that comes out of it is
+        // defined by the same loader as one from `boot/`, which keeps runtime identity
+        // (`(name, defining loader)`) the same whether the VM booted from dirs or an image.
+        if let Some(image) = &self.boot_image {
+            if let Some(class) = image.class_bytes(name).and_then(|b| ClassFile::from_bytes(&b).ok()) {
                 return Some((class, ClassLoader::Bootstrap));
             }
         }

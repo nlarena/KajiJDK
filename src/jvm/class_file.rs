@@ -583,3 +583,238 @@ mod tests {
         assert!(has_utf8(&class_file, "value"));
     }
 }
+
+// -- `--strip-debug`: dropping the attributes only a debugger needs (Fase J / J6) --------
+
+/// The attributes `jlink --strip-debug` removes. They carry no runtime semantics: the VM
+/// executes identically without them. What they *do* carry is the mapping back to source —
+/// which is exactly what a debugger needs, so stripping an image is what makes our own
+/// `jdb` (Fase I) lose `locals` and line numbers on it. A plugin that breaks another
+/// milestone, same as in the real JDK.
+const DEBUG_ATTRIBUTES: [&str; 4] =
+    ["LineNumberTable", "LocalVariableTable", "LocalVariableTypeTable", "SourceFile"];
+
+/// Rewrites a class file without its debug attributes, or `None` if the bytes don't parse
+/// as one.
+///
+/// This is surgery on the raw bytes rather than parse-and-re-emit: the constant pool is
+/// copied through untouched (leaving now-unreferenced `Utf8` entries behind, exactly as the
+/// real tool does — a pool entry costs little and renumbering the whole file costs a lot).
+/// Only the attribute tables shrink, and every enclosing length is recomputed, including
+/// `Code`'s, since the debug attributes are nested inside it.
+pub fn strip_debug(bytes: &[u8]) -> Option<Vec<u8>> {
+    let mut r = Cursor::new(bytes);
+    let mut out = Vec::with_capacity(bytes.len());
+
+    if r.u32()? != MAGIC {
+        return None;
+    }
+    out.extend_from_slice(&bytes[..8]); // magic + minor + major
+    r.skip(4)?; // minor + major, ya copiados
+
+    // El pool se copia tal cual; sólo hace falta *saltearlo*, y para eso alcanza saber el
+    // tamaño de cada entrada por su tag. Las entradas `long`/`double` ocupan dos slots
+    // (JVMS §4.4.5), una rareza histórica que hay que respetar o se desfasa todo.
+    let pool_start = r.at;
+    let count = r.u16()?;
+    let mut i = 1;
+    while i < count {
+        let tag = r.u8()?;
+        let width = match tag {
+            1 => { let len = r.u16()? as usize; r.skip(len)?; 0 }
+            7 | 8 | 16 | 19 | 20 => 2,
+            15 => 3,
+            3 | 4 | 9 | 10 | 11 | 12 | 17 | 18 => 4,
+            5 | 6 => 8,
+            _ => return None,
+        };
+        r.skip(width)?;
+        i += if tag == 5 || tag == 6 { 2 } else { 1 };
+    }
+    let names = pool_utf8(bytes, pool_start, count)?;
+    out.extend_from_slice(&bytes[pool_start..r.at]);
+
+    // access_flags, this_class, super_class, interfaces
+    out.extend_from_slice(r.take(6)?);
+    let interfaces = r.u16()?;
+    out.extend_from_slice(&interfaces.to_be_bytes());
+    out.extend_from_slice(r.take(interfaces as usize * 2)?);
+
+    // fields y methods tienen la misma forma: cabecera de 6 bytes + tabla de atributos.
+    for _ in 0..2 {
+        let members = r.u16()?;
+        out.extend_from_slice(&members.to_be_bytes());
+        for _ in 0..members {
+            out.extend_from_slice(r.take(6)?);
+            strip_attributes(&mut r, &mut out, &names)?;
+        }
+    }
+    strip_attributes(&mut r, &mut out, &names)?; // atributos de la clase
+    Some(out)
+}
+
+/// Copies an attribute table, dropping the debug ones and recursing into `Code`.
+fn strip_attributes(r: &mut Cursor, out: &mut Vec<u8>, names: &[Option<String>]) -> Option<()> {
+    let count = r.u16()?;
+    let count_at = out.len();
+    out.extend_from_slice(&0u16.to_be_bytes()); // se corrige al final
+    let mut kept = 0u16;
+    for _ in 0..count {
+        let name_index = r.u16()?;
+        let length = r.u32()? as usize;
+        let name = names.get(name_index as usize).and_then(Option::as_deref).unwrap_or("");
+        if DEBUG_ATTRIBUTES.contains(&name) {
+            r.skip(length)?;
+            continue;
+        }
+        kept += 1;
+        out.extend_from_slice(&name_index.to_be_bytes());
+        if name == "Code" {
+            // `Code` lleva atributos adentro, así que su longitud cambia: se emite un
+            // placeholder, se copia el cuerpo, y recién entonces se sabe cuánto midió.
+            let length_at = out.len();
+            out.extend_from_slice(&0u32.to_be_bytes());
+            let body_at = out.len();
+            out.extend_from_slice(r.take(4)?); // max_stack + max_locals
+            let code_length = r.u32()?;
+            out.extend_from_slice(&code_length.to_be_bytes());
+            out.extend_from_slice(r.take(code_length as usize)?);
+            let handlers = r.u16()?;
+            out.extend_from_slice(&handlers.to_be_bytes());
+            out.extend_from_slice(r.take(handlers as usize * 8)?);
+            strip_attributes(r, out, names)?;
+            let body = (out.len() - body_at) as u32;
+            out[length_at..length_at + 4].copy_from_slice(&body.to_be_bytes());
+        } else {
+            out.extend_from_slice(&(length as u32).to_be_bytes());
+            out.extend_from_slice(r.take(length)?);
+        }
+    }
+    out[count_at..count_at + 2].copy_from_slice(&kept.to_be_bytes());
+    Some(())
+}
+
+/// The `Utf8` entries of the pool, by index — enough to recognise an attribute by name.
+fn pool_utf8(bytes: &[u8], start: usize, count: u16) -> Option<Vec<Option<String>>> {
+    let mut r = Cursor::new(bytes);
+    r.at = start;
+    r.u16()?;
+    let mut names = vec![None; count as usize + 1];
+    let mut i = 1usize;
+    while i < count as usize {
+        let tag = r.u8()?;
+        match tag {
+            1 => {
+                let len = r.u16()? as usize;
+                names[i] = String::from_utf8(r.take(len)?.to_vec()).ok();
+            }
+            7 | 8 | 16 | 19 | 20 => r.skip(2)?,
+            15 => r.skip(3)?,
+            3 | 4 | 9 | 10 | 11 | 12 | 17 | 18 => r.skip(4)?,
+            5 | 6 => r.skip(8)?,
+            _ => return None,
+        }
+        i += if tag == 5 || tag == 6 { 2 } else { 1 };
+    }
+    Some(names)
+}
+
+/// A minimal big-endian cursor over the raw class file — the parser's `ClassReader` returns
+/// `Result`s and owns its own reading; here all that is needed is to walk and slice.
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Cursor { bytes, at: 0 }
+    }
+    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
+        let slice = self.bytes.get(self.at..self.at + n)?;
+        self.at += n;
+        Some(slice)
+    }
+    fn skip(&mut self, n: usize) -> Option<()> {
+        self.take(n).map(|_| ())
+    }
+    fn u8(&mut self) -> Option<u8> {
+        self.take(1).map(|b| b[0])
+    }
+    fn u16(&mut self) -> Option<u16> {
+        self.take(2).map(|b| u16::from_be_bytes([b[0], b[1]]))
+    }
+    fn u32(&mut self) -> Option<u32> {
+        self.take(4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    }
+}
+
+#[cfg(test)]
+mod strip_debug_tests {
+    use super::*;
+
+    /// Una clase de la biblioteca, que trae debug de verdad (13 `LineNumberTable`).
+    fn library_class() -> Vec<u8> {
+        std::fs::read("KajiLibrary/java/lang/StringBuilder.class")
+            .expect("KajiLibrary/java/lang/StringBuilder.class")
+    }
+
+    fn attribute_names(cf: &ClassFile) -> Vec<String> {
+        let mut names: Vec<String> = cf
+            .attributes
+            .iter()
+            .filter_map(|a| cf.utf8(a.name_index).map(str::to_string))
+            .collect();
+        for method in &cf.methods {
+            for attribute in &method.attributes {
+                if let Some(n) = cf.utf8(attribute.name_index) {
+                    names.push(n.to_string());
+                }
+            }
+        }
+        names
+    }
+
+    #[test]
+    fn stripping_removes_the_debug_attributes_and_keeps_the_rest() {
+        let original = library_class();
+        let before = ClassFile::from_bytes(&original).expect("la clase original parsea");
+        assert!(attribute_names(&before).iter().any(|n| n == "SourceFile"));
+
+        let stripped = strip_debug(&original).expect("se puede despojar");
+        assert!(stripped.len() < original.len(), "despojar tiene que achicar");
+        let after = ClassFile::from_bytes(&stripped).expect("la clase despojada sigue parseando");
+
+        let names = attribute_names(&after);
+        for debug in DEBUG_ATTRIBUTES {
+            assert!(!names.iter().any(|n| n == debug), "quedó {debug}");
+        }
+        // Lo que el runtime necesita sigue estando: mismos métodos, con su `Code`.
+        assert_eq!(after.methods.len(), before.methods.len());
+        assert!(names.iter().any(|n| n == "Code"));
+    }
+
+    #[test]
+    fn the_constant_pool_is_left_alone() {
+        // Los `Utf8` de los atributos borrados quedan, sin referencias: renumerar el pool
+        // costaría mucho más que los pocos bytes que ahorra, y el tool real hace lo mismo.
+        let stripped = strip_debug(&library_class()).unwrap();
+        let after = ClassFile::from_bytes(&stripped).unwrap();
+        let pool_has_it = (1..after.constant_pool.len())
+            .any(|i| after.utf8(i as u16) == Some("LineNumberTable"));
+        assert!(pool_has_it, "la entrada del pool se conserva aunque el atributo no");
+    }
+
+    #[test]
+    fn stripping_twice_changes_nothing_more() {
+        let once = strip_debug(&library_class()).unwrap();
+        let twice = strip_debug(&once).unwrap();
+        assert_eq!(once, twice, "la operación es idempotente");
+    }
+
+    #[test]
+    fn something_that_is_not_a_class_is_rejected() {
+        assert!(strip_debug(b"no soy una clase").is_none());
+        assert!(strip_debug(&[]).is_none());
+    }
+}

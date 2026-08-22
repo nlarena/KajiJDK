@@ -4,6 +4,7 @@
 //! `impl JVM` method, dispatched from `step()`.
 
 use super::call_site::{CallSite, SiteKind};
+use super::class_operations;
 use super::{Exec, Step, Widths};
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::metaspace::{MethodId, MetaspaceService, SignatureId};
@@ -91,12 +92,14 @@ impl Exec<'_> {
             u16::from_be_bytes([code[pc + 1], code[pc + 2]])
         };
         let caller_class = self.shared.metaspace.class_of(caller).to_string();
-        let (name, descriptor) = {
+        let (interface, name, descriptor) = {
             let cf = self.shared.metaspace.get(&caller_class).expect("caller class is loaded");
-            let (_, n, d) =
+            let (interface, n, d) =
                 cf.methodref_target(cp_index).expect("invokeinterface: bad InterfaceMethodRef");
-            (n.to_string(), d.to_string())
+            (interface.to_string(), n.to_string(), d.to_string())
         };
+        // La interfaz nombrada en el pool es la referencia simbólica que hay que poder ver.
+        class_operations::check_access(&self.shared.metaspace, &caller_class, &interface);
         let signature: SignatureId = self.shared.metaspace.intern_signature(&name, &descriptor);
         let site = CallSite {
             kind: SiteKind::Signature(signature),

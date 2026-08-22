@@ -11,6 +11,7 @@
 //! That guard lives in [`super::class_operations::load_class`], which consults the
 //! metaspace's class-object index and only calls into this builder on first load.
 
+use super::class_operations;
 use crate::jvm::interpreter::frame::{Frame, Value};
 use crate::jvm::interpreter::heap::HeapService;
 use crate::jvm::interpreter::metaspace::{MetaspaceService, MethodId};
@@ -234,6 +235,9 @@ fn resolve_field_site(
         let Some((c, n, d)) = cf.fieldref_target(cp_index) else { panic!("{op}: bad FieldRef") };
         (c.to_string(), n.to_string(), d.to_string())
     };
+    // Accesibilidad (JPMS): el sitio se resuelve una sola vez y queda cacheado, así que el
+    // chequeo va acá — antes de fijar el offset en la caché de F0.
+    class_operations::check_access(metaspace, &caller, &named);
     // `field_offset` loads the whole superclass chain, so the volatility walk right after it
     // (read-only, `get`) always sees every class it needs.
     let offset = field_offset(metaspace, &named, &field);
@@ -448,6 +452,7 @@ fn resolve_field_site_read(
     }
     let caller = metaspace.class_of(method);
     let (named, field, descriptor) = metaspace.get(caller)?.fieldref_target(cp_index)?;
+    class_operations::check_access(metaspace, caller, named);
     let (layout, complete) = layout_fields_ref(metaspace, named);
     let offset = field_offset_in(&layout, field)?;
     let site =

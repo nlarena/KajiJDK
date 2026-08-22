@@ -95,6 +95,7 @@ pub fn new(
 
     // Loading (+ Preparation): bring the target class into the metaspace before we
     // can lay out an instance of it — we need its fields to know the object's size.
+    check_access(metaspace, &caller_class, &class_name);
     load_class(metaspace, heap, &class_name);
 
     // Allocate the instance on the heap and push its reference. Per the JVM, `new`
@@ -108,6 +109,23 @@ pub fn new(
     Ok(())
 }
 
+/// Enforces the JPMS access rule at a **resolution site** (JVMS §5.4.4).
+///
+/// Every place the interpreter turns a constant-pool reference into a class is a place the
+/// rule applies — `new`, the `invoke*`s, the field accesses, `checkcast`. Checking only one
+/// of them would read like encapsulation while leaving the others open, so the check lives
+/// here and every site calls it.
+///
+/// A VM booted from directories has no module graph and this always passes; see
+/// [`MetaspaceService::can_access`].
+pub fn check_access(metaspace: &MetaspaceService, caller: &str, target: &str) {
+    if !metaspace.can_access(caller, target) {
+        panic!(
+            "IllegalAccessError: '{caller}' no puede acceder a '{target}'              (el módulo no lo lee, o el paquete no está exportado)"
+        );
+    }
+}
+
 /// `getstatic` (0xb2): push the value of a *static* field. Unlike `getfield`, there
 /// is no receiver — the value lives in the class's `Class<…>` mirror on the heap,
 /// located by class (not by an object reference on the stack).
@@ -118,6 +136,7 @@ pub fn getstatic(metaspace: &mut MetaspaceService, heap: &mut HeapService, frame
         let (c, n, d) = cf.fieldref_target(cp_index).expect("getstatic: bad FieldRef");
         (c.to_string(), n.to_string(), d.to_string())
     };
+    check_access(metaspace, &caller, &named);
     let at = static_slot(metaspace, heap, &named, &field);
     let value = match descriptor.as_bytes().first() {
         Some(b'J') => Value::Long(heap.read_u64(at) as i64),
@@ -139,6 +158,7 @@ pub fn putstatic(metaspace: &mut MetaspaceService, heap: &mut HeapService, frame
         let (c, n, _d) = cf.fieldref_target(cp_index).expect("putstatic: bad FieldRef");
         (c.to_string(), n.to_string())
     };
+    check_access(metaspace, &caller, &named);
     let at = static_slot(metaspace, heap, &named, &field);
     // The value's type decides the width (a `long`/`double` is 8 bytes); floats and
     // ints store their 4-byte bit pattern.
