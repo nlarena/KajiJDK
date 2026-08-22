@@ -121,12 +121,11 @@ fn merge(a: State, b: State) -> State {
     }
 }
 
+/// El valor de una **expresión constante booleana** (§15.28) — para la reachability §14.21
+/// (`while (false)`, `for (;1>2;)`, `if (true && false)`). Delega en el evaluador del codegen, que es
+/// el mismo que pliega los `branch_if`, así ambas fases coinciden en qué condiciones son constantes.
 fn const_bool(e: &Expr) -> Option<bool> {
-    match &e.kind {
-        ExprKind::BoolLit(b) => Some(*b),
-        ExprKind::Unary { op: UnOp::Not, expr, .. } => const_bool(expr).map(|b| !b),
-        _ => None,
-    }
+    super::codegen::const_bool_expr(e)
 }
 
 /// El slot de un local usado como **lectura** o **destino** (`Name` con binding a local), con su
@@ -457,7 +456,16 @@ impl Analyzer {
         if let Some(last) = ends.last() {
             paths.push(last.clone());
         }
-        if !has_default {
+        // Un `switch` con **patrones** (o `case null`) que llegó hasta acá es **exhaustivo** (§14.11.1.1:
+        // el chequeo ya lo exige) y por eso lleva un `default` implícito que lanza `MatchException` — el
+        // selector **siempre** matchea. Así, una variable asignada en todos los brazos queda
+        // definitivamente asignada después (§16.2.9): no hay un camino que salga sin pasar por un brazo.
+        // Un `switch` clásico (solo constantes) sí puede no matchear nada: ahí el estado previo escapa.
+        let pattern_switch = cases
+            .iter()
+            .flat_map(|c| &c.labels)
+            .any(|l| matches!(l, CaseLabel::Pattern(_) | CaseLabel::Null));
+        if !has_default && !pattern_switch {
             paths.push(Some(f)); // el selector podría no matchear nada
         }
         paths.into_iter().fold(None, merge)
@@ -798,6 +806,47 @@ mod tests {
         assert!(errs.is_empty(), "{errs:?}");
     }
 
+    // ---- D: DA / reachability de un `switch` **exhaustivo** con patrones (§16.2.9 / §14.22) ----
+
+    const SEALED: &str = "sealed interface Shape permits Circle, Square {} \
+        record Circle() implements Shape {} record Square() implements Shape {} ";
+
+    #[test]
+    fn an_exhaustive_pattern_switch_definitely_assigns_in_all_arms() {
+        // El pattern switch exhaustivo lleva un `default` implícito: `x`, asignada en todos los brazos,
+        // queda definitivamente asignada después. Sin el arreglo, flow veía un camino "no matchea".
+        let src = format!(
+            "{SEALED} class M {{ int f(Shape s) {{ int x; \
+             switch (s) {{ case Circle c -> x = 1; case Square q -> x = 2; }} return x; }} }}"
+        );
+        assert!(flow_errs(&src).is_empty(), "{:?}", flow_errs(&src));
+    }
+
+    #[test]
+    fn a_classic_enum_switch_does_not_definitely_assign() {
+        // Un `switch` clásico (solo constantes) **no** es exhaustivo para DA aunque cubra el `enum`:
+        // puede no matchear (no hay default implícito). Espeja a javac real.
+        let src = "enum E { A, B } class M { int f(E e) { int x; \
+                   switch (e) { case A -> x = 1; case B -> x = 2; } return x; } }";
+        let errs = flow_errs(src);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].message.contains("inicializada"));
+    }
+
+    #[test]
+    fn code_after_an_all_returning_exhaustive_switch_is_unreachable() {
+        // Todos los brazos retornan y el switch es exhaustivo → no completa normalmente → lo que sigue
+        // es inalcanzable (§14.22).
+        let src = format!(
+            "{SEALED} class M {{ int f(Shape s) {{ \
+             switch (s) {{ case Circle c -> {{ return 1; }} case Square q -> {{ return 2; }} }} \
+             int y = 1; return y; }} }}"
+        );
+        let errs = flow_errs(&src);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].message.contains("inalcanzable"));
+    }
+
     #[test]
     fn static_init_block_is_flow_analyzed() {
         // Un `static { }` se analiza como un cuerpo estático: leer una local sin asignar es error.
@@ -864,6 +913,28 @@ mod tests {
     #[test]
     fn if_false_is_not_flagged_unreachable() {
         assert!(flow_errs(&in_method("if (false) { int x = 1; }")).is_empty());
+    }
+
+    #[test]
+    fn a_constant_false_comparison_makes_a_while_body_unreachable() {
+        // §14.21 + §15.28: `1 > 2` es una **constante** de valor `false` → el cuerpo es inalcanzable.
+        assert_eq!(flow_errs(&in_method("while (1 > 2) { int x = 1; }")).len(), 1);
+        // Idem con lógicos constantes.
+        assert_eq!(flow_errs(&in_method("while (true && false) { int x = 1; }")).len(), 1);
+    }
+
+    #[test]
+    fn a_constant_true_comparison_loop_is_infinite() {
+        // `2 > 1` constante-`true`: bucle infinito → lo que sigue es inalcanzable.
+        assert_eq!(flow_errs(&in_method("while (2 > 1) { } int x = 1;")).len(), 1);
+    }
+
+    #[test]
+    fn a_non_constant_comparison_condition_is_not_folded() {
+        // `p` es un parámetro (no constante): la comparación no pliega, el cuerpo es alcanzable.
+        assert!(flow_errs(&in_method("while (p > 2) { int x = 1; }")).is_empty());
+        // `false && p` **no** es constante (§15.28 exige ambos operandos constantes) → no se marca.
+        assert!(flow_errs(&in_method("while (false && p > 0) { int x = 1; }")).is_empty());
     }
 
     // ---- variables `final` (DU, §16.2) ----

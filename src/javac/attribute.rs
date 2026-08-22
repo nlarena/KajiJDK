@@ -1444,29 +1444,25 @@ fn require_bool_operand(env: &mut Env, t: &RType, pos: Pos) {
 
 // ---- asignabilidad y subtipado ----
 
-/// El valor de una **expresión constante** entera, si `e` lo es (§15.28, versión acotada: literales
-/// `int`/`char` y `+`/`-` unario sobre ellos — lo que basta para la conversión del §5.2).
-fn const_int_value(e: &Expr) -> Option<i64> {
-    match &e.kind {
-        ExprKind::IntLit(v) => Some(*v),
-        ExprKind::CharLit(c) => Some(*c as i64),
-        ExprKind::Unary { op: UnOp::Neg, expr, .. } => const_int_value(expr).map(|v| -v),
-        ExprKind::Unary { op: UnOp::Plus, expr, .. } => const_int_value(expr),
-        _ => None,
-    }
-}
-
 /// **Narrowing de una constante** (§5.2): una expresión constante de tipo `int` es asignable a
-/// `byte`/`short`/`char` **si su valor entra** en el rango del destino. Es lo que hace legal
-/// `byte b = 5;` o `static final short MAX = 32767;` sin un cast explícito.
+/// `byte`/`short`/`char` **si su valor entra** en el rango del destino. Hace legal `byte b = 5;`,
+/// `static final short MAX = 32767;` y también `byte b = 1 + 2;` — sin cast. El valor lo pliega el
+/// evaluador §15.29 de `codegen` (literales, aritmética, bits y shift), restringido a las constantes
+/// de tipo **`int`** (una `long`/`float`/`double` sí necesita cast explícito).
 fn constant_narrowing_ok(to: &RType, init: &Expr) -> bool {
-    let (lo, hi): (i64, i64) = match to {
+    let (lo, hi): (i32, i32) = match to {
         RType::Prim(PrimType::Byte) => (-128, 127),
         RType::Prim(PrimType::Short) => (-32768, 32767),
         RType::Prim(PrimType::Char) => (0, 65535),
         _ => return false,
     };
-    matches!(const_int_value(init), Some(v) if v >= lo && v <= hi)
+    // El atributado corre **antes** de plegar los campos constantes de la unidad, así que las
+    // referencias a otra `final` no se resuelven aquí (mapa vacío): un `byte b = A;` con `A` constante
+    // es un caso diferido. Sí pliega literales y aritmética entre literales (`byte b = 1 + 2;`).
+    matches!(
+        super::codegen::const_eval_int(init, &super::codegen::ConstFieldMap::new()),
+        Some(v) if v >= lo && v <= hi
+    )
 }
 
 fn assignable(table: &SymbolTable, from: &RType, to: &RType) -> bool {
@@ -2195,8 +2191,25 @@ mod tests {
         // se asigna a `byte`/`short`/`char` **sin cast**, en campo o en local.
         assert!(check("class C { static final byte B = -128; static final short S = 32767; static final char CH = 65; }").is_empty());
         assert!(check("class C { void m() { byte b = 5; short s = -1; char c = 90; } }").is_empty());
-        // Fuera de rango, sigue siendo error.
+        // §15.29: ahora también **expresiones constantes** (aritmética, shift, bits) que entran.
+        assert!(
+            check("class C { void m() { byte b = 1 + 2; short s = 1 << 4; byte m = 100 + 27; char c = 'A' + 1; } }")
+                .is_empty(),
+            "una expresión constante en rango narrowea sin cast",
+        );
+        // Fuera de rango, sigue siendo error — literal o expresión.
         assert_eq!(check("class C { static final byte B = 200; }").len(), 1, "200 no entra en byte");
+        assert_eq!(
+            check("class C { void m() { byte b = 100 + 100; } }").len(),
+            1,
+            "100+100=200 no entra en byte",
+        );
+        // Una constante `long` no narrowea por §5.2: necesita cast explícito.
+        assert_eq!(
+            check("class C { void m() { byte b = 3L; } }").len(),
+            1,
+            "una constante long a byte necesita cast",
+        );
     }
 
     /// Parsea + atribuye, devolviendo la unidad **decorada** (para inspeccionar el AST).

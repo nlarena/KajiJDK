@@ -625,6 +625,29 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
             }
         }
     }
+
+    // Tipos **anidados** directos (`InnerClasses`, §4.7.6): se cargan y se registran como
+    // **miembros-tipo** de esta clase, para que `Outer.Inner` de una clase externa resuelva
+    // (`Diagnostic.Kind`, `Map.Entry`). Solo los **directos** (`Outer$Inner`, no `Outer$Inner$Deep`,
+    // que es miembro de `Inner` y se carga al construir `Inner`).
+    let prefix = format!("{}$", ext.name);
+    for nested_dotted in &ext.nested {
+        let Some(suffix) = nested_dotted.strip_prefix(&prefix) else { continue };
+        if suffix.is_empty() || suffix.contains('$') {
+            continue;
+        }
+        // La clave con que `build_external` lo registra en externals (su nombre simple *dotted*,
+        // `Diagnostic$Kind`) vs. el nombre por el que se lo referencia anidado (`Kind`).
+        let ext_key = nested_dotted.rsplit('.').next().unwrap_or(nested_dotted).to_string();
+        if table.external(&ext_key).is_none() && table.class(nested_dotted).is_none() {
+            if let Some(nested_ext) = finder.find(&nested_dotted.replace('.', "/")) {
+                build_external(table, finder, &nested_ext);
+            }
+        }
+        if let Some(nsid) = table.external(&ext_key) {
+            table.define(members, suffix, nsid);
+        }
+    }
 }
 
 /// Crea los símbolos `TypeVar` de una lista de parámetros de tipo, en `scope`, con dueño `owner`.

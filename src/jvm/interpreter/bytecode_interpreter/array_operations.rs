@@ -186,6 +186,27 @@ fn allocate_array(
     offset
 }
 
+/// `array.clone()` (§10.7): allocates a **fresh** array of the same class and length as `source` and
+/// copies its element bytes across, returning the new offset. This is the intrinsic behind
+/// `T[].clone()` — an array has no vtable, so `invokevirtual "[…]".clone:()Object` resolves here (e.g.
+/// the `values()` of an `enum`, `return $VALUES.clone()`). `malloc` is a bump allocator (no moving GC
+/// mid-call), so reading `source` after allocating stays valid.
+pub fn array_clone(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    source: usize,
+    array_class: &str,
+) -> usize {
+    let length = heap.read_u32(source + LENGTH_OFFSET) as usize;
+    let elem_size = element_width(&array_class[1..]); // el componente, sin el `[` inicial
+    let dest = allocate_array(metaspace, heap, array_class, length, elem_size);
+    for i in 0..length * elem_size {
+        let byte = heap.read_u8(source + ARRAY_HEADER_SIZE + i);
+        heap.write_u8(dest + ARRAY_HEADER_SIZE + i, byte);
+    }
+    dest
+}
+
 /// Ensures the synthetic **array class** `array_class` has a `Class<…>` mirror, and
 /// returns its offset. Array classes have no `.class` file and no static fields, so
 /// the mirror is just a header — it exists to give the array type an identity (its

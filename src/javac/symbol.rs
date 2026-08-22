@@ -186,6 +186,11 @@ pub struct SymbolTable {
     /// §4.7.7): `class_id → (nombre, descriptor)` del método/constructor que la declara. Ausente si
     /// se declaró en un inicializador (ahí `method_index` es 0). Lo puebla el desugar.
     enclosing_methods: HashMap<SymbolId, (String, String)>,
+    /// Valores de **campos constantes** (`static final` numéricos/`String` de la unidad, §15.28):
+    /// `SymbolId del campo → su valor plegado`. Lo puebla la pasada de plegado tras el atributado
+    /// (fixpoint sobre las referencias entre `final`), y lo leen el desugar y el codegen para
+    /// **inlinear** las referencias (`static final int B = A * 2;` → `B = 20` en `ConstantValue`).
+    const_fields: HashMap<SymbolId, super::codegen::ConstVal>,
     /// El scope **raíz**: contiene los paquetes; cada paquete tiene su propio scope, y el de
     /// cada clase se enlaza al de su paquete.
     pub global: ScopeId,
@@ -216,6 +221,7 @@ impl SymbolTable {
             capture_counter: std::cell::Cell::new(0),
             infer_counter: std::cell::Cell::new(0),
             enclosing_methods: HashMap::new(),
+            const_fields: HashMap::new(),
             global: 0,
         };
         table.global = table.new_scope(None, None);
@@ -251,6 +257,18 @@ impl SymbolTable {
 
     pub fn symbol_count(&self) -> usize {
         self.symbols.len()
+    }
+
+    /// Guarda el mapa de **valores de campos constantes** (ver [`Self::const_fields`]). Lo produce el
+    /// plegado de constantes (fixpoint) tras el atributado, antes del desugar.
+    pub(crate) fn set_const_fields(&mut self, map: HashMap<SymbolId, super::codegen::ConstVal>) {
+        self.const_fields = map;
+    }
+
+    /// El mapa de **campos constantes** de la unidad (`SymbolId del campo → valor plegado`), que el
+    /// desugar y el codegen consultan para inlinear referencias entre `final`. Vacío hasta el plegado.
+    pub(crate) fn const_fields(&self) -> &HashMap<SymbolId, super::codegen::ConstVal> {
+        &self.const_fields
     }
 
     /// Guarda la info resuelta de un símbolo (grafo/firmas), salida para la pasada 2.

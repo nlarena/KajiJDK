@@ -20,6 +20,7 @@ fn main() {
     // tras sacarlos se parsea como `[modo] <archivo>`, igual que antes.
     let raw: Vec<String> = env::args().skip(1).collect();
     let mut extra_classpath: Vec<std::path::PathBuf> = Vec::new();
+    let mut lint_spec: Option<String> = None;
     let mut args: Vec<String> = Vec::new();
     let mut it = raw.into_iter();
     while let Some(a) = it.next() {
@@ -27,10 +28,19 @@ fn main() {
             if let Some(val) = it.next() {
                 extra_classpath.extend(env::split_paths(&val));
             }
+        } else if a == "-Xlint" {
+            lint_spec = Some("all".to_string()); // `-Xlint` a secas = todas las categorías
+        } else if let Some(spec) = a.strip_prefix("-Xlint:") {
+            lint_spec = Some(spec.to_string()); // `-Xlint:cat1,cat2` / `:all` / `:none`
         } else {
             args.push(a);
         }
     }
+    // El conjunto de avisos habilitados (`-Xlint`): vacío si no se pasó el flag (opt-in, como `javac`).
+    let lint_set = match &lint_spec {
+        Some(spec) => jvm::javac::lint::LintSet::from_spec(spec),
+        None => jvm::javac::lint::LintSet::none(),
+    };
     let (mode, path) = match args.first().map(String::as_str) {
         Some("--tokens") => (Mode::Tokens, args.get(1)),
         Some("--symbols") => (Mode::Symbols, args.get(1)),
@@ -72,14 +82,27 @@ fn main() {
             Ok(unit) => println!("{unit:#?}"),
             Err(err) => fail(input, &source, err),
         },
-        Mode::Check => match jvm::javac::check_cp(&source, &extra_classpath) {
-            Ok(errors) if errors.is_empty() => println!("javac: {input} sin errores"),
-            Ok(errors) => {
-                eprint!("{}", jvm::javac::render_diagnostics(&errors, &source, input));
-                process::exit(1);
+        Mode::Check => {
+            // Los avisos de `-Xlint` (vacíos si no se pasó el flag) van junto a los errores; solo los
+            // errores hacen fallar (`exit 1`).
+            let warnings =
+                jvm::javac::lint_cp(&source, &extra_classpath, &lint_set).unwrap_or_default();
+            match jvm::javac::check_cp(&source, &extra_classpath) {
+                Ok(errors) => {
+                    let mut all = errors.clone();
+                    all.extend(warnings);
+                    if all.is_empty() {
+                        println!("javac: {input} sin errores");
+                    } else {
+                        eprint!("{}", jvm::javac::render_diagnostics(&all, &source, input));
+                        if !errors.is_empty() {
+                            process::exit(1);
+                        }
+                    }
+                }
+                Err(err) => fail(input, &source, err),
             }
-            Err(err) => fail(input, &source, err),
-        },
+        }
         // Baja el azúcar (tras atribuir, que es de donde saca los tipos) y dibuja el AST resultante.
         Mode::Desugar => match jvm::javac::parse(&source) {
             Ok(mut unit) => {
@@ -93,7 +116,14 @@ fn main() {
         // Compila y **escribe un `.class` por clase**, cada uno con el nombre de **su** clase (no el
         // del archivo), en el mismo directorio que el fuente. Una unidad con varios tipos, o con
         // clases sintéticas (`C$1` del `switch`-enum), produce varios archivos.
-        Mode::Emit => match jvm::javac::compile_cp(&source, &extra_classpath) {
+        Mode::Emit => {
+            // Los avisos de `-Xlint` se imprimen antes de emitir (no impiden la emisión).
+            let warnings =
+                jvm::javac::lint_cp(&source, &extra_classpath, &lint_set).unwrap_or_default();
+            if !warnings.is_empty() {
+                eprint!("{}", jvm::javac::render_diagnostics(&warnings, &source, input));
+            }
+            match jvm::javac::compile_cp(&source, &extra_classpath) {
             Ok(classes) => {
                 for (internal, bytes) in &classes {
                     // El nombre de archivo es el último segmento del nombre interno (`com/foo/A$B`
@@ -108,7 +138,8 @@ fn main() {
                 }
             }
             Err(err) => fail(input, &source, err),
-        },
+            }
+        }
     }
 }
 

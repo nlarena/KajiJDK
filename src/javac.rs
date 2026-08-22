@@ -26,6 +26,7 @@ pub mod enter;
 pub mod attribute;
 pub mod check;
 pub mod flow;
+pub mod lint;
 pub mod desugar;
 pub mod transtypes;
 pub mod sema;
@@ -38,18 +39,34 @@ pub mod class_writer;
 /// `notes` son sub-líneas explicativas al estilo de `javac` (`symbol:`/`location:`, candidatos de
 /// sobrecarga descartados, *did-you-mean*), que el render imprime **indentadas** bajo el mensaje.
 /// Vacío por defecto: el contenido rico lo aporta cada sitio de error que lo amerite.
+/// La **severidad** de un diagnóstico. Un `Error` corta la emisión; un `Warning` (`-Xlint`) se
+/// reporta pero **no** impide compilar (§9.6.4.5: un aviso no es un error).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     pub message: String,
     pub line: u32,
     pub col: u32,
     pub notes: Vec<String>,
+    /// Error (default) o warning. Solo los `Error` cortan la compilación; los `Warning` los produce
+    /// el pase de *lint* y el CLI los imprime aparte.
+    pub severity: Severity,
 }
 
 impl Error {
     /// Un error sin notas en `(línea, columna)`.
     pub fn new(message: impl Into<String>, line: u32, col: u32) -> Error {
-        Error { message: message.into(), line, col, notes: Vec::new() }
+        Error { message: message.into(), line, col, notes: Vec::new(), severity: Severity::Error }
+    }
+
+    /// Un **warning** (`-Xlint`) sin notas en `(línea, columna)`.
+    pub fn warning(message: impl Into<String>, line: u32, col: u32) -> Error {
+        Error { message: message.into(), line, col, notes: Vec::new(), severity: Severity::Warning }
     }
 
     /// El mismo error con sus sub-líneas explicativas (estilo `javac`).
@@ -63,7 +80,11 @@ impl Error {
     /// indentadas. La columna se transmite con el caret (no en el encabezado), igual que `javac`.
     /// El caret preserva los tabs del prefijo para alinear con la línea impresa tal cual.
     pub fn render(&self, source: &str, filename: &str) -> String {
-        let mut out = format!("{filename}:{}: error: {}\n", self.line, self.message);
+        let kind = match self.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let mut out = format!("{filename}:{}: {kind}: {}\n", self.line, self.message);
         if let Some(text) = source.lines().nth(self.line.saturating_sub(1) as usize) {
             out.push_str(text);
             out.push('\n');
@@ -88,23 +109,34 @@ impl Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}: error: {}", self.line, self.col, self.message)
+        let kind = match self.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        write!(f, "{}:{}: {kind}: {}", self.line, self.col, self.message)
     }
 }
 
 /// Renderiza **todos** los diagnósticos al estilo `javac` (cada uno con su snippet + caret) y cierra
 /// con el resumen `N error[s]`. Es lo que imprime el CLI en `--check`/`--emit`. Devuelve `""` si no
 /// hay errores (sin resumen), para que el llamador decida el mensaje de éxito.
-pub fn render_diagnostics(errors: &[Error], source: &str, filename: &str) -> String {
-    if errors.is_empty() {
+pub fn render_diagnostics(diagnostics: &[Error], source: &str, filename: &str) -> String {
+    if diagnostics.is_empty() {
         return String::new();
     }
     let mut out = String::new();
-    for e in errors {
+    for e in diagnostics {
         out.push_str(&e.render(source, filename));
     }
-    let n = errors.len();
-    out.push_str(&format!("{n} error{}\n", if n == 1 { "" } else { "s" }));
+    // Resumen por severidad (`N error[s]` y/o `M warning[s]`), como `javac`.
+    let errors = diagnostics.iter().filter(|d| d.severity == Severity::Error).count();
+    let warnings = diagnostics.len() - errors;
+    if errors > 0 {
+        out.push_str(&format!("{errors} error{}\n", if errors == 1 { "" } else { "s" }));
+    }
+    if warnings > 0 {
+        out.push_str(&format!("{warnings} warning{}\n", if warnings == 1 { "" } else { "s" }));
+    }
     out
 }
 
@@ -134,6 +166,23 @@ pub fn check(source: &str) -> Result<Vec<Error>> {
 pub fn check_cp(source: &str, extra_classpath: &[std::path::PathBuf]) -> Result<Vec<Error>> {
     let (_unit, _table, errors) = analyze_cp(source, extra_classpath)?;
     Ok(errors)
+}
+
+/// Corre el pase de **lint** (`-Xlint`) sobre el fuente y devuelve los avisos (severidad `Warning`) de
+/// las categorías de `set`. Se apoya en [`analyze`], así el AST llega **atribuido** y **antes** del
+/// desugar (las posiciones caen en el fuente). No falla por errores semánticos: los avisos van igual.
+pub fn lint_source(source: &str, set: &lint::LintSet) -> Result<Vec<Error>> {
+    lint_cp(source, &[], set)
+}
+
+/// [`lint_source`] con un **classpath extra** de directorios de `.class`.
+pub fn lint_cp(
+    source: &str,
+    extra_classpath: &[std::path::PathBuf],
+    set: &lint::LintSet,
+) -> Result<Vec<Error>> {
+    let (unit, table, _errors) = analyze_cp(source, extra_classpath)?;
+    Ok(lint::lint(&unit, &table, set))
 }
 
 /// Corre el front-end completo y devuelve las tres salidas: el AST **decorado** por la pasada 2,
@@ -215,6 +264,13 @@ pub fn compile_cp(
     // (`Integer.valueOf`/`x.intValue`). Va después de Flow (que analiza el árbol fuente) y antes del
     // desugar; sus inserciones las materializa la re-atribución de abajo.
     transtypes::trans_types(&mut unit, &table);
+    // Pliega los **campos constantes** de la unidad (`static final` numéricos, §15.29) a un mapa
+    // `SymbolId → valor`, resolviendo referencias entre `final` por *fixpoint* (`B = A * 2`). El
+    // desugar lo consulta para no bajar esas inits al `<clinit>`, y el codegen para emitir su
+    // `ConstantValue`. Debe correr **después** del atributado (que resuelve los `Binding::Field`) y
+    // **antes** del desugar.
+    let const_fields = codegen::collect_const_fields(&unit, &table);
+    table.set_const_fields(const_fields);
     desugar::desugar(&mut unit, &mut table);
     // Re-decorar: el desugar dejó nodos nuevos sin `ty`/`binding`/`slot`. Un error acá **no** es del
     // usuario (su código ya pasó): sería un bug de una reescritura, y emitir igual daría basura.

@@ -281,10 +281,16 @@ fn gen_class(
     // Una **interfaz** (o `@interface`) es `ACC_INTERFACE | ACC_ABSTRACT`, **sin** `ACC_SUPER` (§4.1);
     // una clase lleva `ACC_SUPER`.
     let is_interface = matches!(class.kind, TypeKind::Interface | TypeKind::Annotation);
+    // `ACC_STATIC`/`ACC_PRIVATE`/`ACC_PROTECTED` de un tipo **anidado** son flags **de miembro**: van
+    // en su entrada de `InnerClasses` (§4.7.6), **no** en los access_flags de clase (§4.1), que solo
+    // admiten public/final/super/interface/abstract/…—. Emitirlos ahí da un `.class` que la JVM
+    // rechaza (`Unmatched bit 0x8` para `static`). El nivel de acceso real de un anidado lo lleva
+    // `InnerClasses`; a nivel clase, un anidado package-private queda solo con `ACC_SUPER`.
+    let class_level = class_flags(&class.modifiers) & !(ACC_STATIC | ACC_PRIVATE | ACC_PROTECTED);
     cf.access_flags = if is_interface {
-        class_flags(&class.modifiers) | ACC_INTERFACE | ACC_ABSTRACT
+        class_level | ACC_INTERFACE | ACC_ABSTRACT
     } else {
-        class_flags(&class.modifiers) | ACC_SUPER
+        class_level | ACC_SUPER
     };
     // Un `record` es implícitamente `final` (§8.10) — lo que la reflexión exige para `isRecord()`.
     if class.kind == TypeKind::Record {
@@ -318,7 +324,7 @@ fn gen_class(
     }
     cf.type_annotations = wrap_type_annotations(&class_ta);
     // `Signature` (§4.7.9) de la clase: sus parámetros de tipo + super/interfaces genéricos.
-    cf.signature = class_signature(table, scope, class).map(|s| cf.pool.utf8(&s));
+    cf.signature = class_signature(table, scope, class, &this_internal).map(|s| cf.pool.utf8(&s));
     // `InnerClasses` (§4.7.6): la cadena de enclosing de esta clase + las que contiene.
     cf.inner_classes = build_inner_classes(&mut cf.pool, table, cid);
     // `EnclosingMethod` (§4.7.7): solo si es local/anónima.
@@ -424,7 +430,7 @@ fn gen_class(
                     .init
                     .as_ref()
                     .filter(|_| is_const_field)
-                    .and_then(|init| const_field_value(&f.ty, init))
+                    .and_then(|init| const_field_value(&f.ty, init, table.const_fields()))
                     .map(|v| match v {
                         ConstVal::Int(n) => cf.pool.integer(n),
                         ConstVal::Long(n) => cf.pool.long(n),
@@ -504,7 +510,10 @@ fn gen_class(
     // Sin constructor explícito, se sintetiza el por defecto: `super()` + `return`. Una **interfaz**
     // no tiene constructor.
     if !has_ctor && !is_interface {
-        let ctor = default_ctor(&mut cf.pool, &super_internal);
+        // El ctor por defecto toma el **acceso de la clase** (§8.8.9): `public class` → ctor `public`,
+        // un anidado package-private → ctor package-private (antes salía siempre `public`).
+        let access = class_flags(&class.modifiers) & (ACC_PUBLIC | ACC_PROTECTED | ACC_PRIVATE);
+        let ctor = default_ctor(&mut cf.pool, &super_internal, access);
         cf.methods.push(ctor);
     }
 
@@ -564,8 +573,9 @@ fn checkcast_name(table: &SymbolTable, rt: &RType) -> String {
 /// concreto de instancia que **sobrescribe** uno de un supertipo cuya *erasure* difiere —por un
 /// parámetro **genérico** borrado (`Node<Integer>.setData(T)` → `setData(Object)`), o por un
 /// **retorno covariante** (`A.f():Object` → `B.f():String`)—, se sintetiza un método con el
-/// descriptor **borrado del supertipo** que reenvía al real. Solo clases (en una interfaz el puente
-/// sería un `default`, aparte).
+/// descriptor **borrado del supertipo** que reenvía al real. Vale para clases y para **interfaces**:
+/// en una interfaz el puente es un método `default` sintético que reenvía con `invokeinterface` al
+/// `default` real (§9.4.1.3). Un `@interface` no tiene `default`s ni supertipos genéricos: sin puentes.
 fn bridge_methods(
     pool: &mut ConstantPool,
     table: &SymbolTable,
@@ -573,9 +583,10 @@ fn bridge_methods(
     cid: SymbolId,
     this_internal: &str,
 ) -> Vec<MethodInfo> {
-    if matches!(class.kind, TypeKind::Interface | TypeKind::Annotation) {
+    if matches!(class.kind, TypeKind::Annotation) {
         return Vec::new();
     }
+    let is_interface = matches!(class.kind, TypeKind::Interface);
     let supers = types::supertypes_of(table, &RType::Class(cid));
     // Descriptores **ya presentes** como métodos reales: un puente no debe pisar ninguno.
     let mut present: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
@@ -635,7 +646,8 @@ fn bridge_methods(
                     continue;
                 }
                 out.push(emit_bridge(
-                    pool, table, this_internal, &name, &br_params, &br_ret, &m_params, &m_ret, &m_desc,
+                    pool, table, this_internal, &name, &br_params, &br_ret, &m_params, &m_ret,
+                    &m_desc, is_interface,
                 ));
             }
         }
@@ -644,8 +656,9 @@ fn bridge_methods(
 }
 
 /// Emite el método puente: `this` + los argumentos (con `checkcast` al tipo del método real cuando
-/// difieren) + `invokevirtual` al real + `return` del valor (su subtipo es asignable al retorno del
-/// puente). Sin saltos: no lleva `StackMapTable`.
+/// difieren) + la llamada al real + `return` del valor (su subtipo es asignable al retorno del
+/// puente). En una **interfaz** el reenvío es `invokeinterface` a un `InterfaceMethodref` (§6.5); en
+/// una clase, `invokevirtual` a un `Methodref`. Sin saltos: no lleva `StackMapTable`.
 #[allow(clippy::too_many_arguments)]
 fn emit_bridge(
     pool: &mut ConstantPool,
@@ -657,10 +670,10 @@ fn emit_bridge(
     m_params: &[RType],
     m_ret: &RType,
     m_desc: &str,
+    is_interface: bool,
 ) -> MethodInfo {
     let name_index = pool.utf8(name);
     let descriptor_index = pool.utf8(&sig_desc(table, br_params, br_ret));
-    let target = pool.methodref(this_internal, name, m_desc);
 
     let mut code = vec![ALOAD_0];
     let mut slot = 1u16;
@@ -680,9 +693,21 @@ fn emit_bridge(
         }
     }
     let max_stack = on_stack.max(cat_width(m_ret));
-    code.push(INVOKEVIRTUAL);
-    code.push((target >> 8) as u8);
-    code.push(target as u8);
+    if is_interface {
+        // `invokeinterface`: índice + `count` (slots del receptor + argumentos) + un byte cero (§6.5).
+        let imref = pool.interface_methodref(this_internal, name, m_desc);
+        code.push(INVOKEINTERFACE);
+        code.push((imref >> 8) as u8);
+        code.push(imref as u8);
+        let count: u16 = m_params.iter().map(|p| cat_width(p)).sum::<u16>() + 1;
+        code.push(count as u8);
+        code.push(0);
+    } else {
+        let target = pool.methodref(this_internal, name, m_desc);
+        code.push(INVOKEVIRTUAL);
+        code.push((target >> 8) as u8);
+        code.push(target as u8);
+    }
     if matches!(m_ret, RType::Void) {
         code.push(RETURN);
     } else {
@@ -963,8 +988,23 @@ fn class_tvar_names(class: &ClassDecl) -> HashSet<String> {
 
 /// La `ClassSignature` (§4.7.9.1) de una clase, o `None` si no usa genéricos (ni parámetros de tipo,
 /// ni super/interfaces parametrizados).
-fn class_signature(table: &SymbolTable, scope: ScopeId, class: &ClassDecl) -> Option<String> {
+fn class_signature(
+    table: &SymbolTable,
+    scope: ScopeId,
+    class: &ClassDecl,
+    this_internal: &str,
+) -> Option<String> {
     let tvars = class_tvar_names(class);
+    // Un `enum` extiende **implícitamente** `Enum<Self>` (§8.9), un supertipo **parametrizado**: por
+    // eso siempre lleva `Signature` (`Ljava/lang/Enum<LSelf;>;`), aunque el `extends` no esté escrito.
+    // Sin esto la reflexión veía `Enum` crudo y el `.class` divergía de javac.
+    if class.kind == TypeKind::Enum {
+        let mut s = format!("Ljava/lang/Enum<L{this_internal};>;");
+        for i in &class.implements {
+            s.push_str(&sig_type(table, scope, &tvars, i));
+        }
+        return Some(s);
+    }
     let super_generic = class.extends.as_ref().is_some_and(|t| sig_is_generic(table, scope, &tvars, t));
     let iface_generic = class.implements.iter().any(|t| sig_is_generic(table, scope, &tvars, t));
     if class.type_params.is_empty() && !super_generic && !iface_generic {
@@ -1337,8 +1377,15 @@ fn gen_method(
     // (cast/`instanceof`/`new`) que el emisor fue anotando con el offset de cada opcode.
     let code_type_annotations = wrap_type_annotations(&e.code_type_annotations);
 
+    // Un método de interfaz **con cuerpo** (`default`/`static`, §9.4) es implícitamente `public` salvo
+    // que sea `private` (Java 9+): sin `ACC_PUBLIC` el `.class` diverge de javac y la reflexión lo ve
+    // de paquete. El camino **sin** cuerpo (arriba) ya lo hacía; este —el `default`— faltaba.
+    let mut method_flags = class_flags(&m.modifiers);
+    if is_interface && !m.modifiers.contains(&Modifier::Private) {
+        method_flags |= ACC_PUBLIC;
+    }
     MethodInfo {
-        access_flags: class_flags(&m.modifiers),
+        access_flags: method_flags,
         name_index,
         descriptor_index,
         max_stack: e.max_stack as u16,
@@ -1389,13 +1436,13 @@ fn vtype_of_type(table: &SymbolTable, scope: ScopeId, ty: &Type) -> VType {
 }
 
 /// El constructor por defecto: `aload_0; invokespecial <super>.<init>()V; return`.
-fn default_ctor(pool: &mut ConstantPool, super_internal: &str) -> MethodInfo {
+fn default_ctor(pool: &mut ConstantPool, super_internal: &str, access: u16) -> MethodInfo {
     let name_index = pool.utf8("<init>");
     let descriptor_index = pool.utf8("()V");
     let super_init = pool.methodref(super_internal, "<init>", "()V");
     let code = vec![ALOAD_0, INVOKESPECIAL, (super_init >> 8) as u8, super_init as u8, RETURN];
     MethodInfo {
-        access_flags: ACC_PUBLIC,
+        access_flags: access,
         name_index,
         descriptor_index,
         max_stack: 1,
@@ -1880,7 +1927,9 @@ const POP: u8 = 0x57;
 const POP2: u8 = 0x58;
 const IINC: u8 = 0x84; // incrementa un local `int` **sin tocar la pila**
 const DUP: u8 = 0x59;
+const DUP_X2: u8 = 0x5b;
 const DUP2: u8 = 0x5c;
+const DUP2_X2: u8 = 0x5e;
 const GETSTATIC: u8 = 0xb2;
 const PUTSTATIC: u8 = 0xb3;
 const GETFIELD: u8 = 0xb4;
@@ -1959,6 +2008,18 @@ fn cmp_index(op: BinOp, when: bool) -> Option<u8> {
     };
     // Los pares opuestos son (0,1) (2,3) (4,5): invertir es alternar el bit bajo.
     Some(if when { idx } else { idx ^ 1 })
+}
+
+/// La comparación con los operandos **intercambiados** (`a op b` ⟺ `b rev(op) a`): `<`↔`>`, `<=`↔`>=`;
+/// `==`/`!=` son simétricas. Para emitir `0 op x` como el `x rev(op) 0` de un solo operando.
+fn reverse_cmp(op: BinOp) -> BinOp {
+    match op {
+        BinOp::Lt => BinOp::Gt,
+        BinOp::Gt => BinOp::Lt,
+        BinOp::Le => BinOp::Ge,
+        BinOp::Ge => BinOp::Le,
+        other => other,
+    }
 }
 
 /// La categoría de tipo para elegir la variante de un opcode: 0=`int`, 1=`long`, 2=`float`,
@@ -2059,6 +2120,7 @@ fn const_int(e: &Expr) -> Option<i32> {
 
 /// El valor constante de un campo, ya tipado para el atributo `ConstantValue` (§4.7.2): la variante
 /// determina qué entrada del pool se emite (`Integer`/`Long`/`Float`/`Double`/`String`).
+#[derive(Clone)]
 pub(crate) enum ConstVal {
     Int(i32),
     Long(i64),
@@ -2067,40 +2129,345 @@ pub(crate) enum ConstVal {
     Str(String),
 }
 
-/// Un valor **numérico** constante de compilación (§15.29), leído de un literal con `+`/`-` unario.
-/// Se deja **sin coercionar**: la coerción al tipo del campo la hace [`const_field_value`].
-enum Num {
-    Int(i64),
-    Flt(f64),
+/// El valor **numérico** de una expresión constante de compilación (§15.29), con su tipo (para la
+/// promoción §5.6.2 y el truncado al tipo del campo). `char`/`byte`/`short`/`int` se representan como
+/// `Int`; su tipo declarado solo importa al coercionar en [`const_field_value`].
+#[derive(Clone, Copy)]
+enum NumV {
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
 }
 
-fn const_num(e: &Expr) -> Option<Num> {
+/// El mapa de **valores de campos constantes** de la unidad (`SymbolId del campo → valor plegado`),
+/// que permite inlinear referencias entre `final`: numéricas (`static final int B = A * 2;`) y de
+/// `String` (`static final String T = S + "!";`). Se construye por fixpoint en [`collect_const_fields`]
+/// y se consulta al plegar. Vacío durante el atributado.
+pub(crate) type ConstFieldMap = std::collections::HashMap<SymbolId, ConstVal>;
+
+/// Evalúa una **expresión constante numérica** (§15.29): literales, `+`/`-`/`~` unarios, cast entre
+/// primitivos, y los binarios aritméticos, de bits y de shift con la **promoción numérica binaria**
+/// (§5.6.2). `None` si no es una constante plegable (una `final` referenciada, una división por cero,
+/// un operando booleano…): esos casos caen al `<clinit>` — correcto, solo no *inlineados*.
+fn const_eval_num(e: &Expr, consts: &ConstFieldMap) -> Option<NumV> {
+    Some(match &e.kind {
+        ExprKind::IntLit(n) => NumV::Int(*n as i32),
+        ExprKind::CharLit(c) => NumV::Int(*c as i32),
+        ExprKind::LongLit(n) => NumV::Long(*n),
+        ExprKind::FloatLit(f) => NumV::Float(*f as f32),
+        ExprKind::DoubleLit(d) => NumV::Double(*d),
+        ExprKind::Unary { op: UnOp::Plus, expr, .. } => const_eval_num(expr, consts)?,
+        ExprKind::Unary { op: UnOp::Neg, expr, .. } => match const_eval_num(expr, consts)? {
+            NumV::Int(x) => NumV::Int(x.wrapping_neg()),
+            NumV::Long(x) => NumV::Long(x.wrapping_neg()),
+            NumV::Float(x) => NumV::Float(-x),
+            NumV::Double(x) => NumV::Double(-x),
+        },
+        ExprKind::Unary { op: UnOp::BitNot, expr, .. } => match const_eval_num(expr, consts)? {
+            NumV::Int(x) => NumV::Int(!x),
+            NumV::Long(x) => NumV::Long(!x),
+            _ => return None, // `~` solo aplica a enteros
+        },
+        ExprKind::Cast { ty, expr } => cast_num(ty, const_eval_num(expr, consts)?)?,
+        ExprKind::Binary { op, lhs, rhs } => {
+            eval_binop_num(*op, const_eval_num(lhs, consts)?, const_eval_num(rhs, consts)?)?
+        }
+        // Referencia a otra **constante** de la unidad (`static final int B = A * 2;`): si `A` ya se
+        // plegó a un valor conocido, se **inlinea** aquí (§13.4.9/§15.29). Vale tanto para un nombre
+        // suelto (`A`) como para el acceso cualificado (`Clase.A`), ambos con `Binding::Field`.
+        ExprKind::Name(_) | ExprKind::Field { .. } => match e.binding {
+            Some(Binding::Field(sym)) => match consts.get(&sym)? {
+                ConstVal::Int(n) => NumV::Int(*n),
+                ConstVal::Long(n) => NumV::Long(*n),
+                ConstVal::Float(n) => NumV::Float(*n),
+                ConstVal::Double(n) => NumV::Double(*n),
+                ConstVal::Str(_) => return None, // una `String` constante no es un valor numérico
+            },
+            _ => return None,
+        },
+        _ => return None,
+    })
+}
+
+/// Evalúa una **expresión constante de tipo `String`** (§15.29/§15.18.1): un literal, la
+/// **concatenación** `+` con al menos un operando `String`, o una **referencia** a otra `String`
+/// constante de la unidad (`Binding::Field` que resolvió a un `ConstVal::Str`). `None` si no es una
+/// constante `String` plegable —entonces la init cae al `<clinit>` con su `new StringBuilder`—.
+///
+/// La disyuntiva `"a" + 2` (concat) vs `1 + 2` (aritmética) se decide por §15.18.1: el `+` es concat
+/// **solo si algún operando es de tipo `String`**. Por eso `const_eval_str` devuelve `Some` únicamente
+/// para expresiones cuyo *tipo* es `String` (literal, ref a `String` final, o un `+` que ya es concat);
+/// un `char`/`boolean`/número suelto da `None` aquí y solo se **convierte a texto** como operando de un
+/// concat ya decidido (ver [`operand_to_string`]).
+fn const_eval_str(e: &Expr, consts: &ConstFieldMap) -> Option<String> {
     match &e.kind {
-        ExprKind::IntLit(n) | ExprKind::LongLit(n) => Some(Num::Int(*n)),
-        ExprKind::CharLit(c) => Some(Num::Int(*c as i64)),
-        ExprKind::FloatLit(f) => Some(Num::Flt(*f as f64)),
-        ExprKind::DoubleLit(d) => Some(Num::Flt(*d)),
-        ExprKind::Unary { op: UnOp::Neg, expr, .. } => const_num(expr).map(|n| match n {
-            Num::Int(v) => Num::Int(v.wrapping_neg()),
-            Num::Flt(v) => Num::Flt(-v),
-        }),
-        ExprKind::Unary { op: UnOp::Plus, expr, .. } => const_num(expr),
+        ExprKind::StringLit(s) => Some(s.clone()),
+        ExprKind::Binary { op: BinOp::Add, lhs, rhs } => {
+            let (ls, rs) = (const_eval_str(lhs, consts), const_eval_str(rhs, consts));
+            if ls.is_none() && rs.is_none() {
+                return None; // ningún operando es `String`: es aritmética, no concatenación
+            }
+            Some(operand_to_string(lhs, consts)? + &operand_to_string(rhs, consts)?)
+        }
+        ExprKind::Name(_) | ExprKind::Field { .. } => match e.binding {
+            Some(Binding::Field(sym)) => match consts.get(&sym)? {
+                ConstVal::Str(s) => Some(s.clone()),
+                _ => None, // un campo numérico no es de tipo `String`
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// La **conversión a texto** (§5.1.11) de un operando **constante** de una concatenación ya decidida
+/// como tal: una `String` va tal cual; un `boolean`/`char` literal por su forma textual; un número por
+/// su representación decimal. Un `char` referenciado por campo se pierde a decimal (el mapa lo guarda
+/// como entero) — limitación menor y muy poco frecuente en constantes.
+fn operand_to_string(e: &Expr, consts: &ConstFieldMap) -> Option<String> {
+    if let Some(s) = const_eval_str(e, consts) {
+        return Some(s);
+    }
+    match &e.kind {
+        ExprKind::BoolLit(b) => return Some(b.to_string()),
+        ExprKind::CharLit(c) => return Some(c.to_string()),
+        _ => {}
+    }
+    Some(match const_eval_num(e, consts)? {
+        NumV::Int(n) => n.to_string(),
+        NumV::Long(n) => n.to_string(),
+        NumV::Float(f) => java_fp_string(f as f64),
+        NumV::Double(d) => java_fp_string(d),
+    })
+}
+
+/// Aproxima `Double.toString`/`Float.toString` de Java para la concatenación de constantes: como Rust
+/// imprime `1.0` como `"1"`, se le agrega `.0` a los valores **integrales** finitos. No reproduce el
+/// algoritmo de dígitos mínimos de Java, pero cubre los casos usuales (`"v=" + 1.5` → `"v=1.5"`,
+/// `"v=" + 1.0` → `"v=1.0"`).
+fn java_fp_string(d: f64) -> String {
+    let s = d.to_string();
+    if d.is_finite() && !s.contains(['.', 'e', 'E']) {
+        format!("{s}.0")
+    } else {
+        s
+    }
+}
+
+/// El valor de una **expresión constante booleana** (§15.28): `true`/`false`, `!`, los lógicos y de
+/// bits sobre `boolean` (`&&`, `||`, `&`, `|`, `^`), la igualdad `==`/`!=` entre booleanos, y las
+/// comparaciones (`<`, `<=`, `>`, `>=`, `==`, `!=`) entre **constantes numéricas** (literales, con la
+/// promoción §5.6.2). `None` si no es plegable. Los lógicos exigen **ambos** operandos constantes
+/// (§15.28): `false && x` con `x` no constante **no** es una constante (aunque valga `false`).
+fn const_eval_bool(e: &Expr, consts: &ConstFieldMap) -> Option<bool> {
+    Some(match &e.kind {
+        ExprKind::BoolLit(b) => *b,
+        ExprKind::Unary { op: UnOp::Not, expr, .. } => !const_eval_bool(expr, consts)?,
+        ExprKind::Binary { op, lhs, rhs } => {
+            use BinOp::*;
+            match op {
+                And | Or | BitAnd | BitOr | BitXor => {
+                    let (a, b) = (const_eval_bool(lhs, consts)?, const_eval_bool(rhs, consts)?);
+                    match op {
+                        And => a && b,
+                        Or => a || b,
+                        BitAnd => a & b,
+                        BitOr => a | b,
+                        _ => a ^ b, // BitXor
+                    }
+                }
+                // `==`/`!=` es booleano (dos `boolean` constantes) o numérico (dos números constantes).
+                Eq | Ne => {
+                    if let (Some(a), Some(b)) =
+                        (const_eval_bool(lhs, consts), const_eval_bool(rhs, consts))
+                    {
+                        if matches!(op, Eq) { a == b } else { a != b }
+                    } else {
+                        compare_num(*op, const_eval_num(lhs, consts)?, const_eval_num(rhs, consts)?)?
+                    }
+                }
+                Lt | Le | Gt | Ge => {
+                    compare_num(*op, const_eval_num(lhs, consts)?, const_eval_num(rhs, consts)?)?
+                }
+                _ => return None,
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Compara dos constantes numéricas ya evaluadas con la promoción binaria (§5.6.2). Una comparación
+/// con `NaN` no es plegable (`partial_cmp` da `None`): cae a runtime, donde el bytecode la resuelve
+/// bien (todas `false`, salvo `!=` que es `true`).
+fn compare_num(op: BinOp, a: NumV, b: NumV) -> Option<bool> {
+    use std::cmp::Ordering;
+    let fp = matches!(a, NumV::Double(_) | NumV::Float(_))
+        || matches!(b, NumV::Double(_) | NumV::Float(_));
+    let ord = if fp {
+        num_to_f64(a).partial_cmp(&num_to_f64(b))?
+    } else {
+        num_to_i64(a).cmp(&num_to_i64(b))
+    };
+    Some(match op {
+        BinOp::Lt => ord == Ordering::Less,
+        BinOp::Le => ord != Ordering::Greater,
+        BinOp::Gt => ord == Ordering::Greater,
+        BinOp::Ge => ord != Ordering::Less,
+        BinOp::Eq => ord == Ordering::Equal,
+        BinOp::Ne => ord != Ordering::Equal,
+        _ => return None,
+    })
+}
+
+/// El valor de una **expresión constante booleana** de la unidad, sin resolver referencias a campos
+/// (mapa vacío) — así el *flow* (que corre antes de plegar los campos) y el codegen coinciden bit a
+/// bit en qué condiciones son constantes. Lo usan la reachability §14.21 y el plegado de `branch_if`.
+pub(crate) fn const_bool_expr(e: &Expr) -> Option<bool> {
+    const_eval_bool(e, &ConstFieldMap::new())
+}
+
+fn num_to_i64(v: NumV) -> i64 {
+    match v {
+        NumV::Int(x) => x as i64,
+        NumV::Long(x) => x,
+        NumV::Float(x) => x as i64,
+        NumV::Double(x) => x as i64,
+    }
+}
+
+fn num_to_f64(v: NumV) -> f64 {
+    match v {
+        NumV::Int(x) => x as f64,
+        NumV::Long(x) => x as f64,
+        NumV::Float(x) => x as f64,
+        NumV::Double(x) => x,
+    }
+}
+
+/// Un *cast* entre primitivos aplicado a un valor constante (§5.1.2/§5.1.3). Los estrechamientos a
+/// entero angosto van por `int` primero (`f2i` satura, luego trunca), como en la JVM.
+fn cast_num(ty: &Type, v: NumV) -> Option<NumV> {
+    let Type::Prim(p) = ty else { return None };
+    Some(match p {
+        PrimType::Long => NumV::Long(num_to_i64(v)),
+        PrimType::Float => NumV::Float(num_to_f64(v) as f32),
+        PrimType::Double => NumV::Double(num_to_f64(v)),
+        PrimType::Int => NumV::Int(num_to_i64(v) as i32),
+        PrimType::Byte => NumV::Int(num_to_i64(v) as i32 as i8 as i32),
+        PrimType::Short => NumV::Int(num_to_i64(v) as i32 as i16 as i32),
+        PrimType::Char => NumV::Int(num_to_i64(v) as i32 as u16 as i32),
+        PrimType::Boolean => return None,
+    })
+}
+
+/// Un binario numérico sobre dos constantes ya evaluadas. Los shifts promocionan cada operando por
+/// separado y dan el tipo del izquierdo (§15.19); el resto usa la promoción binaria (§5.6.2). Los
+/// operadores no-numéricos (comparaciones, `&&`/`||`) devuelven `None` (no producen un `NumV`).
+fn eval_binop_num(op: BinOp, a: NumV, b: NumV) -> Option<NumV> {
+    use BinOp::*;
+    if matches!(op, Shl | Shr | UShr) {
+        let amt = num_to_i64(b);
+        return Some(match a {
+            NumV::Int(x) => {
+                let s = (amt as u32) & 31;
+                NumV::Int(match op {
+                    Shl => x.wrapping_shl(s),
+                    Shr => x.wrapping_shr(s),
+                    _ => ((x as u32) >> s) as i32,
+                })
+            }
+            NumV::Long(x) => {
+                let s = (amt as u32) & 63;
+                NumV::Long(match op {
+                    Shl => x.wrapping_shl(s),
+                    Shr => x.wrapping_shr(s),
+                    _ => ((x as u64) >> s) as i64,
+                })
+            }
+            _ => return None, // el shift solo aplica a enteros
+        });
+    }
+    // Promoción binaria (§5.6.2): al tipo más ancho de los dos.
+    let is_dbl = matches!(a, NumV::Double(_)) || matches!(b, NumV::Double(_));
+    let is_flt = matches!(a, NumV::Float(_)) || matches!(b, NumV::Float(_));
+    let is_lng = matches!(a, NumV::Long(_)) || matches!(b, NumV::Long(_));
+    if is_dbl || is_flt {
+        let (x, y) = (num_to_f64(a), num_to_f64(b));
+        let r = match op {
+            Add => x + y,
+            Sub => x - y,
+            Mul => x * y,
+            Div => x / y,
+            Rem => x % y,
+            _ => return None, // bitwise/comparaciones no aplican a punto flotante
+        };
+        return Some(if is_dbl { NumV::Double(r) } else { NumV::Float(r as f32) });
+    }
+    if is_lng {
+        let (x, y) = (num_to_i64(a), num_to_i64(b));
+        return Some(NumV::Long(match op {
+            Add => x.wrapping_add(y),
+            Sub => x.wrapping_sub(y),
+            Mul => x.wrapping_mul(y),
+            Div => (y != 0).then(|| x.wrapping_div(y))?,
+            Rem => (y != 0).then(|| x.wrapping_rem(y))?,
+            BitAnd => x & y,
+            BitOr => x | y,
+            BitXor => x ^ y,
+            _ => return None,
+        }));
+    }
+    let (NumV::Int(x), NumV::Int(y)) = (a, b) else { return None };
+    Some(NumV::Int(match op {
+        Add => x.wrapping_add(y),
+        Sub => x.wrapping_sub(y),
+        Mul => x.wrapping_mul(y),
+        Div => (y != 0).then(|| x.wrapping_div(y))?,
+        Rem => (y != 0).then(|| x.wrapping_rem(y))?,
+        BitAnd => x & y,
+        BitOr => x | y,
+        BitXor => x ^ y,
+        _ => return None,
+    }))
+}
+
+/// El valor **entero** de una expresión constante numérica (§15.29). `None` si es de punto flotante:
+/// un `float`/`double` sin *cast* explícito no va a un campo entero.
+fn const_eval_i64(e: &Expr, consts: &ConstFieldMap) -> Option<i64> {
+    match const_eval_num(e, consts)? {
+        NumV::Int(v) => Some(v as i64),
+        NumV::Long(v) => Some(v),
+        NumV::Float(_) | NumV::Double(_) => None,
+    }
+}
+
+/// El valor de una expresión constante numérica como `f64` (para campos `float`/`double`).
+fn const_eval_f64(e: &Expr, consts: &ConstFieldMap) -> Option<f64> {
+    Some(num_to_f64(const_eval_num(e, consts)?))
+}
+
+/// El valor de una expresión constante de tipo **`int`** (§15.29), o `None` si no es una constante
+/// **int** (una `long`/`float`/`double`, o algo no plegable). Es el predicado del **narrowing por
+/// constante** del §5.2 (`byte b = 1 + 2;`): solo un `int` constante que entra en el rango del
+/// destino se asigna a `byte`/`short`/`char` sin cast.
+pub(crate) fn const_eval_int(e: &Expr, consts: &ConstFieldMap) -> Option<i32> {
+    match const_eval_num(e, consts)? {
+        NumV::Int(v) => Some(v),
         _ => None,
     }
 }
 
 /// El valor del atributo `ConstantValue` de un campo con inicializador de **expresión constante**
-/// (§15.29), coercionado a su tipo declarado. `None` si no es un literal primitivo/`String` que
-/// sepamos plegar —una expresión aritmética compleja cae al `<clinit>` (correcto, solo no *inlineada*)—.
+/// (§15.29), coercionado a su tipo declarado. Pliega literales **y** expresiones aritméticas/de bits/
+/// shift (`2 + 3`, `60 * 60`, `1 << 4`, …). `None` si no es plegable —una referencia a otra `final`,
+/// un `String` no literal— y entonces la init cae al `<clinit>` (correcto, solo no *inlineada*).
 /// El mismo predicado lo usa el desugar para **no** bajar la init al `<clinit>` si va a `ConstantValue`.
-pub(crate) fn const_field_value(field_ty: &Type, init: &Expr) -> Option<ConstVal> {
+pub(crate) fn const_field_value(field_ty: &Type, init: &Expr, consts: &ConstFieldMap) -> Option<ConstVal> {
     let p = match field_ty {
         Type::Prim(p) => *p,
         Type::Class(n) if n == "String" || n == "java.lang.String" => {
-            return match &init.kind {
-                ExprKind::StringLit(s) => Some(ConstVal::Str(s.clone())),
-                _ => None,
-            };
+            return const_eval_str(init, consts).map(ConstVal::Str);
         }
         _ => return None,
     };
@@ -2110,29 +2477,87 @@ pub(crate) fn const_field_value(field_ty: &Type, init: &Expr) -> Option<ConstVal
             _ => None,
         },
         // Los enteros angostos se guardan como `Integer`, truncados a su rango (§5.1.3).
-        PrimType::Int => num_int(init).map(|v| ConstVal::Int(v as i32)),
-        PrimType::Short => num_int(init).map(|v| ConstVal::Int(v as i16 as i32)),
-        PrimType::Byte => num_int(init).map(|v| ConstVal::Int(v as i8 as i32)),
-        PrimType::Char => num_int(init).map(|v| ConstVal::Int(v as u16 as i32)),
-        PrimType::Long => num_int(init).map(ConstVal::Long),
-        PrimType::Float => const_num(init).map(|n| ConstVal::Float(num_f64(n) as f32)),
-        PrimType::Double => const_num(init).map(|n| ConstVal::Double(num_f64(n))),
+        PrimType::Int => const_eval_i64(init, consts).map(|v| ConstVal::Int(v as i32)),
+        PrimType::Short => const_eval_i64(init, consts).map(|v| ConstVal::Int(v as i16 as i32)),
+        PrimType::Byte => const_eval_i64(init, consts).map(|v| ConstVal::Int(v as i8 as i32)),
+        PrimType::Char => const_eval_i64(init, consts).map(|v| ConstVal::Int(v as u16 as i32)),
+        PrimType::Long => const_eval_i64(init, consts).map(ConstVal::Long),
+        PrimType::Float => const_eval_f64(init, consts).map(|v| ConstVal::Float(v as f32)),
+        PrimType::Double => const_eval_f64(init, consts).map(ConstVal::Double),
     }
 }
 
-/// El valor entero de una constante numérica (un `float`/`double` no encaja en un campo entero sin un
-/// *cast* explícito, que no plegamos, así que ahí devuelve `None`).
-fn num_int(e: &Expr) -> Option<i64> {
-    match const_num(e)? {
-        Num::Int(v) => Some(v),
-        Num::Flt(_) => None,
+/// Construye el mapa de **campos constantes** de la unidad por *fixpoint* (§13.4.9/§15.29). Recorre
+/// todos los campos `static final` de tipo numérico y, mientras alguno se pueda plegar con lo ya
+/// conocido, lo agrega —así una constante que depende de otra (`B = A * 2`) se resuelve en una pasada
+/// posterior—. Converge cuando una iteración completa no agrega ninguno (o quedan solo referencias a
+/// campos externos / no plegables, que caen al `<clinit>`). El desugar y el codegen consultan este
+/// mapa para inlinear referencias y **no** duplicar la init en el `<clinit>`.
+pub(crate) fn collect_const_fields(
+    unit: &super::ast::CompilationUnit,
+    table: &SymbolTable,
+) -> ConstFieldMap {
+    // Junta `(SymbolId, tipo, init)` de cada `static final` numérico de todas las clases de la unidad.
+    let mut pending: Vec<(SymbolId, &Type, &Expr)> = Vec::new();
+    for class in &unit.types {
+        collect_static_final_fields(class, "", table, &mut pending);
     }
+    let mut map = ConstFieldMap::new();
+    // Fixpoint: repetir mientras una pasada agregue algún campo nuevo. `const_field_value` pliega ya
+    // coercionado al tipo del campo (numérico o `String`) y resuelve referencias contra el mapa
+    // parcial, así una constante que depende de otra (`B = A * 2`, `T = S + "!"`) converge en una
+    // pasada posterior. Los que nunca plegan (ref a constante externa) quedan pendientes sin efecto.
+    loop {
+        let mut changed = false;
+        pending.retain(|&(sym, ty, init)| match const_field_value(ty, init, &map) {
+            Some(v) => {
+                map.insert(sym, v);
+                changed = true;
+                false // resuelto: sale de la lista de pendientes
+            }
+            None => true, // aún no plegable: reintentar en la próxima pasada
+        });
+        if !changed {
+            break;
+        }
+    }
+    map
 }
 
-fn num_f64(n: Num) -> f64 {
-    match n {
-        Num::Int(v) => v as f64,
-        Num::Flt(v) => v,
+/// Recolecta los campos `static final` de tipo **primitivo o `String`** (con su `SymbolId`, tipo
+/// declarado e init) de una clase y de sus tipos anidados. El `SymbolId` de cada campo sale del scope
+/// de miembros de su clase, que se resuelve por **nombre cualificado** (igual que [`gen_type`]).
+fn collect_static_final_fields<'a>(
+    class: &'a super::ast::ClassDecl,
+    enclosing: &str,
+    table: &SymbolTable,
+    out: &mut Vec<(SymbolId, &'a Type, &'a Expr)>,
+) {
+    let fqn = if enclosing.is_empty() {
+        class.name.clone()
+    } else {
+        format!("{enclosing}.{}", class.name)
+    };
+    if let Some(cid) = table.class(&fqn) {
+        let scope = member_scope(table, cid);
+        for member in &class.members {
+            match member {
+                Member::Field(f)
+                    if f.modifiers.contains(&Modifier::Static)
+                        && f.modifiers.contains(&Modifier::Final) =>
+                {
+                    if let (Some(init), Some(&sym)) =
+                        (f.init.as_ref(), table.scope(scope).get(&f.name).first())
+                    {
+                        out.push((sym, &f.ty, init));
+                    }
+                }
+                Member::Type(nested) => {
+                    collect_static_final_fields(nested, &fqn, table, out)
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -2188,6 +2613,9 @@ struct Emitter<'a> {
     wide_fixups: Vec<(usize, usize, Label)>,
     /// Pila de sentencias de las que se puede **salir**: bucles, `switch` y bloques etiquetados.
     blocks: Vec<Breakable>,
+    /// Pila de switch-**expresiones** abiertas: `(fin, categoría, VType del resultado)`. Un `yield`
+    /// usa la del tope para ajustar su valor y saltar al fin.
+    yield_targets: Vec<(Label, u8, VType)>,
     /// La etiqueta Java (`lbl:`) que precede a la sentencia que estamos por emitir. La deja el arm
     /// de `Labeled` y la consume la sentencia etiquetada al entrar.
     pending_label: Option<String>,
@@ -2275,6 +2703,7 @@ impl<'a> Emitter<'a> {
             fixups: Vec::new(),
             wide_fixups: Vec::new(),
             blocks: Vec::new(),
+            yield_targets: Vec::new(),
             pending_label: None,
             locals_t: Vec::new(),
             pending: HashMap::new(),
@@ -2840,8 +3269,11 @@ impl<'a> Emitter<'a> {
             StmtKind::LocalClass(_) => {
                 self.unsupported(s.pos, "una clase local (necesita una clase sintética)")
             }
+            // `yield e` de una switch-expresión embebida (las lowerable las baja el desugar a
+            // asignaciones): deja el valor en la pila y salta al fin del switch más interno.
+            StmtKind::Yield(e) => self.yield_value(e),
             // Estas tendrían que haber desaparecido en el desugar: si llegan acá es un bug de esa pasada.
-            StmtKind::ForEach { .. } | StmtKind::Assert { .. } | StmtKind::Yield(_) => {
+            StmtKind::ForEach { .. } | StmtKind::Assert { .. } => {
                 self.unsupported(s.pos, "una construcción que el desugar debía haber bajado")
             }
         }
@@ -2878,10 +3310,15 @@ impl<'a> Emitter<'a> {
     /// El criterio es el de javac: la tabla gana si su costo en espacio, más tres veces su ventaja
     /// en tiempo, sale mejor. Las dos instrucciones llevan **relleno** hasta alinear a 4 bytes desde
     /// el arranque del método, y sus desplazamientos son de **4 bytes** relativos al opcode.
-    fn switch_stmt(&mut self, s: &Stmt, selector: &Expr, cases: &[SwitchCase], lbl: Option<String>) {
+    fn emit_switch_dispatch(
+        &mut self,
+        pos: Pos,
+        selector: &Expr,
+        cases: &[SwitchCase],
+    ) -> Option<(Vec<Label>, Label, Label)> {
         if category(&self.ty_of(selector)) != 0 {
-            self.unsupported(s.pos, "un `switch` cuyo selector no es `int` (lo baja el desugar)");
-            return;
+            self.unsupported(pos, "un `switch` cuyo selector no es `int` (lo baja el desugar)");
+            return None;
         }
         // (valor, índice del grupo) por cada etiqueta, más cuál es el `default`.
         let mut keys: Vec<(i32, usize)> = Vec::new();
@@ -2889,21 +3326,21 @@ impl<'a> Emitter<'a> {
         for (i, c) in cases.iter().enumerate() {
             if let Some(g) = &c.guard {
                 self.unsupported(g.pos, "una guarda `when` (el desugar debía haberla bajado)");
-                return;
+                return None;
             }
             if c.is_default {
                 default_case = Some(i);
             }
             for l in &c.labels {
                 let CaseLabel::Constant(e) = l else {
-                    self.unsupported(s.pos, "una etiqueta `case` que el desugar debía haber bajado");
-                    return;
+                    self.unsupported(pos, "una etiqueta `case` que el desugar debía haber bajado");
+                    return None;
                 };
                 match const_int(e) {
                     Some(v) => keys.push((v, i)),
                     None => {
                         self.unsupported(e.pos, "un `case` que no es una constante entera");
-                        return;
+                        return None;
                     }
                 }
             }
@@ -2941,7 +3378,15 @@ impl<'a> Emitter<'a> {
             }
         }
         self.reachable = false; // del switch no se **cae** al primer grupo: se salta
+        Some((arms, end, default_l))
+    }
 
+    /// `switch`-**sentencia**: el salto múltiple y cada grupo como sentencias (la flecha no cae al
+    /// siguiente; la forma de dos puntos sí).
+    fn switch_stmt(&mut self, s: &Stmt, selector: &Expr, cases: &[SwitchCase], lbl: Option<String>) {
+        let Some((arms, end, _)) = self.emit_switch_dispatch(s.pos, selector, cases) else {
+            return;
+        };
         // Los grupos, en orden de fuente — de ahí sale el *fall-through* de la forma de dos puntos.
         // Los locales declarados en un `case:` viven en el bloque del `switch` (§14.11.2), un solo
         // scope que envuelve todos los grupos; una flecha con `{ }` abre además su propio bloque.
@@ -2964,6 +3409,65 @@ impl<'a> Emitter<'a> {
         self.blocks.pop();
         self.bind(end);
         self.close_scope();
+    }
+
+    /// `switch`-**expresión** embebida (`1 + switch(y){…}`): igual que la sentencia, pero cada brazo
+    /// **produce un valor**. `case X -> v` es un *yield* implícito; un bloque o la forma de dos puntos
+    /// yieldan con `yield`. Todos los caminos dejan **un** valor (del tipo del switch) en la pila —
+    /// el resultado de la expresión, que converge en `end`. Solo selector `int`: las switch-expresión
+    /// sobre `String`/`enum`/patterns se bajan en posición *lowerable* (las embebidas de esos tipos
+    /// todavía cortan).
+    fn switch_expr(&mut self, e: &Expr, selector: &Expr, cases: &[SwitchCase]) {
+        // Alcance: brazos de **flecha** con expresión (`-> v`, el *yield* implícito) o `-> throw …`.
+        // Los brazos de **bloque** (`-> { … yield … }`) o de **dos puntos** con `yield` embebidos
+        // todavía cortan: la resolución de sus locales dentro de una switch-expr embebida necesita
+        // trabajo en la atribución (hoy un `yield t` de un local del bloque no lo resuelve). Mejor un
+        // error honesto que bytecode incorrecto.
+        let simple = cases.iter().all(|c| {
+            matches!(&c.body, SwitchBody::Arrow(b) if matches!(b.kind, StmtKind::Expr(_) | StmtKind::Throw(_)))
+        });
+        if !simple {
+            return self
+                .unsupported(e.pos, "una switch-expresión embebida con brazos de bloque o `:`");
+        }
+        let cat = category(&self.ty_of(e));
+        let vt = vtype_of(self.table, &self.ty_of(e));
+        let Some((arms, end, _)) = self.emit_switch_dispatch(e.pos, selector, cases) else {
+            return;
+        };
+        self.open_scope();
+        self.yield_targets.push((end, cat, vt));
+        for (i, c) in cases.iter().enumerate() {
+            self.bind(arms[i]);
+            match &c.body {
+                // `case X -> v` en una expresión es el *yield* de `v`.
+                SwitchBody::Arrow(b) if matches!(b.kind, StmtKind::Expr(_)) => {
+                    if let StmtKind::Expr(v) = &b.kind {
+                        self.yield_value(v);
+                    }
+                }
+                // `case X -> throw …`: transfiere el control por su cuenta, no yieldea.
+                SwitchBody::Arrow(b) => self.stmt(b),
+                SwitchBody::Colon(_) => unreachable!("filtrado por `simple`"),
+            }
+        }
+        self.yield_targets.pop();
+        self.bind(end); // acá converge el valor de todos los brazos
+        self.close_scope();
+    }
+
+    /// Emite un `yield v`: evalúa `v`, lo ajusta al tipo de la switch-expresión (para que todos los
+    /// brazos coincidan en el destino) y salta a su fin.
+    fn yield_value(&mut self, v: &Expr) {
+        let Some((end, cat, vt)) = self.yield_targets.last().cloned() else {
+            return self.unsupported(v.pos, "un `yield` fuera de una switch-expresión");
+        };
+        self.expr(v);
+        self.convert(category(&self.ty_of(v)), cat);
+        self.pop(1);
+        self.push(vt);
+        self.jump(GOTO, end);
+        self.reachable = false;
     }
 
     /// Relleno hasta el próximo múltiplo de 4 **desde el arranque del método** (JVMS §6,
@@ -3126,6 +3630,10 @@ impl<'a> Emitter<'a> {
     /// sentencia-expresión): una asignación no deja nada, el resto se saca con `pop`.
     fn discard(&mut self, e: &Expr) {
         if let ExprKind::Assign { op: AssignOp::Assign, target, value } = &e.kind {
+            // Peephole `iinc` para `x = x ± c` (la forma desugarada de `x++`/`x += c`) en descarte.
+            if self.try_iinc(target, value) {
+                return;
+            }
             self.assign(target, value, false);
             return;
         }
@@ -3223,6 +3731,25 @@ impl<'a> Emitter<'a> {
             ExprKind::Unary { op: op @ (UnOp::Inc | UnOp::Dec), expr: target, prefix } => {
                 self.incdec(target, *op == UnOp::Inc, *prefix, true)
             }
+            // `-<literal numérico>` se pliega a la constante **negada** (`-1` → `iconst_m1`, `-100`
+            // → `bipush -100`), como javac, en vez de `push <literal>; neg`. Lo destapó el diferencial.
+            ExprKind::Unary { op: UnOp::Neg, expr: inner, .. }
+                if matches!(
+                    inner.kind,
+                    ExprKind::IntLit(_)
+                        | ExprKind::LongLit(_)
+                        | ExprKind::FloatLit(_)
+                        | ExprKind::DoubleLit(_)
+                ) =>
+            {
+                match &inner.kind {
+                    ExprKind::IntLit(n) => self.push_int((*n as i32).wrapping_neg()),
+                    ExprKind::LongLit(n) => self.push_long(n.wrapping_neg()),
+                    ExprKind::FloatLit(f) => self.push_float(-*f),
+                    ExprKind::DoubleLit(d) => self.push_double(-*d),
+                    _ => unreachable!(),
+                }
+            }
             ExprKind::Unary { op, expr: inner, .. } => {
                 self.expr(inner);
                 let cat = category(&self.ty_of(e));
@@ -3257,6 +3784,16 @@ impl<'a> Emitter<'a> {
                 self.arith(*op, cat);
             }
             ExprKind::Call { target, name, args, .. } => {
+                // `array.clone()` (§10.7): no resuelve a un símbolo de método (los arrays no lo tienen
+                // en la tabla), así que `invoke` no sabría emitirlo. Se emite estructuralmente.
+                if name == "clone" && args.is_empty() {
+                    if let Some(t) = target {
+                        if matches!(self.ty_of(t), RType::Array(_)) {
+                            self.array_clone(t);
+                            return;
+                        }
+                    }
+                }
                 // Una llamada de **instancia** empuja primero el receptor (el explícito, o `this`).
                 let is_static = match e.binding {
                     Some(Binding::Method(mid)) => {
@@ -3351,7 +3888,7 @@ impl<'a> Emitter<'a> {
                 self.push(vt);
                 self.bind(end);
             }
-            ExprKind::Switch { .. } => self.unsupported(e.pos, "una switch-expresión embebida"),
+            ExprKind::Switch { selector, cases } => self.switch_expr(e, selector, cases),
             // Un *call site* de `invokedynamic` ya bajado por el desugar (LambdaToMethod): se
             // empujan las capturas —el receptor `this` primero, si la impl es de instancia— y se
             // emite el opcode. El *bootstrap* es `LambdaMetafactory.metafactory`, con el `MethodType`
@@ -3404,11 +3941,29 @@ impl<'a> Emitter<'a> {
                 self.unsupported(e.pos, "una referencia a método (necesita `invokedynamic`)")
             }
             // Una asignación **compuesta** que llegó hasta acá es la del lvalue con efectos, que el
-            // desugar deja a propósito para el emisor — y que todavía no resuelve.
-            ExprKind::Assign { .. } => {
-                self.unsupported(e.pos, "una asignación compuesta sobre un destino con efectos")
+            // desugar deja a propósito para el emisor (ver `compound_effectful`).
+            ExprKind::Assign { op, target, value } => {
+                self.compound_effectful(e, *op, target, value)
             }
         }
+    }
+
+    /// `array.clone()` (§10.7): empuja el array, `invokevirtual "[desc]".clone:()Ljava/lang/Object;`
+    /// y **`checkcast [desc]`** —el descriptor del `clone` heredado devuelve `Object`, pero el lenguaje
+    /// tipa el resultado como el **tipo del array** (retorno covariante), así que hay que estrecharlo—.
+    /// Es exactamente lo que emite javac (p. ej. en el `values()` de un `enum`).
+    fn array_clone(&mut self, receiver: &Expr) {
+        let arr_ty = self.ty_of(receiver);
+        let adesc = rtype_desc(self.table, &arr_ty); // `[LEnums;` / `[I`
+        self.expr(receiver);
+        let mref = self.pool.methodref(&adesc, "clone", "()Ljava/lang/Object;");
+        self.op(INVOKEVIRTUAL);
+        self.u16(mref);
+        let cc = self.pool.class(&adesc);
+        self.op(CHECKCAST);
+        self.u16(cc);
+        self.pop(1); // sale el receptor, entra el array clonado (del tipo del array)
+        self.push(vtype_of(self.table, &arr_ty));
     }
 
     fn invoke(&mut self, call: &Expr, args: &[Expr], is_static: bool) {
@@ -3427,15 +3982,26 @@ impl<'a> Emitter<'a> {
             &self.table.symbol(owner).kind,
             SymbolKind::Class { kind: TypeKind::Interface, .. }
         );
+        // A `private` instance method is **not virtual** — it never enters the vtable (it can't be
+        // overridden), so the JVM invokes it with `invokespecial`, not `invokevirtual` (JVMS §6.5).
+        // Emitting `invokevirtual` compiles fine and passes `javap`, but at run time the vtable
+        // lookup misses and the VM throws `NoSuchMethodError`. Static privates go through the
+        // `is_static` branch (invokestatic); private *interface* methods are left to the interface
+        // branch below.
+        let is_private = self.table.symbol(mid).modifiers.contains(&Modifier::Private);
 
-        // `invokestatic` sin receptor; `invokespecial` para un constructor; `invokeinterface` si el
-        // método pertenece a una **interfaz** (§6.5, con `count` = slots del receptor + argumentos);
-        // si no, despacho virtual.
+        // `invokestatic` sin receptor; `invokespecial` para un constructor o un método `private` de
+        // instancia; `invokeinterface` si el método pertenece a una **interfaz** (§6.5, con
+        // `count` = slots del receptor + argumentos); si no, despacho virtual.
         if is_static {
             let mref = self.pool.methodref(&class_internal, &mname, &desc);
             self.op(INVOKESTATIC);
             self.u16(mref);
         } else if is_ctor {
+            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            self.op(INVOKESPECIAL);
+            self.u16(mref);
+        } else if is_private && !owner_is_interface {
             let mref = self.pool.methodref(&class_internal, &mname, &desc);
             self.op(INVOKESPECIAL);
             self.u16(mref);
@@ -3468,6 +4034,16 @@ impl<'a> Emitter<'a> {
     /// condiciones: `&&`/`||` se vuelven saltos (así se cortocircuitan de verdad) en vez de calcular
     /// un booleano, y negar la condición es simplemente invertir el sentido del salto.
     fn branch_if(&mut self, cond: &Expr, target: Label, when: bool) {
+        // §15.28: una condición **constante** no se testea en runtime. Si su valor coincide con `when`
+        // el salto es incondicional (`goto`); si no, no se emite nada (se cae). No cambia la estructura
+        // ni `reachable` (la rama muerta se sigue emitiendo, pero saltada), así que es consistente con
+        // lo que calculó el *flow* con el mismo evaluador. Una constante no tiene efectos que perder.
+        if let Some(v) = const_bool_expr(cond) {
+            if v == when {
+                self.jump(GOTO, target);
+            }
+            return;
+        }
         match &cond.kind {
             // `!c` ⇒ saltar cuando `c` valga lo contrario.
             ExprKind::Unary { op: UnOp::Not, expr, .. } => self.branch_if(expr, target, !when),
@@ -3495,12 +4071,30 @@ impl<'a> Emitter<'a> {
                 }
             }
             ExprKind::Binary { op, lhs, rhs } if cmp_index(*op, true).is_some() => {
+                let lcat = category(&self.ty_of(lhs));
+                let rcat = category(&self.ty_of(rhs));
+                // Comparación de un `int` contra la constante literal **0**: los saltos de **un solo
+                // operando** (`ifeq`/`ifne`/`iflt`/`ifge`/`ifgt`/`ifle`, 0x99..0x9e) en vez de
+                // `iconst_0; if_icmp…`, como javac. Si el `0` va a la izquierda, la comparación se
+                // **invierte** (`0 < x` ⟺ `x > 0`). Lo destapó el diferencial de emisión.
+                let is_zero = |x: &Expr| matches!(&x.kind, ExprKind::IntLit(0));
+                if lcat == 0 && rcat == 0 && (is_zero(lhs) || is_zero(rhs)) {
+                    let (operand, cmp_op): (&Expr, BinOp) = if is_zero(rhs) {
+                        (lhs, *op)
+                    } else {
+                        (rhs, reverse_cmp(*op))
+                    };
+                    self.expr(operand);
+                    self.pop(1);
+                    self.jump(IFEQ + cmp_index(cmp_op, when).unwrap(), target);
+                    return;
+                }
                 let idx = cmp_index(*op, when).unwrap();
-                let cat = category(&self.ty_of(lhs)).max(category(&self.ty_of(rhs)));
+                let cat = lcat.max(rcat);
                 self.expr(lhs);
-                self.convert(category(&self.ty_of(lhs)), cat);
+                self.convert(lcat, cat);
                 self.expr(rhs);
-                self.convert(category(&self.ty_of(rhs)), cat);
+                self.convert(rcat, cat);
                 match cat {
                     // Los operandos se consumen **antes** de saltar: el estado que se anota para
                     // el destino es el de después de la comparación, no el de antes.
@@ -3583,19 +4177,91 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// `a[i()] op= v` con un destino de **efectos**: el desugar deja este caso para el emisor
+    /// (bajar `x op= v` a `x = x op v` re-evaluaría el destino y re-ejecutaría sus efectos). Se
+    /// resuelve con **juego de pila**: `(arrayref, índice)` se evalúan una sola vez y se `dup2`ean,
+    /// para cargar `a[i]`, combinarlo con `v` y volver a guardarlo. Deja el resultado en la pila
+    /// (semántica de expresión; una sentencia lo descarta con `discard`).
+    ///
+    /// Cubre destinos **array** sin cruce de categorías: mismo tipo (`int[] += int`, incluidos
+    /// `byte`/`short`/`char`, cuyo `*astore` trunca solo), o un shift con RHS `int`. Con promoción
+    /// (`int[] += long`), elemento de referencia (`String[] +=`) o un campo con receptor de efectos,
+    /// sigue cortando fuerte — mejor un error que bytecode a medias.
+    fn compound_effectful(&mut self, e: &Expr, op: AssignOp, target: &Expr, value: &Expr) {
+        let bail = |s: &mut Self| {
+            s.unsupported(e.pos, "una asignación compuesta sobre un destino con efectos");
+        };
+        let binop = match op {
+            AssignOp::Add => BinOp::Add,
+            AssignOp::Sub => BinOp::Sub,
+            AssignOp::Mul => BinOp::Mul,
+            AssignOp::Div => BinOp::Div,
+            AssignOp::Rem => BinOp::Rem,
+            AssignOp::And => BinOp::BitAnd,
+            AssignOp::Or => BinOp::BitOr,
+            AssignOp::Xor => BinOp::BitXor,
+            AssignOp::Shl => BinOp::Shl,
+            AssignOp::Shr => BinOp::Shr,
+            AssignOp::UShr => BinOp::UShr,
+            AssignOp::Assign => return bail(self), // el `=` puro lo maneja `assign`; no debería llegar
+        };
+        let is_shift = matches!(binop, BinOp::Shl | BinOp::Shr | BinOp::UShr);
+        // Por ahora solo destino array (un campo con efectos sigue cortando).
+        let ExprKind::Index { array, index } = &target.kind else { return bail(self) };
+        let tcat = category(&self.ty_of(target)); // categoría del elemento
+        let vcat = category(&self.ty_of(value));
+        let handled = tcat != 4 && if is_shift { vcat == 0 } else { tcat == vcat };
+        if !handled {
+            return bail(self);
+        }
+        let kind = array_kind(&self.ty_of(target));
+
+        // (arrayref, índice) evaluados una vez y duplicados: sirven para el load y para el store.
+        self.expr(array);
+        self.expr(index);
+        self.op(DUP2);
+        let idx_t = self.stack[self.stack.len() - 1].clone();
+        let aref_t = self.stack[self.stack.len() - 2].clone();
+        self.push(aref_t);
+        self.push(idx_t); // modelo: [.., aref, idx, aref, idx]
+
+        self.op(IALOAD + kind); // carga a[i] con la copia de (aref, idx)
+        self.pop(2);
+        self.push_cat(tcat); // [.., aref, idx, a[i]]
+        self.expr(value);
+        self.arith(binop, tcat); // [.., aref, idx, result]
+
+        // Deja el resultado en la pila: copia por debajo de (aref, idx) y guarda.
+        self.op(if stack_width(tcat) == 2 { DUP2_X2 } else { DUP_X2 });
+        self.max_stack = self.max_stack.max(self.height() + stack_width(tcat));
+        self.op(IASTORE + kind);
+        self.pop(3);
+        self.push_cat(tcat); // sobrevive la copia como valor de la expresión
+    }
+
     /// Emite `target = value`. `leave` dice si debe **dejar el valor** en la pila: una asignación
     /// usada como *expresión* sí (`a = b = 1`), como *sentencia* no.
     fn assign(&mut self, target: &Expr, value: &Expr, leave: bool) {
         // `a[i] = v` — no pasa por un binding: consume (arrayref, índice, valor).
         if let ExprKind::Index { array, index } = &target.kind {
-            if leave {
-                self.unsupported(target.pos, "usar el valor de una asignación a un array");
-                return;
-            }
             self.expr(array);
             self.expr(index);
             self.expr(value);
             let kind = array_kind(&self.ty_of(target));
+            if leave {
+                // Usada como expresión (`b = a[i] = v`): hay que dejar el valor en la pila.
+                // `dup_x2` (o `dup2_x2` si es categoría 2) copia el valor **por debajo** de
+                // (arrayref, índice); el store consume esos tres y la copia sobrevive como
+                // resultado. Modelamos el pico de `max_stack` a mano (la copia es transitoria).
+                let cat = category(&self.ty_of(target));
+                let vt = self.stack.last().cloned().unwrap_or(VType::Top);
+                self.op(if stack_width(cat) == 2 { DUP2_X2 } else { DUP_X2 });
+                self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+                self.op(IASTORE + kind);
+                self.pop(3); // arrayref, índice y valor (queda la copia duplicada)
+                self.push(vt);
+                return;
+            }
             self.op(IASTORE + kind);
             self.pop(3); // arrayref, índice y valor
             return;
@@ -3834,6 +4500,42 @@ impl<'a> Emitter<'a> {
         let vt = vtype_of(self.table, &ty);
         self.set_local(slot, vt);
         self.store(cat, slot);
+    }
+
+    /// Peephole: una asignación en **descarte** de la forma `x = x + c` / `x = x - c` sobre un local
+    /// **`int`** (la forma a la que el desugar baja `x++`/`x--`/`x += c`) se emite como un `iinc` —una
+    /// instrucción, sin tocar la pila— igual que javac, en vez de `iload`/`const`/`iadd`/`istore`. Solo
+    /// aplica a `int` exacto: un `byte`/`short`/`char` lleva un cast **truncante** que `iinc` no hace.
+    /// Devuelve `true` si lo emitió (el llamador ya no debe emitir la asignación).
+    fn try_iinc(&mut self, target: &Expr, value: &Expr) -> bool {
+        let Some(Binding::Local { slot }) = target.binding else { return false };
+        if !matches!(self.ty_of(target), RType::Prim(PrimType::Int)) {
+            return false;
+        }
+        // El desugar envuelve el resultado en el cast de reducción `(int)`; se desenvuelve.
+        let inner = match &value.kind {
+            ExprKind::Cast { expr, .. } => expr.as_ref(),
+            _ => value,
+        };
+        let ExprKind::Binary { op, lhs, rhs } = &inner.kind else { return false };
+        let as_lit = |e: &Expr| if let ExprKind::IntLit(n) = &e.kind { Some(*n) } else { None };
+        let is_var = |e: &Expr| matches!(e.binding, Some(Binding::Local { slot: s }) if s == slot);
+        // `x + c` (conmutativo) da `+c`; `x - c` (la variable **a la izquierda**) da `-c`.
+        let delta: i64 = match op {
+            BinOp::Add if is_var(lhs) => match as_lit(rhs) { Some(c) => c, None => return false },
+            BinOp::Add if is_var(rhs) => match as_lit(lhs) { Some(c) => c, None => return false },
+            BinOp::Sub if is_var(lhs) => match as_lit(rhs) { Some(c) => -c, None => return false },
+            _ => return false,
+        };
+        // `iinc` regular: índice en un byte, incremento en un byte con signo. Fuera de rango, se deja
+        // que el llamador use la forma general (leer-modificar-escribir).
+        if slot > 255 || !(-128..=127).contains(&delta) {
+            return false;
+        }
+        self.op(IINC);
+        self.op(slot as u8);
+        self.op(delta as i8 as u8);
+        true
     }
 
     /// Duplica el tope de la pila (`dup2` si el valor es de categoría 2).
@@ -4175,6 +4877,120 @@ mod tests {
     }
 
     #[test]
+    fn an_array_assignment_used_as_a_value_leaves_it_on_the_stack() {
+        // E2: `b = (a[0] = 7)` — usar el **valor** de una asignación a un array (dup_x2).
+        // Antes bailaba: "el generador de bytecode todavía no soporta usar el valor de una
+        // asignación a un array". El valor del store debe sobrevivir para el `+`.
+        let src = "public class ArrE { public static int run() {
+            int[] a = new int[1]; int b = (a[0] = 7); return b + a[0];
+        } }";
+        assert_eq!(run_int(src, "ArrE", "run", vec![]), 14);
+    }
+
+    #[test]
+    fn an_array_assignment_value_works_for_category_2_elements() {
+        // Rama dup2_x2: el elemento es `long` (categoría 2, ocupa dos slots).
+        let src = "public class ArrL { public static long run() {
+            long[] a = new long[1]; long b = (a[0] = 100L); return b + a[0];
+        } }";
+        assert_eq!(run(src, "ArrL", "run", vec![]), Some(Value::Long(200)));
+    }
+
+    #[test]
+    fn a_compound_assignment_on_an_effectful_index_evaluates_it_once() {
+        // E1: `a[idx()] += 5` — el índice tiene efectos, debe evaluarse **una sola vez** (dup2).
+        // Antes bailaba: "todavía no soporta una asignación compuesta sobre un destino con efectos".
+        let src = "public class CompA {
+            static int calls = 0;
+            static int idx() { calls++; return 1; }
+            public static int run() {
+                int[] a = {10, 20, 30}; a[idx()] += 5;
+                return a[1] * 100 + calls; // 25*100 + 1 (idx llamado una vez)
+            }
+        }";
+        assert_eq!(run_int(src, "CompA", "run", vec![]), 2501);
+    }
+
+    #[test]
+    fn a_compound_assignment_on_a_byte_array_truncates_via_the_store() {
+        // Elemento `byte`: `bastore` trunca solo, sin i2b explícito. 100+50=150 → (byte)150 = -106.
+        let src = "public class CompB {
+            static int c = 0; static int idx() { c++; return 0; }
+            public static int run() {
+                byte[] b = new byte[1]; b[0] = 100; b[idx()] += 50;
+                return b[0] + c * 1000; // -106 + 1000
+            }
+        }";
+        assert_eq!(run_int(src, "CompB", "run", vec![]), 894);
+    }
+
+    #[test]
+    fn a_compound_shift_assignment_on_an_effectful_index_works() {
+        // Shift con RHS `int`: `a[idx()] <<= 4`. 3<<4 = 48, idx una vez.
+        let src = "public class CompS {
+            static int c = 0; static int idx() { c++; return 0; }
+            public static int run() { int[] a = {3}; a[idx()] <<= 4; return a[0] + c; }
+        }";
+        assert_eq!(run_int(src, "CompS", "run", vec![]), 49);
+    }
+
+    #[test]
+    fn a_compound_array_assignment_used_as_a_value_leaves_the_result() {
+        // Como expresión: `int b = (a[idx()] += 5)`. a[0]=15, b=15, idx una vez → 15+15+1.
+        let src = "public class CompE {
+            static int c = 0; static int idx() { c++; return 0; }
+            public static int run() { int[] a = {10}; int b = (a[idx()] += 5); return b + a[0] + c; }
+        }";
+        assert_eq!(run_int(src, "CompE", "run", vec![]), 31);
+    }
+
+    #[test]
+    fn an_embedded_switch_expression_yields_its_value() {
+        // E3: `1 + switch(y){…}` — la switch-expr está **embebida** (no en posición lowerable), así
+        // que la emite el codegen dejando su valor en la pila. Antes bailaba "switch-expresión embebida".
+        let src = "public class SwE {
+            public static int run() {
+                int y = 2; return 1 + switch (y) { case 1 -> 10; case 2 -> 20; default -> 0; };
+            }
+        }";
+        assert_eq!(run_int(src, "SwE", "run", vec![]), 21);
+    }
+
+    #[test]
+    fn an_embedded_switch_expression_with_a_throw_arm() {
+        // Un brazo `-> throw …` transfiere el control por su cuenta; los demás yieldan. y=2 → 20+5.
+        let src = "public class SwET {
+            public static int run() {
+                int y = 2;
+                return switch (y) { case 1 -> throw new RuntimeException(); case 2 -> 20; default -> 0; } + 5;
+            }
+        }";
+        assert_eq!(run_int(src, "SwET", "run", vec![]), 25);
+    }
+
+    #[test]
+    fn an_embedded_sparse_switch_expression_uses_lookupswitch() {
+        // Claves ralas → `lookupswitch`; embebida en un `*`.
+        let src = "public class SwES {
+            public static int run() {
+                int y = 1000; return switch (y) { case 1 -> 1; case 1000 -> 5; default -> 0; } * 2;
+            }
+        }";
+        assert_eq!(run_int(src, "SwES", "run", vec![]), 10);
+    }
+
+    #[test]
+    fn an_embedded_switch_expression_of_long_type() {
+        // Resultado de categoría 2 (`long`): el `vt`/convert del `yield` debe ser `Long`.
+        let src = "public class SwEL {
+            public static long run() {
+                int y = 2; return 1L + switch (y) { case 1 -> 10L; case 2 -> 20L; default -> 0L; };
+            }
+        }";
+        assert_eq!(run(src, "SwEL", "run", vec![]), Some(Value::Long(21)));
+    }
+
+    #[test]
     fn compiles_locals_and_static_calls() {
         // `compute()` usa un local `r` y llama a `add`/`sub` (invokestatic anidado).
         let src = "public class Add {
@@ -4294,6 +5110,31 @@ mod tests {
         let src = "public class M { public static int fact(int n) { \
                    int r = 1; for (int i = 2; i <= n; i++) { r = r * i; } return r; } }";
         assert_eq!(run_int(src, "M", "fact", vec![5]), 120);
+    }
+
+    #[test]
+    fn incrementing_an_int_local_emits_iinc() {
+        // El diferencial de emisión mostró que `x++`/`x += c`/`x -= c` sobre un `int` local deben ir
+        // por un `iinc` (una instrucción), como javac —no `iload`/`const`/`iadd`/`istore`—.
+        let (inc, _) = code_of("public class C { public void m(int x) { x++; } }", "C", "m");
+        assert!(inc.contains(&super::IINC), "`x++` debe emitir iinc");
+        let (add, _) = code_of("public class C { public void m(int x) { x += 5; } }", "C", "m");
+        assert!(add.contains(&super::IINC), "`x += 5` debe emitir iinc");
+        let (dec, _) = code_of("public class C { public void m(int x) { x -= 3; } }", "C", "m");
+        assert!(dec.contains(&super::IINC), "`x -= 3` debe emitir iinc");
+        // El `i++` del `update` de un `for` también.
+        let (loop_, _) = code_of(
+            "public class C { public int s(int n) { int t = 0; for (int i = 0; i < n; i++) t += i; return t; } }",
+            "C",
+            "s",
+        );
+        assert!(loop_.contains(&super::IINC), "el `i++` del for debe emitir iinc");
+        // Un `byte` lleva un cast **truncante**: NO usa iinc.
+        let (by, _) = code_of("public class C { public void m(byte b) { b++; } }", "C", "m");
+        assert!(!by.contains(&super::IINC), "`byte b++` no usa iinc (cast truncante)");
+        // Un método sin incremento no lo emite.
+        let (id, _) = code_of("public class C { public int id(int x) { return x; } }", "C", "id");
+        assert!(!id.contains(&super::IINC));
     }
 
     #[test]
@@ -5327,6 +6168,38 @@ mod tests {
         assert_eq!(run_int(src, "Outer", "use", vec![]), 10);
     }
 
+    #[test]
+    fn a_nested_class_keeps_member_flags_out_of_the_class_access() {
+        // §4.1: `ACC_STATIC`/`PRIVATE`/`PROTECTED` de un anidado son flags **de miembro** (van en
+        // `InnerClasses`), no en los access_flags de clase —la JVM rechaza un `.class` con ellos—.
+        // Lo destapó el diferencial de emisión (`Unmatched bit 0x8` en javap).
+        let jvm = compiled_class("class Outer { private static class Inner {} }", "Outer$Inner");
+        let member = super::ACC_STATIC | super::ACC_PRIVATE | super::ACC_PROTECTED;
+        assert_eq!(jvm.access_flags & member, 0, "flags de miembro a nivel clase: {:#x}", jvm.access_flags);
+    }
+
+    #[test]
+    fn the_default_constructor_takes_the_class_access() {
+        // §8.8.9: el ctor por defecto hereda el **acceso de la clase** (antes salía siempre `public`).
+        let find_ctor = |jvm: &ClassFile| -> u16 {
+            jvm.methods
+                .iter()
+                .find(|m| jvm.utf8(m.name_index) == Some("<init>"))
+                .map(|m| m.access_flags)
+                .expect("hay ctor")
+        };
+        assert_eq!(
+            find_ctor(&compiled_class("class C {}", "C")) & super::ACC_PUBLIC,
+            0,
+            "clase package-private → ctor package-private",
+        );
+        assert_ne!(
+            find_ctor(&compiled_class("public class C {}", "C")) & super::ACC_PUBLIC,
+            0,
+            "clase public → ctor public",
+        );
+    }
+
     // ---- invocación explícita de constructor (§8.8.7.1) ----
 
     #[test]
@@ -5882,6 +6755,117 @@ mod tests {
         assert_eq!(constant_value(&jvm, "B").as_deref(), Some("int:1"), "boolean true = 1");
         assert_eq!(constant_value(&jvm, "BY").as_deref(), Some("int:5"));
         assert_eq!(constant_value(&jvm, "S").as_deref(), Some("String:hi"));
+    }
+
+    #[test]
+    fn static_final_constant_expressions_are_folded_for_constant_value() {
+        // §15.29 fuera del `case`: el `ConstantValue` no solo pliega literales, sino expresiones
+        // aritméticas, de bits y de shift, con la promoción binaria (§5.6.2) y los casts.
+        let src = "class C { \
+            static final int SUM = 2 + 3; \
+            static final int SECONDS = 60 * 60; \
+            static final int MASK = 1 << 4; \
+            static final int BITS = 0xF0 | 0x0F; \
+            static final int PREC = 1 + 2 * 3; \
+            static final long BIG = 1000L * 1000L; \
+            static final byte NARROW = (byte)(100 + 100); \
+            static final double HALF = 1.0 / 2.0; \
+            static final int MIXED = (int)(3L + 4); \
+        }";
+        let jvm = compiled_class(src, "C");
+        assert_eq!(constant_value(&jvm, "SUM").as_deref(), Some("int:5"));
+        assert_eq!(constant_value(&jvm, "SECONDS").as_deref(), Some("int:3600"));
+        assert_eq!(constant_value(&jvm, "MASK").as_deref(), Some("int:16"));
+        assert_eq!(constant_value(&jvm, "BITS").as_deref(), Some("int:255"));
+        assert_eq!(constant_value(&jvm, "PREC").as_deref(), Some("int:7"), "1 + 2*3, no (1+2)*3");
+        assert_eq!(constant_value(&jvm, "BIG").as_deref(), Some("long:1000000"));
+        assert_eq!(constant_value(&jvm, "NARROW").as_deref(), Some("int:-56"), "(byte)200 = -56");
+        assert_eq!(constant_value(&jvm, "HALF").as_deref(), Some("double:0.5"));
+        assert_eq!(constant_value(&jvm, "MIXED").as_deref(), Some("int:7"));
+    }
+
+    #[test]
+    fn references_to_other_final_constants_are_folded_into_constant_value() {
+        // A#3 (§13.4.9/§15.29): un `static final` que **referencia** a otra constante de la unidad
+        // se pliega igual. El fixpoint resuelve las cadenas de dependencia en cualquier orden de
+        // fuente (`C` referencia a `B`, que referencia a `A`, declaradas después).
+        let src = "class C { \
+            static final int A = 10; \
+            static final int B = A * 2; \
+            static final int C2 = B + A; \
+            static final int MASKED = FLAG_A | FLAG_B; \
+            static final int FLAG_A = 1; \
+            static final int FLAG_B = 2; \
+            static final long BIGREF = A + 1L; \
+            static final byte NB = (byte)(A * 20); \
+            static final int QUAL = Other.K + 1; \
+        } \
+        class Other { static final int K = 41; }";
+        let jvm = compiled_class(src, "C");
+        assert_eq!(constant_value(&jvm, "A").as_deref(), Some("int:10"));
+        assert_eq!(constant_value(&jvm, "B").as_deref(), Some("int:20"), "A*2");
+        assert_eq!(constant_value(&jvm, "C2").as_deref(), Some("int:30"), "B+A = 20+10");
+        assert_eq!(constant_value(&jvm, "MASKED").as_deref(), Some("int:3"), "1|2, decl. después");
+        assert_eq!(constant_value(&jvm, "BIGREF").as_deref(), Some("long:11"), "int A promovido a long");
+        assert_eq!(constant_value(&jvm, "NB").as_deref(), Some("int:-56"), "(byte)200");
+        // Referencia cualificada a una constante de **otra** clase de la misma unidad (`Other.K`).
+        assert_eq!(constant_value(&jvm, "QUAL").as_deref(), Some("int:42"), "Other.K + 1");
+        assert_eq!(constant_value(&compiled_class(src, "Other"), "K").as_deref(), Some("int:41"));
+    }
+
+    #[test]
+    fn constant_conditions_fold_the_branch_and_keep_semantics() {
+        // A#4 (§15.28): condiciones constantes no se testean en runtime, pero el resultado es correcto.
+        // `if` con comparación constante-verdadera: toma el `then`.
+        let t = "public class K { public static int run() { if (1 < 2) return 5; return 9; } }";
+        assert_eq!(run_int(t, "K", "run", vec![]), 5);
+        // `if` constante-falsa: toma el `else` (rama muerta no ejecutada).
+        let f = "public class K { public static int run() { if (2 < 1) return 5; return 9; } }";
+        assert_eq!(run_int(f, "K", "run", vec![]), 9);
+        // Lógico constante.
+        let a = "public class K { public static int run() { if (true && false) return 5; return 9; } }";
+        assert_eq!(run_int(a, "K", "run", vec![]), 9);
+    }
+
+    #[test]
+    fn constant_string_concatenation_is_folded_for_constant_value() {
+        // A#2 (§15.29/§15.18.1): la concatenación `+` de constantes de tipo `String` es una constante
+        // `String` → va a `ConstantValue`, sin `StringBuilder`. Incluye la conversión a texto (§5.1.11)
+        // de operandos `int`/`long`/`char`/`boolean`, y referencias a otras `String`/numéricas finales.
+        let src = "class C { \
+            static final String AB = \"a\" + \"b\"; \
+            static final String NUM = \"n=\" + 42; \
+            static final String EXPR = \"x=\" + (1 + 2); \
+            static final String CH = \"c=\" + 'z'; \
+            static final String BOOL = \"b=\" + true; \
+            static final String LONG = \"l=\" + 100L; \
+            static final String HELLO = HI + \", \" + WHO + \"!\"; \
+            static final String HI = \"Hola\"; \
+            static final String WHO = \"mundo\"; \
+            static final String WITHREF = \"v=\" + N; \
+            static final int N = 7; \
+        }";
+        let jvm = compiled_class(src, "C");
+        assert_eq!(constant_value(&jvm, "AB").as_deref(), Some("String:ab"));
+        assert_eq!(constant_value(&jvm, "NUM").as_deref(), Some("String:n=42"));
+        assert_eq!(constant_value(&jvm, "EXPR").as_deref(), Some("String:x=3"), "1+2 aritmética, no concat");
+        assert_eq!(constant_value(&jvm, "CH").as_deref(), Some("String:c=z"), "char → 'z'");
+        assert_eq!(constant_value(&jvm, "BOOL").as_deref(), Some("String:b=true"));
+        assert_eq!(constant_value(&jvm, "LONG").as_deref(), Some("String:l=100"));
+        assert_eq!(constant_value(&jvm, "HELLO").as_deref(), Some("String:Hola, mundo!"), "cadena de refs");
+        assert_eq!(constant_value(&jvm, "WITHREF").as_deref(), Some("String:v=7"), "ref a int final");
+    }
+
+    #[test]
+    fn non_constant_string_concatenation_has_no_constant_value() {
+        // Si un operando **no** es constante (un parámetro, un `new`), la concatenación no es constante:
+        // cae al `<clinit>` con su `StringBuilder`, sin `ConstantValue`.
+        let src = "class C { \
+            static String mk() { return \"y\"; } \
+            static final String NC = \"x\" + mk(); \
+        }";
+        let jvm = compiled_class(src, "C");
+        assert_eq!(constant_value(&jvm, "NC"), None, "concat con llamada no es constante");
     }
 
     #[test]
@@ -6593,6 +7577,37 @@ mod tests {
     }
 
     #[test]
+    fn a_string_switch_expression_in_return_position_runs() {
+        // `return switch (s) { case "a" -> … }` sobre `String`: el lowering de la switch-expr genera un
+        // switch-**sentencia** que **además** hay que bajar a dos int-switches (hashCode+equals). Antes
+        // llegaba crudo al emisor (que no soporta un switch no-`int`). Lo destapó el diferencial.
+        let src = "public class C { public static int run() { return sw(\"a\") * 100 + sw(\"b\") * 10 + sw(\"z\"); } \
+                   static int sw(String s) { return switch (s) { case \"a\" -> 1; case \"b\" -> 2; default -> 9; }; } }";
+        assert_eq!(run_int(src, "C", "run", vec![]), 129); // 1*100 + 2*10 + 9
+    }
+
+    #[test]
+    fn array_clone_returns_an_independent_fresh_copy() {
+        // `array.clone()` (§10.7): el emisor lo compila a `invokevirtual clone` + `checkcast`, y la VM
+        // lo intrinseca a una copia fresca —mismo contenido, independiente del original—. Es lo que
+        // usa el `values()` de un enum; lo destapó el diferencial de emisión.
+        let src = "public class C { public static int run() { \
+                   int[] a = {1, 2, 3}; int[] b = (int[]) a.clone(); b[0] = 99; \
+                   return a[0] * 100 + b[0] + b[1] + b[2]; } }";
+        // a[0] sigue 1 (100), b = {99,2,3} (104) → 204.
+        assert_eq!(run_int(src, "C", "run", vec![]), 204);
+    }
+
+    #[test]
+    fn an_enum_gets_an_enum_of_self_class_signature() {
+        // Un `enum` extiende implícitamente `Enum<Self>` (§8.9): su `Signature` de clase lo refleja
+        // (`Ljava/lang/Enum<LColor;>;`), aunque el `extends` no esté escrito. Lo destapó el diferencial
+        // de emisión contra javac.
+        let e = compiled_class("enum Color { RED, GREEN }", "Color");
+        assert_eq!(class_sig(&e).as_deref(), Some("Ljava/lang/Enum<LColor;>;"));
+    }
+
+    #[test]
     fn a_generic_superclass_is_in_the_class_signature() {
         let src = "class Base<T> {} class Node<T> extends Base<T> {}";
         let node = compiled_class(src, "Node");
@@ -6734,6 +7749,72 @@ mod tests {
             "falta el puente `compareTo(Object)`",
         );
         verify_all(src, "Foo");
+    }
+
+    #[test]
+    fn an_interface_default_method_is_emitted_public() {
+        // §9.4: un método `default` (o `static`) de interfaz sin `public` explícito es implícitamente
+        // **público** en el `.class` — lo destapó el diferencial de emisión contra javac.
+        let src = "interface I { default String hi() { return \"x\"; } static int z() { return 0; } }";
+        let i = compiled_class(src, "I");
+        assert!(
+            has_method(&i, "hi", "()Ljava/lang/String;", super::ACC_PUBLIC),
+            "el `default` debe llevar ACC_PUBLIC",
+        );
+        assert!(
+            has_method(&i, "z", "()I", super::ACC_PUBLIC),
+            "el `static` de interfaz también es implícitamente público",
+        );
+    }
+
+    #[test]
+    fn an_interface_default_override_synthesizes_a_bridge() {
+        // B (§9.4.1.3): una interfaz con un `default` que sobrescribe un método genérico borrado de
+        // un superinterfaz (`A<String>.get():T` → `get():Object`) sintetiza un puente `default
+        // Object get()` marcado `ACC_BRIDGE ACC_SYNTHETIC`, que reenvía con `invokeinterface`.
+        let src = "interface A<T> { T get(); } \
+                   interface B extends A<String> { default String get() { return \"hi\"; } }";
+        let b = compiled_class(src, "B");
+        assert!(
+            has_method(&b, "get", "()Ljava/lang/Object;", ACC_BRIDGE | ACC_SYNTHETIC),
+            "falta el puente `Object get()` en la interfaz",
+        );
+        assert!(has_method(&b, "get", "()Ljava/lang/String;", 0), "falta el `get` real");
+        // El puente de interfaz reenvía con `invokeinterface`, no `invokevirtual`.
+        let bridge = b
+            .methods
+            .iter()
+            .find(|m| {
+                b.utf8(m.name_index) == Some("get")
+                    && b.utf8(m.descriptor_index) == Some("()Ljava/lang/Object;")
+            })
+            .expect("el puente existe");
+        let code = &b.member_code(bridge).expect("el puente tiene Code").code;
+        assert!(code.contains(&super::INVOKEINTERFACE), "el puente de interfaz usa invokeinterface");
+        assert!(!code.contains(&super::INVOKEVIRTUAL), "no debe usar invokevirtual");
+        verify_all(src, "B");
+    }
+
+    #[test]
+    fn an_interface_bridge_is_inherited_and_dispatches_from_an_implementor() {
+        // Correctitud de punta a punta: `A<String> a = new C()` con `C implements B`; `a.get()` se ve
+        // como `A.get():Object` → `invokeinterface get()Object`, que resuelve al puente `default` que
+        // C **hereda** de B y reenvía a `B.get():String`. Sin el puente de interfaz no resolvería.
+        let src = "interface A<T> { T get(); } \
+                   interface B extends A<String> { default String get() { return \"hi\"; } } \
+                   class C implements B {} \
+                   class M { static int f() { A a = new C(); Object o = a.get(); return o == null ? 0 : 1; } }";
+        assert_eq!(run_int(src, "M", "f", vec![]), 1, "el puente de interfaz heredado debe reenviar");
+    }
+
+    #[test]
+    fn a_plain_inherited_default_method_dispatches_via_the_interface() {
+        // Consecuencia del arreglo de vtable de B: un `default` **corriente** (sin genéricos) heredado
+        // por una clase que no lo sobrescribe resuelve por `invokeinterface` sobre la clase receptora.
+        let src = "interface Greeter { default int greet() { return 42; } } \
+                   class Impl implements Greeter {} \
+                   class M { static int f() { Greeter g = new Impl(); return g.greet(); } }";
+        assert_eq!(run_int(src, "M", "f", vec![]), 42, "el default heredado debe despachar");
     }
 
     #[test]

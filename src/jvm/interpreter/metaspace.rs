@@ -248,7 +248,69 @@ impl MetaspaceService {
                 None => entries.push(VtableEntry { name, descriptor, method }),
             }
         }
+
+        // Fold in **default methods** inherited from superinterfaces (§5.4.3.3): a *concrete*
+        // interface method (`default`, or a synthetic `bridge`) fills a slot the class doesn't already
+        // provide by a class/superclass method — sin esto, un `invokeinterface` de un método `default`
+        // heredado (o de su **puente** de genéricos, esquina B) daría `NoSuchMethodError`. Las
+        // interfaces se recorren de la más derivada a la más general (BFS), así una sub-interfaz gana
+        // sobre su super-interfaz; los métodos **abstractos** no tienen `Code` y `resolve_method` los
+        // descarta solo.
+        for iface in self.all_superinterfaces(class) {
+            let defaults: Vec<(String, String)> = match self.get_or_load(&iface) {
+                Some(cf) => cf
+                    .methods
+                    .iter()
+                    .filter(|m| !m.is_static() && !m.is_private())
+                    .filter_map(|m| {
+                        let name = cf.utf8(m.name_index)?;
+                        let descriptor = cf.utf8(m.descriptor_index)?;
+                        (!name.starts_with('<')).then(|| (name.to_string(), descriptor.to_string()))
+                    })
+                    .collect(),
+                None => Vec::new(),
+            };
+            for (name, descriptor) in defaults {
+                if entries.iter().any(|e| e.name == name && e.descriptor == descriptor) {
+                    continue; // ya lo aporta la clase, el superclass, o una interfaz más específica
+                }
+                if let Some(method) = self.resolve_method(&iface, &name, &descriptor) {
+                    entries.push(VtableEntry { name, descriptor, method });
+                }
+            }
+        }
         entries
+    }
+
+    /// Los **superinterfaces transitivos** de `class` (o de una interfaz), de la más derivada a la más
+    /// general (BFS por las interfaces directas). Para plegar sus `default` en el vtable. No incluye a
+    /// `class`; las interfaces del superclass ya vienen en el vtable heredado, así que no se recorren.
+    fn all_superinterfaces(&mut self, class: &str) -> Vec<String> {
+        let mut result: Vec<String> = Vec::new();
+        let mut queue: std::collections::VecDeque<String> =
+            self.direct_interfaces(class).into_iter().collect();
+        while let Some(iface) = queue.pop_front() {
+            if result.iter().any(|x| x == &iface) {
+                continue;
+            }
+            for sup in self.direct_interfaces(&iface) {
+                queue.push_back(sup);
+            }
+            result.push(iface);
+        }
+        result
+    }
+
+    /// Los nombres de las interfaces **directamente** declaradas por `name` (`implements`/`extends`).
+    fn direct_interfaces(&mut self, name: &str) -> Vec<String> {
+        match self.get_or_load(name) {
+            Some(cf) => cf
+                .interfaces
+                .iter()
+                .filter_map(|&idx| cf.class_name(idx).map(str::to_string))
+                .collect(),
+            None => Vec::new(),
+        }
     }
 
     /// The class name whose `Class<…>` mirror sits at heap `offset` — the reverse of

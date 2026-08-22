@@ -35,6 +35,10 @@ pub struct ExternalClass {
     pub methods: Vec<ExtMethod>,
     /// La firma **genérica** de la clase, si la tiene (§4.7.9.1).
     pub signature: Option<ClassSig>,
+    /// Los nombres *dotted* de las clases **anidadas** que lista `InnerClasses` (§4.7.6). El llamador
+    /// (`build_external`) filtra las que son **miembros directos** (`Outer$Inner`) para que
+    /// `Outer.Inner` de una clase externa resuelva.
+    pub nested: Vec<String>,
 }
 
 pub struct ExtField {
@@ -100,7 +104,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         r.u2()?; // access
         let fname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let sig = read_attributes(&mut r, &pool)?;
+        let (sig, _) = read_attributes(&mut r, &pool)?;
         fields.push(ExtField {
             name: fname,
             ty: parse_field_desc(&desc)?,
@@ -113,7 +117,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let mname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let sig = read_attributes(&mut r, &pool)?;
+        let (sig, _) = read_attributes(&mut r, &pool)?;
         let (params, ret) = parse_method_desc(&desc)?;
         methods.push(ExtMethod {
             name: mname,
@@ -126,7 +130,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         });
     }
 
-    let class_sig = read_attributes(&mut r, &pool)?;
+    let (class_sig, nested) = read_attributes(&mut r, &pool)?;
     Some(ExternalClass {
         name,
         is_interface: access_flags & ACC_INTERFACE != 0,
@@ -135,6 +139,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         fields,
         methods,
         signature: class_sig.as_deref().and_then(parse_class_signature),
+        nested,
     })
 }
 
@@ -235,18 +240,38 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
 /// Lee la tabla de atributos, devolviendo el valor del **`Signature`** si aparece (§4.7.9.1) y
 /// salteando todo lo demás. A diferencia de saltear a ciegas, acá hay que resolver el nombre de
 /// cada atributo contra el constant pool.
-fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<Option<String>> {
+fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<(Option<String>, Vec<String>)> {
     let mut signature = None;
+    let mut nested = Vec::new();
     for _ in 0..r.u2()? {
         let name = pool.utf8(r.u2()?);
         let len = r.u4()? as usize;
         let data = r.take(len)?;
-        if name.as_deref() == Some("Signature") && data.len() >= 2 {
-            let idx = ((data[0] as u16) << 8) | data[1] as u16;
-            signature = pool.utf8(idx);
+        match name.as_deref() {
+            Some("Signature") if data.len() >= 2 => {
+                let idx = ((data[0] as u16) << 8) | data[1] as u16;
+                signature = pool.utf8(idx);
+            }
+            // `InnerClasses` (§4.7.6): los nombres de las clases **anidadas** (`inner_class_info`), para
+            // que un tipo anidado de una clase externa (`Diagnostic.Kind`) sea resoluble. Se toma el
+            // nombre de cada entrada; el llamador filtra las que son **miembros directos**.
+            Some("InnerClasses") if data.len() >= 2 => {
+                let count = ((data[0] as usize) << 8) | data[1] as usize;
+                for k in 0..count {
+                    let base = 2 + k * 8; // 4 × u2 por entrada
+                    if base + 2 > data.len() {
+                        break;
+                    }
+                    let inner_idx = ((data[base] as u16) << 8) | data[base + 1] as u16;
+                    if let Some(n) = pool.class_name(inner_idx) {
+                        nested.push(n);
+                    }
+                }
+            }
+            _ => {}
         }
     }
-    Some(signature)
+    Some((signature, nested))
 }
 
 // ---- descriptores → Type ----

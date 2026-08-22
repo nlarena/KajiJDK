@@ -49,6 +49,21 @@ impl Exec<'_> {
             Value::Reference(offset) => offset,
             _ => panic!("invokevirtual: receiver is not an object reference"),
         };
+
+        // `array.clone()` (§10.7): un array no tiene vtable, así que el `clone` heredado de `Object` se
+        // **intrinseca** acá —copia fresca del array—. El `static_class` del methodref es el descriptor
+        // del array (`[LEnums;`/`[I`). Es a lo que compila `T[].clone()` (p. ej. el `values()` de un enum).
+        if name == "clone" && static_class.starts_with('[') {
+            let dest = crate::jvm::interpreter::bytecode_interpreter::array_operations::array_clone(
+                &mut self.shared.metaspace,
+                &mut self.shared.heap,
+                receiver,
+                &static_class,
+            );
+            self.top().push(Value::Reference(dest));
+            self.advance_past_call();
+            return Step::Continue;
+        }
         let mirror_offset = self.shared.heap.read_u32(receiver) as usize;
         let runtime_class = self
             .shared.metaspace

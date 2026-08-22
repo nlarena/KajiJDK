@@ -58,7 +58,11 @@ use super::Error;
 
 /// Corre los chequeos de declaración sobre la unidad ya atribuida.
 pub fn check(unit: &CompilationUnit, table: &SymbolTable) -> Vec<Error> {
-    let mut cx = Checker { table, errors: Vec::new() };
+    // Mapa `record → tipos de sus componentes en orden` (para la exhaustividad de record patterns
+    // anidados, §14.11.1.1): se arma del AST porque el checker no lo tiene de otra forma.
+    let mut records: std::collections::HashMap<SymbolId, Vec<RType>> = std::collections::HashMap::new();
+    collect_record_components(table, &unit.types, unit.package.as_deref().unwrap_or(""), &mut records);
+    let mut cx = Checker { table, errors: Vec::new(), records };
     let base = unit.package.as_deref().unwrap_or("");
     if let Some(module) = &unit.module {
         cx.module_decl(module);
@@ -72,6 +76,61 @@ pub fn check(unit: &CompilationUnit, table: &SymbolTable) -> Vec<Error> {
 struct Checker<'a> {
     table: &'a SymbolTable,
     errors: Vec<Error>,
+    /// `record → tipos de sus componentes en orden` — para deconstruir record patterns al medir la
+    /// exhaustividad (§14.11.1.1). Vacío para records externos (sin AST): ahí el pattern se toma total.
+    records: std::collections::HashMap<SymbolId, Vec<RType>>,
+}
+
+/// Recolecta, recursivo por tipos anidados, los **tipos de los componentes** de cada `record` de la
+/// unidad, resueltos en el scope de miembros del record. Es la tabla que usa la exhaustividad para
+/// bajar por un record pattern (`Box(Circle c)`) hasta sus componentes.
+fn collect_record_components(
+    table: &SymbolTable,
+    types: &[ClassDecl],
+    enclosing: &str,
+    out: &mut std::collections::HashMap<SymbolId, Vec<RType>>,
+) {
+    for class in types {
+        let fqn = if enclosing.is_empty() {
+            class.name.clone()
+        } else {
+            format!("{enclosing}.{}", class.name)
+        };
+        if let Some(cid) = table.class(&fqn) {
+            if class.kind == TypeKind::Record {
+                let scope = match &table.symbol(cid).kind {
+                    SymbolKind::Class { members, .. } => *members,
+                    _ => table.global,
+                };
+                let comps = class
+                    .components
+                    .iter()
+                    .map(|p| super::attribute::resolve_rtype(table, scope, &p.ty))
+                    .collect();
+                out.insert(cid, comps);
+            }
+        }
+        // Tipos anidados (una clase/record puede declarar records adentro).
+        for m in &class.members {
+            if let Member::Type(nested) = m {
+                collect_record_components(table, std::slice::from_ref(nested), &fqn, out);
+            }
+        }
+    }
+}
+
+/// Los patrones de `case` **sin guarda** (una guarda `when` puede fallar, así que no cubre): son los
+/// que cuentan para la exhaustividad de un `switch` con patrones.
+fn unguarded_patterns(cases: &[SwitchCase]) -> Vec<&Pattern> {
+    cases
+        .iter()
+        .filter(|c| c.guard.is_none())
+        .flat_map(|c| &c.labels)
+        .filter_map(|l| match l {
+            CaseLabel::Pattern(p) => Some(p),
+            _ => None,
+        })
+        .collect()
 }
 
 /// La firma **borrada** de un método: lo que decide si dos métodos son *override-equivalentes*
@@ -158,6 +217,9 @@ fn package_of(binary: &str) -> &str {
         None => "",
     }
 }
+
+// (helper de instancia [`Checker::access_level_in`] más abajo — necesita saber si el tipo declarante
+// es una interfaz, así que no puede ser una función libre como [`access_level`].)
 
 fn access_name(level: u8) -> &'static str {
     match level {
@@ -783,7 +845,11 @@ impl Checker<'_> {
             self.error(decl.pos, msg);
         }
 
-        let (mine_acc, parent_acc) = (access_level(&decl.modifiers), access_level(&parent_mods));
+        let owner_type = owner.unwrap_or(parent);
+        let (mine_acc, parent_acc) = (
+            self.access_level_in(&decl.modifiers, cid),
+            self.access_level_in(&parent_mods, owner_type),
+        );
         if mine_acc < parent_acc {
             let msg = format!(
                 "`{}` reduce la visibilidad heredada: es `{}` y en `{owner_name}` era `{}`",
@@ -1155,25 +1221,107 @@ impl Checker<'_> {
             }
             return self.enum_constants_covered(id, cases);
         }
-        // `sealed`/referencia: cobertura por tipos totales, recursiva sobre la jerarquía sellada.
-        self.covers_type(sel, &total)
+        // `sealed`/referencia: cobertura **recursiva** por el conjunto de patrones, bajando por los
+        // record patterns anidados y por la jerarquía sellada (§14.11.1.1 / JEP 440-441).
+        let pats = unguarded_patterns(cases);
+        self.patterns_cover(from, sel, &pats)
     }
 
-    /// `T` está cubierto si algún patrón **total** lo abarca (`T <: patrón`), o si `T` es `sealed` y
-    /// **cada** subtipo autorizado está cubierto (recursión hasta las hojas `final`/`non-sealed`).
-    fn covers_type(&self, t: &RType, total: &[RType]) -> bool {
-        if total.iter().any(|p| types::is_subtype(self.table, t, p)) {
+    /// ¿El conjunto de patrones (sin guarda) cubre el tipo `t`? (§14.11.1.1 con record patterns.) Es el
+    /// caso de arranque de [`Self::cover_column`] con una tupla de **una** columna (el propio `t`): cada
+    /// patrón de `case` es una "fila" de un solo elemento.
+    fn patterns_cover(&self, from: SymbolId, t: &RType, pats: &[&Pattern]) -> bool {
+        let rows: Vec<&[Pattern]> = pats.iter().map(|p| std::slice::from_ref(*p)).collect();
+        self.cover_column(from, t, &[], &rows)
+    }
+
+    /// El núcleo de la exhaustividad de record patterns: ¿las `rows` (cada una la lista de patrones de
+    /// componente de un record pattern, alineadas) cubren la **tupla** `[c0, ...rest]`? Reduce la
+    /// **primera** columna `c0` de tres formas (§14.11.1.1): (a) un patrón de tipo **total** para `c0`
+    /// deja pasar sus columnas restantes; (b) si `c0` es un `record`, un patrón de deconstrucción se
+    /// **aplana** (sus componentes se anteponen a las columnas restantes); (c) si `c0` es `sealed`,
+    /// se parte en sus subtipos autorizados y cada uno debe quedar cubierto.
+    fn cover_column(&self, from: SymbolId, c0: &RType, rest: &[RType], rows: &[&[Pattern]]) -> bool {
+        // (a) Filas cuyo primer patrón es un **type pattern total** para `c0` (incluye `var`): aportan
+        //     sus columnas restantes. Si esas cubren el resto, la tupla entera está cubierta.
+        let total_rest: Vec<&[Pattern]> = rows
+            .iter()
+            .filter(|row| matches!(&row[0], Pattern::Type { ty, .. } if self.type_pattern_covers(from, c0, ty)))
+            .map(|row| &row[1..])
+            .collect();
+        if self.covers_tuple(from, rest, &total_rest) {
             return true;
         }
-        if let Some(id) = types::erased_id(t) {
-            if self.table.is_sealed(id) {
-                let perm = self.table.permitted(id);
-                if !perm.is_empty() && perm.iter().all(|s| self.covers_type(s, total)) {
-                    return true;
+        let Some(c0id) = types::erased_id(c0) else { return false };
+        // (b) Filas cuyo primer patrón es un **record pattern del tipo `c0`**: se aplanan.
+        let rec_rows: Vec<&[Pattern]> = rows
+            .iter()
+            .copied()
+            .filter(|row| {
+                matches!(&row[0], Pattern::Record { ty, .. } if self.pattern_type_id(from, ty) == Some(c0id))
+            })
+            .collect();
+        if !rec_rows.is_empty() {
+            match self.records.get(&c0id) {
+                Some(comps) => {
+                    let new_types: Vec<RType> =
+                        comps.iter().cloned().chain(rest.iter().cloned()).collect();
+                    let new_rows: Vec<Vec<Pattern>> = rec_rows
+                        .iter()
+                        .map(|row| {
+                            let Pattern::Record { components, .. } = &row[0] else { unreachable!() };
+                            components.iter().cloned().chain(row[1..].iter().cloned()).collect()
+                        })
+                        .collect();
+                    let refs: Vec<&[Pattern]> = new_rows.iter().map(Vec::as_slice).collect();
+                    if self.covers_tuple(from, &new_types, &refs) {
+                        return true;
+                    }
+                }
+                // Record **externo** (sin componentes en el AST): se toma el pattern como total, como
+                // antes — su deconstrucción no se puede medir, así que no se es más estricto.
+                None => {
+                    let ext_rest: Vec<&[Pattern]> = rec_rows.iter().map(|row| &row[1..]).collect();
+                    if self.covers_tuple(from, rest, &ext_rest) {
+                        return true;
+                    }
                 }
             }
         }
+        // (c) `c0` sellado: cada subtipo autorizado debe quedar cubierto por las mismas filas.
+        if self.table.is_sealed(c0id) {
+            let perm = self.table.permitted(c0id);
+            if !perm.is_empty() {
+                return perm.iter().all(|s| self.cover_column(from, s, rest, rows));
+            }
+        }
         false
+    }
+
+    /// ¿Las `rows` cubren la tupla de tipos `types`? Una tupla **vacía** (record nular ya reducido) se
+    /// cubre si llegó al menos una fila; si no, se reduce la primera columna con [`Self::cover_column`].
+    fn covers_tuple(&self, from: SymbolId, types: &[RType], rows: &[&[Pattern]]) -> bool {
+        match types.split_first() {
+            None => !rows.is_empty(),
+            Some((c0, rest)) => self.cover_column(from, c0, rest, rows),
+        }
+    }
+
+    /// ¿El type pattern de tipo escrito `ty` es **total** para `c0`? Lo es `var` (tipo inferido) y todo
+    /// `S x` con `c0 <: S`. El nombre se resuelve en el scope de `from`.
+    fn type_pattern_covers(&self, from: SymbolId, c0: &RType, ty: &Type) -> bool {
+        if matches!(ty, Type::Var) {
+            return true;
+        }
+        match self.pattern_type_id(from, ty) {
+            Some(id) => types::is_subtype(self.table, c0, &RType::Class(id)),
+            None => false,
+        }
+    }
+
+    /// El `SymbolId` del tipo escrito en un patrón (`Circle`, `Box`), resuelto en el scope de `from`.
+    fn pattern_type_id(&self, from: SymbolId, ty: &Type) -> Option<SymbolId> {
+        self.resolve_type_id(from, ty)
     }
 
     /// Los tipos de los patrones **totales**: patrones sin `when` (una guarda puede fallar, así que
@@ -1255,6 +1403,17 @@ impl Checker<'_> {
 
     fn is_interface(&self, cid: SymbolId) -> bool {
         matches!(&self.table.symbol(cid).kind, SymbolKind::Class { kind: TypeKind::Interface, .. })
+    }
+
+    /// El nivel de acceso de un miembro **según su tipo declarante**. Igual que [`access_level`], salvo
+    /// que en una **interfaz** un miembro sin modificador es implícitamente `public` (§9.4) —no de
+    /// paquete—, mientras que un `private` (método de interfaz de Java 9+) sigue siendo `private`.
+    fn access_level_in(&self, mods: &[Modifier], declaring: SymbolId) -> u8 {
+        if self.is_interface(declaring) && !mods.contains(&Modifier::Private) {
+            3 // public
+        } else {
+            access_level(mods)
+        }
     }
 
     /// Un tipo **externo** (modelado por el *class finder*, con sus miembros incompletos).
@@ -1464,6 +1623,24 @@ mod tests {
     #[test]
     fn widening_visibility_is_accepted() {
         ok("class A { protected int f() { return 0; } }             class B extends A { public int f() { return 0; } }");
+    }
+
+    #[test]
+    fn an_interface_method_without_a_modifier_is_implicitly_public() {
+        // §9.4: los miembros de interfaz son implícitamente `public`. Un `default` que sobrescribe a
+        // otro método de interfaz **no** reduce la visibilidad aunque no escriba `public`.
+        ok("interface A<T> { T get(); } \
+            interface B extends A<String> { default String get() { return null; } }");
+    }
+
+    #[test]
+    fn a_class_implementation_cannot_reduce_an_interface_methods_visibility() {
+        // Pero una **clase** que implementa un método de interfaz `public` con acceso de paquete sí lo
+        // reduce (§8.4.8.3) — el implícito `public` es de la interfaz, no de la clase.
+        one(
+            "interface I { void m(); } class C implements I { void m() {} }",
+            "reduce la visibilidad",
+        );
     }
 
     // ---- `final` y `static` (§8.4.3.3 / §8.4.8.2) ----
@@ -1782,6 +1959,84 @@ mod tests {
         ok(&format!(
             "{SHAPES} class U {{ int f(Shape s) {{ \
              return switch (s) {{ case Shape any -> 0; }}; }} }}"
+        ));
+    }
+
+    // ---- exhaustividad de record patterns anidados (C, §14.11.1.1 / JEP 440-441) ----
+
+    /// Jerarquía sellada de **records** más contenedores, para deconstruir patrones anidados.
+    const RECORDS: &str = "sealed interface Shape permits Circle, Square {} \
+        record Circle() implements Shape {} \
+        record Square() implements Shape {} \
+        record Box(Shape s) {} \
+        record Pair(Shape a, Shape b) {} ";
+
+    #[test]
+    fn a_record_pattern_missing_a_component_subtype_is_not_exhaustive() {
+        // `Box(Circle c)` **no** cubre `Box`: falta el `Box` que contiene un `Square`.
+        some(
+            &format!(
+                "{RECORDS} class U {{ int f(Box b) {{ \
+                 return switch (b) {{ case Box(Circle c) -> 1; }}; }} }}"
+            ),
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn record_patterns_covering_every_component_subtype_are_exhaustive() {
+        ok(&format!(
+            "{RECORDS} class U {{ int f(Box b) {{ return switch (b) {{ \
+             case Box(Circle c) -> 1; case Box(Square s) -> 2; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn a_total_component_pattern_covers_the_record() {
+        // Un componente total (`Shape s` o `var s`) cubre todo el record de un saque.
+        ok(&format!(
+            "{RECORDS} class U {{ int f(Box b) {{ \
+             return switch (b) {{ case Box(Shape s) -> 1; }}; }} }}"
+        ));
+        ok(&format!(
+            "{RECORDS} class U {{ int f(Box b) {{ \
+             return switch (b) {{ case Box(var s) -> 1; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn nested_record_patterns_covering_all_combinations_are_exhaustive() {
+        ok(&format!(
+            "{RECORDS} class U {{ int f(Pair p) {{ return switch (p) {{ \
+             case Pair(Circle a, Circle b) -> 1; \
+             case Pair(Circle a, Square b) -> 2; \
+             case Pair(Square a, Circle b) -> 3; \
+             case Pair(Square a, Square b) -> 4; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn nested_record_patterns_missing_a_combination_are_rejected() {
+        some(
+            &format!(
+                "{RECORDS} class U {{ int f(Pair p) {{ return switch (p) {{ \
+                 case Pair(Circle a, Circle b) -> 1; \
+                 case Pair(Circle a, Square b) -> 2; \
+                 case Pair(Square a, Circle b) -> 3; }}; }} }}"
+            ),
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn a_total_second_component_collapses_the_nested_combinations() {
+        // Mezcla: para `first == Square`, `Shape b` cubre todo el segundo componente de una; para
+        // `first == Circle` se enumeran los dos subtipos. Exhaustivo sin las cuatro combinaciones.
+        ok(&format!(
+            "{RECORDS} class U {{ int f(Pair p) {{ return switch (p) {{ \
+             case Pair(Circle a, Circle b) -> 1; \
+             case Pair(Circle a, Square b) -> 2; \
+             case Pair(Square a, Shape b) -> 3; }}; }} }}"
         ));
     }
 

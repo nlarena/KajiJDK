@@ -70,11 +70,10 @@
 //!
 //! Y los miembros implícitos de un **`enum`** (§8.9.3): las constantes como campos, el `$VALUES`
 //! que las junta, el constructor privado `(String, int)` —lo único que puede darle a `java.lang.Enum`
-//! su nombre y su ordinal— y `values()`/`valueOf()`. Dos desvíos deliberados de javac, ninguno
-//! semántico: `values()` copia con un **bucle** en vez de `$VALUES.clone()` (lo que importa de
-//! `clone()` es devolver un array fresco, y eso el bucle lo da), y `valueOf` compara contra los
-//! nombres literales acá adentro en vez de delegar en `Enum.valueOf(Class, String)`, que va por
-//! reflexión sobre el `$VALUES` de otra clase.
+//! su nombre y su ordinal— y `values()`/`valueOf()`. `values()` es `return (E[]) $VALUES.clone();`
+//! **igual que javac** (el emisor y la VM saben `array.clone()`, §10.7). Queda **un** desvío
+//! deliberado, no semántico: `valueOf` compara contra los nombres literales acá adentro en vez de
+//! delegar en `Enum.valueOf(Class, String)`, que va por reflexión sobre el `$VALUES` de otra clase.
 //!
 //! Lo que queda:
 //! - Un `enum` cuyas constantes lleven **argumentos** (`ROJO("rojo")`) o que declare su propio
@@ -552,7 +551,7 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
 /// de campos del `.class` y **nada más**. Su valor lo pone el constructor (o el `<clinit>` si es
 /// `static`), y tiene que correr **en orden de fuente**, intercalado con los bloques `{ }` /
 /// `static { }` — de ahí que se junten los dos en un solo recorrido y no por separado.
-fn hoist_initializers(class: &mut ClassDecl) {
+fn hoist_initializers(class: &mut ClassDecl, consts: &super::codegen::ConstFieldMap) {
     let mut statics: Vec<Stmt> = Vec::new();
     let mut instances: Vec<Stmt> = Vec::new();
     for member in &mut class.members {
@@ -566,7 +565,7 @@ fn hoist_initializers(class: &mut ClassDecl) {
                 if is_static
                     && is_final
                     && f.init.as_ref().is_some_and(|init| {
-                        super::codegen::const_field_value(&f.ty, init).is_some()
+                        super::codegen::const_field_value(&f.ty, init, consts).is_some()
                     })
                 {
                     continue;
@@ -716,7 +715,7 @@ impl Desugarer<'_> {
         let fqn = qualify(enclosing, &class.name);
         // Primero de todo: los inicializadores de campo pasan a ser sentencias. Después el recorrido
         // les baja el azúcar que tengan adentro como a cualquier otra.
-        hoist_initializers(class);
+        hoist_initializers(class, self.table.const_fields());
         // El `assert` se baja dentro de un método, pero su *guard* es un campo de **esta** clase: se
         // anota acá y se agrega al final, cuando ya se recorrieron todos los miembros.
         let outer = std::mem::take(&mut self.needs_assert_guard);
@@ -993,46 +992,17 @@ impl Desugarer<'_> {
             }));
         }
 
-        // 5. `values()`: una copia fresca de `$VALUES` en cada llamada.
-        let (r, i) = ("$r".to_string(), "$i".to_string());
-        let len = || ex(ExprKind::Field { expr: Box::new(name(values_field)), name: "length".into() });
-        let body = Block(vec![
-            local(
-                arr.clone(),
-                r.clone(),
-                ex(ExprKind::NewArray { elem: ety.clone(), dims: vec![Some(len())], init: None }),
-            ),
-            st(StmtKind::For {
-                init: Some(boxst(StmtKind::LocalVar {
-                    ty: int,
-                    name: i.clone(),
-                    init: Some(ex(ExprKind::IntLit(0))),
-                    is_final: false,
-                    type_annos: Vec::new(),
-                })),
-                cond: Some(ex(ExprKind::Binary {
-                    op: BinOp::Lt,
-                    lhs: Box::new(name(&i)),
-                    rhs: Box::new(len()),
-                })),
-                update: vec![assign_expr(
-                    name(&i),
-                    ex(ExprKind::Binary {
-                        op: BinOp::Add,
-                        lhs: Box::new(name(&i)),
-                        rhs: Box::new(ex(ExprKind::IntLit(1))),
-                    }),
-                )],
-                body: boxst(StmtKind::Expr(assign_expr(
-                    ex(ExprKind::Index { array: Box::new(name(&r)), index: Box::new(name(&i)) }),
-                    ex(ExprKind::Index {
-                        array: Box::new(name(values_field)),
-                        index: Box::new(name(&i)),
-                    }),
-                ))),
-            }),
-            st(StmtKind::Return(Some(name(&r)))),
-        ]);
+        // 5. `values()`: `return (E[]) $VALUES.clone();` — una copia **fresca** de `$VALUES` en cada
+        //    llamada, igual que javac (`invokevirtual clone` + `checkcast`). El emisor sabe emitir
+        //    `array.clone()` (§10.7); el `checkcast` lo pone él porque el `clone` heredado devuelve
+        //    `Object`. Antes se copiaba con un bucle (para no depender de `array.clone()`); ya no hace
+        //    falta y así el `.class` coincide con javac byte a byte.
+        let body = Block(vec![st(StmtKind::Return(Some(ex(ExprKind::Call {
+            target: Some(Box::new(name(values_field))),
+            name: "clone".to_string(),
+            args: Vec::new(),
+            type_args: Vec::new(),
+        }))))]);
         self.register_method(cid, scope, "values", &[], &arr, false);
         out.push(Member::Method(MethodDecl {
             annotations: Vec::new(),
@@ -1870,7 +1840,14 @@ impl Desugarer<'_> {
         let tmp = self.fresh("s");
         let ty = rtype_to_type(self.table, e.ty.as_ref().unwrap());
         let decl = st(StmtKind::LocalVar { ty, name: tmp.clone(), init: None, is_final: false, type_annos: Vec::new() });
-        let sw = st(self.switch_to_stmt(e, name(&tmp)));
+        let mut sw = st(self.switch_to_stmt(e, name(&tmp)));
+        // El switch-**sentencia** generado puede ser sobre `String`/`enum`/*patterns*: hay que bajarlo
+        // también. El llamador (`lower_switch_stmt`) ya no lo alcanza porque `sw` queda **dentro de un
+        // `Block`**, y los lowerings de `stmt` solo miran el nodo de tope — sin esto, un
+        // `return switch (s) { … }` sobre un `String` llegaba **crudo** al emisor (que no lo soporta).
+        self.lower_string_switch(&mut sw);
+        self.lower_enum_switch(&mut sw);
+        self.lower_pattern_switch(&mut sw);
         (decl, sw, tmp)
     }
 
