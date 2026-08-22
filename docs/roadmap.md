@@ -25,8 +25,8 @@
 | Parsear `.class` y ejecutar bytecode | **Sí** (el corazón del proyecto) |
 | Objetos, herencia, dispatch dinámico | Sí (Nivel 3) |
 | Garbage collector simple (mark & sweep) | Aspiracional (Nivel 4) |
-| JIT (bytecode → nativo) | **No** — territorio PhD, sueño lejano |
-| Biblioteca estándar Java completa | **No** — se stubea lo mínimo |
+| JIT (bytecode → nativo) | **Sí** — hecho (Fase F: primer tier x86-64 corriendo, ~116×; censo ~57% de los métodos) |
+| Biblioteca estándar Java (`java.base` + extras) | **Sí** — amplia (945 clases: colecciones, `java.time`, `java.util.zip`, `java.math`, `java.text`, `java.lang.constant`, jakarta) |
 | Certificación TCK | **No** — inviable para una persona |
 
 ---
@@ -65,7 +65,7 @@ Saltos (`if_icmpgt`, `goto`), `invokestatic`, pila de frames.
 - **Native methods / bootstrap:** enganchar lo mínimo de `java.lang`/`java.io`
   (p. ej. para `System.out.println`).
 - **Garbage collector:** empezar con "no liberar nada" → mark & sweep simple.
-- **JIT:** fuera de alcance por ahora.
+- **JIT:** era el sueño lejano; **hoy hecho** (Fase F, ver abajo).
 
 ### Cómo se mide
 - Nivel 2 en solitario → sólido en sistemas/bajo nivel.
@@ -251,7 +251,7 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [x] **`ldc` de literales de clase** (`Foo.class`, `int[].class`) — empuja el mirror, cacheado por Class ID, y sin inicializar la clase (un literal no es *uso activo*, §5.5)
 - [x] **La VM puede invocar Java** (`call_java`) — empuja un frame propio y lo corre con un bucle anidado, devolviendo el resultado. Era el caso general de lo que ya hacía `<clinit>`. **Los intrínsecos dejan de ser terminales**: es lo que permite que `String.valueOf(Object)` llame al `toString()` del objeto, que un record pregunte el `equals`/`hashCode` de sus componentes, y que un condy ejecute su bootstrap
 - [x] **Modelo de objetos de `java.lang.invoke`** (`MethodHandle`/`MethodType`/`Lookup`) — **cierra 0xba**: vive en Java (`bootstrap/java/lang/invoke/`), con `MethodHandle.invoke`/`invokeWithArguments` **nativos** (polimorfia de firma, §2.9.3, interceptados en `invokevirtual` antes de la resolución normal). `ConstantBootstraps.invoke` es **ahora Java** (`handle.invokeWithArguments(args)`), lo que exigió el **cache de condy raíz de GC**; el `ldc` de `MethodHandle`/`MethodType` —que `javac` nunca emite— se probó con **class files hechos a mano por el escritor de `.class`**. Kinds static/virtual/special/constructor + mirrors de primitivos (`int.class` → `Integer.TYPE`), y `LambdaMetafactory` **genera clases reales** al vuelo. Detalle en `invokedynamic-ruta.md`
-- [ ] JIT (bytecode → código nativo)
+- [x] JIT (bytecode → código nativo) — **hecho en la Fase F** (emisor x86-64 propio, primer tier corriendo, ~116×; ver más abajo)
 - **✅ Éxito (parcial):** verificación de tipos completa, GC generacional, set de opcodes completo (incluido `invokedynamic`), y **concurrencia con paralelismo real** (GIL removido, ensanchado W1/W2/W3) — con el **JMM relajado (H4)**, **CAS (H5)** y el **núcleo de `java.util.concurrent` (H6)** sobre AQS (`ReentrantLock`/`Semaphore`/`CountDownLatch`) ya hechos y validados por el oráculo. Falta el **volumen de j.u.c** (pools, colecciones), los locks finos, resolver el **bug residual del modo `os`** (ver arriba) y/o el JIT. *Detalle en los informes `Concurrencia_KajiJDK.pdf` e `invokedynamic-ruta.md`.*
 
 ### Hito A7 · Conformidad JVMS 🟣 — auditoría 2026-08-12 (detalle: `holdon.md`)
@@ -279,13 +279,14 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 
 ## FASE B — El compilador (`javac`, escrito en Rust)
 
-> **Al día — el compilador está construido (fusionado desde el pendrive):** B0 (lexer),
-> B1 (parser, lenguaje completo), B2 (análisis semántico: pasadas 1 y 2 + chequeos),
-> B3 (generación de bytecode con `StackMapTable`) y B4 (compilador robusto) están
-> **hechos** — el `javac` propio compila objetos/bucles/excepciones y el `.class` corre
-> en la JVM (`fib(10)=55`, `fact(5)=120`) y pasa el verificador JVMS-estricto. Falta B5
-> (cumbre: genéricos completos). El detalle por hito está en `Roadmap_JDK.pdf`. Las
-> casillas de abajo son el plan original.
+> **Al día — el compilador está construido:** B0 (lexer), B1 (parser, lenguaje completo),
+> B2 (análisis semántico: pasadas 1 y 2 + chequeos), B3 (generación de bytecode con
+> `StackMapTable`), B4 (compilador robusto) **y B5 (genéricos completos: erasure +
+> bridge methods)** están **hechos** — el `javac` propio compila objetos/bucles/
+> excepciones/genéricos y el `.class` corre en la JVM (`fib(10)=55`, `fact(5)=120`) y pasa
+> el verificador JVMS-estricto. En curso **B6 (fidelidad de `javac`)**: esquinas de
+> lenguaje, `-Xlint`, APT y el diferencial de emisión (ver abajo). El detalle por hito está
+> en `Roadmap_JDK.pdf`. Las casillas de abajo son el plan original.
 
 ### Hito B0 · Lexer 🟢
 - [ ] Scanner: texto `.java` → tokens (palabras clave, identificadores, literales, símbolos)
@@ -314,13 +315,28 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [ ] Generación de `StackMapTable` (la exige el verificador moderno)
 - **✅ Éxito:** compila programas con sobrecarga, herencia y flujo no trivial.
 
-### Hito B5 · Cumbre del compilador 🟣
-- [ ] Genéricos completos (*type erasure*, *wildcards*, inferencia)
+### Hito B5 · Cumbre del compilador 🟣 — ✅ núcleo cerrado
+- [x] Genéricos completos (*type erasure*, *wildcards*, inferencia del Cap. 18) + **bridge methods**
 - **✅ Éxito:** compila código genérico equivalente al de `javac`.
+
+### Hito B6 · Fidelidad de `javac` 🟣 — 🚧 en progreso
+- [x] **Esquinas de lenguaje (A/B/C/D)** — expresiones constantes a `ConstantValue` (§15.28/§15.29), *bridges* en interfaz (§9.4.1.3 + defaults de superinterfaz en la vtable), exhaustividad con record patterns anidados (JEP 440/441) y asignación definitiva de un `switch` exhaustivo sin `default` (§16.2.9)
+- [x] **`-Xlint`** (§9.6.4.5) — pase de lint con **nueve categorías** (`empty`, `cast`, `fallthrough`, `deprecation`, `rawtypes`, `unchecked`, `finally`, `serial`, `this-escape`), severidad en el diagnóstico, `@SuppressWarnings` y render estilo `javac`
+- [x] **APT — fase 1** — la API de `javax.annotation.processing` / `javax.lang.model`, con resolución de tipos anidados de clases externas (atributo `InnerClasses`, p. ej. `Diagnostic.Kind`)
+- [x] **Diferencial de emisión** (`tools/emitdiff`) — compila cada `.java` con nuestro `javac` y con el real, desensambla ambos con `javap -p -c` y compara **normalizado**; cerró un lote de divergencias (ACC_PUBLIC del `default` de interfaz, `iinc`, comparaciones contra 0, literales negativos, `ACC_STATIC` de clase anidada, `Signature` de enum + `values()` vía `array.clone()`, switch-expr sobre `String`)
+- [ ] **Falta:** el *round loop* de APT y `javadoc`
+- **✅ Éxito (parcial):** el `.class` emitido y los diagnósticos son indistinguibles de los de `javac` para el núcleo del lenguaje.
 
 ---
 
 ## FASE C — Las bibliotecas (escritas en Java, compiladas por tu `javac`)
+
+> **Al día — muy por delante del plan original:** la biblioteca son hoy **945 clases** e
+> incluye, además del núcleo, `java.util` completo (colecciones + concurrentes), `java.io`
+> con decoradores, `java.time` (value types + offsets + `DateTimeFormatter` + zonas + chrono),
+> `java.util.zip` (DEFLATE + ZIP), `java.math`, `java.text`, `java.lang.constant`,
+> `java.lang.invoke`, reflexión parcial y **jakarta.validation**. Las casillas de abajo son
+> el plan original mínimo.
 
 ### Hito C0 · Núcleo de `java.lang` 🟢
 - [ ] `Object`, `String`, `System`, wrappers (`Integer`...), `Math`, `StringBuilder`
@@ -347,7 +363,9 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [ ] 🟢 `java` (lanzador que arranca la JVM) — se logra durante la Fase A
 - [ ] 🟢 `javac` (compilador) — es toda la Fase B
 - [ ] 🔵 `jar` (empaquetador de `.class`)
-- [ ] 🟣 `jdb` (debugger), `javadoc`, `jlink`/`jmod`, `keytool`...
+- [x] 🟣 **`jdb` (debugger)** — hecho (Fase I: JPDA completo — JVMTI/JDWP/JDI, validado contra el `jdb` real de Temurin)
+- [x] 🟣 **`jlink`/`jimage`** — hecho (Fase J: escritor/lector de `jimage`, imagen ejecutable, `--compress`)
+- [ ] 🟣 `javadoc`, `jmod`, `keytool`…
 
 ---
 
@@ -358,6 +376,26 @@ El momento épico: las tres piezas funcionando juntas.
 - [ ] Ejecutar un programa real que use esas bibliotecas en tu propia JVM (Fase A)
 - [ ] Conformance / compatibilidad (la cumbre lejana: comportamiento fiel a la spec)
 - **✅ Éxito:** un `.java` que escribes → lo compila tu `javac` → usa tus bibliotecas → corre en tu JVM, sin tocar nada del JDK de Temurin.
+
+---
+
+## FASE I — El depurador (JPDA: JVMTI · JDWP · jdb) 🟣 — ✅ completo
+
+> La VM propia se depura, y no solo desde adentro: el mismo `com.sun.jdi` que usa IntelliJ
+> attachea sin saber que la VM es propia.
+- [x] **JVMTI** (`jvmti.rs`) — back-end *push*: un `JvmtiAgent` registra callbacks (`breakpoint`/`single_step`/`method_entry`/`method_exit`/`exception`) que la VM dispara en medio de `step()`, con *fast-path* por `Capabilities` y sin `unsafe` (destructurando `self` en campos disjuntos)
+- [x] **JDWP** (`jdwp.rs`) — codec puro (handshake, framing, serialización tipada big-endian), *command handlers* (`VirtualMachine`/`EventRequest`), y el bridge JVMTI↔JDWP que empuja eventos como *Composite packets* y aplica los `EventRequest` del cliente a la VM real
+- [x] **JDI** (`jdi.rs`) — API cliente por *mirrors* tipados (`Vm`/`Location`/`Event`); binarios `jvm-jdwp` (servidor `dt_socket`), `jdi-attach` y `jdb`
+- [x] **Fidelidad (I5)** — inspección de pila/variables con la VM parada, breakpoints por línea de fuente y field watchpoints; **validado contra el `jdb` real de Temurin** (`Breakpoint hit: Add.add(), line=3 bci=0`)
+- **✅ Éxito:** sesión de `jdb` 100% limpia (`threads`/`classes`/`stop at`/`cont`/`where`/`locals`/`watch`) por protocolo, dos procesos, todo propio.
+
+## FASE J — Imagen enlazada (`jlink` / `jimage`) 🟣 — ✅ cerrada
+
+> Empaquetar el runtime + la biblioteca en una imagen ejecutable, como el `jlink` del JDK.
+- [x] **`jimage`** (`jimage.rs`, `src/jvm/jimage.rs`) — escritor y lector del contenedor (`info`/`list`/`extract`), con `module-info` de cada módulo aislado
+- [x] **`jlink`** (`jlink.rs`, `src/jvm/modules.rs`) — grafo de módulos JPMS (accesibilidad, `--add-modules`, `--describe-module`), pipeline de plugins (`strip-debug`, `add-options`, `launcher`) y `--compress` con `inflate` propio (`inflate.rs`) que hace **booteable** la imagen
+- [x] **Accesibilidad JPMS** enforced en el intérprete (`check_access` en los `invoke*`/field, §5.4.4)
+- **✅ Éxito:** `run-headless --boot <imagen>` corre desde la imagen enlazada; el `java.base` propio vive en `KajiLibrary/module-info.java`.
 
 ---
 
