@@ -21,9 +21,26 @@ import java.util.Optional;
 // an array, so the three cases fall out of the first character. That avoids needing
 // `isPrimitive`/`isArray`/`getComponentType`, none of which our `Class` has yet.
 //
-// OMITTED (subset): `fromMethodDescriptorString(String, ClassLoader)` — it must LOAD each named
-// class, and KajiLibrary has no `Class.forName`; and the `TypeDescriptor.OfMethod` bridge methods,
-// which are the erased overloads of the ones below.
+// OMITTED (subset), and both blocked OUTSIDE this package rather than by anything here:
+//
+//   - `fromMethodDescriptorString(String, ClassLoader)`. The reason is not the one an earlier
+//     revision of this note gave ("it must LOAD each named class"): that would only make the body
+//     a `throw`, which is what every other unimplementable method here already is. The real
+//     blocker is that `java.lang.ClassLoader` DOES NOT EXIST in KajiLibrary, so the parameter type
+//     cannot be spelled at all — `javac` answers *no se encuentra el símbolo: ClassLoader*. One
+//     declaration-only `java/lang/ClassLoader.java` unblocks it.
+//
+//   - the seven `TypeDescriptor.OfMethod` bridge methods. In the JDK this class is
+//     `MethodType implements TypeDescriptor.OfMethod<Class<?>, MethodType>`, and the bridges are
+//     what `javac` emits for that. Two things have to be true before we can emit them, and
+//     neither is: `java.lang.Class` must implement `TypeDescriptor.OfField` (it does not, and it
+//     is not this package's file), and `TypeDescriptor` must be generic — it is deliberately raw
+//     here, to work around #100, which is what makes `parameterType` return `OfField` rather than
+//     the `F` that a bridge would be generated against. They cannot be hand-written either: a
+//     bridge differs from the method it bridges ONLY in return type, which is legal in a class
+//     file and illegal in Java source. Our compiler does emit covariant bridges when the source
+//     is legal, so nothing here is a compiler hole — it is the raw-`TypeDescriptor` workaround
+//     paying its cost, and it comes out when #100 does.
 // `Constable` va por import y nombre simple: una referencia CALIFICADA a un tipo del classpath no
 // resuelve (finding #106a).
 public final class MethodType implements Constable {
@@ -234,10 +251,46 @@ public final class MethodType implements Constable {
     }
 
     private static Class<?> convertOne(Class<?> type, boolean toWrapper) {
-        // Without `Class.forName` a name cannot be turned back into a `Class`, so the conversion
-        // can only report the type it was given. The shape of the API is preserved; the mapping
-        // returns once class lookup by name exists.
-        return type;
+        Class<?> result = type;
+        if (toWrapper) {
+            result = wrapperFor(type.getName(), type);
+        }
+        // The `unwrap` direction stays the identity, and the reason is worth stating precisely
+        // because it is NOT the same reason as before. It is not that a name cannot be turned
+        // back into a `Class` — every wrapper has a class literal, so `wrap` above works. It is
+        // that a PRIMITIVE `Class` object has no source spelling our compiler accepts: `int.class`
+        // is rejected at the parser ("se esperaba una expresion, se encontro Int"), and there is
+        // no other expression whose value is the mirror for `int`. `Integer.TYPE` would be the
+        // classic escape hatch, and it is declared as `Integer.TYPE = int.class` — the same
+        // literal, one file away. So `unwrap` returns what it was given rather than lying about
+        // it, and the two directions are asymmetric until that literal parses.
+        return result;
+    }
+
+    // Primitive keyword to its box. Kept as a name switch rather than a map because a `Class`
+    // cannot be a key here — there is no primitive `Class` to key on, which is the whole problem.
+    private static Class<?> wrapperFor(String name, Class<?> fallback) {
+        Class<?> box = fallback;
+        if (name.equals("int")) {
+            box = Integer.class;
+        } else if (name.equals("long")) {
+            box = Long.class;
+        } else if (name.equals("double")) {
+            box = Double.class;
+        } else if (name.equals("float")) {
+            box = Float.class;
+        } else if (name.equals("short")) {
+            box = Short.class;
+        } else if (name.equals("byte")) {
+            box = Byte.class;
+        } else if (name.equals("char")) {
+            box = Character.class;
+        } else if (name.equals("boolean")) {
+            box = Boolean.class;
+        } else if (name.equals("void")) {
+            box = Void.class;
+        }
+        return box;
     }
 
     public Class<?> parameterType(int num) {

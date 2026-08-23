@@ -1,5 +1,7 @@
 package java.lang.invoke;
 
+import java.util.List;
+
 // The bridge between the two ways this project already describes a type. A `ClassDesc` in
 // `java.lang.constant` NAMES a type without loading it; a `Class` IS the loaded type. Both can
 // answer "what is your class-file descriptor", and this interface is that single question — which
@@ -47,6 +49,12 @@ public interface TypeDescriptor {
         OfField returnType();
 
         OfField[] parameterArray();
+
+        // The same parameters as `parameterArray`, as a list. Both exist because an array can be
+        // handed out only by copying — it is mutable — while a list can be handed out shared, and
+        // callers that only read want the cheap one. Safe to add here: nothing in KajiLibrary
+        // implements `OfMethod` yet, so a new abstract method breaks no implementor.
+        List<OfField> parameterList();
 
         OfMethod changeReturnType(OfField newReturn);
 

@@ -1,7 +1,5 @@
 package java.lang.invoke;
 
-import java.lang.invoke.MethodHandles.Lookup;
-
 // The bootstrap behind `"a" + b` since Java 9. Before that, the compiler emitted an explicit
 // `StringBuilder` chain, which froze the strategy into every class file ever compiled; moving it
 // behind an `invokedynamic` means the JDK can change how concatenation works — and it has, more
@@ -18,13 +16,14 @@ public final class StringConcatFactory {
     private StringConcatFactory() {
     }
 
-    // `Object` in place of `MethodHandles.Lookup` — see `LambdaMetafactory` for why.
-    public static CallSite makeConcat(Lookup lookup, String name, MethodType concatType)
+    // `MethodHandles$Lookup` — the binary name — see `LambdaMetafactory` and `MethodHandles` for
+    // why the Java spelling cannot be used here.
+    public static CallSite makeConcat(MethodHandles$Lookup lookup, String name, MethodType concatType)
             throws StringConcatException {
         throw new UnsupportedOperationException("string concat linkage is done by the VM");
     }
 
-    public static CallSite makeConcatWithConstants(Lookup lookup, String name, MethodType concatType,
+    public static CallSite makeConcatWithConstants(MethodHandles$Lookup lookup, String name, MethodType concatType,
             String recipe, Object[] constants) throws StringConcatException {
         throw new UnsupportedOperationException("string concat linkage is done by the VM");
     }

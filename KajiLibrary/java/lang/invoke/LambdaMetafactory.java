@@ -1,7 +1,5 @@
 package java.lang.invoke;
 
-import java.lang.invoke.MethodHandles.Lookup;
-
 // The bootstrap behind every lambda and method reference. `x -> x + 1` compiles to an
 // `invokedynamic` whose bootstrap is this class; at link time it builds a class implementing the
 // functional interface and forwarding to the compiler-generated body. The lambda's class
@@ -23,16 +21,18 @@ public final class LambdaMetafactory {
     private LambdaMetafactory() {
     }
 
-    // The `Object` in place of `MethodHandles.Lookup` is not a design choice: a NESTED type from
-    // another file erases to `Object` in the emitted descriptor anyway (#101), so spelling it
-    // `Object` at least makes the source agree with the binary. Allowlisted for the gate.
-    public static CallSite metafactory(Lookup caller, String interfaceMethodName,
+    // `MethodHandles$Lookup` — the BINARY name — because the Java spelling of a nested type from
+    // another file does not resolve (#101) and the `import` sidestep emits `LLookup;`, a class
+    // that exists in no package (#208). Earlier revisions wrote `Object` here, which at least
+    // named a loadable class but was a different descriptor from the JDK's; the binary name gives
+    // the JDK's descriptor exactly. Full note in `MethodHandles.java`.
+    public static CallSite metafactory(MethodHandles$Lookup caller, String interfaceMethodName,
             MethodType factoryType, MethodType interfaceMethodType, MethodHandle implementation,
             MethodType dynamicMethodType) throws LambdaConversionException {
         throw new UnsupportedOperationException("lambda linkage is done by the VM, not the library");
     }
 
-    public static CallSite altMetafactory(Lookup caller, String interfaceMethodName,
+    public static CallSite altMetafactory(MethodHandles$Lookup caller, String interfaceMethodName,
             MethodType factoryType, Object[] args) throws LambdaConversionException {
         throw new UnsupportedOperationException("lambda linkage is done by the VM, not the library");
     }
