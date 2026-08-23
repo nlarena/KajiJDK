@@ -1270,6 +1270,63 @@ mod tests {
     }
 
     /// Runs `Class.run()` to completion and returns its int result (the execute harness).
+    /// Like [`run_int`] but for a named `()I` method: a fixture that probes several shapes of
+    /// one defect exposes a method per shape instead of a class per shape.
+    fn run_int_method(class_file: &str, method: &str) -> i32 {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::bytecode_interpreter::execute;
+        use crate::jvm::interpreter::frame::Frame;
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let class = ClassFile::from_path(class_file).expect("load class");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, method, "()I").expect("the ()I method");
+        let max_locals = metaspace.max_locals(entry);
+        let frame = Frame::new(entry, max_locals, Vec::new());
+        match execute(metaspace, frame) {
+            Some(Value::Int(v)) => v,
+            other => panic!("expected an int result from {method}, got {other:?}"),
+        }
+    }
+
+    /// Runs `method` with **KajiLibrary ahead of `boot/`** on the bootclasspath — the
+    /// configuration `run-headless` uses, and the one the library sessions actually develop
+    /// against. Returns the raw result, so a test can assert on a thread that ended *without*
+    /// one. See COMPILER_FINDINGS #246: the two libraries diverge, and the VM must not assume
+    /// the shape of whichever one it was written against.
+    fn run_with_kajilibrary(class_file: &str, method: &str) -> Option<Value> {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::bytecode_interpreter::execute;
+        use crate::jvm::interpreter::frame::Frame;
+        use std::path::PathBuf;
+        let mut metaspace = MetaspaceService::new(
+            vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")],
+            vec![PathBuf::from("java")],
+        );
+        let class = ClassFile::from_path(class_file).expect("load class");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, method, "()I").expect("the ()I method");
+        let max_locals = metaspace.max_locals(entry);
+        execute(metaspace, Frame::new(entry, max_locals, Vec::new()))
+    }
+
+    /// A `Throwable` is not required to declare the `backtrace` field the VM writes its captured
+    /// stack trace into — that field is **our own convention**, and
+    /// `KajiLibrary/java/lang/Throwable` declares only `message` and `cause`
+    /// (COMPILER_FINDINGS #227). The VM assumed `boot/`'s shape, so **any** uncaught exception
+    /// took the whole VM down with `field_offset: field not found in the class or its
+    /// superclasses` — before printing the report it exists to print.
+    ///
+    /// The thread ends with no value (JVMS §2.10); what this pins is that the VM survives to say
+    /// so, with or without a trace to show.
+    #[test]
+    fn an_uncaught_exception_survives_a_throwable_with_no_backtrace_field() {
+        assert_eq!(run_with_kajilibrary("java/VmProbe.class", "p227"), None);
+    }
+
     fn run_int(class_file: &str) -> i32 {
         use crate::jvm::class_file::ClassFile;
         use crate::jvm::interpreter::bytecode_interpreter::execute;
@@ -2180,6 +2237,30 @@ mod tests {
         for _ in 0..10 {
             assert_eq!(run_int_os_parallel("java/LockTest.class"), 300); // os (parallel)
         }
+    }
+
+    /// JVMS §5.4.2 Preparation: a `static` field carrying a `ConstantValue` attribute starts at
+    /// that constant, not at its type's default. The real `javac` folds every compile-time
+    /// constant into its use sites, so a JDK class never depends on this — **ours does not fold**,
+    /// so it emits a `getstatic` against a field whose value lives only in the attribute
+    /// (COMPILER_FINDINGS #216/#112). Every `static final int` read back 0, which is how
+    /// `FutureTask`'s four state constants were all 0 and `get()` waited forever.
+    ///
+    /// The fixture is compiled with **our** javac on purpose (`java/KProbe.java`): with the real
+    /// one the constant folds to `bipush 7` and the test would pass without ever reaching the
+    /// code path.
+    ///
+    /// All five shapes §4.7.2 allows, because a width bug is invisible from `int` alone: the
+    /// `long` is deliberately 5_000_000_000 (above 2^32, so a 32-bit write loses it), the
+    /// `double` needs the same 8 bytes, and the `String` exercises the interning path — the one
+    /// that forced this to run *after* the mirror is registered.
+    #[test]
+    fn a_static_final_constant_is_applied_at_preparation() {
+        assert_eq!(run_int("java/KProbe.class"), 7); // int
+        assert_eq!(run_int_method("java/KProbe.class", "runLong"), 1); // long, 64-bit
+        assert_eq!(run_int_method("java/KProbe.class", "runDouble"), 1); // double, 64-bit
+        assert_eq!(run_int_method("java/KProbe.class", "runString"), 3); // String, interned
+        assert_eq!(run_int_method("java/KProbe.class", "runBool"), 1); // boolean
     }
 
     // Deterministic repro of the `RunningCtx::pending_exception` hole — single-threaded, `green`,
