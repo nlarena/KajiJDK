@@ -1,5 +1,8 @@
 package java.util.regex;
 
+import java.util.HashMap;
+import java.util.Map;
+
 // KajiLibrary's regex node tree + parser (all package-private — real javac keeps these
 // nested inside Pattern; we make them top-level in the package to sidestep the compiler's
 // generic-enclosing-capture limitation, and the API gate skips them since the JDK has no
@@ -9,6 +12,10 @@ package java.util.regex;
 // Node matches at a position and, on success, delegates to its `next` (the continuation).
 // Backtracking falls out of the recursion — a node that fails returns false, and the caller
 // tries its next alternative. RegexParser turns a pattern string into the linked tree.
+//
+// Compile flags are resolved at *parse* time: the parser bakes CASE_INSENSITIVE, DOTALL,
+// MULTILINE and UNIX_LINES into the nodes it builds, so the engine itself stays branch-free
+// on flags. COMMENTS and LITERAL are handled entirely in the parser/pre-pass.
 
 // --- The node hierarchy ---------------------------------------------------------------
 
@@ -25,13 +32,63 @@ abstract class Node {
     boolean match(Matcher m, int i, CharSequence seq) {
         throw new RuntimeException("unmatchable node");
     }
+
+    // --- shared character helpers -------------------------------------------------
+
+    // ASCII case folding. CASE_INSENSITIVE on its own is defined by the JDK as US-ASCII
+    // folding ("Unicode-aware case folding" is what UNICODE_CASE adds, and we don't offer
+    // that flag), so folding to lower case over 'A'..'Z' is the *correct* behavior here and
+    // not a shortcut.
+    static char fold(char c) {
+        if (c >= 'A' && c <= 'Z') {
+            return (char) (c + 32);
+        }
+        return c;
+    }
+
+    static boolean sameChar(char a, char b, boolean ci) {
+        if (a == b) {
+            return true;
+        }
+        if (ci) {
+            return fold(a) == fold(b);
+        }
+        return false;
+    }
+
+    // A line terminator, in the JDK's default (non-UNIX_LINES) sense: LF, CR, NEL, LS, PS.
+    static boolean isLineTerm(char c, boolean unixLines) {
+        if (c == '\n') {
+            return true;
+        }
+        if (unixLines) {
+            return false;
+        }
+        // NEL (U+0085), LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR (U+2029),
+        // spelled numerically so the source stays pure ASCII.
+        return c == '\r' || c == (char) 0x85 || c == (char) 0x2028 || c == (char) 0x2029;
+    }
+
+    static boolean isWordChar(char c) {
+        if (c >= 'a' && c <= 'z') {
+            return true;
+        }
+        if (c >= 'A' && c <= 'Z') {
+            return true;
+        }
+        if (c >= '0' && c <= '9') {
+            return true;
+        }
+        return c == '_';
+    }
 }
 
 // Terminal accept node: the end of the pattern. Records the overall match end (group 0's
 // end). During matches() the accept is only valid at the region end.
 final class LastNode extends Node {
     boolean match(Matcher m, int i, CharSequence seq) {
-        if (m.requireEnd && i != m.to) {
+        if (m.anchorEnd && i != m.to) {
+            m.hitEnd = true;
             return false;
         }
         m.groups[1] = i;
@@ -42,29 +99,43 @@ final class LastNode extends Node {
 // A single literal character.
 final class CharNode extends Node {
     char ch;
+    boolean ci;
 
-    CharNode(char ch) {
+    CharNode(char ch, boolean ci) {
         this.ch = ch;
+        this.ci = ci;
     }
 
     boolean match(Matcher m, int i, CharSequence seq) {
-        if (i < m.to && seq.charAt(i) == this.ch) {
+        if (i >= m.to) {
+            m.hitEnd = true;
+            return false;
+        }
+        if (sameChar(seq.charAt(i), this.ch, this.ci)) {
             return this.next.match(m, i + 1, seq);
         }
         return false;
     }
 }
 
-// The '.' metacharacter: any character except a line terminator. Default JDK behavior; the
-// DOTALL flag (making '.' match everything) and the full Unicode line-terminator set
-// (/ / ) are H5-T5.
+// The '.' metacharacter. Without DOTALL it matches any character except a line terminator
+// (the terminator set narrows to LF under UNIX_LINES); with DOTALL it matches everything.
 final class AnyNode extends Node {
+    boolean dotall;
+    boolean unixLines;
+
+    AnyNode(boolean dotall, boolean unixLines) {
+        this.dotall = dotall;
+        this.unixLines = unixLines;
+    }
+
     boolean match(Matcher m, int i, CharSequence seq) {
-        if (i < m.to) {
-            char c = seq.charAt(i);
-            if (c != '\n' && c != '\r') {
-                return this.next.match(m, i + 1, seq);
-            }
+        if (i >= m.to) {
+            m.hitEnd = true;
+            return false;
+        }
+        if (this.dotall || !isLineTerm(seq.charAt(i), this.unixLines)) {
+            return this.next.match(m, i + 1, seq);
         }
         return false;
     }
@@ -74,12 +145,14 @@ final class AnyNode extends Node {
 // negated. Ranges grow on demand the way the rest of KajiLibrary grows its backing arrays.
 final class CharClassNode extends Node {
     boolean negate;
+    boolean ci;
     char[] lo;
     char[] hi;
     int count;
 
     CharClassNode() {
         this.negate = false;
+        this.ci = false;
         this.lo = new char[8];
         this.hi = new char[8];
         this.count = 0;
@@ -106,8 +179,7 @@ final class CharClassNode extends Node {
         this.hi = nh;
     }
 
-    // Whether `c` falls in the class (before applying `negate`).
-    boolean inSet(char c) {
+    private boolean inRanges(char c) {
         for (int i = 0; i < this.count; i++) {
             if (c >= this.lo[i] && c <= this.hi[i]) {
                 return true;
@@ -116,12 +188,31 @@ final class CharClassNode extends Node {
         return false;
     }
 
-    boolean match(Matcher m, int i, CharSequence seq) {
-        if (i < m.to) {
-            boolean in = this.inSet(seq.charAt(i));
-            if (in != this.negate) {
-                return this.next.match(m, i + 1, seq);
+    // Whether `c` falls in the class (before applying `negate`). Under CASE_INSENSITIVE both
+    // ASCII cases of `c` are tried, so [a-z] also accepts 'A'.
+    boolean inSet(char c) {
+        if (this.inRanges(c)) {
+            return true;
+        }
+        if (this.ci) {
+            char l = fold(c);
+            if (l != c && this.inRanges(l)) {
+                return true;
             }
+            if (c >= 'a' && c <= 'z' && this.inRanges((char) (c - 32))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    boolean match(Matcher m, int i, CharSequence seq) {
+        if (i >= m.to) {
+            m.hitEnd = true;
+            return false;
+        }
+        if (this.inSet(seq.charAt(i)) != this.negate) {
+            return this.next.match(m, i + 1, seq);
         }
         return false;
     }
@@ -289,20 +380,128 @@ final class BranchConn extends Node {
     }
 }
 
-// The '^' anchor: matches at the start of input (multiline handling is H5-T5).
+// The '^' anchor. Plain '^' (and '\A', which is the same node with multiline off) matches at
+// the start of the region; with MULTILINE it also matches right after a line terminator,
+// with the JDK's CRLF rule (no match between the CR and the LF).
 final class Begin extends Node {
+    boolean multiline;
+    boolean unixLines;
+
+    Begin(boolean multiline, boolean unixLines) {
+        this.multiline = multiline;
+        this.unixLines = unixLines;
+    }
+
     boolean match(Matcher m, int i, CharSequence seq) {
-        if (i == 0) {
+        int startIndex = m.anchorStart();
+        if (!this.multiline) {
+            // '^' without MULTILINE, and '\A': only the very start of the region.
+            if (i != startIndex) {
+                return false;
+            }
             return this.next.match(m, i, seq);
         }
-        return false;
+        int endIndex = m.anchorLimit(seq);
+        // Perl (and therefore the JDK) never matches '^' at the end of input, not even
+        // right after a line terminator.
+        if (i >= endIndex) {
+            m.hitEnd = true;
+            return false;
+        }
+        if (i > startIndex) {
+            char ch = seq.charAt(i - 1);
+            if (!isLineTerm(ch, this.unixLines)) {
+                return false;
+            }
+            // Never match between the CR and the LF of a CRLF pair.
+            if (ch == '\r' && seq.charAt(i) == '\n') {
+                return false;
+            }
+        }
+        return this.next.match(m, i, seq);
     }
 }
 
-// The '$' anchor: matches at the end of input (multiline handling is H5-T5).
+// The '$' anchor. Without MULTILINE it matches only at the end of the region, optionally
+// before a single trailing line terminator (which is also exactly '\Z'); with MULTILINE it
+// matches before any line terminator. Matching at the very end sets requireEnd, because more
+// input could turn the match into a failure — that is what Matcher.requireEnd() reports.
 final class End extends Node {
+    boolean multiline;
+    boolean unixLines;
+
+    End(boolean multiline, boolean unixLines) {
+        this.multiline = multiline;
+        this.unixLines = unixLines;
+    }
+
     boolean match(Matcher m, int i, CharSequence seq) {
-        if (i == m.to) {
+        int endIndex = m.anchorLimit(seq);
+        if (!this.multiline) {
+            if (i < endIndex - 2) {
+                return false;
+            }
+            if (i == endIndex - 2) {
+                if (seq.charAt(i) != '\r' || seq.charAt(i + 1) != '\n') {
+                    return false;
+                }
+            }
+        }
+        if (i < endIndex) {
+            char ch = seq.charAt(i);
+            if (ch == '\n') {
+                if (i > 0 && seq.charAt(i - 1) == '\r') {
+                    return false;
+                }
+                if (this.multiline) {
+                    return this.next.match(m, i, seq);
+                }
+            } else if (isLineTerm(ch, this.unixLines)) {
+                if (this.multiline) {
+                    return this.next.match(m, i, seq);
+                }
+            } else {
+                return false;
+            }
+        }
+        m.hitEnd = true;
+        m.requireEnd = true;
+        return this.next.match(m, i, seq);
+    }
+}
+
+// '\z' — the very end of the region, with no trailing-terminator allowance.
+final class EndInput extends Node {
+    boolean match(Matcher m, int i, CharSequence seq) {
+        int endIndex = m.anchorLimit(seq);
+        if (i != endIndex) {
+            return false;
+        }
+        m.hitEnd = true;
+        m.requireEnd = true;
+        return this.next.match(m, i, seq);
+    }
+}
+
+// '\b' (word boundary) and '\B' (its negation). A boundary sits between a word character and
+// a non-word character; positions outside the region count as non-word (opaque bounds — we
+// do not offer transparent bounds, see Matcher.useTransparentBounds).
+final class WordBoundary extends Node {
+    boolean negate;
+
+    WordBoundary(boolean negate) {
+        this.negate = negate;
+    }
+
+    boolean match(Matcher m, int i, CharSequence seq) {
+        int startIndex = m.anchorStart();
+        int endIndex = m.anchorLimit(seq);
+        boolean before = i > startIndex && isWordChar(seq.charAt(i - 1));
+        boolean after = i < endIndex && isWordChar(seq.charAt(i));
+        if (i >= endIndex) {
+            m.hitEnd = true;
+        }
+        if ((before != after) != this.negate) {
             return this.next.match(m, i, seq);
         }
         return false;
@@ -319,7 +518,8 @@ final class LookAccept extends Node {
 
 // A zero-width lookahead assertion (?=X) (positive) or (?!X) (negative): runs the sub-
 // expression X at the current position; on the expected outcome it continues the outer chain
-// at the SAME position, consuming nothing. Lookbehind is H5-T5.
+// at the SAME position, consuming nothing. Lookbehind is not supported — the parser rejects
+// it rather than mis-parsing it.
 final class Lookahead extends Node {
     Node cond;
     boolean negate;
@@ -333,13 +533,16 @@ final class Lookahead extends Node {
     }
 }
 
-// A backreference \n: matches the exact run of text that a prior capturing group matched. A
-// reference to a group that never participated matches the empty string (as real javac does).
+// A backreference \n (or \k<name>): matches the exact run of text that a prior capturing
+// group matched. A reference to a group that never participated matches the empty string (as
+// real javac does).
 final class BackRefNode extends Node {
     int groupIndex;
+    boolean ci;
 
-    BackRefNode(int groupIndex) {
+    BackRefNode(int groupIndex, boolean ci) {
         this.groupIndex = groupIndex;
+        this.ci = ci;
     }
 
     boolean match(Matcher m, int i, CharSequence seq) {
@@ -350,10 +553,11 @@ final class BackRefNode extends Node {
         }
         int gl = ge - gs;
         if (i + gl > m.to) {
+            m.hitEnd = true;
             return false;
         }
         for (int k = 0; k < gl; k++) {
-            if (seq.charAt(i + k) != seq.charAt(gs + k)) {
+            if (!sameChar(seq.charAt(i + k), seq.charAt(gs + k), this.ci)) {
                 return false;
             }
         }
@@ -375,26 +579,48 @@ final class Frag {
 
 // --- The parser: pattern string -> node tree ------------------------------------------
 
-// Recursive-descent parser for the H5-T2 grammar:
+// Recursive-descent parser for the grammar:
 //   expr   := seq ('|' seq)*
 //   seq    := factor*
 //   factor := atom quantifier?
 //   atom   := '(' expr ')' | '[' class ']' | '.' | '^' | '$' | '\' escape | literal
 // Capturing groups are numbered as their '(' is seen (group 0 is the whole match, implicit).
 // Each quantifier is assigned a scratch-slot index so Matcher can size its per-loop arrays.
+//
+// Flags reach the parser through the constructor and are baked into the nodes it emits.
+// LITERAL and \Q..\E are handled by a pre-pass (expandQuotes) that rewrites the quoted runs
+// into ordinary backslash escapes, so the grammar above never has to know about them.
 final class RegexParser {
     private final String src;
     private final int len;
+    private final int flags;
+    private final boolean ci;
+    private final boolean comments;
     private int pos;
     private int groups;
     private int loops;
+    private Map<String, Integer> named;
 
     RegexParser(String pattern) {
-        this.src = pattern;
-        this.len = pattern.length();
+        this(pattern, 0);
+    }
+
+    RegexParser(String pattern, int flags) {
+        this.flags = flags;
+        String p = pattern;
+        if ((flags & Pattern.LITERAL) != 0) {
+            p = literalize(pattern);
+        } else {
+            p = expandQuotes(pattern);
+        }
+        this.src = p;
+        this.len = p.length();
+        this.ci = (flags & Pattern.CASE_INSENSITIVE) != 0;
+        this.comments = (flags & Pattern.COMMENTS) != 0 && (flags & Pattern.LITERAL) == 0;
         this.pos = 0;
         this.groups = 0;
         this.loops = 0;
+        this.named = null;
     }
 
     int groupCount() {
@@ -404,6 +630,100 @@ final class RegexParser {
     int localCount() {
         return this.loops;
     }
+
+    // The name -> group-number map, or null when the pattern declares no named groups.
+    Map<String, Integer> namedGroups() {
+        return this.named;
+    }
+
+    private boolean dotall() {
+        return (this.flags & Pattern.DOTALL) != 0;
+    }
+
+    private boolean multiline() {
+        return (this.flags & Pattern.MULTILINE) != 0;
+    }
+
+    private boolean unixLines() {
+        return (this.flags & Pattern.UNIX_LINES) != 0;
+    }
+
+    // --- \Q..\E and LITERAL: rewrite quoted runs into ordinary escapes ----------------
+
+    // Escapes every non-alphanumeric character, which is exactly "treat the whole string as
+    // literal text".
+    private static String literalize(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!isAlnum(c)) {
+                sb.append('\\');
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private static boolean isAlnum(char c) {
+        if (c >= 'a' && c <= 'z') {
+            return true;
+        }
+        if (c >= 'A' && c <= 'Z') {
+            return true;
+        }
+        return c >= '0' && c <= '9';
+    }
+
+    // Rewrites `\Q ... \E` runs into per-character escapes. Doing it as a pre-pass keeps the
+    // grammar free of quoting state; the cost is that PatternSyntaxException offsets refer to
+    // the rewritten string, which we accept (they are already approximate).
+    //
+    // Pattern.quote() emits `\Q`, breaks any embedded `\E` as `\E\\E\Q`, and closes with
+    // `\E`; this pre-pass is what makes that round-trip actually work.
+    private static String expandQuotes(String s) {
+        int n = s.length();
+        int i = 0;
+        boolean quoting = false;
+        StringBuilder sb = new StringBuilder();
+        while (i < n) {
+            char c = s.charAt(i);
+            if (!quoting) {
+                if (c == '\\' && i + 1 < n) {
+                    char d = s.charAt(i + 1);
+                    if (d == 'Q') {
+                        quoting = true;
+                        i = i + 2;
+                        continue;
+                    }
+                    if (d == 'E') {
+                        // A stray \E outside a quote is a no-op, as in the JDK.
+                        i = i + 2;
+                        continue;
+                    }
+                    sb.append(c);
+                    sb.append(d);
+                    i = i + 2;
+                    continue;
+                }
+                sb.append(c);
+                i = i + 1;
+            } else {
+                if (c == '\\' && i + 1 < n && s.charAt(i + 1) == 'E') {
+                    quoting = false;
+                    i = i + 2;
+                    continue;
+                }
+                if (!isAlnum(c)) {
+                    sb.append('\\');
+                }
+                sb.append(c);
+                i = i + 1;
+            }
+        }
+        return sb.toString();
+    }
+
+    // --- the grammar ------------------------------------------------------------------
 
     // Parses the whole pattern into a chain terminated by a LastNode; returns the head.
     Node parse() {
@@ -449,10 +769,32 @@ final class RegexParser {
         }
     }
 
+    // Under COMMENTS, whitespace in the pattern is ignored and '#' runs to end of line.
+    private void skipComments() {
+        if (!this.comments) {
+            return;
+        }
+        boolean moved = true;
+        while (moved && this.pos < this.len) {
+            moved = false;
+            char c = this.peek();
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == 0x0b) {
+                this.pos = this.pos + 1;
+                moved = true;
+            } else if (c == '#') {
+                while (this.pos < this.len && this.peek() != '\n') {
+                    this.pos = this.pos + 1;
+                }
+                moved = true;
+            }
+        }
+    }
+
     // seq := factor*  (stops at '|' or ')', or end of input)
     private Frag seq() {
         Node head = null;
         Node tail = null;
+        this.skipComments();
         while (this.pos < this.len) {
             char c = this.peek();
             if (c == '|' || c == ')') {
@@ -466,6 +808,7 @@ final class RegexParser {
                 tail.next = f.head;
                 tail = f.tail;
             }
+            this.skipComments();
         }
         return new Frag(head, tail);
     }
@@ -473,6 +816,7 @@ final class RegexParser {
     // factor := atom quantifier?
     private Frag factor() {
         Frag atom = this.atom();
+        this.skipComments();
         if (this.pos < this.len) {
             char c = this.peek();
             if (c == '*' || c == '+' || c == '?' || c == '{') {
@@ -485,6 +829,9 @@ final class RegexParser {
     // Wraps an already-parsed atom fragment in a greedy quantifier: a Prolog (fresh-count
     // reset) in front, the Quantifier as the loop target, and the atom's tail looping back.
     private Frag quantifier(Frag atom) {
+        if (atom.tail == null) {
+            throw this.error("Dangling meta character");
+        }
         char c = this.next();
         Quantifier q = new Quantifier();
         q.atom = atom.head;
@@ -515,13 +862,20 @@ final class RegexParser {
                 mx = n;
             }
             this.expect('}');
+            if (mx != -1 && mx < n) {
+                throw this.error("Illegal repetition range");
+            }
             q.min = n;
             q.max = mx;
         }
-        // A trailing '?' makes the quantifier reluctant (possessive '+' is H5-T5).
+        // A trailing '?' makes the quantifier reluctant. A trailing '+' would make it
+        // possessive; we have no cut/atomic node, so say so instead of silently treating
+        // '+' as another quantifier over the loop (which is what a naive parse would do).
         if (this.pos < this.len && this.peek() == '?') {
             q.lazy = true;
             this.next();
+        } else if (this.pos < this.len && this.peek() == '+') {
+            throw this.error("Possessive quantifiers are not supported");
         }
         q.atomTail.next = q;
         Prolog p = new Prolog(q);
@@ -538,15 +892,15 @@ final class RegexParser {
         }
         if (c == '.') {
             this.next();
-            return single(new AnyNode());
+            return single(new AnyNode(this.dotall(), this.unixLines()));
         }
         if (c == '^') {
             this.next();
-            return single(new Begin());
+            return single(new Begin(this.multiline(), this.unixLines()));
         }
         if (c == '$') {
             this.next();
-            return single(new End());
+            return single(new End(this.multiline(), this.unixLines()));
         }
         if (c == '\\') {
             return this.escape();
@@ -555,11 +909,12 @@ final class RegexParser {
             throw this.error("Dangling meta character");
         }
         this.next();
-        return single(new CharNode(c));
+        return single(new CharNode(c, this.ci));
     }
 
-    // '(' expr ')'  — a capturing group, or a '(?...)' special group: '(?:...)' non-capturing
-    // and '(?=...)' / '(?!...)' lookahead. Named groups '(?<name>...)' and lookbehind are H5-T5.
+    // '(' expr ')'  — a capturing group, or a '(?...)' special group: '(?:...)' non-capturing,
+    // '(?=...)' / '(?!...)' lookahead, and '(?<name>...)' named capturing. Lookbehind,
+    // atomic groups and inline flag groups are rejected explicitly.
     private Frag group() {
         this.next();
         if (this.pos < this.len && this.peek() == '?') {
@@ -575,23 +930,53 @@ final class RegexParser {
                 return inner;
             }
             if (kind == '=' || kind == '!') {
-                Frag inner = this.expr();
-                this.expect(')');
-                LookAccept acc = new LookAccept();
-                Lookahead la = new Lookahead();
-                la.negate = (kind == '!');
-                if (inner.head == null) {
-                    la.cond = acc;
-                } else {
-                    la.cond = inner.head;
-                    inner.tail.next = acc;
+                return this.lookahead(kind == '!');
+            }
+            if (kind == '<') {
+                if (this.pos < this.len && (this.peek() == '=' || this.peek() == '!')) {
+                    throw this.error("Lookbehind is not supported");
                 }
-                return single(la);
+                String name = this.readGroupName();
+                this.expect('>');
+                return this.capturingGroup(name);
+            }
+            if (kind == '>') {
+                throw this.error("Atomic groups are not supported");
             }
             throw this.error("Unsupported group construct");
         }
+        return this.capturingGroup(null);
+    }
+
+    private Frag lookahead(boolean negate) {
+        Frag inner = this.expr();
+        this.expect(')');
+        LookAccept acc = new LookAccept();
+        Lookahead la = new Lookahead();
+        la.negate = negate;
+        if (inner.head == null) {
+            la.cond = acc;
+        } else {
+            la.cond = inner.head;
+            inner.tail.next = acc;
+        }
+        return single(la);
+    }
+
+    // A capturing group, optionally carrying a name. The number is assigned when '(' is seen,
+    // so nested groups number outside-in exactly as in the JDK.
+    private Frag capturingGroup(String name) {
         this.groups = this.groups + 1;
         int idx = this.groups;
+        if (name != null) {
+            if (this.named == null) {
+                this.named = new HashMap<String, Integer>();
+            }
+            if (this.named.containsKey(name)) {
+                throw this.error("Named capturing group is already defined");
+            }
+            this.named.put(name, Integer.valueOf(idx));
+        }
         GroupHead gh = new GroupHead(idx);
         GroupTail gt = new GroupTail(idx);
         Frag inner = this.expr();
@@ -605,10 +990,28 @@ final class RegexParser {
         return new Frag(gh, gt);
     }
 
+    // A group name: a letter followed by letters and digits (the JDK's rule).
+    private String readGroupName() {
+        StringBuilder sb = new StringBuilder();
+        if (this.pos >= this.len) {
+            throw this.error("Unclosed group name");
+        }
+        char c = this.peek();
+        boolean letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        if (!letter) {
+            throw this.error("capturing group name does not start with a Latin letter");
+        }
+        while (this.pos < this.len && isAlnum(this.peek())) {
+            sb.append(this.next());
+        }
+        return sb.toString();
+    }
+
     // '[' ['^'] members ']'  — a character class.
     private Frag charClass() {
         this.next();
         CharClassNode cc = new CharClassNode();
+        cc.ci = this.ci;
         if (this.pos < this.len && this.peek() == '^') {
             cc.negate = true;
             this.next();
@@ -616,6 +1019,15 @@ final class RegexParser {
         boolean first = true;
         while (this.pos < this.len && (this.peek() != ']' || first)) {
             first = false;
+            // Union/intersection of nested classes ([a-z&&[^bc]], [a[bc]]) needs a class
+            // node that can hold sub-classes; ours holds a flat range list. Reject rather
+            // than treat '&' and '[' as ordinary members, which is what a flat parse does.
+            if (this.peek() == '&' && this.pos + 1 < this.len && this.charAt(this.pos + 1) == '&') {
+                throw this.error("Character class intersection is not supported");
+            }
+            if (this.peek() == '[') {
+                throw this.error("Nested character classes are not supported");
+            }
             char c = this.next();
             if (c == '\\') {
                 char e = this.next();
@@ -627,7 +1039,10 @@ final class RegexParser {
                 this.next();
                 char hi = this.next();
                 if (hi == '\\') {
-                    hi = this.next();
+                    hi = this.classEscapeChar(this.next());
+                }
+                if (hi < c) {
+                    throw this.error("Illegal character range");
                 }
                 cc.addRange(c, hi);
             } else {
@@ -638,8 +1053,9 @@ final class RegexParser {
         return single(cc);
     }
 
-    // A predefined class inside [...]: \d \w \s add their ranges (the negated \D \W \S
-    // inside a class are an H5-T5 refinement).
+    // A predefined class inside [...]: \d \w \s add their ranges. The negated forms
+    // (\D \W \S inside a class) would need a nested-class node, which we do not have; they
+    // are rejected rather than silently added as their positive counterpart.
     private void addClassEscape(CharClassNode cc, char e) {
         if (e == 'd') {
             cc.addRange('0', '9');
@@ -650,21 +1066,58 @@ final class RegexParser {
             cc.addRange('_', '_');
         } else if (e == 's') {
             this.addWhitespace(cc);
-        } else if (e == 'n') {
-            cc.addRange('\n', '\n');
-        } else if (e == 't') {
-            cc.addRange('\t', '\t');
-        } else if (e == 'r') {
-            cc.addRange('\r', '\r');
+        } else if (e == 'D' || e == 'W' || e == 'S') {
+            throw this.error("Negated predefined classes inside a character class are not supported");
         } else {
-            cc.addRange(e, e);
+            char c = this.classEscapeChar(e);
+            cc.addRange(c, c);
         }
+    }
+
+    // The single character an escape denotes, for the endpoints of a class range and for the
+    // plain-literal case inside a class.
+    private char classEscapeChar(char e) {
+        if (e == 'n') {
+            return '\n';
+        }
+        if (e == 't') {
+            return '\t';
+        }
+        if (e == 'r') {
+            return '\r';
+        }
+        if (e == 'f') {
+            return '\f';
+        }
+        if (e == 'a') {
+            return (char) 7;
+        }
+        if (e == 'e') {
+            return (char) 27;
+        }
+        if (e == '0') {
+            return this.readOctal();
+        }
+        if (e == 'x') {
+            return this.readHex(2);
+        }
+        if (e == 'u') {
+            return this.readHex(4);
+        }
+        if (e == 'c') {
+            return this.readControl();
+        }
+        if (isAlnum(e)) {
+            throw this.error("Illegal/unsupported escape sequence");
+        }
+        return e;
     }
 
     private void addWhitespace(CharClassNode cc) {
         cc.addRange(' ', ' ');
         cc.addRange('\t', '\t');
         cc.addRange('\n', '\n');
+        cc.addRange((char) 0x0b, (char) 0x0b);
         cc.addRange('\r', '\r');
         cc.addRange('\f', '\f');
     }
@@ -691,24 +1144,47 @@ final class RegexParser {
                 num = nn;
                 this.next();
             }
-            return single(new BackRefNode(num));
+            return single(new BackRefNode(num, this.ci));
         }
         if (e == 'd' || e == 'D' || e == 'w' || e == 'W' || e == 's' || e == 'S') {
             CharClassNode cc = new CharClassNode();
+            cc.ci = this.ci;
             this.fillPredef(cc, e);
             return single(cc);
         }
-        if (e == 'n') {
-            return single(new CharNode('\n'));
+        if (e == 'b') {
+            return single(new WordBoundary(false));
         }
-        if (e == 't') {
-            return single(new CharNode('\t'));
+        if (e == 'B') {
+            return single(new WordBoundary(true));
         }
-        if (e == 'r') {
-            return single(new CharNode('\r'));
+        if (e == 'A') {
+            return single(new Begin(false, this.unixLines()));
         }
-        // An escaped metacharacter (\. \* \\ ...) or any other escaped literal.
-        return single(new CharNode(e));
+        if (e == 'z') {
+            return single(new EndInput());
+        }
+        if (e == 'Z') {
+            // '\Z' is '$' with MULTILINE forced off: end of region, or just before a single
+            // trailing line terminator.
+            return single(new End(false, this.unixLines()));
+        }
+        if (e == 'k') {
+            this.expect('<');
+            String name = this.readGroupName();
+            this.expect('>');
+            if (this.named == null || !this.named.containsKey(name)) {
+                throw this.error("No group with that name to reference");
+            }
+            return single(new BackRefNode(this.named.get(name).intValue(), this.ci));
+        }
+        // Constructs the JDK has but this engine does not. Naming them beats the old behavior
+        // of turning '\p' into the literal 'p'.
+        if (e == 'p' || e == 'P' || e == 'G' || e == 'R' || e == 'h' || e == 'H'
+                || e == 'v' || e == 'V' || e == 'N' || e == 'X') {
+            throw this.error("Unsupported escape sequence");
+        }
+        return single(new CharNode(this.classEscapeChar(e), this.ci));
     }
 
     // Builds a predefined class node; the uppercase forms negate the positive set.
@@ -743,6 +1219,9 @@ final class RegexParser {
     }
 
     private char next() {
+        if (this.pos >= this.len) {
+            throw this.error("Unexpected end of pattern");
+        }
         char c = this.src.charAt(this.pos);
         this.pos = this.pos + 1;
         return c;
@@ -766,6 +1245,57 @@ final class RegexParser {
             throw this.error("Expected a number");
         }
         return v;
+    }
+
+    // '\0' followed by one to three octal digits.
+    private char readOctal() {
+        int v = 0;
+        int n = 0;
+        while (n < 3 && this.pos < this.len && this.peek() >= '0' && this.peek() <= '7') {
+            v = v * 8 + (this.next() - '0');
+            n = n + 1;
+        }
+        if (n == 0) {
+            throw this.error("Illegal octal escape sequence");
+        }
+        return (char) v;
+    }
+
+    private char readHex(int digits) {
+        int v = 0;
+        for (int i = 0; i < digits; i++) {
+            if (this.pos >= this.len) {
+                throw this.error("Illegal hexadecimal escape sequence");
+            }
+            int d = hexDigit(this.next());
+            if (d < 0) {
+                throw this.error("Illegal hexadecimal escape sequence");
+            }
+            v = v * 16 + d;
+        }
+        return (char) v;
+    }
+
+    private static int hexDigit(char c) {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        }
+        if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        }
+        if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        }
+        return -1;
+    }
+
+    // '\cX' — the control character corresponding to X.
+    private char readControl() {
+        if (this.pos >= this.len) {
+            throw this.error("Illegal control escape sequence");
+        }
+        char c = this.next();
+        return (char) (c ^ 64);
     }
 
     private PatternSyntaxException error(String msg) {
