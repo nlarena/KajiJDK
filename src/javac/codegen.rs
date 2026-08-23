@@ -392,6 +392,7 @@ fn gen_class(
                     &this_internal,
                     &super_internal,
                     is_interface,
+                    class.kind == TypeKind::Enum,
                     rt,
                     tu,
                     &mut bootstraps,
@@ -478,6 +479,7 @@ fn gen_class(
         .collect();
     if !statics.is_empty() {
         let clinit = MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             return_annos: Vec::new(),
             pos: Pos::default(),
@@ -499,6 +501,7 @@ fn gen_class(
             &this_internal,
             &super_internal,
             false,
+            class.kind == TypeKind::Enum,
             rt,
             tu,
             &mut bootstraps,
@@ -556,6 +559,61 @@ fn cat_offset(rt: &RType) -> u8 {
 /// El ancho en slots/categoría de un tipo: 2 para `long`/`double`, 1 para el resto.
 fn cat_width(rt: &RType) -> u16 {
     matches!(rt, RType::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
+}
+
+/// El **máximo slot** (índice + ancho) que usa cualquier local del cuerpo, recorriendo todas las
+/// sentencias anidadas. Sirve para reservar un slot **temporal por encima de todo local declarado**
+/// —el que guarda el valor de un `return` mientras corre un `finally` inyectado (§14.20.2)—, de modo
+/// que nunca pise el `int y` del propio `finally`. Los pattern-switch ya vienen bajados a `LocalVar`
+/// desde el desugar, así que sus *bindings* se cuentan como cualquier local.
+fn body_max_slot(stmts: &[Stmt]) -> u16 {
+    stmts.iter().map(stmt_max_slot).max().unwrap_or(0)
+}
+
+fn stmt_max_slot(s: &Stmt) -> u16 {
+    let mut m = s.local.as_ref().map_or(0, |l| l.slot + cat_width(&l.ty));
+    match &s.kind {
+        StmtKind::If { then, els, .. } => {
+            m = m.max(stmt_max_slot(then));
+            if let Some(e) = els {
+                m = m.max(stmt_max_slot(e));
+            }
+        }
+        StmtKind::While { body, .. }
+        | StmtKind::Do { body, .. }
+        | StmtKind::ForEach { body, .. }
+        | StmtKind::Labeled { body, .. } => m = m.max(stmt_max_slot(body)),
+        StmtKind::For { init, body, .. } => {
+            if let Some(i) = init {
+                m = m.max(stmt_max_slot(i));
+            }
+            m = m.max(stmt_max_slot(body));
+        }
+        StmtKind::Block(b) => m = m.max(body_max_slot(&b.0)),
+        StmtKind::Synchronized { body, .. } => m = m.max(body_max_slot(&body.0)),
+        StmtKind::Try { resources, body, catches, finally } => {
+            m = m.max(body_max_slot(resources)).max(body_max_slot(&body.0));
+            for c in catches {
+                if let Some(sl) = c.slot {
+                    m = m.max(sl + 1);
+                }
+                m = m.max(body_max_slot(&c.body.0));
+            }
+            if let Some(f) = finally {
+                m = m.max(body_max_slot(&f.0));
+            }
+        }
+        StmtKind::Switch { cases, .. } => {
+            for c in cases {
+                match &c.body {
+                    SwitchBody::Arrow(st) => m = m.max(stmt_max_slot(st)),
+                    SwitchBody::Colon(sts) => m = m.max(body_max_slot(sts)),
+                }
+            }
+        }
+        _ => {}
+    }
+    m
 }
 
 /// El nombre para un `CHECKCAST` sobre `rt`: el interno de la clase, o el descriptor de un array.
@@ -779,7 +837,22 @@ fn super_internal(
 }
 
 fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<SymbolId> {
-    table.resolve_type(scope, name).or_else(|| table.external(name))
+    if let Some(id) = table.resolve_type(scope, name).or_else(|| table.external(name)) {
+        return Some(id);
+    }
+    // Cualificado / **anidado** (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`): por nombre simple
+    // (externo registrado así) o, si no, resolviendo el `outer` y bajando a su miembro-tipo. Sin esto,
+    // el descriptor de un `Map.Entry<..>` en firma se emitía borrado a `Object` y el `Signature` con el
+    // nombre crudo `Map/Entry` en vez del binario `java/util/Map$Entry`.
+    if let Some((outer, simple)) = name.rsplit_once('.') {
+        if let Some(id) = table.external(simple) {
+            return Some(id);
+        }
+        if let Some(oid) = resolve_type_id(table, scope, outer) {
+            return super::attribute::nested_type_in(table, oid, simple);
+        }
+    }
+    None
 }
 
 fn class_flags(mods: &[Modifier]) -> u16 {
@@ -1024,7 +1097,13 @@ fn class_signature(
 /// La `MethodSignature` (§4.7.9.1) de un método, o `None` si no usa genéricos. Las variables de tipo
 /// de la **clase** resuelven por el `scope`; solo las **propias** del método (que viven en otro
 /// scope) se pasan explícitas en `tvars`.
-fn method_signature(table: &SymbolTable, scope: ScopeId, m: &MethodDecl) -> Option<String> {
+fn method_signature(table: &SymbolTable, scope: ScopeId, m: &MethodDecl, is_enum: bool) -> Option<String> {
+    // El constructor de un `enum` lleva **siempre** `Signature: ()V` (§8.9.2): su descriptor arranca
+    // con los dos parámetros sintéticos `(String, int)` que `java.lang.Enum` exige, pero la firma
+    // *declarada* los elide, así que javac emite el atributo para registrar la firma sin ellos.
+    if m.is_constructor && is_enum {
+        return Some("()V".to_string());
+    }
     let tvars: HashSet<String> = m.type_params.iter().map(|tp| tp.name.clone()).collect();
 
     let params_g = m.params.iter().any(|p| sig_is_generic(table, scope, &tvars, &p.ty));
@@ -1208,6 +1287,7 @@ fn gen_method(
     this_internal: &str,
     super_internal: &str,
     is_interface: bool,
+    is_enum: bool,
     rt: &std::collections::HashSet<String>,
     tu: &TypeUseInfo,
     bootstraps: &mut Vec<BootstrapMethod>,
@@ -1218,7 +1298,7 @@ fn gen_method(
     let descriptor_index = pool.utf8(&method_descriptor(table, scope, m));
     let annotations = build_annotations(pool, table, scope, &m.annotations, rt, tu);
     // `Signature` (§4.7.9): parámetros de tipo del método + params/retorno/throws genéricos.
-    let signature = method_signature(table, scope, m).map(|s| pool.utf8(&s));
+    let signature = method_signature(table, scope, m, is_enum).map(|s| pool.utf8(&s));
     // `MethodParameters` (§4.7.24): los nombres (+ flags) de los parámetros formales.
     let parameters = build_method_parameters(pool, m);
     // `RuntimeVisibleTypeAnnotations` (§4.7.20) del método, juntando: parámetros de tipo (`<@Foo T>`,
@@ -1364,6 +1444,9 @@ fn gen_method(
     }
 
     if let Some(body) = &m.body {
+        // Reservar los temporales por encima de **todo** local del método (incluidos los de los
+        // `finally`), para que un `return` que inyecta un `finally` no le pise sus variables.
+        e.temp_base = e.max_locals.max(body_max_slot(&body.0));
         e.block_scoped(&body.0);
     }
     // Un `void`/constructor puede omitir el `return` final; lo agregamos.
@@ -1383,6 +1466,11 @@ fn gen_method(
     let mut method_flags = class_flags(&m.modifiers);
     if is_interface && !m.modifiers.contains(&Modifier::Private) {
         method_flags |= ACC_PUBLIC;
+    }
+    // El método sintético `$values()` de un `enum` (§8.9.3) —el que arma el arreglo `$VALUES`— lleva
+    // `ACC_SYNTHETIC`, igual que el campo `$VALUES`. Real javac: `$values()` = `0x100a`.
+    if m.name == "$values" {
+        method_flags |= ACC_SYNTHETIC;
     }
     MethodInfo {
         access_flags: method_flags,
@@ -2655,6 +2743,15 @@ struct Emitter<'a> {
     /// de posición-bytecode (cast 0x47, `instanceof` 0x43, `new` 0x44, local 0x40), cada uno con el
     /// offset del opcode como `target_info`. Se llenan al emitir cada instrucción.
     code_type_annotations: Vec<Vec<u8>>,
+    /// Los bloques `finally` que **encierran** el punto actual (el más interno al final). Un
+    /// `return` que sale de un `try` corre estos bloques antes de retornar (§14.20.2): la v69 no
+    /// tiene `jsr`/`ret`, así que el `finally` se **inyecta** en cada salida abrupta, igual que en la
+    /// salida normal.
+    finally_stack: Vec<Block>,
+    /// Primer slot **libre** por encima de todos los locales del método: de ahí sale el temporal que
+    /// guarda el valor de un `return` mientras corre un `finally` inyectado, para no pisar los locales
+    /// de ese `finally` (que tienen slot fijo de la pasada 2).
+    temp_base: u16,
 }
 
 /// Un destino de salto todavía sin dirección: se resuelve al final, parcheando los operandos.
@@ -2670,6 +2767,9 @@ struct Breakable {
     brk: Label,
     /// El destino de un `continue` — `None` si no es un bucle.
     cont: Option<Label>,
+    /// Profundidad del `finally_stack` cuando se abrió esta sentencia. Un `break`/`continue` que
+    /// salta acá cruza —y por lo tanto debe correr— los `finally` que se apilaron **después** (§14.20.2).
+    finally_depth: usize,
 }
 
 impl<'a> Emitter<'a> {
@@ -2695,6 +2795,8 @@ impl<'a> Emitter<'a> {
             rt,
             tu,
             code_type_annotations: Vec::new(),
+            finally_stack: Vec::new(),
+            temp_base: 0,
             bytes: Vec::new(),
             stack: Vec::new(),
             max_stack: 0,
@@ -3141,10 +3243,31 @@ impl<'a> Emitter<'a> {
                     Some(e) => {
                         let cat = category(&self.ty_of(e));
                         self.expr(e);
-                        self.op(IRETURN + cat);
-                        self.pop(1);
+                        if self.finally_stack.is_empty() {
+                            self.op(IRETURN + cat);
+                            self.pop(1);
+                        } else {
+                            // Salida **abrupta** de un `try` (§14.20.2): el valor no puede quedar en la
+                            // pila mientras corre el `finally` (que la usa), así que se guarda en un
+                            // temporal por encima de todo local, se corren los `finally` pendientes, y
+                            // se recarga antes del `ireturn`. Es lo que hace javac (`istore`/…/`iload`).
+                            let tmp = self.temp_base;
+                            let vt = self.stack.last().cloned().unwrap_or(VType::Top);
+                            self.set_local(tmp, vt);
+                            self.store(cat, tmp);
+                            let saved = self.temp_base;
+                            self.temp_base += stack_width(cat) as u16;
+                            self.run_pending_finallys();
+                            self.temp_base = saved;
+                            self.load(cat, tmp);
+                            self.op(IRETURN + cat);
+                            self.pop(1);
+                        }
                     }
-                    None => self.op(RETURN),
+                    None => {
+                        self.run_pending_finallys();
+                        self.op(RETURN);
+                    }
                 }
                 self.reachable = false; // lo que siga solo se alcanza por un salto
             }
@@ -3170,7 +3293,7 @@ impl<'a> Emitter<'a> {
                 let end = self.new_label();
                 self.bind(top);
                 self.branch_if(cond, end, false);
-                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(top) });
+                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(top), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
                 self.jump(GOTO, top);
@@ -3182,7 +3305,7 @@ impl<'a> Emitter<'a> {
                 let cont = self.new_label();
                 let end = self.new_label();
                 self.bind(top);
-                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont) });
+                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
                 self.bind(cont); // un `continue` va a reevaluar la condición
@@ -3203,7 +3326,7 @@ impl<'a> Emitter<'a> {
                 if let Some(c) = cond {
                     self.branch_if(c, end, false);
                 }
-                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont) });
+                self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(cont), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
                 self.bind(cont);
@@ -3216,14 +3339,16 @@ impl<'a> Emitter<'a> {
                 self.close_scope(); // cierra el scope de la variable del `for`
             }
             StmtKind::Break(label) => match self.break_target(label.as_deref()) {
-                Some(t) => {
+                Some((t, depth)) => {
+                    self.run_finallys_down_to(depth); // §14.20.2: correr los `finally` que el salto cruza
                     self.jump(GOTO, t);
                     self.reachable = false;
                 }
                 None => self.unsupported(s.pos, "un `break` sin destino (¿lo dejó pasar el flujo?)"),
             },
             StmtKind::Continue(label) => match self.continue_target(label.as_deref()) {
-                Some(t) => {
+                Some((t, depth)) => {
+                    self.run_finallys_down_to(depth);
                     self.jump(GOTO, t);
                     self.reachable = false;
                 }
@@ -3259,6 +3384,7 @@ impl<'a> Emitter<'a> {
                         label: Some(label.clone()),
                         brk: end,
                         cont: None,
+                        finally_depth: self.finally_stack.len(),
                     });
                     self.stmt(body);
                     self.blocks.pop();
@@ -3271,7 +3397,7 @@ impl<'a> Emitter<'a> {
             }
             // `yield e` de una switch-expresión embebida (las lowerable las baja el desugar a
             // asignaciones): deja el valor en la pila y salta al fin del switch más interno.
-            StmtKind::Yield(e) => self.yield_value(e),
+            StmtKind::Yield(e) => self.yield_value(e, false),
             // Estas tendrían que haber desaparecido en el desugar: si llegan acá es un bug de esa pasada.
             StmtKind::ForEach { .. } | StmtKind::Assert { .. } => {
                 self.unsupported(s.pos, "una construcción que el desugar debía haber bajado")
@@ -3281,21 +3407,26 @@ impl<'a> Emitter<'a> {
 
     /// El destino de un `break`: la sentencia más interna de la que se puede salir, o la que lleve
     /// la etiqueta pedida.
-    fn break_target(&self, label: Option<&str>) -> Option<Label> {
+    fn break_target(&self, label: Option<&str>) -> Option<(Label, usize)> {
         match label {
-            None => self.blocks.last().map(|b| b.brk),
-            Some(l) => self.blocks.iter().rev().find(|b| b.label.as_deref() == Some(l)).map(|b| b.brk),
+            None => self.blocks.last().map(|b| (b.brk, b.finally_depth)),
+            Some(l) => self
+                .blocks
+                .iter()
+                .rev()
+                .find(|b| b.label.as_deref() == Some(l))
+                .map(|b| (b.brk, b.finally_depth)),
         }
     }
 
     /// El destino de un `continue`: el **bucle** más interno (un `switch` interpuesto no cuenta), o
     /// el que lleve la etiqueta pedida.
-    fn continue_target(&self, label: Option<&str>) -> Option<Label> {
+    fn continue_target(&self, label: Option<&str>) -> Option<(Label, usize)> {
         self.blocks
             .iter()
             .rev()
             .find(|b| b.cont.is_some() && label.is_none_or(|l| b.label.as_deref() == Some(l)))
-            .and_then(|b| b.cont)
+            .map(|b| (b.cont.unwrap(), b.finally_depth))
     }
 
     /// `switch` como **sentencia**, ya reducido a un selector `int`: los de `String`, `enum` y con
@@ -3391,7 +3522,7 @@ impl<'a> Emitter<'a> {
         // Los locales declarados en un `case:` viven en el bloque del `switch` (§14.11.2), un solo
         // scope que envuelve todos los grupos; una flecha con `{ }` abre además su propio bloque.
         self.open_scope();
-        self.blocks.push(Breakable { label: lbl, brk: end, cont: None });
+        self.blocks.push(Breakable { label: lbl, brk: end, cont: None, finally_depth: self.finally_stack.len() });
         for (i, c) in cases.iter().enumerate() {
             self.bind(arms[i]);
             match &c.body {
@@ -3439,11 +3570,14 @@ impl<'a> Emitter<'a> {
         self.yield_targets.push((end, cat, vt));
         for (i, c) in cases.iter().enumerate() {
             self.bind(arms[i]);
+            // El brazo **físicamente último** cae al `end` sin `goto` (fiel a javac): su valor queda
+            // en la pila y `bind(end)` toma esa pila real. Los demás saltan al `end`.
+            let tail = i == cases.len() - 1;
             match &c.body {
                 // `case X -> v` en una expresión es el *yield* de `v`.
                 SwitchBody::Arrow(b) if matches!(b.kind, StmtKind::Expr(_)) => {
                     if let StmtKind::Expr(v) = &b.kind {
-                        self.yield_value(v);
+                        self.yield_value(v, tail);
                     }
                 }
                 // `case X -> throw …`: transfiere el control por su cuenta, no yieldea.
@@ -3457,8 +3591,10 @@ impl<'a> Emitter<'a> {
     }
 
     /// Emite un `yield v`: evalúa `v`, lo ajusta al tipo de la switch-expresión (para que todos los
-    /// brazos coincidan en el destino) y salta a su fin.
-    fn yield_value(&mut self, v: &Expr) {
+    /// brazos coincidan en el destino) y salta a su fin. Con `tail = true` es el brazo físicamente
+    /// último: deja el valor en la pila y **cae** al `end` sin `goto` (así lo emite javac);
+    /// `reachable` queda en `true` para que `bind(end)` guarde la pila real.
+    fn yield_value(&mut self, v: &Expr, tail: bool) {
         let Some((end, cat, vt)) = self.yield_targets.last().cloned() else {
             return self.unsupported(v.pos, "un `yield` fuera de una switch-expresión");
         };
@@ -3466,6 +3602,9 @@ impl<'a> Emitter<'a> {
         self.convert(category(&self.ty_of(v)), cat);
         self.pop(1);
         self.push(vt);
+        if tail {
+            return; // cae al `end` con el valor en la pila
+        }
         self.jump(GOTO, end);
         self.reachable = false;
     }
@@ -3529,18 +3668,49 @@ impl<'a> Emitter<'a> {
         self.bind(after);
     }
 
+    /// Inyecta los `finally` pendientes para una salida **abrupta** (un `return`), del más interno al
+    /// más externo. Cada bloque se emite con el stack de `finally` **truncado** a los que lo encierran,
+    /// para que un `return` dentro de un `finally` corra solo los de más afuera (nunca a sí mismo). El
+    /// stack se restaura al terminar, porque el `try` que llama sigue usándolo para sus otras salidas.
+    fn run_pending_finallys(&mut self) {
+        self.run_finallys_down_to(0);
+    }
+
+    /// Como [`run_pending_finallys`](Self::run_pending_finallys) pero solo los `finally` **por encima**
+    /// de `target_depth` — los que un `break`/`continue` cruza al saltar a una sentencia envolvente que
+    /// se abrió con esa profundidad (los de más adentro que el destino, no el destino ni los de afuera).
+    fn run_finallys_down_to(&mut self, target_depth: usize) {
+        let pending = self.finally_stack.clone();
+        for i in (target_depth..pending.len()).rev() {
+            self.finally_stack.truncate(i);
+            self.block_scoped(&pending[i].0);
+        }
+        self.finally_stack = pending;
+    }
+
     /// `try { … } catch (E e) { … } [finally { … }]`.
     ///
     /// El cuerpo protegido queda en `[start, end)`; cada `catch` instala una entrada en la tabla de
     /// excepciones. Al entrar a un *handler* la JVM **limpia la pila y deja ahí la excepción**, así
     /// que su frame lleva `stack = [E]` y arranca guardándola en el slot de su variable.
     ///
-    /// El `finally` se emite **duplicado** (§14.20.2): una copia en la salida normal y otra en un
-    /// handler *catch-all* (`catch_type = 0`) que lo corre y re-lanza — la v69 ya no admite `jsr`.
+    /// El `finally` se emite **duplicado** (§14.20.2): una copia en **cada** salida —normal, `return`,
+    /// `break`/`continue` (inyectada donde ocurre la salida abrupta)— y otra en un handler *catch-all*
+    /// (`catch_type = 0`) que además protege los cuerpos de los `catch`, lo corre y re-lanza. La v69 ya
+    /// no admite `jsr`/`ret`, así que duplicar es la única vía.
     fn try_stmt(&mut self, body: &Block, catches: &[CatchClause], finally: &Option<Block>) {
         let entry_locals = self.locals_t.clone();
         let start = self.bytes.len();
+        // Mientras se emite el cuerpo, este `finally` queda **pendiente**: un `return` de adentro lo
+        // corre (§14.20.2). Se saca antes de emitir la copia de la salida normal (que ya es el `finally`
+        // en sí y no debe correrse a sí misma).
+        if let Some(f) = finally {
+            self.finally_stack.push(f.clone());
+        }
         self.block_scoped(&body.0);
+        if finally.is_some() {
+            self.finally_stack.pop();
+        }
         let end = self.bytes.len();
         let after = self.new_label();
         if self.reachable {
@@ -3551,6 +3721,10 @@ impl<'a> Emitter<'a> {
             self.reachable = false;
         }
 
+        // Rango de cada cuerpo de `catch`, para que el `finally` catch-all también lo proteja: si un
+        // `catch` **lanza**, el `finally` debe correr igual (§14.20.2). Sin esto, un `throw` en el
+        // `catch` se escapaba sin ejecutar el `finally`.
+        let mut catch_ranges: Vec<(usize, usize)> = Vec::new();
         for c in catches {
             let handler = self.bytes.len();
             let exc = c
@@ -3576,8 +3750,18 @@ impl<'a> Emitter<'a> {
                 self.op(POP);
                 self.pop(1);
             }
+            // El `finally` también encierra el cuerpo del `catch`: un `return` de acá lo corre.
+            if let Some(f) = finally {
+                self.finally_stack.push(f.clone());
+            }
             for s in &c.body.0 {
                 self.stmt(s);
+            }
+            if finally.is_some() {
+                self.finally_stack.pop();
+                // El cuerpo del `catch` va de su handler hasta acá (antes de la copia del `finally` de
+                // salida normal): ese rango también lo protege el catch-all de más abajo.
+                catch_ranges.push((handler, self.bytes.len()));
             }
             if self.reachable {
                 if let Some(f) = finally {
@@ -3603,7 +3787,14 @@ impl<'a> Emitter<'a> {
             self.stack = vec![VType::Object("java/lang/Throwable".to_string())];
             self.max_stack = self.max_stack.max(1);
             self.locals_t = entry_locals.clone();
-            self.block_scoped(&f.0);
+            // Aparcar la excepción en un local **libre** (por encima de todo local del método y del
+            // propio `finally`) en vez de dejarla en la pila mientras corre el `finally`: así el
+            // `finally` usa la pila sin restricciones, como emite javac.
+            let park = self.max_locals.max(body_max_slot(&f.0));
+            self.set_local(park, VType::Object("java/lang/Throwable".to_string()));
+            self.store(4, park); // astore park: saca la excepción de la pila
+            self.block_scoped(&f.0); // el `finally` corre con la pila limpia
+            self.load(4, park); // aload park: la recupera para re-lanzarla
             self.op(ATHROW);
             self.pop(1);
             self.reachable = false;
@@ -3613,6 +3804,18 @@ impl<'a> Emitter<'a> {
                 handler_pc: handler as u16,
                 catch_type: 0, // cualquier Throwable
             });
+            // …y sobre cada cuerpo de `catch` (rangos disjuntos del cuerpo del `try`): un `throw` ahí
+            // adentro pasa por el mismo catch-all, que corre el `finally` y re-lanza.
+            for (cs, ce) in &catch_ranges {
+                if ce > cs {
+                    self.exceptions.push(ExceptionEntry {
+                        start_pc: *cs as u16,
+                        end_pc: *ce as u16,
+                        handler_pc: handler as u16,
+                        catch_type: 0,
+                    });
+                }
+            }
         }
         self.bind(after);
     }
@@ -4016,7 +4219,20 @@ impl<'a> Emitter<'a> {
             self.op(count as u8);
             self.op(0);
         } else {
-            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            // El owner del `Methodref` de una invocación **virtual** es el **tipo estático del
+            // receptor**, no la clase que *declara* el método (§5.4.3.3): para un receptor implícito o
+            // `this`, ese tipo es la clase actual. Sin esto, `ordinal()` heredado de `java.lang.Enum`
+            // emitía owner `java/lang/Enum`; javac emite la propia clase (`Enums`). Se acota a virtual y
+            // a receptor implícito/`this` — `invokespecial`/`invokestatic`/`super` no se tocan.
+            let receiver_is_self = match &call.kind {
+                ExprKind::Call { target, .. } => {
+                    matches!(target.as_deref(), None | Some(Expr { kind: ExprKind::This, .. }))
+                }
+                _ => false,
+            };
+            let owner_internal =
+                if receiver_is_self { self.this_class.clone() } else { class_internal };
+            let mref = self.pool.methodref(&owner_internal, &mname, &desc);
             self.op(INVOKEVIRTUAL);
             self.u16(mref);
         }
@@ -5828,6 +6044,47 @@ mod tests {
     }
 
     #[test]
+    fn finally_runs_when_the_try_returns() {
+        // §14.20.2: un `return` **dentro** del `try` corre el `finally` antes de retornar. Antes se
+        // salteaba (el `return` emitía `ireturn` directo). `m(5)` retorna 5 **y** deja `r = 99`.
+        let src = "public class M { static int r = 0; \
+                   static int m(int x) { try { return x; } finally { r = 99; } } \
+                   public static int f(int n) { int v = m(5); return v * 1000 + r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 5099);
+    }
+
+    #[test]
+    fn finally_runs_when_the_catch_returns() {
+        // El `finally` también corre cuando la salida abrupta es un `return` del `catch`.
+        // `m(-3)` lanza → el `catch` retorna -1, el `finally` deja `r = 7` ⇒ -1*1000 + 7.
+        let src = "public class M { static int r = 0; \
+                   static int m(int x) { try { if (x < 0) throw new RuntimeException(); return x; } \
+                   catch (RuntimeException e) { return -1; } finally { r = 7; } } \
+                   public static int f(int n) { int v = m(-3); return v * 1000 + r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), -993);
+    }
+
+    #[test]
+    fn finally_runs_when_a_break_leaves_the_try() {
+        // Un `break` que **sale** de un `try` cruza y corre su `finally` (§14.20.2). Antes emitía el
+        // `goto` de salida directo, salteándolo: `m()` daba 0 en vez de 1.
+        let src = "public class M { static int r = 0; public static int f(int n) { \
+                   for (int i = 0; i < 3; i++) { try { break; } finally { r = r + 1; } } return r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 1);
+    }
+
+    #[test]
+    fn finally_runs_when_the_catch_throws() {
+        // Un `throw` en el `catch` no se escapa sin correr el `finally`: el catch-all también protege
+        // el cuerpo del `catch`. `inner` deja `r = 5` antes de propagar; el `f` de afuera lo atrapa.
+        let src = "public class M { static int r = 0; \
+                   static void inner() { try { throw new RuntimeException(); } \
+                   catch (RuntimeException e) { throw new RuntimeException(); } finally { r = 5; } } \
+                   public static int f(int n) { try { inner(); } catch (RuntimeException e) {} return r; } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 5);
+    }
+
+    #[test]
     fn try_catch_passes_the_strict_verifier() {
         // El frame de un handler es especial: la JVM limpia la pila y deja ahí la excepción.
         verify_all(
@@ -7607,6 +7864,93 @@ mod tests {
         assert_eq!(class_sig(&e).as_deref(), Some("Ljava/lang/Enum<LColor;>;"));
     }
 
+    // ---- fidelidad byte-exacta del codegen de `enum` (corpus `Enums.java`) ----
+
+    /// Todos los `Methodref` de la clase resueltos a `(owner, nombre, descriptor)`.
+    fn method_refs(jvm: &ClassFile) -> Vec<(String, String, String)> {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        let mut out = Vec::new();
+        for e in &jvm.constant_pool {
+            let CP::MethodRef { class_index, name_and_type_index } = e else { continue };
+            let Some(owner) = jvm.class_name(*class_index) else { continue };
+            if let Some(CP::NameAndType { name_index, descriptor_index }) =
+                jvm.constant_pool.get((*name_and_type_index - 1) as usize)
+            {
+                if let (Some(n), Some(d)) = (jvm.utf8(*name_index), jvm.utf8(*descriptor_index)) {
+                    out.push((owner.to_string(), n.to_string(), d.to_string()));
+                }
+            }
+        }
+        out
+    }
+
+    /// ¿Alguna entrada `Utf8` del pool contiene `needle`?
+    fn pool_mentions(jvm: &ClassFile, needle: &str) -> bool {
+        use crate::jvm::parser::ConstantPoolEntry as CP;
+        jvm.constant_pool.iter().any(|e| matches!(e, CP::Utf8(s) if s.contains(needle)))
+    }
+
+    #[test]
+    fn an_enum_valueof_delegates_to_enum_valueof() {
+        // §8.9.3: `valueOf(String)` delega en `Enum.valueOf(Class, String)` con un `checkcast` a `E`,
+        // byte a byte como javac. Ya no arma la cadena de `equals` + `IllegalArgumentException`.
+        let jvm = compiled_class("enum E { A, B }", "E");
+        let refs = method_refs(&jvm);
+        assert!(
+            refs.iter().any(|(o, n, d)| o == "java/lang/Enum"
+                && n == "valueOf"
+                && d == "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;"),
+            "`valueOf` debe delegar en `Enum.valueOf`: {refs:?}",
+        );
+        assert!(
+            !pool_mentions(&jvm, "IllegalArgumentException"),
+            "el viejo camino con `IllegalArgumentException` ya no se emite",
+        );
+    }
+
+    #[test]
+    fn an_enum_factors_the_values_array_into_a_synthetic_values_method() {
+        // javac factoriza la construcción de `$VALUES` en un método sintético `private static E[]
+        // $values()` que el `<clinit>` invoca con `invokestatic`.
+        let jvm = compiled_class("enum E { A, B }", "E");
+        assert!(
+            has_method(&jvm, "$values", "()[LE;", super::ACC_PRIVATE | super::ACC_STATIC | ACC_SYNTHETIC),
+            "`$values` debe ser `private static synthetic ()[LE;`",
+        );
+        let refs = method_refs(&jvm);
+        assert!(
+            refs.iter().any(|(o, n, d)| o == "E" && n == "$values" && d == "()[LE;"),
+            "el `<clinit>` debe invocar `$values`: {refs:?}",
+        );
+    }
+
+    #[test]
+    fn an_enum_virtual_call_on_this_targets_the_enum_class_not_the_declaring_class() {
+        // §5.4.3.3: el owner del `Methodref` de una invocación virtual es el **tipo estático del
+        // receptor**. `ordinal()` heredado de `java.lang.Enum`, llamado sin receptor, apunta a la propia
+        // clase (`E`), no a `java/lang/Enum` — igual que javac.
+        let jvm = compiled_class("enum E { A, B; public int code() { return ordinal() + 1; } }", "E");
+        let refs = method_refs(&jvm);
+        let ordinal: Vec<_> = refs.iter().filter(|(_, n, _)| n == "ordinal").collect();
+        assert!(!ordinal.is_empty(), "hay una invocación a `ordinal`: {refs:?}");
+        assert!(
+            ordinal.iter().all(|(o, _, _)| o == "E"),
+            "el owner de `ordinal()` es la clase enum `E`, no `java/lang/Enum`: {ordinal:?}",
+        );
+    }
+
+    #[test]
+    fn an_enum_constructor_gets_a_void_signature_that_elides_the_synthetic_params() {
+        // §8.9.2: el ctor de un `enum` lleva siempre `Signature: ()V` — su descriptor arranca con los
+        // dos parámetros sintéticos `(String, int)`, pero la firma declarada los elide.
+        let jvm = compiled_class("enum E { A, B }", "E");
+        assert_eq!(
+            method_sig(&jvm, "<init>").as_deref(),
+            Some("()V"),
+            "el ctor del enum lleva `Signature: ()V`",
+        );
+    }
+
     #[test]
     fn a_generic_superclass_is_in_the_class_signature() {
         let src = "class Base<T> {} class Node<T> extends Base<T> {}";
@@ -7862,5 +8206,85 @@ mod tests {
             jvm.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("PermittedSubclasses")),
             "`Shape` debe llevar el atributo PermittedSubclasses",
         );
+    }
+
+    // ---- APT fase 4: el mecanismo del Filer ----
+
+    /// De punta a punta: un programa corre en la VM, usa el `Filer` para fabricar `Foo`, escribe su
+    /// fuente en el `StringWriter` que el Filer le entrega, y el lado Rust **recupera** ese texto.
+    /// Ejercita Filer → StringWriter → nativo → cola → lectura reentrante (el `toString()` del
+    /// writer invocado por el VM sobre el **mismo heap** que corrió el programa). Es el hito mínimo
+    /// del Filer; el re-enganche al round loop (fase 2) queda aparte.
+    #[test]
+    fn the_filer_hands_generated_source_back_to_rust() {
+        use crate::jvm::interpreter::natives::{drain_filer, install_filer};
+
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("javac_filer_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Compila una unidad (contra KajiLibrary + lo ya emitido en `dir`) y escribe cada clase bajo
+        // su ruta de paquete, para que el classpath de runtime la resuelva por nombre interno.
+        let kaji = PathBuf::from("KajiLibrary");
+        let compile_into = |source: &str| {
+            let classes = crate::javac::compile_cp(source, &[kaji.clone(), dir.clone()])
+                .expect("la fuente del Filer debe compilar");
+            for (internal, bytes) in classes {
+                let path = dir.join(format!("{internal}.class"));
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, bytes).unwrap();
+            }
+        };
+
+        // Los archivos reales de KajiLibrary (el entregable), en orden de dependencia:
+        // KajiFiler crea un KajiSourceFile, así que este último se compila primero.
+        compile_into(
+            &std::fs::read_to_string(kaji.join("javax/annotation/processing/KajiSourceFile.java")).unwrap(),
+        );
+        compile_into(
+            &std::fs::read_to_string(kaji.join("javax/annotation/processing/KajiFiler.java")).unwrap(),
+        );
+        // El manejador de prueba: usa el Filer como lo haría un procesador de anotaciones.
+        // `w` se maneja como el `StringWriter` concreto que el Filer entrega: el VM propio todavía
+        // no le da slot de vtable a un método **abstracto** heredado (p. ej. `Writer.close()`), así
+        // que resolver `close()` contra el tipo estático `Writer` fallaría. Ortogonal al Filer.
+        compile_into(
+            "package javax.annotation.processing; \
+             import javax.tools.JavaFileObject; import java.io.StringWriter; \
+             public class FilerDriver { \
+                 public static int drive() { \
+                     Filer f = new KajiFiler(); \
+                     JavaFileObject jfo = f.createSourceFile(\"Foo\"); \
+                     StringWriter w = (StringWriter) jfo.openWriter(); \
+                     w.write(\"class Foo {}\"); \
+                     w.close(); \
+                     return 0; \
+                 } \
+             }",
+        );
+
+        // Boot = KajiLibrary (StringWriter, Filer, ...) + boot/; app = las clases recién compiladas.
+        let mut ms = MetaspaceService::new(vec![kaji.clone(), PathBuf::from("boot")], vec![dir.clone()]);
+        let driver = ms
+            .resolve_method("javax/annotation/processing/FilerDriver", "drive", "()I")
+            .expect("FilerDriver.drive resuelto");
+        let max_locals = ms.max_locals(driver);
+        let mut jvm = JVM::new(ms, Frame::for_call(driver, max_locals, Vec::new(), &[]));
+
+        // Armar el Filer, correr el programa, drenar lo registrado y recuperar el texto de cada uno.
+        install_filer();
+        for _ in 0..100_000 {
+            if let Step::Return(_) = jvm.exec().step() {
+                break;
+            }
+        }
+        let pending = drain_filer();
+        let recovered: Vec<(String, String)> = pending
+            .into_iter()
+            .map(|(name, writer_ref)| (name, jvm.read_generated_text(writer_ref as usize)))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(recovered, vec![("Foo".to_string(), "class Foo {}".to_string())]);
     }
 }

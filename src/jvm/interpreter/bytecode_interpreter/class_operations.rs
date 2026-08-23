@@ -190,7 +190,7 @@ pub fn static_reference(
 /// declaring class, possibly a superclass of the named one), makes sure its mirror
 /// exists (`load_class`), then offsets past the header by the field's index among
 /// that class's own static fields. Each class keeps its own statics — no flattening.
-fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_class: &str, field: &str) -> usize {
+pub(crate) fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_class: &str, field: &str) -> usize {
     let declaring = static_declaring_class(metaspace, named_class, field)
         .expect("getstatic/putstatic: static field not found in the class or its superclasses");
 

@@ -176,12 +176,14 @@ pub struct SymbolTable {
     /// Tipos **resueltos** por símbolo (grafo de herencia + firmas) — salida para la pasada 2.
     resolved_map: HashMap<SymbolId, Resolved>,
     /// Contador de **variables de captura** (§5.1.10): da un `id` fresco por *wildcard* capturado.
-    /// Es mutabilidad **interior** (`Cell`) para poder crear capturas con la tabla compartida `&self`
-    /// —Attribute la tiene inmutable—, sin conflictos de *borrow* en medio del tipado.
-    capture_counter: std::cell::Cell<u32>,
+    /// Es mutabilidad **interior** (`AtomicU32`) para poder crear capturas con la tabla compartida
+    /// `&self` —Attribute la tiene inmutable—, sin conflictos de *borrow* en medio del tipado. Es
+    /// **atómico** (no `Cell`) para que la tabla sea `Sync`: la fase 3 de APT la comparte, ya
+    /// tipada e inmutable, con la JVM (que debe ser `Send + Sync`); ver `jvm::interpreter::apt`.
+    capture_counter: std::sync::atomic::AtomicU32,
     /// Contador de **variables de inferencia** (§18.1): da un `id` fresco por parámetro de tipo de cada
-    /// invocación genérica. Mutabilidad **interior** por la misma razón que `capture_counter`.
-    infer_counter: std::cell::Cell<u32>,
+    /// invocación genérica. Mutabilidad **interior** atómica por la misma razón que `capture_counter`.
+    infer_counter: std::sync::atomic::AtomicU32,
     /// El **método envolvente** de una clase local/anónima (para el atributo `EnclosingMethod`,
     /// §4.7.7): `class_id → (nombre, descriptor)` del método/constructor que la declara. Ausente si
     /// se declaró en un inicializador (ahí `method_index` es 0). Lo puebla el desugar.
@@ -218,8 +220,8 @@ impl SymbolTable {
             static_single: HashMap::new(),
             static_on_demand: Vec::new(),
             resolved_map: HashMap::new(),
-            capture_counter: std::cell::Cell::new(0),
-            infer_counter: std::cell::Cell::new(0),
+            capture_counter: std::sync::atomic::AtomicU32::new(0),
+            infer_counter: std::sync::atomic::AtomicU32::new(0),
             enclosing_methods: HashMap::new(),
             const_fields: HashMap::new(),
             global: 0,
@@ -231,17 +233,13 @@ impl SymbolTable {
     /// Un `id` fresco para una nueva variable de captura (§5.1.10). Solo necesita `&self` (mutabilidad
     /// interior): así se puede capturar en medio del tipado, con la tabla compartida.
     pub fn fresh_capture_id(&self) -> u32 {
-        let n = self.capture_counter.get();
-        self.capture_counter.set(n + 1);
-        n
+        self.capture_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Un `id` fresco para una nueva **variable de inferencia** (§18.1). Como [`Self::fresh_capture_id`],
     /// solo necesita `&self` (mutabilidad interior): la inferencia corre con la tabla compartida.
     pub fn fresh_infer_id(&self) -> u32 {
-        let n = self.infer_counter.get();
-        self.infer_counter.set(n + 1);
-        n
+        self.infer_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Registra el **método envolvente** de una clase local/anónima (para `EnclosingMethod`, §4.7.7).

@@ -21,12 +21,29 @@ fn main() {
     let raw: Vec<String> = env::args().skip(1).collect();
     let mut extra_classpath: Vec<std::path::PathBuf> = Vec::new();
     let mut lint_spec: Option<String> = None;
+    // Annotation processing (APT fase 2): `-processor <FQN[,FQN...]>` lista los processors a correr
+    // (descubrimiento explícito, no por `META-INF/services` todavía), y `-processorpath <dirs>` es
+    // el classpath donde encontrarlos. Ambos se acumulan igual que `-cp`/`-Xlint`.
+    let mut processors: Vec<String> = Vec::new();
+    let mut processor_path: Vec<std::path::PathBuf> = Vec::new();
     let mut args: Vec<String> = Vec::new();
     let mut it = raw.into_iter();
     while let Some(a) = it.next() {
         if a == "-cp" || a == "--classpath" {
             if let Some(val) = it.next() {
                 extra_classpath.extend(env::split_paths(&val));
+            }
+        } else if a == "-processor" {
+            // Nombres separados por coma, en notación con puntos (`com.foo.MyProc`); se pasan a la VM
+            // como nombres internos (con `/`).
+            if let Some(val) = it.next() {
+                processors.extend(
+                    val.split(',').filter(|s| !s.is_empty()).map(|s| s.replace('.', "/")),
+                );
+            }
+        } else if a == "-processorpath" {
+            if let Some(val) = it.next() {
+                processor_path.extend(env::split_paths(&val));
             }
         } else if a == "-Xlint" {
             lint_spec = Some("all".to_string()); // `-Xlint` a secas = todas las categorías
@@ -41,6 +58,33 @@ fn main() {
         Some(spec) => jvm::javac::lint::LintSet::from_spec(spec),
         None => jvm::javac::lint::LintSet::none(),
     };
+    // Annotation processing (APT fase 2): si se pidieron processors, se corre el *round loop* de
+    // JSR 269 antes de la compilación. Es el hito mínimo demostrable — instancia cada processor en
+    // la VM, corre `init(env)` y el bucle de rondas (una normal + la final `processingOver`) — y
+    // todavía **no** reifica elementos ni alimenta lo generado de vuelta a la compilación.
+    if !processors.is_empty() {
+        let boot = vec![std::path::PathBuf::from("KajiLibrary"), std::path::PathBuf::from("boot")];
+        // El loader de aplicación ve primero el `-processorpath`, luego el `-cp`.
+        let mut app = processor_path.clone();
+        app.extend(extra_classpath.iter().cloned());
+        let outcome = jvm::jvm::interpreter::apt::run_processors(&processors, boot, app);
+        print!("{}", outcome.console);
+        if let Some(err) = &outcome.error {
+            eprintln!("javac: annotation processing falló: {err}");
+            process::exit(1);
+        }
+        eprintln!(
+            "javac: annotation processing: {} processor(s), {} ronda(s), {} llamada(s) a process",
+            processors.len(),
+            outcome.rounds,
+            outcome.process_calls
+        );
+        // Modo "sólo procesar": sin archivo fuente, el round loop es todo lo que había para hacer.
+        if args.is_empty() {
+            return;
+        }
+    }
+
     let (mode, path) = match args.first().map(String::as_str) {
         Some("--tokens") => (Mode::Tokens, args.get(1)),
         Some("--symbols") => (Mode::Symbols, args.get(1)),

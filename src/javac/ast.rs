@@ -85,6 +85,9 @@ pub enum TypeKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassDecl {
     pub pos: Pos,
+    /// El doc comment (`/** … */`) que precede a la declaración, sin delimitadores; `None` si no hay
+    /// (javadoc, etapa 1). Aún no se emite a `.class`; solo se retiene en el AST.
+    pub doc: Option<String>,
     pub annotations: Vec<Annotation>,
     pub modifiers: Vec<Modifier>,
     pub kind: TypeKind,
@@ -117,6 +120,9 @@ pub struct ClassDecl {
 /// Una constante de `enum`: `NAME` o `NAME(args)`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumConstant {
+    /// El doc comment (`/** … */`) que precede a la constante, sin delimitadores; `None` si no hay
+    /// (javadoc, etapa 1).
+    pub doc: Option<String>,
     /// Anotaciones sobre la constante (`@Deprecated FOO`); se retienen aunque el emisor todavía no
     /// las escriba.
     pub annotations: Vec<Annotation>,
@@ -207,6 +213,9 @@ pub enum Member {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldDecl {
     pub pos: Pos,
+    /// El doc comment (`/** … */`) que precede a la declaración, sin delimitadores; `None` si no hay
+    /// (javadoc, etapa 1).
+    pub doc: Option<String>,
     pub annotations: Vec<Annotation>,
     pub modifiers: Vec<Modifier>,
     pub ty: Type,
@@ -221,6 +230,9 @@ pub struct FieldDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MethodDecl {
     pub pos: Pos,
+    /// El doc comment (`/** … */`) que precede a la declaración, sin delimitadores; `None` si no hay
+    /// (javadoc, etapa 1).
+    pub doc: Option<String>,
     pub annotations: Vec<Annotation>,
     pub modifiers: Vec<Modifier>,
     /// Parámetros de tipo de un método genérico (`<T> T id(T x)`), con sus cotas.

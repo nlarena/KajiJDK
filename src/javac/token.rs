@@ -349,4 +349,8 @@ pub struct Token {
     pub text: String,
     pub line: u32,
     pub col: u32,
+    /// El **doc comment** (`/** … */`) que precede inmediatamente a este token, ya sin sus
+    /// delimitadores; `None` si no lo hay. Lo adjunta el lexer (el último doc comment antes del
+    /// token gana) para que el parser lo cuelgue de la declaración correspondiente (javadoc, etapa 1).
+    pub doc: Option<String>,
 }

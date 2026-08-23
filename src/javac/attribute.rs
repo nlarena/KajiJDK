@@ -1315,10 +1315,17 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
 /// El **tipo anidado** `name` declarado en `owner` (§8.5), o `None`. Busca un símbolo de clase con
 /// ese nombre en el scope de miembros del dueño.
 fn nested_type(table: &SymbolTable, owner: SymbolId, name: &str) -> Option<SymbolId> {
+    nested_type_in(table, owner, name)
+}
+
+/// Igual que [`nested_type`], pero **compartido** con `enter`: es la bajada que resuelve `Map.Entry`
+/// / `Diagnostic.Kind` en **posición de tipo** (campo, retorno, parámetro), no solo en expresión.
+/// Busca un miembro-tipo de nombre simple `simple` en el scope de miembros de `owner`.
+pub(crate) fn nested_type_in(table: &SymbolTable, owner: SymbolId, simple: &str) -> Option<SymbolId> {
     let scope = member_scope(table, owner);
     table
         .scope(scope)
-        .get(name)
+        .get(simple)
         .iter()
         .copied()
         .find(|&id| matches!(table.symbol(id).kind, SymbolKind::Class { .. }))
@@ -1910,14 +1917,26 @@ fn resolve_overload(
             applicables.retain(|&m| !has_unresolved_params(env.table, m));
         }
         // Hay aplicables: **se corta acá**, aunque una fase posterior tuviera un match "mejor".
-        return Some(choose_most_specific(env, &applicables, name, pos));
+        // Si **algún** argumento es indulgente (`Unresolved`/`TypeVar`, un tipo que no pudimos
+        // cargar), `convertible` lo dio por convertible a **toda** sobrecarga: el desempate por *más
+        // específico* no es fiable y no se debe reportar "ambigua" (espejo del guard de params
+        // `Unresolved` de arriba). Se elige `best` en silencio.
+        let args_lenient = args.iter().any(lenient);
+        return Some(choose_most_specific(env, &applicables, name, pos, args_lenient));
     }
     None
 }
 
 /// Elige el más específico entre los aplicables de una fase; si no hay uno que gane a todos,
-/// la llamada es **ambigua** (JLS §15.12.2.5).
-fn choose_most_specific(env: &mut Env, applicables: &[SymbolId], name: &str, pos: Pos) -> SymbolId {
+/// la llamada es **ambigua** (JLS §15.12.2.5) — salvo que la ambigüedad venga de un argumento
+/// indulgente (`args_lenient`), en cuyo caso se elige `best` sin reportar.
+fn choose_most_specific(
+    env: &mut Env,
+    applicables: &[SymbolId],
+    name: &str,
+    pos: Pos,
+    args_lenient: bool,
+) -> SymbolId {
     let mut best = applicables[0];
     for &m in &applicables[1..] {
         if more_specific(env.table, m, best) {
@@ -1925,7 +1944,7 @@ fn choose_most_specific(env: &mut Env, applicables: &[SymbolId], name: &str, pos
         }
     }
     let wins_all = applicables.iter().all(|&m| m == best || more_specific(env.table, best, m));
-    if !wins_all {
+    if !wins_all && !args_lenient {
         env.error(pos, format!("la referencia a `{name}` es ambigua"));
     }
     best
@@ -2097,15 +2116,26 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         }
     } else if let Some(id) = table.external(name) {
         RType::Class(id)
-    } else if let Some((_, simple)) = name.rsplit_once('.') {
+    } else if let Some((outer, simple)) = name.rsplit_once('.') {
         // Un nombre **cualificado** (`java.lang.Object`): el *class finder* registra los externos por
         // su nombre **simple**, así que se resuelve por el último segmento. Sin esto, un tipo FQN en un
         // `new` (`new java.lang.Object()`) quedaba `Unresolved` y el codegen no podía emitir el `new` +
         // `invokespecial` — finding #20. (En otras posiciones no se notaba: un `Unresolved` de un local
         // o retorno no rompe la emisión.)
-        match table.external(simple) {
-            Some(id) => RType::Class(id),
-            None => RType::Unresolved,
+        if let Some(id) = table.external(simple) {
+            RType::Class(id)
+        } else if let RType::Class(oid) | RType::Parameterized { base: oid, .. } =
+            resolve_type_name(table, scope, outer)
+        {
+            // Tipo **anidado** en posición de tipo (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`):
+            // se resuelve el `outer` y se baja a su miembro-tipo. Devuelve el `RType::Class` real (no
+            // `Unresolved`), de modo que un `Map.Entry<String,Integer>` en firma sale parametrizado.
+            match nested_type_in(table, oid, simple) {
+                Some(id) => RType::Class(id),
+                None => RType::Unresolved,
+            }
+        } else {
+            RType::Unresolved
         }
     } else {
         RType::Unresolved
@@ -3122,5 +3152,32 @@ mod tests {
              int use() { return Outer.Inner.v(); } }",
         );
         assert!(errs.is_empty(), "{errs:?}");
+    }
+
+    #[test]
+    fn an_overload_call_with_a_lenient_argument_is_not_flagged_ambiguous() {
+        // `m(P)`/`m(Q)` con un argumento de tipo **variable** (`T`, indulgente): `convertible` lo da
+        // por aplicable a ambas y ninguna es más específica. Antes salía "ambigua" (como el
+        // `StringBuilder.append(Name)` cuando `Name` no cargaba); ahora, como la ambigüedad viene de un
+        // argumento indulgente, no se reporta (espejo del guard de params `Unresolved`).
+        let errs = check(
+            "class P {} class Q {}
+             class C { void m(P p) {} void m(Q q) {}
+                       <T> void use(T t) { m(t); } }",
+        );
+        assert!(!errs.iter().any(|e| e.message.contains("ambigua")), "{errs:?}");
+    }
+
+    #[test]
+    fn a_genuinely_ambiguous_overload_call_is_still_reported() {
+        // Regresión del guard anterior: con argumentos **resueltos** (`B`,`B`) contra
+        // `m(A,B)`/`m(B,A)`, ninguna sobrecarga es más específica y la ambigüedad es **real** — se
+        // sigue reportando (el guard solo calla la ambigüedad de argumentos indulgentes).
+        let errs = check(
+            "class A {} class B extends A {}
+             class C { void m(A a, B b) {} void m(B b, A a) {}
+                       void use(B b) { m(b, b); } }",
+        );
+        assert!(errs.iter().any(|e| e.message.contains("ambigua")), "{errs:?}");
     }
 }

@@ -138,6 +138,20 @@ const METAFACTORY_DESC: &str = "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/la
 /// nombres de componentes y un `MethodHandle` *getter* por componente (varargs), y devuelve un `Object`.
 const OBJECT_METHODS_DESC: &str = "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/TypeDescriptor;Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/invoke/MethodHandle;)Ljava/lang/Object;";
 
+/// El descriptor de `StringConcatFactory.makeConcatWithConstants` (§ de
+/// `java.lang.invoke.StringConcatFactory`): tras los tres argumentos que aporta la VM (`Lookup`,
+/// nombre, tipo del call site), toma la *receta* (`String`) y los argumentos constantes (varargs
+/// `Object[]`), y devuelve un `CallSite`.
+const STRING_CONCAT_DESC: &str = "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;";
+
+/// El marcador de un **argumento ordinario** (dinámico) en la receta de `makeConcatWithConstants`
+/// (`TAG_ARG` de `StringConcatFactory`). Cada `` consume un operando empujado, en orden.
+const CONCAT_TAG_ARG: char = '\u{0001}';
+/// El marcador de una **constante** aportada como argumento estático del bootstrap (`TAG_CONST`).
+/// Aquí no lo emitimos —las constantes se embeben literalmente en la receta— pero un literal que lo
+/// contenga debe tratarse como dinámico para no corromper la receta.
+const CONCAT_TAG_CONST: char = '\u{0002}';
+
 /// Baja el azúcar de `unit`, transformándolo en el lugar. Necesita la tabla para reconocer
 /// tipos (p. ej. si un `+` es concatenación de `String`).
 pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
@@ -476,6 +490,7 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
     let mut out = Vec::new();
     for c in &class.components {
         out.push(Member::Field(FieldDecl {
+            doc: None,
             annotations: Vec::new(),
             type_annos: Vec::new(),
             pos: Pos::default(),
@@ -501,6 +516,7 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
                 .collect(),
         );
         out.push(Member::Method(MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Public],
@@ -525,6 +541,7 @@ fn record_members(class: &ClassDecl) -> Vec<Member> {
             name: c.name.clone(),
         }))))]);
         out.push(Member::Method(MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Public],
@@ -601,6 +618,7 @@ fn hoist_initializers(class: &mut ClassDecl, consts: &super::codegen::ConstField
         // sintetizaría es `super(); return`, y ahí los inicializadores se perderían.
         if !class.members.iter().any(|m| matches!(m, Member::Method(me) if me.is_constructor)) {
             class.members.push(Member::Method(MethodDecl {
+                doc: None,
                 annotations: Vec::new(),
                 pos: Pos::default(),
                 modifiers: vec![Modifier::Public],
@@ -633,6 +651,7 @@ fn qualify(enclosing: &str, name: &str) -> String {
 /// Arma la `ClassDecl` de la clase sintética a partir de los miembros acumulados.
 fn holder_class(h: Holder) -> ClassDecl {
     ClassDecl {
+        doc: None,
         annotations: Vec::new(),
         pos: Pos::default(),
         modifiers: Vec::new(),
@@ -907,6 +926,7 @@ impl Desugarer<'_> {
         //    la cual el `.class` referencia un campo que no declara.
         for c in &class.enum_constants {
             out.push(Member::Field(FieldDecl {
+                doc: None,
                 annotations: Vec::new(),
                 type_annos: Vec::new(),
                 pos: Pos::default(),
@@ -929,6 +949,7 @@ impl Desugarer<'_> {
         self.table
             .set_resolved(fid, Resolved::Field(RType::Array(Box::new(RType::Class(cid)))));
         out.push(Member::Field(FieldDecl {
+            doc: None,
             annotations: Vec::new(),
             type_annos: Vec::new(),
             pos: Pos::default(),
@@ -951,12 +972,37 @@ impl Desugarer<'_> {
             let made = ex(ExprKind::NewObject { ty: ety.clone(), args, body: None, outer: None });
             clinit.push(st(StmtKind::Expr(assign_expr(name(&c.name), made))));
         }
+        // El array de constantes se factoriza en un método sintético `private static E[] $values()`,
+        // igual que javac; el `<clinit>` lo invoca con `$VALUES = $values()` en vez de construir el
+        // array inline. (`$values` lleva `ACC_SYNTHETIC`, que se lo pone el codegen por nombre.)
         let all = ex(ExprKind::NewArray {
             elem: ety.clone(),
             dims: vec![None],
             init: Some(class.enum_constants.iter().map(|c| name(&c.name)).collect()),
         });
-        clinit.push(st(StmtKind::Expr(assign_expr(name(values_field), all))));
+        self.register_method(cid, scope, "$values", &[], &arr, false);
+        out.push(Member::Method(MethodDecl {
+            annotations: Vec::new(),
+            pos: Pos::default(),
+            modifiers: vec![Modifier::Private, Modifier::Static],
+            type_params: Vec::new(),
+            return_annos: Vec::new(),
+            return_type: arr.clone(),
+            name: "$values".to_string(),
+            params: Vec::new(),
+            throws: Vec::new(),
+            throws_annos: Vec::new(),
+            body: Some(Block(vec![st(StmtKind::Return(Some(all)))])),
+            is_constructor: false,
+            doc: None,
+        }));
+        let values_call = ex(ExprKind::Call {
+            target: None,
+            name: "$values".to_string(),
+            args: Vec::new(),
+            type_args: Vec::new(),
+        });
+        clinit.push(st(StmtKind::Expr(assign_expr(name(values_field), values_call))));
         out.push(Member::StaticInit(Block(clinit)));
 
         // 4. El constructor. Es lo único que puede darle a `java.lang.Enum` su nombre y su posición,
@@ -977,6 +1023,7 @@ impl Desugarer<'_> {
             ];
             self.register_method(cid, scope, &ename, &ctor_params, &Type::Void, true);
             out.push(Member::Method(MethodDecl {
+                doc: None,
                 annotations: Vec::new(),
                 pos: Pos::default(),
                 modifiers: vec![Modifier::Private],
@@ -1005,6 +1052,7 @@ impl Desugarer<'_> {
         }))))]);
         self.register_method(cid, scope, "values", &[], &arr, false);
         out.push(Member::Method(MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Public, Modifier::Static],
@@ -1019,26 +1067,25 @@ impl Desugarer<'_> {
             is_constructor: false,
         }));
 
-        // 6. `valueOf(String)`, con el `IllegalArgumentException` que manda §8.9.3 si no matchea.
+        // 6. `valueOf(String)`: delega en `java.lang.Enum.valueOf(Class, String)` con un `checkcast` a
+        //    `E`, byte a byte como javac (§8.9.3) — es `Enum.valueOf` la que valida el nombre y tira el
+        //    `IllegalArgumentException`. El `target` cualificado a `Enum` es imprescindible: sin él la
+        //    re-atribución auto-resolvería a `E.valueOf` (recursión infinita).
         let arg = "$n".to_string();
-        let mut stmts = Vec::new();
-        for c in &class.enum_constants {
-            let cmp = call(ex(ExprKind::StringLit(c.name.clone())), "equals", vec![name(&arg)]);
-            stmts.push(st(StmtKind::If {
-                cond: cmp,
-                then: boxst(StmtKind::Return(Some(name(&c.name)))),
-                els: None,
-            }));
-        }
-        stmts.push(st(StmtKind::Throw(ex(ExprKind::NewObject {
-            ty: Type::Class("IllegalArgumentException".to_string()),
-            args: Vec::new(),
-            body: None,
-            outer: None,
-        }))));
+        let vo_call = ex(ExprKind::Call {
+            target: Some(Box::new(name("Enum"))),
+            name: "valueOf".to_string(),
+            args: vec![ex(ExprKind::ClassLit(ety.clone())), name(&arg)],
+            type_args: Vec::new(),
+        });
+        let vo_body = Block(vec![st(StmtKind::Return(Some(ex(ExprKind::Cast {
+            ty: ety.clone(),
+            expr: Box::new(vo_call),
+        }))))]);
         let vo_params = vec![Param { annotations: Vec::new(), ty: string, name: arg, varargs: false, is_final: false, type_annos: Vec::new() }];
         self.register_method(cid, scope, "valueOf", &vo_params, &ety, false);
         out.push(Member::Method(MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Public, Modifier::Static],
@@ -1049,7 +1096,7 @@ impl Desugarer<'_> {
             params: vo_params,
             throws: Vec::new(),
             throws_annos: Vec::new(),
-            body: Some(Block(stmts)),
+            body: Some(vo_body),
             is_constructor: false,
         }));
 
@@ -1180,6 +1227,7 @@ impl Desugarer<'_> {
         self.table.set_resolved(fid, Resolved::Field(RType::Prim(PrimType::Boolean)));
 
         let decl = Member::Field(FieldDecl {
+            doc: None,
             annotations: Vec::new(),
             type_annos: Vec::new(),
             pos: Pos::default(),
@@ -1206,7 +1254,9 @@ impl Desugarer<'_> {
             // solo ve la forma **sentencia** del switch, nunca una switch-expresión en un `init`.
             // Una declaración de local es siempre hija directa de un bloque, así que este es el único
             // lugar donde hace falta partir una sentencia en dos (las demás posiciones se auto-contienen).
-            if matches!(&s.kind, StmtKind::LocalVar { init: Some(e), .. } if is_lowerable_switch_expr(e)) {
+            // Una switch-expresión de **pila** (selector `int`, brazos que dejan el valor en la pila)
+            // sobrevive entera al codegen: el `init` la consume con un `store`, sin temporal.
+            if matches!(&s.kind, StmtKind::LocalVar { init: Some(e), .. } if is_lowerable_switch_expr(e) && !self.is_stack_switch_expr(e)) {
                 let StmtKind::LocalVar { ty, name: var, init, .. } =
                     std::mem::replace(&mut s.kind, StmtKind::Empty)
                 else {
@@ -1788,6 +1838,7 @@ impl Desugarer<'_> {
         // Su tipo resuelto `int[]` — si no, `resolve_name` lo encuentra pero lo descarta.
         self.table.set_resolved(fid, Resolved::Field(RType::Array(Box::new(RType::Prim(PrimType::Int)))));
         let field_decl = Member::Field(FieldDecl {
+            doc: None,
             annotations: Vec::new(),
             type_annos: Vec::new(),
             pos: Pos::default(),
@@ -1804,14 +1855,51 @@ impl Desugarer<'_> {
         field
     }
 
+    /// ¿`e` es la switch-**expresión** que javac deja con el valor **en la pila**? Ese es el modelo
+    /// que emite [`Codegen::switch_expr`]: cada brazo `bipush v; goto join`, y el brazo físicamente
+    /// último **cae** al join sin `goto`; el contexto consume el valor (`ireturn`/`istore`). Cuando
+    /// esto vale, **no** hay que bajar la expresión a un temporal — el codegen la toma por los
+    /// caminos normales. Exige (espejo del predicado `simple` de `switch_expr`, más las condiciones
+    /// de un dispatch entero simple): selector `int` (no `String`/`enum`), `default` presente, cada
+    /// `case` default o (sin guarda, con etiquetas **constantes enteras**) y **todos** los brazos de
+    /// flecha con expresión o `throw`.
+    fn is_stack_switch_expr(&self, e: &Expr) -> bool {
+        let ExprKind::Switch { selector, cases } = &e.kind else { return false };
+        // Solo selector entero (int/short/byte/char): `String`/`enum` los baja su propia pasada.
+        if !matches!(
+            selector.ty,
+            Some(RType::Prim(PrimType::Int | PrimType::Short | PrimType::Byte | PrimType::Char))
+        ) {
+            return false;
+        }
+        if !cases.iter().any(|c| c.is_default) {
+            return false;
+        }
+        cases.iter().all(|c| {
+            (c.is_default
+                || (c.guard.is_none()
+                    && !c.labels.is_empty()
+                    && c.labels.iter().all(is_int_const_label)))
+                && is_arrow_value_or_throw(&c.body)
+        })
+    }
+
     /// Baja una switch-**expresión** que aparece como el valor directo de un `return`, un `yield` o
     /// una asignación simple (`x = switch…`). Las dos primeras necesitan un temporal `$s` (más un
     /// bloque que lo declara, asigna y usa); la asignación reescribe el switch para que sus brazos
     /// escriban `x` directamente. Ver [`is_lowerable_switch_expr`] para el subconjunto que bajamos.
     fn lower_switch_stmt(&mut self, s: &mut Stmt) {
+        // Una switch-expresión de **pila** (selector `int`, cada brazo deja el valor en la pila y el
+        // último cae al join sin `goto`) NO se baja a un temporal: el codegen la consume por los
+        // caminos normales — `return`→valor en pila→`ireturn`, `x = switch…`→`store`.
         let ok = match &s.kind {
-            StmtKind::Return(Some(e)) | StmtKind::Yield(e) => is_lowerable_switch_expr(e) && e.ty.is_some(),
-            StmtKind::Expr(e) => is_assign_switch(e),
+            StmtKind::Return(Some(e)) | StmtKind::Yield(e) => {
+                is_lowerable_switch_expr(e) && e.ty.is_some() && !self.is_stack_switch_expr(e)
+            }
+            StmtKind::Expr(e) => {
+                is_assign_switch(e)
+                    && !matches!(&e.kind, ExprKind::Assign { value, .. } if self.is_stack_switch_expr(value))
+            }
             _ => false,
         };
         if !ok {
@@ -2308,21 +2396,61 @@ impl Desugarer<'_> {
         matches!(ty, Some(RType::Class(id)) if self.table.symbol(*id).name == "String")
     }
 
-    /// `a + b + c` (concatenación) → `new StringBuilder().append(a).append(b).append(c).toString()`.
+    /// `a + b + c` (concatenación) → un `invokedynamic makeConcatWithConstants`, como javac 9+
+    /// (*StringConcat*). Se aplana la cadena de `+` y cada operando se clasifica:
+    ///
+    /// - **Dinámico** (no constante): se marca con `` en la receta, se **empuja** en el call site
+    ///   (pasa a `captures`) y su tipo se suma a los parámetros del descriptor.
+    /// - **Constante literal** (String/char/bool/int/long): su texto se **embebe** directamente en la
+    ///   receta (javac lo pasaría como argumento estático, pero embeberlo produce el mismo resultado y
+    ///   evita entradas en el pool). Float/double quedan dinámicos por ahora.
+    ///
+    /// Si **todos** los operandos son constantes, no hay call site: se pliega a un solo `StringLit`
+    /// (javac emite un `ldc`, no un indy vacío).
     fn lower_concat(&mut self, e: &mut Expr) {
         let ty = e.ty.clone();
         let old = std::mem::replace(&mut e.kind, ExprKind::Null);
         let mut operands = Vec::new();
         self.flatten_concat(Expr { kind: old, pos: e.pos, ty, binding: None, type_annos: Vec::new() }, &mut operands);
-        // Bajar cada operando (puede tener su propia azúcar anidada).
+        // Bajar cada operando (puede tener su propia azúcar anidada) antes de clasificarlo.
         operands.iter_mut().for_each(|op| self.expr(op));
 
-        let mut recv =
-            ex(ExprKind::NewObject { ty: Type::Class("StringBuilder".into()), args: vec![], body: None, outer: None });
+        let mut recipe = String::new();
+        let mut dyn_descs = String::new();
+        let mut captures: Vec<Expr> = Vec::new();
         for op in operands {
-            recv = call(recv, "append", vec![op]);
+            match concat_const(&op.kind) {
+                // Constante: se embebe su texto en la receta. Un literal que ya contenga un marcador
+                // de la receta se degrada a dinámico para no corromperla.
+                Some(text) if !text.contains([CONCAT_TAG_ARG, CONCAT_TAG_CONST]) => {
+                    recipe.push_str(&text);
+                }
+                _ => {
+                    recipe.push(CONCAT_TAG_ARG);
+                    dyn_descs.push_str(
+                        &op.ty.as_ref().map_or_else(|| "Ljava/lang/Object;".to_string(), |t| rtype_desc(self.table, t)),
+                    );
+                    captures.push(op);
+                }
+            }
         }
-        e.kind = call(recv, "toString", vec![]).kind;
+
+        // Todos constantes: sin call site, un literal plegado (`"a" + "b"` → `ldc "ab"`).
+        if captures.is_empty() {
+            e.kind = ExprKind::StringLit(recipe);
+            return;
+        }
+
+        let info = IndyCall {
+            name: "makeConcatWithConstants".to_string(),
+            descriptor: format!("({dyn_descs})Ljava/lang/String;"),
+            bootstrap_owner: "java/lang/invoke/StringConcatFactory".to_string(),
+            bootstrap_name: "makeConcatWithConstants".to_string(),
+            bootstrap_desc: STRING_CONCAT_DESC.to_string(),
+            bootstrap_args: vec![BootstrapArg::Str(recipe)],
+        };
+        e.kind = ExprKind::Indy { info: Box::new(info), captures };
+        // `e.ty` sigue siendo `String`: no se toca.
     }
 
     /// Aplana una cadena de `+` de tipo `String` en sus operandos hoja (izquierda a derecha). Se
@@ -2450,6 +2578,7 @@ impl Desugarer<'_> {
             modifiers.push(Modifier::Static);
         }
         self.lambda_methods.push(Member::Method(MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             return_annos: Vec::new(),
             pos: e.pos,
@@ -2737,6 +2866,7 @@ impl Desugarer<'_> {
         indy.ty = Some(indy_ty);
         let body = Block(vec![st(StmtKind::Return(Some(indy)))]);
         Member::Method(MethodDecl {
+            doc: None,
             annotations: Vec::new(),
             pos: Pos::default(),
             modifiers: vec![Modifier::Public, Modifier::Final],
@@ -2786,6 +2916,7 @@ impl Desugarer<'_> {
         class.members.insert(
             0,
             Member::Field(FieldDecl {
+                doc: None,
                 annotations: Vec::new(),
                 type_annos: Vec::new(),
                 pos: Pos::default(),
@@ -2830,6 +2961,7 @@ impl Desugarer<'_> {
             // Constructor por defecto: `public Inner(Outer this$0) { this.this$0 = this$0; }` (el
             // emisor le antepone el `super()` implícito).
             class.members.push(Member::Method(MethodDecl {
+                doc: None,
                 annotations: Vec::new(),
                 pos: Pos::default(),
                 modifiers: vec![Modifier::Public],
@@ -3091,6 +3223,7 @@ impl Desugarer<'_> {
             lc.members.insert(
                 0,
                 Member::Field(FieldDecl {
+                    doc: None,
                     annotations: Vec::new(),
                     type_annos: Vec::new(),
                     pos: Pos::default(),
@@ -3125,6 +3258,7 @@ impl Desugarer<'_> {
             }
         } else {
             lc.members.push(Member::Method(MethodDecl {
+                doc: None,
                 annotations: Vec::new(),
                 pos: Pos::default(),
                 modifiers: vec![Modifier::Public],
@@ -3252,6 +3386,20 @@ fn metafactory_indy(
             },
             BootstrapArg::MethodType(inst_desc),
         ],
+    }
+}
+
+/// El **texto de una constante** para embeber en la receta de `makeConcatWithConstants`, si el
+/// operando es un literal que se pliega en tiempo de compilación. Reconoce los literales que javac
+/// trata como constantes de compilación de una concatenación (String/char/bool/int/long); los
+/// `float`/`double` se dejan como argumentos dinámicos por ahora. Devuelve `None` para todo lo demás.
+fn concat_const(kind: &ExprKind) -> Option<String> {
+    match kind {
+        ExprKind::StringLit(s) => Some(s.clone()),
+        ExprKind::CharLit(c) => Some(c.to_string()),
+        ExprKind::BoolLit(b) => Some(b.to_string()),
+        ExprKind::IntLit(i) | ExprKind::LongLit(i) => Some(i.to_string()),
+        _ => None,
     }
 }
 
@@ -3540,6 +3688,21 @@ fn is_assign_switch(e: &Expr) -> bool {
 /// (`case X -> v`) o con `throw` no necesita la etiqueta; un bloque o la forma de dos puntos sí.
 fn is_arrow_value_or_throw(body: &SwitchBody) -> bool {
     matches!(body, SwitchBody::Arrow(s) if matches!(s.kind, StmtKind::Expr(_) | StmtKind::Throw(_)))
+}
+
+/// ¿La etiqueta es una **constante entera** que el emisor de `switch` entiende directo (`case 1`,
+/// `case 'a'`, con `-`/`+`/*cast* al frente)? Espejo de `const_int` del codegen: las que necesitan
+/// plegado (`case MAX`, `case 1 + 2`) caen fuera y siguen el camino con temporal.
+fn is_int_const_label(l: &CaseLabel) -> bool {
+    fn is_int_const(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::IntLit(_) | ExprKind::CharLit(_) => true,
+            ExprKind::Unary { op: UnOp::Neg | UnOp::Plus, expr, .. } => is_int_const(expr),
+            ExprKind::Cast { expr, .. } => is_int_const(expr),
+            _ => false,
+        }
+    }
+    matches!(l, CaseLabel::Constant(e) if is_int_const(e))
 }
 
 /// Una asignación simple fresca `target = value`.
@@ -3832,34 +3995,49 @@ mod tests {
     // ---- azúcar de expresiones ----
 
     #[test]
-    fn string_concat_becomes_a_stringbuilder_chain() {
+    fn string_concat_becomes_a_makeconcat_indy() {
         let unit = desugared("class C { String m(String a, int b) { return a + b; } }");
         let StmtKind::Return(Some(e)) = &body_of(&unit)[0].kind else { panic!() };
-        // Termina en un `.toString()`.
-        let ExprKind::Call { name, target, .. } = &e.kind else { panic!("{:?}", e.kind) };
-        assert_eq!(name, "toString");
-        // Cuyo receptor es un `.append(...)`.
-        let ExprKind::Call { name: inner, .. } = &target.as_ref().unwrap().kind else { panic!() };
-        assert_eq!(inner, "append");
+        let ExprKind::Indy { info, captures } = &e.kind else { panic!("{:?}", e.kind) };
+        assert_eq!(info.name, "makeConcatWithConstants");
+        assert_eq!(info.bootstrap_owner, "java/lang/invoke/StringConcatFactory");
+        assert_eq!(info.bootstrap_name, "makeConcatWithConstants");
+        assert_eq!(info.bootstrap_desc, STRING_CONCAT_DESC);
+        // Dos operandos dinámicos: `String` e `int`.
+        assert_eq!(info.descriptor, "(Ljava/lang/String;I)Ljava/lang/String;");
+        assert_eq!(captures.len(), 2, "se empujan ambos operandos");
+        // La receta son dos marcadores dinámicos, sin texto constante.
+        assert_eq!(info.bootstrap_args, vec![BootstrapArg::Str("\u{1}\u{1}".to_string())]);
     }
 
     #[test]
-    fn a_three_way_concat_flattens_to_three_appends() {
+    fn a_three_way_concat_captures_three_operands() {
         let unit = desugared("class C { String m(String a, int b, Object c) { return a + b + c; } }");
         let StmtKind::Return(Some(e)) = &body_of(&unit)[0].kind else { panic!() };
-        // toString ← append(c) ← append(b) ← append(a) ← new StringBuilder()
-        let mut appends = 0;
-        let mut cur = &e.kind;
-        while let ExprKind::Call { name, target, .. } = cur {
-            if name == "append" {
-                appends += 1;
-            }
-            match target {
-                Some(t) => cur = &t.kind,
-                None => break,
-            }
-        }
-        assert_eq!(appends, 3, "un append por operando");
+        let ExprKind::Indy { info, captures } = &e.kind else { panic!("{:?}", e.kind) };
+        assert_eq!(captures.len(), 3, "un push por operando dinámico");
+        assert_eq!(info.descriptor, "(Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;");
+        assert_eq!(info.bootstrap_args, vec![BootstrapArg::Str("\u{1}\u{1}\u{1}".to_string())]);
+    }
+
+    #[test]
+    fn concat_recipe_and_descriptor_embed_the_literal() {
+        // §StringConcat: `a + "=" + b` con `a:String`, `b:int` da la receta `"="` y el
+        // descriptor `(Ljava/lang/String;I)…` — verificado contra javac real.
+        let unit = desugared("class C { String m(String a, int b) { return a + \"=\" + b; } }");
+        let StmtKind::Return(Some(e)) = &body_of(&unit)[0].kind else { panic!() };
+        let ExprKind::Indy { info, captures } = &e.kind else { panic!("{:?}", e.kind) };
+        assert_eq!(info.descriptor, "(Ljava/lang/String;I)Ljava/lang/String;");
+        assert_eq!(captures.len(), 2, "el `=` es constante y no se empuja");
+        assert_eq!(info.bootstrap_args, vec![BootstrapArg::Str("\u{1}=\u{1}".to_string())]);
+    }
+
+    #[test]
+    fn concat_of_only_constants_folds_to_a_string_literal() {
+        // `"a" + "b"` es una constante de compilación: javac emite un `ldc`, no un indy vacío.
+        let unit = desugared("class C { String m() { return \"a\" + \"b\"; } }");
+        let StmtKind::Return(Some(e)) = &body_of(&unit)[0].kind else { panic!() };
+        assert!(matches!(&e.kind, ExprKind::StringLit(s) if s == "ab"), "plegado a \"ab\": {:?}", e.kind);
     }
 
     #[test]
@@ -3950,48 +4128,49 @@ mod tests {
 
     #[test]
     fn string_compound_assignment_lowers_the_concat_too() {
-        // `s += x` → `s = s + x` → cadena de StringBuilder (sin cast: el destino es `String`).
+        // `s += x` → `s = s + x` → un `makeConcatWithConstants` (sin cast: el destino es `String`).
         let unit = desugared("class C { void m(String s, int x) { s += x; } }");
         let StmtKind::Expr(e) = &body_of(&unit)[0].kind else { panic!() };
         let ExprKind::Assign { value, .. } = &e.kind else { panic!() };
-        assert!(
-            matches!(&value.kind, ExprKind::Call { name, .. } if name == "toString"),
-            "{:?}",
-            value.kind
-        );
+        let ExprKind::Indy { info, .. } = &value.kind else { panic!("{:?}", value.kind) };
+        assert_eq!(info.name, "makeConcatWithConstants");
+        assert_eq!(info.descriptor, "(Ljava/lang/String;I)Ljava/lang/String;");
     }
 
     // ---- switch-expresión ----
 
     #[test]
-    fn switch_expression_in_a_local_init_splits_into_decl_plus_switch_stmt() {
-        // `int r = switch(x){ case 1 -> 10; default -> 0; };`
+    fn switch_expression_in_a_local_init_survives_for_codegen() {
+        // `int r = switch(x){ case 1 -> 10; default -> 0; };` — switch de **pila**: NO se parte en
+        // decl + switch-sentencia; sobrevive entera y el codegen la consume con un `store`.
         let unit = desugared("class C { int m(int x) { int r = switch (x) { case 1 -> 10; default -> 0; }; return r; } }");
         let body = body_of(&unit);
-        // [0] la declaración sin init, [1] el switch-sentencia, [2] el return.
-        assert!(matches!(&body[0].kind, StmtKind::LocalVar { init: None, .. }), "decl sin init: {:?}", body[0].kind);
-        let StmtKind::Switch { cases, .. } = &body[1].kind else { panic!("esperaba switch-sentencia: {:?}", body[1].kind) };
-        // Cada brazo ahora **asigna** a `r`.
-        let SwitchBody::Arrow(arm) = &cases[0].body else { panic!() };
-        let StmtKind::Expr(e) = &arm.kind else { panic!("{:?}", arm.kind) };
-        assert!(matches!(e.kind, ExprKind::Assign { op: AssignOp::Assign, .. }), "el brazo asigna a r: {:?}", e.kind);
+        // [0] `int r = switch…` intacta (con init), [1] el return.
+        let StmtKind::LocalVar { init: Some(e), .. } = &body[0].kind else {
+            panic!("esperaba LocalVar con init: {:?}", body[0].kind)
+        };
+        assert!(matches!(e.kind, ExprKind::Switch { .. }), "el init sigue siendo una switch-expresión: {:?}", e.kind);
     }
 
     #[test]
-    fn switch_expression_in_a_return_uses_a_temp() {
-        // `return switch(x){...};` → `{ int $s; switch(x){ $s = ... }; return $s; }`
+    fn switch_expression_in_a_return_survives_for_codegen() {
+        // `return switch(x){...};` — switch de **pila**: NO usa temporal; el `return` la consume
+        // dejando el valor en la pila y haciendo `ireturn`.
         let unit = desugared("class C { int m(int x) { return switch (x) { case 1 -> 10; default -> 0; }; } }");
-        let StmtKind::Block(b) = &body_of(&unit)[0].kind else { panic!("{:?}", body_of(&unit)[0].kind) };
-        assert!(matches!(b.0[0].kind, StmtKind::LocalVar { init: None, .. }), "declara el temporal");
-        assert!(matches!(b.0[1].kind, StmtKind::Switch { .. }), "el switch-sentencia lo asigna");
-        assert!(matches!(b.0[2].kind, StmtKind::Return(Some(_))), "y retorna el temporal");
+        let StmtKind::Return(Some(e)) = &body_of(&unit)[0].kind else {
+            panic!("esperaba Return con valor: {:?}", body_of(&unit)[0].kind)
+        };
+        assert!(matches!(e.kind, ExprKind::Switch { .. }), "el return sigue siendo una switch-expresión: {:?}", e.kind);
     }
 
     #[test]
-    fn switch_expression_assigned_to_a_variable_becomes_a_switch_stmt() {
-        // `r = switch(x){...};` → `switch(x){ r = ... }` (sin temporal).
+    fn switch_expression_assigned_to_a_variable_survives_for_codegen() {
+        // `r = switch(x){...};` — switch de **pila**: NO se baja a switch-sentencia; queda como la
+        // asignación intacta y el codegen la consume con un `store`.
         let unit = desugared("class C { void m(int x) { int r = 0; r = switch (x) { case 1 -> 10; default -> 0; }; } }");
-        assert!(matches!(body_of(&unit)[1].kind, StmtKind::Switch { .. }), "{:?}", body_of(&unit)[1].kind);
+        let StmtKind::Expr(e) = &body_of(&unit)[1].kind else { panic!("{:?}", body_of(&unit)[1].kind) };
+        let ExprKind::Assign { value, .. } = &e.kind else { panic!("esperaba una asignación: {:?}", e.kind) };
+        assert!(matches!(value.kind, ExprKind::Switch { .. }), "el valor sigue siendo una switch-expresión: {:?}", value.kind);
     }
 
     #[test]

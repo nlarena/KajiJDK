@@ -190,11 +190,13 @@ fn collect_from_type(ty: &Type, out: &mut HashSet<String>) {
     match ty {
         Type::Class(name) => {
             out.insert(name.clone());
+            insert_outer_segments(name, out);
         }
         // Un parametrizado aporta su base **y** sus argumentos: `List<String>` necesita cargar
         // tanto `List` como `String`.
         Type::Parameterized { base, args } => {
             out.insert(base.clone());
+            insert_outer_segments(base, out);
             for a in args {
                 collect_from_type_arg(a, out);
             }
@@ -202,6 +204,18 @@ fn collect_from_type(ty: &Type, out: &mut HashSet<String>) {
         Type::Array(inner) => collect_from_type(inner, out),
         // Sin nombres de tipo que cargar (explícito, para que agregar una variante rompa acá).
         Type::Void | Type::Prim(_) | Type::Var => {}
+    }
+}
+
+/// Para un nombre **anidado** (`Map.Entry`, `Outer.Mid.Inner`), agrega los nombres de sus
+/// contenedores (`Map`; `Outer.Mid` y `Outer`) al conjunto a cargar. Sin cargar el **outer**, su
+/// `build_external` nunca registra el nested, y `Map.Entry` no resolvería en firma. Los segmentos que
+/// en realidad son paquete (`java.util`) simplemente no encuentran clase y no molestan.
+fn insert_outer_segments(name: &str, out: &mut HashSet<String>) {
+    let mut rest = name;
+    while let Some((outer, _)) = rest.rsplit_once('.') {
+        out.insert(outer.to_string());
+        rest = outer;
     }
 }
 
@@ -915,7 +929,18 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
         // `AbstractList` cargada —los externos se registran por nombre simple—, sin lo cual la
         // cadena de supertipos de un genérico del JDK quedaba rota (y la indulgencia, sin cerrar).
         let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
-        return table.class(&dotted).or_else(|| table.external(simple)).map(|id| (id, false));
+        if let Some(id) = table.class(&dotted).or_else(|| table.external(simple)) {
+            return Some((id, false));
+        }
+        // Tipo **anidado** `Outer.Inner` (`Map.Entry`, `Outer.Mid.Inner`): se parte en el **último**
+        // `.`, se resuelve el `outer` y se baja a su miembro-tipo. Es la misma bajada que hace el
+        // path de expresión (`nested_type`), traída a la posición de tipo.
+        if let Some((outer, inner)) = dotted.rsplit_once('.') {
+            if let Some((oid, _)) = resolve_name_to_sym(table, scope, outer) {
+                return super::attribute::nested_type_in(table, oid, inner).map(|id| (id, false));
+            }
+        }
+        return None;
     }
     if let Some(id) = table.resolve_type(scope, name) {
         let is_var = matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. });
@@ -1073,7 +1098,18 @@ fn resolve_class_name(table: &SymbolTable, scope: ScopeId, name: &str, imports: 
         return table.external(rest).is_some();
     }
     if name.contains('.') {
-        return table.class(name).is_some();
+        if table.class(name).is_some() {
+            return true;
+        }
+        // Tipo **anidado** `Outer.Inner` (`Map.Entry`, `Diagnostic.Kind`): resolver el `outer` y ver
+        // si tiene ese miembro-tipo. Sin esto, un tipo anidado en firma daba un falso "no se
+        // encuentra el símbolo" (la pasada 1 solo miraba `table.class` para los cualificados).
+        if let Some((outer, inner)) = name.rsplit_once('.') {
+            if let Some((oid, _)) = resolve_name_to_sym(table, scope, outer) {
+                return super::attribute::nested_type_in(table, oid, inner).is_some();
+            }
+        }
+        return false;
     }
     // Nombre simple:
     if table.resolve_type(scope, name).is_some() {
@@ -1586,6 +1622,7 @@ impl Hoister<'_> {
                 ExprKind::Call { target: None, name: "super".to_string(), args: super_args, type_args: Vec::new() },
             );
             members.push(Member::Method(MethodDecl {
+                doc: None,
                 annotations: Vec::new(),
                 return_annos: Vec::new(),
                 throws_annos: Vec::new(),
@@ -1641,6 +1678,7 @@ impl Hoister<'_> {
             .set_resolved(sym, Resolved::Class { super_type: super_rt, interface_types: iface_rts, permitted: Vec::new() });
 
         let decl = ClassDecl {
+            doc: None,
             pos: Pos::default(),
             annotations: Vec::new(),
             modifiers: Vec::new(),
