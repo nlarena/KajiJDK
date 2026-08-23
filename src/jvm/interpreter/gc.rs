@@ -1327,6 +1327,31 @@ mod tests {
         assert_eq!(run_with_kajilibrary("java/VmProbe.class", "p227"), None);
     }
 
+    /// `invokeinterface` with a **`String`** receiver (COMPILER_FINDINGS #225). `CharSequence cs
+    /// = "abc"; cs.length()` blew the interpreter up with an index-out-of-bounds — and since
+    /// `Matcher` works through `CharSequence`, it made all of `java.util.regex` unrunnable.
+    ///
+    /// Needs KajiLibrary on the bootclasspath: `boot/`'s `String` implements **no** interfaces at
+    /// all, so it cannot even express the call. Only the library that is actually developed
+    /// declares `implements Comparable<String>, CharSequence` — the #246 divergence again.
+    #[test]
+    fn invokeinterface_dispatches_on_a_string_receiver() {
+        assert_eq!(run_with_kajilibrary("java/VmProbe.class", "p225"), Some(Value::Int(3)));
+    }
+
+    /// `invokevirtual` through an **abstract** declaration (COMPILER_FINDINGS #230). Two
+    /// independent library sessions hit this; the A/B is in the fixture: the same body, the same
+    /// class, the same static type — the only variable is whether the method overrides an
+    /// `abstract` one. `build_vtable` skips any method `resolve_method` cannot resolve, and
+    /// `resolve_method` gives up on a member with no `Code`, so an abstract declaration never took
+    /// a slot — and the call site, which reads the slot off the **static** type, found nothing.
+    #[test]
+    fn invokevirtual_dispatches_through_an_abstract_declaration() {
+        assert_eq!(run_int("java/AbsProbe.class"), 7); // por el tipo abstracto
+        assert_eq!(run_int_method("java/AbsProbe.class", "viaConcrete"), 7); // control
+        assert_eq!(run_int_method("java/AbsProbe.class", "viaExact"), 7); // control
+    }
+
     fn run_int(class_file: &str) -> i32 {
         use crate::jvm::class_file::ClassFile;
         use crate::jvm::interpreter::bytecode_interpreter::execute;

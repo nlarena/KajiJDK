@@ -198,26 +198,8 @@ impl Exec<'_> {
         // frame, so nothing returns to advance the pc — we do it here). The name and descriptor
         // are the selected method's own, which are the call site's: a vtable slot holds one
         // signature across the whole hierarchy, and a private target resolved on both.
-        if self.shared.metaspace.is_native(callee) {
-            let (native_class, name, descriptor) = {
-                let m = &self.shared.metaspace;
-                (m.class_of(callee).to_string(), m.name(callee).to_string(), m.descriptor(callee).to_string())
-            };
-            let result = natives::dispatch(
-                &native_class,
-                &name,
-                &descriptor,
-                &locals,
-                &mut self.shared.metaspace,
-                &mut self.shared.heap,
-                &mut self.shared.console,
-                &mut self.shared.apt,
-            );
-            if let Some(value) = result {
-                self.top().push(value);
-            }
-            self.advance_past_call();
-            return Step::Continue;
+        if let Some(step) = self.dispatch_bodiless(callee, &locals) {
+            return step;
         }
 
         let max_locals = self.shared.metaspace.max_locals(callee);
@@ -226,6 +208,50 @@ impl Exec<'_> {
         // Slot widths: the receiver (1) then each parameter (`long`/`double` = 2) — read off the
         // callee's precomputed table instead of re-parsing its descriptor into a fresh `Vec`.
         self.push_frame_locked(callee, max_locals, locals, Widths::OfCallee { receiver: true }, lock)
+    }
+
+    /// Handles a callee that has **no `Code`**, so that one never reaches `push_frame_locked`.
+    ///
+    /// Runs it on the **native bridge** when it is native: hands it the popped
+    /// `[receiver, args...]`, pushes whatever it returns, and steps past the call (there is no
+    /// frame, so nothing returns to advance the pc). `Some` means it was handled; `None` means
+    /// the method is an ordinary one and the caller should push a frame.
+    ///
+    /// Shared by `invokevirtual` and `invokeinterface` deliberately. A native has **no `Code`**,
+    /// so pushing a frame for one leaves the dispatch loop indexing an empty code slice — which
+    /// is precisely how an `invokeinterface` with a `String` receiver took the whole interpreter
+    /// down (COMPILER_FINDINGS #225). `String`'s primitives are all `native`, and only
+    /// `invokevirtual` was asking the question. One funnel, so the next opcode that dispatches
+    /// dynamically cannot forget to ask.
+    pub(super) fn dispatch_bodiless(&mut self, callee: MethodId, locals: &[Value]) -> Option<Step> {
+        // `abstract`: bodiless because there is nothing to run. It resolves — that is what lets it
+        // hold a vtable slot, so an override lands where the call site looks (COMPILER_FINDINGS
+        // #230) — but selecting one at dispatch time is JVMS §6.5's `AbstractMethodError`.
+        if self.shared.metaspace.is_abstract(callee) {
+            return Some(self.throw_exception("java/lang/AbstractMethodError"));
+        }
+        if !self.shared.metaspace.is_native(callee) {
+            return None;
+        }
+        let (native_class, name, descriptor) = {
+            let m = &self.shared.metaspace;
+            (m.class_of(callee).to_string(), m.name(callee).to_string(), m.descriptor(callee).to_string())
+        };
+        let result = natives::dispatch(
+            &native_class,
+            &name,
+            &descriptor,
+            locals,
+            &mut self.shared.metaspace,
+            &mut self.shared.heap,
+            &mut self.shared.console,
+            &mut self.shared.apt,
+        );
+        if let Some(value) = result {
+            self.top().push(value);
+        }
+        self.advance_past_call();
+        Some(Step::Continue)
     }
 
     /// The `(static class, name, descriptor)` an `invokevirtual`'s `Methodref` names — the only

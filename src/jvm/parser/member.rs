@@ -42,6 +42,14 @@ impl MemberInfo {
         self.access_flags & 0x0100 != 0
     }
 
+    /// Whether `ACC_ABSTRACT` (0x0400) is set. On a *method* it means the declaration carries no
+    /// `Code`: a body the class promises but does not supply. It still occupies a place in the
+    /// type — a subclass override has to land on **that** declaration's vtable slot — which is
+    /// why the metaspace resolves it to a real `MethodId` rather than treating it as absent.
+    pub fn is_abstract(&self) -> bool {
+        self.access_flags & 0x0400 != 0
+    }
+
     /// Whether `ACC_SYNCHRONIZED` (0x0020) is set. For a *method*, this is the whole
     /// signal that it is `synchronized`: there are **no** `monitorenter`/`monitorexit`
     /// opcodes in the body (unlike a `synchronized` *block*), so the VM must take the

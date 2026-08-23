@@ -196,6 +196,12 @@ struct MethodBody {
     /// `true` for a `native` method (no bytecode): the interpreter dispatches it to
     /// the native bridge instead of pushing a frame.
     native_: bool,
+    /// `true` for an `abstract` method — also bodiless, but for the opposite reason: there is
+    /// nothing to run, and selecting one at dispatch time is an `AbstractMethodError` (§6.5).
+    /// It is resolved anyway because it must **hold a vtable slot**: the call site reads the slot
+    /// off the *static* type, so if the abstract declaration has no slot, every override of it is
+    /// unreachable through the type that declares it (COMPILER_FINDINGS #230).
+    abstract_: bool,
     /// `true` for a `synchronized` method (`ACC_SYNCHRONIZED`). There is no opcode for
     /// it — the VM takes the receiver's (or `Class`'s) monitor when it pushes the frame
     /// and releases it when the frame is popped. See `JVM::push_frame_locked`.
@@ -473,7 +479,17 @@ impl MetaspaceService {
                 ),
                 None => continue,
             };
-            if declared.iter().any(|(n, d)| self.resolve_method(&iface, n, d).is_some()) {
+            // "Declares a default method" means declaring one **with a body**. This used to read
+            // `resolve_method(...).is_some()`, which worked only because an abstract method failed
+            // to resolve at all; now that it resolves (so it can hold a vtable slot, #230) the
+            // question has to be asked directly, which is what it always meant.
+            let declares_default = declared.iter().any(|(n, d)| {
+                match self.resolve_method(&iface, n, d) {
+                    Some(m) => !self.is_abstract(m),
+                    None => false,
+                }
+            });
+            if declares_default {
                 with_defaults.push(iface);
             }
             for s in supers {
@@ -611,8 +627,11 @@ impl MetaspaceService {
                 if entries.iter().any(|e| e.name == name && e.descriptor == descriptor) {
                     continue; // already provided by the class hierarchy or a more-specific default
                 }
-                let Some(method) = self.resolve_method(&iface, &name, &descriptor) else {
-                    continue; // abstract (no Code) — declares the signature, provides nothing
+                let Some(method) = self
+                    .resolve_method(&iface, &name, &descriptor)
+                    .filter(|&m| !self.is_abstract(m))
+                else {
+                    continue; // abstract — declares the signature, provides nothing to inherit
                 };
                 entries.push(VtableEntry { name, descriptor, method });
             }
@@ -808,7 +827,7 @@ impl MetaspaceService {
             return Some(id);
         }
         self.get_or_load(class)?; // make sure the class is loaded
-        let (max_locals, code, exceptions, native_, synchronized_, static_) = {
+        let (max_locals, code, exceptions, native_, abstract_, synchronized_, static_) = {
             let cf = self.classes.get(class)?;
             let member = cf.methods.iter().find(|m| {
                 cf.utf8(m.name_index) == Some(name)
@@ -818,10 +837,16 @@ impl MetaspaceService {
             if member.is_native() {
                 // Native: no `Code`. We still record a body so it has a `MethodId`;
                 // the invoke checks `is_native` and dispatches to the native bridge.
-                (0, Vec::new(), Vec::new(), true, synchronized_, static_)
+                (0, Vec::new(), Vec::new(), true, false, synchronized_, static_)
+            } else if member.is_abstract() {
+                // Abstract: no `Code` either, and for the same practical reason it must still
+                // resolve — a `MethodId` is what lets it take a vtable slot, and the slot is what
+                // an override replaces. Skipping it here is what made a call through an abstract
+                // declaration miss the table entirely (COMPILER_FINDINGS #230).
+                (0, Vec::new(), Vec::new(), false, true, synchronized_, static_)
             } else {
                 let body = cf.member_code(member)?;
-                (body.max_locals as usize, body.code, body.exception_table, false, synchronized_, static_)
+                (body.max_locals as usize, body.code, body.exception_table, false, false, synchronized_, static_)
             }
         };
         let id = self.methods.len();
@@ -860,6 +885,7 @@ impl MetaspaceService {
             code,
             exceptions,
             native_,
+            abstract_,
             synchronized_,
             static_,
             field_sites,
@@ -897,6 +923,12 @@ impl MetaspaceService {
     /// Whether a resolved method is `native` (no bytecode → dispatched to the bridge).
     pub fn is_native(&self, method: MethodId) -> bool {
         self.methods[method].native_
+    }
+
+    /// Whether a resolved method is `abstract` — bodiless, and an `AbstractMethodError` if a
+    /// dispatch ever selects it (JVMS §6.5).
+    pub fn is_abstract(&self, method: MethodId) -> bool {
+        self.methods[method].abstract_
     }
 
     /// Whether a resolved method is `synchronized` (`ACC_SYNCHRONIZED`) — the VM takes
