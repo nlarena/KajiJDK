@@ -59,13 +59,7 @@ public abstract class Buffer {
      * @throws IllegalArgumentException if {@code newPosition} is negative or past the limit
      */
     public Buffer position(int newPosition) {
-        if (newPosition > limit || newPosition < 0) {
-            throw new IllegalArgumentException("position out of bounds");
-        }
-        position = newPosition;
-        if (mark > position) {
-            mark = -1;
-        }
+        setPosition(newPosition);
         return this;
     }
 
@@ -86,16 +80,7 @@ public abstract class Buffer {
      * @throws IllegalArgumentException if {@code newLimit} is negative or past the capacity
      */
     public Buffer limit(int newLimit) {
-        if (newLimit > capacity || newLimit < 0) {
-            throw new IllegalArgumentException("limit out of bounds");
-        }
-        limit = newLimit;
-        if (position > limit) {
-            position = limit;
-        }
-        if (mark > limit) {
-            mark = -1;
-        }
+        setLimit(newLimit);
         return this;
     }
 
@@ -105,7 +90,7 @@ public abstract class Buffer {
      * @return this buffer
      */
     public Buffer mark() {
-        mark = position;
+        setMark();
         return this;
     }
 
@@ -116,10 +101,7 @@ public abstract class Buffer {
      * @throws InvalidMarkException if no mark is set, or the mark was discarded
      */
     public Buffer reset() {
-        if (mark < 0) {
-            throw new InvalidMarkException();
-        }
-        position = mark;
+        resetToMark();
         return this;
     }
 
@@ -130,9 +112,7 @@ public abstract class Buffer {
      * @return this buffer
      */
     public Buffer clear() {
-        position = 0;
-        limit = capacity;
-        mark = -1;
+        clearIndices();
         return this;
     }
 
@@ -143,9 +123,7 @@ public abstract class Buffer {
      * @return this buffer
      */
     public Buffer flip() {
-        limit = position;
-        position = 0;
-        mark = -1;
+        flipIndices();
         return this;
     }
 
@@ -155,8 +133,7 @@ public abstract class Buffer {
      * @return this buffer
      */
     public Buffer rewind() {
-        position = 0;
-        mark = -1;
+        rewindIndices();
         return this;
     }
 
@@ -218,6 +195,31 @@ public abstract class Buffer {
     public abstract boolean isDirect();
 
     /**
+     * Returns the object this buffer's elements actually live in, or {@code null} when there is
+     * none.
+     *
+     * <p>Not the same question as {@link #array()}, which is the caller-facing accessor and
+     * refuses to answer for a read-only buffer. This one is the implementation's own handle on
+     * the storage and always tells the truth: the backing array for a heap buffer, {@code null}
+     * for a view over a {@link ByteBuffer} — a view owns nothing, it decodes.
+     *
+     * @return the backing object, or {@code null}
+     */
+    abstract Object base();
+
+    /**
+     * Returns how far an element index has to be shifted left to become a byte offset — 0 for a
+     * byte buffer, 1 for {@code char} and {@code short}, 2 for {@code int} and {@code float},
+     * 3 for {@code long} and {@code double}.
+     *
+     * <p>A shift rather than a multiplication because every element width in the language is a
+     * power of two, which is also why the bulk operations can be written once for all six types.
+     *
+     * @return the base-two logarithm of this buffer's element size in bytes
+     */
+    abstract int scaleShifts();
+
+    /**
      * Creates a buffer over this buffer's remaining elements, sharing the backing memory.
      *
      * @return the new buffer
@@ -241,6 +243,122 @@ public abstract class Buffer {
     public abstract Buffer duplicate();
 
     // ---- helpers para las subclases ----
+
+    // ---- el trabajo real de los siete mutadores de indices ----
+    //
+    // Cada subclase tipada vuelve a declarar `position(int)`, `limit(int)`, `mark()`, `reset()`,
+    // `clear()`, `flip()` y `rewind()` para devolver SU tipo (asi una cadena de llamadas no se
+    // degrada a `Buffer`). En el JDK esos override llaman a `super.position(...)`; nuestro javac
+    // todavia no genera `invokespecial` para `super.metodo()` ("el generador de bytecode todavia
+    // no soporta `super`"), asi que el cuerpo vive aca, en metodos `final` que nadie sobreescribe,
+    // y tanto Buffer como las subclases los invocan por nombre. Es el mismo codigo una sola vez;
+    // lo unico que se pierde es la forma de escribirlo.
+
+    final void setPosition(int newPosition) {
+        if (newPosition > limit || newPosition < 0) {
+            throw createPositionException(newPosition);
+        }
+        position = newPosition;
+        if (mark > position) {
+            mark = -1;
+        }
+    }
+
+    final void setLimit(int newLimit) {
+        if (newLimit > capacity || newLimit < 0) {
+            throw createLimitException(newLimit);
+        }
+        limit = newLimit;
+        if (position > limit) {
+            position = limit;
+        }
+        if (mark > limit) {
+            mark = -1;
+        }
+    }
+
+    final void setMark() {
+        mark = position;
+    }
+
+    final void resetToMark() {
+        if (mark < 0) {
+            throw new InvalidMarkException();
+        }
+        position = mark;
+    }
+
+    final void clearIndices() {
+        position = 0;
+        limit = capacity;
+        mark = -1;
+    }
+
+    final void flipIndices() {
+        limit = position;
+        position = 0;
+        mark = -1;
+    }
+
+    final void rewindIndices() {
+        position = 0;
+        mark = -1;
+    }
+
+    /**
+     * The exception for "you handed a buffer to itself", which every bulk {@code put} has to
+     * reject: the copy would read the same elements it is overwriting.
+     */
+    static IllegalArgumentException createSameBufferException() {
+        return new IllegalArgumentException("The source buffer is this buffer");
+    }
+
+    /** The exception for a negative capacity, shared by every {@code allocate}. */
+    static IllegalArgumentException createCapacityException(int capacity) {
+        return new IllegalArgumentException("capacity < 0: (" + capacity + " < 0)");
+    }
+
+    private IllegalArgumentException createPositionException(int newPosition) {
+        String reason;
+        if (newPosition > limit) {
+            reason = "newPosition > limit: (" + newPosition + " > " + limit + ")";
+        } else {
+            reason = "newPosition < 0: (" + newPosition + " < 0)";
+        }
+        return new IllegalArgumentException(reason);
+    }
+
+    private IllegalArgumentException createLimitException(int newLimit) {
+        String reason;
+        if (newLimit > capacity) {
+            reason = "newLimit > capacity: (" + newLimit + " > " + capacity + ")";
+        } else {
+            reason = "newLimit < 0: (" + newLimit + " < 0)";
+        }
+        return new IllegalArgumentException(reason);
+    }
+
+    /** The current mark, or −1 if none — what a subclass has to carry into a duplicate. */
+    final int markValue() {
+        return mark;
+    }
+
+    /** Forgets the mark. */
+    final void discardMark() {
+        mark = -1;
+    }
+
+    /**
+     * Validates a range against a plain array's length, for the bulk accessors.
+     *
+     * <p>The single-comparison trick is the JDK's: a negative offset, a negative length, an
+     * overflowing sum or a range past the end all set the sign bit of the {@code or}.
+     */
+    static void checkBounds(int off, int len, int size) {
+        if ((off | len | (off + len) | (size - (off + len))) < 0) {
+            throw new IndexOutOfBoundsException("range out of bounds for array of length " + size);
+        }
+    }
 
     /** The index for a relative read of one element, advancing the position. */
     final int nextGetIndex() {

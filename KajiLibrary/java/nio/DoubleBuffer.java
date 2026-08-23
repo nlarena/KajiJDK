@@ -10,17 +10,26 @@ package java.nio;
  *
  * <p>The interesting asymmetry is with {@link ByteBuffer}: bytes are what actually travel, so
  * only that class can reinterpret its contents at other widths. A {@code DoubleBuffer} is either
- * allocated on its own or obtained as a <em>view</em> over some bytes — and the view is where the
- * byte order stops being an implementation detail.
+ * allocated on its own — and then it owns a {@code double[]} — or obtained as a <em>view</em> over
+ * some bytes via {@link ByteBuffer#asDoubleBuffer()}, and then it owns nothing and every access is
+ * decoded from the bytes underneath. That second case is why {@link #hb} may be {@code null} and
+ * why the bulk operations below are written in terms of {@link #get(int)} and
+ * {@link #put(int, double)} rather than reaching into the array: a view has no array to reach into.
  *
  * <p><strong>Omitted from this implementation</strong> (the API-shape gate requires a subset, not
- * equality): the view factories and the bulk {@code put(DoubleBuffer)} form.
+ * equality): everything that needs {@code Unsafe}, {@code MemorySegment} or a scoped session —
+ * {@code heapSegment(...)} and the {@code MemorySegment} constructors — because there is no
+ * off-heap memory here at all.
  */
 public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBuffer> {
 
+    /**
+     * The backing array, or {@code null} for a view over a {@link ByteBuffer}. Every accessor
+     * that touches it has to ask first; that is the whole cost of supporting views.
+     */
     final double[] hb;
     final int offset;
-    boolean readOnly;
+    boolean isReadOnly;
 
     DoubleBuffer(double[] hb, int offset, int capacity) {
         super(capacity);
@@ -39,7 +48,7 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      */
     public static DoubleBuffer allocate(int capacity) {
         if (capacity < 0) {
-            throw new IllegalArgumentException("negative capacity");
+            throw Buffer.createCapacityException(capacity);
         }
         return new HeapDoubleBuffer(new double[capacity], 0, capacity);
     }
@@ -72,14 +81,14 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
     }
 
     /**
-     * Creates a buffer over this buffer's remaining elements, sharing the backing array.
+     * Creates a buffer over this buffer's remaining elements, sharing the backing memory.
      *
      * @return the new buffer, whose position is zero and whose capacity is the remaining count
      */
     public abstract DoubleBuffer slice();
 
     /**
-     * Creates a buffer over the given range of this one, sharing the backing array.
+     * Creates a buffer over the given range of this one, sharing the backing memory.
      *
      * @param index the first element of the slice
      * @param length the number of elements in the slice
@@ -88,7 +97,7 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
     public abstract DoubleBuffer slice(int index, int length);
 
     /**
-     * Creates a buffer sharing this one's backing array but with its own position, limit and
+     * Creates a buffer sharing this one's backing memory but with its own position, limit and
      * mark — two independent cursors over one piece of memory.
      *
      * @return the new buffer
@@ -150,10 +159,11 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      * @throws BufferUnderflowException if fewer than {@code length} elements remain
      */
     public DoubleBuffer get(double[] dst, int off, int length) {
+        Buffer.checkBounds(off, length, dst.length);
         int from = nextGetIndex(length);
         int i = 0;
         while (i < length) {
-            dst[off + i] = hb[offset + from + i];
+            dst[off + i] = get(from + i);
             i = i + 1;
         }
         return this;
@@ -171,6 +181,46 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
     }
 
     /**
+     * Copies elements starting at an absolute index into part of an array. The position does
+     * not move — this is the bulk form of {@link #get(int)}, and the reason a single buffer can
+     * be read from more than one place at a time.
+     *
+     * @param index the first element of this buffer to read
+     * @param dst the array to copy into
+     * @param off the first index of {@code dst} to write
+     * @param length the number of elements to copy
+     * @return this buffer
+     * @throws IndexOutOfBoundsException if either range falls outside its container
+     */
+    public DoubleBuffer get(int index, double[] dst, int off, int length) {
+        checkIndex(index, length);
+        Buffer.checkBounds(off, length, dst.length);
+        return getArray(index, dst, off, length);
+    }
+
+    /** The unchecked copy behind the absolute bulk {@code get}. */
+    private DoubleBuffer getArray(int index, double[] dst, int off, int length) {
+        int i = 0;
+        while (i < length) {
+            dst[off + i] = get(index + i);
+            i = i + 1;
+        }
+        return this;
+    }
+
+    /**
+     * Fills an array from this buffer starting at an absolute index, without moving the position.
+     *
+     * @param index the first element of this buffer to read
+     * @param dst the array to fill
+     * @return this buffer
+     * @throws IndexOutOfBoundsException if the range falls outside this buffer
+     */
+    public DoubleBuffer get(int index, double[] dst) {
+        return get(index, dst, 0, dst.length);
+    }
+
+    /**
      * Copies part of an array into this buffer, advancing the position.
      *
      * @param src the array to copy from
@@ -182,10 +232,11 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      */
     public DoubleBuffer put(double[] src, int off, int length) {
         checkWritable();
+        Buffer.checkBounds(off, length, src.length);
         int to = nextPutIndex(length);
         int i = 0;
         while (i < length) {
-            hb[offset + to + i] = src[off + i];
+            put(to + i, src[off + i]);
             i = i + 1;
         }
         return this;
@@ -199,8 +250,108 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      * @throws BufferOverflowException if fewer than {@code src.length} elements of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public DoubleBuffer put(double[] src) {
+    public final DoubleBuffer put(double[] src) {
         return put(src, 0, src.length);
+    }
+
+    /**
+     * Copies part of an array into this buffer at an absolute index, without moving the position.
+     *
+     * @param index the first element of this buffer to write
+     * @param src the array to copy from
+     * @param off the first index of {@code src} to read
+     * @param length the number of elements to copy
+     * @return this buffer
+     * @throws IndexOutOfBoundsException if either range falls outside its container
+     * @throws ReadOnlyBufferException if this buffer is read-only
+     */
+    public DoubleBuffer put(int index, double[] src, int off, int length) {
+        checkWritable();
+        checkIndex(index, length);
+        Buffer.checkBounds(off, length, src.length);
+        return putArray(index, src, off, length);
+    }
+
+    /** The unchecked copy behind the absolute bulk {@code put}. */
+    DoubleBuffer putArray(int index, double[] src, int off, int length) {
+        int i = 0;
+        while (i < length) {
+            put(index + i, src[off + i]);
+            i = i + 1;
+        }
+        return this;
+    }
+
+    /**
+     * Copies a whole array into this buffer at an absolute index, without moving the position.
+     *
+     * @param index the first element of this buffer to write
+     * @param src the array to copy from
+     * @return this buffer
+     * @throws IndexOutOfBoundsException if the range falls outside this buffer
+     * @throws ReadOnlyBufferException if this buffer is read-only
+     */
+    public DoubleBuffer put(int index, double[] src) {
+        return put(index, src, 0, src.length);
+    }
+
+    /**
+     * Drains another buffer into this one: every element remaining in {@code src} is written
+     * here, and <em>both</em> positions advance. That both move is the point — this is the
+     * hand-off between a buffer that was just filled and one about to be drained.
+     *
+     * @param src the buffer to copy from
+     * @return this buffer
+     * @throws BufferOverflowException if {@code src} has more remaining than this buffer
+     * @throws IllegalArgumentException if {@code src} is this buffer
+     * @throws ReadOnlyBufferException if this buffer is read-only
+     */
+    public DoubleBuffer put(DoubleBuffer src) {
+        if (src == this) {
+            throw Buffer.createSameBufferException();
+        }
+        checkWritable();
+        int n = src.remaining();
+        if (n > remaining()) {
+            throw new BufferOverflowException();
+        }
+        int to = nextPutIndex(n);
+        int from = src.nextGetIndex(n);
+        int i = 0;
+        while (i < n) {
+            put(to + i, src.get(from + i));
+            i = i + 1;
+        }
+        return this;
+    }
+
+    /**
+     * Copies a range of another buffer into this one at an absolute index. Neither position
+     * moves; both ranges are absolute.
+     *
+     * @param index the first element of this buffer to write
+     * @param src the buffer to copy from
+     * @param off the first element of {@code src} to read
+     * @param length the number of elements to copy
+     * @return this buffer
+     * @throws IndexOutOfBoundsException if either range falls outside its buffer
+     * @throws ReadOnlyBufferException if this buffer is read-only
+     */
+    public DoubleBuffer put(int index, DoubleBuffer src, int off, int length) {
+        checkWritable();
+        checkIndex(index, length);
+        src.checkIndex(off, length);
+        putBuffer(index, src, off, length);
+        return this;
+    }
+
+    /** The unchecked copy behind {@link #put(int, DoubleBuffer, int, int)}. */
+    void putBuffer(int index, DoubleBuffer src, int off, int length) {
+        int i = 0;
+        while (i < length) {
+            put(index + i, src.get(off + i));
+            i = i + 1;
+        }
     }
 
     /**
@@ -212,46 +363,43 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      * @return this buffer
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public DoubleBuffer compact() {
-        checkWritable();
-        int n = remaining();
-        int from = position();
-        int i = 0;
-        while (i < n) {
-            hb[offset + i] = hb[offset + from + i];
-            i = i + 1;
-        }
-        position(n);
-        limit(capacity());
-        return this;
-    }
+    public abstract DoubleBuffer compact();
 
     /**
      * Tells whether this buffer's memory lives outside the Java heap.
      *
      * @return always {@code false} — KajiLibrary has no off-heap allocation
      */
-    public boolean isDirect() {
-        return false;
-    }
+    public abstract boolean isDirect();
 
     /**
      * Tells whether this buffer exposes an accessible backing array.
      *
-     * @return {@code true} unless this buffer is read-only
+     * @return {@code true} only for a writable buffer that owns an array; a read-only buffer and
+     *         a view over a {@link ByteBuffer} both say no
      */
-    public boolean hasArray() {
-        return !readOnly;
+    public final boolean hasArray() {
+        return hb != null && !isReadOnly;
     }
 
     /**
      * Returns the backing array.
      *
+     * <p><strong>Declared {@code Object} rather than {@code double[]}</strong>, unlike the JDK: our
+     * javac rejects an override that narrows {@code Object} to an array type ("byte[] no es un
+     * subtipo de Object"), so the covariant form does not compile. The JDK's own bridge method
+     * has exactly this signature, so callers that were compiled against {@code Buffer} see no
+     * difference; callers that want the array must cast.
+     *
      * @return the array this buffer reads and writes
      * @throws ReadOnlyBufferException if this buffer is read-only
+     * @throws UnsupportedOperationException if this buffer is a view and owns no array
      */
     public Object array() {
-        if (readOnly) {
+        if (hb == null) {
+            throw new UnsupportedOperationException("view buffer has no backing array");
+        }
+        if (isReadOnly) {
             throw new ReadOnlyBufferException();
         }
         return (Object) hb;
@@ -262,12 +410,93 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      *
      * @return the offset of element zero within the array
      * @throws ReadOnlyBufferException if this buffer is read-only
+     * @throws UnsupportedOperationException if this buffer is a view and owns no array
      */
-    public int arrayOffset() {
-        if (readOnly) {
+    public final int arrayOffset() {
+        if (hb == null) {
+            throw new UnsupportedOperationException("view buffer has no backing array");
+        }
+        if (isReadOnly) {
             throw new ReadOnlyBufferException();
         }
         return offset;
+    }
+
+    /**
+     * Sets the position. Declared here only to return the precise type, so that a chain of
+     * buffer calls keeps its type.
+     *
+     * <p>The JDK's version of these seven overrides calls {@code super.position(...)}; ours
+     * calls the package-private {@code setPosition} in {@link Buffer} instead, because our javac
+     * does not emit {@code invokespecial} for {@code super.method()} yet. Same code, one place.
+     *
+     * @param newPosition the new position
+     * @return this buffer
+     */
+    public final DoubleBuffer position(int newPosition) {
+        setPosition(newPosition);
+        return this;
+    }
+
+    /**
+     * Sets the limit.
+     *
+     * @param newLimit the new limit
+     * @return this buffer
+     */
+    public final DoubleBuffer limit(int newLimit) {
+        setLimit(newLimit);
+        return this;
+    }
+
+    /**
+     * Remembers the current position.
+     *
+     * @return this buffer
+     */
+    public final DoubleBuffer mark() {
+        setMark();
+        return this;
+    }
+
+    /**
+     * Moves the position back to the mark.
+     *
+     * @return this buffer
+     */
+    public final DoubleBuffer reset() {
+        resetToMark();
+        return this;
+    }
+
+    /**
+     * Resets the indices for writing from scratch.
+     *
+     * @return this buffer
+     */
+    public final DoubleBuffer clear() {
+        clearIndices();
+        return this;
+    }
+
+    /**
+     * Turns a written buffer into a readable one.
+     *
+     * @return this buffer
+     */
+    public final DoubleBuffer flip() {
+        flipIndices();
+        return this;
+    }
+
+    /**
+     * Rewinds to position zero, keeping the limit.
+     *
+     * @return this buffer
+     */
+    public final DoubleBuffer rewind() {
+        rewindIndices();
+        return this;
     }
 
     /**
@@ -280,8 +509,31 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      */
     public abstract ByteOrder order();
 
+    /**
+     * Returns the array this buffer's elements live in, or {@code null} for a view over a
+     * {@link ByteBuffer}.
+     *
+     * <p>Not the same question as {@link #array()}: that one is the caller-facing accessor and
+     * refuses to answer for a read-only buffer, while this is the implementation's own handle on
+     * the storage and always tells the truth.
+     *
+     * @return the backing array, or {@code null}
+     */
+    Object base() {
+        return (Object) hb;
+    }
+
+    /**
+     * Returns the shift that turns an element index into a byte offset.
+     *
+     * @return 3, because a double is eight bytes wide
+     */
+    int scaleShifts() {
+        return 3;
+    }
+
     final void checkWritable() {
-        if (readOnly) {
+        if (isReadOnly) {
             throw new ReadOnlyBufferException();
         }
     }
@@ -334,27 +586,81 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
      * @return a negative number, zero or a positive number as this buffer is less than, equal to
      *         or greater than {@code that}
      */
+    /**
+     * The three-way comparison of two elements.
+     *
+     * <p>Split out of {@link #compareTo} because a buffer needs a <em>total</em> order over its
+     * element type, and {@code <} does not give one here: {@code NaN} compares false against
+     * everything, itself included. The order below is the one {@code Float.compare} defines —
+     * {@code NaN} sorts above every number and equals itself — so that sorting a buffer of
+     * {@code double} terminates and {@code compareTo} stays consistent with itself.
+     *
+     * @param x the first element
+     * @param y the second element
+     * @return a negative number, zero or a positive number as {@code x} is less than, equal to
+     *         or greater than {@code y}
+     */
+    private static int compare(double x, double y) {
+        if (x < y) {
+            return -1;
+        }
+        if (x > y) {
+            return 1;
+        }
+        if (x == y) {
+            return 0;
+        }
+        if (x != x) {
+            if (y != y) {
+                return 0;
+            }
+            return 1;
+        }
+        return -1;
+    }
+
     public int compareTo(DoubleBuffer that) {
         int n = remaining();
         if (that.remaining() < n) {
             n = that.remaining();
         }
-        int result = remaining() - that.remaining();
         int i = 0;
-        boolean decided = false;
-        while (i < n && !decided) {
-            double a = get(position() + i);
-            double b = that.get(that.position() + i);
-            if (a != b) {
-                result = -1;
-                if (a > b) {
-                    result = 1;
-                }
-                decided = true;
+        while (i < n) {
+            int c = compare(get(position() + i), that.get(that.position() + i));
+            if (c != 0) {
+                return c;
             }
             i = i + 1;
         }
-        return result;
+        return remaining() - that.remaining();
+    }
+
+    /**
+     * Returns the index of the first element where this buffer and {@code that} disagree,
+     * relative to their positions, or {@code -1} if the shared prefix runs to the end of both.
+     *
+     * <p>When one is a strict prefix of the other the answer is the shorter length: the buffers
+     * do differ, and the first place they do is where the shorter one ended.
+     *
+     * @param that the buffer to compare with
+     * @return the relative index of the first mismatch, or {@code -1}
+     */
+    public int mismatch(DoubleBuffer that) {
+        int length = remaining();
+        if (that.remaining() < length) {
+            length = that.remaining();
+        }
+        int i = 0;
+        while (i < length) {
+            if (get(position() + i) != that.get(that.position() + i)) {
+                return i;
+            }
+            i = i + 1;
+        }
+        if (remaining() != that.remaining()) {
+            return length;
+        }
+        return -1;
     }
 
     /**
@@ -369,8 +675,11 @@ public abstract class DoubleBuffer extends Buffer implements Comparable<DoubleBu
 
 /**
  * The heap implementation of {@link DoubleBuffer}. Top-level and package-private rather than
- * nested — the project's idiom for a helper type — and skipped by the API-shape gate, which has
- * no JDK counterpart to compare it against.
+ * nested — the project's idiom for a helper type.
+ *
+ * <p>Everything here is either a method the abstract class left open or an array fast path for
+ * a bulk operation the abstract class can only express one element at a time (it has to work
+ * for views, which have no array).
  */
 class HeapDoubleBuffer extends DoubleBuffer {
 
@@ -378,15 +687,29 @@ class HeapDoubleBuffer extends DoubleBuffer {
         super(hb, offset, capacity);
     }
 
+    /**
+     * Translates a buffer index into an index in the backing array.
+     *
+     * <p>The offset exists because a slice shares its parent's array and starts partway into it;
+     * every access here goes through this one place so that the arithmetic is written once.
+     *
+     * @param i the buffer index
+     * @return the corresponding index in {@code hb}
+     */
+    protected int ix(int i) {
+        return offset + i;
+    }
+
     public DoubleBuffer slice() {
         HeapDoubleBuffer b = new HeapDoubleBuffer(hb, offset + position(), remaining());
-        b.readOnly = readOnly;
+        b.isReadOnly = isReadOnly;
         return b;
     }
 
     public DoubleBuffer slice(int index, int length) {
+        checkIndex(index, length);
         HeapDoubleBuffer b = new HeapDoubleBuffer(hb, offset + index, length);
-        b.readOnly = readOnly;
+        b.isReadOnly = isReadOnly;
         return b;
     }
 
@@ -394,13 +717,13 @@ class HeapDoubleBuffer extends DoubleBuffer {
         HeapDoubleBuffer b = new HeapDoubleBuffer(hb, offset, capacity());
         b.position(position());
         b.limit(limit());
-        b.readOnly = readOnly;
+        b.isReadOnly = isReadOnly;
         return b;
     }
 
     public DoubleBuffer asReadOnlyBuffer() {
         HeapDoubleBuffer b = (HeapDoubleBuffer) duplicate();
-        b.readOnly = true;
+        b.isReadOnly = true;
         return b;
     }
 
@@ -414,26 +737,156 @@ class HeapDoubleBuffer extends DoubleBuffer {
      * @return {@code true} if this buffer is read-only
      */
     public boolean isReadOnly() {
-        return readOnly;
+        return isReadOnly;
+    }
+
+    public boolean isDirect() {
+        return false;
     }
 
     public double get() {
-        return hb[offset + nextGetIndex()];
+        return hb[ix(nextGetIndex())];
     }
 
     public double get(int index) {
-        return hb[offset + checkIndex(index)];
+        return hb[ix(checkIndex(index))];
     }
 
     public DoubleBuffer put(double value) {
         checkWritable();
-        hb[offset + nextPutIndex()] = value;
+        hb[ix(nextPutIndex())] = value;
         return this;
     }
 
     public DoubleBuffer put(int index, double value) {
         checkWritable();
-        hb[offset + checkIndex(index)] = value;
+        hb[ix(checkIndex(index))] = value;
+        return this;
+    }
+
+    public DoubleBuffer get(double[] dst, int off, int length) {
+        Buffer.checkBounds(off, length, dst.length);
+        int from = nextGetIndex(length);
+        int i = 0;
+        while (i < length) {
+            dst[off + i] = hb[offset + from + i];
+            i = i + 1;
+        }
+        return this;
+    }
+
+    public DoubleBuffer get(int index, double[] dst, int off, int length) {
+        checkIndex(index, length);
+        Buffer.checkBounds(off, length, dst.length);
+        int i = 0;
+        while (i < length) {
+            dst[off + i] = hb[offset + index + i];
+            i = i + 1;
+        }
+        return this;
+    }
+
+    public DoubleBuffer put(double[] src, int off, int length) {
+        checkWritable();
+        Buffer.checkBounds(off, length, src.length);
+        int to = nextPutIndex(length);
+        int i = 0;
+        while (i < length) {
+            hb[offset + to + i] = src[off + i];
+            i = i + 1;
+        }
+        return this;
+    }
+
+    public DoubleBuffer put(int index, double[] src, int off, int length) {
+        checkWritable();
+        checkIndex(index, length);
+        Buffer.checkBounds(off, length, src.length);
+        int i = 0;
+        while (i < length) {
+            hb[offset + index + i] = src[off + i];
+            i = i + 1;
+        }
+        return this;
+    }
+
+    /**
+     * Drains another buffer into this one, copying array to array when the source has one.
+     *
+     * <p>The abstract class can only do this one element at a time, because it also has to work
+     * for a view over a {@link ByteBuffer}, which owns no array. Here both sides usually do.
+     *
+     * @param src the buffer to copy from
+     * @return this buffer
+     * @throws BufferOverflowException if {@code src} has more remaining than this buffer
+     * @throws IllegalArgumentException if {@code src} is this buffer
+     * @throws ReadOnlyBufferException if this buffer is read-only
+     */
+    public DoubleBuffer put(DoubleBuffer src) {
+        if (src == this) {
+            throw Buffer.createSameBufferException();
+        }
+        checkWritable();
+        int n = src.remaining();
+        if (n > remaining()) {
+            throw new BufferOverflowException();
+        }
+        int to = nextPutIndex(n);
+        int from = src.nextGetIndex(n);
+        int i = 0;
+        if (src.hb != null) {
+            while (i < n) {
+                hb[offset + to + i] = src.hb[src.offset + from + i];
+                i = i + 1;
+            }
+        } else {
+            while (i < n) {
+                hb[offset + to + i] = src.get(from + i);
+                i = i + 1;
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Copies a range of another buffer into this one at an absolute index, array to array when
+     * the source has one. Neither position moves.
+     *
+     * @param index the first element of this buffer to write
+     * @param src the buffer to copy from
+     * @param off the first element of {@code src} to read
+     * @param length the number of elements to copy
+     * @return this buffer
+     * @throws IndexOutOfBoundsException if either range falls outside its buffer
+     * @throws ReadOnlyBufferException if this buffer is read-only
+     */
+    public DoubleBuffer put(int index, DoubleBuffer src, int off, int length) {
+        checkWritable();
+        checkIndex(index, length);
+        src.checkIndex(off, length);
+        if (src.hb == null) {
+            putBuffer(index, src, off, length);
+            return this;
+        }
+        int i = 0;
+        while (i < length) {
+            hb[offset + index + i] = src.hb[src.offset + off + i];
+            i = i + 1;
+        }
+        return this;
+    }
+
+    public DoubleBuffer compact() {
+        checkWritable();
+        int n = remaining();
+        int from = position();
+        int i = 0;
+        while (i < n) {
+            hb[offset + i] = hb[offset + from + i];
+            i = i + 1;
+        }
+        position(n);
+        limit(capacity());
         return this;
     }
 
