@@ -157,6 +157,52 @@ impl ClassFile {
         let this_class = reader.read_u16()?;
         let super_class = reader.read_u16()?;
 
+        // --- §4.1 rules on `super_class`. Checked *here* because the reader is the last place
+        //     that sees a class file before the rest of the VM starts trusting it. Our own
+        //     `javac` once emitted `java.lang.Object` with `super_class` pointing at itself
+        //     (COMPILER_FINDINGS #6): the loader took it, and the superclass walk had nowhere
+        //     to stop. ---
+        {
+            const ACC_MODULE: u16 = 0x8000;
+            // The class name behind a `CONSTANT_Class` index, before the `ClassFile` (and its
+            // `class_name`) exists. `None` means the index names something else, or nothing.
+            let name_of = |index: u16| -> Option<&str> {
+                if index == 0 {
+                    return None;
+                }
+                let name_index = match constant_pool.get((index - 1) as usize)? {
+                    ConstantPoolEntry::Class { name_index } => *name_index,
+                    _ => return None,
+                };
+                match constant_pool.get((name_index - 1) as usize)? {
+                    ConstantPoolEntry::Utf8(name) => Some(name),
+                    _ => None,
+                }
+            };
+            if super_class != 0 && super_class == this_class {
+                return Err(ParseError::BadSuperClass(format!(
+                    "#{super_class} names the class itself"
+                )));
+            }
+            if super_class == 0 {
+                // Zero is legal for exactly two shapes: `java/lang/Object`, the root of the
+                // hierarchy, and a module descriptor (§4.7.25), which has no hierarchy at all.
+                // The second half is not a detail — every `module-info.class` we produce has it,
+                // so a check written as "zero means Object" would break `jlink`.
+                let is_object = name_of(this_class) == Some("java/lang/Object");
+                if !is_object && access_flags & ACC_MODULE == 0 {
+                    return Err(ParseError::BadSuperClass(format!(
+                        "zero on `{}`, which is neither java/lang/Object nor a module",
+                        name_of(this_class).unwrap_or("?")
+                    )));
+                }
+            } else if name_of(super_class).is_none() {
+                return Err(ParseError::BadSuperClass(format!(
+                    "#{super_class} does not index a CONSTANT_Class"
+                )));
+            }
+        }
+
         // --- interfaces: a u2 count, then that many u2 class indices ---
         let interfaces_count = reader.read_u16()?;
         let mut interfaces = Vec::with_capacity(interfaces_count as usize);
@@ -470,6 +516,35 @@ impl ClassFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// JVMS §4.1: a class may not be its own superclass. Our `javac` emitted exactly that for
+    /// `java.lang.Object` (COMPILER_FINDINGS #6) and the loader took it without a word, so the
+    /// superclass walk had nowhere to stop. The compiler side is fixed; this pins the *reader*.
+    #[test]
+    fn a_class_may_not_be_its_own_superclass() {
+        use crate::javac::class_writer::ClassFile as Writer;
+        let mut writer = Writer::new();
+        writer.access_flags = 0x0021; // ACC_PUBLIC | ACC_SUPER
+        writer.this_class = writer.pool.class("SelfSuper");
+        writer.super_class = writer.this_class; // the defect
+        match ClassFile::from_bytes(&writer.to_bytes()) {
+            Ok(_) => panic!("a self-referential super_class was accepted"),
+            Err(e) => assert!(
+                e.to_string().contains("super_class"),
+                "rejected, but not for the super_class rule: {e}"
+            ),
+        }
+    }
+
+    /// The other half of §4.1, and the reason the obvious rule is wrong: `super_class == 0` is
+    /// legal for `java/lang/Object` **and** for a module descriptor (ACC_MODULE, §4.7.25). A
+    /// check written as "zero means Object" rejects every `module-info.class` in the tree — both
+    /// of ours, which is what a scan of all 1684 class files turned up.
+    #[test]
+    fn object_and_module_info_may_declare_no_superclass() {
+        assert!(ClassFile::from_path("boot/java/lang/Object.class").is_ok());
+        assert!(ClassFile::from_path("KajiLibrary/module-info.class").is_ok());
+    }
 
     /// True if the constant pool contains a Utf8 entry equal to `text`.
     fn has_utf8(class_file: &ClassFile, text: &str) -> bool {

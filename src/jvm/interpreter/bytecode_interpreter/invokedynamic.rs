@@ -315,22 +315,38 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             let mut ctor_args = vec![Value::Reference(object)];
             ctor_args.extend(args.iter().cloned());
             self.call_java(ctor, ctor_args, &widths);
-            self.top().push(Value::Reference(object));
+            // The constructor is real code and can throw; a parked exception means there is no
+            // object to push (the `0xba` handler delivers it instead of stepping over the call).
+            if !self.threw() {
+                self.top().push(Value::Reference(object));
+            }
         }
         Bootstrap::ObjectMethods { method, record_class, components } => {
             match method.as_str() {
+                // Each of the three calls the components' own `toString`/`hashCode`/`equals` —
+                // arbitrary user code, which can throw. When it does, the value computed here is
+                // meaningless (the loops read a failed call as "the component has no such method")
+                // and must NOT be pushed: the exception is parked, and the `0xba` handler throws it
+                // instead of stepping over the call site.
                 "toString" => {
                     let text = record_to_string(self, record_class, components, &args);
-                    let offset = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
-                    self.top().push(Value::Reference(offset));
+                    if !self.threw() {
+                        let offset =
+                            strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
+                        self.top().push(Value::Reference(offset));
+                    }
                 }
                 "hashCode" => {
                     let hash = record_hash_code(self, record_class, components, &args);
-                    self.top().push(Value::Int(hash));
+                    if !self.threw() {
+                        self.top().push(Value::Int(hash));
+                    }
                 }
                 "equals" => {
                     let equal = record_equals(self, record_class, components, &args);
-                    self.top().push(Value::Int(equal as i32));
+                    if !self.threw() {
+                        self.top().push(Value::Int(equal as i32));
+                    }
                 }
                 other => panic!(
                     "ObjectMethods: unknown call site name '{other}' \
@@ -623,6 +639,9 @@ pub(super) fn text_of(&mut self, object: usize) -> String {
     match self.call_virtual(object, "toString", "()Ljava/lang/String;", Vec::new()) {
         Some(Value::Reference(0)) => "null".to_string(),
         Some(Value::Reference(text)) => strings::read(&self.shared.heap, text),
+        // The call threw. There is no text, and the `None` arm below must not read that as
+        // "this class declares no toString" — the caller checks `threw()` and drops the result.
+        None if self.threw() => String::new(),
         // Our `java.lang.Object` declares no `toString`, so a class that defines none has
         // no text to give. Java would answer `Class@hash`; inventing that here would be
         // guessing at a format nothing has asked us to match yet.

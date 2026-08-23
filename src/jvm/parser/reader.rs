@@ -36,6 +36,10 @@ pub enum ParseError {
     BadConstantTag(u8),
     /// A Utf8 constant held invalid (modified) UTF-8.
     BadUtf8,
+    /// `super_class` broke one of the §4.1 rules: it names the class itself, it is zero on a
+    /// class file that is neither `java/lang/Object` nor a module descriptor, or it does not
+    /// index a `CONSTANT_Class`.
+    BadSuperClass(String),
     /// A `StackMapTable` frame type we don't decode yet.
     UnsupportedStackMapFrame(u8),
     /// A `verification_type_info` tag outside the 0–8 range (JVM spec §4.7.4).
@@ -55,6 +59,7 @@ impl fmt::Display for ParseError {
             }
             ParseError::BadConstantTag(tag) => write!(f, "unknown constant pool tag: {tag}"),
             ParseError::BadUtf8 => write!(f, "invalid modified UTF-8 in a Utf8 constant"),
+            ParseError::BadSuperClass(why) => write!(f, "invalid super_class: {why}"),
             ParseError::UnsupportedStackMapFrame(t) => {
                 write!(f, "unsupported StackMapTable frame type: {t}")
             }
