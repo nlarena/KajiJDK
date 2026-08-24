@@ -3605,7 +3605,17 @@ impl Exec<'_> {
         if self.threw() {
             return None;
         }
-        Some(objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, class))
+        // **Old, no Eden.** El driver de APT guarda estas referencias en estado de *Rust* — el
+        // `Vec` de instancias de processors, el `roundEnv` de la ronda, el cache `reified` — y el
+        // estado de Rust no es raíz del GC: el colector recorre `threads[*].frames` y nada más. Un
+        // minor movía el objeto joven y el driver seguía despachando sobre el offset viejo: la
+        // segunda ronda no corría, en silencio. Alocar en Old los deja quietos ante un minor, que
+        // es la misma decisión que `AptContext::reify` ya había tomado para su cache.
+        //
+        // Residual, y a propósito: un **major compactante** sí mueve Old, así que esto es una
+        // mitigación, no una prueba. El arreglo de fondo es que las referencias vivas del driver
+        // sean raíces que el colector visite, como lo es el cache de condy.
+        Some(objects_operations::allocate_old(&mut self.shared.metaspace, &mut self.shared.heap, class))
     }
 
     /// Resuelve un método `class.name descriptor` a su [`MethodId`] (cargando la clase si hace

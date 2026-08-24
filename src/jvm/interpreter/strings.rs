@@ -1,11 +1,19 @@
 //! Minimal `java.lang.String` support — enough to load a string literal (`ldc`) and
 //! print it. A real `String` is backed by a `byte[] value` field; we keep it simpler
-//! and lay the UTF-8 bytes *inline* in the String object, so the text lives in the
-//! heap like everything else:
+//! and lay the text *inline* in the String object, so it lives in the heap like
+//! everything else:
 //!
 //! ```text
-//! [ class_id(4) | mark(4) | length(4) | utf8 bytes... ]
+//! [ class_id(4) | mark(4) | length(4) | utf16 code units (2 bytes each)... ]
 //! ```
+//!
+//! The units are **UTF-16**, because that is what a Java `String` is: `length()` counts code
+//! units and `charAt` returns one, so a supplementary character is two of them. This used to be
+//! UTF-8 bytes with the byte count as the length, which made every non-ASCII literal wrong in
+//! both directions — `"ñ".length()` answered 2, and `charAt(0)` handed back `0xC3`, the first
+//! byte of the encoding rather than the character (COMPILER_FINDINGS #229). The class reader
+//! already decodes modified UTF-8 (surrogate pairs included) into real scalar values, so the
+//! text arriving here is correct; only the storage was lossy.
 //!
 //! No interning/dedup yet (each `ldc` makes a fresh object), so `"a" == "a"` would be
 //! false here — fine for printing, a refinement for later.
@@ -15,10 +23,12 @@ use super::bytecode_interpreter::objects_operations::HEADER_SIZE;
 use super::heap::HeapService;
 use super::metaspace::MetaspaceService;
 
-/// The `length` word (in bytes of UTF-8) sits right after the object header.
+/// The `length` word (in UTF-16 code units) sits right after the object header.
 const LENGTH_OFFSET: usize = HEADER_SIZE;
-/// The UTF-8 payload starts after the header + length word.
+/// The payload starts after the header + length word.
 const STRING_HEADER: usize = HEADER_SIZE + 4;
+/// Bytes per UTF-16 code unit.
+const UNIT_SIZE: usize = 2;
 
 /// Allocates a `java.lang.String` on the heap holding `text`, and returns its offset.
 /// Loads `String`'s mirror first so the header's `class_id` points at it (an `ldc`
@@ -28,28 +38,32 @@ pub fn intern(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &s
     let uuid = metaspace.class_id("java/lang/String").to_string();
     let mirror = metaspace.class_object(&uuid).unwrap_or(0);
 
-    let bytes = text.as_bytes();
-    let offset = heap.malloc(STRING_HEADER + bytes.len());
+    // `encode_utf16` is the whole conversion: a scalar above U+FFFF becomes its surrogate pair,
+    // which is exactly how Java counts it.
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let offset = heap.malloc(STRING_HEADER + units.len() * UNIT_SIZE);
     heap.write_u32(offset, mirror as u32);
-    heap.write_u32(offset + LENGTH_OFFSET, bytes.len() as u32);
-    for (i, &byte) in bytes.iter().enumerate() {
-        heap.write_u8(offset + STRING_HEADER + i, byte);
+    heap.write_u32(offset + LENGTH_OFFSET, units.len() as u32);
+    for (i, &unit) in units.iter().enumerate() {
+        heap.write_u16(offset + STRING_HEADER + i * UNIT_SIZE, unit);
     }
     offset
 }
 
-/// Reads the text of the `String` object at `offset` back out of the heap.
+/// Reads the text of the `String` object at `offset` back out of the heap. A lone surrogate is
+/// replaced rather than rejected — Java allows one to sit in a `String`, Rust's `String` cannot
+/// hold it, and the only consumers of this are diagnostics and native bridges.
 pub fn read(heap: &HeapService, offset: usize) -> String {
-    let bytes = heap.read_bytes(offset + STRING_HEADER, length(heap, offset));
-    String::from_utf8_lossy(&bytes).into_owned()
+    let units: Vec<u16> = (0..length(heap, offset)).map(|i| char_at(heap, offset, i)).collect();
+    String::from_utf16_lossy(&units)
 }
 
-/// The length (in UTF-8 bytes) of the `String` object at `offset`.
+/// The length of the `String` at `offset`, in **UTF-16 code units** — `String.length()`.
 pub fn length(heap: &HeapService, offset: usize) -> usize {
     heap.read_u32(offset + LENGTH_OFFSET) as usize
 }
 
-/// The `i`-th byte of the `String` at `offset` — `charAt` for ASCII text.
-pub fn char_at(heap: &HeapService, offset: usize, i: usize) -> u8 {
-    heap.read_u8(offset + STRING_HEADER + i)
+/// The `i`-th UTF-16 code unit of the `String` at `offset` — `String.charAt`.
+pub fn char_at(heap: &HeapService, offset: usize, i: usize) -> u16 {
+    heap.read_u16(offset + STRING_HEADER + i * UNIT_SIZE)
 }

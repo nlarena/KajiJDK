@@ -1352,6 +1352,29 @@ mod tests {
         assert_eq!(run_int_method("java/AbsProbe.class", "viaExact"), 7); // control
     }
 
+    /// A `String` is **UTF-16** (COMPILER_FINDINGS #229). The VM laid the UTF-8 bytes inline and
+    /// called the byte count `length`, so every non-ASCII literal was wrong in both directions:
+    /// `"ñ".length()` answered 2 and `charAt(0)` handed back `0xC3`, the first byte of the
+    /// encoding, instead of the character.
+    ///
+    /// The fixture is compiled with the **real** javac (`-encoding UTF-8`): its `CONSTANT_Utf8`
+    /// carries proper modified UTF-8, including the surrogate pair for the astral character —
+    /// which our class reader already decodes correctly. The loss happened afterwards, on the way
+    /// into the heap.
+    #[test]
+    fn a_string_is_measured_in_utf16_code_units() {
+        let at = |m| run_int_method("java/Utf16Probe.class", m);
+        assert_eq!(at("lenAscii"), 3); // control: ASCII ya andaba
+        assert_eq!(at("len1"), 1); // U+00F1: 1 unidad, 2 bytes UTF-8
+        assert_eq!(at("charAt1"), 0x00F1);
+        assert_eq!(at("len3"), 1); // U+20AC: 1 unidad, 3 bytes UTF-8
+        assert_eq!(at("charAt3"), 0x20AC);
+        assert_eq!(at("lenMixed"), 3); // "añb"
+        assert_eq!(at("charAtMixed"), 'b' as i32);
+        assert_eq!(at("lenAstral"), 2); // U+1D160: par subrogado = 2 unidades
+        assert_eq!(at("charAtAstral"), 0xD834); // la mitad alta
+    }
+
     fn run_int(class_file: &str) -> i32 {
         use crate::jvm::class_file::ClassFile;
         use crate::jvm::interpreter::bytecode_interpreter::execute;
