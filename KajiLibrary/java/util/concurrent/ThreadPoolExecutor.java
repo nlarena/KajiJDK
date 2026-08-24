@@ -57,6 +57,15 @@ public class ThreadPoolExecutor implements ExecutorService {
     }
 
     public void execute(Runnable command) {
+        executeNow(command);
+    }
+
+    // The body of execute(), under a name a subclass can still reach. A subclass that
+    // overrides execute() to mean something else — ScheduledThreadPoolExecutor overrides it
+    // to mean "schedule with zero delay" — needs a way back to the plain pool submission,
+    // and `super.execute(...)` does not compile here (finding #125: no invokespecial for
+    // `super.method()`). Package-private, so it changes nothing observable.
+    final void executeNow(Runnable command) {
         if (command == null) {
             throw new NullPointerException();
         }
@@ -99,6 +108,11 @@ public class ThreadPoolExecutor implements ExecutorService {
     }
 
     public void shutdown() {
+        shutdownInternal();
+    }
+
+    // Same seam as executeNow, for the same reason.
+    final void shutdownInternal() {
         synchronized (sync) {
             shutdown = true;
             // With no worker left to drain it, an already-idle pool is done right away.
@@ -179,6 +193,11 @@ public class ThreadPoolExecutor implements ExecutorService {
     }
 
     public BlockingQueue<Runnable> getQueue() {
+        return workQueue;
+    }
+
+    // Same seam again: a subclass that overrides getQueue() cannot call through to this one.
+    final BlockingQueue<Runnable> queue() {
         return workQueue;
     }
 
