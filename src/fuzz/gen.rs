@@ -102,15 +102,51 @@
 //! turn a `double` into one is the very conversion under test. [`emit_classifier`] is the answer,
 //! and it states its own limitation.
 //!
+//! # Objects, and the one thing that is actually being tested
+//!
+//! `new`, `getfield`, `putfield` and `invokevirtual` are in the grammar, over a **fixed four-class
+//! hierarchy** ([`ObjClass`]) the program carries with it. All four instructions are inside the
+//! JIT's subset, which makes this the first stage that costs no coverage by construction rather
+//! than by measurement — though it is measured anyway, in
+//! `fuzz::campaigns::jit_coverage::what_each_grammar_setting_costs_in_jit_coverage`.
+//!
+//! What the stage is *for* is the **inline cache**. The JIT gives every dispatched call site a
+//! cell holding the class it last saw and the body it bound to, and a guard comparing the
+//! receiver's class against it. Two things can happen there and they are opposites:
+//!
+//! - the guard **holds**, and the call is a direct one inside native code;
+//! - the guard **fails**, and the site *deopts*: native code is left, the interpreter's locals,
+//!   operand stack and pc are reconstructed from the compiled frame, and execution resumes.
+//!
+//! That second path is the critical one, and nothing generated could reach it before. It needs one
+//! bytecode call site whose receiver's class changes between executions of that same site — which
+//! in this grammar means a reassignment inside a loop over a name declared outside it — and rolling
+//! that shape out of the ordinary distribution would happen a few times in a thousand seeds. So it
+//! is **planted**: [`Gen::dispatch_shape`] puts a monomorphic site, a polymorphic one, or one of
+//! each at the head of the entry method, and folds what they compute into the method's result so
+//! the work is actually observable. Both halves of that sentence are FZ-004's lesson applied before
+//! the fact rather than after.
+//!
+//! ## Determinism, given that objects have identity
+//!
+//! Property 2 says the grammar cannot express a non-reproducible value, and an object's identity is
+//! exactly such a value. The rule is not "never allocate one" — it is that identity is never
+//! **observed**: there is no node that compares two references, no `hashCode`, no `toString`, and
+//! [`Ty`] has no reference type, so an identity has nowhere to flow. What survives of an object is
+//! its fields and which body a call dispatched to, both of which are functions of the program
+//! alone. That is enforced by absence, like the rest of property 2, and checked by
+//! `nothing_non_deterministic_can_be_expressed`.
+//!
 //! # What is out of scope in this version
 //!
 //! Written down because an unstated scope is indistinguishable from an oversight:
 //!
 //! | left out | why |
 //! |---|---|
-//! | objects, `new`, fields, virtual calls | needs the heap and the GC in the comparison; a large step, and object *identity* is a determinism hazard. The valuable half is the **inline cache** — a monomorphic site that always hits next to a polymorphic one that misses and deopts — and nothing generated tests it today |
+//! | interface dispatch | `invokeinterface` shares the JIT's inline-cache path with `invokevirtual` but resolves through an itable rather than a vtable, so it is a genuinely different lookup. It needs an interface-typed local, which is a second static type in [`Scope`]; the next step, not this one |
+//! | reference **fields** | a `putfield` of a reference needs the GC's write barrier, which this JIT tier answers `Ineligible` for. Every method touching one would leave the compiled arm — FZ-004 wearing the write barrier's hat. The first thing to add when the barrier lands |
 //! | multi-dimensional arrays | `multianewarray` is outside the JIT's subset "and not narrowly" (`burst::compile`); a one-dimensional array already reaches every guard worth reaching |
-//! | `null` arrays | an `NullPointerException` from `arraylength` is a real JIT deopt path, but a `null` in the grammar needs a reference type in [`Ty`], which is the objects step |
+//! | `null` **arrays** | the deopt path is now covered by a `null` *receiver* ([`Stmt::NewObject`]), which reaches the same guard from a place the grammar can already express. An array variable that may be `null` needs a reference type in [`Ty`], and objects deliberately avoided that — see below |
 //! | strings | `jvm::interpreter::strings` is being given its interning table **right now**, so the expected answer to a string comparison is the thing in flux. Generating them today would manufacture divergences nobody could classify. The first thing to add once that lands |
 //! | NaN **payloads** | the one corner of IEEE that Java leaves implementation-defined; [`emit_classifier`] collapses every NaN to one code deliberately |
 //! | `char`, `byte`, `short`, `boolean` locals | narrowing conversions are a real bug source, but they multiply the type context before it has earned it |
@@ -150,9 +186,16 @@ pub mod marks {
     pub const ARITHMETIC: i32 = 0x5AFE_0001u32 as i32;
     /// `ArrayIndexOutOfBoundsException`: an index outside `[0, length)`.
     pub const BOUNDS: i32 = 0x5AFE_0002u32 as i32;
-    /// `NullPointerException`. Reserved; objects are out of scope in this version.
+    /// `NullPointerException`: a `getfield`, `putfield` or `invokevirtual` on a `null` receiver.
+    ///
+    /// Reachable since objects entered the grammar, and worth more than it looks: in compiled code
+    /// none of the three *throws*, they **deopt** — the null check leaves native code and hands the
+    /// pc back to the interpreter, which raises what the compiled code declined to. So this marker
+    /// arriving from both engines is a statement about a boundary crossing, exactly as
+    /// [`BOUNDS`] is.
     pub const NULL: i32 = 0x5AFE_0003u32 as i32;
-    /// `ClassCastException`. Reserved.
+    /// `ClassCastException`. Reserved; the grammar has no `checkcast` — every object local is
+    /// declared at the base type and never narrowed.
     pub const CLASS_CAST: i32 = 0x5AFE_0004u32 as i32;
     /// `StackOverflowError`. Reserved; the call graph is a DAG, so it should be unreachable.
     pub const STACK_OVERFLOW: i32 = 0x5AFE_0005u32 as i32;
@@ -533,6 +576,110 @@ impl CmpOp {
     }
 }
 
+/// One of the four classes of the **fixed hierarchy** a program carries when it uses objects.
+///
+/// # Why the hierarchy is fixed and the *use* is generated
+///
+/// The dimension that matters for this stage is not the shape of the class graph — it is **how many
+/// distinct receiver classes reach one call site, and in what order**. That is a property of the
+/// code around the call, not of the classes, so the classes are a constant and the interesting
+/// variation goes where it pays: which class each `new` picks, how often the receiver is reassigned,
+/// what the constructor argument computes to.
+///
+/// The four cover the three ways a `invokevirtual` can resolve:
+///
+/// | class | `v()` | `w()` | what it is for |
+/// |---|---|---|---|
+/// | `B` | own | own | the base; the receiver when nothing is subclassed |
+/// | `S0` | overrides | inherits | the ordinary override |
+/// | `S1` | overrides | overrides | a fully overriding subclass |
+/// | `S2` | inherits | inherits | **no override at all** — the vtable slot must carry `B`'s body down |
+///
+/// `S2` is the one that is easy to leave out and worth having: a vtable built by copying only the
+/// methods a class *declares* passes every test that uses `S0` and `S1`, and fails only here.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ObjClass {
+    Base,
+    S0,
+    S1,
+    S2,
+}
+
+impl ObjClass {
+    /// The suffix appended to the program's class name. The classes are named per program
+    /// (`Fz7B`, `Fz7S0`, …) rather than with fixed names, because the executor compiles every
+    /// program into the **same working directory**: a globally-named `B.class` from one seed would
+    /// still be sitting there when the next seed ran, and the day the hierarchy stops being a
+    /// constant that becomes a stale-class bug nobody would look for.
+    fn suffix(self) -> &'static str {
+        match self {
+            ObjClass::Base => "B",
+            ObjClass::S0 => "S0",
+            ObjClass::S1 => "S1",
+            ObjClass::S2 => "S2",
+        }
+    }
+}
+
+/// The two instance fields every object in the hierarchy has.
+///
+/// Both are **primitive**, and that is a constraint rather than a simplification: a `putfield` of a
+/// *reference* needs the GC's write barrier, which this JIT tier cannot emit (`burst::compile`
+/// answers `Ineligible` for one). A reference field would therefore take every method that touched
+/// one straight out of the compiled arm — FZ-004 again, wearing the write barrier's hat.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Field {
+    /// `int a` — the only width **inside the JIT's subset**: `burst::compile`'s resolver answers
+    /// an offset for a non-volatile `int` instance field and refuses everything else.
+    A,
+    /// `long b` — outside it, and gated behind [`GenConfig::wide_fields`] for exactly the reason
+    /// [`GenConfig::wide_array_elements`] is gated.
+    B,
+}
+
+impl Field {
+    fn name(self) -> &'static str {
+        match self {
+            Field::A => "a",
+            Field::B => "b",
+        }
+    }
+
+    pub fn ty(self) -> Ty {
+        match self {
+            Field::A => Ty::Int,
+            Field::B => Ty::Long,
+        }
+    }
+}
+
+/// A virtual method of the hierarchy. Nullary on purpose: argument marshalling is already covered
+/// by [`Expr::Call`], and what this node exists for is the **dispatch**, which takes no arguments
+/// to get wrong.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum VMethod {
+    /// `int v()`.
+    V,
+    /// `long w()`.
+    W,
+}
+
+impl VMethod {
+    fn name(self) -> &'static str {
+        match self {
+            VMethod::V => "v",
+            VMethod::W => "w",
+        }
+    }
+
+    pub fn ty(self) -> Ty {
+        match self {
+            VMethod::V => Ty::Int,
+            VMethod::W => Ty::Long,
+        }
+    }
+}
+
 /// An expression of a known [`Ty`].
 ///
 /// Every variant carries enough to answer [`Expr::ty`] without a symbol table, which is what lets
@@ -573,6 +720,18 @@ pub enum Expr {
     /// `a.length`. Always `int`, and the one array operation that cannot throw — unless the array
     /// is null, which this grammar cannot express.
     ArrayLength(String),
+    /// `o.a` — a `getfield` on the object local named here. Throws a `NullPointerException` when
+    /// the receiver is `null`, which in compiled code is a **deopt**, not a throw.
+    Field(String, Field),
+    /// `o.v()` — an `invokevirtual` on the object local named here.
+    ///
+    /// **The point of this whole stage.** The JIT gives every dispatched call site an inline cache:
+    /// a cell holding the class it saw last and the body it bound to, plus a guard comparing the
+    /// receiver's class against it. A site whose receiver never changes takes the guard every time
+    /// and never leaves native code; a site whose receiver rotates fails the guard and **deopts**,
+    /// reconstructing the interpreter's locals, operand stack and pc from the compiled frame. The
+    /// two live one line apart in a planted shape — see [`Gen::dispatch_shape`].
+    Virtual(String, VMethod),
 }
 
 impl Expr {
@@ -591,6 +750,8 @@ impl Expr {
             Expr::Call(_, _, ty) => *ty,
             Expr::Classify(_) | Expr::ArrayLength(_) => Ty::Int,
             Expr::ArrayLoad(_, elem, _) => *elem,
+            Expr::Field(_, field) => field.ty(),
+            Expr::Virtual(_, method) => method.ty(),
         }
     }
 
@@ -616,6 +777,8 @@ impl Expr {
             | Expr::FloatLit(_)
             | Expr::DoubleLit(_)
             | Expr::ArrayLength(_)
+            | Expr::Field(_, _)
+            | Expr::Virtual(_, _)
             | Expr::Var(_, _) => 1,
             Expr::Neg(inner)
             | Expr::Not(inner)
@@ -640,6 +803,8 @@ impl Expr {
             | Expr::FloatLit(_)
             | Expr::DoubleLit(_)
             | Expr::ArrayLength(_)
+            | Expr::Field(_, _)
+            | Expr::Virtual(_, _)
             | Expr::Var(_, _) => false,
             Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) | Expr::ArrayLoad(_, _, a) => {
                 a.classifies(ty)
@@ -709,6 +874,26 @@ pub enum Stmt {
     /// generated method being **pure**, so an array that outlived a call would silently make the
     /// 40 iterations compute 40 different things.
     ArrayStore { array: String, elem: Ty, index: Expr, value: Expr },
+    /// `<class>B <name> = new <class><cls>(<arg>);`, or `= null;` when `cls` is `None`.
+    ///
+    /// The **declared type is always the base**, whatever is constructed. That is what makes the
+    /// calls on it `invokevirtual` rather than a statically-bound `invokespecial`: a local declared
+    /// as its own exact class gives `javac` enough to bind the call itself, and the inline cache
+    /// this stage exists to test would never be consulted.
+    ///
+    /// `None` is a `null` receiver, and it is a real path rather than a curiosity: `getfield`,
+    /// `putfield` and `invokevirtual` on `null` all **deopt** out of compiled code rather than
+    /// throwing in it. It is drawn rarely — see [`GenConfig::null_share`] and FZ-005 for what
+    /// happens to a campaign when programs die before the JIT has looked at them.
+    NewObject { name: String, class: Option<ObjClass>, arg: Expr },
+    /// `<name> = new <class><cls>(<arg>);` — the same, on a name that already exists.
+    ///
+    /// Separate from [`Stmt::NewObject`] because only this one can appear **inside a loop over a
+    /// name declared outside it**, which is the only way to make a single bytecode call site see
+    /// more than one receiver class. Every polymorphic site in a generated program comes from here.
+    SetObject { name: String, class: Option<ObjClass>, arg: Expr },
+    /// `<obj>.<field> = <value>;` — a `putfield`, of a primitive.
+    FieldStore { obj: String, field: Field, value: Expr },
 }
 
 impl Stmt {
@@ -720,6 +905,8 @@ impl Stmt {
             Stmt::For { body, .. } => 1 + body.size(),
             Stmt::NewArray { .. } => 1,
             Stmt::ArrayStore { index, value, .. } => 1 + index.size() + value.size(),
+            Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => 1 + arg.size(),
+            Stmt::FieldStore { value, .. } => 1 + value.size(),
         }
     }
 
@@ -737,6 +924,8 @@ impl Stmt {
             Stmt::ArrayStore { index, value, .. } => {
                 index.classifies(ty) || value.classifies(ty)
             }
+            Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => arg.classifies(ty),
+            Stmt::FieldStore { value, .. } => value.classifies(ty),
         }
     }
 }
@@ -818,6 +1007,109 @@ impl JavaProgram {
     fn classifies(&self, ty: Ty) -> bool {
         self.entry.classifies(ty) || self.methods.iter().any(|m| m.classifies(ty))
     }
+
+    /// What the object hierarchy this program carries has to contain — see [`ObjUse`].
+    fn obj_use(&self) -> ObjUse {
+        let mut used = ObjUse::default();
+        for method in self.methods.iter().chain(std::iter::once(&self.entry)) {
+            for stmt in &method.body {
+                scan_stmt(stmt, &mut used);
+            }
+            scan_expr(&method.result, &mut used);
+        }
+        used
+    }
+}
+
+/// How much of the hierarchy a program actually touches.
+///
+/// Derived from the program, never from the configuration, and the difference matters twice over:
+///
+/// - the reducer can delete the last statement that read a `long` field, and the emitted class
+///   should lose the field with it — otherwise a "minimal" case still carries a `long b` nobody
+///   reads, and the human reading it has to work out that it is irrelevant;
+/// - a `long` field is **outside the JIT's subset**, and it does not merely fail to compile
+///   *itself*: `burst::compile` inlines the `invokespecial` of a constructor into its caller, so a
+///   constructor that writes a `long` would take every method containing a `new` out of the
+///   compiled arm with it. Emitting the field only when something reads it means a program with
+///   [`GenConfig::wide_fields`] off is int-only all the way down, hierarchy included.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+struct ObjUse {
+    /// Anything at all — whether the four classes are emitted.
+    any: bool,
+    /// A `long` field or the `long`-returning virtual, i.e. whether `b` and `w()` exist.
+    wide: bool,
+}
+
+fn scan_stmt(stmt: &Stmt, used: &mut ObjUse) {
+    match stmt {
+        Stmt::Declare { init, .. } => scan_expr(init, used),
+        Stmt::Assign { expr, .. } => scan_expr(expr, used),
+        Stmt::If { cond, then, otherwise } => {
+            scan_cond(cond, used);
+            then.iter().chain(otherwise).for_each(|s| scan_stmt(s, used));
+        }
+        Stmt::For { body, .. } => body.iter().for_each(|s| scan_stmt(s, used)),
+        Stmt::NewArray { .. } => {}
+        Stmt::ArrayStore { index, value, .. } => {
+            scan_expr(index, used);
+            scan_expr(value, used);
+        }
+        Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => {
+            used.any = true;
+            scan_expr(arg, used);
+        }
+        Stmt::FieldStore { field, value, .. } => {
+            used.any = true;
+            used.wide |= *field == Field::B;
+            scan_expr(value, used);
+        }
+    }
+}
+
+fn scan_cond(cond: &Cond, used: &mut ObjUse) {
+    match cond {
+        Cond::Cmp(_, a, b) => {
+            scan_expr(a, used);
+            scan_expr(b, used);
+        }
+        Cond::And(a, b) | Cond::Or(a, b) => {
+            scan_cond(a, used);
+            scan_cond(b, used);
+        }
+        Cond::Not(a) => scan_cond(a, used),
+    }
+}
+
+fn scan_expr(expr: &Expr, used: &mut ObjUse) {
+    match expr {
+        Expr::IntLit(_)
+        | Expr::LongLit(_)
+        | Expr::FloatLit(_)
+        | Expr::DoubleLit(_)
+        | Expr::Var(_, _)
+        | Expr::ArrayLength(_) => {}
+        Expr::Field(_, field) => {
+            used.any = true;
+            used.wide |= *field == Field::B;
+        }
+        Expr::Virtual(_, method) => {
+            used.any = true;
+            used.wide |= *method == VMethod::W;
+        }
+        Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) | Expr::Classify(a) => scan_expr(a, used),
+        Expr::ArrayLoad(_, _, a) => scan_expr(a, used),
+        Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => {
+            scan_expr(a, used);
+            scan_expr(b, used);
+        }
+        Expr::Ternary(c, a, b) => {
+            scan_cond(c, used);
+            scan_expr(a, used);
+            scan_expr(b, used);
+        }
+        Expr::Call(_, args, _) => args.iter().for_each(|a| scan_expr(a, used)),
+    }
 }
 
 impl Program for JavaProgram {
@@ -835,9 +1127,9 @@ impl Program for JavaProgram {
             emit_classifier(&mut out, Ty::Double);
         }
         for method in &self.methods {
-            emit_method(&mut out, method);
+            emit_method(&mut out, method, &self.class);
         }
-        emit_method(&mut out, &self.entry);
+        emit_method(&mut out, &self.entry, &self.class);
         // The total wrapper (property 4). `Throwable` last, so the specific catches win.
         //
         // The **warm-up loop** inside the `try` is what makes the interpreter/JIT pairing mean
@@ -879,8 +1171,61 @@ impl Program for JavaProgram {
         let _ =
             writeln!(out, "    public static void main(String[] a) {{ System.out.println(run()); }}");
         let _ = writeln!(out, "}}");
+        // The hierarchy goes **beside** the public class, not inside it. A nested class would be
+        // `Fz7$B` on disk, and this file has no reason to find out how well every path that loads a
+        // class handles the `$`; several top-level classes in one file are ordinary Java, and
+        // `run-headless` puts the class file's own directory on the application class path, so both
+        // engines find them the same way.
+        let used = self.obj_use();
+        if used.any {
+            emit_hierarchy(&mut out, &self.class, used.wide);
+        }
         out
     }
+}
+
+/// The four classes of [`ObjClass`], as Java.
+///
+/// The bodies are constants — the variation this stage cares about is *which class reaches which
+/// call site*, not what the callee computes — but the constructor's argument is a generated
+/// expression, so the field values are as varied as anything else in the grammar.
+///
+/// `wide` is [`ObjUse::wide`]: with it off there is no `long` anywhere in the hierarchy, including
+/// in the constructor, which is what keeps a `new` from taking its **caller** out of the JIT's
+/// subset along with it.
+fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool) {
+    let _ = writeln!(out, "class {prefix}B {{");
+    let _ = writeln!(out, "    int a;");
+    if wide {
+        let _ = writeln!(out, "    long b;");
+        let _ = writeln!(out, "    {prefix}B(int s) {{ this.a = s; this.b = (s * 1000003L); }}");
+    } else {
+        let _ = writeln!(out, "    {prefix}B(int s) {{ this.a = s; }}");
+    }
+    let _ = writeln!(out, "    int v() {{ return (a + 1); }}");
+    if wide {
+        let _ = writeln!(out, "    long w() {{ return (b - 1L); }}");
+    }
+    let _ = writeln!(out, "}}");
+
+    let _ = writeln!(out, "class {prefix}S0 extends {prefix}B {{");
+    let _ = writeln!(out, "    {prefix}S0(int s) {{ super(s); }}");
+    let _ = writeln!(out, "    int v() {{ return (a * 3); }}");
+    let _ = writeln!(out, "}}");
+
+    let _ = writeln!(out, "class {prefix}S1 extends {prefix}B {{");
+    let _ = writeln!(out, "    {prefix}S1(int s) {{ super(s); }}");
+    let _ = writeln!(out, "    int v() {{ return (a - 7); }}");
+    if wide {
+        let _ = writeln!(out, "    long w() {{ return (b * 2L); }}");
+    }
+    let _ = writeln!(out, "}}");
+
+    // Overrides nothing. The one subclass that fails a vtable built by copying only the methods a
+    // class *declares*, and passes every test written with the other two.
+    let _ = writeln!(out, "class {prefix}S2 extends {prefix}B {{");
+    let _ = writeln!(out, "    {prefix}S2(int s) {{ super(s); }}");
+    let _ = writeln!(out, "}}");
 }
 
 /// The name of the classifier helper for a floating type. Not `m<k>`, so it cannot collide with a
@@ -989,7 +1334,7 @@ fn emit_classifier(out: &mut String, ty: Ty) {
     let _ = writeln!(out, "    }}");
 }
 
-fn emit_method(out: &mut String, method: &Method) {
+fn emit_method(out: &mut String, method: &Method, prefix: &str) {
     let params = method
         .params
         .iter()
@@ -998,7 +1343,7 @@ fn emit_method(out: &mut String, method: &Method) {
         .join(", ");
     let _ = writeln!(out, "    static {} {}({}) {{", method.returns.keyword(), method.name, params);
     for stmt in &method.body {
-        emit_stmt(out, stmt, 2);
+        emit_stmt(out, stmt, 2, prefix);
     }
     let mut result = String::new();
     emit_expr(&mut result, &method.result);
@@ -1012,7 +1357,7 @@ fn indent(out: &mut String, depth: usize) {
     }
 }
 
-fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize) {
+fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
     indent(out, depth);
     match stmt {
         Stmt::Declare { name, ty, init } => {
@@ -1030,7 +1375,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize) {
             emit_cond(&mut c, cond);
             let _ = writeln!(out, "if ({c}) {{");
             for s in then {
-                emit_stmt(out, s, depth + 1);
+                emit_stmt(out, s, depth + 1, prefix);
             }
             indent(out, depth);
             if otherwise.is_empty() {
@@ -1038,7 +1383,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize) {
             } else {
                 let _ = writeln!(out, "}} else {{");
                 for s in otherwise {
-                    emit_stmt(out, s, depth + 1);
+                    emit_stmt(out, s, depth + 1, prefix);
                 }
                 indent(out, depth);
                 let _ = writeln!(out, "}}");
@@ -1047,7 +1392,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize) {
         Stmt::For { var, bound, body } => {
             let _ = writeln!(out, "for (int {var} = 0; {var} < {bound}; {var}++) {{");
             for s in body {
-                emit_stmt(out, s, depth + 1);
+                emit_stmt(out, s, depth + 1, prefix);
             }
             indent(out, depth);
             let _ = writeln!(out, "}}");
@@ -1062,6 +1407,35 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize) {
             let mut v = String::new();
             emit_expr(&mut v, value);
             let _ = writeln!(out, "{array}[{i}] = {v};");
+        }
+        // Declared at the **base** type whatever is constructed — see [`Stmt::NewObject`]. The
+        // argument of a `null` is not emitted, and the generator makes it a literal zero so that
+        // nothing the reducer could shrink is invisible in the source.
+        Stmt::NewObject { name, class, arg } => match class {
+            Some(cls) => {
+                let mut e = String::new();
+                emit_expr(&mut e, arg);
+                let _ =
+                    writeln!(out, "{prefix}B {name} = new {prefix}{}({e});", cls.suffix());
+            }
+            None => {
+                let _ = writeln!(out, "{prefix}B {name} = null;");
+            }
+        },
+        Stmt::SetObject { name, class, arg } => match class {
+            Some(cls) => {
+                let mut e = String::new();
+                emit_expr(&mut e, arg);
+                let _ = writeln!(out, "{name} = new {prefix}{}({e});", cls.suffix());
+            }
+            None => {
+                let _ = writeln!(out, "{name} = null;");
+            }
+        },
+        Stmt::FieldStore { obj, field, value } => {
+            let mut v = String::new();
+            emit_expr(&mut v, value);
+            let _ = writeln!(out, "{obj}.{} = {v};", field.name());
         }
     }
 }
@@ -1218,6 +1592,14 @@ fn emit_expr(out: &mut String, expr: &Expr) {
         Expr::ArrayLength(name) => {
             let _ = write!(out, "{name}.length");
         }
+        // Primary expressions too, for the same reason `a.length` is: a field access and a method
+        // invocation bind tighter than every operator, so there is no precedence to protect.
+        Expr::Field(name, field) => {
+            let _ = write!(out, "{name}.{}", field.name());
+        }
+        Expr::Virtual(name, method) => {
+            let _ = write!(out, "{name}.{}()", method.name());
+        }
     }
 }
 
@@ -1280,11 +1662,27 @@ struct Local {
     /// **first** warm-up iteration never reaches `JitCache::THRESHOLD`, so the JIT never sees it at
     /// all. Measured: 46% of seeds died that way and JIT coverage halved.
     array_len: i32,
+    /// `true` when this name is an **object** — static type `<class>B`, whatever class the value
+    /// currently is.
+    ///
+    /// A third flag on the same flat list, for the reason `array_of` is one: every existing lookup
+    /// (the checker's scope, the shadowing rule, the block cloning) keeps working unchanged. What
+    /// it must do is keep the namespaces apart in *both* directions — an object offered where a
+    /// scalar is wanted emits `o0 + 1`, and a scalar offered as a receiver emits `v3.v()`. Both are
+    /// `javac` rejections, i.e. generator bugs, so [`Scope::readable`] and [`Scope::assignable`]
+    /// filter on it and [`Scope::objects`] is the only way in.
+    object: bool,
 }
 
 impl Local {
     fn scalar(name: String, ty: Ty) -> Local {
-        Local { name, ty, assignable: true, array_of: None, array_len: 0 }
+        Local { name, ty, assignable: true, array_of: None, array_len: 0, object: false }
+    }
+
+    /// An object local. `ty` is a placeholder that nothing may read: every consumer of a scalar
+    /// type filters `object` out first, and [`Scope::objects`] hands back names only.
+    fn object(name: String) -> Local {
+        Local { name, ty: Ty::Int, assignable: true, array_of: None, array_len: 0, object: true }
     }
 }
 
@@ -1298,7 +1696,7 @@ impl Scope {
     fn readable(&self, ty: Ty) -> Vec<&str> {
         self.locals
             .iter()
-            .filter(|l| l.ty == ty && l.array_of.is_none())
+            .filter(|l| l.ty == ty && l.array_of.is_none() && !l.object)
             .map(|l| l.name.as_str())
             .collect()
     }
@@ -1306,7 +1704,7 @@ impl Scope {
     fn assignable(&self, ty: Ty) -> Vec<&str> {
         self.locals
             .iter()
-            .filter(|l| l.ty == ty && l.assignable && l.array_of.is_none())
+            .filter(|l| l.ty == ty && l.assignable && l.array_of.is_none() && !l.object)
             .map(|l| l.name.as_str())
             .collect()
     }
@@ -1319,6 +1717,12 @@ impl Scope {
             .iter()
             .filter_map(|l| l.array_of.map(|elem| (l.name.as_str(), elem, l.array_len)))
             .collect()
+    }
+
+    /// The object locals in scope, by name. Their static type is always the base class, so there
+    /// is nothing else to carry.
+    fn objects(&self) -> Vec<&str> {
+        self.locals.iter().filter(|l| l.object).map(|l| l.name.as_str()).collect()
     }
 
     /// The arrays whose elements are of `elem` — for the places that need a value of a known type
@@ -1406,6 +1810,66 @@ pub struct GenConfig {
     /// budget has to pay for. A length of 200 inside a nest of loops is how a generator writes a
     /// benchmark by accident.
     pub max_array_len: i32,
+    /// Out of 100, how often a statement is an object `new`, a reassignment or a `putfield`.
+    ///
+    /// Drawn *after* the array roll and before the ordinary one, so that a share of zero consumes
+    /// no randomness at all and reproduces the array grammar byte for byte.
+    pub object_share: u32,
+    /// Whether the hierarchy has a `long` field and a `long`-returning virtual.
+    ///
+    /// The third knob of this shape, after [`GenConfig::fp_narrowing`] and
+    /// [`GenConfig::wide_array_elements`]. `getfield` and `putfield` are in the JIT's subset **for
+    /// a non-volatile `int` instance field and nothing else**, so a method that reads `b` or calls
+    /// `w()` is refused. That much is a fact about `burst::compile`'s resolver.
+    ///
+    /// # The measurement that changed this default
+    ///
+    /// The fear was worse than the refusal, and specific: `burst::compile` **inlines** the
+    /// `invokespecial` of a constructor into its caller, so a constructor writing a `long` looked
+    /// like it would take every method containing a `new` out of the compiled arm with it. That
+    /// would be a large effect — the compiled-method count collapsing toward the objects-off row —
+    /// and it is not what
+    /// `fuzz::campaigns::jit_coverage::what_each_grammar_setting_costs_in_jit_coverage` found:
+    ///
+    /// | | entered native | methods compiled | deopts |
+    /// |---|---|---|---|
+    /// | no objects at all | 57/80 | 121 | 18 |
+    /// | objects, `int` fields | 67/80 | 405 | 754 |
+    /// | objects, **`long` fields** | 71/80 | 401 | 802 |
+    ///
+    /// The rows are different *populations* — each configuration generates its own 80 programs —
+    /// so a difference of four programs is not attributable to anything. But the predicted effect
+    /// was a collapse toward the first row, and 401 is not that. The constructor is not poisoning
+    /// its callers, so the knob defaults **on**: against a real `java` the `long` half is worth
+    /// having, exactly as [`GenConfig::wide_array_elements`] is.
+    ///
+    /// The field is still absent from the emitted source when nothing reads it — see [`ObjUse`] —
+    /// so a reduced case never carries a `long` a human then has to rule out.
+    pub wide_fields: bool,
+    /// Out of 100, how often an object `new` is a plain `null` instead.
+    ///
+    /// A `null` receiver is a genuinely valuable path — `getfield`, `putfield` and `invokevirtual`
+    /// on one all **deopt** out of compiled code rather than throwing inside it — and it is drawn
+    /// rarely for exactly the reason [`Gen::index_expr`] draws an out-of-range index rarely. FZ-005
+    /// measured what happens otherwise: a program that throws on warm-up iteration 1 never reaches
+    /// `JitCache::THRESHOLD`, so the JIT never sees it, and the campaign compares the interpreter
+    /// against itself while reporting nothing wrong.
+    ///
+    /// It is never drawn inside the planted [`Gen::dispatch_shape`], which has to survive.
+    pub null_share: u32,
+    /// Whether the entry method gets a planted monomorphic and/or polymorphic call site.
+    ///
+    /// # Why this is planted rather than left to chance
+    ///
+    /// A polymorphic **site** is not a polymorphic *program*: it needs one bytecode call site whose
+    /// receiver's class changes between executions of that same site, which in this grammar means a
+    /// reassignment inside a loop over a name declared outside it. Rolling that shape out of the
+    /// ordinary statement distribution would happen a few times in a thousand seeds.
+    ///
+    /// FZ-004 and FZ-005 were both the same mistake — assuming coverage that was not there — found
+    /// by measuring rather than by reasoning. Planting the shape is that lesson applied before the
+    /// fact, and the knob exists so the coverage campaign can still measure what it costs.
+    pub dispatch_probe: bool,
     /// How many times `run()` calls the entry method before returning.
     ///
     /// # Why this is not 1
@@ -1445,6 +1909,13 @@ impl Default for GenConfig {
             array_share: 22,
             wide_array_elements: true,
             max_array_len: 6,
+            // Objects are the newest arm of the grammar and the one with the most ways to cost JIT
+            // coverage, so the share is a little under the arrays' and every setting below is the
+            // JIT-friendly one until `fuzz::campaigns::jit_coverage` says otherwise.
+            object_share: 18,
+            wide_fields: true,
+            null_share: 4,
+            dispatch_probe: true,
             warmup: 40,
         }
     }
@@ -1560,13 +2031,16 @@ impl Gen {
             params.push((name.clone(), ty));
             scope.locals.push(Local::scalar(name, ty));
         }
-        self.finish_method(format!("m{index}"), params, returns, scope)
+        self.finish_method(format!("m{index}"), params, returns, scope, false)
     }
 
     /// The method `run()` calls. Always returns `int` — that is the only thing the executor can
     /// observe — and takes no parameters, since nobody would have anything to pass.
     fn entry_method(&mut self, index: usize) -> Method {
-        self.finish_method(format!("m{index}"), Vec::new(), Ty::Int, Scope::default())
+        // `true`: the planted dispatch shape goes in the **entry** method and nowhere else. It is
+        // the one method `run()` calls 40 times, so it is the one guaranteed to cross
+        // `JitCache::THRESHOLD` and actually be compiled.
+        self.finish_method(format!("m{index}"), Vec::new(), Ty::Int, Scope::default(), true)
     }
 
     fn finish_method(
@@ -1575,11 +2049,238 @@ impl Gen {
         params: Vec<(String, Ty)>,
         returns: Ty,
         mut scope: Scope,
+        plant: bool,
     ) -> Method {
-        let body = self.block(&mut scope, 0);
-        let result = self.expr(&scope, returns, 0);
+        let planting = plant && self.config.object_share > 0 && self.config.dispatch_probe;
+        let (mut body, accumulators) =
+            if planting { self.dispatch_shape(&mut scope) } else { (Vec::new(), Vec::new()) };
+        self.budget = self.budget.saturating_sub(self.block_cost(&body));
+        body.extend(self.block(&mut scope, 0));
+
+        let mut result = self.expr(&scope, returns, 0);
+        // **The accumulators are folded into the result on purpose.**
+        //
+        // Without this the planted shape would be coverage that never reaches the observable: the
+        // entry method's result is generated independently, so it would read the dispatch
+        // accumulator only by luck, and a seed where it did not would execute every virtual call,
+        // miss the inline cache exactly as intended, deopt — and return a number that could not
+        // possibly differ. That is FZ-004's mistake in miniature (work the campaign believed it was
+        // measuring and was not), so the dependency is built rather than hoped for.
+        //
+        // `31 *` and not a bare `+`: addition is commutative, so two accumulators that swapped
+        // values would sum the same. It is the same shift-and-add the warm-up loop in
+        // [`JavaProgram::to_java`] uses, for the same reason.
+        for (name, ty) in accumulators {
+            let read = Expr::Var(name, ty);
+            // `(int)` of a `long` is `l2i`, a plain truncation and inside the JIT's subset — not
+            // one of the saturating conversions [`GenConfig::fp_narrowing`] is careful about.
+            let as_int = if ty == Ty::Int { read } else { Expr::Cast(Ty::Int, Box::new(read)) };
+            result = Expr::Bin(
+                BinOp::Add,
+                Box::new(Expr::Bin(BinOp::Mul, Box::new(result), Box::new(Expr::IntLit(31)))),
+                Box::new(as_int),
+            );
+        }
         let cost = self.block_cost(&body) + self.expr_cost(&result);
         Method { name, params, returns, body, result, cost }
+    }
+
+    // -- objects, fields and dispatch ----------------------------------------------------------
+
+    /// The planted inline-cache probe: a monomorphic site, a polymorphic one, or both.
+    ///
+    /// Returns the statements and the **accumulators** they write, which [`Gen::finish_method`]
+    /// folds into the method's result so that what the sites compute is actually observable.
+    fn dispatch_shape(&mut self, scope: &mut Scope) -> (Vec<Stmt>, Vec<(String, Ty)>) {
+        let mut stmts = Vec::new();
+        let mut accs = Vec::new();
+        let roll = self.rng.below(3);
+        if roll != 1 {
+            let (s, acc) = self.monomorphic_site(scope);
+            stmts.extend(s);
+            accs.push(acc);
+        }
+        if roll != 0 {
+            let (s, acc) = self.polymorphic_site(scope);
+            stmts.extend(s);
+            accs.push(acc);
+        }
+        (stmts, accs)
+    }
+
+    /// A call site whose receiver never changes: the inline cache is filled on the first execution
+    /// and its guard holds for every one after, so native code is never left.
+    fn monomorphic_site(&mut self, scope: &mut Scope) -> (Vec<Stmt>, (String, Ty)) {
+        let class = *self.rng.pick(OBJ_CLASSES);
+        let method = self.virtual_method();
+        let ty = method.ty();
+        let bound = 2 + self.rng.below(3) as i32;
+        let arg = self.ctor_arg(scope);
+
+        let obj = self.fresh("o");
+        let acc = self.fresh("v");
+        let counter = self.fresh("i");
+        scope.locals.push(Local::object(obj.clone()));
+        scope.locals.push(Local::scalar(acc.clone(), ty));
+
+        let site = Stmt::Assign {
+            name: acc.clone(),
+            ty,
+            expr: Expr::Bin(
+                BinOp::Add,
+                Box::new(Expr::Var(acc.clone(), ty)),
+                Box::new(Expr::Virtual(obj.clone(), method)),
+            ),
+        };
+        let stmts = vec![
+            Stmt::NewObject { name: obj, class: Some(class), arg },
+            Stmt::Declare { name: acc.clone(), ty, init: Expr::zero(ty) },
+            Stmt::For { var: counter, bound, body: vec![site] },
+        ];
+        (stmts, (acc, ty))
+    }
+
+    /// A call site whose receiver rotates between two classes on alternate iterations, after
+    /// starting as a third.
+    ///
+    /// Three classes over the site's life rather than two, because the first execution only *fills*
+    /// the cache — it cannot miss. Starting at the base means the first guarded execution is
+    /// already a miss, instead of the site spending an iteration establishing the answer it is
+    /// about to contradict.
+    fn polymorphic_site(&mut self, scope: &mut Scope) -> (Vec<Stmt>, (String, Ty)) {
+        let (first, second) = self.two_classes();
+        let method = self.virtual_method();
+        let ty = method.ty();
+        let bound = 2 + self.rng.below(3) as i32;
+        let initial = self.ctor_arg(scope);
+        let left = self.ctor_arg(scope);
+        let right = self.ctor_arg(scope);
+
+        let obj = self.fresh("o");
+        let acc = self.fresh("v");
+        let counter = self.fresh("i");
+        scope.locals.push(Local::object(obj.clone()));
+        scope.locals.push(Local::scalar(acc.clone(), ty));
+
+        // `(i & 1) == 0` — the receiver alternates, so the guard fails on every iteration after the
+        // first of each class.
+        let rotate = Stmt::If {
+            cond: Cond::Cmp(
+                CmpOp::Eq,
+                Expr::Bin(
+                    BinOp::And,
+                    Box::new(Expr::Var(counter.clone(), Ty::Int)),
+                    Box::new(Expr::IntLit(1)),
+                ),
+                Expr::IntLit(0),
+            ),
+            then: vec![Stmt::SetObject { name: obj.clone(), class: Some(first), arg: left }],
+            otherwise: vec![Stmt::SetObject { name: obj.clone(), class: Some(second), arg: right }],
+        };
+        let site = Stmt::Assign {
+            name: acc.clone(),
+            ty,
+            expr: Expr::Bin(
+                BinOp::Add,
+                Box::new(Expr::Var(acc.clone(), ty)),
+                Box::new(Expr::Virtual(obj.clone(), method)),
+            ),
+        };
+        let stmts = vec![
+            Stmt::NewObject { name: obj, class: Some(ObjClass::Base), arg: initial },
+            Stmt::Declare { name: acc.clone(), ty, init: Expr::zero(ty) },
+            Stmt::For { var: counter, bound, body: vec![rotate, site] },
+        ];
+        (stmts, (acc, ty))
+    }
+
+    /// Two **distinct** subclasses. Distinct is the whole point: the same class twice is a
+    /// monomorphic site written the long way.
+    fn two_classes(&mut self) -> (ObjClass, ObjClass) {
+        let subs = [ObjClass::S0, ObjClass::S1, ObjClass::S2];
+        let first = self.rng.below(3) as usize;
+        let second = (first + 1 + self.rng.below(2) as usize) % 3;
+        (subs[first], subs[second])
+    }
+
+    /// `v()` unless the hierarchy has a `long` half to call into.
+    fn virtual_method(&mut self) -> VMethod {
+        if self.config.wide_fields && self.rng.chance(1, 3) {
+            VMethod::W
+        } else {
+            VMethod::V
+        }
+    }
+
+    fn any_field(&mut self) -> Field {
+        if self.config.wide_fields && self.rng.chance(1, 3) {
+            Field::B
+        } else {
+            Field::A
+        }
+    }
+
+    /// The `int` a constructor is handed. Shallow: the field values want to be varied, not the
+    /// expression that produced them, and the budget has a whole method left to pay for.
+    fn ctor_arg(&mut self, scope: &Scope) -> Expr {
+        self.expr(scope, Ty::Int, self.config.max_expr_depth.saturating_sub(1))
+    }
+
+    /// Which class a `new` builds, and its argument — or `None` for a `null`, whose argument is a
+    /// literal zero because the emitter does not write it (see [`Stmt::NewObject`]).
+    fn new_object(&mut self, scope: &Scope) -> (Option<ObjClass>, Expr) {
+        if self.config.null_share > 0 && self.rng.below(100) < self.config.null_share {
+            return (None, Expr::IntLit(0));
+        }
+        let class = *self.rng.pick(OBJ_CLASSES);
+        (Some(class), self.ctor_arg(scope))
+    }
+
+    /// A `new`, a reassignment or a `putfield`. `None` when nothing applies, so [`Gen::stmt`] falls
+    /// through to the ordinary roll rather than emitting nothing — the shape [`Gen::array_stmt`]
+    /// already has.
+    fn object_stmt(&mut self, scope: &mut Scope) -> Option<Stmt> {
+        let existing = scope.objects().len();
+        // The first draw in a scope has to be a `new`: there is nothing to reassign or store into.
+        if existing == 0 || self.rng.chance(2, 5) {
+            let (class, arg) = self.new_object(scope);
+            let name = self.fresh("o");
+            scope.locals.push(Local::object(name.clone()));
+            return Some(Stmt::NewObject { name, class, arg });
+        }
+        let names: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
+        let obj = self.rng.pick(&names).clone();
+        if self.rng.chance(1, 2) {
+            let (class, arg) = self.new_object(scope);
+            return Some(Stmt::SetObject { name: obj, class, arg });
+        }
+        let field = self.any_field();
+        let value = self.expr(scope, field.ty(), 1);
+        Some(Stmt::FieldStore { obj, field, value })
+    }
+
+    /// `o.a` or `o.v()` — a field read or a dispatched call, when one can produce `ty`.
+    ///
+    /// `None` for `float` and `double`: the hierarchy has no floating half, and inventing one would
+    /// buy nothing the arithmetic grammar does not already cover far better.
+    fn object_read(&mut self, scope: &Scope, ty: Ty) -> Option<Expr> {
+        let names = scope.objects();
+        if names.is_empty() {
+            return None;
+        }
+        let (field, method) = match ty {
+            Ty::Int => (Field::A, VMethod::V),
+            Ty::Long if self.config.wide_fields => (Field::B, VMethod::W),
+            _ => return None,
+        };
+        let name = (*self.rng.pick(&names)).to_string();
+        // Half and half. The call is the interesting one, but a `getfield` right beside it is what
+        // makes the two comparable when a campaign reports something.
+        Some(if self.rng.chance(1, 2) {
+            Expr::Field(name, field)
+        } else {
+            Expr::Virtual(name, method)
+        })
     }
 
     /// Statements are **charged as they are generated**, not checked afterwards. Consulting the
@@ -1609,6 +2310,13 @@ impl Gen {
         // roll below is exactly the one that was there before.
         if self.config.array_share > 0 && self.rng.below(100) < self.config.array_share {
             if let Some(stmt) = self.array_stmt(scope) {
+                return Some(stmt);
+            }
+        }
+        // And objects after them, on the same terms: a share of zero draws nothing, so it leaves
+        // both the array grammar and the roll below exactly as they were.
+        if self.config.object_share > 0 && self.rng.below(100) < self.config.object_share {
+            if let Some(stmt) = self.object_stmt(scope) {
                 return Some(stmt);
             }
         }
@@ -1663,6 +2371,7 @@ impl Gen {
                     assignable: false,
                     array_of: None,
                     array_len: 0,
+                    object: false,
                 });
                 let body = self.block(&mut body_scope, depth + 1);
                 self.budget = outer;
@@ -1689,6 +2398,7 @@ impl Gen {
                 assignable: false,
                 array_of: Some(elem),
                 array_len: len,
+                object: false,
             });
             return Some(Stmt::NewArray { name, elem, len });
         }
@@ -1801,6 +2511,14 @@ impl Gen {
     fn expr(&mut self, scope: &Scope, ty: Ty, depth: u32) -> Expr {
         if depth >= self.config.max_expr_depth {
             return self.leaf(scope, ty);
+        }
+        // Drawn before the roll, like the array and object *statements* are, and for the same
+        // reason: at a share of zero this consumes no randomness and the grammar below is byte for
+        // byte the one that was there before objects existed.
+        if self.config.object_share > 0 && self.rng.below(100) < self.config.object_share {
+            if let Some(read) = self.object_read(scope, ty) {
+                return read;
+            }
         }
         match self.rng.below(17) {
             0..=3 => self.leaf(scope, ty),
@@ -1973,6 +2691,13 @@ impl Gen {
             Stmt::ArrayStore { index, value, .. } => {
                 1 + self.expr_cost(index) + self.expr_cost(value)
             }
+            // An allocation plus a constructor chain, charged as three rather than one for the
+            // reason `newarray` is charged for its length: a `new` inside a loop nest is real work,
+            // and a budget that priced it at one statement would have bounded nothing.
+            Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => {
+                3 + self.expr_cost(arg)
+            }
+            Stmt::FieldStore { value, .. } => 1 + self.expr_cost(value),
         }
     }
 
@@ -1994,6 +2719,9 @@ impl Gen {
             Expr::Classify(a) => CLASSIFY_COST + self.expr_cost(a),
             Expr::ArrayLength(_) => 1,
             Expr::ArrayLoad(_, _, index) => 1 + self.expr_cost(index),
+            Expr::Field(_, _) => 1,
+            // The dispatch plus the callee's one-expression body.
+            Expr::Virtual(_, _) => 2,
             Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) => 1 + self.expr_cost(a),
             Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => 1 + self.expr_cost(a) + self.expr_cost(b),
             Expr::Ternary(c, a, b) => {
@@ -2049,6 +2777,11 @@ const FP_BIN_OPS: &[BinOp] =
 const SHIFT_OPS: &[ShiftOp] = &[ShiftOp::Left, ShiftOp::Right, ShiftOp::Unsigned];
 const CMP_OPS: &[CmpOp] =
     &[CmpOp::Lt, CmpOp::Le, CmpOp::Gt, CmpOp::Ge, CmpOp::Eq, CmpOp::Ne];
+/// The base included: a receiver that is exactly the declared type still goes through
+/// `invokevirtual` and still fills an inline cache, and a hierarchy whose base is never instantiated
+/// would never test that.
+const OBJ_CLASSES: &[ObjClass] =
+    &[ObjClass::Base, ObjClass::S0, ObjClass::S1, ObjClass::S2];
 
 // ---------------------------------------------------------------------------------------------
 // Well-formedness
@@ -2105,6 +2838,17 @@ pub enum Malformed {
     /// the position have to agree; the reducer can delete a method, and renumbering is exactly the
     /// kind of bookkeeping that is worth having checked rather than trusted.
     MisnamedMethod { position: usize, name: String },
+    /// A name used as a receiver that is not in scope, or is in scope as a scalar or an array. The
+    /// reducer produces this constantly by deleting the `new` that declared an object — the exact
+    /// counterpart of [`Malformed::NotAnArray`].
+    NotAnObject(String),
+    /// A `putfield` whose value is not the field's type. Java would widen an `int` into a `long`
+    /// field; the AST says the reducer broke an invariant, and a reducer that silently changes what
+    /// a program means is worse than one that gives up.
+    FieldValueType { field: Field, used: Ty },
+    /// A constructor argument that is not an `int`. The hierarchy has one constructor shape, so
+    /// anything else here is a shrink that went somewhere it should not.
+    BadConstructorArgument(Ty),
 }
 
 impl JavaProgram {
@@ -2180,6 +2924,18 @@ fn check_block(
                 if !local.assignable {
                     return Err(Malformed::AssignedLoopCounter(name.clone()));
                 }
+                // An object local carries `Ty::Int` as a placeholder, so without this an
+                // `o0 = <int>` would type-check here and emit source `javac` rejects. The generator
+                // cannot build one — [`Scope::assignable`] filters objects out — but the checker's
+                // job is to hold for programs the *reducer* built, and it is a cheap thing to be
+                // wrong about.
+                if local.object || local.array_of.is_some() {
+                    return Err(Malformed::WrongType {
+                        name: name.clone(),
+                        declared: local.ty,
+                        used: *ty,
+                    });
+                }
                 if local.ty != *ty || expr.ty() != *ty {
                     return Err(Malformed::WrongType {
                         name: name.clone(),
@@ -2207,6 +2963,7 @@ fn check_block(
                     assignable: false,
                     array_of: None,
                     array_len: 0,
+                    object: false,
                 });
                 check_block(body, &mut inner, visible)?;
             }
@@ -2219,6 +2976,7 @@ fn check_block(
                     assignable: false,
                     array_of: Some(*elem),
                     array_len: 0,
+                    object: false,
                 });
             }
             Stmt::ArrayStore { array, elem, index, value } => {
@@ -2236,9 +2994,41 @@ fn check_block(
                 }
                 check_expr(value, scope, visible)?;
             }
+            Stmt::NewObject { name, arg, .. } => {
+                check_expr(arg, scope, visible)?;
+                if arg.ty() != Ty::Int {
+                    return Err(Malformed::BadConstructorArgument(arg.ty()));
+                }
+                scope.push(Local::object(name.clone()));
+            }
+            Stmt::SetObject { name, arg, .. } => {
+                object_local(scope, name)?;
+                check_expr(arg, scope, visible)?;
+                if arg.ty() != Ty::Int {
+                    return Err(Malformed::BadConstructorArgument(arg.ty()));
+                }
+            }
+            Stmt::FieldStore { obj, field, value } => {
+                object_local(scope, obj)?;
+                check_expr(value, scope, visible)?;
+                if value.ty() != field.ty() {
+                    return Err(Malformed::FieldValueType { field: *field, used: value.ty() });
+                }
+            }
         }
     }
     Ok(())
+}
+
+/// That `name` is in scope **as an object**, or why it is not.
+fn object_local(scope: &[Local], name: &str) -> Result<(), Malformed> {
+    scope
+        .iter()
+        .rev()
+        .find(|l| l.name == name)
+        .filter(|l| l.object)
+        .map(|_| ())
+        .ok_or_else(|| Malformed::NotAnObject(name.to_string()))
 }
 
 /// The element type of the array called `name`, or why it is not one.
@@ -2278,9 +3068,10 @@ fn check_expr(expr: &Expr, scope: &[Local], visible: &[Method]) -> Result<(), Ma
                 .rev()
                 .find(|l| &l.name == name)
                 .ok_or_else(|| Malformed::UnboundVariable(name.clone()))?;
-            // An array read as a scalar emits `a0 + 1`, which does not compile. The reducer reaches
-            // this by replacing a subtree with a variable that happens to share a name.
-            if local.array_of.is_some() {
+            // An array or an object read as a scalar emits `a0 + 1` or `o0 + 1`, neither of which
+            // compiles. The reducer reaches this by replacing a subtree with a variable that
+            // happens to share a name.
+            if local.array_of.is_some() || local.object {
                 return Err(Malformed::WrongType {
                     name: name.clone(),
                     declared: local.ty,
@@ -2328,6 +3119,7 @@ fn check_expr(expr: &Expr, scope: &[Local], visible: &[Method]) -> Result<(), Ma
             Ok(())
         }
         Expr::ArrayLength(name) => array_element(scope, name).map(|_| ()),
+        Expr::Field(name, _) | Expr::Virtual(name, _) => object_local(scope, name),
         Expr::Bin(op, a, b) => {
             check_expr(a, scope, visible)?;
             check_expr(b, scope, visible)?;
@@ -2559,17 +3351,31 @@ mod tests {
                     "seed {seed} emitted {needle:?}, which the oracle cannot compare"
                 );
             }
-            // `new` deserves better than a substring ban, now that arrays are in the grammar.
-            // What must stay impossible is allocating an **object**: an object has an identity,
-            // and identity is the one thing two runs of the same program need not agree on. An
-            // array allocation is safe here for a reason the grammar enforces rather than hopes
-            // for — no node compares two references, so an array's identity is unobservable.
+            // `new` deserves better than a substring ban now that arrays and objects are both in
+            // the grammar.
+            //
+            // Objects *do* have identity, and identity is the one thing two runs of a program need
+            // not agree on — so the rule cannot be "never allocate one". It is the sharper claim
+            // that identity is never **observed**: the AST has no node that compares two
+            // references, no `hashCode`, no `toString`, and [`Ty`] has no reference type, so there
+            // is nothing an identity could flow into. What is left of an object is its fields and
+            // which body a call dispatched to, both of which are functions of the program alone.
+            //
+            // The check that stays is therefore about *shape*: everything allocated is either a
+            // primitive array or one of the four classes this file emits, so no third kind of
+            // object can appear without this test being revisited.
+            let class = format!("Fz{seed}");
             for allocation in source.split("new ").skip(1) {
+                let ok = ["int[", "long[", "float[", "double["]
+                    .iter()
+                    .any(|k| allocation.starts_with(k))
+                    || OBJ_CLASSES.iter().any(|c| {
+                        allocation.starts_with(&format!("{class}{}(", c.suffix()))
+                    });
                 assert!(
-                    ["int[", "long[", "float[", "double["]
-                        .iter()
-                        .any(|k| allocation.starts_with(k)),
-                    "seed {seed} allocated something that is not a primitive array: new {}",
+                    ok,
+                    "seed {seed} allocated something that is neither a primitive array nor a \
+                     class of the hierarchy: new {}",
                     &allocation[..allocation.len().min(24)]
                 );
             }
@@ -2777,7 +3583,15 @@ mod tests {
 
     #[test]
     fn an_array_share_of_zero_gives_the_grammar_without_arrays_back() {
-        let flat = GenConfig { array_share: 0, ..GenConfig::default() };
+        // Objects off as well, and not to make the test pass: `new ` and a bracket are the
+        // *arrays'* signature, and with objects on they are no longer only that. Turning one axis
+        // off to make a claim about the other is what keeps the claim about arrays.
+        let flat = GenConfig {
+            array_share: 0,
+            object_share: 0,
+            dispatch_probe: false,
+            ..GenConfig::default()
+        };
         for seed in 0..200 {
             let source = JavaGenerator::new(flat).generate(Seed(seed)).to_java();
             // Not `[`: `main(String[] a)` has one, and always did.
@@ -2794,18 +3608,27 @@ mod tests {
         for seed in 0..300 {
             let p = program(seed);
             let source = p.to_java();
-            allocated += usize::from(source.contains(" = new "));
+            let mut lens = Vec::new();
+            collect_array_lengths(&p, &mut lens);
+            // Counted on the AST, not as `" = new "` in the text. That substring used to mean "an
+            // array was allocated" and stopped meaning it the moment objects joined the grammar:
+            // it now matches `Fz7B o0 = new Fz7S1(3)` too, so a version of this file that emitted
+            // no arrays at all would have gone on passing.
+            allocated += usize::from(!lens.is_empty());
             stored += usize::from(count_array_stores(&p) > 0);
             loaded += usize::from(count_array_loads(&p) > 0);
             length += usize::from(source.contains(".length"));
-            let mut lens = Vec::new();
-            collect_array_lengths(&p, &mut lens);
             negative += usize::from(lens.iter().any(|&l| l < 0));
             empty += usize::from(lens.contains(&0));
         }
+        // The thresholds are below what the grammar actually produces, measured: 252 allocate, 123
+        // store, 87 read and 77 ask for a length. Objects cost the last three about a sixth
+        // between them (149, 92 and one more allocation with `object_share: 0`), which is the
+        // expression grammar being shared out rather than anything going wrong — but it is written
+        // down here so the next arm that takes a bite out of arrays has to say so too.
         assert!(allocated > 100, "only {allocated}/300 programs allocated an array");
         assert!(stored > 40, "only {stored}/300 programs stored into one");
-        assert!(loaded > 90, "only {loaded}/300 programs read one");
+        assert!(loaded > 60, "only {loaded}/300 programs read one");
         assert!(length > 20, "only {length}/300 programs asked for a length");
         // The two allocation failures. Neither is common, and neither may be absent: they are the
         // whole reason `marks::NEGATIVE_SIZE` exists.
@@ -2848,6 +3671,8 @@ mod tests {
                     Stmt::If { then, otherwise, .. } => in_block(then) + in_block(otherwise),
                     Stmt::For { body, .. } => in_block(body),
                     Stmt::ArrayStore { index, value, .. } => in_expr(index) + in_expr(value),
+                    Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => in_expr(arg),
+                    Stmt::FieldStore { value, .. } => in_expr(value),
                     Stmt::NewArray { .. } => 0,
                 })
                 .sum()
@@ -3084,6 +3909,10 @@ mod tests {
                         in_expr(index, out);
                         in_expr(value, out);
                     }
+                    Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => {
+                        in_expr(arg, out)
+                    }
+                    Stmt::FieldStore { value, .. } => in_expr(value, out),
                     Stmt::NewArray { .. } => {}
                 }
             }
@@ -3298,6 +4127,336 @@ mod tests {
             println!("==== seed {seed} (cost {}, {} nodes) ====", p.estimated_cost(), p.size());
             println!("{}", p.to_java());
         }
+    }
+    // -- objects, fields and dispatch (stage 3) ------------------------------------------------
+
+    #[test]
+    fn an_object_share_of_zero_gives_the_grammar_without_objects_back() {
+        let flat = GenConfig { object_share: 0, dispatch_probe: false, ..GenConfig::default() };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(flat).generate(Seed(seed)).to_java();
+            // The hierarchy is emitted only when something uses it, so its absence is the whole
+            // claim: no classes, and therefore no `getfield`, no `putfield` and no dispatch.
+            for needle in ["class Fz", ".v()", ".w()", "extends"] {
+                let hit = source.matches(needle).count();
+                // `class Fz<seed> {` is the program's own class, which is always there.
+                let expected = usize::from(needle == "class Fz");
+                assert_eq!(
+                    hit, expected,
+                    "seed {seed} emitted {needle:?} {hit} times at object_share 0"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_probe_plants_a_call_site_in_every_program() {
+        // The point of planting rather than rolling: this is 300/300, not a share.
+        for seed in 0..300 {
+            let p = program(seed);
+            assert!(
+                !planted_sites(&p.entry.body).is_empty(),
+                "seed {seed} has no planted call site:\n{}",
+                p.to_java()
+            );
+        }
+    }
+
+    #[test]
+    fn both_a_monomorphic_and_a_polymorphic_site_are_reachable() {
+        // The *pair* is what an inline cache is tested by: a guard that always holds and a guard
+        // that always fails, on the same shape of code. One without the other proves half of it.
+        let (mut mono, mut poly, mut both) = (0, 0, 0);
+        for seed in 0..300 {
+            let p = program(seed);
+            let sites = planted_sites(&p.entry.body);
+            let m = sites.iter().filter(|s| !s.rotates()).count();
+            let q = sites.iter().filter(|s| s.rotates()).count();
+            mono += usize::from(m > 0);
+            poly += usize::from(q > 0);
+            both += usize::from(m > 0 && q > 0);
+        }
+        // Two thirds of the seeds each, a third with both — the three faces of the roll in
+        // `dispatch_shape`. The thresholds are loose enough to survive a reweighting and tight
+        // enough that dropping either shape fails.
+        assert!(mono > 150, "only {mono}/300 programs have a monomorphic site");
+        assert!(poly > 150, "only {poly}/300 programs have a polymorphic site");
+        assert!(both > 50, "only {both}/300 programs have both at once");
+    }
+
+    #[test]
+    fn a_polymorphic_site_rotates_between_two_different_classes_and_never_to_null() {
+        // Two *distinct* classes, or it is a monomorphic site written the long way and the cache
+        // never misses. And never a `null`: the planted site has to survive all 40 warm-up calls,
+        // because a program that throws before `JitCache::THRESHOLD` is never compiled at all
+        // (FZ-005), and an uncompiled probe measures nothing.
+        let mut checked = 0;
+        for seed in 0..300 {
+            let p = program(seed);
+            for site in planted_sites(&p.entry.body) {
+                assert!(site.initial.is_some(), "seed {seed}: a planted site starts at null");
+                if !site.rotates() {
+                    continue;
+                }
+                let Some(Stmt::If { then, otherwise, .. }) = site.body.first() else {
+                    panic!("seed {seed}: a rotating site with no `if`");
+                };
+                let (
+                    Some(Stmt::SetObject { class: a, name: left, .. }),
+                    Some(Stmt::SetObject { class: b, name: right, .. }),
+                ) = (then.first(), otherwise.first())
+                else {
+                    panic!("seed {seed}: a rotating site whose arms do not reassign");
+                };
+                assert_eq!(left, right, "seed {seed} rotates two different names");
+                assert_eq!(left, site.receiver, "seed {seed} rotates something else");
+                assert_ne!(a, b, "seed {seed} rotates between one class and itself");
+                assert!(a.is_some() && b.is_some(), "seed {seed} rotates through a null");
+                checked += 1;
+            }
+        }
+        assert!(checked > 150, "only {checked} rotating sites in 300 programs");
+    }
+
+    #[test]
+    fn what_the_planted_sites_compute_reaches_the_result() {
+        // The trap this exists for: a planted site that runs, misses its cache, deopts — and
+        // writes an accumulator nobody reads, so no divergence in any of it could change the one
+        // `int` the executor observes. That is FZ-004's mistake in miniature, which is why
+        // `finish_method` folds the accumulators in rather than hoping the result happens to
+        // mention them.
+        for seed in 0..300 {
+            let p = program(seed);
+            let mut reads = Vec::new();
+            collect_var_reads(&p.entry.result, &mut reads);
+            for site in planted_sites(&p.entry.body) {
+                assert!(
+                    reads.contains(site.acc),
+                    "seed {seed}: the site writing {} never reaches the result:\n{}",
+                    site.acc,
+                    p.to_java()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_class_that_overrides_nothing_is_emitted_and_used() {
+        // `S2` declares no method at all, so a vtable built by copying only what a class declares
+        // leaves its slots empty. Every other subclass in the hierarchy hides that.
+        let mut used = 0;
+        for seed in 0..300 {
+            let source = program(seed).to_java();
+            let s2 = format!("class Fz{seed}S2 extends Fz{seed}B");
+            assert!(source.contains(&s2), "seed {seed} has no S2");
+            let body = &source[source.find(&s2).unwrap()..];
+            let body = &body[..body.find("\n}").unwrap()];
+            assert!(!body.contains("int v()"), "seed {seed}: S2 overrides v()");
+            assert!(!body.contains("long w()"), "seed {seed}: S2 overrides w()");
+            used += usize::from(source.contains(&format!("new Fz{seed}S2(")));
+        }
+        assert!(used > 100, "only {used}/300 programs instantiate the class that overrides nothing");
+    }
+
+    #[test]
+    fn the_hierarchy_carries_a_long_only_when_something_reads_one() {
+        // Not a cosmetic saving. `burst::compile` resolves a `getfield`/`putfield` only for a
+        // non-volatile `int` instance field, and it **inlines** the `invokespecial` of a
+        // constructor into its caller — so a constructor that wrote a `long` would make every
+        // method containing a `new` ineligible. With `wide_fields` off the hierarchy has to be
+        // int-only all the way down, the constructor included.
+        let narrow_cfg = GenConfig { wide_fields: false, ..GenConfig::default() };
+        for seed in 0..120 {
+            let narrow = JavaGenerator::new(narrow_cfg).generate(Seed(seed)).to_java();
+            assert!(!narrow.contains("long b;"), "seed {seed} carries a long field it cannot read");
+            assert!(!narrow.contains("long w()"), "seed {seed} carries a long virtual");
+            assert!(!narrow.contains("1000003L"), "seed {seed}: the constructor writes a long");
+        }
+        // And with the knob on — the default since the coverage measurement — most programs do
+        // reach it, but not all: `ObjUse` still keeps the field out of the ones that never read it.
+        let carried =
+            (0..120).filter(|&seed| program(seed).to_java().contains("long b;")).count();
+        assert!(carried > 40, "only {carried}/120 default programs reach the long half");
+        assert!(carried < 120, "every program carries the long field — ObjUse is not filtering");
+    }
+
+    #[test]
+    fn null_receivers_are_rare_and_present() {
+        // The balance FZ-005 forced, in its third setting. A `null` receiver is a real deopt path
+        // — `getfield`, `putfield` and `invokevirtual` on one all leave native code rather than
+        // throwing inside it — and a program that dies on warm-up iteration 1 never reaches
+        // `JitCache::THRESHOLD`. So: present, and nowhere near common.
+        //
+        // That the *planted* sites never contain one is asserted where the shape is recognised
+        // precisely, in `a_polymorphic_site_rotates_between_two_different_classes_and_never_to_null`.
+        // Trying to assert it here as well meant matching any `if` inside any `for`, which also
+        // matches what the ordinary grammar rolls — a recogniser loose enough to report the
+        // generator working correctly as a failure.
+        let mut with_null = 0;
+        for seed in 0..300 {
+            with_null += usize::from(count_nulls(&program(seed)) > 0);
+        }
+        assert!(with_null > 5, "only {with_null}/300 programs build a null receiver");
+        assert!(with_null < 150, "{with_null}/300 programs build one — too many to warm up");
+    }
+
+    #[test]
+    fn well_formed_rejects_the_object_things_it_should() {
+        // The reducer reaches every one of these by deleting the statement that declared an object.
+        let mut p = program(7);
+        p.entry.result = Expr::Field("nope".to_string(), Field::A);
+        assert!(matches!(p.well_formed(), Err(Malformed::NotAnObject(_))));
+
+        let mut p = program(7);
+        p.entry.result = Expr::Bin(
+            BinOp::Add,
+            Box::new(Expr::Virtual("nope".to_string(), VMethod::V)),
+            Box::new(Expr::IntLit(1)),
+        );
+        assert!(matches!(p.well_formed(), Err(Malformed::NotAnObject(_))));
+
+        // An object read as a scalar — `o0 + 1`, which does not compile.
+        let mut p = program(7);
+        let obj = p
+            .entry
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::NewObject { name, .. } => Some(name.clone()),
+                _ => None,
+            })
+            .expect("the probe plants one");
+        p.entry.result = Expr::Var(obj.clone(), Ty::Int);
+        assert!(matches!(p.well_formed(), Err(Malformed::WrongType { .. })));
+
+        // And an object *assigned* a scalar — `o0 = 1;`. The generator cannot build this, since
+        // `Scope::assignable` filters objects out; the checker rejects it anyway, because an object
+        // local carries `Ty::Int` as a placeholder and the plain type comparison would let it past.
+        let mut p = program(7);
+        p.entry.body.push(Stmt::Assign {
+            name: obj.clone(),
+            ty: Ty::Int,
+            expr: Expr::IntLit(1),
+        });
+        assert!(matches!(p.well_formed(), Err(Malformed::WrongType { .. })));
+
+        // A `putfield` of the wrong width. Java would widen; the AST says a shrink went somewhere
+        // it should not have.
+        let mut p = program(7);
+        p.entry.body.push(Stmt::FieldStore {
+            obj: obj.clone(),
+            field: Field::A,
+            value: Expr::LongLit(1),
+        });
+        assert!(matches!(p.well_formed(), Err(Malformed::FieldValueType { .. })));
+
+        let mut p = program(7);
+        p.entry.body.push(Stmt::SetObject {
+            name: obj,
+            class: Some(ObjClass::S0),
+            arg: Expr::DoubleLit(0),
+        });
+        assert!(matches!(p.well_formed(), Err(Malformed::BadConstructorArgument(Ty::Double))));
+    }
+
+    /// One planted call site, as [`Gen::dispatch_shape`] wrote it.
+    struct PlantedSite<'a> {
+        /// The class the receiver starts as. Never `None` — see the rotation test.
+        initial: Option<ObjClass>,
+        receiver: &'a String,
+        acc: &'a String,
+        /// The body of the loop the site sits in.
+        body: &'a Block,
+    }
+
+    impl PlantedSite<'_> {
+        /// Whether the loop reassigns the receiver, which is what makes the site polymorphic.
+        fn rotates(&self) -> bool {
+            reassigns(self.body, self.receiver)
+        }
+    }
+
+    /// The planted sites, read off the **head** of a method body.
+    ///
+    /// The head is the only place they can be — [`Gen::finish_method`] puts the shape in front of
+    /// everything it generates — and reading them from there is what makes this a recogniser for
+    /// *the emitter* rather than a pattern. The looser version of this function (any `for`
+    /// containing a virtual call) matched what the ordinary grammar rolls as well, and reported
+    /// two correct programs as failures before it was tightened.
+    fn planted_sites(body: &Block) -> Vec<PlantedSite<'_>> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        // Never more than two: `dispatch_shape` plants a monomorphic site, a polymorphic one, or
+        // one of each.
+        while out.len() < 2 && at + 3 <= body.len() {
+            let (
+                Stmt::NewObject { name: receiver, class: initial, .. },
+                Stmt::Declare { name: acc, .. },
+                Stmt::For { body: loop_body, .. },
+            ) = (&body[at], &body[at + 1], &body[at + 2])
+            else {
+                break;
+            };
+            // The loop has to end in `acc = acc + receiver.m()`, or this is three statements that
+            // merely start the same way.
+            let Some(Stmt::Assign { name, expr: Expr::Bin(BinOp::Add, _, right), .. }) =
+                loop_body.last()
+            else {
+                break;
+            };
+            let Expr::Virtual(called_on, _) = right.as_ref() else { break };
+            if name != acc || called_on != receiver {
+                break;
+            }
+            out.push(PlantedSite { initial: *initial, receiver, acc, body: loop_body });
+            at += 3;
+        }
+        out
+    }
+
+    fn reassigns(block: &Block, name: &str) -> bool {
+        block.iter().any(|s| match s {
+            Stmt::SetObject { name: target, .. } => target == name,
+            Stmt::If { then, otherwise, .. } => reassigns(then, name) || reassigns(otherwise, name),
+            Stmt::For { body, .. } => reassigns(body, name),
+            _ => false,
+        })
+    }
+
+    fn collect_var_reads(e: &Expr, out: &mut Vec<String>) {
+        match e {
+            Expr::Var(name, _) => out.push(name.clone()),
+            Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) | Expr::Classify(a) => {
+                collect_var_reads(a, out)
+            }
+            Expr::ArrayLoad(_, _, a) => collect_var_reads(a, out),
+            Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => {
+                collect_var_reads(a, out);
+                collect_var_reads(b, out);
+            }
+            Expr::Ternary(_, a, b) => {
+                collect_var_reads(a, out);
+                collect_var_reads(b, out);
+            }
+            Expr::Call(_, args, _) => args.iter().for_each(|a| collect_var_reads(a, out)),
+            _ => {}
+        }
+    }
+
+    fn count_nulls(p: &JavaProgram) -> usize {
+        fn in_block(b: &Block) -> usize {
+            b.iter()
+                .map(|s| match s {
+                    Stmt::NewObject { class, .. } | Stmt::SetObject { class, .. } => {
+                        usize::from(class.is_none())
+                    }
+                    Stmt::If { then, otherwise, .. } => in_block(then) + in_block(otherwise),
+                    Stmt::For { body, .. } => in_block(body),
+                    _ => 0,
+                })
+                .sum()
+        }
+        p.methods.iter().chain([&p.entry]).map(|m| in_block(&m.body)).sum()
     }
 }
 

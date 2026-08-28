@@ -639,6 +639,11 @@ fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
                 visit_expr(index, f);
                 visit_expr(value, f);
             }
+            // The constructor argument of a `null` is not emitted, so shrinking it is a step that
+            // changes nothing — accepted, harmlessly, and the generator keeps it a literal zero so
+            // there is normally nothing left to shrink.
+            Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => visit_expr(arg, f),
+            Stmt::FieldStore { value, .. } => visit_expr(value, f),
         }
     }
 }
@@ -651,6 +656,8 @@ fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
         | Expr::FloatLit(_)
         | Expr::DoubleLit(_)
         | Expr::ArrayLength(_)
+        | Expr::Field(_, _)
+        | Expr::Virtual(_, _)
         | Expr::Var(_, _) => {}
         Expr::Neg(a)
         | Expr::Not(a)

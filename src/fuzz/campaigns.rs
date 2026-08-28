@@ -405,6 +405,18 @@ mod jit_coverage {
             ("arrays, no floats     ", GenConfig { fp_share: 0, ..base }),
             ("arrays of int only    ", GenConfig { wide_array_elements: false, ..base }),
             ("no narrowing conversion", GenConfig { fp_narrowing: false, ..base }),
+            // Stage 3. `new`, `getfield`, `putfield` and `invokevirtual` are all **inside** the
+            // JIT's subset, so unlike arrays and narrowing conversions these should not cost
+            // anything — which is exactly the kind of expectation worth measuring rather than
+            // stating. The two rows that isolate the risk: the planted probe alone (a `new` in a
+            // loop, whose `invokespecial` is inlined into its caller) and the `long` field, which
+            // is outside the subset in a way that could take the caller with it.
+            (
+                "no objects at all      ",
+                GenConfig { object_share: 0, dispatch_probe: false, ..base },
+            ),
+            ("objects, no planted probe", GenConfig { dispatch_probe: false, ..base }),
+            ("objects, int fields only", GenConfig { wide_fields: false, ..base }),
             ("everything (the default)", base),
         ];
         let mut rows = Vec::new();
