@@ -633,6 +633,15 @@ fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
                 visit_block_exprs(then, f);
                 visit_block_exprs(otherwise, f);
             }
+            Stmt::Switch { selector, arms, default } => {
+                visit_expr(selector, f);
+                for arm in arms.iter_mut() {
+                    visit_block_exprs(&mut arm.body, f);
+                }
+                if let Some(body) = default {
+                    visit_block_exprs(body, f);
+                }
+            }
             Stmt::For { body, .. } => visit_block_exprs(body, f),
             Stmt::NewArray { .. } => {}
             Stmt::ArrayStore { index, value, .. } => {
@@ -658,10 +667,13 @@ fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
         | Expr::ArrayLength(_)
         | Expr::Field(_, _)
         | Expr::Virtual(_, _)
+        // Un subarbol de strings no contiene `Expr`: sus hojas son literales del pool.
+        | Expr::Str(_, _)
         | Expr::Var(_, _) => {}
         Expr::Neg(a)
         | Expr::Not(a)
         | Expr::Cast(_, a)
+        | Expr::Narrow(_, a)
         | Expr::Classify(a)
         | Expr::ArrayLoad(_, _, a) => visit_expr(a, f),
         Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => {

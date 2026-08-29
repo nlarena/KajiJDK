@@ -37,10 +37,6 @@ const ARRAY_HEADER: usize = HEADER_SIZE + 4;
 /// Loads `String`'s mirror first so the header's `class_id` points at it (an `ldc`
 /// of a string literal does exactly this — materialise a String for the constant).
 pub fn intern(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &str) -> usize {
-    class_operations::load_class(metaspace, heap, "java/lang/String");
-    let uuid = metaspace.class_id("java/lang/String").to_string();
-    let mirror = metaspace.class_object(&uuid).unwrap_or(0);
-
     // `encode_utf16` is the whole conversion: a scalar above U+FFFF becomes its surrogate pair,
     // which is exactly how Java counts it.
     let units: Vec<u16> = text.encode_utf16().collect();

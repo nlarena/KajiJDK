@@ -70,6 +70,20 @@ pub struct Toolchain {
     pub headless: PathBuf,
 }
 
+/// Where `run-headless` was built.
+///
+/// `target/` is only the default: this repo lives on an external drive and is routinely built with
+/// `CARGO_TARGET_DIR` pointed at local disk, in which case the hardcoded path does not exist and
+/// **every run of every campaign reports the same crash**. That is the shape of FZ-003 again, the
+/// environment lying to the fuzzer, and it is worth a lookup rather than a note telling people to
+/// unset a variable.
+fn headless_path() -> PathBuf {
+    let root = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("target"));
+    root.join("release").join("run-headless")
+}
+
 impl Toolchain {
     /// Best-effort discovery of the reference JDK.
     ///
@@ -89,7 +103,7 @@ impl Toolchain {
         Toolchain {
             javac: bin.join("javac"),
             java: bin.join("java"),
-            headless: PathBuf::from("target/release/run-headless"),
+            headless: headless_path(),
         }
     }
 }

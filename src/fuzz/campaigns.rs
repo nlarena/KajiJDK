@@ -153,6 +153,60 @@ mod tests {
         );
     }
 
+    /// Strings against the reference JDK.
+    ///
+    /// The pairing is the point. `string_share` is zero by default and no string opcode is inside
+    /// the JIT's subset, so against [`Path::Jit`] a probe is inert weight — it only displaces
+    /// arithmetic the compiled arm would otherwise have seen. What is worth asking is whether **this
+    /// VM** agrees with a real JDK about the three things the stage generates: interning of
+    /// literals (JLS §3.10.5), constant folding of a concatenation of two literals (§15.28, which
+    /// decides whether `("a" + "b") == "ab"`), and `equals` over contents.
+    ///
+    /// The first of those spent time on the oracle's known-divergence list as an accepted
+    /// difference before it turned out to be a conformance bug, which is the reason this campaign
+    /// exists rather than a note saying strings are fine.
+    #[test]
+    #[ignore]
+    fn strings_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { string_share: 40, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-strings"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(
+            report.divergences.is_empty(),
+            "this VM disagrees with the reference implementation about strings:
+{}",
+            describe(&report, paths)
+        );
+    }
+
+    /// Narrowing round trips against the reference JDK.
+    ///
+    /// Paired against the interpreter and not the JIT on purpose: `i2b`, `i2s` and `i2c` are absent
+    /// from `burst::compile`'s opcode scan, so a method carrying one is refused whole. Running this
+    /// against [`Path::Jit`] would compare the interpreter with itself and call the result
+    /// agreement — FZ-004 in a different costume.
+    ///
+    /// What it asks is whether `conversion_operations` truncates and extends the way a real JDK
+    /// does, including the asymmetry that makes `(char) -1` equal 65535 while `(byte) -1` stays -1.
+    #[test]
+    #[ignore]
+    fn narrowing_agrees_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { narrowing_share: 40, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-narrowing"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(
+            report.divergences.is_empty(),
+            "this VM disagrees with the reference implementation about narrowing:\n{}",
+            describe(&report, paths)
+        );
+    }
+
     /// An afternoon's campaign rather than a smoke test: more seeds, a wider grammar, every
     /// pairing. `FUZZ_SEEDS` sets the count so the same test serves both a ten-minute run and an
     /// overnight one.

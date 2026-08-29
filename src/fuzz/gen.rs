@@ -684,6 +684,98 @@ impl VMethod {
 ///
 /// Every variant carries enough to answer [`Expr::ty`] without a symbol table, which is what lets
 /// the reducer rewrite a subtree and immediately know whether the result still type-checks.
+/// The width an `int` can be truncated to and read back from: `i2b`, `i2s` and `i2c`.
+///
+/// These are **not** new [`Ty`]s, and that is the whole design. Java's binary numeric promotion
+/// says `byte + byte` is an `int`, so a real `byte` in the lattice would break the one invariant
+/// every operator here relies on — two operands of a type give that type back — and would put a
+/// promotion rule in every arm. A narrowing is instead a **round trip**: `int` in, truncate,
+/// sign- or zero-extend, `int` out. The interesting semantics survive (truncation, and `char`
+/// extending with zero where `byte` and `short` extend with the sign) and the type context does
+/// not multiply.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NarrowTy {
+    Byte,
+    Short,
+    /// The one that is not like the others: `i2c` **zero**-extends, so `(char) -1` is 65535 and not
+    /// -1. A generator that only drew `byte` and `short` would never ask that question.
+    Char,
+}
+
+impl NarrowTy {
+    fn keyword(self) -> &'static str {
+        match self {
+            NarrowTy::Byte => "byte",
+            NarrowTy::Short => "short",
+            NarrowTy::Char => "char",
+        }
+    }
+}
+
+/// The literals a generated `String` can be. All **ASCII** on purpose: the emitter's modified-UTF-8
+/// bug (#128) and the missing `String.valueOf([CII)` native (#226) are open, so a non-ASCII literal
+/// would manufacture divergences that are already known and would drown the ones that are not. The
+/// pool repeats no value by accident — two occurrences of the *same* literal is exactly what
+/// [`StrProbe::Identity`] needs to ask its question.
+pub const STRING_POOL: &[&str] = &["", "a", "ab", "abc", "kaji", "0", "true", "null"];
+
+/// A `String`-valued expression.
+///
+/// Strings live **outside** [`Ty`] deliberately. `Ty` is the *arithmetic* lattice — every operator
+/// in the grammar takes two operands of one `Ty` and gives that `Ty` back — and a `String` has no
+/// arithmetic. Adding it there would put a guard on every operator, which is the cost
+/// [`Expr::Classify`] already avoided for floating point by making the odd type reach the observed
+/// `int` through one dedicated node instead of through the lattice.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum StrExpr {
+    /// An index into [`STRING_POOL`].
+    Lit(usize),
+    /// `a + b`. Two literals concatenated is a **compile-time constant expression** (JLS §15.28),
+    /// so `javac` folds it and interns the result — which makes `("a" + "b") == "ab"` true in real
+    /// Java. That is a fact about the *compiler*, and this node is how the fuzzer gets to ask
+    /// whether ours agrees.
+    Concat(Box<StrExpr>, Box<StrExpr>),
+    /// `new String(s)` — a distinct object with equal contents. It exists for
+    /// [`StrProbe::Identity`]: `==` must be **false** here and **true** between two occurrences of
+    /// the same literal (JLS §3.10.5).
+    Fresh(Box<StrExpr>),
+}
+
+impl StrExpr {
+    fn size(&self) -> usize {
+        match self {
+            StrExpr::Lit(_) => 1,
+            StrExpr::Fresh(a) => 1 + a.size(),
+            StrExpr::Concat(a, b) => 1 + a.size() + b.size(),
+        }
+    }
+}
+
+/// How a [`StrExpr`] becomes the single `int` the executor observes.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum StrProbe {
+    /// `s.length()` — in **UTF-16 code units**, which is what a Java `String` is measured in.
+    Length,
+    /// `a.equals(b) ? 1 : 0` — equality by contents.
+    Identity(Box<StrExpr>),
+    /// `a == b ? 1 : 0` — equality by **reference**.
+    ///
+    /// This is the probe that earns the stage. `"a" == "a"` spent time on the oracle's
+    /// known-divergence list as an accepted difference, and turned out to be a non-conformance with
+    /// JLS §3.10.5: literals must be interned. The interning table landed; a suppressed check is
+    /// exactly how that regression would come back without anyone noticing.
+    Same(Box<StrExpr>),
+}
+
+impl StrProbe {
+    fn size(&self) -> usize {
+        match self {
+            StrProbe::Length => 1,
+            StrProbe::Identity(b) | StrProbe::Same(b) => 1 + b.size(),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Expr {
     IntLit(i32),
@@ -720,6 +812,13 @@ pub enum Expr {
     /// `a.length`. Always `int`, and the one array operation that cannot throw — unless the array
     /// is null, which this grammar cannot express.
     ArrayLength(String),
+    /// `(byte) e` / `(short) e` / `(char) e`, of an `int`, read back as an `int`. Always `int`:
+    /// Java promotes the result the moment it is used, and modelling that promotion is exactly the
+    /// complexity [`NarrowTy`] exists to avoid.
+    Narrow(NarrowTy, Box<Expr>),
+    /// A `String` question answered as an `int` — the only way a string reaches the observed
+    /// value. Always `int`, whatever the strings inside it are.
+    Str(StrProbe, Box<StrExpr>),
     /// `o.a` — a `getfield` on the object local named here. Throws a `NullPointerException` when
     /// the receiver is `null`, which in compiled code is a **deopt**, not a throw.
     Field(String, Field),
@@ -748,7 +847,10 @@ impl Expr {
             Expr::Cast(to, _) => *to,
             Expr::Ternary(_, then, _) => then.ty(),
             Expr::Call(_, _, ty) => *ty,
-            Expr::Classify(_) | Expr::ArrayLength(_) => Ty::Int,
+            Expr::Classify(_)
+            | Expr::ArrayLength(_)
+            | Expr::Str(_, _)
+            | Expr::Narrow(_, _) => Ty::Int,
             Expr::ArrayLoad(_, elem, _) => *elem,
             Expr::Field(_, field) => field.ty(),
             Expr::Virtual(_, method) => method.ty(),
@@ -786,6 +888,8 @@ impl Expr {
             | Expr::Classify(inner)
             | Expr::ArrayLoad(_, _, inner) => 1 + inner.size(),
             Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => 1 + a.size() + b.size(),
+            Expr::Str(probe, s) => 1 + probe.size() + s.size(),
+            Expr::Narrow(_, a) => 1 + a.size(),
             Expr::Ternary(c, a, b) => 1 + c.size() + a.size() + b.size(),
             Expr::Call(_, args, _) => 1 + args.iter().map(Expr::size).sum::<usize>(),
         }
@@ -798,6 +902,12 @@ impl Expr {
     fn classifies(&self, ty: Ty) -> bool {
         match self {
             Expr::Classify(a) => a.ty() == ty || a.classifies(ty),
+            // A string subtree holds no floating expression in this stage, so it can never keep a
+            // `float` alive that the reducer just stripped.
+            Expr::Str(_, _) => false,
+            // A narrowing does: its operand is an `int` expression, and an `int` expression may be
+            // a classifier over a `double`.
+            Expr::Narrow(_, a) => a.classifies(ty),
             Expr::IntLit(_)
             | Expr::LongLit(_)
             | Expr::FloatLit(_)
@@ -848,6 +958,22 @@ impl Cond {
     }
 }
 
+/// One arm of a [`Stmt::Switch`].
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SwitchArm {
+    pub label: i32,
+    pub body: Block,
+    /// Whether the arm ends in `break`.
+    ///
+    /// **`false` is the point of the whole construct.** Without the `break`, control falls into the
+    /// next arm — and fall-through is a property of the *source* that neither `tableswitch` nor
+    /// `lookupswitch` encodes: the opcode holds a jump table, and it is the **compiler** that lays
+    /// the arms out so that one runs into the next. So this is the one thing in the stage that
+    /// tests the emitter and the engine at once, and the one an implementation cannot get right by
+    /// accident.
+    pub breaks: bool,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Stmt {
     /// `<ty> <name> = <init>;`
@@ -855,6 +981,14 @@ pub enum Stmt {
     /// `<name> = <expr>;` — `name` must be an assignable local of `expr`'s type.
     Assign { name: String, ty: Ty, expr: Expr },
     If { cond: Cond, then: Block, otherwise: Block },
+    /// `switch (selector) { case l: … }`.
+    ///
+    /// The labels decide which opcode `javac` emits: consecutive ones become a **`tableswitch`**
+    /// (a jump table indexed by the value) and scattered ones a **`lookupswitch`** (a sorted search).
+    /// Both are inside the JIT's subset, which makes this the first construct of the stage that
+    /// *adds* compiled coverage instead of costing it — the exact opposite of the narrowing that
+    /// shares its milestone.
+    Switch { selector: Expr, arms: Vec<SwitchArm>, default: Option<Block> },
     /// `for (int <var> = 0; <var> < <bound>; <var>++)`. `bound` is a literal, never an expression,
     /// and `var` is never assignable inside `body` — the two rules that make termination structural.
     For { var: String, bound: i32, body: Block },
@@ -902,6 +1036,11 @@ impl Stmt {
             Stmt::Declare { init, .. } => 1 + init.size(),
             Stmt::Assign { expr, .. } => 1 + expr.size(),
             Stmt::If { cond, then, otherwise } => 1 + cond.size() + then.size() + otherwise.size(),
+            Stmt::Switch { selector, arms, default } => {
+                1 + selector.size()
+                    + arms.iter().map(|a| a.body.size()).sum::<usize>()
+                    + default.as_ref().map_or(0, Block::size)
+            }
             Stmt::For { body, .. } => 1 + body.size(),
             Stmt::NewArray { .. } => 1,
             Stmt::ArrayStore { index, value, .. } => 1 + index.size() + value.size(),
@@ -918,6 +1057,11 @@ impl Stmt {
                 cond.classifies(ty)
                     || then.iter().any(|s| s.classifies(ty))
                     || otherwise.iter().any(|s| s.classifies(ty))
+            }
+            Stmt::Switch { selector, arms, default } => {
+                selector.classifies(ty)
+                    || arms.iter().any(|a| a.body.iter().any(|s| s.classifies(ty)))
+                    || default.iter().flatten().any(|s| s.classifies(ty))
             }
             Stmt::For { body, .. } => body.iter().any(|s| s.classifies(ty)),
             Stmt::NewArray { .. } => false,
@@ -1043,6 +1187,12 @@ struct ObjUse {
 
 fn scan_stmt(stmt: &Stmt, used: &mut ObjUse) {
     match stmt {
+        Stmt::Switch { selector, arms, default } => {
+            scan_expr(selector, used);
+            for st in arms.iter().flat_map(|a| a.body.iter()).chain(default.iter().flatten()) {
+                scan_stmt(st, used);
+            }
+        }
         Stmt::Declare { init, .. } => scan_expr(init, used),
         Stmt::Assign { expr, .. } => scan_expr(expr, used),
         Stmt::If { cond, then, otherwise } => {
@@ -1098,6 +1248,9 @@ fn scan_expr(expr: &Expr, used: &mut ObjUse) {
             used.wide |= *method == VMethod::W;
         }
         Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) | Expr::Classify(a) => scan_expr(a, used),
+        // A string subtree names no local: its leaves are literals from the pool.
+        Expr::Str(_, _) => {}
+        Expr::Narrow(_, a) => scan_expr(a, used),
         Expr::ArrayLoad(_, _, a) => scan_expr(a, used),
         Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => {
             scan_expr(a, used);
@@ -1389,6 +1542,35 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
                 let _ = writeln!(out, "}}");
             }
         }
+        Stmt::Switch { selector, arms, default } => {
+            let mut sel = String::new();
+            emit_expr(&mut sel, selector);
+            let _ = writeln!(out, "switch ({sel}) {{");
+            for arm in arms {
+                indent(out, depth);
+                let _ = writeln!(out, "case {}: {{", arm.label);
+                for st in &arm.body {
+                    emit_stmt(out, st, depth + 1, prefix);
+                }
+                indent(out, depth);
+                out.push_str("}\n");
+                if arm.breaks {
+                    indent(out, depth);
+                    out.push_str("break;\n");
+                }
+            }
+            if let Some(body) = default {
+                indent(out, depth);
+                let _ = writeln!(out, "default: {{");
+                for st in body {
+                    emit_stmt(out, st, depth + 1, prefix);
+                }
+                indent(out, depth);
+                out.push_str("}\n");
+            }
+            indent(out, depth);
+            let _ = writeln!(out, "}}");
+        }
         Stmt::For { var, bound, body } => {
             let _ = writeln!(out, "for (int {var} = 0; {var} < {bound}; {var}++) {{");
             for s in body {
@@ -1518,6 +1700,57 @@ fn emit_double_lit(out: &mut String, bits: u64) {
 /// an emitter gets subtly wrong, and a precedence bug does not show up as a compile error — it
 /// shows up as a program that computes something other than what the AST says, which would make
 /// every finding suspect.
+/// A string question, emitted as the `int` it answers. The ternaries are how a `boolean` becomes
+/// a value at all: the grammar has no `boolean` locals, the same reason [`Expr::Ternary`] exists.
+fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr) {
+    match probe {
+        StrProbe::Length => {
+            emit_str(out, value);
+            out.push_str(".length()");
+        }
+        // The whole ternary is parenthesised, not just its condition. Without the outer pair,
+        // `x * s.equals(t) ? 1 : 0` parses as `(x * s.equals(t)) ? 1 : 0` — a multiplication of an
+        // int by a boolean — and `javac` rejects the program. Every node in this grammar
+        // parenthesises itself for exactly this reason.
+        StrProbe::Identity(other) => {
+            out.push('(');
+            emit_str(out, value);
+            out.push_str(".equals(");
+            emit_str(out, other);
+            out.push_str(") ? 1 : 0)");
+        }
+        StrProbe::Same(other) => {
+            out.push_str("((");
+            emit_str(out, value);
+            out.push_str(" == ");
+            emit_str(out, other);
+            out.push_str(") ? 1 : 0)");
+        }
+    }
+}
+
+/// A `String`-valued expression. Every form is parenthesised: `a + b` inside a `.length()` would
+/// otherwise bind the call to `b` alone.
+fn emit_str(out: &mut String, value: &StrExpr) {
+    match value {
+        StrExpr::Lit(i) => {
+            let _ = write!(out, "\"{}\"", STRING_POOL[*i % STRING_POOL.len()]);
+        }
+        StrExpr::Concat(a, b) => {
+            out.push('(');
+            emit_str(out, a);
+            out.push_str(" + ");
+            emit_str(out, b);
+            out.push(')');
+        }
+        StrExpr::Fresh(a) => {
+            out.push_str("new String(");
+            emit_str(out, a);
+            out.push(')');
+        }
+    }
+}
+
 fn emit_expr(out: &mut String, expr: &Expr) {
     match expr {
         Expr::IntLit(v) => emit_int_lit(out, *v),
@@ -1578,6 +1811,15 @@ fn emit_expr(out: &mut String, expr: &Expr) {
         }
         Expr::Classify(inner) => {
             let _ = write!(out, "{}(", classifier_name(inner.ty()));
+            emit_expr(out, inner);
+            out.push(')');
+        }
+        Expr::Str(probe, value) => emit_str_probe(out, probe, value),
+        // Two pairs of parentheses, both load-bearing: the inner one so the cast takes the whole
+        // operand rather than binding tighter than the expression's own operator, the outer one so
+        // the promoted result sits where any other `int` would.
+        Expr::Narrow(to, inner) => {
+            let _ = write!(out, "(({}) ", to.keyword());
             emit_expr(out, inner);
             out.push(')');
         }
@@ -1785,6 +2027,35 @@ pub struct GenConfig {
     /// Hence the knob, and hence `fuzz::campaigns::jit_coverage` measuring both settings rather
     /// than assuming either.
     pub fp_narrowing: bool,
+    /// Out of 100, how often a statement is a `switch`.
+    ///
+    /// Unlike the other two knobs of this milestone, turning this one up **helps** the JIT pairing:
+    /// `tableswitch` and `lookupswitch` are both inside `burst::compile`'s subset, padding included.
+    /// It is the construct that pays for the narrowing's cost.
+    pub switch_share: u32,
+    /// Out of 100, how often an `int` expression is a **narrowing round trip** (`i2b`/`i2s`/`i2c`).
+    ///
+    /// Its own knob, separate from anything else in this stage, because it pulls the two pairings
+    /// in **opposite** directions — the same tension [`GenConfig::fp_narrowing`] documents:
+    ///
+    /// - against [`Path::ReferenceJdk`](super::Path::ReferenceJdk) it is the point. Truncation and
+    ///   the sign/zero-extension split (`(char) -1` is 65535, `(byte) -1` is -1) are implemented
+    ///   only in `conversion_operations`, and nothing has ever diffed them against a real JDK;
+    /// - against [`Path::Jit`](super::Path::Jit) it is **poison**. `0x91`–`0x93` do not appear in
+    ///   `burst::compile`'s opcode scan at all, so a method carrying one is refused whole — the
+    ///   compiled arm never sees it, and the campaign quietly measures the interpreter twice.
+    pub narrowing_share: u32,
+    /// Out of 100, how often an `int` expression is a **string probe** instead of arithmetic.
+    ///
+    /// A knob rather than a constant, and defaulting to **zero**, for the same reason
+    /// [`GenConfig::fp_share`] is one: strings change what the *pairings* mean. Against
+    /// [`Path::ReferenceJdk`](super::Path::ReferenceJdk) they are the point — interning, concat
+    /// folding and `equals` are all compiler-and-runtime behaviour nobody has diffed. Against
+    /// [`Path::Jit`](super::Path::Jit) they are inert weight: no string opcode is in the JIT's
+    /// subset, so every probe is arithmetic the compiled arm does not get to see. Zero reproduces
+    /// the grammar without strings exactly, which is what makes "what did strings cost us in JIT
+    /// coverage?" a question with a measurable answer instead of a guess.
+    pub string_share: u32,
     /// Out of 100, how often a statement is an array `new` or an array store.
     ///
     /// Drawn *before* the ordinary statement roll rather than as extra faces on it, so that setting
@@ -1906,6 +2177,16 @@ impl Default for GenConfig {
             // hand actually lived — keeps most of the seeds.
             fp_share: 34,
             fp_narrowing: true,
+            // On by default, and low: it is the one addition of this milestone that costs the
+            // compiled arm nothing, so there is no reason to hide it behind a flag.
+            switch_share: 12,
+            // Zero for the same reason `string_share` is: it costs JIT coverage, and the pairing
+            // that gains from it is not the one the standing campaigns run.
+            narrowing_share: 0,
+            // Zero by default: strings are the newest arm and the one pairing that gains from
+            // them is not the one the standing campaigns run. `jit_coverage` turns it on to
+            // measure the cost, and the reference-JDK campaign is where it earns its keep.
+            string_share: 0,
             array_share: 22,
             wide_array_elements: true,
             max_array_len: 6,
@@ -2343,6 +2624,11 @@ impl Gen {
                 let expr = self.expr(scope, ty, 0);
                 Some(Stmt::Assign { name, ty, expr })
             }
+            6..=7 if self.config.switch_share > 0
+                && self.rng.below(100) < self.config.switch_share =>
+            {
+                self.switch_stmt(scope, depth)
+            }
             6..=7 => {
                 let ty = self.any_ty();
                 let cond = self.cond(scope, ty, 0);
@@ -2408,6 +2694,89 @@ impl Gen {
         let index = self.index_expr(scope, len);
         let value = self.expr(scope, elem, 1);
         Some(Stmt::ArrayStore { array: name, elem, index, value })
+    }
+
+    /// A `switch`, dense or scattered.
+    ///
+    /// The choice between the two is not cosmetic: consecutive labels are what make `javac` emit a
+    /// `tableswitch` and scattered ones a `lookupswitch`, and those are **different opcodes with
+    /// different decoders** — the second one searches. A generator that only ever produced one
+    /// shape would leave half of the pair untested and look exactly like one that tested both.
+    ///
+    /// The selector is masked rather than left arbitrary. An unbounded `int` expression would miss
+    /// every label essentially always, so the arms would be dead code and the whole construct would
+    /// reduce to "evaluate the selector, run `default`".
+    fn switch_stmt(&mut self, scope: &Scope, depth: u32) -> Option<Stmt> {
+        let count = 2 + self.rng.below(3) as usize;
+        let dense = self.rng.chance(1, 2);
+        let (labels, mask): (Vec<i32>, i32) = if dense {
+            let base = self.rng.below(3) as i32 - 1;
+            ((0..count).map(|i| base + i as i32).collect(), 3)
+        } else {
+            // Spread wide enough that `javac` cannot fold them into a table, and inside the mask so
+            // the selector still lands on one now and then.
+            let pool = [0i32, 5, 17, 44, 99, 126];
+            let mut picked: Vec<i32> = Vec::new();
+            while picked.len() < count {
+                let candidate = *self.rng.pick(&pool);
+                if !picked.contains(&candidate) {
+                    picked.push(candidate);
+                }
+            }
+            (picked, 127)
+        };
+        let inner = self.expr(scope, Ty::Int, 1);
+        let selector =
+            Expr::Bin(BinOp::And, Box::new(inner), Box::new(Expr::IntLit(mask)));
+        let arms = labels
+            .into_iter()
+            .map(|label| {
+                let mut arm_scope = scope.clone();
+                SwitchArm {
+                    label,
+                    body: self.block(&mut arm_scope, depth + 1),
+                    // Fall-through a third of the time. Rare enough that a `switch` still usually
+                    // reads like one, common enough that a campaign of any size meets it.
+                    breaks: !self.rng.chance(1, 3),
+                }
+            })
+            .collect();
+        let default = if self.rng.chance(1, 2) {
+            let mut default_scope = scope.clone();
+            Some(self.block(&mut default_scope, depth + 1))
+        } else {
+            None
+        };
+        Some(Stmt::Switch { selector, arms, default })
+    }
+
+    /// A string question. The probe is drawn first because it decides how many string operands
+    /// the node needs, and `Same` is weighted like the others rather than kept rare: reference
+    /// identity is the property this stage exists to check.
+    fn str_probe(&mut self, depth: u32) -> Expr {
+        let value = self.str_expr(depth);
+        let probe = match self.rng.below(3) {
+            0 => StrProbe::Length,
+            1 => StrProbe::Identity(Box::new(self.str_expr(depth))),
+            _ => StrProbe::Same(Box::new(self.str_expr(depth))),
+        };
+        Expr::Str(probe, Box::new(value))
+    }
+
+    /// A `String`-valued subtree. Depth is charged the same way arithmetic charges it, so a string
+    /// cannot be the one construct that escapes [`GenConfig::max_expr_depth`].
+    fn str_expr(&mut self, depth: u32) -> StrExpr {
+        if depth >= self.config.max_expr_depth {
+            return StrExpr::Lit(self.rng.below(STRING_POOL.len() as u32) as usize);
+        }
+        match self.rng.below(6) {
+            0 => StrExpr::Concat(
+                Box::new(self.str_expr(depth + 1)),
+                Box::new(self.str_expr(depth + 1)),
+            ),
+            1 => StrExpr::Fresh(Box::new(self.str_expr(depth + 1))),
+            _ => StrExpr::Lit(self.rng.below(STRING_POOL.len() as u32) as usize),
+        }
     }
 
     /// The element type of a new array. `int` most of the time, and deliberately so: `iaload` and
@@ -2519,6 +2888,22 @@ impl Gen {
             if let Some(read) = self.object_read(scope, ty) {
                 return read;
             }
+        }
+        // Same treatment, same reason. A string question only answers `int`, so the share is spent
+        // only where it can be honoured — otherwise a high share would silently do nothing on a
+        // `long` subtree and the knob would not mean what it says.
+        if ty == Ty::Int
+            && self.config.string_share > 0
+            && self.rng.below(100) < self.config.string_share
+        {
+            return self.str_probe(depth);
+        }
+        if ty == Ty::Int
+            && self.config.narrowing_share > 0
+            && self.rng.below(100) < self.config.narrowing_share
+        {
+            let to = *self.rng.pick(&[NarrowTy::Byte, NarrowTy::Short, NarrowTy::Char]);
+            return Expr::Narrow(to, Box::new(self.expr(scope, Ty::Int, depth + 1)));
         }
         match self.rng.below(17) {
             0..=3 => self.leaf(scope, ty),
@@ -2674,6 +3059,14 @@ impl Gen {
 
     fn stmt_cost(&self, stmt: &Stmt) -> u64 {
         match stmt {
+            // **Every** arm is charged, not the average one. Fall-through means a single entry can
+            // run several of them, and a budget that assumed one would be wrong exactly on the
+            // shapes this construct exists to generate.
+            Stmt::Switch { selector, arms, default } => {
+                1 + self.expr_cost(selector)
+                    + arms.iter().map(|a| self.block_cost(&a.body)).sum::<u64>()
+                    + default.as_ref().map_or(0, |b| self.block_cost(b))
+            }
             Stmt::Declare { init, .. } => 1 + self.expr_cost(init),
             Stmt::Assign { expr, .. } => 1 + self.expr_cost(expr),
             Stmt::If { cond, then, otherwise } => {
@@ -2717,6 +3110,10 @@ impl Gen {
             // probe. Charging it honestly is what keeps a program that classifies inside a nest of
             // loops from silently costing thirty times what the budget was told.
             Expr::Classify(a) => CLASSIFY_COST + self.expr_cost(a),
+            // A concat allocates and a compare walks the contents; both are cheap next to the
+            // classifier, and neither loops.
+            Expr::Str(probe, value) => (probe.size() + value.size()) as u64,
+            Expr::Narrow(_, a) => 1 + self.expr_cost(a),
             Expr::ArrayLength(_) => 1,
             Expr::ArrayLoad(_, _, index) => 1 + self.expr_cost(index),
             Expr::Field(_, _) => 1,
@@ -2793,6 +3190,12 @@ const OBJ_CLASSES: &[ObjClass] =
 /// get subtly wrong.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Malformed {
+    /// A `switch` selector that is not an `int`. Java allows `String` and `enum` too; this
+    /// grammar does not generate either, so anything else is a generator bug.
+    SwitchOnNonInt(Ty),
+    /// [`Expr::Narrow`] was handed something that is not an `int`. `i2b`/`i2s`/`i2c` take an `int`
+    /// and nothing else; a `long` would need `l2i` first, which is a different node.
+    NarrowOnNonInt(Ty),
     /// A name that is not in scope at the point it is read.
     UnboundVariable(String),
     /// A name read at a type other than the one it was declared with.
@@ -2952,6 +3355,22 @@ fn check_block(
                 let mut inner = scope.clone();
                 check_block(otherwise, &mut inner, visible)?;
             }
+            Stmt::Switch { selector, arms, default } => {
+                check_expr(selector, scope, visible)?;
+                if selector.ty() != Ty::Int {
+                    return Err(Malformed::SwitchOnNonInt(selector.ty()));
+                }
+                // Each arm gets its own copy of the scope: the braces around an arm's body are a
+                // real block, so a local declared in one is not in scope in the next.
+                for arm in arms {
+                    let mut inner = scope.clone();
+                    check_block(&arm.body, &mut inner, visible)?;
+                }
+                if let Some(body) = default {
+                    let mut inner = scope.clone();
+                    check_block(body, &mut inner, visible)?;
+                }
+            }
             Stmt::For { var, bound, body } => {
                 if *bound <= 0 {
                     return Err(Malformed::BadLoopBound(*bound));
@@ -3096,6 +3515,15 @@ fn check_expr(expr: &Expr, scope: &[Local], visible: &[Method]) -> Result<(), Ma
             Ok(())
         }
         Expr::Cast(_, a) => check_expr(a, scope, visible),
+        // Nothing to check: a string subtree names no local and has no type to get wrong.
+        Expr::Str(_, _) => Ok(()),
+        Expr::Narrow(_, a) => {
+            check_expr(a, scope, visible)?;
+            if a.ty() != Ty::Int {
+                return Err(Malformed::NarrowOnNonInt(a.ty()));
+            }
+            Ok(())
+        }
         Expr::Classify(a) => {
             check_expr(a, scope, visible)?;
             if !a.ty().is_fp() {
@@ -3525,6 +3953,11 @@ mod tests {
                     walk(a, seed);
                 }
                 Expr::Neg(a) | Expr::Cast(_, a) => walk(a, seed),
+                Expr::Str(_, _) => {}
+                Expr::Narrow(_, a) => {
+                    assert_eq!(a.ty(), Ty::Int, "seed {seed}: narrowing of a {:?}", a.ty());
+                    walk(a, seed);
+                }
                 Expr::Classify(a) => {
                     assert!(a.ty().is_fp(), "seed {seed}: classify of a {:?}", a.ty());
                     walk(a, seed);
@@ -3580,6 +4013,134 @@ mod tests {
     }
 
     // -- arrays (stage 2) ----------------------------------------------------------------------
+
+    /// A `switch` has three properties worth pinning, and none of them is "it appears".
+    ///
+    /// **Dense and scattered both**, because the label layout is what decides whether `javac` emits
+    /// a `tableswitch` or a `lookupswitch`, and those are different opcodes with different
+    /// decoders. **Fall-through**, because it is the one thing here the opcodes do not encode — the
+    /// compiler lays the arms out so control runs from one into the next. And **arms that are
+    /// actually reached**, since a selector that never matches a label turns the whole construct
+    /// into `default` with extra steps.
+    ///
+    /// Read off the tree rather than the text: `break` is easy to grep for and easy to be wrong
+    /// about, and the tree is what the reducer manipulates anyway.
+    #[test]
+    fn a_switch_is_generated_dense_scattered_and_falling_through() {
+        fn scan(block: &Block, dense: &mut usize, sparse: &mut usize, falls: &mut usize) {
+            for stmt in block {
+                match stmt {
+                    Stmt::Switch { arms, default, .. } => {
+                        let mut labels: Vec<i32> = arms.iter().map(|a| a.label).collect();
+                        labels.sort_unstable();
+                        let consecutive = labels.windows(2).all(|w| w[1] == w[0] + 1);
+                        if consecutive {
+                            *dense += 1;
+                        } else {
+                            *sparse += 1;
+                        }
+                        if arms.iter().any(|a| !a.breaks) {
+                            *falls += 1;
+                        }
+                        for arm in arms {
+                            scan(&arm.body, dense, sparse, falls);
+                        }
+                        if let Some(body) = default {
+                            scan(body, dense, sparse, falls);
+                        }
+                    }
+                    Stmt::If { then, otherwise, .. } => {
+                        scan(then, dense, sparse, falls);
+                        scan(otherwise, dense, sparse, falls);
+                    }
+                    Stmt::For { body, .. } => scan(body, dense, sparse, falls),
+                    _ => {}
+                }
+            }
+        }
+
+        let off = GenConfig { switch_share: 0, ..GenConfig::default() };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(off).generate(Seed(seed)).to_java();
+            assert!(!source.contains("switch ("), "seed {seed} emitted a switch at share 0");
+        }
+
+        let on = GenConfig { switch_share: 45, ..GenConfig::default() };
+        let (mut dense, mut sparse, mut falls) = (0, 0, 0);
+        for seed in 0..300 {
+            let program = JavaGenerator::new(on).generate(Seed(seed));
+            scan(&program.entry.body, &mut dense, &mut sparse, &mut falls);
+            for m in &program.methods {
+                scan(&m.body, &mut dense, &mut sparse, &mut falls);
+            }
+        }
+        assert!(dense > 10, "switch denso (tableswitch) en {dense} lugares");
+        assert!(sparse > 10, "switch disperso (lookupswitch) en {sparse} lugares");
+        assert!(falls > 10, "fall-through en {falls} lugares");
+    }
+
+    /// Same contract as the string test, and the same reason. A narrowing that never appears is
+    /// a campaign measuring nothing, and it would look exactly like a campaign that passed.
+    #[test]
+    fn a_narrowing_share_turns_the_round_trips_on_and_off() {
+        let none = GenConfig { narrowing_share: 0, ..GenConfig::default() };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(none).generate(Seed(seed)).to_java();
+            for needle in ["(byte)", "(short)", "(char)"] {
+                assert!(!source.contains(needle), "seed {seed} emitted {needle} at share 0");
+            }
+        }
+        let lots = GenConfig { narrowing_share: 60, ..GenConfig::default() };
+        let (mut byte, mut short, mut ch) = (0, 0, 0);
+        for seed in 0..300 {
+            let source = JavaGenerator::new(lots).generate(Seed(seed)).to_java();
+            if source.contains("(byte)") {
+                byte += 1;
+            }
+            if source.contains("(short)") {
+                short += 1;
+            }
+            // The one worth counting separately: `i2c` zero-extends where the other two carry the
+            // sign, so a run without it has not asked the question this stage is for.
+            if source.contains("(char)") {
+                ch += 1;
+            }
+        }
+        assert!(byte > 10, "(byte) en {byte}/300 seeds");
+        assert!(short > 10, "(short) en {short}/300 seeds");
+        assert!(ch > 10, "(char) en {ch}/300 seeds");
+    }
+
+    /// The counterpart of the array test, and the reason it exists: a campaign that reports zero
+    /// divergences over a grammar that never produced the construct is FZ-004 with a different
+    /// disguise. This pins that `string_share` both **fires** and **stays off** when it is zero.
+    #[test]
+    fn a_string_share_turns_strings_on_and_off() {
+        // Off: not a single quoted literal outside the fixed `main(String[] a)` signature.
+        let none = GenConfig { string_share: 0, ..GenConfig::default() };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(none).generate(Seed(seed)).to_java();
+            let body = source.replace("main(String[] a)", "");
+            assert!(!body.contains('\"'), "seed {seed} emitted a string literal at share 0");
+        }
+        // On: the three shapes the stage exists to exercise all appear across a few hundred seeds.
+        let lots = GenConfig { string_share: 60, ..GenConfig::default() };
+        let (mut literal, mut concat, mut fresh, mut equals, mut same) = (0, 0, 0, 0, 0);
+        for seed in 0..300 {
+            let source = JavaGenerator::new(lots).generate(Seed(seed)).to_java();
+            let body = source.replace("main(String[] a)", "");
+            if body.contains('\"') { literal += 1; }
+            if body.contains("\" + \"") { concat += 1; }
+            if body.contains("new String(") { fresh += 1; }
+            if body.contains(".equals(") { equals += 1; }
+            if body.contains(" == \"") || body.contains("\") == ") { same += 1; }
+        }
+        assert!(literal > 100, "literales en {literal}/300 seeds");
+        assert!(concat > 10, "concatenaciones en {concat}/300");
+        assert!(fresh > 10, "new String en {fresh}/300");
+        assert!(equals > 10, "equals en {equals}/300");
+        assert!(same > 10, "identidad en {same}/300");
+    }
 
     #[test]
     fn an_array_share_of_zero_gives_the_grammar_without_arrays_back() {
@@ -3669,6 +4230,11 @@ mod tests {
                     Stmt::Declare { init, .. } => in_expr(init),
                     Stmt::Assign { expr, .. } => in_expr(expr),
                     Stmt::If { then, otherwise, .. } => in_block(then) + in_block(otherwise),
+                    Stmt::Switch { selector, arms, default } => {
+                        in_expr(selector)
+                            + arms.iter().map(|x| in_block(&x.body)).sum::<usize>()
+                            + default.as_ref().map_or(0, in_block)
+                    }
                     Stmt::For { body, .. } => in_block(body),
                     Stmt::ArrayStore { index, value, .. } => in_expr(index) + in_expr(value),
                     Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => in_expr(arg),
@@ -3903,6 +4469,15 @@ mod tests {
                         in_cond(cond, out);
                         in_block(then, out);
                         in_block(otherwise, out);
+                    }
+                    Stmt::Switch { selector, arms, default } => {
+                        in_expr(selector, out);
+                        for arm in arms {
+                            in_block(&arm.body, out);
+                        }
+                        if let Some(body) = default {
+                            in_block(body, out);
+                        }
                     }
                     Stmt::For { body, .. } => in_block(body, out),
                     Stmt::ArrayStore { index, value, .. } => {
