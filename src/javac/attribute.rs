@@ -23,7 +23,7 @@ use std::collections::HashMap;
 
 use super::ast::{
     AssignOp, BinOp, Binding, Block, CaseLabel, ClassDecl, CompilationUnit, Expr, ExprKind,
-    LambdaBody, LocalInfo, Member, MethodRefQualifier, Modifier, Pattern, Pos, PrimType, Stmt,
+    LambdaBody, LocalInfo, Member, MethodDecl, MethodRefQualifier, Modifier, Pattern, Pos, PrimType, Stmt,
     StmtKind, SwitchBody, Type, TypeArg, TypeKind, UnOp,
 };
 use super::symbol::{RType, RTypeArg, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable};
@@ -53,6 +53,11 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
     for member in &mut class.members {
         match member {
             Member::Method(m) => {
+                // Los tipos de la **firma** (retorno y parámetros) y del cuerpo de un método
+                // **genérico** resuelven en el scope propio del método —el que ve sus `<T>`—, no en el
+                // de la clase. Sin esto, la `T` de `<T> T maxOf(T a, T b)` quedaba `Unresolved` y
+                // `a.compareTo(b)` no encontraba el método de su cota (bytecode roto).
+                let scope = method_sig_scope(table, scope, m);
                 let ret = resolve_rtype(table, scope, &m.return_type);
                 // Slots de la frame (JVMS §2.6.1): en un método de instancia el slot 0 es
                 // `this`; los parámetros siguen en orden, y un `long`/`double` ocupa dos.
@@ -456,11 +461,16 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
             None
         }
         StmtKind::If { cond, then, els } => {
+            // Se abre un ámbito alrededor del `if` para que una **variable de pattern** de la condición
+            // (`if (o instanceof T t)`) tenga su slot **liberado** al salir, y el próximo `if` lo reuse
+            // —así javac numera `astore_2` en cada rama disjunta, no 2/3/4—.
+            env.push();
             require_boolean(env, cond, "if");
             attrib_stmt(env, then);
             if let Some(e) = els {
                 attrib_stmt(env, e);
             }
+            env.pop();
             None
         }
         StmtKind::While { cond, body } => {
@@ -603,12 +613,78 @@ fn attrib_expr(env: &mut Env, expr: &mut Expr) -> RType {
 /// El constructor de `cid` que aplica a esos argumentos. `None` si la clase no declara ninguno —
 /// ahí rige el **implícito** `()V`, que no tiene símbolo y el emisor referencia directo.
 fn ctor_binding(env: &mut Env, cid: SymbolId, args: &[RType], pos: Pos) -> Option<Binding> {
-    let cands = constructors(env.table, cid);
+    let mut cands = constructors(env.table, cid);
+    // Un constructor `private` solo es candidato si el punto de llamada está en el **mismo nido**
+    // (§6.6.1): un `new AssertionError("...")` desde otra clase no puede ver el `private
+    // AssertionError(String)`, así que la sobrecarga cae en el `public AssertionError(Object)` —igual
+    // que javac—. Sin este filtro se elegía el `(String)`, que es inaccesible (y ni existe en runtime).
+    cands.retain(|&id| ctor_accessible(env.table, id, env.class));
     if cands.is_empty() {
         return None;
     }
     let name = env.table.symbol(cid).name.clone();
     resolve_overload(env, &cands, args, &name, pos, &RType::Class(cid)).map(Binding::Method)
+}
+
+/// La clase **top-level** que encierra a `cid` (su nido, §6.6.1): se sube por la cadena de dueños
+/// hasta la que no tiene otra clase por encima.
+/// El scope donde resuelven los tipos de la **firma**/cuerpo de `m`: si el método declara parámetros
+/// de tipo (`<T> …`), su scope propio (que ve `T` y, por encadenamiento, los de la clase); si no, el
+/// de la clase. La sobrecarga correcta se localiza por nombre y aridad.
+pub(crate) fn method_sig_scope(table: &SymbolTable, class_scope: ScopeId, m: &MethodDecl) -> ScopeId {
+    if m.type_params.is_empty() {
+        return class_scope;
+    }
+    for &id in table.scope(class_scope).get(&m.name) {
+        if let SymbolKind::Method { params, is_constructor: false, .. } = &table.symbol(id).kind {
+            if params.len() == m.params.len() {
+                if let Some(s) = table.own_scope(id) {
+                    return s;
+                }
+            }
+        }
+    }
+    class_scope
+}
+
+/// Si `ty` es una **variable de tipo**, su **primera cota** (la *erasure* de sus miembros, §4.4);
+/// una `T` sin cota declarada erasa a `Object`. Cualquier otro tipo se devuelve intacto. Se sube por
+/// cotas encadenadas (`T extends U`, `U extends Comparable<U>`).
+fn typevar_bound(table: &SymbolTable, ty: RType) -> RType {
+    let mut cur = ty;
+    let mut guard = 0;
+    while let RType::TypeVar(id) = &cur {
+        guard += 1;
+        if guard > 16 {
+            break;
+        }
+        match table.resolved(*id) {
+            Some(Resolved::TypeVar { bounds }) if !bounds.is_empty() => cur = bounds[0].clone(),
+            _ => {
+                return table.external("Object").map_or(cur, RType::Class);
+            }
+        }
+    }
+    cur
+}
+
+fn nest_top(table: &SymbolTable, mut cid: SymbolId) -> SymbolId {
+    while let Some(o) = enclosing_class(table, cid) {
+        cid = o;
+    }
+    cid
+}
+
+/// ¿Es `ctor` accesible desde `from`? Solo se filtra lo **inequívocamente inaccesible**: un `private`
+/// de **otro nido**. Los demás niveles (package/protected/public) se dejan pasar para no descartar de
+/// más código válido —modelar su accesibilidad completa pediría comparar paquetes—.
+fn ctor_accessible(table: &SymbolTable, ctor: SymbolId, from: SymbolId) -> bool {
+    if table.symbol(ctor).modifiers.contains(&Modifier::Private) {
+        if let Some(owner) = table.symbol(ctor).owner {
+            return nest_top(table, owner) == nest_top(table, from);
+        }
+    }
+    true
 }
 
 /// **Fase 2** de la resolución de sobrecarga (§15.12.2.6): re-atribuye los argumentos **poly** de una
@@ -975,6 +1051,11 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // de captura. `capture` preserva la *erasure*, así que la búsqueda de candidatos sigue
             // igual. Un receptor sin wildcards se devuelve tal cual.
             let recv = types::capture(env.table, &recv);
+            // Un receptor que es una **variable de tipo** (`a : T`, con `T extends Comparable<T>`) no
+            // tiene miembros propios: sus métodos son los de su **cota** (§4.4). Se sustituye por ella
+            // para que `a.compareTo(b)` resuelva contra `Comparable`. Sin esto, `erased_id(TypeVar)`
+            // daba `None` y la llamada quedaba sin resolver (bytecode roto).
+            let recv = typevar_bound(env.table, recv);
             // El receptor puede ser crudo (`C`) o parametrizado (`List<String>`): se busca sobre
             // su erasure, y después se **sustituyen** los argumentos en la firma.
             match types::erased_id(&recv) {
@@ -1204,7 +1285,11 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // codegen cae al `()V`.
             let binding = match &rt {
                 RType::Class(cid) | RType::Parameterized { base: cid, .. } => {
-                    let cands = constructors(env.table, *cid);
+                    let mut cands = constructors(env.table, *cid);
+                    // Se descartan los constructores inaccesibles (un `private` de otro nido): un `new
+                    // AssertionError("...")` no ve el `private AssertionError(String)` y cae en el
+                    // `public (Object)`, como javac.
+                    cands.retain(|&id| ctor_accessible(env.table, id, env.class));
                     let cname = env.table.symbol(*cid).name.clone();
                     if cands.is_empty() {
                         None

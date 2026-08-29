@@ -26,6 +26,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::javac::ast::CompilationUnit;
 use crate::javac::symbol::{SymbolId, SymbolTable};
 
 use super::bytecode_interpreter::objects_operations::{self, field_offset};
@@ -33,6 +34,7 @@ use super::bytecode_interpreter::{class_operations, JVM};
 use super::frame::{Frame, Value};
 use super::heap::HeapService;
 use super::metaspace::{MethodId, MetaspaceService};
+use super::natives::{drain_filer, install_filer};
 
 // ============================================================================================
 //  Fase 2 — el round loop
@@ -57,27 +59,76 @@ pub struct AptOutcome {
     pub console: String,
     /// El nombre interno de la clase de la excepción que abortó el bucle, si alguna escapó.
     pub error: Option<String>,
+    /// Los fuentes que los procesadores **generaron** vía el `Filer`, en orden de creación: cada uno
+    /// `(nombre pedido a `createSourceFile`, texto que el procesador escribió en su `StringWriter`)`.
+    pub generated_sources: Vec<(String, String)>,
+    /// Los `.class` **compilados** a partir de esos fuentes generados —`(nombre interno, bytes)`—:
+    /// una unidad generada puede producir varias clases (anidadas, sintéticas). Es lo que deja
+    /// "disponible" lo generado: el llamador puede escribirlos a un classpath y correrlos.
+    pub generated_classes: Vec<(String, Vec<u8>)>,
 }
+
+/// Tope de rondas normales, para que un procesador que genera fuente en cada ronda (un bug, o una
+/// dependencia cíclica de generación) no cuelgue el compilador. `javac` real tiene el mismo riesgo;
+/// un límite alto no molesta a un uso legítimo (que converge en unas pocas rondas) y corta el bucle.
+const MAX_ROUNDS: usize = 100;
+
+/// El recurso de `META-INF/services` que nombra los procesadores de un processorpath (JSR 269 §2).
+const PROCESSOR_SERVICE: &str = "META-INF/services/javax.annotation.processing.Processor";
 
 /// Corre el bucle de annotation processing sobre `processors` (nombres internos, p. ej.
 /// `com/foo/MyProcessor`), con la VM booteada de `boot` (loader bootstrap: KajiLibrary + `boot/`)
 /// y `app` (loader de aplicación: el `-processorpath` y el `-cp`).
 ///
-/// Descubrimiento: en esta fase los processors se pasan **explícitos** (el `-processor <FQN>` de
-/// `javac`), no por `META-INF/services`. Para cada uno: se lo instancia en la VM, se corre
-/// `init(env)`, y luego el bucle de rondas. El MVP corre **una ronda normal** (nada se genera) y la
-/// **ronda final** (`processingOver == true`).
+/// **Descubrimiento.** Si `processors` viene vacío, se descubren por el recurso
+/// `META-INF/services/javax.annotation.processing.Processor` de cada directorio de `app` (el
+/// `-processorpath`), como manda JSR 269. Si viene con nombres, se usan tal cual (el `-processor
+/// <FQN>` explícito de `javac`, que gana sobre el descubrimiento).
+///
+/// **El bucle (con re-entrada del `Filer`).** Cada procesador se instancia una vez y recibe su
+/// `init(env)`, con un `ProcessingEnvironment` cuyo `getFiler()` entrega un `KajiFiler`. Luego el
+/// bucle de rondas: antes de cada ronda se **arma** el `Filer` del hilo; tras `process()` se **drena**
+/// y, por cada fuente que un procesador fabricó, se recupera su texto (reentrante, vía
+/// `read_generated_text`). Los fuentes generados se **parsean y entran** en una `SymbolTable`
+/// acumulada (multi-unidad), se **compilan** a `.class` (disponibles para el llamador y para la VM en
+/// las rondas siguientes) y disparan **otra** ronda normal. El bucle termina cuando una ronda no
+/// genera nada; entonces corre la **ronda final** (`processingOver == true`).
 pub fn run_processors(processors: &[String], boot: Vec<PathBuf>, app: Vec<PathBuf>) -> AptOutcome {
     let mut outcome = AptOutcome::default();
-    let Some(first) = processors.first() else {
-        return outcome; // sin processors no hay nada que correr
+
+    // Descubrimiento por servicios si no hubo `-processor` explícito. `app` es el processorpath.
+    let discovered;
+    let processors: &[String] = if processors.is_empty() {
+        discovered = discover_processors(&app);
+        &discovered
+    } else {
+        processors
     };
+    let Some(first) = processors.first() else {
+        return outcome; // ni explícitos ni descubiertos: nada que correr
+    };
+
+    // Directorio de salida de lo generado: los `.class` que se compilen de los fuentes que fabrique
+    // el `Filer` se escriben acá, y se **antepone** al loader de aplicación para que la VM los cargue
+    // en las rondas siguientes (y el compilador los resuelva al generar código que dependa de ellos).
+    let gen_dir = std::env::temp_dir()
+        .join(format!("apt_gen_{}_{}", std::process::id(), gen_seq()));
+    let _ = std::fs::create_dir_all(&gen_dir);
+    // Classpath para (re)compilar y (re)entrar lo generado: primero lo ya generado, luego el boot
+    // (KajiLibrary) y el app originales, así un fuente generado puede referenciar a otro anterior o a
+    // la biblioteca. (`compile_cp`/`enter_multi` ya anteponen esto al classpath por defecto.)
+    let mut lib_dirs: Vec<PathBuf> = vec![gen_dir.clone()];
+    lib_dirs.extend(boot.iter().cloned());
+    lib_dirs.extend(app.iter().cloned());
+    // El loader de aplicación de la VM ve `gen_dir` primero (para cargar lo generado por nombre).
+    let mut app_with_gen = vec![gen_dir.clone()];
+    app_with_gen.extend(app.iter().cloned());
 
     // La VM necesita un frame de arranque aunque nunca lo ejecute (`call_java` empuja *por encima*
     // de él y desenrolla de vuelta). Sirve cualquier método con cuerpo; usamos el `<init>` del
     // primer processor, que javac siempre genera. Resolverlo también valida el descubrimiento: si
     // la clase no está en el classpath, fallamos acá con un error claro.
-    let mut metaspace = MetaspaceService::new(boot, app);
+    let mut metaspace = MetaspaceService::new(boot, app_with_gen);
     let Some(entry) = metaspace.resolve_method(first, "<init>", "()V") else {
         outcome.error = Some(format!("processor no encontrado o sin <init>: {first}"));
         return outcome;
@@ -95,8 +146,8 @@ pub fn run_processors(processors: &[String], boot: Vec<PathBuf>, app: Vec<PathBu
             outcome.console = console(&mut jvm);
             return outcome;
         };
-        // 2. Reificar un `ProcessingEnvironment` mínimo y correr `init(env)` (heredado de
-        //    `AbstractProcessor`, así que se despacha virtual para encontrar el override real).
+        // 2. Reificar un `ProcessingEnvironment` (con `getFiler()` → `KajiFiler`) y correr `init(env)`
+        //    (heredado de `AbstractProcessor`, así que se despacha virtual para el override real).
         let Some(env) = new_instance(&mut jvm, PROC_ENV_IMPL, "()V", Vec::new()) else {
             outcome.error = take_error(&mut jvm).or(Some("no se pudo reificar el env".into()));
             outcome.console = console(&mut jvm);
@@ -112,39 +163,103 @@ pub fn run_processors(processors: &[String], boot: Vec<PathBuf>, app: Vec<PathBu
     }
 
     // --- El bucle de rondas ---------------------------------------------------------------------
-    // Ronda(s) normal(es): en el MVP nada se genera (el conjunto de anotaciones y las raíces son
-    // vacíos), así que hay exactamente una. Luego la ronda final con `processingOver == true`.
+    // Unidades **acumuladas**: cada fuente generado se parsea y se suma acá, y la tabla se reconstruye
+    // multi-unidad para que la ronda siguiente lo vea reificado (fase 3). Empieza vacío (el round loop
+    // del MVP no recibe unidades de entrada; sólo lo que los procesadores generan).
+    let mut units: Vec<CompilationUnit> = Vec::new();
+    let mut normal_rounds = 0usize;
     loop {
-        run_round(&mut jvm, &instances, false, &mut outcome);
+        let generated = run_round(&mut jvm, &instances, false, &mut outcome);
         if outcome.error.is_some() {
             outcome.console = console(&mut jvm);
+            let _ = std::fs::remove_dir_all(&gen_dir);
             return outcome;
         }
-        // Sin reificación de elementos ni `Filer`, ningún processor puede aún emitir un nuevo
-        // fuente: no hay nuevas unidades → el bucle de rondas normales termina tras la primera.
-        break;
+        // Sin fuentes nuevos, el bucle de rondas normales terminó: cae a la ronda final.
+        if generated.is_empty() {
+            break;
+        }
+        // Re-entrada: parsear+entrar+compilar cada fuente generado.
+        for (name, text) in generated {
+            outcome.generated_sources.push((name.clone(), text.clone()));
+            match crate::javac::parse(&text) {
+                Ok(unit) => units.push(unit),
+                Err(err) => {
+                    outcome.error = Some(format!("fuente generado '{name}' no parsea: {err}"));
+                    break;
+                }
+            }
+            match crate::javac::compile_cp(&text, &lib_dirs) {
+                Ok(classes) => {
+                    for (internal, bytes) in classes {
+                        let path = gen_dir.join(format!("{internal}.class"));
+                        if let Some(parent) = path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = std::fs::write(&path, &bytes);
+                        outcome.generated_classes.push((internal, bytes));
+                    }
+                }
+                Err(err) => {
+                    outcome.error = Some(format!("fuente generado '{name}' no compila: {err}"));
+                    break;
+                }
+            }
+        }
+        if outcome.error.is_some() {
+            outcome.console = console(&mut jvm);
+            let _ = std::fs::remove_dir_all(&gen_dir);
+            return outcome;
+        }
+        // Reconstruir la tabla acumulada (multi-unidad) y atarla al VM: la reificación de la próxima
+        // ronda (fase 3) verá los tipos recién generados junto a los previos.
+        let (table, _errs) = crate::javac::enter::enter_multi(&units, &lib_dirs);
+        jvm.set_apt(AptContext::new(Arc::new(table)));
+
+        normal_rounds += 1;
+        if normal_rounds >= MAX_ROUNDS {
+            outcome.error = Some(format!("APT: el bucle de rondas superó {MAX_ROUNDS} rondas"));
+            outcome.console = console(&mut jvm);
+            let _ = std::fs::remove_dir_all(&gen_dir);
+            return outcome;
+        }
     }
+    // Ronda final (`processingOver == true`): un procesador no debería generar acá, así que lo que
+    // drene se descarta (ya no hay ronda que lo procese).
     run_round(&mut jvm, &instances, true, &mut outcome);
 
     outcome.console = console(&mut jvm);
     outcome.error = outcome.error.take().or_else(|| take_error(&mut jvm));
+    let _ = std::fs::remove_dir_all(&gen_dir);
     outcome
 }
 
-/// Una ronda: construye un `RoundEnvironment` (con `processingOver = over`) y un conjunto de
-/// anotaciones vacío, y llama `process(annotations, roundEnv)` en cada processor. Corta apenas
-/// una llamada deja una excepción pendiente.
-fn run_round(jvm: &mut JVM, instances: &[(String, usize)], over: bool, outcome: &mut AptOutcome) {
+/// Una ronda: **arma** el `Filer` del hilo, construye un `RoundEnvironment` (con `processingOver =
+/// over`) y un conjunto de anotaciones vacío, llama `process(annotations, roundEnv)` en cada
+/// processor, y al terminar **drena** el `Filer` y recupera el texto de cada fuente registrado
+/// (`(nombre, texto)`, en orden de creación). Corta apenas una llamada deja una excepción pendiente.
+fn run_round(
+    jvm: &mut JVM,
+    instances: &[(String, usize)],
+    over: bool,
+    outcome: &mut AptOutcome,
+) -> Vec<(String, String)> {
+    // Armar el canal del `Filer` para esta ronda: lo que los procesadores registren queda acá hasta
+    // que lo drenemos al final. (Cada ronda parte de cero — un fuente generado se procesa una sola vez.)
+    install_filer();
+
     // El `RoundEnvironment` y el `Set` de anotaciones se comparten entre todos los processors de la
     // ronda (mismo contrato de JSR 269): se construyen una vez por ronda.
     let flag = Value::Int(over as i32);
     let Some(round_env) = new_instance(jvm, ROUND_ENV_IMPL, "(Z)V", vec![flag]) else {
         outcome.error = take_error(jvm).or(Some("no se pudo reificar el roundEnv".into()));
-        return;
+        drain_filer();
+        return Vec::new();
     };
     let Some(annotations) = new_instance(jvm, HASH_SET, "()V", Vec::new()) else {
         outcome.error = take_error(jvm).or(Some("no se pudo crear el set de anotaciones".into()));
-        return;
+        drain_filer();
+        return Vec::new();
     };
     for (_fqn, obj) in instances {
         let args = vec![Value::Reference(annotations), Value::Reference(round_env)];
@@ -152,10 +267,49 @@ fn run_round(jvm: &mut JVM, instances: &[(String, usize)], over: bool, outcome: 
         outcome.process_calls += 1;
         if let Some(err) = take_error(jvm) {
             outcome.error = Some(err);
-            return;
+            drain_filer();
+            return Vec::new();
         }
     }
     outcome.rounds += 1;
+
+    // Drenar lo que el `Filer` registró y recuperar su texto (reentrante, sobre el mismo heap).
+    drain_filer()
+        .into_iter()
+        .map(|(name, writer_ref)| (name, jvm.read_generated_text(writer_ref as usize)))
+        .collect()
+}
+
+/// Descubre procesadores por `META-INF/services/javax.annotation.processing.Processor` en cada
+/// directorio de `processorpath`, en orden. Devuelve **nombres internos** (con `/`), sin duplicados,
+/// ignorando líneas en blanco y comentarios (`#…`) como manda el formato de `ServiceLoader`.
+fn discover_processors(processorpath: &[PathBuf]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for dir in processorpath {
+        let Ok(text) = std::fs::read_to_string(dir.join(PROCESSOR_SERVICE)) else {
+            continue;
+        };
+        for line in text.lines() {
+            // El comentario `#` va hasta fin de línea; luego se recorta el espacio.
+            let entry = line.split('#').next().unwrap_or("").trim();
+            if entry.is_empty() {
+                continue;
+            }
+            let internal = entry.replace('.', "/");
+            if !names.contains(&internal) {
+                names.push(internal);
+            }
+        }
+    }
+    names
+}
+
+/// Un contador de proceso para que dos corridas de `run_processors` (p. ej. tests en paralelo) usen
+/// directorios de generación distintos y no se pisen los `.class`.
+fn gen_seq() -> usize {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static SEQ: AtomicUsize = AtomicUsize::new(0);
+    SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Aloca una instancia de `class` (carga + prepara + `<clinit>`) y corre su constructor
@@ -195,6 +349,10 @@ fn console(jvm: &mut JVM) -> String {
 /// La clase de la biblioteca que **reifica** un `Symbol` en el heap: un `int sym` (el
 /// `SymbolId`) más los `native` de nombre. Vive en `KajiLibrary/jdk/internal/apt/`.
 pub const SYM_ELEMENT: &str = "jdk/internal/apt/SymElement";
+
+/// El enum `javax.lang.model.element.ElementKind` — el que `SymElement.getKind()` (capa 4)
+/// devuelve por constante estática, tras correr su `<clinit>`.
+pub const ELEMENT_KIND: &str = "javax/lang/model/element/ElementKind";
 
 /// El estado del modelo APT durante una corrida: la tabla del compilador (compartida por `Arc`)
 /// y la **caché de identidad** `SymbolId → offset del SymElement`. La caché es lo que hace que
@@ -345,21 +503,407 @@ public class HelloProcessor extends AbstractProcessor {
         // El cable APT: compartir la tabla con el VM por `Arc` (no la consume; ver nota del módulo).
         jvm.set_apt(AptContext::new(Arc::clone(&table)));
 
-        // Reificar Foo y pedirle su nombre simple por invokevirtual (→ el native).
+        // Reificar Foo y pedirle su nombre simple por invokevirtual (→ el native). Capa 2: el
+        // nombre viaja como un `Name` (un `SymName`), no como un `String`; su texto se lee con
+        // `toString()` (parte del contrato `CharSequence` de `Name`).
         let element = jvm.exec().apt_element_for(foo);
-        let name_ref = jvm
+        let name = jvm
             .exec()
-            .call_virtual(element, "getSimpleName", "()Ljava/lang/String;", Vec::new())
+            .call_virtual(element, "getSimpleName", "()Ljavax/lang/model/element/Name;", Vec::new())
             .expect("getSimpleName devuelve un valor");
-        let Value::Reference(name) = name_ref else {
-            panic!("getSimpleName devuelve una referencia a String, no {name_ref:?}");
+        let Value::Reference(name_obj) = name else {
+            panic!("getSimpleName devuelve una referencia a Name, no {name:?}");
         };
-        assert_eq!(strings::read(jvm.exec().heap(), name), "Foo");
+        assert_eq!(name_text(&mut jvm, name_obj), "Foo");
 
         // La caché de identidad: reificar Foo otra vez da el **mismo** objeto.
         assert_eq!(jvm.exec().apt_element_for(foo), element, "identidad estable");
 
         // Y el VM no consumió la tabla: el llamador conserva su `Arc` (sigue consultable).
         assert_eq!(table.symbol(foo).name, "Foo", "el llamador conserva la tabla");
+    }
+
+    /// Compila con el javac del proyecto cada fuente `source` (contra `cp`) y escribe sus `.class`
+    /// bajo `dir`, por nombre interno (con subdirectorios de paquete), para que un classpath los
+    /// resuelva. Helper de los tests de re-entrada.
+    fn compile_into(dir: &std::path::Path, source: &str, cp: &[PathBuf]) {
+        let classes = crate::javac::compile_cp(source, cp).expect("la fuente debe compilar");
+        for (internal, bytes) in classes {
+            let path = dir.join(format!("{internal}.class"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+    }
+
+    /// **El cable completo de fase 4 → fase 2**: un procesador usa su `Filer` para fabricar
+    /// `FooGreeting` con un `public static int value() { return 42; }`; el round loop **drena** ese
+    /// fuente, lo **re-parsea/entra/compila**, y el `.class` generado queda disponible y corre dando
+    /// 42. Ejercita `createSourceFile → texto → re-entrada → enter → codegen`, más el criterio de
+    /// terminación (una ronda que no genera nada → ronda final) y el conteo de rondas resultante.
+    #[test]
+    fn a_processor_generates_a_source_that_is_recompiled_and_runs() {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::bytecode_interpreter::execute;
+
+        let kaji = PathBuf::from("KajiLibrary");
+        let n = gen_seq();
+        let base = std::env::temp_dir().join(format!("apt_reentry_{}_{n}", std::process::id()));
+        let lib = base.join("lib"); // shadow de boot: Filer real + ProcessingEnvironmentImpl
+        let proc = base.join("proc"); // processorpath: el procesador
+        std::fs::create_dir_all(&lib).unwrap();
+        std::fs::create_dir_all(&proc).unwrap();
+
+        // 1) Las clases de soporte del `Filer`, compiladas con el javac del proyecto (bytecode que
+        //    esta VM corre). Van a `lib`, que se antepone a `boot` para tapar la
+        //    `ProcessingEnvironmentImpl` de KajiLibrary (cuya `getFiler()` ahora entrega un KajiFiler).
+        //    En orden de dependencia: KajiSourceFile ← KajiFiler ← ProcessingEnvironmentImpl.
+        let lib_cp = [lib.clone(), kaji.clone()];
+        for name in [
+            "javax/annotation/processing/KajiSourceFile",
+            "javax/annotation/processing/KajiFiler",
+            "javax/annotation/processing/ProcessingEnvironmentImpl",
+        ] {
+            let src = std::fs::read_to_string(kaji.join(format!("{name}.java"))).unwrap();
+            compile_into(&lib, &src, &lib_cp);
+        }
+
+        // 2) El procesador: en la **primera** ronda normal usa el Filer para crear `FooGreeting`, y no
+        //    vuelve a generar (guarda un flag). Captura el `env` en su propio campo (evita depender de
+        //    resolver el campo heredado de AbstractProcessor). Sin `System.out` (no compila acá).
+        let processor = r#"
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.Filer;
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.lang.model.element.TypeElement;
+import javax.tools.JavaFileObject;
+import java.io.StringWriter;
+import java.util.Set;
+@SupportedAnnotationTypes("*")
+public class GenProcessor extends AbstractProcessor {
+    private ProcessingEnvironment env;
+    private boolean done;
+    public void init(ProcessingEnvironment e) { this.env = e; }
+    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        if (!roundEnv.processingOver() && !this.done) {
+            this.done = true;
+            Filer f = this.env.getFiler();
+            JavaFileObject jfo = f.createSourceFile("FooGreeting");
+            StringWriter w = (StringWriter) jfo.openWriter();
+            w.write("public class FooGreeting { public static int value() { return 42; } }");
+        }
+        return false;
+    }
+}
+"#;
+        compile_into(&proc, processor, &[kaji.clone()]);
+
+        // 3) Correr el round loop. boot = [lib (shadow), KajiLibrary, boot]; app = [processorpath].
+        let boot = vec![lib.clone(), kaji.clone(), PathBuf::from("boot")];
+        let app = vec![proc.clone()];
+        let outcome = run_processors(&["GenProcessor".to_string()], boot, app);
+
+        assert!(outcome.error.is_none(), "el bucle no debería fallar: {:?}", outcome.error);
+        // Tres rondas: normal-genera, normal-vacía (el flag cortó la generación), y la final.
+        assert_eq!(outcome.rounds, 3, "generar, converger y la final: {}", outcome.rounds);
+        assert_eq!(outcome.process_calls, 3, "una llamada a process por ronda");
+        // El Filer entregó el fuente de vuelta a Rust.
+        assert_eq!(outcome.generated_sources.len(), 1, "un solo fuente generado");
+        assert_eq!(outcome.generated_sources[0].0, "FooGreeting");
+        assert!(
+            outcome.generated_sources[0].1.contains("static int value"),
+            "el texto recuperado: {:?}",
+            outcome.generated_sources[0].1
+        );
+        // Y se **recompiló**: el `.class` de FooGreeting quedó disponible.
+        let foo = outcome
+            .generated_classes
+            .iter()
+            .find(|(name, _)| name == "FooGreeting")
+            .expect("FooGreeting.class generado");
+
+        // 4) El `.class` generado corre y `value()` da 42 — la re-entrada llegó hasta el codegen.
+        let out = base.join("out");
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(out.join("FooGreeting.class"), &foo.1).unwrap();
+        let mut ms = MetaspaceService::new(vec![PathBuf::from("boot")], vec![out.clone()]);
+        let class = ClassFile::from_path(out.join("FooGreeting.class").to_str().unwrap())
+            .expect("el .class generado parsea");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        ms.add(name.clone(), class);
+        let value = ms.resolve_method(&name, "value", "()I").expect("FooGreeting.value");
+        let max_locals = ms.max_locals(value);
+        let result = execute(ms, Frame::new(value, max_locals, Vec::new()));
+
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(result, Some(Value::Int(42)), "FooGreeting.value() debería dar 42");
+    }
+
+    /// Descubrimiento por `META-INF/services`: sin `-processor` explícito, el round loop lee el
+    /// recurso del processorpath y corre lo que nombra. Reusa el `HelloProcessor` (sólo imprime), así
+    /// el foco es el **descubrimiento**, no la generación.
+    #[test]
+    fn processors_are_discovered_via_meta_inf_services() {
+        let source = r#"
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.AptTrace;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.lang.model.element.TypeElement;
+import java.util.Set;
+@SupportedAnnotationTypes("*")
+public class SvcProcessor extends AbstractProcessor {
+    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        AptTrace.trace("SvcProcessor ran");
+        return false;
+    }
+}
+"#;
+        let kaji = PathBuf::from("KajiLibrary");
+        let n = gen_seq();
+        let dir = std::env::temp_dir().join(format!("apt_svc_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        compile_into(&dir, source, &[kaji.clone()]);
+        // El archivo de servicios: FQN en notación con puntos, con un comentario y una línea en blanco
+        // para ejercitar el parseo tolerante.
+        let svc = dir.join("META-INF/services/javax.annotation.processing.Processor");
+        std::fs::create_dir_all(svc.parent().unwrap()).unwrap();
+        std::fs::write(&svc, "# procesadores\nSvcProcessor\n\n").unwrap();
+
+        // Sin `-processor` explícito: `run_processors` los descubre del processorpath (`app`).
+        let boot = vec![kaji.clone(), PathBuf::from("boot")];
+        let outcome = run_processors(&[], boot, vec![dir.clone()]);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(outcome.error.is_none(), "no debería fallar: {:?}", outcome.error);
+        assert_eq!(outcome.rounds, 2, "normal + final (no genera nada)");
+        assert!(outcome.console.contains("SvcProcessor ran"), "corrió: {:?}", outcome.console);
+    }
+
+    /// [`enter_multi`] entra **dos** unidades en **una** tabla y resuelve una referencia **cruzada**
+    /// entre ellas (una clase de la unidad B extiende una de la A). Es el front-end multi-unidad que
+    /// la re-entrada del round loop necesita.
+    #[test]
+    fn enter_multi_resolves_a_cross_unit_reference() {
+        use crate::javac::symbol::Resolved;
+        let a = crate::javac::parse("public class Base { int a() { return 1; } }").expect("A parsea");
+        let b = crate::javac::parse("public class Sub extends Base {}").expect("B parsea");
+        let (table, errors) = crate::javac::enter::enter_multi(&[a, b], &[]);
+        assert!(
+            errors.iter().all(|e| e.severity == crate::javac::Severity::Warning),
+            "sin errores: {errors:?}"
+        );
+        let base = table.class("Base").expect("símbolo de Base en la tabla acumulada");
+        let sub = table.class("Sub").expect("símbolo de Sub en la tabla acumulada");
+        // El `extends Base` de Sub resolvió al símbolo de Base de la **otra** unidad.
+        match table.resolved(sub) {
+            Some(Resolved::Class { super_type: Some(crate::javac::symbol::RType::Class(c)), .. }) => {
+                assert_eq!(*c, base, "Sub extends Base resuelto entre unidades");
+            }
+            other => panic!("Sub debería extender Base: {other:?}"),
+        }
+    }
+
+    // ---- ayudantes de las capas 2-5 ------------------------------------------------------------
+
+    /// Una JVM sobre KajiLibrary con la tabla `table` atada como contexto APT, parada en un método
+    /// cualquiera (no corre `main`): las llamadas virtuales del test manejan native/intrínsecos sin
+    /// necesitar un frame propio. Comparte la tabla por `Arc` (no la consume).
+    fn jvm_with_apt(table: &Arc<SymbolTable>) -> JVM {
+        let mut metaspace = MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![]);
+        let park = metaspace
+            .resolve_method("java/lang/Object", "hashCode", "()I")
+            .expect("un método donde estacionar el frame de entrada");
+        let max_locals = metaspace.max_locals(park);
+        let mut jvm = JVM::new(metaspace, Frame::new(park, max_locals, Vec::new()));
+        jvm.set_apt(AptContext::new(Arc::clone(table)));
+        jvm
+    }
+
+    /// El texto de un `Name` (`SymName`) del heap: su `toString()` (contrato `CharSequence`).
+    fn name_text(jvm: &mut JVM, name_obj: usize) -> String {
+        let text = jvm
+            .exec()
+            .call_virtual(name_obj, "toString", "()Ljava/lang/String;", Vec::new())
+            .expect("Name.toString devuelve un String");
+        match text {
+            Value::Reference(s) => strings::read(jvm.exec().heap(), s),
+            other => panic!("toString devuelve una referencia, no {other:?}"),
+        }
+    }
+
+    /// El nombre simple de un `SymElement` del heap (llama a `getSimpleName().toString()`).
+    fn simple_name(jvm: &mut JVM, element: usize) -> String {
+        let name = jvm
+            .exec()
+            .call_virtual(element, "getSimpleName", "()Ljavax/lang/model/element/Name;", Vec::new())
+            .expect("getSimpleName");
+        match name {
+            Value::Reference(obj) => name_text(jvm, obj),
+            other => panic!("getSimpleName no devolvió una referencia: {other:?}"),
+        }
+    }
+
+    /// El nombre de la constante `ElementKind` que `getKind()` devuelve para `element` (llama a
+    /// `getKind()` —intrínseco— y luego `Enum.name()` sobre la constante).
+    fn kind_name(jvm: &mut JVM, element: usize) -> String {
+        let kind = jvm
+            .exec()
+            .call_virtual(element, "getKind", "()Ljavax/lang/model/element/ElementKind;", Vec::new())
+            .expect("getKind devuelve una constante");
+        let Value::Reference(constant) = kind else {
+            panic!("getKind no devolvió una referencia: {kind:?}");
+        };
+        let named = jvm
+            .exec()
+            .call_virtual(constant, "name", "()Ljava/lang/String;", Vec::new())
+            .expect("Enum.name");
+        match named {
+            Value::Reference(s) => strings::read(jvm.exec().heap(), s),
+            other => panic!("name() no devolvió una referencia: {other:?}"),
+        }
+    }
+
+    /// **Capa 3** — `getQualifiedName()` de un tipo **anidado** transforma el `$` del binary name
+    /// en `.`: `class Outer { class Inner {} }` → `Inner.getQualifiedName() == "Outer.Inner"`,
+    /// mientras que su nombre simple sigue siendo `"Inner"`.
+    #[test]
+    fn get_qualified_name_of_a_nested_type_dots_the_binary() {
+        let (_unit, table, errors) =
+            crate::javac::analyze("class Outer { class Inner {} }").expect("analyze");
+        assert!(
+            errors.iter().all(|e| e.severity == crate::javac::Severity::Warning),
+            "sin errores: {errors:?}"
+        );
+        let table = Arc::new(table);
+        let inner = table.class("Outer.Inner").expect("símbolo de Outer.Inner");
+        let mut jvm = jvm_with_apt(&table);
+
+        let element = jvm.exec().apt_element_for(inner);
+        let qualified = jvm
+            .exec()
+            .call_virtual(element, "getQualifiedName", "()Ljavax/lang/model/element/Name;", Vec::new())
+            .expect("getQualifiedName");
+        let Value::Reference(qname) = qualified else {
+            panic!("getQualifiedName no devolvió una referencia: {qualified:?}");
+        };
+        assert_eq!(name_text(&mut jvm, qname), "Outer.Inner", "FQN con el `$` vuelto `.`");
+        assert_eq!(simple_name(&mut jvm, element), "Inner", "el nombre simple no cambia");
+    }
+
+    /// **Capa 5** — `getEnclosedElements()` de una clase con miembros devuelve una `List` con un
+    /// elemento por miembro (`members_of`); cada uno reificado con su propio nombre. Se verifica que
+    /// la lista contenga el campo `x` y el método `m`.
+    #[test]
+    fn get_enclosed_elements_lists_the_members() {
+        let (_unit, table, errors) =
+            crate::javac::analyze("class Foo { int x; void m() {} }").expect("analyze");
+        assert!(
+            errors.iter().all(|e| e.severity == crate::javac::Severity::Warning),
+            "sin errores: {errors:?}"
+        );
+        let table = Arc::new(table);
+        let foo = table.class("Foo").expect("símbolo de Foo");
+        let mut jvm = jvm_with_apt(&table);
+
+        let element = jvm.exec().apt_element_for(foo);
+        let list = jvm
+            .exec()
+            .call_virtual(element, "getEnclosedElements", "()Ljava/util/List;", Vec::new())
+            .expect("getEnclosedElements");
+        let Value::Reference(list) = list else {
+            panic!("getEnclosedElements no devolvió una referencia: {list:?}");
+        };
+
+        // Recorrer la `List` (size/get) y juntar los nombres simples de sus elementos.
+        let size = match jvm.exec().call_virtual(list, "size", "()I", Vec::new()) {
+            Some(Value::Int(n)) => n,
+            other => panic!("List.size no devolvió un int: {other:?}"),
+        };
+        let mut names = Vec::new();
+        for i in 0..size {
+            let child = jvm
+                .exec()
+                .call_virtual(list, "get", "(I)Ljava/lang/Object;", vec![Value::Int(i)])
+                .expect("List.get");
+            let Value::Reference(child) = child else { panic!("get no devolvió una referencia") };
+            names.push(simple_name(&mut jvm, child));
+        }
+        assert!(names.iter().any(|n| n == "x"), "debería listar el campo x: {names:?}");
+        assert!(names.iter().any(|n| n == "m"), "debería listar el método m: {names:?}");
+    }
+
+    /// **Capa 4** — `getKind()` mapea `SymbolKind`/`TypeKind` a la constante de `ElementKind`
+    /// correcta, corriendo antes el `<clinit>` del enum. Se prueban una clase, una interfaz y un
+    /// enum en una misma unidad.
+    #[test]
+    fn get_kind_maps_class_interface_and_enum() {
+        let source = "class Foo {} interface Bar {} enum Color { RED }";
+        let (_unit, table, errors) = crate::javac::analyze(source).expect("analyze");
+        assert!(
+            errors.iter().all(|e| e.severity == crate::javac::Severity::Warning),
+            "sin errores: {errors:?}"
+        );
+        let table = Arc::new(table);
+        let (foo, bar, color) = (
+            table.class("Foo").expect("Foo"),
+            table.class("Bar").expect("Bar"),
+            table.class("Color").expect("Color"),
+        );
+        let mut jvm = jvm_with_apt(&table);
+
+        let foo_el = jvm.exec().apt_element_for(foo);
+        assert_eq!(kind_name(&mut jvm, foo_el), "CLASS");
+        let bar_el = jvm.exec().apt_element_for(bar);
+        assert_eq!(kind_name(&mut jvm, bar_el), "INTERFACE");
+        let color_el = jvm.exec().apt_element_for(color);
+        assert_eq!(kind_name(&mut jvm, color_el), "ENUM");
+    }
+
+    /// **Capa 3** — `getEnclosingElement()` reifica el `Symbol.owner` con la **caché de identidad**:
+    /// dos miembros de la misma clase devuelven el **mismo** objeto para su elemento envolvente, y
+    /// ese objeto es el `SymElement` de la clase (`==` a `element_for` de la clase).
+    #[test]
+    fn get_enclosing_element_shares_identity() {
+        let (_unit, table, errors) =
+            crate::javac::analyze("class Foo { int a; int b; }").expect("analyze");
+        assert!(
+            errors.iter().all(|e| e.severity == crate::javac::Severity::Warning),
+            "sin errores: {errors:?}"
+        );
+        let table = Arc::new(table);
+        let foo = table.class("Foo").expect("símbolo de Foo");
+        // Los símbolos de los campos a y b, hijos de Foo.
+        let field = |name: &str| {
+            table
+                .members_of(foo)
+                .into_iter()
+                .find(|&id| table.symbol(id).name == name)
+                .unwrap_or_else(|| panic!("campo {name} no encontrado"))
+        };
+        let (a, b) = (field("a"), field("b"));
+        let mut jvm = jvm_with_apt(&table);
+
+        let a_el = jvm.exec().apt_element_for(a);
+        let b_el = jvm.exec().apt_element_for(b);
+        let enclosing = |jvm: &mut JVM, el: usize| {
+            match jvm
+                .exec()
+                .call_virtual(el, "getEnclosingElement", "()Ljavax/lang/model/element/Element;", Vec::new())
+                .expect("getEnclosingElement")
+            {
+                Value::Reference(owner) => owner,
+                other => panic!("getEnclosingElement no devolvió una referencia: {other:?}"),
+            }
+        };
+        let owner_a = enclosing(&mut jvm, a_el);
+        let owner_b = enclosing(&mut jvm, b_el);
+        assert_eq!(owner_a, owner_b, "mismo dueño → mismo objeto (identidad)");
+
+        // Y ese dueño es exactamente el `SymElement` de Foo (misma caché).
+        let foo_el = jvm.exec().apt_element_for(foo);
+        assert_eq!(owner_a, foo_el, "el envolvente es el elemento de la clase");
+        assert_eq!(simple_name(&mut jvm, owner_a), "Foo");
     }
 }

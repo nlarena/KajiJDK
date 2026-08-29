@@ -100,6 +100,13 @@ impl BoundSet {
     /// **Reducción** (§18.2.1/§18.2.2) de `‹s → t›`: qué bounds impone que el argumento de tipo
     /// `s` tenga que ser compatible con el parámetro `t`.
     fn reduce(&mut self, table: &SymbolTable, s: &RType, t: &RType) {
+        // Un argumento **sin resolver** (`?`) no aporta ninguna cota: es lenient, como en el resto del
+        // compilador. Sin esto, el array de un varargs ya bajado por el desugar (`new T[]{…}` con `T`
+        // todavía sin instanciar, o sea `?[]`) reducía `? <: T` y volvía la inferencia insatisfacible
+        // en la **re-atribución** posterior al desugar —aunque la primera atribución ya había fijado `T`—.
+        if matches!(s, RType::Unresolved) {
+            return;
+        }
         match t {
             // ‹S → α› ⇒ `S <: α`. El argumento se **boxea**: una α nunca puede ser un primitivo
             // (§4.5.1), así que de `id(1)` sale `T = Integer`.
@@ -733,7 +740,7 @@ pub fn infer_call_nested(
     if vars_orig.is_empty() && nested.is_empty() {
         return (HashMap::new(), Vec::new(), true);
     }
-    let Some(Resolved::Method { params, ret, .. }) = table.resolved(m) else {
+    let Some(Resolved::Method { params, ret, varargs, .. }) = table.resolved(m) else {
         return (HashMap::new(), Vec::new(), true);
     };
     let recv_subst = match table.symbol(m).owner {
@@ -771,8 +778,24 @@ pub fn infer_call_nested(
     }
 
     let mut bounds = BoundSet::new(all_ids, origin, fresh.clone());
+    // Índice del último parámetro (el de `...` en un método de aridad variable) y su tipo de
+    // **elemento** (`T[]` → `T`): un argumento del *spread* restringe la variable de tipo contra el
+    // elemento, no contra el array. Sin esto, `<T> count(T... xs)` llamado `count("a","b")` reducía
+    // `String <: T[]` (insatisfacible) en vez de `String <: T` (⇒ `T = String`).
+    let last = params.len().saturating_sub(1);
     for (i, a) in arg_types.iter().enumerate() {
-        let Some(p) = params.get(i) else { continue };
+        // Para los argumentos del *spread* (índice ≥ último parámetro) de un método varargs, se usa el
+        // tipo de elemento —salvo que el argumento sea **él mismo** un array (invocación de aridad fija,
+        // p. ej. pasar el `T[]` ya armado), donde se conserva el parámetro array.
+        let p = if *varargs && i >= last && !matches!(a, RType::Array(_)) {
+            match params.get(last) {
+                Some(RType::Array(elem)) => Some(elem.as_ref()),
+                other => other,
+            }
+        } else {
+            params.get(i)
+        };
+        let Some(p) = p else { continue };
         let p = types::substitute(&types::substitute(p, &recv_subst), &fresh);
         // Si este argumento es una llamada anidada, se usa su **retorno** (con variables frescas), no
         // el tipo concreto que resolvió aislada.

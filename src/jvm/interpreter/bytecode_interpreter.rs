@@ -603,6 +603,88 @@ impl Exec<'_> {
             .expect("apt_element_for sin un AptContext atado (usar JVM::set_apt)")
             .element_for(sym, metaspace, heap)
     }
+
+    /// El `SymbolId` que reifica un `SymElement` receptor: lee su campo `int sym`. Es el índice en
+    /// la tabla viva de `javac` que los dos intrínsecos de abajo usan para releer el símbolo.
+    fn sym_field_of(&mut self, receiver: usize) -> crate::javac::symbol::SymbolId {
+        let sym_offset =
+            objects_operations::field_offset(&mut self.shared.metaspace, apt::SYM_ELEMENT, "sym");
+        self.shared.heap.read_u32(receiver + sym_offset) as usize
+    }
+
+    /// **Capa 4** — `SymElement.getKind()`: la constante de `ElementKind` que corresponde al
+    /// `SymbolKind`/`TypeKind` del símbolo reificado. Va por intrínseco (no native) porque las
+    /// constantes del enum sólo existen tras su `<clinit>`, que sólo el intérprete puede correr;
+    /// luego se lee el campo estático homónimo — el mismo patrón que [`Self::thread_get_state`].
+    pub(crate) fn sym_element_kind(&mut self, receiver: usize) -> usize {
+        use crate::javac::ast::TypeKind;
+        use crate::javac::symbol::SymbolKind;
+        let sym = self.sym_field_of(receiver);
+        // El nombre de la constante: se resuelve con la tabla prestada, y como es `&'static str` no
+        // retiene el préstamo, así que la `ensure_initialized` de abajo puede volver a tomar `self`.
+        let constant = {
+            let apt = self.shared.apt.as_ref().expect("sym_element_kind sin AptContext atado");
+            match &apt.table().symbol(sym).kind {
+                SymbolKind::Package { .. } => "PACKAGE",
+                SymbolKind::Class { kind, .. } => match kind {
+                    TypeKind::Class => "CLASS",
+                    TypeKind::Interface => "INTERFACE",
+                    TypeKind::Enum => "ENUM",
+                    TypeKind::Record => "RECORD",
+                    TypeKind::Annotation => "ANNOTATION_TYPE",
+                },
+                SymbolKind::Method { is_constructor: true, .. } => "CONSTRUCTOR",
+                SymbolKind::Method { .. } => "METHOD",
+                SymbolKind::Field { .. } => "FIELD",
+                SymbolKind::TypeVar { .. } => "TYPE_PARAMETER",
+            }
+        };
+        // Las constantes del enum no existen hasta que corre su `<clinit>`.
+        self.ensure_initialized(apt::ELEMENT_KIND);
+        class_operations::static_reference(
+            &mut self.shared.metaspace,
+            &mut self.shared.heap,
+            apt::ELEMENT_KIND,
+            constant,
+        )
+    }
+
+    /// **Capa 5** — `SymElement.getEnclosedElements()`: la `List` de los elementos que el símbolo
+    /// declara directamente (`members_of`). Va por intrínseco porque **re-entra** al intérprete:
+    /// construye un `ArrayList` y por cada miembro reifica su `SymElement` (con la caché de
+    /// identidad de `element_for`) y lo agrega con `ArrayList.add` —bytecode de la biblioteca—.
+    /// Devuelve el offset de la lista.
+    pub(crate) fn sym_element_enclosed(&mut self, receiver: usize) -> usize {
+        let sym = self.sym_field_of(receiver);
+        let children: Vec<crate::javac::symbol::SymbolId> = {
+            let apt = self.shared.apt.as_ref().expect("sym_element_enclosed sin AptContext atado");
+            apt.table().members_of(sym)
+        };
+        // El `ArrayList` va en **Old**: se sostiene en un local de Rust (no es raíz del GC) a través
+        // de las alocaciones de `element_for`/`add` de abajo, así que no debe moverse bajo un GC.
+        let list = self.new_array_list();
+        for child in children {
+            let element = self.apt_element_for(child);
+            self.call_virtual(list, "add", "(Ljava/lang/Object;)Z", vec![Value::Reference(element)]);
+        }
+        list
+    }
+
+    /// Un `java.util.ArrayList` recién construido (cargado + inicializado + `<init>()`), alocado en
+    /// **Old**. El helper que usa [`Self::sym_element_enclosed`] para su lista de retorno.
+    fn new_array_list(&mut self) -> usize {
+        let class = "java/util/ArrayList";
+        class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, class);
+        self.ensure_initialized(class);
+        let list = objects_operations::allocate_old(&mut self.shared.metaspace, &mut self.shared.heap, class);
+        let ctor = self
+            .shared
+            .metaspace
+            .resolve_method(class, "<init>", "()V")
+            .expect("java/util/ArrayList.<init>()V");
+        self.call_java(ctor, vec![Value::Reference(list)], &[1]);
+        list
+    }
 }
 
 // ---- ganchos JVMTI (hito I) sobre `Exec` --------------------------------------------------------
@@ -3618,6 +3700,20 @@ impl Exec<'_> {
         let runtime = runtime.to_string();
         let slot = self.shared.metaspace.vtable_slot(&runtime, name, descriptor)?;
         let callee = self.shared.metaspace.vtable_method(&runtime, slot)?;
+
+        // Los intrínsecos que el opcode `invokevirtual` intercepta también deben interceptarse
+        // acá: este es el camino de las llamadas virtuales **iniciadas por el VM** (el driver de
+        // APT, los tests), que no pasan por el opcode. Sin esto, `getKind`/`getEnclosedElements`
+        // caerían al bridge (están declarados `native`) y panicarían. Ver `apt::AptContext`.
+        match self.shared.metaspace.intrinsic(callee) {
+            crate::jvm::interpreter::metaspace::Intrinsic::SymElementGetKind => {
+                return Some(Value::Reference(self.sym_element_kind(receiver)));
+            }
+            crate::jvm::interpreter::metaspace::Intrinsic::SymElementGetEnclosedElements => {
+                return Some(Value::Reference(self.sym_element_enclosed(receiver)));
+            }
+            _ => {}
+        }
 
         let mut operands = vec![Value::Reference(receiver)];
         operands.extend(args);

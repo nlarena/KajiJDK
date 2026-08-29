@@ -613,8 +613,18 @@ impl Analyzer {
                 let f1 = self.expr_after(flow, array);
                 both(self.expr_after(&f1, index))
             }
-            ExprKind::Cast { expr, .. } | ExprKind::InstanceOf { expr, .. } => {
-                both(self.expr_after(flow, expr))
+            ExprKind::Cast { expr, .. } => both(self.expr_after(flow, expr)),
+            // Un `instanceof` con **pattern** (`o instanceof String s`) liga su variable **cuando es
+            // verdadero** (§16.1.7): en la rama true, `s` queda *definitely assigned*; en la false no.
+            // Sin esto, usar `s` en el `then`/`&&` daba "puede no haber sido inicializada".
+            ExprKind::InstanceOf { expr, slot, .. } => {
+                let f = self.expr_after(flow, expr);
+                let mut t = f.clone();
+                if let Some(s) = slot {
+                    t.da.insert(*s);
+                    t.du.remove(s);
+                }
+                Cond { t, f }
             }
             // Un literal de clase no lee ninguna variable: el flujo pasa igual.
             ExprKind::ClassLit(_) => both(flow.clone()),

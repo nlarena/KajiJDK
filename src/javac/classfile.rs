@@ -19,6 +19,7 @@ use super::ast::{PrimType, Type, TypeArg, TypeParam};
 /// overload resolution — el descriptor solo dice `[I`, no distingue `int[]` de `int...`.
 const ACC_VARARGS: u16 = 0x0080;
 const ACC_STATIC: u16 = 0x0008;
+const ACC_PRIVATE: u16 = 0x0002;
 const ACC_ABSTRACT: u16 = 0x0400;
 const ACC_INTERFACE: u16 = 0x0200;
 
@@ -47,6 +48,9 @@ pub struct ExtField {
     pub ty: Type,
     /// El tipo **genérico** del atributo `Signature`, si lo tiene.
     pub generic_ty: Option<Type>,
+    /// `ACC_STATIC` — distingue `getstatic`/`getfield` en el emisor (`System.out` es un campo
+    /// **estático**). Sin él, todo campo externo se trataba como de instancia.
+    pub is_static: bool,
 }
 
 pub struct ExtMethod {
@@ -59,6 +63,10 @@ pub struct ExtMethod {
     pub is_abstract: bool,
     /// `ACC_STATIC` — un método estático de interfaz tampoco cuenta para el SAM.
     pub is_static: bool,
+    /// `ACC_PRIVATE` — para descartar de la resolución de sobrecarga los miembros inaccesibles desde
+    /// otro nido (p. ej. el `private AssertionError(String)`, que no debe capturar `new
+    /// AssertionError("...")`).
+    pub is_private: bool,
     /// La firma **genérica** del atributo `Signature`, si la tiene.
     pub signature: Option<MethodSig>,
 }
@@ -101,7 +109,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
 
     let mut fields = Vec::new();
     for _ in 0..r.u2()? {
-        r.u2()?; // access
+        let access = r.u2()?;
         let fname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
         let (sig, _) = read_attributes(&mut r, &pool)?;
@@ -109,6 +117,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
             name: fname,
             ty: parse_field_desc(&desc)?,
             generic_ty: sig.as_deref().and_then(parse_field_signature),
+            is_static: access & ACC_STATIC != 0,
         });
     }
 
@@ -126,6 +135,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
             varargs: access & ACC_VARARGS != 0,
             is_abstract: access & ACC_ABSTRACT != 0,
             is_static: access & ACC_STATIC != 0,
+            is_private: access & ACC_PRIVATE != 0,
             signature: sig.as_deref().and_then(parse_method_signature),
         });
     }

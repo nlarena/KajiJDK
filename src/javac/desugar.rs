@@ -183,6 +183,7 @@ pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
         lambda_methods: Vec::new(),
         cur_class: None,
         cur_method: String::new(),
+        lambda_ordinal: 0,
         cur_method_sig: None,
         has_this: false,
         enclosing_type: None,
@@ -191,6 +192,7 @@ pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
         captured_locals: HashMap::new(),
         local_new_args: HashMap::new(),
         local_uses_this: HashSet::new(),
+        enclosing_store: false,
     };
     for ty in &mut unit.types {
         d.class(ty, &base);
@@ -232,6 +234,11 @@ struct Desugarer<'a> {
     cur_class: Option<SymbolId>,
     /// Nombre del método/inicializador envolvente, para bautizar `lambda$<envolvente>$<n>`.
     cur_method: String,
+    /// El `<n>` de `lambda$<envolvente>$<n>`: un ordinal que javac **reinicia por método envolvente**
+    /// (la primera lambda de cada método es `$0`), no un contador de clase. Se pone a cero al entrar a
+    /// cada método/inicializador y se salva/restaura alrededor de un tipo anidado (una clase local
+    /// tiene su propia numeración por método).
+    lambda_ordinal: u32,
     /// `(nombre, descriptor)` del método/constructor envolvente, o `None` si el punto actual está en
     /// un **inicializador** (o fuera de un método). Lo lee `lift_local_class` para el atributo
     /// `EnclosingMethod` (§4.7.7) de la local/anónima que levanta.
@@ -258,6 +265,11 @@ struct Desugarer<'a> {
     /// Las clases locales que **además** capturan la instancia envolvente (`this$0`): su `new L(...)`
     /// empuja `this` de cabecera (antes de los `val$`), y su ctor lo lleva de primer parámetro.
     local_uses_this: HashSet<String>,
+    /// Si la clase interna/local/anónima que se va a recorrer **almacena** la instancia envolvente en
+    /// un campo `this$0` (porque realmente la usa). Lo fija cada sitio que fija `enclosing_type`, y lo
+    /// lee `capture_enclosing_instance`: el **parámetro** de captura va siempre (en contexto de
+    /// instancia), pero el **campo** solo si se usa —javac lo omite y solo hace el `requireNonNull`—.
+    enclosing_store: bool,
 }
 
 /// El scope que contiene los tipos top-level (el del paquete) — el `enclosing` del scope de miembros
@@ -724,6 +736,22 @@ fn local(ty: Type, name: String, init: Expr) -> Stmt {
     st(StmtKind::LocalVar { ty, name, init: Some(init), is_final: false, type_annos: Vec::new() })
 }
 
+/// El **wrapper** de un primitivo y su método de **desboxeo** (§5.1.8): `int`→`(Integer, intValue)`.
+/// Lo usa el `for-each` sobre un `Iterable` cuando la variable es primitiva, para castear al wrapper y
+/// desboxear igual que javac.
+fn wrapper_and_value(p: PrimType) -> (&'static str, &'static str) {
+    match p {
+        PrimType::Boolean => ("Boolean", "booleanValue"),
+        PrimType::Byte => ("Byte", "byteValue"),
+        PrimType::Char => ("Character", "charValue"),
+        PrimType::Short => ("Short", "shortValue"),
+        PrimType::Int => ("Integer", "intValue"),
+        PrimType::Long => ("Long", "longValue"),
+        PrimType::Float => ("Float", "floatValue"),
+        PrimType::Double => ("Double", "doubleValue"),
+    }
+}
+
 impl Desugarer<'_> {
     fn fresh(&mut self, tag: &str) -> String {
         self.counter += 1;
@@ -752,6 +780,9 @@ impl Desugarer<'_> {
         // El método envolvente también se salva/restaura: una local se procesa (vía `class()`) en
         // medio del método que la declara, y sus propios métodos pisarían este contexto.
         let saved_method_sig = self.cur_method_sig.take();
+        // La numeración de lambdas es por método: se salva la del método envolvente (una clase local
+        // se procesa en medio de él) y se restaura al salir, para que sus lambdas posteriores sigan.
+        let saved_lambda_ordinal = std::mem::take(&mut self.lambda_ordinal);
         self.cur_class = self.table.class(&fqn);
         // Una interna de **instancia**: se le sintetiza el campo `this$0` y se le inyecta a los
         // constructores el parámetro/asignación de la instancia envolvente, **antes** de recorrer sus
@@ -763,6 +794,7 @@ impl Desugarer<'_> {
             match member {
                 Member::Method(m) => {
                     self.cur_method = m.name.clone();
+                    self.lambda_ordinal = 0; // la primera lambda de cada método es `$0`
                     // El método/constructor envolvente, para el `EnclosingMethod` de una local que
                     // declare en su cuerpo: su nombre (`<init>` para un ctor) y descriptor emitido.
                     self.cur_method_sig = self.cur_class.map(|cid| {
@@ -780,19 +812,29 @@ impl Desugarer<'_> {
                     // El enclosing de una interna de **instancia** es la clase actual; para una
                     // anidada estática (o interface/enum/record) no hay captura.
                     let saved = self.enclosing_type;
+                    let saved_store = self.enclosing_store;
                     self.enclosing_type =
                         is_instance_inner(nested).then_some(self.cur_class).flatten();
+                    // El campo `this$0` solo se materializa si la interna **usa** la instancia
+                    // envolvente (§8.1.3); si no, javac igual pasa el parámetro (para el `requireNonNull`)
+                    // pero omite el campo.
+                    self.enclosing_store = self
+                        .enclosing_type
+                        .is_some_and(|enc| self.uses_enclosing_instance(nested, enc));
                     self.class(nested, &fqn);
                     self.enclosing_type = saved;
+                    self.enclosing_store = saved_store;
                 }
                 Member::StaticInit(block) => {
                     self.cur_method = "static".to_string();
+                    self.lambda_ordinal = 0;
                     self.cur_method_sig = None; // un inicializador no es un método (EnclosingMethod: 0)
                     self.has_this = false;
                     self.block(block);
                 }
                 Member::InstanceInit(block) => {
                     self.cur_method = "init".to_string();
+                    self.lambda_ordinal = 0;
                     self.cur_method_sig = None;
                     self.has_this = true;
                     self.block(block);
@@ -810,6 +852,7 @@ impl Desugarer<'_> {
         self.cur_fqn = saved_fqn;
         self.has_this = saved_has_this;
         self.cur_method_sig = saved_method_sig;
+        self.lambda_ordinal = saved_lambda_ordinal;
         // Los inicializadores de **instancia** corren dentro de cada constructor, después del
         // `super()` (§8.6/§12.5): se copian al frente de su cuerpo. Un constructor que delega en
         // `this(...)` **no** los corre — ya los corrió aquel.
@@ -1387,29 +1430,9 @@ impl Desugarer<'_> {
         self.lower_enum_switch(s);
         // Un `switch` con *type patterns* → cadena de `instanceof` en un bloque etiquetado.
         self.lower_pattern_switch(s);
-        // `synchronized (e)` → el monitor copiado a un local, que el emisor pueda releer.
-        self.lower_sync(s);
-    }
-
-    /// `synchronized (e) { … }` → `{ Object $lock = e; synchronized ($lock) { … } }` (§14.19).
-    ///
-    /// La copia es **incondicional**, incluso si `e` ya es un nombre: un campo puede cambiar entre
-    /// el `monitorenter` y el `monitorexit` —justamente lo que otro hilo podría estar haciendo— y
-    /// soltaríamos un monitor que nunca tomamos. Es lo que hace javac.
-    fn lower_sync(&mut self, s: &mut Stmt) {
-        if !matches!(s.kind, StmtKind::Synchronized { .. }) {
-            return;
-        }
-        let tmp = self.fresh("lock");
-        let StmtKind::Synchronized { lock, body } = std::mem::replace(&mut s.kind, StmtKind::Empty)
-        else {
-            unreachable!()
-        };
-        // `Object` alcanza: `monitorenter` toma cualquier referencia, y la conversión de ampliación
-        // desde el tipo real siempre vale.
-        let decl = local(Type::Class("Object".into()), tmp.clone(), lock);
-        let inner = st(StmtKind::Synchronized { lock: name(&tmp), body });
-        s.kind = StmtKind::Block(Block(vec![decl, inner]));
+        // `synchronized (e)`: la copia del monitor a un local sintético (§14.19) y su `monitorexit`
+        // en cada salida la hace el emisor (`codegen::sync_stmt`), espejando a javac (`dup`/`astore`
+        // en vez de una sentencia `Object $lock = e;`), así que no hay azúcar que bajar acá.
     }
 
     /// Punto de entrada del switch sobre `String`: opera sobre el `switch`-sentencia, ya venga
@@ -1426,6 +1449,9 @@ impl Desugarer<'_> {
             if let StmtKind::Labeled { body, .. } = &mut s.kind {
                 self.string_switch_here(body);
             }
+        } else {
+            // `return`/`yield switch (s) { … }` de cola: se baja dejando el valor en la pila.
+            self.string_switch_expr_tail(s);
         }
     }
 
@@ -1444,6 +1470,27 @@ impl Desugarer<'_> {
         else {
             unreachable!()
         };
+        let (decl_s, decl_i, dispatch, ivar, level2) = self.string_switch_parts(selector, cases);
+        // { String $s = sel; int $i = -1; <ruteo>; switch ($i){nivel 2} }
+        s.kind = StmtKind::Block(Block(vec![
+            decl_s,
+            decl_i,
+            dispatch,
+            st(StmtKind::Switch { selector: name(&ivar), cases: level2 }),
+        ]));
+    }
+
+    /// Piezas comunes de un `switch` sobre `String`: declara `$s`/`$i`, arma el **nivel 1** (dispatch
+    /// por `hashCode`, cadena de `equals` por grupo de hash y el ruteo de `null`) y el **nivel 2**
+    /// (espejo del original, indexado por el entero sintético). Devuelve
+    /// `(decl $s, decl $i, dispatch, nombre de $i, casos del nivel 2)`; el llamador decide si el
+    /// nivel 2 es una **sentencia** (`switch` sobre `String`) o el valor de un `return`/`yield`
+    /// (switch-**expresión** de cola) — así ambas formas comparten exactamente los mismos slots.
+    fn string_switch_parts(
+        &mut self,
+        selector: Expr,
+        cases: Vec<SwitchCase>,
+    ) -> (Stmt, Stmt, Stmt, String, Vec<SwitchCase>) {
         let svar = self.fresh("s");
         let ivar = self.fresh("i");
 
@@ -1518,13 +1565,56 @@ impl Desugarer<'_> {
             None => level1_switch,
         };
 
-        // { String $s = sel; int $i = -1; <ruteo>; switch ($i){nivel 2} }
-        s.kind = StmtKind::Block(Block(vec![
-            local(Type::Class("String".into()), svar.clone(), selector),
-            local(Type::Prim(PrimType::Int), ivar.clone(), ex(ExprKind::IntLit(-1))),
-            dispatch,
-            st(StmtKind::Switch { selector: name(&ivar), cases: level2 }),
-        ]));
+        let decl_s = local(Type::Class("String".into()), svar.clone(), selector);
+        let decl_i = local(Type::Prim(PrimType::Int), ivar.clone(), ex(ExprKind::IntLit(-1)));
+        (decl_s, decl_i, dispatch, ivar, level2)
+    }
+
+    /// `return switch (s) { case "a" -> 1; … }` / `yield switch (s) { … }` sobre un `String`: baja la
+    /// switch-**expresión** de cola dejando el **nivel 2 como switch-expresión sobre `int`** — que el
+    /// codegen consume con el valor en la pila (`ireturn`/`yield` directo), **sin** temporal de
+    /// resultado. Esto reproduce a javac byte a byte: `$s`/`$i` toman los slots inmediatamente
+    /// después de los parámetros (no hay un slot de resultado que se cuele antes). Solo aplica si los
+    /// brazos son de **flecha-valor** (o `throw`) y hay `default`; el resto sigue el camino con
+    /// temporal de [`lower_switch_stmt`]/[`hoist_switch`].
+    fn string_switch_expr_tail(&mut self, s: &mut Stmt) {
+        let applies = match &s.kind {
+            StmtKind::Return(Some(e)) | StmtKind::Yield(e) => self.is_tail_string_switch_expr(e),
+            _ => false,
+        };
+        if !applies {
+            return;
+        }
+        let (e, is_return) = match std::mem::replace(&mut s.kind, StmtKind::Empty) {
+            StmtKind::Return(Some(e)) => (e, true),
+            StmtKind::Yield(e) => (e, false),
+            _ => unreachable!(),
+        };
+        let ety = e.ty.clone();
+        let ExprKind::Switch { selector, cases } = e.kind else { unreachable!() };
+        let (decl_s, decl_i, dispatch, ivar, level2) = self.string_switch_parts(*selector, cases);
+        // La switch-expresión de cola sobre `$i` (`int`): deja **el valor en la pila** — el codegen la
+        // toma por los caminos normales (`return`→pila→`ireturn`), como cualquier switch-expr entera.
+        let mut sel = name(&ivar);
+        sel.ty = Some(RType::Prim(PrimType::Int));
+        let mut tail_expr = ex(ExprKind::Switch { selector: Box::new(sel), cases: level2 });
+        tail_expr.ty = ety; // el tipo del switch original (para la categoría/`vtype` del resultado)
+        let tail = if is_return {
+            st(StmtKind::Return(Some(tail_expr)))
+        } else {
+            st(StmtKind::Yield(tail_expr))
+        };
+        s.kind = StmtKind::Block(Block(vec![decl_s, decl_i, dispatch, tail]));
+    }
+
+    /// ¿`e` es una switch-**expresión** sobre `String` bajable **en la pila** (con `default` y todos
+    /// los brazos de flecha-valor o `throw`)? Es el subconjunto que [`string_switch_expr_tail`] emite
+    /// byte a byte como javac; el resto usa el camino con temporal.
+    fn is_tail_string_switch_expr(&self, e: &Expr) -> bool {
+        let ExprKind::Switch { selector, cases } = &e.kind else { return false };
+        self.is_string_switch(selector, cases)
+            && cases.iter().any(|c| c.is_default)
+            && cases.iter().all(|c| is_arrow_value_or_throw(&c.body))
     }
 
     /// ¿El selector es un `String` y todas las etiquetas son constantes `String` (o `default`)? Solo
@@ -1894,7 +1984,12 @@ impl Desugarer<'_> {
         // caminos normales — `return`→valor en pila→`ireturn`, `x = switch…`→`store`.
         let ok = match &s.kind {
             StmtKind::Return(Some(e)) | StmtKind::Yield(e) => {
-                is_lowerable_switch_expr(e) && e.ty.is_some() && !self.is_stack_switch_expr(e)
+                is_lowerable_switch_expr(e)
+                    && e.ty.is_some()
+                    && !self.is_stack_switch_expr(e)
+                    // Un `return switch(String)` de flecha-valor lo baja `string_switch_expr_tail`
+                    // (valor en la pila, sin temporal). No lo hoisteamos a un temporal acá.
+                    && !self.is_tail_string_switch_expr(e)
             }
             StmtKind::Expr(e) => {
                 is_assign_switch(e)
@@ -2055,10 +2150,23 @@ impl Desugarer<'_> {
         let body = *body;
 
         s.kind = if is_array {
-            // { var $a = it; for (int $i = 0; $i < $a.length; $i = $i + 1) { T x = $a[$i]; body } }
+            // { var $a = it; int $len = $a.length; for (int $i = 0; $i < $len; $i = $i + 1) { T x = $a[$i]; body } }
+            // El `$a.length` se **cachea** en un local (como javac): se calcula una sola vez, no en cada
+            // vuelta de la condición. Sin esto el bucle recomputaba `arraylength` por iteración.
             let a = self.fresh("a");
+            let len = self.fresh("len");
             let i = self.fresh("i");
             let a_decl = local(Type::Var, a.clone(), iterable);
+            let len_decl = st(StmtKind::LocalVar {
+                ty: Type::Prim(PrimType::Int),
+                name: len.clone(),
+                init: Some(ex(ExprKind::Field {
+                    expr: Box::new(name(&a)),
+                    name: "length".into(),
+                })),
+                is_final: false,
+                type_annos: Vec::new(),
+            });
             let i_decl = boxst(StmtKind::LocalVar {
                 ty: Type::Prim(PrimType::Int),
                 name: i.clone(),
@@ -2069,7 +2177,7 @@ impl Desugarer<'_> {
             let cond = ex(ExprKind::Binary {
                 op: BinOp::Lt,
                 lhs: Box::new(name(&i)),
-                rhs: Box::new(ex(ExprKind::Field { expr: Box::new(name(&a)), name: "length".into() })),
+                rhs: Box::new(name(&len)),
             });
             let update = ex(ExprKind::Assign {
                 op: AssignOp::Assign,
@@ -2091,15 +2199,29 @@ impl Desugarer<'_> {
                 update: vec![update],
                 body: boxst(StmtKind::Block(Block(vec![elem, body]))),
             });
-            StmtKind::Block(Block(vec![a_decl, for_loop]))
+            StmtKind::Block(Block(vec![a_decl, len_decl, for_loop]))
         } else {
             // { var $it = it.iterator(); while ($it.hasNext()) { T x = (T) $it.next(); body } }
             let it = self.fresh("it");
             let it_decl = local(Type::Var, it.clone(), call(iterable, "iterator", vec![]));
             let cond = call(name(&it), "hasNext", vec![]);
             let next = call(name(&it), "next", vec![]);
-            // El cast es la conversión que inserta la *erasure* (`Iterator.next()` da `Object`).
-            let elem = local(ty.clone(), var, ex(ExprKind::Cast { ty, expr: Box::new(next) }));
+            // El valor del elemento: `Iterator.next()` da `Object` (borrado), así que se castea al tipo
+            // del elemento. Si la variable del `for-each` es **primitiva** (`for (int x : List<Integer>)`),
+            // javac castea al **wrapper** (checkcast Integer) y **desboxea** (`intValue()`): se emite
+            // `((Integer) $it.next()).intValue()`. Para un tipo referencia basta el `(T) $it.next()`.
+            let init = match &ty {
+                Type::Prim(p) => {
+                    let (wrapper, value_method) = wrapper_and_value(*p);
+                    let cast = ex(ExprKind::Cast {
+                        ty: Type::Class(wrapper.into()),
+                        expr: Box::new(next),
+                    });
+                    call(cast, value_method, vec![])
+                }
+                _ => ex(ExprKind::Cast { ty: ty.clone(), expr: Box::new(next) }),
+            };
+            let elem = local(ty.clone(), var, init);
             let while_loop = st(StmtKind::While {
                 cond,
                 body: boxst(StmtKind::Block(Block(vec![elem, body]))),
@@ -2383,8 +2505,23 @@ impl Desugarer<'_> {
             }
         }
         let RType::Array(elem) = &params[fixed] else { return };
-        let elem_ty = rtype_to_type(self.table, elem);
+        let elem = elem.as_ref().clone();
         let trailing = args.split_off(fixed);
+        // Para un varargs **genérico** (`<T> f(T...)`), el elemento del array sintético es el tipo
+        // **inferido** de `T`, no su borrado a `Object`: javac emite `new String[]{…}` para
+        // `f("a","b")`. Se aproxima con el *lub* de los tipos de los argumentos del *spread* (para
+        // argumentos homogéneos, ese lub es su propio tipo). Un varargs no genérico (`int...`,
+        // `String...`) conserva su elemento declarado.
+        let elem_ty = if matches!(elem, RType::TypeVar(_)) {
+            let arg_tys: Vec<RType> = trailing.iter().filter_map(|a| a.ty.clone()).collect();
+            if !arg_tys.is_empty() && arg_tys.len() == trailing.len() {
+                rtype_to_type(self.table, &types::lub(self.table, &arg_tys))
+            } else {
+                rtype_to_type(self.table, &elem)
+            }
+        } else {
+            rtype_to_type(self.table, &elem)
+        };
         args.push(ex(ExprKind::NewArray { elem: elem_ty, dims: vec![None], init: Some(trailing) }));
     }
 
@@ -2549,8 +2686,8 @@ impl Desugarer<'_> {
         let owner_internal = owner.map(|c| internal_name(self.table, c)).unwrap_or_default();
 
         // --- método sintético ---
-        let impl_name = format!("lambda${}${}", self.cur_method, self.counter);
-        self.counter += 1;
+        let impl_name = format!("lambda${}${}", self.cur_method, self.lambda_ordinal);
+        self.lambda_ordinal += 1;
         // Parámetros: primero las capturas (por su tipo resuelto), después los de la lambda con su
         // tipo **instanciado** (el `x` de `x -> …` deja de ser inferido).
         let mut method_params: Vec<Param> = free
@@ -2897,37 +3034,44 @@ impl Desugarer<'_> {
     }
 
     /// Sintetiza la captura de la instancia envolvente de una interna de instancia `cid` cuyo
-    /// enclosing es `outer` (§8.1.3): el campo `final Outer this$0`, y en cada constructor el
-    /// parámetro de cabecera `Outer this$0` con su asignación `this.this$0 = this$0` (tras el
-    /// `super`/`this` explícito). Si no había constructor, sintetiza el por defecto. Actualiza el
-    /// **símbolo** de cada constructor para que `new Inner(outer)` resuelva en la re-atribución.
+    /// enclosing es `outer` (§8.1.3). En **todo** constructor va el parámetro de cabecera `Outer this$0`
+    /// (javac siempre lo pasa en contexto de instancia, para el `requireNonNull` de §15.9.5). El campo
+    /// `final Outer this$0` y su asignación `this.this$0 = this$0` solo se sintetizan si la clase
+    /// **usa** la instancia envolvente (`self.enclosing_store`): si no, javac omite el campo y solo hace
+    /// `Objects.requireNonNull(this$0)` (aquí, para no depender de resolver `java.util.Objects`, se
+    /// omite también ese chequeo — la instancia es no-nula en el `new` no cualificado). Si no había
+    /// constructor, sintetiza el por defecto. Actualiza el **símbolo** de cada constructor para que
+    /// `new Inner(outer)` resuelva en la re-atribución.
     fn capture_enclosing_instance(&mut self, class: &mut ClassDecl, cid: SymbolId, outer: SymbolId) {
         let scope = self.member_scope_of(cid);
         let outer_ty = Type::Class(self.table.symbol(outer).name.clone());
-        // Campo `final Outer this$0;` — símbolo + declaración.
-        let fid = self.table.new_symbol(Symbol {
-            name: "this$0".to_string(),
-            kind: SymbolKind::Field { ty: outer_ty.clone() },
-            owner: Some(cid),
-            modifiers: vec![Modifier::Final],
-        });
-        self.table.define(scope, "this$0", fid);
-        self.table.set_resolved(fid, Resolved::Field(RType::Class(outer)));
-        class.members.insert(
-            0,
-            Member::Field(FieldDecl {
-                doc: None,
-                annotations: Vec::new(),
-                type_annos: Vec::new(),
-                pos: Pos::default(),
-                modifiers: vec![Modifier::Final],
-                ty: outer_ty.clone(),
+        let store = self.enclosing_store;
+        // Campo `final Outer this$0;` — símbolo + declaración. Solo si la clase usa el enclosing.
+        if store {
+            let fid = self.table.new_symbol(Symbol {
                 name: "this$0".to_string(),
-                init: None,
-            }),
-        );
+                kind: SymbolKind::Field { ty: outer_ty.clone() },
+                owner: Some(cid),
+                modifiers: vec![Modifier::Final],
+            });
+            self.table.define(scope, "this$0", fid);
+            self.table.set_resolved(fid, Resolved::Field(RType::Class(outer)));
+            class.members.insert(
+                0,
+                Member::Field(FieldDecl {
+                    doc: None,
+                    annotations: Vec::new(),
+                    type_annos: Vec::new(),
+                    pos: Pos::default(),
+                    modifiers: vec![Modifier::Final],
+                    ty: outer_ty.clone(),
+                    name: "this$0".to_string(),
+                    init: None,
+                }),
+            );
+        }
 
-        // A cada constructor: el parámetro de cabecera y la asignación de `this$0`.
+        // A cada constructor: el parámetro de cabecera y —solo si se usa— la asignación de `this$0`.
         let mut had_ctor = false;
         for m in class.members.iter_mut() {
             let Member::Method(me) = m else { continue };
@@ -2936,9 +3080,11 @@ impl Desugarer<'_> {
             }
             had_ctor = true;
             me.params.insert(0, synth_param(outer_ty.clone(), "this$0".to_string()));
-            if let Some(body) = &mut me.body {
-                let at = usize::from(starts_with_ctor_call(body));
-                body.0.insert(at, this0_assign());
+            if store {
+                if let Some(body) = &mut me.body {
+                    let at = usize::from(starts_with_ctor_call(body));
+                    body.0.insert(at, this0_assign());
+                }
             }
         }
 
@@ -2959,7 +3105,9 @@ impl Desugarer<'_> {
             }
         } else {
             // Constructor por defecto: `public Inner(Outer this$0) { this.this$0 = this$0; }` (el
-            // emisor le antepone el `super()` implícito).
+            // emisor le antepone el `super()` implícito). Si la clase no usa el enclosing, el cuerpo
+            // queda vacío: se recibe el parámetro pero no se guarda.
+            let body = if store { vec![this0_assign()] } else { Vec::new() };
             class.members.push(Member::Method(MethodDecl {
                 doc: None,
                 annotations: Vec::new(),
@@ -2972,7 +3120,7 @@ impl Desugarer<'_> {
                 params: vec![synth_param(outer_ty.clone(), "this$0".to_string())],
                 throws: Vec::new(),
                 throws_annos: Vec::new(),
-                body: Some(Block(vec![this0_assign()])),
+                body: Some(Block(body)),
                 is_constructor: true,
             }));
             let mid = self.table.new_symbol(Symbol {
@@ -3157,9 +3305,12 @@ impl Desugarer<'_> {
         if let Some((name, desc)) = self.cur_method_sig.clone() {
             self.table.set_enclosing_method(lc_cid, name, desc);
         }
-        // Se captura `this$0` cuando el método envolvente tiene instancia: aunque no se use, es válido
-        // (un campo/parámetro de más), y evita un análisis de "usa la instancia envolvente" aparte.
+        // El **parámetro** de la instancia envolvente va siempre que el método envolvente tenga
+        // instancia (§15.9.5): javac lo pasa y lo `requireNonNull`ea aunque la clase no lo use. El
+        // **campo** `this$0`, en cambio, solo si el cuerpo realmente usa un miembro del enclosing (o
+        // `Outer.this`): esa decisión la lleva `enclosing_store` a `capture_enclosing_instance`.
         let uses_this = self.has_this;
+        let stores_this = uses_this && self.uses_enclosing_instance(&lc, enclosing);
 
         // Captura de locales: se reusa el análisis de variables libres de las lambdas, ignorando su
         // `uses_this` (pensado para lambdas —sin `this` propio—; una local sí lo tiene).
@@ -3186,9 +3337,12 @@ impl Desugarer<'_> {
         self.captured_locals = free.iter().cloned().collect();
         let fqn = self.cur_fqn.clone();
         let saved_encl = self.enclosing_type;
+        let saved_store = self.enclosing_store;
         self.enclosing_type = if uses_this { Some(enclosing) } else { None };
+        self.enclosing_store = stores_this;
         self.class(&mut lc, &fqn);
         self.enclosing_type = saved_encl;
+        self.enclosing_store = saved_store;
         self.captured_locals.clear();
 
         self.local_new_args.insert(lc.name.clone(), free.iter().map(|(n, _)| n.clone()).collect());
@@ -3325,6 +3479,26 @@ impl Desugarer<'_> {
             cur = if self.is_instance_inner_id(c) { self.table.symbol(c).owner } else { None };
         }
         chain
+    }
+    /// ¿La clase interna/local/anónima `class` **usa** la instancia envolvente (`enclosing`)? (§8.1.3)
+    /// javac solo materializa el campo `this$0` cuando el cuerpo referencia un miembro **de instancia**
+    /// del enclosing (o de un enclosing más lejano) sin cualificar, o usa `Outer.this` — exactamente lo
+    /// que `rewrite_enclosing_access`/`lower_qualified_this` rutean por `this$0`. Se recorre el cuerpo
+    /// entero, **incluidas las clases anidadas**: si una nieta usa el enclosing, la del medio también
+    /// tiene que capturarlo para pasárselo (transitividad de §8.1.3). El conjunto son los tipos de la
+    /// cadena de `this$0` alcanzable desde `class` (el enclosing directo y sus enclosings de instancia).
+    fn uses_enclosing_instance(&self, class: &ClassDecl, enclosing: SymbolId) -> bool {
+        let mut set: HashSet<SymbolId> = HashSet::new();
+        let mut names: HashSet<String> = HashSet::new();
+        let mut cur = Some(enclosing);
+        while let Some(c) = cur {
+            set.insert(c);
+            names.insert(self.table.symbol(c).name.clone());
+            cur = if self.is_instance_inner_id(c) { self.table.symbol(c).owner } else { None };
+        }
+        let mut scan = EnclosingUseScan { table: self.table, set: &set, names: &names, used: false };
+        scan.members(&class.members);
+        scan.used
     }
     /// El **número de saltos `this$0`** (1-based) hasta el enclosing de la cadena que declara `member`,
     /// o `None` si no pertenece a ninguno.
@@ -3653,6 +3827,228 @@ impl Captures<'_> {
     }
 }
 
+/// Recorre el cuerpo de una clase interna/local/anónima buscando un **uso de la instancia envolvente**
+/// (§8.1.3): un acceso sin cualificar a un miembro de instancia de un enclosing (`set`), o `Outer.this`
+/// (`names`). Es el análisis que decide si materializar el campo `this$0`. Recorre también las clases
+/// anidadas (transitividad): una nieta que use el enclosing obliga a la del medio a capturarlo.
+struct EnclosingUseScan<'a> {
+    table: &'a SymbolTable,
+    /// Los tipos alcanzables por la cadena de `this$0` desde la clase analizada (enclosing directo y
+    /// sus enclosings de instancia). Un miembro de instancia de uno de ellos, accedido sin cualificar,
+    /// es un uso de la instancia envolvente.
+    set: &'a HashSet<SymbolId>,
+    /// Sus nombres simples, para reconocer `Outer.this`.
+    names: &'a HashSet<String>,
+    used: bool,
+}
+
+impl EnclosingUseScan<'_> {
+    fn is_static(&self, id: SymbolId) -> bool {
+        self.table.symbol(id).modifiers.contains(&Modifier::Static)
+    }
+    /// ¿El miembro `id` (campo o método) pertenece a un tipo del conjunto de enclosings?
+    fn owner_in_set(&self, id: SymbolId) -> bool {
+        self.table.symbol(id).owner.is_some_and(|o| self.set.contains(&o))
+    }
+
+    fn members(&mut self, members: &[Member]) {
+        for m in members {
+            match m {
+                Member::Field(f) => {
+                    if let Some(e) = &f.init {
+                        self.expr(e);
+                    }
+                }
+                Member::Method(me) => {
+                    if let Some(b) = &me.body {
+                        self.block(b);
+                    }
+                }
+                Member::StaticInit(b) | Member::InstanceInit(b) => self.block(b),
+                // Una clase anidada: sus accesos al enclosing común también cuentan (transitividad).
+                Member::Type(nested) => self.members(&nested.members),
+            }
+        }
+    }
+
+    fn block(&mut self, b: &Block) {
+        b.0.iter().for_each(|s| self.stmt(s));
+    }
+
+    fn stmt(&mut self, s: &Stmt) {
+        if self.used {
+            return;
+        }
+        match &s.kind {
+            StmtKind::LocalVar { init, .. } => {
+                if let Some(e) = init {
+                    self.expr(e);
+                }
+            }
+            StmtKind::ForEach { iterable, body, .. } => {
+                self.expr(iterable);
+                self.stmt(body);
+            }
+            StmtKind::Return(e) => {
+                if let Some(e) = e {
+                    self.expr(e);
+                }
+            }
+            StmtKind::Yield(e) | StmtKind::Expr(e) | StmtKind::Throw(e) => self.expr(e),
+            StmtKind::If { cond, then, els } => {
+                self.expr(cond);
+                self.stmt(then);
+                if let Some(e) = els {
+                    self.stmt(e);
+                }
+            }
+            StmtKind::While { cond, body } | StmtKind::Do { body, cond } => {
+                self.expr(cond);
+                self.stmt(body);
+            }
+            StmtKind::For { init, cond, update, body } => {
+                if let Some(i) = init {
+                    self.stmt(i);
+                }
+                if let Some(c) = cond {
+                    self.expr(c);
+                }
+                update.iter().for_each(|u| self.expr(u));
+                self.stmt(body);
+            }
+            StmtKind::Block(b) => self.block(b),
+            StmtKind::Synchronized { lock, body } => {
+                self.expr(lock);
+                self.block(body);
+            }
+            StmtKind::Assert { cond, message } => {
+                self.expr(cond);
+                if let Some(m) = message {
+                    self.expr(m);
+                }
+            }
+            StmtKind::Try { resources, body, catches, finally } => {
+                resources.iter().for_each(|r| self.stmt(r));
+                self.block(body);
+                catches.iter().for_each(|c| self.block(&c.body));
+                if let Some(f) = finally {
+                    self.block(f);
+                }
+            }
+            StmtKind::Switch { selector, cases } => {
+                self.expr(selector);
+                self.cases(cases);
+            }
+            StmtKind::Labeled { body, .. } => self.stmt(body),
+            // Una clase local anidada: sus accesos al enclosing común cuentan (transitividad).
+            StmtKind::LocalClass(lc) => self.members(&lc.members),
+            StmtKind::Break(_) | StmtKind::Continue(_) | StmtKind::Empty => {}
+        }
+    }
+
+    fn cases(&mut self, cases: &[SwitchCase]) {
+        for c in cases {
+            if let Some(g) = &c.guard {
+                self.expr(g);
+            }
+            match &c.body {
+                SwitchBody::Arrow(s) => self.stmt(s),
+                SwitchBody::Colon(ss) => ss.iter().for_each(|s| self.stmt(s)),
+            }
+        }
+    }
+
+    fn expr(&mut self, e: &Expr) {
+        if self.used {
+            return;
+        }
+        match &e.kind {
+            // Un nombre suelto ligado a un campo de instancia de un enclosing → `this$0.campo`.
+            ExprKind::Name(_) => {
+                if let Some(Binding::Field(id)) = &e.binding {
+                    if !self.is_static(*id) && self.owner_in_set(*id) {
+                        self.used = true;
+                    }
+                }
+            }
+            // Una llamada sin receptor a un método de instancia de un enclosing → `this$0.m(...)`.
+            ExprKind::Call { target, args, .. } => {
+                if target.is_none() {
+                    if let Some(Binding::Method(id)) = &e.binding {
+                        if !self.is_static(*id) && self.owner_in_set(*id) {
+                            self.used = true;
+                        }
+                    }
+                }
+                if let Some(t) = target {
+                    self.expr(t);
+                }
+                args.iter().for_each(|a| self.expr(a));
+            }
+            // `Outer.this` que nombra a un enclosing (no a la propia clase) usa la cadena de `this$0`.
+            ExprKind::QualifiedThis(Type::Class(n)) => {
+                let simple = n.rsplit('.').next().unwrap_or(n);
+                if self.names.contains(simple) {
+                    self.used = true;
+                }
+            }
+            ExprKind::Binary { lhs, rhs, .. } => {
+                self.expr(lhs);
+                self.expr(rhs);
+            }
+            ExprKind::Unary { expr, .. } => self.expr(expr),
+            ExprKind::Assign { target, value, .. } => {
+                self.expr(target);
+                self.expr(value);
+            }
+            ExprKind::Ternary { cond, then, els } => {
+                self.expr(cond);
+                self.expr(then);
+                self.expr(els);
+            }
+            ExprKind::Field { expr, .. } => self.expr(expr),
+            ExprKind::Index { array, index } => {
+                self.expr(array);
+                self.expr(index);
+            }
+            ExprKind::Cast { expr, .. } => self.expr(expr),
+            ExprKind::InstanceOf { expr, .. } => self.expr(expr),
+            // Una clase anónima aún sin levantar (por si se analiza antes de `hoist_anonymous`): su
+            // cuerpo puede usar el enclosing común.
+            ExprKind::NewObject { args, outer, body, .. } => {
+                if let Some(o) = outer {
+                    self.expr(o);
+                }
+                args.iter().for_each(|a| self.expr(a));
+                if let Some(members) = body {
+                    self.members(members);
+                }
+            }
+            ExprKind::NewArray { dims, init, .. } => {
+                dims.iter().flatten().for_each(|d| self.expr(d));
+                if let Some(es) = init {
+                    es.iter().for_each(|e| self.expr(e));
+                }
+            }
+            ExprKind::Switch { selector, cases } => {
+                self.expr(selector);
+                self.cases(cases);
+            }
+            ExprKind::Lambda { body, .. } => match body.as_ref() {
+                LambdaBody::Expr(e) => self.expr(e),
+                LambdaBody::Block(b) => self.block(b),
+            },
+            ExprKind::Indy { captures, .. } => captures.iter().for_each(|c| self.expr(c)),
+            ExprKind::MethodRef { qualifier, .. } => {
+                if let super::ast::MethodRefQualifier::Expr(q) = qualifier.as_ref() {
+                    self.expr(q);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Junta en `out` los nombres que **liga** un pattern (§14.30.1): el binding de un `Type name` y,
 /// recursivamente, los de una deconstrucción de record.
 fn declare_pattern(p: &Pattern, out: &mut HashSet<String>) {
@@ -3874,10 +4270,12 @@ mod tests {
     #[test]
     fn for_each_over_an_array_becomes_an_indexed_for() {
         let unit = desugared("class C { void m(int[] xs) { for (int x : xs) { int y = x; } } }");
-        // Queda un Block { var $a = xs; for(...) {...} }.
+        // Queda un Block { var $a = xs; int $len = $a.length; for(...) {...} } — el largo se **cachea**
+        // en un temporal (como javac), así que el `for` es el tercer elemento del bloque.
         let StmtKind::Block(b) = &body_of(&unit)[0].kind else { panic!("{:?}", body_of(&unit)[0].kind) };
         assert!(matches!(b.0[0].kind, StmtKind::LocalVar { .. }), "el array se copia a un temporal");
-        assert!(matches!(b.0[1].kind, StmtKind::For { .. }), "y se vuelve un for indexado");
+        assert!(matches!(b.0[1].kind, StmtKind::LocalVar { .. }), "el largo se cachea en un temporal");
+        assert!(matches!(b.0[2].kind, StmtKind::For { .. }), "y se vuelve un for indexado");
     }
 
     #[test]
@@ -4563,5 +4961,200 @@ mod tests {
             Member::Method(me) => me.body.as_ref().is_some_and(|b| b.0.iter().any(in_stmt)),
             _ => false,
         })
+    }
+
+    // ---- captura de la instancia envolvente (`this$0`): solo por uso (§8.1.3) ----
+
+    /// Corre el front-end completo (incluido `register_local_classes`/`hoist_anonymous`, que bajan las
+    /// clases locales y anónimas) y luego el desugar. Necesario para ejercitar `lift_local_class`.
+    fn desugared_full(src: &str) -> CompilationUnit {
+        let mut unit = parse(tokenize(src).unwrap()).0;
+        let (mut table, _e1) = enter(&unit);
+        let mut errs = Vec::new();
+        crate::javac::enter::register_local_classes(&mut unit, &mut table, &mut errs);
+        crate::javac::enter::hoist_anonymous(&mut unit, &mut table, &mut errs);
+        attribute(&mut unit, &table);
+        desugar(&mut unit, &mut table);
+        unit
+    }
+
+    /// Como `preserves_semantics`, pero con el front-end completo (locales/anónimas).
+    fn preserves_semantics_full(src: &str) {
+        let mut unit = parse(tokenize(src).unwrap()).0;
+        let (mut table, e1) = enter(&unit);
+        let mut errs = Vec::new();
+        crate::javac::enter::register_local_classes(&mut unit, &mut table, &mut errs);
+        crate::javac::enter::hoist_anonymous(&mut unit, &mut table, &mut errs);
+        let e2 = attribute(&mut unit, &table);
+        assert!(e1.is_empty() && e2.is_empty() && errs.is_empty(), "el fuente ya tenía errores: {e1:?} {e2:?} {errs:?}");
+        desugar(&mut unit, &mut table);
+        let e3 = attribute(&mut unit, &table);
+        let e4 = flow(&unit);
+        assert!(e3.is_empty(), "desugar introdujo errores de tipo: {e3:?}");
+        assert!(e4.is_empty(), "desugar introdujo errores de flujo: {e4:?}");
+    }
+
+    /// Todos los tipos anidados (recursivo) de la unidad — incluidas las locales/anónimas ya levantadas.
+    fn all_nested(unit: &CompilationUnit) -> Vec<&ClassDecl> {
+        fn rec<'a>(c: &'a ClassDecl, out: &mut Vec<&'a ClassDecl>) {
+            for m in &c.members {
+                if let Member::Type(n) = m {
+                    out.push(n);
+                    rec(n, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for t in &unit.types {
+            rec(t, &mut out);
+        }
+        out
+    }
+
+    /// El único tipo anidado que declara un método `run` — la clase interna bajo prueba.
+    fn the_runner(unit: &CompilationUnit) -> &ClassDecl {
+        let runners: Vec<&ClassDecl> = all_nested(unit)
+            .into_iter()
+            .filter(|c| c.members.iter().any(|m| matches!(m, Member::Method(me) if me.name == "run")))
+            .collect();
+        assert_eq!(runners.len(), 1, "se esperaba exactamente una clase con `run`");
+        runners[0]
+    }
+
+    fn has_this0(c: &ClassDecl) -> bool {
+        c.members.iter().any(|m| matches!(m, Member::Field(f) if f.name == "this$0"))
+    }
+
+    /// Cantidad de parámetros del (primer) constructor del AST, o `None` si la clase no declara uno
+    /// (una anónima sin capturas ni instancia envolvente no gana constructor hasta el codegen).
+    fn ctor_params(c: &ClassDecl) -> Option<usize> {
+        c.members.iter().find_map(|m| match m {
+            Member::Method(me) if me.is_constructor => Some(me.params.len()),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn an_anonymous_class_that_ignores_the_enclosing_instance_drops_this0() {
+        // El bug: capturaba `this$0` aunque `run()` no tocara nada del enclosing. javac no crea el campo
+        // (§8.1.3), aunque igual pasa el parámetro Outer al ctor (para el `requireNonNull` de §15.9.5).
+        let unit = desugared_full(
+            "interface R { void run(); } \
+             class C { int f; void m() { R r = new R() { public void run() { int x = 1; } }; } }",
+        );
+        let anon = the_runner(&unit);
+        assert!(!has_this0(anon), "no debe capturar this$0 si no usa el enclosing:\n{}", crate::javac::ast_view::tree(&unit));
+        assert_eq!(ctor_params(anon), Some(1), "el ctor igual recibe el parámetro Outer");
+    }
+
+    #[test]
+    fn an_anonymous_class_that_reads_an_enclosing_field_keeps_this0() {
+        let unit = desugared_full(
+            "interface R { void run(); } \
+             class C { int f; void m() { R r = new R() { public void run() { int x = f; } }; } }",
+        );
+        assert!(has_this0(the_runner(&unit)), "usa `f` del enclosing: captura this$0");
+    }
+
+    #[test]
+    fn an_anonymous_class_that_calls_an_enclosing_method_keeps_this0() {
+        let unit = desugared_full(
+            "interface R { void run(); } \
+             class C { void g() {} void m() { R r = new R() { public void run() { g(); } }; } }",
+        );
+        assert!(has_this0(the_runner(&unit)), "llama `g()` del enclosing: captura this$0");
+    }
+
+    #[test]
+    fn an_anonymous_class_that_uses_outer_this_keeps_this0() {
+        let unit = desugared_full(
+            "interface R { void run(); } \
+             class C { void m() { R r = new R() { public void run() { Object o = C.this; } }; } }",
+        );
+        assert!(has_this0(the_runner(&unit)), "usa `C.this`: captura this$0");
+    }
+
+    #[test]
+    fn an_anonymous_class_in_a_static_method_takes_no_enclosing_param() {
+        let unit = desugared_full(
+            "interface R { void run(); } \
+             class C { static void m() { R r = new R() { public void run() { int x = 1; } }; } }",
+        );
+        let anon = the_runner(&unit);
+        assert!(!has_this0(anon), "sin instancia envolvente, sin this$0");
+        // Sin capturas ni instancia envolvente, la anónima ni siquiera declara un ctor en el AST
+        // (lo sintetiza el codegen); si lo declarara, no llevaría el parámetro Outer.
+        assert_ne!(ctor_params(anon), Some(1), "ningún parámetro Outer");
+    }
+
+    #[test]
+    fn a_local_class_that_ignores_the_enclosing_instance_drops_this0() {
+        let unit = desugared_full(
+            "class C { int f; void m() { class L { void run() { int x = 1; } } new L().run(); } }",
+        );
+        let l = the_runner(&unit);
+        assert!(!has_this0(l), "una local que no usa el enclosing no captura this$0");
+        assert_eq!(ctor_params(l), Some(1), "pero el ctor recibe el parámetro Outer (contexto de instancia)");
+    }
+
+    #[test]
+    fn a_local_class_that_uses_the_enclosing_instance_keeps_this0() {
+        let unit = desugared_full(
+            "class C { int f; void m() { class L { void run() { int x = f; } } new L().run(); } }",
+        );
+        assert!(has_this0(the_runner(&unit)), "usa `f`: captura this$0");
+    }
+
+    #[test]
+    fn a_member_inner_class_that_ignores_the_enclosing_instance_drops_this0() {
+        let unit = desugared_full("class C { int f; class I { void run() { int x = 1; } } }");
+        let i = the_runner(&unit);
+        assert!(!has_this0(i), "una interna miembro que no usa el enclosing no captura this$0");
+        assert_eq!(ctor_params(i), Some(1), "el ctor sí recibe Outer (la interna se crea con `outer.new I()`)");
+    }
+
+    #[test]
+    fn a_member_inner_class_that_uses_the_enclosing_instance_keeps_this0() {
+        let unit = desugared_full("class C { int f; class I { void run() { int x = f; } } }");
+        assert!(has_this0(the_runner(&unit)), "usa `f`: captura this$0");
+    }
+
+    #[test]
+    fn a_local_class_still_captures_effectively_final_locals() {
+        // La captura de locales (`val$x`) es por uso y **no** debe romperse por el cambio en this$0.
+        let unit = desugared_full(
+            "class C { void m(int p) { class L { void run() { int x = p; } } new L().run(); } }",
+        );
+        let l = the_runner(&unit);
+        assert!(l.members.iter().any(|m| matches!(m, Member::Field(f) if f.name == "val$p")), "captura val$p");
+        assert!(!has_this0(l), "pero no this$0 (no usa el enclosing)");
+    }
+
+    #[test]
+    fn a_nested_local_class_that_uses_the_outer_forces_the_middle_to_capture_it() {
+        // Transitividad (§8.1.3): la local de en medio no usa `f` directamente, pero su local anidada
+        // sí, así que la del medio tiene que capturar this$0 para pasárselo.
+        let unit = desugared_full(
+            "class C { int f; void m() { \
+               class Mid { void run() { class Inner { void run() { int x = f; } } new Inner().run(); } } \
+               new Mid().run(); } }",
+        );
+        let mid = all_nested(&unit)
+            .into_iter()
+            .find(|c| c.name.contains("Mid"))
+            .expect("la local del medio");
+        assert!(has_this0(mid), "la del medio captura this$0 para pasárselo a la anidada:\n{}", crate::javac::ast_view::tree(&unit));
+    }
+
+    #[test]
+    fn the_this0_capture_by_use_still_type_checks() {
+        preserves_semantics_full(
+            "interface R { void run(); } \
+             class C { int f; void g() {} \
+               void a() { R r = new R() { public void run() { int x = 1; } }; r.run(); } \
+               void b() { R r = new R() { public void run() { g(); int x = f; } }; r.run(); } \
+               void c() { class L { void run() { int x = f; } } new L().run(); } \
+               void d(int p) { class L2 { void run() { int x = p; } } new L2().run(); } }",
+        );
     }
 }

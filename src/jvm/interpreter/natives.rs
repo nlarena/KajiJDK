@@ -15,7 +15,7 @@ use crate::jvm::class_file::ClassFile;
 
 use super::apt::AptContext;
 use super::bytecode_interpreter::class_operations;
-use super::bytecode_interpreter::objects_operations::{field_offset, HEADER_SIZE};
+use super::bytecode_interpreter::objects_operations::{allocate_old, field_offset, HEADER_SIZE};
 use super::frame::Value;
 use super::heap::HeapService;
 use super::metaspace::MetaspaceService;
@@ -91,10 +91,12 @@ pub fn dispatch(
             let _ = writeln!(out, "{}", strings::read(heap, reference(&args[1])));
             None
         }
-        // APT (fase 2): salida de un processor durante el round loop. `System.out.println` todavía
-        // no compila en este javac (la resolución de `System.out` como campo estático falla), así
-        // que un processor imprime por este native estático — el mínimo `Messager` delegando a Rust.
-        // `args[0]` es la referencia al String (método estático: sin receptor).
+        // APT (fase 2): salida de un processor durante el round loop, vía este native estático — el
+        // mínimo `Messager` delegando a Rust. `args[0]` es la referencia al String (método estático:
+        // sin receptor). (Nota histórica: se agregó cuando `System.out.println` no compilaba en este
+        // javac por un bug de carga transitiva —el tipo de `System.out` quedaba sin resolver—; ese
+        // bug ya está arreglado y `System.out.println` compila, pero el native se conserva como el
+        // canal directo `Messager`→stdout de un processor.)
         ("javax/annotation/processing/AptTrace", "trace", "(Ljava/lang/String;)V") => {
             let _ = writeln!(out, "{}", strings::read(heap, reference(&args[0])));
             None
@@ -316,20 +318,42 @@ pub fn dispatch(
         // --- APT fase 3: el modelo de elementos reificado (ver `super::apt`) -----
         // El receptor es un `jdk/internal/apt/SymElement`: su campo `int sym` es el `SymbolId`
         // en la tabla de `javac` (viva en este mismo proceso, atada con `JVM::set_apt`). Leemos
-        // ese id, indexamos la tabla y devolvemos `Symbol.name` como un `String` internado — el
-        // mismo patrón que `Class.getName` (leer una identidad del metaspace → `strings::intern`),
-        // pero contra la tabla del compilador en vez del metaspace. Capa 1: solo el nombre.
-        (
-            "jdk/internal/apt/SymElement",
-            "getSimpleName" | "getQualifiedName",
-            "()Ljava/lang/String;",
-        ) => {
-            let this = reference(&args[0]);
-            let sym_offset = field_offset(metaspace, "jdk/internal/apt/SymElement", "sym");
-            let sym = heap.read_u32(this + sym_offset) as usize;
-            let apt = apt.as_ref().expect("SymElement native sin un AptContext (usar JVM::set_apt)");
-            let text = apt.table().symbol(sym).name.clone();
-            Some(Value::Reference(strings::intern(metaspace, heap, &text)))
+        // ese id, indexamos la tabla y respondemos contra la tabla del compilador. Estos tres son
+        // native (no intrínsecos): no corren `<clinit>` ni re-entran al intérprete —construyen un
+        // objeto a mano, el mismo patrón que `materialize_method_type`—. Los que sí lo necesitan
+        // (`getKind`/`getEnclosedElements`) los intercepta el intérprete antes de llegar acá.
+        //
+        // `getSimpleName`: el `Symbol.name` (`"Foo"`), envuelto en un `Name` (`SymName`) —el
+        // contrato de `Element` devuelve `Name`, no `String`—.
+        ("jdk/internal/apt/SymElement", "getSimpleName", "()Ljavax/lang/model/element/Name;") => {
+            let sym = sym_of(&args[0], metaspace, heap);
+            let text = apt_ref(apt).table().symbol(sym).name.clone();
+            Some(Value::Reference(make_name(metaspace, heap, &text)))
+        }
+        // `getQualifiedName`: el *binary name* de un tipo con el `$` del anidamiento vuelto `.`
+        // (`"a.b.Outer$Inner"` → `"a.b.Outer.Inner"`), también como un `Name`. Para un símbolo que
+        // no es una clase (no debería pasar: sólo `TypeElement` lo declara) cae al nombre simple.
+        ("jdk/internal/apt/SymElement", "getQualifiedName", "()Ljavax/lang/model/element/Name;") => {
+            let sym = sym_of(&args[0], metaspace, heap);
+            let symbol = apt_ref(apt).table().symbol(sym);
+            let text = match &symbol.kind {
+                crate::javac::symbol::SymbolKind::Class { binary, .. } => binary.replace('$', "."),
+                _ => symbol.name.clone(),
+            };
+            Some(Value::Reference(make_name(metaspace, heap, &text)))
+        }
+        // `getEnclosingElement`: el `Symbol.owner` reificado —la clase de un miembro, el paquete de
+        // un tipo top-level— vía `element_for`, así que hereda su **caché de identidad**: dos hijos
+        // del mismo dueño devuelven el **mismo** objeto (`a.getEnclosingElement() ==
+        // b.getEnclosingElement()`). `null` (referencia 0) si el símbolo no tiene dueño.
+        ("jdk/internal/apt/SymElement", "getEnclosingElement", "()Ljavax/lang/model/element/Element;") => {
+            let sym = sym_of(&args[0], metaspace, heap);
+            let owner = apt_ref(apt).table().symbol(sym).owner;
+            let element = match owner {
+                Some(owner) => apt.as_mut().expect("AptContext atado").element_for(owner, metaspace, heap),
+                None => 0,
+            };
+            Some(Value::Reference(element))
         }
 
         // --- String -------------------------------------------------------------
@@ -453,4 +477,35 @@ fn reference(value: &Value) -> usize {
         Value::Reference(offset) => *offset,
         other => panic!("native: expected a reference argument, found {other:?}"),
     }
+}
+
+// --- APT fase 3: ayudantes de la reificación de `SymElement` -------------------------------------
+
+/// El `SymbolId` que reifica un `SymElement` receptor: lee su campo `int sym`. Es el índice en la
+/// tabla viva de `javac` que los native de arriba usan para releer el símbolo.
+fn sym_of(receiver: &Value, metaspace: &mut MetaspaceService, heap: &HeapService) -> usize {
+    let this = reference(receiver);
+    let sym_offset = field_offset(metaspace, "jdk/internal/apt/SymElement", "sym");
+    heap.read_u32(this + sym_offset) as usize
+}
+
+/// El [`AptContext`] atado (con `JVM::set_apt`). Panica si falta: un native de `SymElement` sólo se
+/// alcanza durante una corrida de procesador, donde el contexto siempre está presente.
+fn apt_ref(apt: &Option<AptContext>) -> &AptContext {
+    apt.as_ref().expect("SymElement native sin un AptContext (usar JVM::set_apt)")
+}
+
+/// Construye un `jdk/internal/apt/SymName` (un `javax.lang.model.element.Name`) que envuelve `text`:
+/// aloca el objeto y le escribe el `String` internado en su campo `value`. Alocado en **Old** (como
+/// un `SymElement`): un `Name` es un handle que el procesador puede sostener a través de otras
+/// alocaciones/GC. El `String` va por la barrera de escritura (`store_reference`), por si el Name
+/// (Old) apunta a una `String` joven. Mismo patrón que `Exec::materialize_method_type`.
+fn make_name(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &str) -> usize {
+    const SYM_NAME: &str = "jdk/internal/apt/SymName";
+    class_operations::load_class(metaspace, heap, SYM_NAME);
+    let object = allocate_old(metaspace, heap, SYM_NAME);
+    let value = strings::intern(metaspace, heap, text);
+    let value_offset = field_offset(metaspace, SYM_NAME, "value");
+    heap.store_reference(object, object + value_offset, value);
+    object
 }

@@ -111,6 +111,16 @@ pub enum Intrinsic {
     /// `Object.clone()` — reached by `invokevirtual` (no override) and by an override's
     /// `super.clone()` (`invokespecial`).
     ObjectClone,
+    /// `jdk/internal/apt/SymElement.getKind()` (APT fase 3, capa 4): devuelve una constante del
+    /// enum `ElementKind`. Va por intrínseco (no native del bridge) porque debe correr el
+    /// `<clinit>` de `ElementKind` para que sus constantes existan — sólo el intérprete puede — y
+    /// luego leer el campo estático, el mismo patrón que `Thread.getState()`.
+    SymElementGetKind,
+    /// `jdk/internal/apt/SymElement.getEnclosedElements()` (APT fase 3, capa 5): devuelve una
+    /// `List`. Va por intrínseco porque construye un `ArrayList` y **re-entra** al intérprete por
+    /// cada miembro (`ArrayList.add(element_for(child))`) — un native del bridge no tiene la vista
+    /// `Exec` para invocar bytecode.
+    SymElementGetEnclosedElements,
 }
 
 /// Which [`Intrinsic`] a `(class, name, descriptor)` names — the ~7 string-compare chain the
@@ -149,6 +159,15 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
             ("notify", "()V") => Intrinsic::ObjectNotify,
             ("notifyAll", "()V") => Intrinsic::ObjectNotifyAll,
             ("clone", "()Ljava/lang/Object;") => Intrinsic::ObjectClone,
+            _ => Intrinsic::None,
+        },
+        // APT fase 3 (capas 4-5): los dos accesores de `SymElement` que no pueden ser native del
+        // bridge — `getKind` corre un `<clinit>` (enum) y `getEnclosedElements` re-entra al
+        // intérprete. Los demás (`getSimpleName`/`getQualifiedName`/`getEnclosingElement`) sí son
+        // native, así que caen a `Intrinsic::None` y los toma el bridge.
+        "jdk/internal/apt/SymElement" => match (name, descriptor) {
+            ("getKind", "()Ljavax/lang/model/element/ElementKind;") => Intrinsic::SymElementGetKind,
+            ("getEnclosedElements", "()Ljava/util/List;") => Intrinsic::SymElementGetEnclosedElements,
             _ => Intrinsic::None,
         },
         _ => Intrinsic::None,

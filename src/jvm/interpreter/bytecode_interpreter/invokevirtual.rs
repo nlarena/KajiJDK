@@ -190,6 +190,22 @@ impl Exec<'_> {
             // override runs as a normal frame, and its `super.clone()` lands in invokespecial's
             // twin interception.
             Intrinsic::ObjectClone => return self.object_clone(receiver),
+            // APT fase 3 (capas 4-5): los dos accesores de `SymElement` que el bridge no puede
+            // atender —`getKind` corre el `<clinit>` de un enum, `getEnclosedElements` re-entra al
+            // intérprete—. Se resuelven acá y su resultado (un offset del heap) se empuja como una
+            // referencia, igual que cualquier native interceptado. Ver `super::apt`.
+            Intrinsic::SymElementGetKind => {
+                let kind = self.sym_element_kind(receiver);
+                self.top().push(Value::Reference(kind));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            Intrinsic::SymElementGetEnclosedElements => {
+                let list = self.sym_element_enclosed(receiver);
+                self.top().push(Value::Reference(list));
+                self.advance_past_call();
+                return Step::Continue;
+            }
             _ => {}
         }
 

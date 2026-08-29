@@ -17,6 +17,7 @@ pub mod token;
 pub mod lexer;
 pub mod ast;
 pub mod ast_view;
+pub mod doc;
 pub mod parser;
 pub mod symbol;
 pub mod types;

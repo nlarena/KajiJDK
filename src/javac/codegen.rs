@@ -70,6 +70,7 @@ const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
 const ACC_NATIVE: u16 = 0x0100; // método implementado por el VM, sin `Code` (§4.6)
 const ACC_BRIDGE: u16 = 0x0040; // método puente sintetizado (§4.6)
+const ACC_VARARGS: u16 = 0x0080; // método de aridad variable (`T...`) (§4.6)
 const ACC_SYNTHETIC: u16 = 0x1000; // no aparece en el fuente (§4.6)
 const ACC_ENUM: u16 = 0x4000; // tipo/campo `enum` (§4.1/§4.5)
 const ACC_MODULE: u16 = 0x8000; // el `.class` es un descriptor de módulo (§4.1)
@@ -286,7 +287,12 @@ fn gen_class(
     // admiten public/final/super/interface/abstract/…—. Emitirlos ahí da un `.class` que la JVM
     // rechaza (`Unmatched bit 0x8` para `static`). El nivel de acceso real de un anidado lo lleva
     // `InnerClasses`; a nivel clase, un anidado package-private queda solo con `ACC_SUPER`.
-    let class_level = class_flags(&class.modifiers) & !(ACC_STATIC | ACC_PRIVATE | ACC_PROTECTED);
+    let mut class_level = class_flags(&class.modifiers) & !(ACC_STATIC | ACC_PRIVATE | ACC_PROTECTED);
+    // Un tipo miembro de una interfaz es implícitamente `public` (§9.5): sin esto un `record`/clase
+    // anidado en una interfaz salía package-private (`final class` en vez de `public final class`).
+    if member_of_interface(table, cid) {
+        class_level |= ACC_PUBLIC;
+    }
     cf.access_flags = if is_interface {
         class_level | ACC_INTERFACE | ACC_ABSTRACT
     } else {
@@ -360,6 +366,13 @@ fn gen_class(
                 cf.interfaces.push(idx);
             }
         }
+    }
+    // Un tipo de anotación (`@interface`) implementa implícitamente `java.lang.annotation.Annotation`
+    // (§9.6.1): es su super-interfaz directa en el `.class`, igual que la emite javac. Sin ella la
+    // reflexión no reconocería el tipo como anotación.
+    if class.kind == TypeKind::Annotation {
+        let idx = cf.pool.class("java/lang/annotation/Annotation");
+        cf.interfaces.push(idx);
     }
     // `PermittedSubclasses` (§4.7.31): un tipo `sealed` graba en el `.class` sus subtipos
     // autorizados (el `permits` explícito o el implícito de la misma unidad). Sin esto, el tipo no
@@ -561,59 +574,139 @@ fn cat_width(rt: &RType) -> u16 {
     matches!(rt, RType::Prim(PrimType::Long | PrimType::Double)) as u16 + 1
 }
 
-/// El **máximo slot** (índice + ancho) que usa cualquier local del cuerpo, recorriendo todas las
-/// sentencias anidadas. Sirve para reservar un slot **temporal por encima de todo local declarado**
-/// —el que guarda el valor de un `return` mientras corre un `finally` inyectado (§14.20.2)—, de modo
-/// que nunca pise el `int y` del propio `finally`. Los pattern-switch ya vienen bajados a `LocalVar`
-/// desde el desugar, así que sus *bindings* se cuentan como cualquier local.
-fn body_max_slot(stmts: &[Stmt]) -> u16 {
-    stmts.iter().map(stmt_max_slot).max().unwrap_or(0)
+/// El **menor slot** que declara algún local del bloque (recorriendo lo anidado): la *base* de los
+/// locales de un `finally`. javac reubica esos locales **por encima** del temporal del `return` (o de
+/// la excepción aparcada del catch-all) en cada copia inline; para lograr el mismo byte-exacto se
+/// desplaza cada slot `>= base` por un delta al emitir la copia. `None` si el bloque no declara
+/// ningún local (no hace falta reubicar nada).
+fn finally_local_base(stmts: &[Stmt]) -> Option<u16> {
+    let mut out: Vec<u16> = Vec::new();
+    collect_local_slots(stmts, &mut out);
+    out.into_iter().min()
 }
 
-fn stmt_max_slot(s: &Stmt) -> u16 {
-    let mut m = s.local.as_ref().map_or(0, |l| l.slot + cat_width(&l.ty));
+fn collect_local_slots(stmts: &[Stmt], out: &mut Vec<u16>) {
+    for s in stmts {
+        collect_stmt_slots(s, out);
+    }
+}
+
+fn collect_stmt_slots(s: &Stmt, out: &mut Vec<u16>) {
+    if let Some(l) = s.local.as_ref() {
+        out.push(l.slot);
+    }
     match &s.kind {
         StmtKind::If { then, els, .. } => {
-            m = m.max(stmt_max_slot(then));
+            collect_stmt_slots(then, out);
             if let Some(e) = els {
-                m = m.max(stmt_max_slot(e));
+                collect_stmt_slots(e, out);
             }
         }
         StmtKind::While { body, .. }
         | StmtKind::Do { body, .. }
         | StmtKind::ForEach { body, .. }
-        | StmtKind::Labeled { body, .. } => m = m.max(stmt_max_slot(body)),
+        | StmtKind::Labeled { body, .. } => collect_stmt_slots(body, out),
         StmtKind::For { init, body, .. } => {
             if let Some(i) = init {
-                m = m.max(stmt_max_slot(i));
+                collect_stmt_slots(i, out);
             }
-            m = m.max(stmt_max_slot(body));
+            collect_stmt_slots(body, out);
         }
-        StmtKind::Block(b) => m = m.max(body_max_slot(&b.0)),
-        StmtKind::Synchronized { body, .. } => m = m.max(body_max_slot(&body.0)),
+        StmtKind::Block(b) => collect_local_slots(&b.0, out),
+        StmtKind::Synchronized { body, .. } => collect_local_slots(&body.0, out),
         StmtKind::Try { resources, body, catches, finally } => {
-            m = m.max(body_max_slot(resources)).max(body_max_slot(&body.0));
+            collect_local_slots(resources, out);
+            collect_local_slots(&body.0, out);
             for c in catches {
                 if let Some(sl) = c.slot {
-                    m = m.max(sl + 1);
+                    out.push(sl);
                 }
-                m = m.max(body_max_slot(&c.body.0));
+                collect_local_slots(&c.body.0, out);
             }
             if let Some(f) = finally {
-                m = m.max(body_max_slot(&f.0));
+                collect_local_slots(&f.0, out);
             }
         }
         StmtKind::Switch { cases, .. } => {
             for c in cases {
                 match &c.body {
-                    SwitchBody::Arrow(st) => m = m.max(stmt_max_slot(st)),
-                    SwitchBody::Colon(sts) => m = m.max(body_max_slot(sts)),
+                    SwitchBody::Arrow(st) => collect_stmt_slots(st, out),
+                    SwitchBody::Colon(sts) => collect_local_slots(sts, out),
                 }
             }
         }
         _ => {}
     }
-    m
+}
+
+/// Parte `[start, end)` excluyendo los `gaps` (las copias inline del `finally` que corren en las
+/// salidas abruptas): javac deja **fuera** de la región protegida cada copia inyectada —una excepción
+/// dentro de ella ya no pertenece al `try`, sino que la toma el catch-all de más afuera—. Devuelve los
+/// sub-rangos resultantes (ninguno vacío), en orden ascendente.
+fn split_range(start: usize, end: usize, gaps: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut sorted: Vec<(usize, usize)> =
+        gaps.iter().filter(|(s, e)| e > s).cloned().collect();
+    sorted.sort();
+    let mut out = Vec::new();
+    let mut cur = start;
+    for (gs, ge) in sorted {
+        let gs = gs.max(start);
+        let ge = ge.min(end);
+        if gs >= end {
+            break;
+        }
+        if gs > cur {
+            out.push((cur, gs));
+        }
+        cur = cur.max(ge);
+    }
+    if cur < end {
+        out.push((cur, end));
+    }
+    out
+}
+
+/// Anidamiento máximo de `synchronized` de un cuerpo, para reservar los slots de sus monitores (uno
+/// por nivel) y los aparcaderos de excepción de sus handlers (otro por nivel) por debajo de los
+/// temporales dinámicos del método.
+fn max_sync_depth(stmts: &[Stmt]) -> u16 {
+    stmts.iter().map(stmt_sync_depth).max().unwrap_or(0)
+}
+
+fn stmt_sync_depth(s: &Stmt) -> u16 {
+    match &s.kind {
+        StmtKind::Synchronized { body, .. } => 1 + max_sync_depth(&body.0),
+        StmtKind::If { then, els, .. } => {
+            stmt_sync_depth(then).max(els.as_ref().map_or(0, |e| stmt_sync_depth(e)))
+        }
+        StmtKind::While { body, .. }
+        | StmtKind::Do { body, .. }
+        | StmtKind::ForEach { body, .. }
+        | StmtKind::For { body, .. }
+        | StmtKind::Labeled { body, .. } => stmt_sync_depth(body),
+        StmtKind::Block(b) => max_sync_depth(&b.0),
+        StmtKind::Try { resources, body, catches, finally } => {
+            let mut m = max_sync_depth(resources).max(max_sync_depth(&body.0));
+            for c in catches {
+                m = m.max(max_sync_depth(&c.body.0));
+            }
+            if let Some(f) = finally {
+                m = m.max(max_sync_depth(&f.0));
+            }
+            m
+        }
+        StmtKind::Switch { cases, .. } => {
+            let mut m = 0;
+            for c in cases {
+                m = m.max(match &c.body {
+                    SwitchBody::Arrow(st) => stmt_sync_depth(st),
+                    SwitchBody::Colon(sts) => max_sync_depth(sts),
+                });
+            }
+            m
+        }
+        _ => 0,
+    }
 }
 
 /// El nombre para un `CHECKCAST` sobre `rt`: el interno de la clase, o el descriptor de un array.
@@ -859,6 +952,18 @@ fn class_flags(mods: &[Modifier]) -> u16 {
     mods.iter().fold(0, |f, m| f | modifier_flag(*m))
 }
 
+/// ¿`cid` es un **tipo miembro de una interfaz** (o `@interface`)? Un tipo así es implícitamente
+/// `public static` (§9.5), aunque no lo escriba el fuente — flags que van tanto a los access_flags de
+/// clase como a su entrada de `InnerClasses`.
+fn member_of_interface(table: &SymbolTable, cid: SymbolId) -> bool {
+    class_owner(table, cid).is_some_and(|o| {
+        matches!(
+            table.symbol(o).kind,
+            SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
+        )
+    })
+}
+
 fn modifier_flag(m: Modifier) -> u16 {
     match m {
         Modifier::Public => ACC_PUBLIC,
@@ -1086,6 +1191,10 @@ fn class_signature(
     let mut s = sig_type_params(table, scope, &tvars, &class.type_params);
     match &class.extends {
         Some(t) => s.push_str(&sig_type(table, scope, &tvars, t)),
+        // Un `record` extiende implícitamente `java.lang.Record` (§8.10): su `Signature` genérica debe
+        // nombrarlo como superclase, no `Object`. Sin esto un `record` con parámetros de tipo se
+        // desensamblaba como `class GenRec<A,B>` (sin `extends java.lang.Record`).
+        None if class.kind == TypeKind::Record => s.push_str("Ljava/lang/Record;"),
         None => s.push_str("Ljava/lang/Object;"),
     }
     for i in &class.implements {
@@ -1198,6 +1307,10 @@ fn inner_entry(pool: &mut ConstantPool, table: &SymbolTable, id: SymbolId) -> In
     if matches!(sym.kind, SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }) {
         flags |= ACC_INTERFACE | ACC_ABSTRACT;
     }
+    // Miembro de interfaz: implícitamente `public static` (§9.5), también en su entrada `InnerClasses`.
+    if member_of_interface(table, id) {
+        flags |= ACC_PUBLIC | ACC_STATIC;
+    }
 
     let (outer, name) = if all_digits {
         (0, 0) // anónima: sin dueño ni nombre
@@ -1293,6 +1406,12 @@ fn gen_method(
     bootstraps: &mut Vec<BootstrapMethod>,
     errors: &mut Vec<Error>,
 ) -> MethodInfo {
+    // Los tipos de la firma/cuerpo de un método **genérico** se resuelven en su scope propio (el que
+    // ve sus `<T>`), no en el de la clase: así una variable de tipo `T extends Comparable<T>` **borra a
+    // su cota** (`Comparable`) en el descriptor y en los frames del verificador —no a `Object`, que da
+    // un `.class` que no verifica al invocar un método de la cota sobre el parámetro—. Un método sin
+    // parámetros de tipo devuelve el scope de la clase intacto.
+    let scope = super::attribute::method_sig_scope(table, scope, m);
     let name = if m.is_constructor { "<init>" } else { &m.name };
     let name_index = pool.utf8(name);
     let descriptor_index = pool.utf8(&method_descriptor(table, scope, m));
@@ -1351,6 +1470,9 @@ fn gen_method(
         if is_interface {
             flags |= ACC_PUBLIC;
         }
+        if m.params.last().is_some_and(|p| p.varargs) {
+            flags |= ACC_VARARGS;
+        }
         return MethodInfo {
             access_flags: flags,
             name_index,
@@ -1384,6 +1506,12 @@ fn gen_method(
         rt,
         tu,
     );
+    // La categoría del tipo de retorno, para convertir el valor de cada `return` al contexto de
+    // asignación (§5.2): un `return <float>` en un método `double` necesita `f2d`.
+    e.ret_cat = match &m.return_type {
+        Type::Prim(p) => category(&RType::Prim(*p)),
+        _ => 4,
+    };
     // `this` (slot 0) en los métodos de instancia y constructores; luego los parámetros. Se anotan
     // también sus **tipos de verificación**: son los locales ya asignados al entrar, y de ahí parte
     // el cálculo de los frames.
@@ -1404,6 +1532,14 @@ fn gen_method(
         slot += type_width(&p.ty);
     }
     e.max_locals = slot;
+    e.next_free = slot; // cursor dinámico: arranca justo encima de `this` y los parámetros
+    // Reservar la región de los `synchronized` (monitores + aparcaderos de excepción, dos slots por
+    // nivel de anidamiento) justo encima de los parámetros, como javac; el cursor dinámico arranca por
+    // encima de ella para que los temporales de `return`/`finally` no la pisen.
+    e.sync_base = e.next_free;
+    e.sync_max_depth = m.body.as_ref().map_or(0, |b| max_sync_depth(&b.0));
+    e.next_free += 2 * e.sync_max_depth;
+    e.max_locals = e.max_locals.max(e.next_free);
 
     // `LocalVariableTable`: el scope del método envuelve `this` y los parámetros —vivos [0, code_len)—.
     // Los locales del cuerpo van en scopes anidados (bloques), que reflejan el reuso de slots.
@@ -1444,13 +1580,14 @@ fn gen_method(
     }
 
     if let Some(body) = &m.body {
-        // Reservar los temporales por encima de **todo** local del método (incluidos los de los
-        // `finally`), para que un `return` que inyecta un `finally` no le pise sus variables.
-        e.temp_base = e.max_locals.max(body_max_slot(&body.0));
         e.block_scoped(&body.0);
     }
-    // Un `void`/constructor puede omitir el `return` final; lo agregamos.
-    if m.is_constructor || matches!(m.return_type, Type::Void) {
+    // Un `void`/constructor puede omitir el `return` final; lo agregamos —pero **solo si el final es
+    // alcanzable**. Si el cuerpo termina en `throw`/`return` (p.ej. un `close()` que siempre lanza, o
+    // el cuerpo de un try-with-resources que sale por excepción), agregarlo dejaba un `return` muerto
+    // tras un `athrow`: código inalcanzable sin frame que el verificador estricto de la JVM rechaza
+    // («Expecting a stack map frame»). javac tampoco lo emite.
+    if (m.is_constructor || matches!(m.return_type, Type::Void)) && e.reachable {
         e.op(RETURN);
     }
     e.close_scope(); // cierra el scope del método: `this`/parámetros toman su rango [0, code_len)
@@ -1466,6 +1603,11 @@ fn gen_method(
     let mut method_flags = class_flags(&m.modifiers);
     if is_interface && !m.modifiers.contains(&Modifier::Private) {
         method_flags |= ACC_PUBLIC;
+    }
+    // `ACC_VARARGS` (§4.6): el último parámetro se declaró con `...`. Sin él la reflexión no ve el
+    // método como varargs y javap lo desensambla como `T[]` en vez de `T...`.
+    if m.params.last().is_some_and(|p| p.varargs) {
+        method_flags |= ACC_VARARGS;
     }
     // El método sintético `$values()` de un `enum` (§8.9.3) —el que arma el arreglo `$VALUES`— lleva
     // `ACC_SYNTHETIC`, igual que el campo `$VALUES`. Real javac: `$values()` = `0x100a`.
@@ -2746,12 +2888,45 @@ struct Emitter<'a> {
     /// Los bloques `finally` que **encierran** el punto actual (el más interno al final). Un
     /// `return` que sale de un `try` corre estos bloques antes de retornar (§14.20.2): la v69 no
     /// tiene `jsr`/`ret`, así que el `finally` se **inyecta** en cada salida abrupta, igual que en la
-    /// salida normal.
-    finally_stack: Vec<Block>,
-    /// Primer slot **libre** por encima de todos los locales del método: de ahí sale el temporal que
-    /// guarda el valor de un `return` mientras corre un `finally` inyectado, para no pisar los locales
-    /// de ese `finally` (que tienen slot fijo de la pasada 2).
-    temp_base: u16,
+    /// salida normal. Cada entrada acumula los `gaps` —las copias inline que corren en sus salidas
+    /// abruptas— para recortarlos de la región protegida en la tabla de excepciones.
+    finally_stack: Vec<PendingExit>,
+    /// Cursor **dinámico** del primer slot libre (`nextreg` de javac): el máximo `slot + ancho` de los
+    /// locales vivos en el punto actual. Sube al declarar un local y se restaura al cerrar el scope.
+    /// De acá sale el temporal del `return` (justo en `next-free`, no por encima de todo el método) y
+    /// la base sobre la que se reubican los locales del `finally` en cada copia inline.
+    next_free: u16,
+    /// `next_free` guardado al abrir cada scope, para restaurarlo al cerrarlo (los slots de un bloque
+    /// se liberan al salir y los reusa el bloque hermano).
+    scope_next_free: Vec<u16>,
+    /// Reubicación de slots activa mientras se emite una copia inline de un `finally`: `(base, delta)`
+    /// desplaza todo slot `>= base` por `delta`. Fuera de esa emisión es `None` (identidad).
+    slot_remap: Option<(u16, i32)>,
+    /// Categoría (0=int-fam,1=long,2=float,3=double,4=ref) del tipo de retorno del método
+    /// en curso: cada `return e` convierte `e` a ella (contexto de asignación §5.2).
+    ret_cat: u8,
+    /// Base de la región reservada para los `synchronized`: el `next_free` inicial (tras `this` y los
+    /// parámetros, = el `nextreg` de javac al entrar al método). Los monitores van en
+    /// `sync_base + profundidad` y los aparcaderos de excepción por encima de todos ellos; el cursor
+    /// dinámico `next_free` arranca por **encima** de esta región para no pisarla.
+    sync_base: u16,
+    /// Cuántos `synchronized` están **abiertos** en el punto actual: da el slot del monitor de uno
+    /// nuevo (`sync_base + sync_depth`) y, con `sync_max_depth`, el de su aparcadero de excepción.
+    sync_depth: u16,
+    /// Anidamiento máximo de `synchronized` del método, para dimensionar la región reservada.
+    sync_max_depth: u16,
+}
+
+/// Una salida **pendiente** que encierra el punto actual: un bloque `finally` (con los `gaps` que sus
+/// copias inline dejan en la región protegida, para recortar la tabla de excepciones) o el
+/// `monitorexit` de un `synchronized` (con el slot del local que guarda la referencia bloqueada). Una
+/// salida abrupta —`return`, `break`/`continue` que sale— corre las que cruza antes de saltar
+/// (§14.20.2), igual que en la salida normal: un `synchronized` es, a estos efectos, un
+/// `try { monitorenter; body } finally { monitorexit }`.
+#[derive(Clone)]
+enum PendingExit {
+    Finally { block: Block, gaps: Vec<(usize, usize)> },
+    Monitor(u16),
 }
 
 /// Un destino de salto todavía sin dirección: se resuelve al final, parcheando los operandos.
@@ -2796,7 +2971,13 @@ impl<'a> Emitter<'a> {
             tu,
             code_type_annotations: Vec::new(),
             finally_stack: Vec::new(),
-            temp_base: 0,
+            next_free: 0,
+            scope_next_free: Vec::new(),
+            sync_base: 0,
+            sync_depth: 0,
+            sync_max_depth: 0,
+            slot_remap: None,
+            ret_cat: 0,
             bytes: Vec::new(),
             stack: Vec::new(),
             max_stack: 0,
@@ -2821,14 +3002,34 @@ impl<'a> Emitter<'a> {
 
     // ---- LocalVariableTable (§4.7.13): scopes de variables locales ----
 
+    /// Aplica la reubicación de slots activa (dentro de una copia inline de `finally`): todo slot por
+    /// encima de la base del `finally` se corre por el delta; el resto (—`this`, parámetros, locales de
+    /// afuera—) queda igual. Fuera de esa emisión es la identidad.
+    fn rmap(&self, slot: u16) -> u16 {
+        match self.slot_remap {
+            Some((base, delta)) if slot >= base => (slot as i32 + delta) as u16,
+            _ => slot,
+        }
+    }
+
+    /// Registra que un local vive en `slot` (ya reubicado): sube el cursor `next_free` para que el
+    /// próximo temporal/local no lo pise.
+    fn note_local(&mut self, slot: u16, width: u16) {
+        self.next_free = self.next_free.max(slot + width);
+    }
+
     /// Abre un scope de locales (espejo de un `env.push()` de la pasada 2).
     fn open_scope(&mut self) {
         self.open_locals.push(Vec::new());
+        self.scope_next_free.push(self.next_free);
     }
 
     /// Cierra el scope corriente: cada local abierto se vuelca a `local_vars` con su rango de vida
     /// `[start, pc_actual)` (se descartan los de largo 0: se declararon pero no vivieron sobre código).
     fn close_scope(&mut self) {
+        if let Some(saved) = self.scope_next_free.pop() {
+            self.next_free = saved;
+        }
         let pc = self.bytes.len() as u16;
         if let Some(scope) = self.open_locals.pop() {
             for (slot, name, desc, start, type_annos) in scope {
@@ -2863,6 +3064,10 @@ impl<'a> Emitter<'a> {
     /// Registra una variable local, viva desde el offset actual, en el scope corriente. `type_annos`
     /// son las anotaciones de tipo del local (target 0x40); vacío para `this`, parámetros y `catch`.
     fn open_local(&mut self, slot: u16, name: &str, desc: &str, type_annos: &[TypeUseAnnot]) {
+        let slot = self.rmap(slot);
+        // Ancho del local: un `long`/`double` ocupa dos slots (una sola entrada, pero el cursor sube 2).
+        let width = if matches!(desc.as_bytes().first(), Some(b'J') | Some(b'D')) { 2 } else { 1 };
+        self.note_local(slot, width);
         let name_idx = self.pool.utf8(name);
         let desc_idx = self.pool.utf8(desc);
         let start = self.bytes.len() as u16;
@@ -2905,6 +3110,7 @@ impl<'a> Emitter<'a> {
 
     /// Anota el tipo de un local (y deja en `Top` la segunda mitad de un `long`/`double`).
     fn set_local(&mut self, slot: u16, t: VType) {
+        let slot = self.rmap(slot);
         let i = slot as usize;
         if self.locals_t.len() < i + 2 {
             self.locals_t.resize(i + 2, VType::Top);
@@ -3116,10 +3322,11 @@ impl<'a> Emitter<'a> {
 
     /// Resuelve todos los saltos. El desplazamiento es **relativo al propio salto** (JVMS §6).
     fn patch(&mut self) {
+        // Paso 1: escribir cada salto con su destino **directo**. Así los `goto` ya llevan su offset
+        // real en el buffer y el paso 2 puede seguirlos.
         for &(operand, at, l) in &self.fixups {
             let target = self.labels[l].expect("etiqueta sin fijar");
-            let delta = target as i32 - at as i32;
-            let bytes = (delta as i16).to_be_bytes();
+            let bytes = ((target as i32 - at as i32) as i16).to_be_bytes();
             self.bytes[operand] = bytes[0];
             self.bytes[operand + 1] = bytes[1];
         }
@@ -3128,6 +3335,39 @@ impl<'a> Emitter<'a> {
             let delta = (target as i64 - base as i64) as i32;
             self.bytes[operand..operand + 4].copy_from_slice(&delta.to_be_bytes());
         }
+        // Paso 2: encadenar los saltos cuyo destino es un `goto` hasta su destino final (fiel a
+        // javac). Solo cambia el **operando** de cada salto, nunca la posición de una instrucción.
+        for &(operand, at, l) in &self.fixups {
+            let target = self.chase_goto(self.labels[l].expect("etiqueta sin fijar"));
+            let bytes = ((target as i32 - at as i32) as i16).to_be_bytes();
+            self.bytes[operand] = bytes[0];
+            self.bytes[operand + 1] = bytes[1];
+        }
+        for &(operand, base, l) in &self.wide_fixups {
+            let target = self.chase_goto(self.labels[l].expect("etiqueta sin fijar"));
+            let delta = (target as i64 - base as i64) as i32;
+            self.bytes[operand..operand + 4].copy_from_slice(&delta.to_be_bytes());
+        }
+    }
+
+    /// Encadena un salto cuyo destino es un `goto` hasta su destino **final** (fiel al `Code.resolve`
+    /// de javac: saltar a un `goto L` equivale a saltar a `L`). Preserva la semántica —un `goto` no
+    /// toca la pila— y evita el rebote `ifeq→goto→destino` que javac colapsa a `ifeq destino`. El
+    /// tope de iteraciones corta un ciclo de `goto`s (código muerto que la práctica no produce).
+    fn chase_goto(&self, mut target: usize) -> usize {
+        for _ in 0..self.bytes.len() {
+            if self.bytes.get(target) != Some(&GOTO) {
+                break;
+            }
+            let delta =
+                i16::from_be_bytes([self.bytes[target + 1], self.bytes[target + 2]]) as i32;
+            let next = (target as i32 + delta) as usize;
+            if next == target {
+                break; // `goto` a sí mismo: no encadenar
+            }
+            target = next;
+        }
+        target
     }
 
     fn op(&mut self, b: u8) {
@@ -3226,8 +3466,23 @@ impl<'a> Emitter<'a> {
             StmtKind::LocalVar { name, init, type_annos, .. } => {
                 if let Some(local) = &s.local {
                     if let Some(e) = init {
-                        self.expr(e);
                         let cat = category(&local.ty);
+                        // Conversión en contexto de asignación (§5.2): un inicializador de una categoría
+                        // numérica más angosta se **ensancha** al tipo de la variable. Una **constante**
+                        // se pliega directo al tipo destino (`double s = 0` ⇒ `dconst_0`, como javac); un
+                        // valor no constante se emite y se convierte (`double s = i` ⇒ `iload; i2d`).
+                        let from = category(&self.ty_of(e));
+                        if from != cat && from <= 3 && cat <= 3 {
+                            match const_eval_num(e, &ConstFieldMap::new()) {
+                                Some(n) => self.push_num_as(n, cat),
+                                None => {
+                                    self.expr(e);
+                                    self.convert(from, cat);
+                                }
+                            }
+                        } else {
+                            self.expr(e);
+                        }
                         let vt = vtype_of(self.table, &local.ty);
                         self.set_local(local.slot, vt);
                         self.store(cat, local.slot);
@@ -3241,32 +3496,52 @@ impl<'a> Emitter<'a> {
             StmtKind::Return(e) => {
                 match e {
                     Some(e) => {
-                        let cat = category(&self.ty_of(e));
+                        let from = category(&self.ty_of(e));
                         self.expr(e);
+                        // Conversión al tipo de retorno (§5.2): p. ej. `f2d` si el `return` de un
+                        // método `double` rinde un `float`. `convert` es no-op si ya coinciden o si
+                        // alguno es referencia.
+                        self.convert(from, self.ret_cat);
+                        let cat = self.ret_cat;
                         if self.finally_stack.is_empty() {
                             self.op(IRETURN + cat);
                             self.pop(1);
+                        } else if !self.pending_has_finally() {
+                            // Solo `monitorexit` pendientes (ningún `finally`): el valor puede quedar
+                            // en la pila **bajo** la referencia del monitor mientras se sueltan los
+                            // monitores (§14.19) —cada `aload lock; monitorexit` no lo toca—, sin
+                            // aparcarlo en un temporal. Byte-fiel a javac.
+                            let starts = self.run_finallys_down_to(0, self.next_free);
+                            self.op(IRETURN + cat);
+                            self.pop(1);
+                            self.close_gaps(starts);
                         } else {
                             // Salida **abrupta** de un `try` (§14.20.2): el valor no puede quedar en la
                             // pila mientras corre el `finally` (que la usa), así que se guarda en un
-                            // temporal por encima de todo local, se corren los `finally` pendientes, y
-                            // se recarga antes del `ireturn`. Es lo que hace javac (`istore`/…/`iload`).
-                            let tmp = self.temp_base;
+                            // temporal —en el **next-free** vivo, como javac—, se corren los `finally`
+                            // pendientes (con sus locales reubicados por encima de ese temporal), y se
+                            // recarga antes del `ireturn`.
+                            let tmp = self.next_free;
                             let vt = self.stack.last().cloned().unwrap_or(VType::Top);
                             self.set_local(tmp, vt);
                             self.store(cat, tmp);
-                            let saved = self.temp_base;
-                            self.temp_base += stack_width(cat) as u16;
-                            self.run_pending_finallys();
-                            self.temp_base = saved;
+                            let rebase_top = tmp + stack_width(cat) as u16;
+                            let saved = self.next_free;
+                            self.next_free = rebase_top; // el temporal ocupa [tmp, rebase_top)
+                            let starts = self.run_finallys_down_to(0, rebase_top);
+                            self.next_free = saved;
                             self.load(cat, tmp);
                             self.op(IRETURN + cat);
                             self.pop(1);
+                            self.close_gaps(starts);
                         }
                     }
                     None => {
-                        self.run_pending_finallys();
+                        // `return;` sin valor: no hay temporal, los `finally` se reubican en el
+                        // next-free vivo.
+                        let starts = self.run_finallys_down_to(0, self.next_free);
                         self.op(RETURN);
+                        self.close_gaps(starts);
                     }
                 }
                 self.reachable = false; // lo que siga solo se alcanza por un salto
@@ -3340,17 +3615,20 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Break(label) => match self.break_target(label.as_deref()) {
                 Some((t, depth)) => {
-                    self.run_finallys_down_to(depth); // §14.20.2: correr los `finally` que el salto cruza
+                    // §14.20.2: correr los `finally` que el salto cruza (reubicados en el next-free vivo).
+                    let starts = self.run_finallys_down_to(depth, self.next_free);
                     self.jump(GOTO, t);
                     self.reachable = false;
+                    self.close_gaps(starts);
                 }
                 None => self.unsupported(s.pos, "un `break` sin destino (¿lo dejó pasar el flujo?)"),
             },
             StmtKind::Continue(label) => match self.continue_target(label.as_deref()) {
                 Some((t, depth)) => {
-                    self.run_finallys_down_to(depth);
+                    let starts = self.run_finallys_down_to(depth, self.next_free);
                     self.jump(GOTO, t);
                     self.reachable = false;
+                    self.close_gaps(starts);
                 }
                 None => {
                     self.unsupported(s.pos, "un `continue` sin destino (¿lo dejó pasar el flujo?)")
@@ -3529,7 +3807,10 @@ impl<'a> Emitter<'a> {
                 // La flecha **no** cae al grupo siguiente (§14.11.2): sale sola.
                 SwitchBody::Arrow(b) => {
                     self.stmt(b);
-                    if self.reachable {
+                    // El brazo **físicamente último** cae al `end` (que se fija justo después) sin
+                    // `goto`: javac elide todo salto al opcode siguiente. Los demás sí saltan.
+                    let last = i == cases.len() - 1;
+                    if self.reachable && !last {
                         self.jump(GOTO, end);
                         self.reachable = false;
                     }
@@ -3617,75 +3898,160 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// `synchronized (lock) { … }` (§14.19, JVMS §3.14): `monitorenter` al entrar y `monitorexit`
-    /// en **las dos** salidas — la normal y la excepcional. Esta última es un handler *catch-all*
-    /// que suelta el monitor y re-lanza; sin él, una excepción dejaría el monitor tomado para
-    /// siempre y cualquier otro hilo que lo pidiera quedaría colgado.
-    ///
-    /// El handler **no** guarda la excepción en un local: la deja en la pila, empuja el lock encima
-    /// (`monitorexit` consume solo ese) y hace `athrow` sobre lo que quedó.
-    ///
-    /// El monitor viene copiado a un local por el desugar, así que releerlo no reevalúa nada.
-    fn sync_stmt(&mut self, s: &Stmt, lock: &Expr, body: &Block) {
-        let Some(Binding::Local { slot }) = lock.binding else {
-            self.unsupported(s.pos, "un `synchronized` cuyo monitor no se copió a un local");
-            return;
-        };
-        let entry_locals = self.locals_t.clone();
-        self.load(4, slot);
+    /// `synchronized (e) { body }` (§14.19), byte-fiel a javac y modelado como un
+    /// `try { monitorenter; body } finally { monitorexit }`: el `monitorexit` corre en la salida
+    /// normal, en el handler catch-all (que re-lanza) **y** en toda salida abrupta del cuerpo
+    /// (`return`/`break`/`continue`), esto último vía la entrada `PendingExit::Monitor` en el
+    /// `finally_stack`. El monitor se copia a un local sintético tomado del cursor dinámico
+    /// `next_free` (= el `nextreg` de javac), reservado mientras se emite el cuerpo y liberado al
+    /// salir; el handler aparca la excepción en el slot siguiente para soltar el monitor con la pila
+    /// limpia.
+    fn sync_stmt(&mut self, _s: &Stmt, lock: &Expr, body: &Block) {
+        // Slot del monitor: uno por nivel, desde la base reservada (= `nextreg` de javac). El
+        // aparcadero de la excepción del handler va **por encima de todos** los monitores; los
+        // handlers se emiten de adentro hacia afuera y javac le da al más interno el slot más bajo de
+        // esa zona, así que se invierte la profundidad.
+        let mon = self.sync_base + self.sync_depth;
+        let exc_slot = self.sync_base + 2 * self.sync_max_depth - 1 - self.sync_depth;
+        self.sync_depth += 1;
+
+        // `<e>; dup; astore mon; monitorenter`: evalúa la referencia una vez y guarda una copia.
+        self.expr(lock);
+        let lock_t = self
+            .stack
+            .last()
+            .cloned()
+            .unwrap_or(VType::Object("java/lang/Object".to_string()));
+        self.op(DUP);
+        self.push(lock_t.clone());
+        self.set_local(mon, lock_t);
+        self.store(4, mon);
         self.op(MONITORENTER);
         self.pop(1);
 
+        // El frame del handler: los locales de entrada al bloque, con el monitor ya guardado.
+        let entry_locals = self.locals_t.clone();
         let start = self.bytes.len();
+        // Mientras se emite el cuerpo, este `monitorexit` queda pendiente: un `return`/`break`/
+        // `continue` de adentro lo corre antes de saltar (§14.20.2), igual que un `finally`.
+        self.finally_stack.push(PendingExit::Monitor(mon));
         self.block_scoped(&body.0);
-        let end = self.bytes.len();
+        self.finally_stack.pop();
+        self.sync_depth -= 1;
+
         let after = self.new_label();
-        if self.reachable {
-            self.load(4, slot);
+        // Salida normal: soltar el monitor y saltar. El `monitorexit` queda **dentro** del rango
+        // protegido (si él mismo tira, el handler lo reintenta), pero el `goto` no.
+        let end = if self.reachable {
+            self.load(4, mon);
             self.op(MONITOREXIT);
             self.pop(1);
+            let e = self.bytes.len();
             self.jump(GOTO, after);
             self.reachable = false;
-        }
+            e
+        } else {
+            self.bytes.len()
+        };
 
+        // Handler catch-all (§14.20.2): aparca la excepción, suelta el monitor y re-lanza.
         let handler = self.bytes.len();
-        self.handler_frame(handler, &entry_locals, "java/lang/Throwable");
-        self.stack = vec![VType::Object("java/lang/Throwable".to_string())];
-        self.max_stack = self.max_stack.max(2); // la excepción + el lock
-        self.locals_t = entry_locals;
-        self.load(4, slot);
-        self.op(MONITOREXIT);
-        self.pop(1);
-        self.op(ATHROW);
-        self.pop(1);
-        self.reachable = false;
         self.exceptions.push(ExceptionEntry {
             start_pc: start as u16,
             end_pc: end as u16,
             handler_pc: handler as u16,
             catch_type: 0, // cualquier Throwable
         });
+        self.handler_frame(handler, &entry_locals, "java/lang/Throwable");
+        self.stack = vec![VType::Object("java/lang/Throwable".to_string())];
+        self.max_stack = self.max_stack.max(1);
+        self.locals_t = entry_locals;
+        self.set_local(exc_slot, VType::Object("java/lang/Throwable".to_string()));
+        self.store(4, exc_slot);
+        self.load(4, mon);
+        self.op(MONITOREXIT);
+        self.pop(1);
+        let handler_end = self.bytes.len();
+        // El propio `monitorexit` del handler está protegido por el mismo handler: si soltar el
+        // monitor tira, se reintenta (la segunda entrada de la tabla, sobre sí misma, como javac).
+        self.exceptions.push(ExceptionEntry {
+            start_pc: handler as u16,
+            end_pc: handler_end as u16,
+            handler_pc: handler as u16,
+            catch_type: 0,
+        });
+        self.load(4, exc_slot);
+        self.op(ATHROW);
+        self.pop(1);
+        self.reachable = false;
         self.bind(after);
     }
 
-    /// Inyecta los `finally` pendientes para una salida **abrupta** (un `return`), del más interno al
-    /// más externo. Cada bloque se emite con el stack de `finally` **truncado** a los que lo encierran,
-    /// para que un `return` dentro de un `finally` corra solo los de más afuera (nunca a sí mismo). El
-    /// stack se restaura al terminar, porque el `try` que llama sigue usándolo para sus otras salidas.
-    fn run_pending_finallys(&mut self) {
-        self.run_finallys_down_to(0);
+    /// ¿Hay algún bloque `finally` (no solo `monitorexit`) pendiente? Un `return` con valor aparca el
+    /// valor en un temporal solo si un `finally` va a usar la pila; para puros `monitorexit` el valor
+    /// puede quedarse debajo de la referencia del monitor.
+    fn pending_has_finally(&self) -> bool {
+        self.finally_stack
+            .iter()
+            .any(|p| matches!(p, PendingExit::Finally { .. }))
     }
 
-    /// Como [`run_pending_finallys`](Self::run_pending_finallys) pero solo los `finally` **por encima**
-    /// de `target_depth` — los que un `break`/`continue` cruza al saltar a una sentencia envolvente que
-    /// se abrió con esa profundidad (los de más adentro que el destino, no el destino ni los de afuera).
-    fn run_finallys_down_to(&mut self, target_depth: usize) {
+    /// Emite una copia inline de un `finally`, **reubicando** sus locales por encima de `rebase_top`
+    /// (el temporal del `return` o la excepción aparcada del catch-all), como hace javac en cada copia.
+    /// La reubicación se restaura al terminar el bloque.
+    fn emit_finally(&mut self, block: &Block, rebase_top: u16) {
+        let saved = self.slot_remap;
+        self.slot_remap = match finally_local_base(&block.0) {
+            Some(fb) if rebase_top as i32 != fb as i32 => Some((fb, rebase_top as i32 - fb as i32)),
+            _ => None,
+        };
+        self.block_scoped(&block.0);
+        self.slot_remap = saved;
+    }
+
+    /// Inyecta los `finally` pendientes **por encima** de `target_depth`, del más interno al más
+    /// externo. Cada bloque se emite con el stack de `finally` **truncado** a los que lo encierran, para
+    /// que un `return` dentro de un `finally` corra solo los de más afuera (nunca a sí mismo). Sus
+    /// locales se reubican sobre `rebase_top`. Devuelve `(nivel, offset)` del arranque de cada copia,
+    /// para que [`close_gaps`](Self::close_gaps) los cierre como *gaps* de la región protegida.
+    ///
+    /// `target_depth = 0` corre **todos** los pendientes (un `return`); un `break`/`continue` pasa la
+    /// profundidad de la sentencia a la que salta —cruza solo los de más adentro que el destino—.
+    fn run_finallys_down_to(&mut self, target_depth: usize, rebase_top: u16) -> Vec<(usize, usize)> {
         let pending = self.finally_stack.clone();
+        let mut starts = Vec::new();
         for i in (target_depth..pending.len()).rev() {
             self.finally_stack.truncate(i);
-            self.block_scoped(&pending[i].0);
+            match &pending[i] {
+                PendingExit::Finally { block, .. } => {
+                    let gap_start = self.bytes.len();
+                    self.emit_finally(block, rebase_top);
+                    starts.push((i, gap_start));
+                }
+                PendingExit::Monitor(slot) => {
+                    // Soltar el monitor antes del salto: `aload lock; monitorexit`. No abre un `gap`
+                    // (el `synchronized` gestiona su propia tabla de excepciones, no una región de
+                    // `finally` que recortar).
+                    self.load(4, *slot);
+                    self.op(MONITOREXIT);
+                    self.pop(1);
+                }
+            }
         }
         self.finally_stack = pending;
+        starts
+    }
+
+    /// Cierra los *gaps* que abrieron las copias inline de una salida abrupta: cada uno va desde su
+    /// arranque hasta el offset actual (ya emitidos el `ireturn`/`goto` de cierre). Se anotan en la
+    /// entrada del `finally_stack` de su `try`, que los recorta de la región protegida en su tabla.
+    fn close_gaps(&mut self, starts: Vec<(usize, usize)>) {
+        let gap_end = self.bytes.len();
+        for (level, gap_start) in starts {
+            if let Some(PendingExit::Finally { gaps, .. }) = self.finally_stack.get_mut(level) {
+                gaps.push((gap_start, gap_end));
+            }
+        }
     }
 
     /// `try { … } catch (E e) { … } [finally { … }]`.
@@ -3703,28 +4069,35 @@ impl<'a> Emitter<'a> {
         let start = self.bytes.len();
         // Mientras se emite el cuerpo, este `finally` queda **pendiente**: un `return` de adentro lo
         // corre (§14.20.2). Se saca antes de emitir la copia de la salida normal (que ya es el `finally`
-        // en sí y no debe correrse a sí misma).
+        // en sí y no debe correrse a sí misma). Al sacarlo se recuperan los `gaps` que sus copias
+        // inline dejaron en el cuerpo, para recortarlos de la región protegida.
         if let Some(f) = finally {
-            self.finally_stack.push(f.clone());
+            self.finally_stack.push(PendingExit::Finally { block: f.clone(), gaps: Vec::new() });
         }
         self.block_scoped(&body.0);
-        if finally.is_some() {
-            self.finally_stack.pop();
-        }
+        let body_gaps = if finally.is_some() {
+            match self.finally_stack.pop() {
+                Some(PendingExit::Finally { gaps, .. }) => gaps,
+                _ => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
         let end = self.bytes.len();
         let after = self.new_label();
         if self.reachable {
+            // Salida normal: sin temporal, el `finally` se reubica en el next-free vivo.
             if let Some(f) = finally {
-                self.block_scoped(&f.0);
+                self.emit_finally(f, self.next_free);
             }
             self.jump(GOTO, after);
             self.reachable = false;
         }
 
         // Rango de cada cuerpo de `catch`, para que el `finally` catch-all también lo proteja: si un
-        // `catch` **lanza**, el `finally` debe correr igual (§14.20.2). Sin esto, un `throw` en el
-        // `catch` se escapaba sin ejecutar el `finally`.
-        let mut catch_ranges: Vec<(usize, usize)> = Vec::new();
+        // `catch` **lanza** (o retorna), el `finally` debe correr igual (§14.20.2). Cada rango lleva sus
+        // propios `gaps` (las copias inline de un `return` del `catch`), a recortar de la protección.
+        let mut catch_ranges: Vec<(usize, usize, Vec<(usize, usize)>)> = Vec::new();
         for c in catches {
             let handler = self.bytes.len();
             let exc = c
@@ -3752,32 +4125,46 @@ impl<'a> Emitter<'a> {
             }
             // El `finally` también encierra el cuerpo del `catch`: un `return` de acá lo corre.
             if let Some(f) = finally {
-                self.finally_stack.push(f.clone());
+                self.finally_stack.push(PendingExit::Finally { block: f.clone(), gaps: Vec::new() });
             }
             for s in &c.body.0 {
                 self.stmt(s);
             }
+            // El cuerpo del `catch` va de su handler hasta acá (antes de la copia del `finally` de salida
+            // normal): ese rango —recortadas sus propias copias inline— lo protege el catch-all.
+            let catch_end = self.bytes.len();
+            let catch_gaps = if finally.is_some() {
+                match self.finally_stack.pop() {
+                    Some(PendingExit::Finally { gaps, .. }) => gaps,
+                    _ => Vec::new(),
+                }
+            } else {
+                Vec::new()
+            };
             if finally.is_some() {
-                self.finally_stack.pop();
-                // El cuerpo del `catch` va de su handler hasta acá (antes de la copia del `finally` de
-                // salida normal): ese rango también lo protege el catch-all de más abajo.
-                catch_ranges.push((handler, self.bytes.len()));
+                catch_ranges.push((handler, catch_end, catch_gaps));
             }
+            // Cerrar el scope del `catch` **antes** de la copia del `finally` de salida normal: así su
+            // variable libera el slot y el `finally` lo reusa (como javac, que corre el finalizador con
+            // `nextreg` ya restaurado tras la variable del `catch`).
+            self.close_scope();
             if self.reachable {
                 if let Some(f) = finally {
-                    self.block_scoped(&f.0);
+                    self.emit_finally(f, self.next_free);
                 }
                 self.jump(GOTO, after);
                 self.reachable = false;
             }
-            self.close_scope(); // cierra el scope del `catch`
             let ct = self.pool.class(&exc);
-            self.exceptions.push(ExceptionEntry {
-                start_pc: start as u16,
-                end_pc: end as u16,
-                handler_pc: handler as u16,
-                catch_type: ct,
-            });
+            // `try → catch` (tipada), recortando las copias inline del cuerpo del `try`.
+            for (s0, e0) in split_range(start, end, &body_gaps) {
+                self.exceptions.push(ExceptionEntry {
+                    start_pc: s0 as u16,
+                    end_pc: e0 as u16,
+                    handler_pc: handler as u16,
+                    catch_type: ct,
+                });
+            }
         }
 
         // El `finally` también corre si algo se escapa: handler catch-all que lo ejecuta y re-lanza.
@@ -3787,46 +4174,65 @@ impl<'a> Emitter<'a> {
             self.stack = vec![VType::Object("java/lang/Throwable".to_string())];
             self.max_stack = self.max_stack.max(1);
             self.locals_t = entry_locals.clone();
-            // Aparcar la excepción en un local **libre** (por encima de todo local del método y del
-            // propio `finally`) en vez de dejarla en la pila mientras corre el `finally`: así el
-            // `finally` usa la pila sin restricciones, como emite javac.
-            let park = self.max_locals.max(body_max_slot(&f.0));
+            // Aparcar la excepción en el **high-water** global de locales (el `newRegSegment` de javac,
+            // que lleva `nextreg` al máximo alcanzado por todas las rutas previas) en vez de dejarla en la
+            // pila mientras corre el `finally`: así el `finally` usa la pila sin restricciones.
+            let park = self.max_locals;
             self.set_local(park, VType::Object("java/lang/Throwable".to_string()));
             self.store(4, park); // astore park: saca la excepción de la pila
-            self.block_scoped(&f.0); // el `finally` corre con la pila limpia
+            let catchall_finally_start = self.bytes.len();
+            self.emit_finally(f, park + 1); // el `finally` corre con la pila limpia, reubicado sobre `park`
             self.load(4, park); // aload park: la recupera para re-lanzarla
             self.op(ATHROW);
             self.pop(1);
             self.reachable = false;
-            self.exceptions.push(ExceptionEntry {
-                start_pc: start as u16,
-                end_pc: end as u16,
-                handler_pc: handler as u16,
-                catch_type: 0, // cualquier Throwable
-            });
-            // …y sobre cada cuerpo de `catch` (rangos disjuntos del cuerpo del `try`): un `throw` ahí
-            // adentro pasa por el mismo catch-all, que corre el `finally` y re-lanza.
-            for (cs, ce) in &catch_ranges {
-                if ce > cs {
+            // `try → catch-all`, recortando las copias inline del cuerpo del `try`.
+            for (s0, e0) in split_range(start, end, &body_gaps) {
+                self.exceptions.push(ExceptionEntry {
+                    start_pc: s0 as u16,
+                    end_pc: e0 as u16,
+                    handler_pc: handler as u16,
+                    catch_type: 0,
+                });
+            }
+            // …y sobre cada cuerpo de `catch` (recortadas sus propias copias inline): un `throw`/`return`
+            // ahí adentro pasa por el mismo catch-all, que corre el `finally` y re-lanza.
+            for (cs, ce, gaps) in &catch_ranges {
+                for (s0, e0) in split_range(*cs, *ce, gaps) {
                     self.exceptions.push(ExceptionEntry {
-                        start_pc: *cs as u16,
-                        end_pc: *ce as u16,
+                        start_pc: s0 as u16,
+                        end_pc: e0 as u16,
                         handler_pc: handler as u16,
                         catch_type: 0,
                     });
                 }
+            }
+            // Auto-protección: la parte del catch-all previa a su propia copia del `finally` (el `astore`
+            // de la excepción) la protege él mismo —como emite javac—.
+            if catchall_finally_start > handler {
+                self.exceptions.push(ExceptionEntry {
+                    start_pc: handler as u16,
+                    end_pc: catchall_finally_start as u16,
+                    handler_pc: handler as u16,
+                    catch_type: 0,
+                });
             }
         }
         self.bind(after);
     }
 
     /// Registra el frame de un *handler*: se alcanza solo por excepción, así que no hay salto que lo
-    /// apunte y hay que forzarlo.
+    /// apunte y hay que forzarlo. Un handler es **siempre alcanzable** (por la arista de excepción),
+    /// así que se marca `reachable`: sin esto, un `finally`/`catch` que se emite tras un camino cortado
+    /// (p.ej. la copia catch-all del `finally`, que sigue a un `catch` terminado en `throw`) heredaba
+    /// `reachable == false` y se comía los `goto` de sus try/catch internos —dejando que el flujo cayera
+    /// dentro de su propio handler y produciendo un `StackMapTable` inverificable.
     fn handler_frame(&mut self, at: usize, locals: &[VType], exc: &str) {
         let l = self.new_label();
         self.labels[l] = Some(at);
         self.targets.insert(l);
         self.frames.insert(at, (locals.to_vec(), vec![VType::Object(exc.to_string())]));
+        self.reachable = true;
     }
 
     /// Evalúa una expresión **descartando** su valor (el `update` de un `for`, o una
@@ -4193,6 +4599,20 @@ impl<'a> Emitter<'a> {
         // branch below.
         let is_private = self.table.symbol(mid).modifiers.contains(&Modifier::Private);
 
+        // El owner del `Methodref`/`InterfaceMethodref` de una invocación de despacho es el **tipo
+        // estático del receptor** (§5.4.3.3/§5.4.3.4), no la clase que *declara* el método: `xs.add(i)`
+        // con `xs : List` emite `List.add`, aunque `add` se herede de `Collection`. Solo se calcula para
+        // un receptor **explícito** que no sea `this`/`super`; el implícito/`this`/`super` conserva el
+        // owner del caso de abajo.
+        let explicit_recv_owner: Option<String> = match &call.kind {
+            ExprKind::Call { target: Some(t), .. }
+                if !matches!(t.kind, ExprKind::This | ExprKind::Super) =>
+            {
+                super::types::erased_id(&self.ty_of(t)).map(|id| internal_name(self.table, id))
+            }
+            _ => None,
+        };
+
         // `invokestatic` sin receptor; `invokespecial` para un constructor o un método `private` de
         // instancia; `invokeinterface` si el método pertenece a una **interfaz** (§6.5, con
         // `count` = slots del receptor + argumentos); si no, despacho virtual.
@@ -4209,7 +4629,8 @@ impl<'a> Emitter<'a> {
             self.op(INVOKESPECIAL);
             self.u16(mref);
         } else if owner_is_interface {
-            let imref = self.pool.interface_methodref(&class_internal, &mname, &desc);
+            let iowner = explicit_recv_owner.clone().unwrap_or_else(|| class_internal.clone());
+            let imref = self.pool.interface_methodref(&iowner, &mname, &desc);
             self.op(INVOKEINTERFACE);
             self.u16(imref);
             let count: u16 = 1 + params
@@ -4230,8 +4651,9 @@ impl<'a> Emitter<'a> {
                 }
                 _ => false,
             };
-            let owner_internal =
-                if receiver_is_self { self.this_class.clone() } else { class_internal };
+            let owner_internal = explicit_recv_owner.unwrap_or_else(|| {
+                if receiver_is_self { self.this_class.clone() } else { class_internal }
+            });
             let mref = self.pool.methodref(&owner_internal, &mname, &desc);
             self.op(INVOKEVIRTUAL);
             self.u16(mref);
@@ -4333,6 +4755,34 @@ impl<'a> Emitter<'a> {
                     }
                 }
             }
+            // `x instanceof T t`: además del test, la rama **verdadera** liga el pattern (recargar el
+            // operando, `checkcast T`, `astore t`), justo donde javac lo emite (§14.30.2). Sin pattern
+            // (slot `None`) cae al caso genérico de abajo, que solo emite el test booleano.
+            ExprKind::InstanceOf { expr: operand, ty, slot: Some(slot), .. } => {
+                let internal = match vtype_of_type(self.table, self.scope, ty) {
+                    VType::Object(n) => n,
+                    _ => "java/lang/Object".to_string(),
+                };
+                let cidx = self.pool.class(&internal);
+                self.expr(operand);
+                self.op(INSTANCEOF);
+                self.u16(cidx);
+                self.pop(1);
+                self.push(VType::Int);
+                self.pop(1); // el booleano lo consume el salto
+                if when {
+                    // Salta a `target` cuando es verdadero, ligando **antes** de saltar; si es falso, cae.
+                    let fall = self.new_label();
+                    self.jump(IFEQ, fall);
+                    self.bind_pattern(operand, &internal, *slot);
+                    self.jump(GOTO, target);
+                    self.bind(fall);
+                } else {
+                    // Salta a `target` (el `else`) cuando es falso; en la caída (verdadero) liga el pattern.
+                    self.jump(IFEQ, target);
+                    self.bind_pattern(operand, &internal, *slot);
+                }
+            }
             // Cualquier otro booleano: se calcula y se compara contra cero.
             _ => {
                 self.expr(cond);
@@ -4342,18 +4792,38 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// Liga la variable de un *type pattern* (`instanceof T t`) en la rama en que el test dio verdadero:
+    /// recarga el operando, lo `checkcast`ea a `T` y lo guarda en el slot de `t` — la secuencia
+    /// `aload …; checkcast T; astore t` que emite javac. El operando se **reevalúa** (para un local/param
+    /// es un `aload` idempotente, como en el corpus); un operando con efectos se re-ejecutaría, esquina
+    /// que javac cubre con un temporal y que acá no se da.
+    fn bind_pattern(&mut self, operand: &Expr, internal: &str, slot: u16) {
+        self.expr(operand);
+        let cidx = self.pool.class(internal);
+        self.op(CHECKCAST);
+        self.u16(cidx);
+        self.pop(1);
+        self.push(VType::Object(internal.to_string()));
+        self.set_local(slot, VType::Object(internal.to_string()));
+        self.store(4, slot);
+    }
+
     /// Materializa una condición como el **valor** `0`/`1` (para `boolean b = x > 0;`).
     fn bool_value(&mut self, cond: &Expr) {
-        let t = self.new_label();
+        // Se materializa igual que javac (`CondItem.load`): se **salta cuando la condición es falsa**
+        // al camino que empuja `0`, y la caída (condición verdadera) empuja `1`. El orden importa para
+        // la fidelidad byte-a-byte: p. ej. `!x` sale como `ifne …; iconst_1; goto …; iconst_0` (no como
+        // `ifeq …; iconst_0; …; iconst_1`), que es lo que emite el compilador de referencia.
+        let f = self.new_label();
         let end = self.new_label();
-        self.branch_if(cond, t, true);
-        self.push_int(0);
+        self.branch_if(cond, f, false); // salto al `0` cuando la condición es falsa
+        self.push_int(1); // caída: condición verdadera
         // Un destino de salto con la pila **no vacía**: el valor booleano ya está empujado.
         self.jump(GOTO, end);
         self.reachable = false;
-        self.bind(t);
+        self.bind(f);
         self.pop(1); // los dos caminos empujan un solo valor, no dos
-        self.push_int(1);
+        self.push_int(0);
         self.bind(end);
     }
 
@@ -4745,12 +5215,14 @@ impl<'a> Emitter<'a> {
         };
         // `iinc` regular: índice en un byte, incremento en un byte con signo. Fuera de rango, se deja
         // que el llamador use la forma general (leer-modificar-escribir).
+        let slot = self.rmap(slot); // reubicado si estamos dentro de una copia inline de `finally`
         if slot > 255 || !(-128..=127).contains(&delta) {
             return false;
         }
         self.op(IINC);
         self.op(slot as u8);
         self.op(delta as i8 as u8);
+        self.use_slot(slot, 1);
         true
     }
 
@@ -4823,6 +5295,37 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// Empuja una **constante numérica** ya plegada al tipo destino `cat` (0=int, 1=long, 2=float,
+    /// 3=double): el resultado de ensanchar una constante en contexto de asignación (`double s = 0`).
+    fn push_num_as(&mut self, n: NumV, cat: u8) {
+        match cat {
+            1 => self.push_long(match n {
+                NumV::Int(x) => x as i64,
+                NumV::Long(x) => x,
+                NumV::Float(x) => x as i64,
+                NumV::Double(x) => x as i64,
+            }),
+            2 => self.push_float(match n {
+                NumV::Int(x) => x as f32,
+                NumV::Long(x) => x as f32,
+                NumV::Float(x) => x,
+                NumV::Double(x) => x as f32,
+            }),
+            3 => self.push_double(match n {
+                NumV::Int(x) => x as f64,
+                NumV::Long(x) => x as f64,
+                NumV::Float(x) => x as f64,
+                NumV::Double(x) => x,
+            }),
+            _ => self.push_int(match n {
+                NumV::Int(x) => x,
+                NumV::Long(x) => x as i32,
+                NumV::Float(x) => x as i32,
+                NumV::Double(x) => x as i32,
+            }),
+        }
+    }
+
     /// `long`: `lconst_0`/`lconst_1` para 0 y 1, si no `ldc2_w`. Ocupa **dos** lugares de pila.
     fn push_long(&mut self, n: i64) {
         match n {
@@ -4867,6 +5370,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn load(&mut self, cat: u8, slot: u16) {
+        let slot = self.rmap(slot);
         if slot <= 3 {
             self.op(ILOAD_0 + cat * 4 + slot as u8);
         } else {
@@ -4886,6 +5390,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn store(&mut self, cat: u8, slot: u16) {
+        let slot = self.rmap(slot);
         if slot <= 3 {
             self.op(ISTORE_0 + cat * 4 + slot as u8);
         } else {
@@ -4935,7 +5440,10 @@ mod tests {
     use crate::jvm::interpreter::frame::{Frame, Value};
     use crate::jvm::interpreter::metaspace::MetaspaceService;
     use crate::jvm::verifier::verify_method;
-    use super::{BIPUSH, INVOKEDYNAMIC, INVOKESPECIAL, LOOKUPSWITCH, MONITOREXIT, TABLESWITCH};
+    use super::{
+        ATHROW, BIPUSH, DUP, INVOKEDYNAMIC, INVOKESPECIAL, IRETURN, LOOKUPSWITCH, MONITORENTER,
+        MONITOREXIT, TABLESWITCH,
+    };
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -6105,6 +6613,75 @@ mod tests {
         );
     }
 
+    // ---- try-with-resources (§14.20.3) ----
+
+    #[test]
+    fn try_with_resources_passes_the_strict_verifier() {
+        // §14.20.3.1 baja `try (R r = …) { … }` a un `try/catch(Throwable)/finally` que cierra el
+        // recurso suprimiendo la excepción del `close()` dentro de la primaria (vía `addSuppressed`).
+        // El `finally` va **duplicado** (salida normal + handler catch-all): la copia catch-all seguía
+        // a un `catch` terminado en `throw`, así que heredaba `reachable == false` y se comía el `goto`
+        // que saltea el handler del `close` interno —el flujo caía dentro de su propio handler y el
+        // `StackMapTable` no verificaba—. Además, un `close()`/cuerpo que **siempre lanza** dejaba un
+        // `return` muerto tras el `athrow` (código inalcanzable sin frame), otro rechazo del verificador.
+        // Cuerpo que retorna:
+        verify_all(
+            "public class M { static class R implements AutoCloseable { public void close() {} } \
+             public static int f(int n) { try (R r = new R()) { if (n > 0) { return n; } return 0; } } }",
+            "M",
+        );
+        // Cuerpo que lanza, con `catch` externo:
+        verify_all(
+            "public class M { static class R implements AutoCloseable { public void close() {} } \
+             public static int f(int n) { try { try (R r = new R()) { throw new RuntimeException(); } } \
+             catch (RuntimeException e) { return 1; } } }",
+            "M",
+        );
+        // `void … throws` que sale por excepción (sin `return` de caída):
+        verify_all(
+            "public class M { static class R implements AutoCloseable { public void close() {} } \
+             static void f() throws Throwable { try (R r = new R()) { throw new java.lang.ArithmeticException(); } } }",
+            "M",
+        );
+        // `close()` que **siempre lanza** (el que dejaba el `return` muerto tras el `athrow`):
+        verify_all(
+            "public class M { static class R implements AutoCloseable { public void close() { throw new RuntimeException(); } } \
+             static int f() { try (R r = new R()) { return 1; } } }",
+            "M$R",
+        );
+    }
+
+    #[test]
+    fn try_with_resources_closes_the_resource_end_to_end() {
+        // Corrida end-to-end en el intérprete propio: el recurso **se cierra** tanto en salida normal
+        // como cuando el cuerpo lanza, y la excepción del cuerpo se propaga como **primaria** (no la
+        // tapa el `close`). `log` acumula el orden: 1 = cuerpo, 2 = `close`. f(0): normal ⇒ el recurso
+        // se cierra (log 12) ⇒ 100+12. f(1): el cuerpo lanza ⇒ el recurso **igual se cierra** (log 12)
+        // y se propaga su ArithmeticException, atrapada afuera ⇒ 12.
+        //
+        // (La supresión con **doble** excepción —`close()` que también lanza— se verifica a nivel de
+        // bytecode con `verify_all` de arriba; ejecutarla end-to-end depende de `Throwable.addSuppressed`,
+        // que hoy el intérprete propio no soporta —limitación de biblioteca, ajena a este codegen—.)
+        let src = "public class M { static int log = 0; \
+                   static class R implements AutoCloseable { public void close() { log = log * 10 + 2; } } \
+                   static int f(int n) { log = 0; \
+                     try { \
+                       try (R r = new R()) { log = log * 10 + 1; if (n >= 1) throw new ArithmeticException(); } \
+                       return 100 + log; \
+                     } catch (ArithmeticException e) { return log; } } }";
+        assert_eq!(run_int(src, "M", "f", vec![0]), 112); // normal: cerrado
+        assert_eq!(run_int(src, "M", "f", vec![1]), 12); // cuerpo lanza: cerrado + primaria preservada
+    }
+
+    #[test]
+    fn a_method_ending_in_throw_emits_no_dead_return() {
+        // Un `void` cuyo cuerpo termina en `throw` no debe llevar un `return` de caída: sería código
+        // muerto tras el `athrow` (sin frame) que el verificador estricto rechaza. javac tampoco lo emite.
+        verify_all("public class M { static void a() { throw new RuntimeException(); } }", "M");
+        let (code, _) = code_of("public class M { static void a() { throw new RuntimeException(); } }", "M", "a");
+        assert_eq!(*code.last().unwrap(), ATHROW, "el último opcode es `athrow`, sin `return` muerto detrás");
+    }
+
     // ---- StackMapTable ----
 
     #[test]
@@ -6324,7 +6901,7 @@ mod tests {
         let src = "public class M { public static int f(Object o, int n) { \
                    synchronized (o) { if (n < 0) { throw new RuntimeException(); } } return n; } }";
         let (code, handlers) = code_of(src, "M", "f");
-        assert_eq!(handlers, 1, "un handler catch-all que suelte el monitor");
+        assert_eq!(handlers, 2, "catch-all que suelta el monitor + su auto-protección, como javac");
         assert_eq!(
             code.iter().filter(|&&b| b == MONITOREXIT).count(),
             2,
@@ -6340,6 +6917,53 @@ mod tests {
              if (n > 0) { return c; } } return c; } }",
             "M",
         );
+    }
+
+    // ---- `synchronized`: soltar el monitor en toda salida (§14.19) ----
+
+    #[test]
+    fn a_return_inside_synchronized_releases_the_monitor_before_returning() {
+        // El bug: `synchronized (o) { … return; }` no soltaba el monitor antes del `return` (monitor
+        // leak). Espejando a javac, el `monitorexit` tiene que ir **antes** del `ireturn`, no solo en
+        // el handler. Además la referencia se `dup`-lica para guardar la copia del monitor.
+        let src = "public class M { static int r; \
+                   static int m(Object o) { synchronized (o) { r = 1; return 7; } } }";
+        let (code, handlers) = code_of(src, "M", "m");
+        let first_ireturn = code.iter().position(|&b| b == IRETURN).expect("hay un ireturn");
+        let exit_before_return = code[..first_ireturn].iter().any(|&b| b == MONITOREXIT);
+        assert!(exit_before_return, "el `monitorexit` debe correr antes del `ireturn`, no filtrar el monitor");
+        assert!(code.contains(&DUP), "la referencia del monitor se `dup`-lica (como javac)");
+        assert!(code.contains(&MONITORENTER), "se toma el monitor");
+        // Dos monitorexit: el del `return` y el del handler catch-all.
+        assert_eq!(code.iter().filter(|&&b| b == MONITOREXIT).count(), 2, "return + catch-all");
+        assert_eq!(handlers, 2, "handler catch-all + auto-protección del handler, como javac");
+    }
+
+    #[test]
+    fn a_break_out_of_a_synchronized_in_a_loop_releases_the_monitor() {
+        // Un `break` que sale del `synchronized` también tiene que soltar el monitor antes del salto:
+        // hay tres `monitorexit` — el del `break`, el de la salida normal, y el del handler.
+        let src = "public class M { static int f(Object o) { int s = 0; \
+                   for (int i = 0; i < 3; i++) { synchronized (o) { if (i == 1) { break; } s += i; } } \
+                   return s; } }";
+        let (code, _handlers) = code_of(src, "M", "f");
+        assert_eq!(
+            code.iter().filter(|&&b| b == MONITOREXIT).count(),
+            3,
+            "break + salida normal + handler catch-all"
+        );
+    }
+
+    #[test]
+    fn a_synchronized_with_a_return_runs_and_releases_the_monitor() {
+        // Ejecución de verdad: tras un `return` desde dentro de un `synchronized`, el hilo **no** debe
+        // seguir teniendo el monitor (`Thread.holdsLock`). Antes del fix quedaba tomado (leak) → 1.
+        let src = "public class M { static int r; \
+                   static int g(Object o) { synchronized (o) { r = 1; return 7; } } \
+                   public static int f() { Object o = new Object(); int v = g(o); \
+                   return v + (Thread.holdsLock(o) ? 100 : 0); } }";
+        // g devuelve 7 y suelta el monitor: f = 7 + 0.
+        assert_eq!(run_int(src, "M", "f", vec![]), 7, "valor correcto y monitor liberado tras el return");
     }
 
     // ---- inicializadores de campo y `<clinit>` ----
@@ -7841,6 +8465,39 @@ mod tests {
         let src = "public class C { public static int run() { return sw(\"a\") * 100 + sw(\"b\") * 10 + sw(\"z\"); } \
                    static int sw(String s) { return switch (s) { case \"a\" -> 1; case \"b\" -> 2; default -> 9; }; } }";
         assert_eq!(run_int(src, "C", "run", vec![]), 129); // 1*100 + 2*10 + 9
+    }
+
+    #[test]
+    fn a_return_string_switch_matches_javac_slots_and_stack() {
+        // `return switch (s) { case "a" -> 1; … }`: se baja a los dos int-switches (hashCode+equals),
+        // pero la switch-**expresión** de cola deja el valor **en la pila** —sin temporal de
+        // resultado— igual que javac. Byte a byte eso fija los slots: `s` es el parámetro (slot 1),
+        // y los sintéticos `$s`/`$i` toman los **inmediatos** 2 y 3 (no hay un slot de resultado que
+        // se cuele en el 2). El método arranca `aload_1; astore_2; iconst_m1; istore_3` y **termina**
+        // dejando el valor del brazo en la pila para el `ireturn` (`… iconst_0; ireturn`), sin
+        // `istore`/`iload` de un temporal.
+        let src = "public class M { public int sw(String s) { \
+                   return switch (s) { case \"a\" -> 1; case \"b\" -> 2; default -> 0; }; } }";
+        let (code, _) = code_of(src, "M", "sw");
+        // Prólogo: $s → slot 2 (`astore_2`), $i → slot 3 (`istore_3`) — pegados al parámetro.
+        assert_eq!(
+            &code[0..4],
+            &[0x2b, 0x4d, 0x02, 0x3e],
+            "aload_1; astore_2; iconst_m1; istore_3 (slots 2 y 3 para $s/$i)"
+        );
+        // Epílogo: el brazo `default` (iconst_0) cae al `ireturn` con el valor en la pila.
+        assert_eq!(
+            code[code.len() - 2..],
+            [0x03, 0xac],
+            "iconst_0; ireturn: el valor viaja por la pila, sin temporal de resultado"
+        );
+        // Y pasa el verificador estricto (el `StackMapTable` del doble switch es válido).
+        verify_all(src, "M");
+        // La semántica se conserva: "a"→1, "b"→2, cualquier otra → default 0.
+        let run = "public class M { public int sw(String s) { \
+                   return switch (s) { case \"a\" -> 1; case \"b\" -> 2; default -> 0; }; } \
+                   public static int run() { M m = new M(); return m.sw(\"a\") * 100 + m.sw(\"b\") * 10 + m.sw(\"z\"); } }";
+        assert_eq!(run_int(run, "M", "run", vec![]), 120);
     }
 
     #[test]

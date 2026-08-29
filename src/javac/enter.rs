@@ -556,11 +556,14 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
     for f in &ext.fields {
         // La firma genérica gana sobre el descriptor borrado (`E` en vez de `Object`).
         let ty = f.generic_ty.clone().unwrap_or_else(|| f.ty.clone());
+        // El flag `static` del `.class` distingue `getstatic`/`getfield` en el emisor: sin él,
+        // `System.out` (campo estático) salía como `getfield` sin receptor — bytecode corrupto.
+        let modifiers = if f.is_static { vec![Modifier::Static] } else { Vec::new() };
         let s = table.new_symbol(Symbol {
             name: f.name.clone(),
             kind: SymbolKind::Field { ty },
             owner: Some(cid),
-            modifiers: Vec::new(),
+            modifiers,
         });
         table.define(members, &f.name, s);
     }
@@ -588,6 +591,11 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         }
         if m.is_static {
             mmods.push(Modifier::Static);
+        }
+        // `ACC_PRIVATE`: para que la resolución de sobrecarga descarte los constructores/métodos
+        // inaccesibles desde otro nido (el `private AssertionError(String)` no captura un `new` externo).
+        if m.is_private {
+            mmods.push(Modifier::Private);
         }
         // Un método de **interfaz** externa que no es ni `abstract` ni `static` es un `default` (§9.4):
         // lleva cuerpo, o sea **implementa**. Marcarlo evita que el chequeo de completitud de
@@ -636,6 +644,32 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         if table.external(simple).is_none() && table.class(&dotted).is_none() {
             if let Some(sup) = finder.find(&dotted.replace('.', "/")) {
                 build_external(table, finder, &sup);
+            }
+        }
+    }
+
+    // **Carga transitiva de los tipos de los campos**: un campo cuyo tipo es una clase externa
+    // (p. ej. `System.out : java.io.PrintStream`) necesita que **esa** clase esté cargada, o su tipo
+    // resuelve a `Unresolved` y el uso —`System.out.println(...)`— no liga a ningún método (el emisor
+    // lo descartaba silenciosamente, emitiendo bytecode que ni siquiera contenía la llamada). La carga
+    // de supertipos de arriba no alcanza: `PrintStream` no es supertipo de `System`. Se recogen los
+    // nombres de clase (cualificados) de los tipos de los campos y se cargan. Es idempotente: la
+    // guardia al inicio de `build_external` corta la recursión sobre lo ya cargado, así que la cascada
+    // termina. Se limita a los **campos** a propósito: extenderlo a las firmas de métodos arrastra
+    // cientos de clases del JDK y altera el orden de carga (qué copia de un tipo gana), sin que el
+    // caso que motiva el fix —el acceso a un campo estático como `System.out`— lo necesite.
+    let mut refs: Vec<String> = Vec::new();
+    for f in &ext.fields {
+        collect_class_names(&f.ty, &mut refs);
+        if let Some(g) = &f.generic_ty {
+            collect_class_names(g, &mut refs);
+        }
+    }
+    for dotted in refs {
+        let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
+        if table.external(simple).is_none() && table.class(&dotted).is_none() {
+            if let Some(dep) = finder.find(&dotted.replace('.', "/")) {
+                build_external(table, finder, &dep);
             }
         }
     }
@@ -743,6 +777,78 @@ pub fn enter_cp(unit: &CompilationUnit, extra_classpath: &[PathBuf]) -> (SymbolT
     }
     // Persistir los tipos resueltos: el grafo `clase→super/interfaces` y las firmas
     // `campo/método → RType` — salida para la pasada 2.
+    resolve_symbols(&mut table);
+    detect_cycles(&table, &mut errors);
+    (table, errors)
+}
+
+/// [`enter_cp`] **multi-unidad**: corre la pasada 1 sobre **varias** unidades de compilación en
+/// **una sola** [`SymbolTable`] acumulada. Es lo que necesita el *round loop* de APT: cada ronda un
+/// procesador puede emitir un fuente nuevo, que se parsea y **entra** en la misma tabla junto a los
+/// anteriores, para que la ronda siguiente lo vea (referencias entre lo generado y lo previo).
+///
+/// Mismo pipeline por fases que [`enter_cp`], pero **globalizado**: primero se entran los tipos de
+/// *todas* las unidades (así cualquier nombre tiene a quién resolver, aunque venga de otra unidad),
+/// luego los miembros de todas, luego externos/imports y por último la resolución — el orden que hace
+/// que dos unidades que se referencian mutuamente resuelvan sin importar en qué orden llegaron. Cada
+/// unidad aporta su propio paquete (`get_or_create_package` deduplica), así conviven paquetes
+/// distintos en la misma tabla.
+pub fn enter_multi(units: &[CompilationUnit], extra_classpath: &[PathBuf]) -> (SymbolTable, Vec<Error>) {
+    let mut table = SymbolTable::new();
+    let mut errors = Vec::new();
+    // Los imports de cada unidad se calculan una vez y se reúsan (externos + resolución).
+    let imports: Vec<Imports> = units.iter().map(Imports::from_unit).collect();
+
+    // Enter — **todos** los tipos de **todas** las unidades primero (top-level y anidados).
+    for unit in units {
+        let pkg = unit.package.as_deref();
+        let pkg_id = table.get_or_create_package(pkg);
+        let pkg_scope = match &table.symbol(pkg_id).kind {
+            SymbolKind::Package { members } => *members,
+            _ => unreachable!("get_or_create_package devuelve un Package"),
+        };
+        let base = pkg.unwrap_or("");
+        for class in &unit.types {
+            enter_type(&mut table, &mut errors, class, pkg_id, pkg_scope, base, base, false);
+        }
+    }
+    // MemberEnter — recién ahora los contenidos de cada tipo de cada unidad.
+    for unit in units {
+        let base = unit.package.as_deref().unwrap_or("");
+        for class in &unit.types {
+            member_enter_type(&mut table, &mut errors, class, base);
+        }
+    }
+    // Externos: cargar del classpath los tipos referenciados por cada unidad.
+    let finder = ClassFinder::new(extra_classpath);
+    for (unit, imp) in units.iter().zip(&imports) {
+        load_externals(&mut table, &finder, unit, imp);
+    }
+    // Respaldo: stubs modelados de `java.lang` para lo que no se encontró en disco.
+    for &name in JAVA_LANG {
+        table.add_external(name);
+    }
+    // `import static` de cada unidad (no afectan la resolución de *tipos*, sí la de miembros).
+    for unit in units {
+        for imp in &unit.imports {
+            if imp.is_static {
+                if imp.wildcard {
+                    table.static_on_demand.push(imp.path.clone());
+                } else if let Some((owner, member)) = imp.path.rsplit_once('.') {
+                    table.static_single.insert(member.to_string(), owner.to_string());
+                }
+            }
+        }
+    }
+    // Resolución — cierra la pasada 1 sobre todas las unidades (un `reported` compartido evita
+    // reportar dos veces el mismo tipo ausente).
+    let mut reported = HashSet::new();
+    for (unit, imp) in units.iter().zip(&imports) {
+        let base = unit.package.as_deref().unwrap_or("");
+        for class in &unit.types {
+            resolve_type_decl(&mut table, &mut errors, class, base, imp, &mut reported);
+        }
+    }
     resolve_symbols(&mut table);
     detect_cycles(&table, &mut errors);
     (table, errors)
@@ -874,6 +980,35 @@ fn owner_scope(table: &SymbolTable, id: SymbolId) -> ScopeId {
             _ => table.global,
         },
         None => table.global,
+    }
+}
+
+/// Recolecta los nombres de clase **cualificados** (`java.io.PrintStream`) que aparecen en un tipo,
+/// bajando por arrays y argumentos genéricos. Solo los cualificados: un nombre pelado es un parámetro
+/// de tipo (`E`, `T`) —no una clase cargable— y `finder.find` sobre él fallaría de todos modos.
+/// Alimenta la carga transitiva de los tipos de las firmas en [`build_external`].
+fn collect_class_names(ty: &Type, out: &mut Vec<String>) {
+    match ty {
+        Type::Array(inner) => collect_class_names(inner, out),
+        Type::Class(name) => {
+            if name.contains('.') || name.contains('/') {
+                out.push(name.replace('/', "."));
+            }
+        }
+        Type::Parameterized { base, args } => {
+            if base.contains('.') || base.contains('/') {
+                out.push(base.replace('/', "."));
+            }
+            for a in args {
+                match a {
+                    TypeArg::Type(t) => collect_class_names(t, out),
+                    TypeArg::Extends(t) => collect_class_names(t, out),
+                    TypeArg::Super(t) => collect_class_names(t, out),
+                    TypeArg::Wildcard => {}
+                }
+            }
+        }
+        Type::Void | Type::Prim(_) | Type::Var => {}
     }
 }
 
