@@ -61,6 +61,8 @@ mod invokeinterface;
 mod invokespecial;
 mod invokestatic;
 mod invokevirtual;
+/// `Method.invoke`: la llamada cuyo destino se decide leyendo un objeto.
+mod reflective_call;
 
 /// `invokedynamic` — the odd one out: it takes free functions rather than an
 /// `impl JVM` method, because it never pushes a frame (the bootstrap methods are
@@ -868,6 +870,14 @@ impl Exec<'_> {
     }
 }
 
+/// What [`Exec::vm_roots`] needs to remember so [`Exec::restore_vm_roots`] can put the
+/// GC-rewritten offsets back: which condy keys the first stretch of `refs` came from, and how
+/// many of the Filer's registered writers follow them.
+struct VmRoots {
+    condy: Vec<(String, u16)>,
+    filer: usize,
+}
+
 impl Exec<'_> {
     /// What the program has printed so far (via native methods), for tooling.
     pub fn console(&self) -> &str {
@@ -897,14 +907,14 @@ impl Exec<'_> {
     /// what came out live vs garbage. Mark-only for now — nothing is freed; the
     /// visualizer triggers this (on `espacio`) to *show* reachability.
     pub fn gc_mark(&mut self) -> gc::MarkReport {
-        let (_keys, refs) = self.condy_roots();
+        let (_roots, refs) = self.vm_roots();
         self.parked(|m, h, t| gc::mark(m, h, t, &refs))
     }
 
     /// Runs a full GC cycle — mark **and sweep**: reclaims every unreachable object
     /// into the heap's free list. Returns the report (its `garbage` = what was freed).
     pub fn gc_sweep(&mut self) -> gc::MarkReport {
-        let (_keys, refs) = self.condy_roots();
+        let (_roots, refs) = self.vm_roots();
         self.parked(|m, h, t| gc::sweep(m, h, t, &refs))
     }
 
@@ -917,9 +927,9 @@ impl Exec<'_> {
     /// Runs a **mark-compact**: relocates live objects into one contiguous run and
     /// fixes the references to them. Returns what moved / how much was reclaimed.
     pub fn gc_compact(&mut self) -> gc::CompactReport {
-        let (keys, mut refs) = self.condy_roots();
+        let (roots, mut refs) = self.vm_roots();
         let report = self.parked(|m, h, t| gc::compact(m, h, t, &mut refs));
-        self.restore_condy_roots(&keys, &refs);
+        self.restore_vm_roots(&roots, &refs);
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
         report
@@ -944,27 +954,40 @@ impl Exec<'_> {
     /// The condy cache's live references, as parallel `(key, offset)` lists. A resolved dynamic
     /// constant lives for the program but is reachable only from this VM table — not any frame or
     /// mirror — so a moving GC must be told to keep it alive and to remap it. Non-reference
-    /// constants (e.g. an `int` condy) are neither a root nor movable, so they're skipped.
-    fn condy_roots(&self) -> (Vec<(String, u16)>, Vec<usize>) {
-        let mut keys = Vec::new();
+    /// The VM's **own** references into the heap: the ones no frame holds, so the collector
+    /// would not see them at all. Two sources today — the condy cache's resolved constants, and
+    /// the `StringWriter`s an annotation processor's Filer registered. Both outlive the frames
+    /// that produced them, and both are recorded as raw offsets, so a moving collection would
+    /// leave those offsets pointing at where the object *used* to be.
+    ///
+    /// Returned as one flat `refs` list (which every moving phase rewrites in place) plus the
+    /// bookkeeping needed to put the rewritten offsets back where they came from.
+    fn vm_roots(&self) -> (VmRoots, Vec<usize>) {
+        let mut condy = Vec::new();
         let mut refs = Vec::new();
         for (key, value) in &self.shared.condy {
             if let Value::Reference(offset) = value {
                 if *offset != 0 {
-                    keys.push(key.clone());
+                    condy.push(key.clone());
                     refs.push(*offset);
                 }
             }
         }
-        (keys, refs)
+        let filer = crate::jvm::interpreter::natives::filer_roots();
+        let filer_count = filer.len();
+        refs.extend(filer);
+        (VmRoots { condy, filer: filer_count }, refs)
     }
 
-    /// Writes the GC-remapped condy references back into the cache (the collector rewrote the
-    /// `refs` list in place through its forwarding map).
-    fn restore_condy_roots(&mut self, keys: &[(String, u16)], refs: &[usize]) {
-        for (key, &offset) in keys.iter().zip(refs) {
+    /// Writes the GC-remapped references back where [`Self::vm_roots`] took them from (the
+    /// collector rewrote the `refs` list in place through its forwarding map).
+    fn restore_vm_roots(&mut self, roots: &VmRoots, refs: &[usize]) {
+        let split = roots.condy.len();
+        for (key, &offset) in roots.condy.iter().zip(&refs[..split]) {
             self.shared.condy.insert(key.clone(), Value::Reference(offset));
         }
+        debug_assert_eq!(refs.len() - split, roots.filer, "el tramo del Filer no cambia de largo");
+        crate::jvm::interpreter::natives::remap_filer_roots(&refs[split..]);
     }
 
     /// Drop monitors whose lock object is no longer allocated (it was collected), so a
@@ -980,9 +1003,9 @@ impl Exec<'_> {
     /// frequent; the visualizer can trigger it, and the safepoint runs it when Eden fills.
     pub fn gc_minor(&mut self) -> gc::MinorReport {
         let tenure = self.shared.gc_policy.tenure;
-        let (keys, mut refs) = self.condy_roots();
+        let (roots, mut refs) = self.vm_roots();
         let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure, &mut refs));
-        self.restore_condy_roots(&keys, &refs);
+        self.restore_vm_roots(&roots, &refs);
         self.remap_monitor_keys(&report.relocations);
         self.prune_dead_monitors();
         report
@@ -1034,9 +1057,9 @@ impl Exec<'_> {
         // gate the old `JVM_GC_AUTO` guarded was about an incomplete mark, long fixed).
         if self.shared.heap.eden_used() * 10 >= self.shared.heap.eden_capacity() * 9 {
             let tenure = self.shared.gc_policy.tenure;
-            let (keys, mut refs) = self.condy_roots();
+            let (roots, mut refs) = self.vm_roots();
             let report = self.parked(|m, h, t| gc::minor(m, h, t, tenure, &mut refs));
-            self.restore_condy_roots(&keys, &refs);
+            self.restore_vm_roots(&roots, &refs);
             self.remap_monitor_keys(&report.relocations); // young objects moved → fix monitor keys
             self.prune_dead_monitors();
             let _ = writeln!(
@@ -1077,7 +1100,7 @@ impl Exec<'_> {
         // A full collection is generational: a minor first (evacuate/promote the young),
         // then the major over Old (sweep, and compact if fragmented). All over every
         // thread's roots, so it runs inside `parked`.
-        let (keys, mut refs) = self.condy_roots();
+        let (roots, mut refs) = self.vm_roots();
         let (live, garbage, compacted, minor_reloc, compact_reloc) = self.parked(|m, h, t| {
             // `refs` (the condy roots) is threaded through and rewritten in place by each moving
             // phase, so it stays current: minor evacuates+remaps, sweep keeps it alive, compact
@@ -1099,7 +1122,7 @@ impl Exec<'_> {
             };
             (report.live.len(), report.garbage.len(), compacted, minor.relocations, compact_reloc)
         });
-        self.restore_condy_roots(&keys, &refs);
+        self.restore_vm_roots(&roots, &refs);
         // Objects moved (minor evacuation, then compaction) → relocate the monitor map keys,
         // applied minor-then-compact (the composition), then drop monitors on dead objects.
         self.remap_monitor_keys(&minor_reloc);
@@ -3515,9 +3538,21 @@ impl Exec<'_> {
     /// it was the entry the program is done (with no value), else the caller resumes
     /// — nothing is handed back, unlike `ireturn`.
     fn return_void(&mut self) -> Step {
+        // A `java.lang.String` constructor cannot answer by filling `this` -- see
+        // `Frame::published` -- so it publishes what it built instead. Take it before the frame
+        // is popped and recycled; `None` for every other method, which is all of them.
+        let handoff = self.top().take_published();
         let synthetic = self.pop_frame();
         if self.running.frames.is_empty() {
             return Step::Return(None);
+        }
+        // Now `top()` is the caller, the frame that ran `new`. Rewrite its references from the
+        // object it allocated to the one the constructor built. Every place that object can be
+        // is covered: the verifier only lets an uninitialised reference live on this frame's
+        // operand stack or in its locals -- never in a field, an array, or another frame
+        // (JVMS 4.10.2.4) -- which is exactly the set `remap_references` walks.
+        if let Some((handed, built)) = handoff {
+            self.top().remap_references(|offset| if offset == handed { built } else { offset });
         }
         // A synthetic `<clinit>` frame wasn't reached via an invoke, so the caller's
         // pc must NOT advance — the instruction that triggered init resumes as-is.
@@ -3687,7 +3722,17 @@ impl Exec<'_> {
         if self.threw() {
             return None;
         }
-        Some(objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, class))
+        // **Old, no Eden.** El driver de APT guarda estas referencias en estado de *Rust* — el
+        // `Vec` de instancias de processors, el `roundEnv` de la ronda, el cache `reified` — y el
+        // estado de Rust no es raíz del GC: el colector recorre `threads[*].frames` y nada más. Un
+        // minor movía el objeto joven y el driver seguía despachando sobre el offset viejo: la
+        // segunda ronda no corría, en silencio. Alocar en Old los deja quietos ante un minor, que
+        // es la misma decisión que `AptContext::reify` ya había tomado para su cache.
+        //
+        // Residual, y a propósito: un **major compactante** sí mueve Old, así que esto es una
+        // mitigación, no una prueba. El arreglo de fondo es que las referencias vivas del driver
+        // sean raíces que el colector visite, como lo es el cache de condy.
+        Some(objects_operations::allocate_old(&mut self.shared.metaspace, &mut self.shared.heap, class))
     }
 
     /// Resuelve un método `class.name descriptor` a su [`MethodId`] (cargando la clase si hace

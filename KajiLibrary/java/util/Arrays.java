@@ -263,4 +263,146 @@ public final class Arrays {
             a[j + 1] = key;
         }
     }
+
+    // ---- spliterators over an array ----
+    //
+    // ORDERED e IMMUTABLE, y la segunda es la que sorprende: el array se puede modificar, y lo
+    // que la caracteristica promete es que **el spliterator no lo va a hacer**. Es una promesa
+    // sobre el recorrido, no sobre el dato.
+
+    /**
+     * A spliterator over all of {@code array}.
+     *
+     * @param array what to traverse
+     */
+    public static <T> Spliterator<T> spliterator(T[] array) {
+        // El local no cambia nada -- un `T[]` ES un `Object[]` -- y esta porque nuestro javac
+        // declara ambigua la llamada cuando el argumento es un arreglo de una VARIABLE de tipo.
+        // Con `String[]` elige bien; con `T[]` no elige (#279). Nombrar el tipo del parametro es
+        // justamente lo que no dedujo.
+        Object[] widened = array;
+        return Spliterators.spliterator(widened, Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over {@code [startInclusive, endExclusive)} of {@code array}.
+     *
+     * @param array what to traverse
+     * @param startInclusive where to start
+     * @param endExclusive where to stop, exclusive
+     */
+    public static <T> Spliterator<T> spliterator(T[] array, int startInclusive,
+            int endExclusive) {
+        Object[] widened = array;
+        return Spliterators.spliterator(widened, startInclusive, endExclusive,
+                Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over all of {@code array}.
+     *
+     * @param array what to traverse
+     */
+    public static Spliterator.OfInt spliterator(int[] array) {
+        return Spliterators.spliterator(array, Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over {@code [startInclusive, endExclusive)} of {@code array}.
+     *
+     * @param array what to traverse
+     * @param startInclusive where to start
+     * @param endExclusive where to stop, exclusive
+     */
+    public static Spliterator.OfInt spliterator(int[] array, int startInclusive,
+            int endExclusive) {
+        return Spliterators.spliterator(array, startInclusive, endExclusive,
+                Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over all of {@code array}.
+     *
+     * @param array what to traverse
+     */
+    public static Spliterator.OfLong spliterator(long[] array) {
+        return Spliterators.spliterator(array, Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over {@code [startInclusive, endExclusive)} of {@code array}.
+     *
+     * @param array what to traverse
+     * @param startInclusive where to start
+     * @param endExclusive where to stop, exclusive
+     */
+    public static Spliterator.OfLong spliterator(long[] array, int startInclusive,
+            int endExclusive) {
+        return Spliterators.spliterator(array, startInclusive, endExclusive,
+                Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over all of {@code array}.
+     *
+     * @param array what to traverse
+     */
+    public static Spliterator.OfDouble spliterator(double[] array) {
+        return Spliterators.spliterator(array, Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    /**
+     * A spliterator over {@code [startInclusive, endExclusive)} of {@code array}.
+     *
+     * @param array what to traverse
+     * @param startInclusive where to start
+     * @param endExclusive where to stop, exclusive
+     */
+    public static Spliterator.OfDouble spliterator(double[] array, int startInclusive,
+            int endExclusive) {
+        return Spliterators.spliterator(array, startInclusive, endExclusive,
+                Spliterator.ORDERED | Spliterator.IMMUTABLE);
+    }
+
+    public static int binarySearch(int[] a, int key) {
+        int length = a.length;
+        int middle = length / 2;
+        int middleValue = a[middle];
+        if (middleValue == key) {
+            return middleValue;
+        }
+        if (middleValue < key) {
+            return Arrays.binarySearch(a, 0, middle, key);
+        }
+        else {
+            return Arrays.binarySearch(a, middle, length, key);
+        }
+    }
+
+    public static int binarySearch(int[] a, int fromIndex, int toIndex, int key) {
+        return 0;
+    }
+
+    public static <T> int binarySearch(T[] a, T key, Comparator<? super T> c) {
+        return 0;
+    }
+
+
+    public static int mismatch(int[] a, int[] b) {
+        return 0;
+    }
+
+    public static <T> int mismatch(T[] a, T[] b, Comparator<? super T> cmp) {
+        return 0;
+    }
+
+    public static int compare(int[] a, int[] b) {
+        return 0;
+    }
+
+    public static <T extends Comparable<? super T>> int compare(T[] a, T[] b) {
+        return 0;
+    }
+
+
 }

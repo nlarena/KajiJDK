@@ -72,6 +72,22 @@ public class TreeSet<E> implements Set<E> {
     public Iterator<E> descendingIterator() {
         return new TreeSetItr<E>(map, false);
     }
+
+    /**
+     * A spliterator over these elements, in sort order.
+     *
+     * @see SortedSet#spliterator()
+     */
+    public Spliterator<E> spliterator() {
+        final Comparator<? super E> order = this.comparator();
+        return new Spliterators.IteratorSpliterator<E>(this,
+                Spliterator.DISTINCT | Spliterator.SORTED | Spliterator.ORDERED
+                        | Spliterator.SIZED) {
+            public Comparator<? super E> getComparator() {
+                return order;
+            }
+        };
+    }
 }
 
 // Walks the backing tree in order (or in reverse), one node at a time through the map's
@@ -109,4 +125,5 @@ final class TreeSetItr<E> implements Iterator<E> {
         }
         return key;
     }
+
 }

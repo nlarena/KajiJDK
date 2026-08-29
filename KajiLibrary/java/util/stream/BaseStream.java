@@ -50,4 +50,12 @@ public interface BaseStream<T, S extends BaseStream<T, S>> extends AutoCloseable
     // Runs the registered close handlers. Overrides AutoCloseable.close() to drop the checked
     // `throws Exception`.
     void close();
+    /**
+     * A spliterator over this stream's elements.
+     *
+     * <p>A TERMINAL operation, which is what makes it different from every other way of reading
+     * a stream: after this the stream is consumed, and the caller owns the traversal.
+     */
+    java.util.Spliterator<T> spliterator();
+
 }

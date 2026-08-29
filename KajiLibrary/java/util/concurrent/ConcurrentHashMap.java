@@ -64,6 +64,20 @@ public class ConcurrentHashMap<K, V> implements ConcurrentMap<K, V>, Serializabl
         return v;
     }
 
+    public Set<K> keySet() {
+        Set<K> ks;
+        synchronized (sync) {
+            ks = map.keySet();
+        }
+        return ks;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        synchronized (sync) {
+            map.putAll(m);
+        }
+    }
+
     public V put(K key, V value) {
         V prev;
         synchronized (sync) {

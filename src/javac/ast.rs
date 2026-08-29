@@ -468,7 +468,11 @@ pub enum ExprKind {
     LongLit(i64),
     FloatLit(f32),
     DoubleLit(f64),
-    CharLit(char),
+    /// Un literal `char`. Se guarda como **`u16`**, que es lo que un `char` de Java **es**:
+    /// una unidad de codigo UTF-16 (JLS 3.1), no un *code point*. Un `char` de Rust no puede
+    /// sostener un sustituto suelto (\u d800), que es Java valido y que la propia
+    /// biblioteca usa (`Character.MIN_HIGH_SURROGATE`).
+    CharLit(u16),
     StringLit(String),
     BoolLit(bool),
     Null,

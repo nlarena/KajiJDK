@@ -78,6 +78,17 @@ pub enum Intrinsic {
     SystemExit,
     /// `String.valueOf(Object)` — calls back into the object's own `toString()`.
     StringValueOfObject,
+    /// `String.publish(String)` — how a String constructor hands back what it built.
+    ///
+    /// Every other constructor returns its result by writing fields of `this`. A String cannot:
+    /// its characters sit inline and are sized when the object is allocated, and `new` sizes an
+    /// instance from its declared fields, of which `String` has none. So the object the
+    /// constructor is handed has room for nothing and cannot be grown.
+    ///
+    /// The constructor builds a separate String and publishes it here; the `return` that ends
+    /// the constructor then rewrites the caller's references from the object it was handed to
+    /// the one it built. See `Exec::string_publish` and `Frame::published`.
+    StringPublish,
     /// `LockSupport.park()` / `park(Object)` — block the current thread.
     LockSupportPark,
     /// `LockSupport.unpark(Thread)` — hand a thread a permit.
@@ -121,6 +132,16 @@ pub enum Intrinsic {
     /// cada miembro (`ArrayList.add(element_for(child))`) — un native del bridge no tiene la vista
     /// `Exec` para invocar bytecode.
     SymElementGetEnclosedElements,
+    /// `java.lang.reflect.Method.invoke(Object, Object[])` — la llamada reflexiva.
+    ///
+    /// Va acá y no en el puente de nativas porque tiene que **correr bytecode**: el puente sólo
+    /// puede computar y devolver, y una llamada reflexiva es, entera, empujar un frame.
+    MethodInvoke,
+    /// `java.lang.reflect.Constructor.newInstance(Object[])` — alocar y correr `<init>`.
+    ///
+    /// Acá por lo mismo que `MethodInvoke`, y con una razón de más: tiene que **alocar**, y
+    /// el objeto a medio construir queda vivo mientras corre bytecode arbitrario.
+    ConstructorNewInstance,
 }
 
 /// Which [`Intrinsic`] a `(class, name, descriptor)` names — the ~7 string-compare chain the
@@ -133,8 +154,14 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
             "exit" => Intrinsic::SystemExit,
             _ => Intrinsic::None,
         },
-        "java/lang/String" if name == "valueOf" && descriptor == "(Ljava/lang/Object;)Ljava/lang/String;" => {
+        "java/lang/String"
+            if (name == "rawValueOfObject" || name == "valueOf")
+                && descriptor == "(Ljava/lang/Object;)Ljava/lang/String;" =>
+        {
             Intrinsic::StringValueOfObject
+        }
+        "java/lang/String" if name == "publish" && descriptor == "(Ljava/lang/String;)V" => {
+            Intrinsic::StringPublish
         }
         "java/util/concurrent/locks/LockSupport" => match name {
             "park" => Intrinsic::LockSupportPark,
@@ -155,7 +182,9 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
         },
         "java/lang/Object" => match (name, descriptor) {
             ("wait", "()V") => Intrinsic::ObjectWait,
-            ("wait", "(J)V") => Intrinsic::ObjectWaitTimed,
+            // `wait0` es el nombre que le da KajiLibrary -- y el JDK -- a la costura privada;
+            // `wait` es el que declara la copia compilada de `boot/`. Los dos, mientras convivan.
+            ("wait0" | "wait", "(J)V") => Intrinsic::ObjectWaitTimed,
             ("notify", "()V") => Intrinsic::ObjectNotify,
             ("notifyAll", "()V") => Intrinsic::ObjectNotifyAll,
             ("clone", "()Ljava/lang/Object;") => Intrinsic::ObjectClone,
@@ -170,6 +199,17 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
             ("getEnclosedElements", "()Ljava/util/List;") => Intrinsic::SymElementGetEnclosedElements,
             _ => Intrinsic::None,
         },
+        "java/lang/reflect/Method"
+            if name == "invoke"
+                && descriptor == "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;" =>
+        {
+            Intrinsic::MethodInvoke
+        }
+        "java/lang/reflect/Constructor"
+            if name == "newInstance" && descriptor == "([Ljava/lang/Object;)Ljava/lang/Object;" =>
+        {
+            Intrinsic::ConstructorNewInstance
+        }
         _ => Intrinsic::None,
     }
 }
@@ -568,6 +608,19 @@ impl MetaspaceService {
     /// methods keep their slots), then fold in the class's own virtual methods —
     /// overriding a slot when the signature already exists, appending otherwise.
     fn build_vtable(&mut self, class: &str) -> Vec<VtableEntry> {
+        // An **array class** has no class file to read methods from — it is synthetic — but it is
+        // not method-less: JLS §10.7 says its members are exactly `Object`'s (plus the `length`
+        // field and a covariant `clone`, both handled before dispatch). Its table therefore *is*
+        // `Object`'s, and building it from an absent class file yielded an empty one: every
+        // `array.hashCode()` / `array.getClass()` missed its slot and died as a `NoSuchMethodError`
+        // — a call javac emits with owner `java/lang/Object`, so the slot the site cached was right
+        // and only the receiver's table was missing (#262).
+        if class.starts_with('[') {
+            return match self.get_or_load("java/lang/Object") {
+                Some(_) => self.vtable("java/lang/Object").to_vec(),
+                None => Vec::new(),
+            };
+        }
         // Inherit the superclass's table first (recursing to build it if needed).
         let super_name = self
             .get_or_load(class)
@@ -840,14 +893,92 @@ impl MetaspaceService {
     /// Resolves a method by name+descriptor to a [`MethodId`], loading its class
     /// and parsing its `Code` the first time, then caching the handle. `None` if
     /// the class can't be loaded or the method has no body.
+    /// La clase que **declara** `name`+`descriptor` empezando por `class`, siguiendo el orden de
+    /// JVMS 5.4.3.3: la clase, sus superclases, y despues sus superinterfaces (en anchura).
+    ///
+    /// Devuelve el **nombre** y no el `ClassFile` porque cargar un ancestro puede insertar en
+    /// `self.classes`, y sostener un prestamo del mapa mientras tanto no compila.
+    fn declaring_class(&mut self, class: &str, name: &str, descriptor: &str) -> Option<String> {
+        // `<init>` y `<clinit>` **no se heredan** (JVMS §2.9): no son metodos que la resolucion
+        // busque, son metodos de inicializacion que la VM invoca implicitamente sobre una clase
+        // concreta. Subir por la jerarquia buscandolos hace que una clase sin `<clinit>` propio
+        // "encuentre" el de su superclase y lo corra por segunda vez, en el contexto equivocado
+        // -- lo que rompia la inicializacion de superinterfaces con `default`.
+        if name.starts_with('<') {
+            let has = self.get_or_load(class).is_some_and(|cf| {
+                cf.methods.iter().any(|m| {
+                    cf.utf8(m.name_index) == Some(name)
+                        && cf.utf8(m.descriptor_index) == Some(descriptor)
+                })
+            });
+            return has.then(|| class.to_string());
+        }
+        let declares = |cf: &ClassFile| {
+            cf.methods.iter().any(|m| {
+                cf.utf8(m.name_index) == Some(name)
+                    && cf.utf8(m.descriptor_index) == Some(descriptor)
+            })
+        };
+        // La clase y su cadena de superclases.
+        let mut at = Some(class.to_string());
+        let mut interfaces: Vec<String> = Vec::new();
+        while let Some(cur) = at {
+            let (found, supers, sup) = match self.get_or_load(&cur) {
+                Some(cf) => (
+                    declares(cf),
+                    cf.interfaces.iter().filter_map(|&i| cf.class_name(i).map(str::to_string)).collect::<Vec<_>>(),
+                    cf.class_name(cf.super_class).map(str::to_string),
+                ),
+                None => break,
+            };
+            if found {
+                return Some(cur);
+            }
+            interfaces.extend(supers);
+            at = sup;
+        }
+        // Y despues las superinterfaces, en anchura. Un metodo `default` vive aca.
+        let mut seen: std::collections::HashSet<String> = interfaces.iter().cloned().collect();
+        let mut i = 0;
+        while i < interfaces.len() {
+            let iface = interfaces[i].clone();
+            i += 1;
+            let (found, supers) = match self.get_or_load(&iface) {
+                Some(cf) => (
+                    declares(cf),
+                    cf.interfaces.iter().filter_map(|&x| cf.class_name(x).map(str::to_string)).collect::<Vec<_>>(),
+                ),
+                None => continue,
+            };
+            if found {
+                return Some(iface);
+            }
+            for s in supers {
+                if seen.insert(s.clone()) {
+                    interfaces.push(s);
+                }
+            }
+        }
+        None
+    }
+
     pub fn resolve_method(&mut self, class: &str, name: &str, descriptor: &str) -> Option<MethodId> {
         let key = (class.to_string(), name.to_string(), descriptor.to_string());
         if let Some(&id) = self.resolved.get(&key) {
             return Some(id);
         }
         self.get_or_load(class)?; // make sure the class is loaded
+        // JVMS 5.4.3.3: la resolucion busca en la clase, **despues en sus superclases** y despues
+        // en sus superinterfaces. Buscar solo en la nombrada devolvia `None` para cualquier metodo
+        // **heredado**, el sitio quedaba `NoTarget`, no se empujaba nada y el llamador moria con
+        // `operand stack underflow` -lejos del origen y sin decir que fue-.
+        //
+        // No es un caso raro: `super.m()` emite `invokespecial <superclase directa>.m`, que es lo
+        // que emite el javac real, y la superclase directa **no tiene por que declarar el metodo**.
+        let declaring = self.declaring_class(class, name, descriptor)?;
+        let declaring = declaring.as_str();
         let (max_locals, code, exceptions, native_, abstract_, synchronized_, static_) = {
-            let cf = self.classes.get(class)?;
+            let cf = self.classes.get(declaring)?;
             let member = cf.methods.iter().find(|m| {
                 cf.utf8(m.name_index) == Some(name)
                     && cf.utf8(m.descriptor_index) == Some(descriptor)
@@ -1251,6 +1382,51 @@ fn argument_count(descriptor: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Corre `run()I` de una clase de `java/` y devuelve el entero. Es el mismo arnes que usa
+    /// `gc::tests::run_int`, replicado aca para que estos dos probes vivan al lado del codigo que
+    /// ejercen.
+    fn run_probe(class_file: &str) -> i32 {
+        use crate::jvm::class_file::ClassFile;
+        use crate::jvm::interpreter::bytecode_interpreter::execute;
+        use crate::jvm::interpreter::frame::{Frame, Value};
+        let mut metaspace = MetaspaceService::new(
+            vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")],
+            vec![PathBuf::from("java")],
+        );
+        let class = ClassFile::from_path(class_file).expect("load class");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        let frame = Frame::new(entry, max_locals, Vec::new());
+        match execute(metaspace, frame) {
+            Some(Value::Int(v)) => v,
+            other => panic!("se esperaba un int, salio {other:?}"),
+        }
+    }
+
+    /// #265 (JVMS §5.4.3.3): la resolucion busca en la clase, **despues en sus superclases** y
+    /// despues en sus superinterfaces. Buscar solo en la nombrada devolvia `None` para todo metodo
+    /// heredado, y el llamador moria con `operand stack underflow` lejos del origen.
+    ///
+    /// Un bit por propiedad: heredado por superclase (1), `default` de una superinterfaz (2),
+    /// `static` heredado (4).
+    #[test]
+    fn method_resolution_walks_superclasses_and_superinterfaces() {
+        assert_eq!(run_probe("java/SuperProbe.class"), 7);
+    }
+
+    /// #262 (JLS §10.7): los miembros de un array son los de `Object`. Su clase es sintetica, asi
+    /// que la tabla se construia **vacia** y su mirror se alocaba **sin header**.
+    ///
+    /// Un bit por propiedad: `hashCode` despacha (1), `getClass` devuelve algo (2), ese algo tiene
+    /// clase (4, por `instanceof` — que lo resuelve la VM leyendo el header, sin correr una linea
+    /// de `java.lang.Class`), `equals` despacha (8).
+    #[test]
+    fn an_arrays_object_members_dispatch_and_its_mirror_has_a_class() {
+        assert_eq!(run_probe("java/ArrayProbe.class"), 15);
+    }
 
     #[test]
     fn loads_a_class_lazily() {

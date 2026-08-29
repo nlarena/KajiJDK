@@ -41,14 +41,14 @@ public class Throwable {
         return getMessage();
     }
 
-    public Throwable getCause() {
+    public synchronized Throwable getCause() {
         if (this.cause == this) {
             return null;
         }
         return this.cause;
     }
 
-    public Throwable initCause(Throwable cause) {
+    public synchronized Throwable initCause(Throwable cause) {
         this.cause = cause;
         return this;
     }

@@ -96,7 +96,9 @@ public abstract class Executable extends AccessibleObject implements Member, Gen
      *
      * @return the generic parameter types, in declaration order
      */
-    public native Type[] getGenericParameterTypes();
+    public Type[] getGenericParameterTypes() {
+        return Executable.erased(this.getParameterTypes());
+    }
 
     /**
      * Returns this executable's exception types.
@@ -112,7 +114,31 @@ public abstract class Executable extends AccessibleObject implements Member, Gen
      *
      * @return the generic exception types
      */
-    public native Type[] getGenericExceptionTypes();
+    public Type[] getGenericExceptionTypes() {
+        return Executable.erased(this.getExceptionTypes());
+    }
+
+    // The erased types, widened to the generic model. Not a placeholder for the generic
+    // answer -- it IS the answer whenever the method carries no `Signature` attribute, which
+    // is the case the JDK handles the same way. What a `Signature` would add is the
+    // difference between `List` and `List<String>`, and no method the VM can describe today
+    // has one.
+    //
+    // Copied rather than returned as-is: `Class[]` IS a `Type[]` by array covariance, so
+    // handing the caller the stored array would let them write a `TypeVariable` into this
+    // method's parameter list and get an ArrayStoreException at some unrelated later read.
+    private static Type[] erased(Class<?>[] types) {
+        if (types == null) {
+            return new Type[0];
+        }
+        Type[] out = new Type[types.length];
+        int i = 0;
+        while (i < types.length) {
+            out[i] = types[i];
+            i = i + 1;
+        }
+        return out;
+    }
 
     /**
      * Returns a {@link Parameter} for each of this executable's parameters, in declaration order.

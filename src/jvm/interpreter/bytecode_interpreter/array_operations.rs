@@ -292,6 +292,16 @@ pub fn array_class_mirror(
     // collector then hands to a different mirror.
     let offset = heap.malloc_old(HEADER_SIZE);
     metaspace.set_class_object(&uuid, offset);
+    // Y el header **se escribe**: un mirror es el mismo una instancia de `java.lang.Class`, asi que
+    // su `class_id` tiene que apuntar al mirror de `Class`. El de una clase normal lo hacia; el de
+    // un array quedaba en 0, o sea un objeto sin clase. Se notaba recien al **operar sobre el
+    // mirror** —`array.getClass().getName()`, o un `checkcast` a `Class`—, que terminaba en "could
+    // not resolve the object's class from its header". Que `getClass()` devolviera algo no-nulo
+    // tapaba el hueco: lo que devolvia era un objeto a medio construir (#262).
+    super::class_operations::load_class(metaspace, heap, "java/lang/Class");
+    let class_uuid = metaspace.class_id("java/lang/Class").to_string();
+    let class_mirror = metaspace.class_object(&class_uuid).unwrap_or(0);
+    heap.write_u32(offset, class_mirror as u32);
     offset
 }
 

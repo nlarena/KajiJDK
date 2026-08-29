@@ -21,4 +21,21 @@ public interface SortedSet<E> extends Set<E>, SequencedSet<E> {
     E first();
 
     E last();
+    /**
+     * A spliterator over these elements, reporting the sort order.
+     *
+     * <p>The only one in the library that reports {@code SORTED}, and it has to report the
+     * comparator with it: a consumer that knows the order can skip sorting, and it cannot know
+     * WHICH order without asking.
+     */
+    default Spliterator<E> spliterator() {
+        final Comparator<? super E> order = this.comparator();
+        return new Spliterators.IteratorSpliterator<E>(this,
+                Spliterator.DISTINCT | Spliterator.SORTED | Spliterator.ORDERED) {
+            public Comparator<? super E> getComparator() {
+                return order;
+            }
+        };
+    }
+
 }

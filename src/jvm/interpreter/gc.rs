@@ -1352,6 +1352,58 @@ mod tests {
         assert_eq!(run_int_method("java/AbsProbe.class", "viaExact"), 7); // control
     }
 
+    /// A `String` is **UTF-16** (COMPILER_FINDINGS #229). The VM laid the UTF-8 bytes inline and
+    /// called the byte count `length`, so every non-ASCII literal was wrong in both directions:
+    /// `"ñ".length()` answered 2 and `charAt(0)` handed back `0xC3`, the first byte of the
+    /// encoding, instead of the character.
+    ///
+    /// The fixture is compiled with the **real** javac (`-encoding UTF-8`): its `CONSTANT_Utf8`
+    /// carries proper modified UTF-8, including the surrogate pair for the astral character —
+    /// which our class reader already decodes correctly. The loss happened afterwards, on the way
+    /// into the heap.
+    #[test]
+    fn a_string_is_measured_in_utf16_code_units() {
+        let at = |m| run_int_method("java/Utf16Probe.class", m);
+        assert_eq!(at("lenAscii"), 3); // control: ASCII ya andaba
+        assert_eq!(at("len1"), 1); // U+00F1: 1 unidad, 2 bytes UTF-8
+        assert_eq!(at("charAt1"), 0x00F1);
+        assert_eq!(at("len3"), 1); // U+20AC: 1 unidad, 3 bytes UTF-8
+        assert_eq!(at("charAt3"), 0x20AC);
+        assert_eq!(at("lenMixed"), 3); // "añb"
+        assert_eq!(at("charAtMixed"), 'b' as i32);
+        assert_eq!(at("lenAstral"), 2); // U+1D160: par subrogado = 2 unidades
+        assert_eq!(at("charAtAstral"), 0xD834); // la mitad alta
+    }
+
+    /// `new String(...)` works, though no String constructor assigns anything.
+    ///
+    /// A String is sized when it is allocated, because its characters sit inline; the `new`
+    /// opcode sizes an instance from its declared fields and `String` declares none. So `new`
+    /// hands the constructor an object with room for nothing, and a heap block does not grow.
+    /// Each constructor therefore builds a separate String and publishes it
+    /// (`Exec::string_publish`); the `return` that ends it rewrites the caller's references
+    /// from the object it was handed to the one it built.
+    ///
+    /// The six constructors that take a `byte[]` and a charset are NOT covered here. They pass
+    /// against the JDK, and they are blocked on this VM by #110 exactly as the whole of
+    /// java.nio.charset is -- decoding reads `StandardCharsets.UTF_8`, a cross-unit static.
+    ///
+    /// `java/CtorTest.java` is the same source the JDK 25 runs to 0, so these counts are the
+    /// reference answers and not this VM agreeing with itself. Each group is asserted on its
+    /// own: a single total would say "something broke" without saying what.
+    #[test]
+    fn a_string_constructor_is_rewritten_into_a_factory_call() {
+        let at = |m| run_with_kajilibrary("java/CtorTest.class", m);
+        assert_eq!(at("caracteres"), Some(Value::Int(0))); // char[], entero y rebanado, y ES copia
+        assert_eq!(at("vacio"), Some(Value::Int(0))); // String()
+        assert_eq!(at("noAscii"), Some(Value::Int(0))); // lo que el layout inline puede perder
+        assert_eq!(at("puntosDeCodigo"), Some(Value::Int(0))); // int[]: 3 entran, 4 chars salen
+        assert_eq!(at("deOtros"), Some(Value::Int(0))); // String/StringBuilder/StringBuffer
+        assert_eq!(at("altoByte"), Some(Value::Int(0))); // las dos formas deprecadas
+        assert_eq!(at("fueraDeRango"), Some(Value::Int(0))); // la rebanada mala tira, no recorta
+        assert_eq!(at("esUnStringDeVerdad"), Some(Value::Int(0))); // trim/substring/concat/hash
+    }
+
     fn run_int(class_file: &str) -> i32 {
         use crate::jvm::class_file::ClassFile;
         use crate::jvm::interpreter::bytecode_interpreter::execute;
@@ -2170,6 +2222,20 @@ mod tests {
         for _ in 0..10 {
             assert_eq!(run_int_os_parallel("java/ClinitProbe.class"), 8); // os (parallel)
         }
+    }
+
+    #[test]
+    fn arraycopy_uses_the_real_element_width_and_survives_overlap() {
+        // #269. El nativo suponia cuatro bytes por elemento para TODO array, asi que un `char[]`
+        // se copiaba con el doble de paso: nada caia donde debia y la lectura se salia del array
+        // por el final -- el origen de los panicos "range end index N out of range". Y el
+        // solapamiento no se contemplaba, que es justo lo que hace un `delete` de StringBuilder.
+        //
+        // Siete propiedades, un bit cada una, para que una falla parcial se nombre sola:
+        // char[] solapado hacia abajo (1), hacia arriba (2), disjunto (4), byte[] (8), long[]
+        // (16), int[] (32, el ancho que el codigo viejo suponia) y referencias por el write
+        // barrier (64). El JDK 25 corriendo la misma fuente da 127.
+        assert_eq!(run_int("java/CopyProbe.class"), 127);
     }
 
     #[test]

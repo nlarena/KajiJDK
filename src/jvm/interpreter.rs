@@ -9,6 +9,8 @@ pub mod gc;
 pub mod atomic_region;
 pub mod eden_arena;
 pub mod heap;
+/// Que la biblioteca que la VM carga cumpla las reglas del lenguaje (solo tests).
+pub mod library_conformance;
 pub mod metaspace;
 pub mod natives;
 pub mod strings;

@@ -1,6 +1,5 @@
 package java.util;
 
-import java.util.Map.Entry;
 
 // The skeleton for maps. In the JDK a subclass provides `entrySet()` and everything else —
 // size, get, containsKey, the iteration — is derived from walking it.
@@ -15,7 +14,26 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     protected AbstractMap() {
     }
 
-    public abstract Set<Entry<K, V>> entrySet();
+    public abstract Set<Map.Entry<K, V>> entrySet();
+
+    // Las claves, derivadas de `entrySet()` — que es justamente el primitivo del que cuelga todo
+    // `AbstractMap` (finding #205). Las subclases que puedan hacerlo mas barato lo sobrescriben.
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        Iterator<Map.Entry<K, V>> it = this.entrySet().iterator();
+        while (it.hasNext()) {
+            out.add(it.next().getKey());
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
 
     public abstract int size();
 

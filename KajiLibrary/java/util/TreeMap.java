@@ -70,6 +70,27 @@ public class TreeMap<K, V> implements Map<K, V> {
 
     // --- Map ---
 
+    // Recorrido **in-order** con los helpers que el mapa ya tiene, o sea en orden de clave
+    // (finding #205). Divergencia: el JDK devuelve un `NavigableSet` ordenado; este un HashSet,
+    // que no conserva el orden.
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        TmNode<K, V> p = firstNode();
+        while (p != null) {
+            out.add(p.key);
+            p = successor(p);
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     public int size() {
         return size;
     }

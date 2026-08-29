@@ -53,11 +53,13 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
     for member in &mut class.members {
         match member {
             Member::Method(m) => {
-                // Los tipos de la **firma** (retorno y parámetros) y del cuerpo de un método
-                // **genérico** resuelven en el scope propio del método —el que ve sus `<T>`—, no en el
-                // de la clase. Sin esto, la `T` de `<T> T maxOf(T a, T b)` quedaba `Unresolved` y
-                // `a.compareTo(b)` no encontraba el método de su cota (bytecode roto).
-                let scope = method_sig_scope(table, scope, m);
+                // Un método **genérico** declara sus propios parámetros de tipo, y esos viven en un
+                // scope **suyo** que cuelga del de la clase (§8.4.4) — no en el de la clase. Resolver
+                // la firma y el cuerpo en el de la clase dejaba la `A` de `<A> A f(A x)` sin
+                // resolver: el parámetro `x` quedaba `Unresolved`, y con él **todo** lo que dependiera
+                // de su tipo — `x.hashCode()` no encontraba receptor, y cualquier inferencia que
+                // pasara por `A` fallaba con "restricciones de tipo incompatibles" (#204/#215/#263).
+                let scope = method_scope(table, cid, m);
                 let ret = resolve_rtype(table, scope, &m.return_type);
                 // Slots de la frame (JVMS §2.6.1): en un método de instancia el slot 0 es
                 // `this`; los parámetros siguen en orden, y un `long`/`double` ocupa dos.
@@ -610,9 +612,14 @@ fn attrib_expr(env: &mut Env, expr: &mut Expr) -> RType {
     attrib_expr_to(env, expr, None)
 }
 
-/// El constructor de `cid` que aplica a esos argumentos. `None` si la clase no declara ninguno —
-/// ahí rige el **implícito** `()V`, que no tiene símbolo y el emisor referencia directo.
-fn ctor_binding(env: &mut Env, cid: SymbolId, args: &[RType], pos: Pos) -> Option<Binding> {
+/// El constructor que aplica a esos argumentos. `None` si la clase no declara ninguno — ahí rige el
+/// **implícito** `()V`, que no tiene símbolo y el emisor referencia directo.
+///
+/// `recv` es el tipo **con sus argumentos** (`G<E>`), no su erasure: es lo que sustituye las
+/// variables de tipo de la clase en la firma del constructor, igual que hace el receptor en una
+/// llamada a método (§15.12.2.2).
+fn ctor_binding(env: &mut Env, recv: &RType, args: &[RType], pos: Pos) -> Option<Binding> {
+    let cid = types::erased_id(recv)?;
     let mut cands = constructors(env.table, cid);
     // Un constructor `private` solo es candidato si el punto de llamada está en el **mismo nido**
     // (§6.6.1): un `new AssertionError("...")` desde otra clase no puede ver el `private
@@ -623,7 +630,7 @@ fn ctor_binding(env: &mut Env, cid: SymbolId, args: &[RType], pos: Pos) -> Optio
         return None;
     }
     let name = env.table.symbol(cid).name.clone();
-    resolve_overload(env, &cands, args, &name, pos, &RType::Class(cid)).map(Binding::Method)
+    resolve_overload(env, &cands, args, &name, pos, recv).map(Binding::Method)
 }
 
 /// La clase **top-level** que encierra a `cid` (su nido, §6.6.1): se sube por la cadena de dueños
@@ -788,8 +795,21 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         if name == "super" || name == "this" {
             let of_super = name == "super";
             let arg_types: Vec<RType> = args.iter_mut().map(|a| attrib_expr(env, a)).collect();
-            let owner = if of_super { env.table.super_class(env.class) } else { Some(env.class) };
-            let binding = owner.and_then(|cid| ctor_binding(env, cid, &arg_types, pos));
+            // **Finding #121**: acá se usaba `super_class`, que devuelve el supertipo ya **borrado**
+            // (`G`), y con eso `ctor_binding` no tenía argumentos de tipo que sustituir. Entonces un
+            // constructor `G(Caja<E>)` conservaba la `E` **de G**, que no es el mismo símbolo que la
+            // `E` de la subclase, y `super(t)` no matcheaba con nada — reportado como "no resolvió a
+            // ningún constructor", que suena a hueco del emisor cuando en verdad es un fallo de
+            // resolución. Hay que pasar el supertipo **como se declaró** (`G<E>`), que es lo mismo
+            // que ya hace el receptor de una llamada a método normal.
+            //
+            // Para `this(...)` no hace falta: los parámetros del constructor ya están escritos con
+            // las variables de tipo **de esta misma clase**, así que la sustitución es la identidad.
+            let recv = match of_super {
+                true => env.table.super_type(env.class).cloned(),
+                false => Some(RType::Class(env.class)),
+            };
+            let binding = recv.and_then(|r| ctor_binding(env, &r, &arg_types, pos));
             expr.ty = Some(RType::Void);
             expr.binding = binding;
             return RType::Void;
@@ -1004,10 +1024,19 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // Las dos ramas están en el **mismo** contexto que el ternario entero (§15.25).
             let a = attrib_expr_to(env, then, target);
             let b = attrib_expr_to(env, els, target);
-            // El tipo del ternario es el **lub** de sus ramas (§15.25). Con primitivos manda la
-            // promoción numérica; con referencias, el supertipo común.
-            let t = if matches!(a, RType::Prim(_)) && matches!(b, RType::Prim(_)) {
-                numeric_result(env, &a, &b, pos)
+            // El tipo del ternario se clasifica en **tres** formas (§15.25), no en dos:
+            // **booleano** si ambas ramas son `boolean`/`Boolean`, **numérico** si ambas son
+            // numéricas, y de **referencia** en todo el resto.
+            //
+            // **Finding #109**: faltaba la primera. Como `boolean` es un `RType::Prim`, un ternario
+            // booleano entraba por la rama numérica y moría con "operando no numérico", aunque el
+            // ternario de `int` y el de referencia compilaran sin problema. Lo destapó la igualdad
+            // null-safe `o == null ? e == null : o.equals(e)`, que es la forma que usan las
+            // colecciones concurrentes.
+            let t = if is_boolean(env.table, &a) && is_boolean(env.table, &b) {
+                RType::Prim(PrimType::Boolean)
+            } else if matches!(a, RType::Prim(_)) && matches!(b, RType::Prim(_)) {
+                conditional_numeric(env, &a, &b, then, els, pos)
             } else {
                 types::lub(env.table, &[a, b])
             };
@@ -1051,14 +1080,33 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // de captura. `capture` preserva la *erasure*, así que la búsqueda de candidatos sigue
             // igual. Un receptor sin wildcards se devuelve tal cual.
             let recv = types::capture(env.table, &recv);
-            // Un receptor que es una **variable de tipo** (`a : T`, con `T extends Comparable<T>`) no
-            // tiene miembros propios: sus métodos son los de su **cota** (§4.4). Se sustituye por ella
-            // para que `a.compareTo(b)` resuelva contra `Comparable`. Sin esto, `erased_id(TypeVar)`
-            // daba `None` y la llamada quedaba sin resolver (bytecode roto).
-            let recv = typevar_bound(env.table, recv);
+            // **Finding #111**: un receptor cuyo tipo estático es una **variable de tipo** (`T value;
+            // value.equals(o)`) no tenía dónde buscar miembros: `erased_id` devuelve `None` para un
+            // `TypeVar`, la resolución caía al brazo `None` de abajo, y la llamada **se descartaba en
+            // silencio** — el método salía haciendo `aload_1; areturn`, o sea devolviendo su propio
+            // argumento desde un método `boolean`.
+            //
+            // La regla es la de §4.4: los miembros de una variable de tipo son los de su **cota**
+            // (`Object` si no declaró ninguna), que es exactamente lo que da `types::erasure`. Con eso
+            // `value.equals(o)` resuelve contra `Object.equals` igual que si se hubiera escrito el
+            // rodeo (ligar el receptor a un local `Object` primero), que era el workaround conocido.
+            let recv = match recv {
+                RType::TypeVar(_) => types::erasure(env.table, &recv),
+                other => other,
+            };
             // El receptor puede ser crudo (`C`) o parametrizado (`List<String>`): se busca sobre
             // su erasure, y después se **sustituyen** los argumentos en la firma.
-            match types::erased_id(&recv) {
+            // `member_class`, no `erased_id`: un receptor **array** no tiene símbolo propio pero sí
+            // miembros — los de `Object` (§10.7).
+            match types::member_class(env.table, &recv) {
+                // `unArray.clone()` es el **único** miembro de un array cuyo tipo no sale de
+                // `Object`: su retorno es el propio tipo array (§10.7). Es lo que hace tipar el
+                // `values()` de un enum (`return $VALUES.clone();`) contra su `E[]` declarado. El
+                // emisor ya lo trata aparte —no hay clase array a la que hacerle un methodref—, así
+                // que acá alcanza con darle el tipo y dejar el binding en `None`.
+                Some(_) if matches!(recv, RType::Array(_)) && name == "clone" && args.is_empty() => {
+                    (recv.clone(), None)
+                }
                 Some(c) => {
                     let cands = candidates(env.table, c, &name);
                     // Indulgencia con externos, **acotada**: solo si la jerarquía del receptor está
@@ -1485,6 +1533,53 @@ fn binary_type(env: &mut Env, op: BinOp, l: &RType, r: &RType, pos: Pos) -> RTyp
     }
 }
 
+/// El tipo de un condicional **numérico** (§15.25), que **no** es la promoción binaria.
+///
+/// La promoción binaria (§5.6.2) tiene piso `int`, y para `a + b` eso es correcto; para `b ? x : y`
+/// no: un condicional con las dos ramas `char` **es** `char`. Usar la promoción colapsaba
+/// `char`/`byte`/`short` a `int`, y devolver el resultado desde un método del tipo angosto daba
+/// "tipo de retorno incompatible" (#260). El `if`/`else` equivalente andaba, que es lo que delataba
+/// que el roto no era el condicional sino su tipo.
+///
+/// Las reglas específicas de §15.25, en orden; lo que no cae en ninguna va a la promoción binaria:
+///
+/// 1. mismo tipo en las dos ramas ⇒ ese tipo;
+/// 2. `byte`/`Byte` con `short`/`Short` ⇒ `short`;
+/// 3. una rama `byte`/`short`/`char` y la otra una **constante** `int` que entra en ese tipo ⇒ el
+///    tipo angosto — es lo que hace que `b ? unChar : 'x'` siga siendo `char`.
+fn conditional_numeric(
+    env: &mut Env,
+    l: &RType,
+    r: &RType,
+    then: &Expr,
+    els: &Expr,
+    pos: Pos,
+) -> RType {
+    let (lu, ru) = (unbox(env.table, l), unbox(env.table, r));
+    // (1) — vale también para `long`/`float`/`double`, donde coincide con la promoción.
+    if lu == ru {
+        return lu;
+    }
+    let narrow = |t: &RType| {
+        matches!(t, RType::Prim(PrimType::Byte | PrimType::Short | PrimType::Char))
+    };
+    // (2)
+    let byte_short = |a: &RType, b: &RType| {
+        matches!(a, RType::Prim(PrimType::Byte)) && matches!(b, RType::Prim(PrimType::Short))
+    };
+    if byte_short(&lu, &ru) || byte_short(&ru, &lu) {
+        return RType::Prim(PrimType::Short);
+    }
+    // (3) — la constante va del lado que **no** es el angosto.
+    if narrow(&lu) && matches!(ru, RType::Prim(PrimType::Int)) && constant_narrowing_ok(&lu, els) {
+        return lu;
+    }
+    if narrow(&ru) && matches!(lu, RType::Prim(PrimType::Int)) && constant_narrowing_ok(&ru, then) {
+        return ru;
+    }
+    numeric_result(env, l, r, pos)
+}
+
 fn numeric_result(env: &mut Env, l: &RType, r: &RType, pos: Pos) -> RType {
     // **Unboxing** (§5.1.8): un envoltorio numérico (`Integer`, `Double`…) se desempaqueta a su
     // primitivo antes de la promoción binaria. Sin esto, `x + 1` con `x` de tipo `Integer` —el caso
@@ -1502,7 +1597,13 @@ fn numeric_result(env: &mut Env, l: &RType, r: &RType, pos: Pos) -> RType {
     rank_to_rtype(a.max(b).max(3)) // el mínimo de la promoción binaria es `int`
 }
 
-/// Desempaqueta un envoltorio numérico a su primitivo (`Integer` → `int`, §5.1.8); cualquier otro
+/// ¿Es `boolean` o `Boolean`? El operando de un ternario **booleano** (§15.25) puede venir de
+/// cualquiera de las dos formas, y las dos dan un ternario de tipo `boolean`.
+fn is_boolean(table: &SymbolTable, t: &RType) -> bool {
+    matches!(unbox(table, t), RType::Prim(PrimType::Boolean))
+}
+
+/// Desempaqueta un envoltorio a su primitivo (`Integer` → `int`, §5.1.8); cualquier otro
 /// tipo queda igual.
 fn unbox(table: &SymbolTable, t: &RType) -> RType {
     if let Some(id) = types::erased_id(t) {
@@ -1582,8 +1683,13 @@ fn assignable(table: &SymbolTable, from: &RType, to: &RType) -> bool {
     }
 }
 
+/// Los tipos **referencia** de §4.3: clase, interfaz, variable de tipo, captura, intersección — y
+/// **array**, que faltaba. Sin el array ni `assignable` ni `convertible` llegaban a consultar el
+/// subtipado: caían al `_ => false`, así que `Object o = unArray;` y pasar un array a un parámetro
+/// `Object` daban "no se convierte". Es la mitad de #261; la otra está en [`types::is_subtype`],
+/// que tampoco le daba supertipos a un array.
 fn is_reference(t: &RType) -> bool {
-    matches!(t, RType::Class(_) | RType::Parameterized { .. } | RType::TypeVar(_) | RType::Capture { .. } | RType::Intersection(_))
+    matches!(t, RType::Class(_) | RType::Parameterized { .. } | RType::TypeVar(_) | RType::Capture { .. } | RType::Intersection(_) | RType::Array(_))
 }
 
 /// Subtipo **probado**, delegando en el álgebra de tipos ([`types::is_subtype`]): sube por la
@@ -1890,16 +1996,30 @@ pub(crate) fn candidates(table: &SymbolTable, class: SymbolId, name: &str) -> Ve
     // `substitute_member` con el receptor.
     let mut stack = vec![class];
     let mut visited = vec![class];
+    // La firma con la que se decide si un candidato **ya está** tiene que ser la **borrada**
+    // (§8.4.2: la override-equivalencia se juzga sobre la erasure).
+    //
+    // **Finding #122**: se comparaban los parámetros *sin* borrar, y entonces la declaración de una
+    // clase y la **re-declaración** de su propia interfaz contaban como dos candidatos distintos —la
+    // `V` de la clase y la `V` de la interfaz son símbolos **diferentes**, así que `Callable<V>` no
+    // era igual a `Callable<V>`—. La llamada por el tipo de la clase salía "ambigua" contra los dos.
+    // No es ambigüedad real: es el mismo método, uno implementando al otro, y §15.12.2.5 quita esos
+    // duplicados **antes** del test de especificidad. Es la forma normal de cualquier implementación
+    // concreta, así que mordía seguido. (El buscador de SAM de más arriba ya deduplicaba por
+    // erasure; esto lo alinea con él.)
+    let mut seen: Vec<Option<Vec<RType>>> = Vec::new();
     while let Some(c) = stack.pop() {
         for &id in table.scope(member_scope(table, c)).get(name) {
             if !matches!(table.symbol(id).kind, SymbolKind::Method { is_constructor: false, .. }) {
                 continue;
             }
-            let sig = signature_of(table, id).map(|(p, _)| p);
-            let overridden = out.iter().any(|&o| signature_of(table, o).map(|(p, _)| p) == sig);
-            if !overridden {
-                out.push(id);
+            let sig: Option<Vec<RType>> = signature_of(table, id)
+                .map(|(p, _)| p.iter().map(|t| types::erasure(table, t)).collect());
+            if seen.contains(&sig) {
+                continue; // ya cubierta: un override, o la re-declaración de una interfaz
             }
+            seen.push(sig);
+            out.push(id);
         }
         let mut supers: Vec<SymbolId> = table.interfaces(c);
         supers.extend(table.super_class(c));
@@ -2119,6 +2239,36 @@ fn bind_pattern(env: &mut Env, p: &mut Pattern) {
     }
 }
 
+/// El scope en el que resolver la firma y el cuerpo de un método: el **suyo** si declara parámetros
+/// de tipo, o el de la clase si no. Espeja lo que ya hacía `enter::owner_scope` para resolver la
+/// firma en la pasada 1; sin esto, las dos pasadas discrepaban y la 2 veía `Unresolved` donde la 1
+/// veía la variable.
+///
+/// Con sobrecargas, el símbolo se identifica por nombre + aridad + la **grafía** de cada tipo de
+/// parámetro: dos sobrecargas genéricas homónimas tienen `A`s que son símbolos distintos, y agarrar
+/// la del otro daría una variable ajena.
+fn method_scope(table: &SymbolTable, cid: SymbolId, m: &super::ast::MethodDecl) -> ScopeId {
+    let class_scope = member_scope(table, cid);
+    if m.type_params.is_empty() {
+        return class_scope;
+    }
+    let want: Vec<String> = m.params.iter().map(|p| format!("{:?}", p.ty)).collect();
+    for id in table.members_of(cid) {
+        let sym = table.symbol(id);
+        let SymbolKind::Method { params, is_constructor, .. } = &sym.kind else { continue };
+        if *is_constructor != m.is_constructor || sym.name != m.name || params.len() != want.len() {
+            continue;
+        }
+        if params.iter().zip(&want).any(|(p, w)| &format!("{:?}", p.ty) != w) {
+            continue;
+        }
+        if let Some(own) = table.own_scope(id) {
+            return own;
+        }
+    }
+    class_scope
+}
+
 pub(crate) fn member_scope(table: &SymbolTable, cid: SymbolId) -> ScopeId {
     match &table.symbol(cid).kind {
         SymbolKind::Class { members, .. } => *members,
@@ -2237,6 +2387,37 @@ mod tests {
         let (table, _e) = enter(&unit);
         attribute(&mut unit, &table)
     }
+
+    /// #204/#215 — los parametros de tipo de un metodo **generico** viven en un scope suyo, no en el
+    /// de la clase. Resolver el cuerpo en el de la clase dejaba la `A` de `<A> A f(A x)` sin
+    /// resolver: el parametro quedaba `Unresolved` y con el se caia todo lo que dependiera de su
+    /// tipo. Se manifestaba como un error de **inferencia** —"restricciones de tipo incompatibles"—
+    /// que no tenia nada que ver con inferir.
+    #[test]
+    fn a_methods_own_type_parameter_resolves_inside_its_body() {
+        // El caso del finding: inferir `id` con el argumento tipado por la `A` del metodo que envuelve.
+        assert!(check(
+            "public class C { static <T> T id(T x) { return x; }              static <A> A caller(A x) { return C.id(x); } }"
+        )
+        .is_empty());
+        // Y la raiz, que es mas ancha que la inferencia: un miembro sobre un parametro de tipo `A`.
+        assert!(check(
+            "public class C { static <A> int f(A x) { return x.hashCode(); } }"
+        )
+        .is_empty());
+        // Local declarado con el parametro de tipo del metodo.
+        assert!(check(
+            "public class C { static <A> A f(A x) { A y = x; return y; } }"
+        )
+        .is_empty());
+        // Con **sobrecargas** homonimas: cada una tiene su propia `A`, y agarrar la ajena daria
+        // una variable de otro simbolo.
+        assert!(check(
+            "public class C { static <A> int f(A x) { return x.hashCode(); }              static <A> int f(A x, A y) { return x.hashCode() + y.hashCode(); } }"
+        )
+        .is_empty());
+    }
+
 
     #[test]
     fn a_call_with_contradictory_type_inference_is_reported() {

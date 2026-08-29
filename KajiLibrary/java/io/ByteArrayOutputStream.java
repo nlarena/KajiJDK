@@ -16,13 +16,13 @@ public class ByteArrayOutputStream extends OutputStream {
         this.count = 0;
     }
 
-    public void write(int b) {
+    public synchronized void write(int b) {
         this.ensureCapacity(this.count + 1);
         this.buf[this.count] = (byte) b;
         this.count = this.count + 1;
     }
 
-    public void write(byte[] b, int off, int len) {
+    public synchronized void write(byte[] b, int off, int len) {
         this.ensureCapacity(this.count + len);
         for (int i = 0; i < len; i++) {
             this.buf[this.count + i] = b[off + i];
@@ -30,16 +30,16 @@ public class ByteArrayOutputStream extends OutputStream {
         this.count = this.count + len;
     }
 
-    public int size() {
+    public synchronized int size() {
         return this.count;
     }
 
-    public void reset() {
+    public synchronized void reset() {
         this.count = 0;
     }
 
     // A right-sized copy of the bytes written so far.
-    public byte[] toByteArray() {
+    public synchronized byte[] toByteArray() {
         byte[] copy = new byte[this.count];
         System.arraycopy(this.buf, 0, copy, 0, this.count);
         return copy;

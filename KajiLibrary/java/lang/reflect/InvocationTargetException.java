@@ -11,7 +11,9 @@ package java.lang.reflect;
  * <p>So the target's exception arrives boxed, reachable through {@link #getTargetException()}, and
  * everything else the reflective call can throw arrives unboxed.
  */
-public class InvocationTargetException extends Exception {
+// Bajo ReflectiveOperationException, que es donde el JDK agrupa todo lo que puede fallar al
+// reflexionar -- asi un solo `catch` cubre esto, ClassNotFoundException y NoSuchMethodException.
+public class InvocationTargetException extends ReflectiveOperationException {
 
     private final Throwable target;
 

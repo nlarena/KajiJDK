@@ -24,23 +24,28 @@ public abstract class DynamicConstantDesc<T> implements ConstantDesc {
         this.bootstrapArgs = bootstrapArgs;
     }
 
-    // The JDK folds a handful of well-known bootstraps into simpler descriptors here — a
-    // `condy` on the null-constant bootstrap canonicalises to the null constant itself. Ours
-    // cannot: the constants that identify those bootstraps (`ConstantDescs.BSM_*`) are exactly
-    // the ones blocked by finding #101, so there is nothing to compare against and the
-    // descriptor is returned as-is. That is a narrowing of behaviour, not of surface.
+    // Un `condy` sobre un bootstrap bien conocido describe algo que YA tiene un descriptor mas
+    // simple, y devolver el simple es lo que hace que dos descripciones de la misma constante se
+    // comparen iguales. La nota que estaba acá decia que no se podia porque los `ConstantDescs.
+    // BSM_*` estaban bloqueados por #101 -- #101 esta cerrado y los BSM existen, asi que el
+    // pliegue del constante nulo se hace. Los otros que el JDK pliega (la clase primitiva, la
+    // constante de enum, los VarHandle) necesitan descriptores que la biblioteca todavia no
+    // tiene, y esos siguen devolviendose como estan.
     public static ConstantDesc ofCanonical(DirectMethodHandleDesc bootstrapMethod, String constantName,
-            ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
+            ClassDesc constantType, ConstantDesc... bootstrapArgs) {
+        if (bootstrapArgs.length == 0 && bootstrapMethod.equals(ConstantDescs.BSM_NULL_CONSTANT)) {
+            return ConstantDescs.NULL;
+        }
         return ofNamed(bootstrapMethod, constantName, constantType, bootstrapArgs);
     }
 
     public static DynamicConstantDesc ofNamed(DirectMethodHandleDesc bootstrapMethod, String constantName,
-            ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
+            ClassDesc constantType, ConstantDesc... bootstrapArgs) {
         return new AnonymousDynamicConstantDesc(bootstrapMethod, constantName, constantType, bootstrapArgs);
     }
 
     // The common case: the name carries no meaning, so the JVM's default `_` is used.
-    public static DynamicConstantDesc of(DirectMethodHandleDesc bootstrapMethod, ConstantDesc[] bootstrapArgs) {
+    public static DynamicConstantDesc of(DirectMethodHandleDesc bootstrapMethod, ConstantDesc... bootstrapArgs) {
         // The cast is finding #120: `invocationType()` is declared on `MethodHandleDesc` and only
         // INHERITED by `DirectMethodHandleDesc`, and our compiler does not read a classpath
         // supertype's method table — so the call is not found unless the receiver is spelled as
@@ -114,5 +119,16 @@ final class AnonymousDynamicConstantDesc extends DynamicConstantDesc {
     AnonymousDynamicConstantDesc(DirectMethodHandleDesc bootstrapMethod, String constantName,
             ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
         super(bootstrapMethod, constantName, constantType, bootstrapArgs);
+    }
+
+    /**
+     * Unsupported: resolving a descriptor needs `java.lang.invoke`, which this library does not
+     * have. Everything else about this type works without it.
+     *
+     * @param lookup the lookup that would perform the resolution
+     * @throws UnsupportedOperationException always
+     */
+    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

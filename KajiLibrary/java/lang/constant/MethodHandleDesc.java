@@ -1,6 +1,7 @@
 package java.lang.constant;
 
-import java.lang.constant.DirectMethodHandleDesc.Kind;
+import java.lang.constant.DirectMethodHandleDesc;
+
 
 
 // A nominal descriptor for a method handle. The factories all produce the *direct* flavour,
@@ -9,38 +10,38 @@ import java.lang.constant.DirectMethodHandleDesc.Kind;
 //
 // `resolveConstantDesc` is OMITTED (`java.lang.invoke`); see `ConstantDesc`.
 //
-// The nested `Kind` is reached through an import rather than as `DirectMethodHandleDesc.Kind`:
+// The nested `DirectMethodHandleDesc.Kind` is reached through an import rather than as `DirectMethodHandleDesc.Kind`:
 // a qualified reference to a nested type does not resolve in our compiler, and worse, with an
 // import plus the simple name it used to emit the wrong descriptor (finding #101). Importing the
 // nested type itself is the form that works.
 public interface MethodHandleDesc extends ConstantDesc {
 
     // `public` is spelled out on the static methods (finding #116 — see `ClassDesc`).
-    public static DirectMethodHandleDesc of(Kind kind, ClassDesc owner, String name, String lookupDescriptor) {
+    public static DirectMethodHandleDesc of(DirectMethodHandleDesc.Kind kind, ClassDesc owner, String name, String lookupDescriptor) {
         return ConstantMethodHandleDesc.make(kind, owner, name, lookupDescriptor);
     }
 
-    public static DirectMethodHandleDesc ofMethod(Kind kind, ClassDesc owner, String name, MethodTypeDesc lookupMethodType) {
+    public static DirectMethodHandleDesc ofMethod(DirectMethodHandleDesc.Kind kind, ClassDesc owner, String name, MethodTypeDesc lookupMethodType) {
         return ConstantMethodHandleDesc.make(kind, owner, name, lookupMethodType.descriptorString());
     }
 
-    public static DirectMethodHandleDesc ofField(Kind kind, ClassDesc owner, String fieldName, ClassDesc fieldType) {
+    public static DirectMethodHandleDesc ofField(DirectMethodHandleDesc.Kind kind, ClassDesc owner, String fieldName, ClassDesc fieldType) {
         return ConstantMethodHandleDesc.make(kind, owner, fieldName, fieldType.descriptorString());
     }
 
     // OMITTED (subset): `static DirectMethodHandleDesc ofConstructor(ClassDesc, ClassDesc...)`.
     //
-    // It needs the value `Kind.CONSTRUCTOR`, and a static member of a nested type turns out to be
+    // It needs the value `DirectMethodHandleDesc.Kind.CONSTRUCTOR`, and a static member of a nested type turns out to be
     // unreachable from outside the file that declares it — by ANY spelling. All three forms were
-    // tried and all three fail with "no se encuentra el simbolo: variable Kind":
+    // tried and all three fail with "no se encuentra el simbolo: variable DirectMethodHandleDesc.Kind":
     //     DirectMethodHandleDesc.Kind.valueOf(8)          (fully qualified)
-    //     Kind.valueOf(8)                                 (with the nested type imported)
+    //     DirectMethodHandleDesc.Kind.valueOf(8)                                 (with the nested type imported)
     //     CONSTRUCTOR                                     (with the constant statically imported)
     // The type import works in a TYPE position — the parameters above prove it — so the defect is
     // specific to using the nested type as a QUALIFIER. That sharpens finding #101, which until
     // now recorded the type-position half.
     //
-    // There is no source-level workaround: a `Kind` value cannot be produced outside
+    // There is no source-level workaround: a `DirectMethodHandleDesc.Kind` value cannot be produced outside
     // `DirectMethodHandleDesc.java`, and any helper that could produce one would be a member the
     // JDK does not have, which the gate would reject as extra. The method returns when #101 does.
 
@@ -91,5 +92,16 @@ final class AdaptedMethodHandleDesc implements MethodHandleDesc {
 
     public String toString() {
         return "MethodHandleDesc[" + target.toString() + " asType " + type.displayDescriptor() + "]";
+    }
+
+    /**
+     * Unsupported: resolving a descriptor needs `java.lang.invoke`, which this library does not
+     * have. Everything else about this type works without it.
+     *
+     * @param lookup the lookup that would perform the resolution
+     * @throws UnsupportedOperationException always
+     */
+    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

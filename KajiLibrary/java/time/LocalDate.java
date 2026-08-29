@@ -16,7 +16,10 @@ import java.time.chrono.IsoChronology;
 // conversion (toEpochDay / ofEpochDay), the classic java.time algorithm — everything else is
 // layered on it. Implements Temporal, TemporalAdjuster and Comparable. A KajiLibrary subset
 // (toString/parse, more fields/units, from(TemporalAccessor) deferred).
-public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalDate, Comparable<LocalDate> {
+// NO declara `Comparable<LocalDate>`: hereda `Comparable<ChronoLocalDate>` de `ChronoLocalDate`
+// (#276), y una clase no puede implementar dos parametrizaciones de la misma interfaz. Es tambien
+// lo que hace el JDK, y por la misma razon.
+public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalDate {
 
     private static final long DAYS_0000_TO_1970 = 719528L;
 
@@ -178,14 +181,38 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
 
     // --- comparison ---
 
-    public int compareTo(LocalDate other) {
-        if (this.year != other.year) {
-            return this.year - other.year;
+    /**
+     * El orden natural. La firma toma {@link ChronoLocalDate} y no {@code LocalDate} porque es la
+     * que declara la interfaz -- y es la que declara el JDK-: una clase no puede implementar
+     * {@code Comparable} dos veces con parametros distintos.
+     *
+     * <p>Con otro {@code LocalDate} compara por campos, que es mas barato que ir al dia epocal.
+     * Con una fecha de otro calendario cae al orden general: dia epocal y, si empatan, el id de la
+     * cronologia -- el desempate que evita que dos fechas que no son iguales comparen 0.
+     */
+    @Override
+    public int compareTo(ChronoLocalDate other) {
+        if (other instanceof LocalDate) {
+            LocalDate that = (LocalDate) other;
+            if (this.year != that.year) {
+                return this.year - that.year;
+            }
+            if (this.month != that.month) {
+                return this.month - that.month;
+            }
+            return this.day - that.day;
         }
-        if (this.month != other.month) {
-            return this.month - other.month;
+        long mine = this.toEpochDay();
+        long theirs = other.toEpochDay();
+        if (mine < theirs) {
+            return -1;
         }
-        return this.day - other.day;
+        if (mine > theirs) {
+            return 1;
+        }
+        Chronology chrono = this.getChronology();
+        Chronology otherChrono = other.getChronology();
+        return chrono.getId().compareTo(otherChrono.getId());
     }
 
     public boolean isBefore(LocalDate other) {

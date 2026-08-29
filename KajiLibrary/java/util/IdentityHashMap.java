@@ -110,6 +110,31 @@ public class IdentityHashMap<K, V> implements Map<K, V> {
         return i;
     }
 
+    // La tabla alterna clave y valor, asi que se avanza de a dos (finding #205).
+    //
+    // Divergencia que importa aca mas que en los otros: este mapa compara por **identidad**, pero
+    // el `HashSet` que se devuelve compara por `equals`. Dos claves distintas-por-identidad pero
+    // iguales-por-equals colapsan en una sola entrada del set.
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        int i = 0;
+        while (i < this.table.length) {
+            if (this.table[i] != null) {
+                out.add((K) unmaskNull(this.table[i]));
+            }
+            i = i + 2;
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     public int size() {
         return size;
     }

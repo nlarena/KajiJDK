@@ -25,6 +25,10 @@ public class Thread {
     // so the write has to be visible without a lock.
     private volatile boolean interrupted;
 
+    // The group this thread belongs to. Every thread is in exactly one, and the group is what
+    // lets several threads be interrupted or counted together.
+    private ThreadGroup group;
+
     public Thread() {
         this.tid = nextThreadNum();
         this.name = "Thread-" + tid;
@@ -47,6 +51,18 @@ public class Thread {
 
     public final String getName() {
         return name;
+    }
+
+    // The group this thread belongs to.
+    //
+    // Resolved lazily when it is null, which happens for the thread the VM starts the program
+    // on: that Thread object is built by the VM without running a constructor, so nothing
+    // attached it to a group.
+    public final ThreadGroup getThreadGroup() {
+        if (this.group == null) {
+            this.group = ThreadGroup.root();
+        }
+        return this.group;
     }
 
     public final void setName(String name) {
@@ -127,5 +143,13 @@ public class Thread {
         WAITING,
         TIMED_WAITING,
         TERMINATED
+    }
+
+    // What to do with a throwable that got out of a thread run() -- installed per thread or per
+    // group. It exists because by the time it is called the thread is already finishing: there
+    // is nothing to catch, only something to report.
+    public interface UncaughtExceptionHandler {
+
+        void uncaughtException(Thread t, Throwable e);
     }
 }

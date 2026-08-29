@@ -248,6 +248,72 @@ pub fn compile_cp(
     source: &str,
     extra_classpath: &[std::path::PathBuf],
 ) -> Result<Vec<(String, Vec<u8>)>> {
+    Ok(compile_units_cp(std::slice::from_ref(&source), extra_classpath)?.remove(0))
+}
+
+/// [`compile_cp`] sobre **varias** unidades de compilación en una sola invocación: todas comparten
+/// una tabla de símbolos, así que cada una **ve los tipos de las otras** (#234).
+///
+/// Devuelve las clases **agrupadas por unidad**, en el mismo orden que `sources`, para que el
+/// llamador pueda escribir cada `.class` al lado de *su* fuente.
+///
+/// Sin esto, dos clases que se referencian mutuamente pedían un bootstrap en tres pasos —compilar
+/// una con el cuerpo talado, compilar la otra, recompilar la primera—, que fue lo que hubo que
+/// hacer tres veces en `java.text` y una en `javax.lang.model.type`.
+pub fn compile_units_cp(
+    sources: &[&str],
+    extra_classpath: &[std::path::PathBuf],
+) -> Result<Vec<Vec<(String, Vec<u8>)>>> {
+    let mut units = Vec::with_capacity(sources.len());
+    let mut errors = Vec::new();
+    for source in sources {
+        let tokens = lexer::tokenize(source)?;
+        let (unit, parse_errors) = parser::parse(tokens);
+        errors.extend(parse_errors);
+        units.push(unit);
+    }
+    // Pasada 1 **global**: Enter de todas las clases, después MemberEnter, después resolución.
+    let (mut table, sem_errors) = enter::enter_cp_multi(&units, extra_classpath);
+    errors.extend(sem_errors);
+    for unit in &mut units {
+        enter::register_local_classes(unit, &mut table, &mut errors);
+        enter::hoist_anonymous(unit, &mut table, &mut errors);
+    }
+    for unit in &mut units {
+        errors.extend(attribute::attribute(unit, &table));
+    }
+    for unit in &units {
+        errors.extend(check::check(unit, &table));
+        errors.extend(flow::flow(unit));
+    }
+    if let Some(first) = errors.into_iter().next() {
+        return Err(first); // no se emite bytecode para un programa con errores
+    }
+    // Las constantes de **todas** las unidades se juntan antes del desugar: una puede leer el
+    // `static final` de otra, y el plegado tiene que verlo (§15.29).
+    let mut const_fields = std::collections::HashMap::new();
+    for unit in &units {
+        const_fields.extend(codegen::collect_const_fields(unit, &table));
+    }
+    table.set_const_fields(const_fields);
+    let mut out = Vec::with_capacity(units.len());
+    for unit in &mut units {
+        transtypes::trans_types(unit, &table);
+        desugar::desugar(unit, &mut table);
+        let lowered = attribute::attribute(unit, &table);
+        if let Some(first) = lowered.into_iter().next() {
+            return Err(first);
+        }
+        out.push(codegen::generate(unit, &table)?);
+    }
+    Ok(out)
+}
+
+#[allow(dead_code)]
+fn compile_cp_single(
+    source: &str,
+    extra_classpath: &[std::path::PathBuf],
+) -> Result<Vec<(String, Vec<u8>)>> {
     let tokens = lexer::tokenize(source)?;
     let (mut unit, parse_errors) = parser::parse(tokens);
     let (mut table, sem_errors) = enter::enter_cp(&unit, extra_classpath);

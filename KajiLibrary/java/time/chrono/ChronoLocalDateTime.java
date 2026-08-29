@@ -21,7 +21,7 @@ import java.time.temporal.TemporalUnit;
 // finding #100), not Comparable, and without `query`/`format`/`timeLineOrder`/`from`. The covariant
 // redeclarations of with/plus/minus are omitted too: the ones inherited from Temporal carry the
 // same contract, and each covariant override would only add a bridge method.
-public interface ChronoLocalDateTime extends Temporal, TemporalAdjuster {
+public interface ChronoLocalDateTime extends Temporal, TemporalAdjuster, Comparable<ChronoLocalDateTime> {
 
     ChronoLocalDate toLocalDate();
 
@@ -69,6 +69,20 @@ public interface ChronoLocalDateTime extends Temporal, TemporalAdjuster {
     // Comparisons on the LOCAL reading (date first, then time) — not on the timeline, which needs
     // an offset. `isEqual` is not `equals`: two date-times of different calendars can name the same
     // local instant and still not be equal objects.
+    /**
+     * The natural order: by date, then by time. A {@code default} because it is one in the JDK,
+     * so adding {@link Comparable} to this interface (#276) breaks no implementor.
+     *
+     * <p>The ordering itself already existed -- {@code isAfter}/{@code isBefore}/{@code isEqual}
+     * are built on it. What was missing was the NAME the language knows it by: without
+     * {@code Comparable}, none of these could be sorted, put in a {@code TreeSet}, or handed to
+     * anything that orders.
+     */
+    @Override
+    default int compareTo(ChronoLocalDateTime other) {
+        return LocalOrder.compare(this, other);
+    }
+
     default boolean isAfter(ChronoLocalDateTime other) {
         return LocalOrder.compare(this, other) > 0;
     }

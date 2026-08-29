@@ -167,7 +167,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     // --- capacity -------------------------------------------------------------------
 
-    public void copyInto(Object[] anArray) {
+    public synchronized void copyInto(Object[] anArray) {
         synchronized (this) {
             for (int i = 0; i < elementCount; i++) {
                 anArray[i] = elementData[i];
@@ -177,7 +177,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     // Give back the unused tail. Worth calling once a vector has stopped growing; pointless
     // before that, since the next add will just grow it again.
-    public void trimToSize() {
+    public synchronized void trimToSize() {
         synchronized (this) {
             if (elementCount < elementData.length) {
                 Object[] copy = new Object[elementCount];
@@ -189,7 +189,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         }
     }
 
-    public void ensureCapacity(int minCapacity) {
+    public synchronized void ensureCapacity(int minCapacity) {
         synchronized (this) {
             growTo(minCapacity);
         }
@@ -198,7 +198,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
     // Resize the *logical* length: truncating drops the tail, extending pads with null.
     // Nothing in the 1.2 collections does this — a List's length is a consequence of what
     // it holds, not something you set.
-    public void setSize(int newSize) {
+    public synchronized void setSize(int newSize) {
         synchronized (this) {
             if (newSize > elementCount) {
                 growTo(newSize);
@@ -211,7 +211,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         }
     }
 
-    public int capacity() {
+    public synchronized int capacity() {
         int c;
         synchronized (this) {
             c = elementData.length;
@@ -221,7 +221,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     // --- Collection / List ----------------------------------------------------------
 
-    public int size() {
+    public synchronized int size() {
         int n;
         synchronized (this) {
             n = elementCount;
@@ -229,7 +229,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return n;
     }
 
-    public boolean isEmpty() {
+    public synchronized boolean isEmpty() {
         boolean empty;
         synchronized (this) {
             empty = elementCount == 0;
@@ -245,7 +245,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return found;
     }
 
-    public int indexOf(Object o) {
+    public synchronized int indexOf(Object o) {
         int i;
         synchronized (this) {
             i = indexUnlocked(o, 0);
@@ -253,7 +253,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return i;
     }
 
-    public int indexOf(Object o, int index) {
+    public synchronized int indexOf(Object o, int index) {
         int i;
         synchronized (this) {
             i = indexUnlocked(o, index);
@@ -261,7 +261,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return i;
     }
 
-    public int lastIndexOf(Object o) {
+    public synchronized int lastIndexOf(Object o) {
         int found;
         synchronized (this) {
             found = -1;
@@ -274,7 +274,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return found;
     }
 
-    public int lastIndexOf(Object o, int index) {
+    public synchronized int lastIndexOf(Object o, int index) {
         int found;
         synchronized (this) {
             if (index >= elementCount) {
@@ -290,7 +290,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return found;
     }
 
-    public E get(int index) {
+    public synchronized E get(int index) {
         Object e;
         synchronized (this) {
             if (index < 0 || index >= elementCount) {
@@ -301,7 +301,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return (E) e;
     }
 
-    public E set(int index, E element) {
+    public synchronized E set(int index, E element) {
         Object old;
         synchronized (this) {
             if (index < 0 || index >= elementCount) {
@@ -313,20 +313,20 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return (E) old;
     }
 
-    public boolean add(E e) {
+    public synchronized boolean add(E e) {
         synchronized (this) {
             addUnlocked(e);
         }
         return true;
     }
 
-    public void add(int index, E element) {
+    public synchronized void add(int index, E element) {
         synchronized (this) {
             insertUnlocked(index, element);
         }
     }
 
-    public E remove(int index) {
+    public synchronized E remove(int index) {
         Object old;
         synchronized (this) {
             old = removeUnlocked(index);
@@ -334,7 +334,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return (E) old;
     }
 
-    public boolean remove(Object o) {
+    public synchronized boolean remove(Object o) {
         boolean removed;
         synchronized (this) {
             int i = indexUnlocked(o, 0);
@@ -355,7 +355,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         }
     }
 
-    public Object[] toArray() {
+    public synchronized Object[] toArray() {
         Object[] copy;
         synchronized (this) {
             copy = new Object[elementCount];
@@ -372,11 +372,11 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
     // of code calls them, and they are a useful reminder of what the collections framework
     // actually bought: one vocabulary instead of one per class.
 
-    public E elementAt(int index) {
+    public synchronized E elementAt(int index) {
         return get(index);
     }
 
-    public E firstElement() {
+    public synchronized E firstElement() {
         Object e;
         synchronized (this) {
             if (elementCount == 0) {
@@ -387,7 +387,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return (E) e;
     }
 
-    public E lastElement() {
+    public synchronized E lastElement() {
         Object e;
         synchronized (this) {
             if (elementCount == 0) {
@@ -398,33 +398,33 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return (E) e;
     }
 
-    public void setElementAt(E obj, int index) {
+    public synchronized void setElementAt(E obj, int index) {
         set(index, obj);
     }
 
-    public void removeElementAt(int index) {
+    public synchronized void removeElementAt(int index) {
         synchronized (this) {
             removeUnlocked(index);
         }
     }
 
-    public void insertElementAt(E obj, int index) {
+    public synchronized void insertElementAt(E obj, int index) {
         synchronized (this) {
             insertUnlocked(index, obj);
         }
     }
 
-    public void addElement(E obj) {
+    public synchronized void addElement(E obj) {
         synchronized (this) {
             addUnlocked(obj);
         }
     }
 
-    public boolean removeElement(Object obj) {
+    public synchronized boolean removeElement(Object obj) {
         return remove(obj);
     }
 
-    public void removeAllElements() {
+    public synchronized void removeAllElements() {
         clear();
     }
 
@@ -432,7 +432,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return new VectorEnumerator<E>(this);
     }
 
-    public Iterator<E> iterator() {
+    public synchronized Iterator<E> iterator() {
         return new VectorItr<E>(this);
     }
 
@@ -440,7 +440,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     // List equality: same length, equal elements in the same order — so a Vector can equal
     // an ArrayList, which is the point of defining it on the interface's terms.
-    public boolean equals(Object o) {
+    public synchronized boolean equals(Object o) {
         boolean same;
         if (o == this) {
             same = true;
@@ -468,7 +468,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     // The order-sensitive companion of that equality: 31 is odd and prime, so the running
     // multiply neither loses bits nor collapses distinct prefixes.
-    public int hashCode() {
+    public synchronized int hashCode() {
         int h;
         synchronized (this) {
             h = 1;
@@ -484,7 +484,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
         return h;
     }
 
-    public String toString() {
+    public synchronized String toString() {
         StringBuilder b = new StringBuilder();
         synchronized (this) {
             b.append('[');
@@ -503,6 +503,14 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
             b.append(']');
         }
         return b.toString();
+    }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED);
     }
 }
 
@@ -559,4 +567,5 @@ final class VectorEnumerator<E> implements Enumeration<E> {
         cursor = cursor + 1;
         return e;
     }
+
 }

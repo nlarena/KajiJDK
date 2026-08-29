@@ -553,8 +553,23 @@ final class AdaptedCallable<T> extends ForkJoinTask<T> implements Runnable {
         value = v;
     }
 
+    /**
+     * {@code Callable.call} declares {@code throws Exception} and {@code exec} may not, so the
+     * checked one is rethrown wrapped -- which is exactly what the JDK does here, and the only
+     * thing that can be done: widening {@code exec}'s clause would break the contract every
+     * caller depends on (JLS 8.4.8.3).
+     *
+     * <p>An unchecked exception passes through untouched: wrapping it would bury the type the
+     * caller is catching on.
+     */
     protected boolean exec() {
-        value = body.call();
+        try {
+            value = body.call();
+        } catch (RuntimeException unchecked) {
+            throw unchecked;
+        } catch (Exception checked) {
+            throw new RuntimeException(checked);
+        }
         return true;
     }
 

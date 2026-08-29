@@ -254,6 +254,18 @@ public class PriorityQueue<E> extends AbstractQueue<E> {
     int count() {
         return size;
     }
+
+    /**
+     * A spliterator over these elements.
+     *
+     *  <p>Sin ORDERED, y esa ausencia es informacion: una cola de prioridad recorre en el orden del
+     * monticulo, que no es el orden de prioridad. Solo `poll` respeta la prioridad.
+     *
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.SIZED | Spliterator.SUBSIZED | Spliterator.NONNULL);
+    }
 }
 
 // Walks the backing array, which is heap order and therefore *not* priority order — only the
@@ -281,4 +293,5 @@ final class PriorityQueueItr<E> implements Iterator<E> {
         cursor = cursor + 1;
         return e;
     }
+
 }

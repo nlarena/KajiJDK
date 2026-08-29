@@ -191,6 +191,33 @@ public class WeakHashMap<K, V> implements Map<K, V> {
     // Note this is not a pure accessor: it drains first, so the answer reflects the keys that
     // have died since the last call. A `size()` that could only shrink at a modification would
     // be a lie.
+    // Buckets + cadenas de colision, saltando las entradas cuya clave ya murio: `WhmEntry` es una
+    // `WeakReference`, y un `get()` nulo significa que el GC se llevo la clave (finding #205).
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        int i = 0;
+        while (i < this.table.length) {
+            WhmEntry<V> e = this.table[i];
+            while (e != null) {
+                Object k = e.get();
+                if (k != null) {
+                    out.add((K) k);
+                }
+                e = e.next;
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     public int size() {
         expungeStaleEntries();
         return size;

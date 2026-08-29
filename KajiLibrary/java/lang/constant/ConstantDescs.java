@@ -9,11 +9,11 @@ package java.lang.constant;
 // class, it does not load one, so describing `java.lang.invoke.MethodHandles$Lookup` costs
 // nothing even where the class is absent.
 //
-// OMITTED (subset): the `BSM_*` bootstrap handles, `MHD_METHODHANDLE_ASTYPE`, the `NULL`/`TRUE`/
-// `FALSE` constants that are built from them, and the two `of*Bootstrap` factories. Every one of
-// them needs a `DirectMethodHandleDesc.Kind` VALUE (`Kind.STATIC`), and a static member of a
-// nested type cannot be named from outside its declaring file — see the note in
-// `MethodHandleDesc.ofConstructor` for the three spellings that were tried. They return with #101.
+// The `BSM_*` handles below were omitted for a long time, and the note that explained why said
+// they needed `DirectMethodHandleDesc.Kind.STATIC` -- a static member of a nested type, which our
+// javac could not name from another file (#101). #101 is closed, so they are here. Worth saying
+// out loud because it is the second time this session: a comment that explains why something is
+// MISSING outlives the reason as easily as any other comment, and nothing recompiles it.
 public final class ConstantDescs {
 
     private ConstantDescs() {
@@ -76,4 +76,146 @@ public final class ConstantDescs {
     public static final ClassDesc CD_void = ClassDesc.ofDescriptor("V");
 
     public static final MethodTypeDesc MTD_void = MethodTypeDesc.of(CD_void);
+
+    // ---- the bootstrap handles ----
+    //
+    // A dynamic constant is not a value in the class file: it is a **recipe**. The entry names a
+    // bootstrap method and its arguments, and the VM runs it the first time the constant is read.
+    // These are the descriptors of the standard recipes, and the reason they all look alike is
+    // that the shape is fixed by the JVM: a bootstrap always takes `(Lookup, String, Class)` and
+    // then whatever else it was given, which is what `ofConstantBootstrap` prepends.
+
+    /** The recipe for a primitive type's mirror -- `int.class` as a constant. */
+    public static final DirectMethodHandleDesc BSM_PRIMITIVE_CLASS =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "primitiveClass", CD_Class);
+
+    /** The recipe for an enum constant, looked up by name in its own type. */
+    public static final DirectMethodHandleDesc BSM_ENUM_CONSTANT =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "enumConstant", CD_Enum);
+
+    /** The recipe for reading a {@code static final} field. */
+    public static final DirectMethodHandleDesc BSM_GET_STATIC_FINAL =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "getStaticFinal", CD_Object,
+                    CD_Class);
+
+    /**
+     * The recipe for {@code null}.
+     *
+     * <p>A constant pool cannot hold a null, which is why this exists at all: the entry names a
+     * bootstrap that returns one.
+     */
+    public static final DirectMethodHandleDesc BSM_NULL_CONSTANT =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "nullConstant", CD_Object);
+
+    /** The recipe for a {@code VarHandle} onto an instance field. */
+    public static final DirectMethodHandleDesc BSM_VARHANDLE_FIELD =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "fieldVarHandle",
+                    CD_VarHandle, CD_Class, CD_Class);
+
+    /** The recipe for a {@code VarHandle} onto a static field. */
+    public static final DirectMethodHandleDesc BSM_VARHANDLE_STATIC_FIELD =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "staticFieldVarHandle",
+                    CD_VarHandle, CD_Class, CD_Class);
+
+    /** The recipe for a {@code VarHandle} onto an array's elements. */
+    public static final DirectMethodHandleDesc BSM_VARHANDLE_ARRAY =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "arrayVarHandle",
+                    CD_VarHandle, CD_Class);
+
+    /**
+     * The recipe that invokes a method handle with the remaining static arguments.
+     *
+     * <p>The general one: any constant that can be computed by calling something is expressible
+     * through this, which is why a language that needs a new kind of constant rarely needs a new
+     * bootstrap.
+     */
+    public static final DirectMethodHandleDesc BSM_INVOKE =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "invoke", CD_Object,
+                    CD_MethodHandle, CD_Object.arrayType());
+
+    /**
+     * The recipe that casts a constant to a type.
+     *
+     * <p>This is how a {@code short} or a {@code byte} becomes a constant: the class file holds
+     * an {@code int}, and the cast is what narrows it. That is why {@code Short.describeConstable}
+     * is a dynamic constant while {@code Integer.describeConstable} is not.
+     */
+    public static final DirectMethodHandleDesc BSM_EXPLICIT_CAST =
+            ConstantDescs.ofConstantBootstrap(CD_ConstantBootstraps, "explicitCast", CD_Object,
+                    CD_Object);
+
+    /** The recipe for the class data a hidden class was defined with. */
+    public static final DirectMethodHandleDesc BSM_CLASS_DATA =
+            ConstantDescs.ofConstantBootstrap(CD_MethodHandles, "classData", CD_Object);
+
+    /** The recipe for one element of that class data. */
+    public static final DirectMethodHandleDesc BSM_CLASS_DATA_AT =
+            ConstantDescs.ofConstantBootstrap(CD_MethodHandles, "classDataAt", CD_Object, CD_int);
+
+    // The three constants built from the recipes above. Declared after them and not before, and
+    // that is load-bearing rather than tidy: static initialisers run in TEXTUAL order, so a
+    // forward reference here would read a null and store it forever.
+
+    /** The {@code null} constant. */
+    public static final ConstantDesc NULL =
+            DynamicConstantDesc.ofNamed(ConstantDescs.BSM_NULL_CONSTANT, DEFAULT_NAME, CD_Object);
+
+    /** The constant {@code Boolean.TRUE}. */
+    public static final DynamicConstantDesc<Boolean> TRUE =
+            DynamicConstantDesc.ofNamed(ConstantDescs.BSM_GET_STATIC_FINAL, "TRUE", CD_Boolean,
+                    CD_Boolean);
+
+    /** The constant {@code Boolean.FALSE}. */
+    public static final DynamicConstantDesc<Boolean> FALSE =
+            DynamicConstantDesc.ofNamed(ConstantDescs.BSM_GET_STATIC_FINAL, "FALSE", CD_Boolean,
+                    CD_Boolean);
+
+    // ---- the two factories ----
+
+    /**
+     * The descriptor of a <em>constant</em> bootstrap: one that computes a dynamic constant.
+     *
+     * <p>The three prepended parameters are not a convention this method invented -- the JVM
+     * passes them to every bootstrap, so a descriptor that omitted them would name a method the
+     * VM could never call.
+     *
+     * @param owner the class declaring the bootstrap
+     * @param name its name
+     * @param returnType what it computes
+     * @param paramTypes the static argument types, beyond the three the VM always passes
+     */
+    public static DirectMethodHandleDesc ofConstantBootstrap(ClassDesc owner, String name,
+            ClassDesc returnType, ClassDesc... paramTypes) {
+        ClassDesc[] full = new ClassDesc[paramTypes.length + 3];
+        full[0] = CD_MethodHandles_Lookup;
+        full[1] = CD_String;
+        full[2] = CD_Class;
+        System.arraycopy(paramTypes, 0, full, 3, paramTypes.length);
+        return MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, owner, name,
+                MethodTypeDesc.of(returnType, full));
+    }
+
+    /**
+     * The descriptor of a <em>call site</em> bootstrap: one that links an {@code invokedynamic}.
+     *
+     * <p>Same shape as {@link #ofConstantBootstrap}, and the third prepended parameter is the
+     * difference: a constant bootstrap is told the TYPE of the constant it must produce, a call
+     * site bootstrap is told the SIGNATURE the call site expects.
+     *
+     * @param owner the class declaring the bootstrap
+     * @param name its name
+     * @param returnType what it returns, normally a {@code CallSite}
+     * @param paramTypes the static argument types, beyond the three the VM always passes
+     */
+    public static DirectMethodHandleDesc ofCallsiteBootstrap(ClassDesc owner, String name,
+            ClassDesc returnType, ClassDesc... paramTypes) {
+        ClassDesc[] full = new ClassDesc[paramTypes.length + 3];
+        full[0] = CD_MethodHandles_Lookup;
+        full[1] = CD_String;
+        full[2] = CD_MethodType;
+        System.arraycopy(paramTypes, 0, full, 3, paramTypes.length);
+        return MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, owner, name,
+                MethodTypeDesc.of(returnType, full));
+    }
+
 }

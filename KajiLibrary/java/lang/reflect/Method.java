@@ -194,7 +194,14 @@ public final class Method extends Executable {
      *
      * @return the type variables; empty if it is not generic
      */
-    public native TypeVariable<?>[] getTypeParameters();
+    public TypeVariable<Method>[] getTypeParameters() {
+        // Empty, and that is the right answer rather than a stub: a method's type
+        // parameters live only in its `Signature` attribute, the VM does not read one, and a
+        // method without a `Signature` declares none. The gap this leaves is real and
+        // narrow -- a genuinely generic method reports zero instead of its variables -- and
+        // it is the same gap as `getGenericParameterTypes`, not a separate one.
+        return new TypeVariable[0];
+    }
 
     // getParameterAnnotations() stays inherited abstract from Executable: `Annotation[][]` overriding
     // `Annotation[][]` is rejected by the same compiler defect described in the class comment.
@@ -209,6 +216,104 @@ public final class Method extends Executable {
     public native AnnotatedType getAnnotatedReturnType();
 
     /**
+     * Whether this method was declared with a variable arity parameter.
+     *
+     * <p>Nothing about the parameter list says so: the last parameter is an array either way, and
+     * {@code ACC_VARARGS} is the only thing that tells {@code f(int...)} from {@code f(int[])}.
+     */
+    public boolean isVarArgs() {
+        return (this.modifiers & 0x0080) != 0;
+    }
+
+    /** Whether the compiler generated this method rather than a programmer writing it. */
+    public boolean isSynthetic() {
+        return (this.modifiers & 0x1000) != 0;
+    }
+
+    /**
+     * Whether {@code obj} is a {@code Method} describing the same method.
+     *
+     * <p>Two separate {@code Method} objects can describe the same method -- every call to
+     * {@code getDeclaredMethods} mints fresh ones -- so identity is the wrong test and this one
+     * is needed. The RETURN type is part of the comparison: two methods that differ only there
+     * are two distinct entries in a class file, and one of them is usually a bridge.
+     *
+     * @param obj the object to compare against
+     */
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof Method)) {
+            return false;
+        }
+        Method other = (Method) obj;
+        if (this.clazz != other.getDeclaringClass() || this.returnType != other.getReturnType()) {
+            return false;
+        }
+        if (!this.name.equals(other.getName())) {
+            return false;
+        }
+        Class<?>[] mine = this.parameterTypes;
+        Class<?>[] theirs = other.getParameterTypes();
+        if (mine.length != theirs.length) {
+            return false;
+        }
+        int i = 0;
+        while (i < mine.length) {
+            if (mine[i] != theirs[i]) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    /**
+     * The declaring class's name hashed against this method's name.
+     *
+     * <p>The JDK's formula exactly, and worth keeping identical: it deliberately leaves the
+     * parameter types out, so all the overloads of one name collide. That is a choice about hash
+     * tables of methods, which are small and rarely hold two overloads at once.
+     */
+    public int hashCode() {
+        return this.clazz.getName().hashCode() ^ this.name.hashCode();
+    }
+
+    /**
+     * Suppresses the access check for this method.
+     *
+     * <p>A no-op here, because KajiJDK performs no access check on a reflective call in the first
+     * place -- so every method behaves as if the flag were already set. Declared rather than
+     * merely inherited because the JDK declares it too.
+     *
+     * @param flag whether to suppress the check
+     */
+    public void setAccessible(boolean flag) {
+        super.setAccessible(flag);
+    }
+
+    /**
+     * The return type in the generic model.
+     *
+     * <p>The erased type, for the reason spelled out in {@code Executable.getGenericParameterTypes}:
+     * that is what a method with no {@code Signature} attribute reports, and none of ours has one.
+     */
+    public Type getGenericReturnType() {
+        return this.returnType;
+    }
+
+    /** The parameter types in the generic model. */
+    public Type[] getGenericParameterTypes() {
+        return super.getGenericParameterTypes();
+    }
+
+    /** The declared exception types in the generic model. */
+    public Type[] getGenericExceptionTypes() {
+        return super.getGenericExceptionTypes();
+    }
+
+    /**
      * Invokes this method on {@code obj} with {@code args}.
      *
      * <p>Backed by the VM (a runtime follow-up).
@@ -217,5 +322,5 @@ public final class Method extends Executable {
      * @param args the arguments
      * @return the result, boxed if the return type is primitive
      */
-    public native Object invoke(Object obj, Object[] args);
+    public native Object invoke(Object obj, Object... args);
 }

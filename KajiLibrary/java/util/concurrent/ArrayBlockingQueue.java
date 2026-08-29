@@ -1,5 +1,9 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.Iterator;
 
@@ -275,6 +279,14 @@ public class ArrayBlockingQueue<E> implements BlockingQueue<E>, Serializable {
         }
         return new AbqItr<E>(snapshot);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.CONCURRENT);
+    }
 }
 
 // Snapshot iterator for ArrayBlockingQueue: it walks the array copied out under the
@@ -297,4 +309,5 @@ final class AbqItr<E> implements Iterator<E> {
         cursor++;
         return e;
     }
+
 }

@@ -1,6 +1,7 @@
 package java.util.random;
 
 import java.math.BigInteger;
+import java.util.stream.Stream;
 import jdk.internal.random.L128X1024MixRandom;
 import jdk.internal.random.L128X128MixRandom;
 import jdk.internal.random.L128X256MixRandom;
@@ -47,10 +48,6 @@ import jdk.internal.random.Xoshiro256PlusPlus;
  *
  * @implNote A KajiLibrary subset:
  *           <ul>
- *           <li>{@code all()} is omitted. It returns a {@code Stream}, and our
- *               {@code java.util.stream.Stream.of} compiles WITHOUT the implicit {@code public} that
- *               an interface member is supposed to get (finding #116), so it cannot be called from
- *               this package at all.</li>
  *           <li>The no-argument {@code create()} is omitted. It would need an entropy source to
  *               vary the seed between runs, and {@code System.currentTimeMillis} is not yet a
  *               native — a {@code create()} that silently returned the same stream on every run
@@ -115,6 +112,26 @@ public final class RandomGeneratorFactory {
      * @return the factory for that algorithm
      * @throws IllegalArgumentException if no algorithm of that name is registered
      */
+    /**
+     * Returns a stream of every algorithm this implementation provides.
+     *
+     * @return a stream of one factory per available algorithm
+     * @implNote The JDK discovers its providers through {@code ServiceLoader} and can therefore
+     *           report a different set per run. Ours is the fixed registry above, so the stream is
+     *           just that table, in declaration order. Returning it is honest either way: the
+     *           contract is "what is available", and here that is knowable up front.
+     */
+    public static Stream<RandomGeneratorFactory> all() {
+        String[] names = RandomGeneratorFactory.names();
+        RandomGeneratorFactory[] out = new RandomGeneratorFactory[names.length];
+        int i = 0;
+        while (i < names.length) {
+            out[i] = new RandomGeneratorFactory(i);
+            i = i + 1;
+        }
+        return Stream.of(out);
+    }
+
     public static RandomGeneratorFactory of(String name) {
         String[] all = RandomGeneratorFactory.names();
         int i = 0;

@@ -509,6 +509,13 @@ impl Parser {
             path.push('.');
             path.push_str(&self.expect_ident()?);
         }
+        // §7.5 — un `import` de tipo unico necesita un nombre **cualificado**: un tipo del paquete
+        // sin nombre no se puede importar, asi que `import IntStream;` no es Java. Se aceptaba en
+        // silencio y el tipo resolvia igual por otro camino, que es lo que lo hacia invisible.
+        // El `javac` real lo reporta como error de sintaxis: `'.' expected`.
+        if !path.contains('.') && !wildcard {
+            return Err(self.error("se esperaba `.`: un `import` necesita un nombre cualificado".to_string()));
+        }
         self.expect(TokenKind::Semi)?;
         Ok(Import { path, is_static, wildcard })
     }
@@ -1933,6 +1940,21 @@ impl Parser {
         Ok(lhs)
     }
 
+    // El literal entero que sigue a un menos unario, ya con el signo adentro. Devuelve `None` si
+    // lo que sigue no es un literal entero, y entonces el llamador arma el `Unary` de siempre.
+    fn negated_int_literal(&mut self) -> Option<Expr> {
+        use TokenKind as T;
+        let tok = self.peek().clone();
+        let pos = Pos { line: tok.line, col: tok.col };
+        let kind = match tok.kind {
+            T::IntLiteral => ExprKind::IntLit(parse_negated_int_literal(&tok.text)?),
+            T::LongLiteral => ExprKind::LongLit(parse_negated_int_literal(&tok.text)?),
+            _ => return None,
+        };
+        self.bump();
+        Some(Expr::new(pos, kind))
+    }
+
     fn unary(&mut self) -> Result<Expr> {
         use TokenKind as T;
         let pos = self.pos(); // la del operador prefijo, si lo hay
@@ -1947,6 +1969,16 @@ impl Parser {
         };
         if let Some(op) = prefix {
             self.bump();
+            // El menos unario delante de un literal entero **pliega el signo** (§3.10.1). No es
+            // una optimización: `2147483648` y `9223372036854775808L` son las magnitudes de los
+            // dos MIN_VALUE, que no tienen contraparte positiva, y la gramática los admite
+            // **únicamente** aquí. Plegarlos en este punto es lo que los hace parsear sin
+            // aceptarlos sueltos, que es lo que la especificación pide.
+            if op == UnOp::Neg {
+                if let Some(lit) = self.negated_int_literal() {
+                    return Ok(lit);
+                }
+            }
             let expr = self.unary()?;
             return Ok(Expr::new(pos, ExprKind::Unary { op, expr: Box::new(expr), prefix: true }));
         }
@@ -2065,6 +2097,25 @@ impl Parser {
                     };
                     e = Expr::new(pos, ExprKind::ClassLit(Type::Class(name)));
                 }
+                // `C[].class` (§15.8.2): el literal de clase de un tipo **array**. Un `[` seguido
+                // inmediatamente de `]` no puede ser un acceso a arreglo —el índice no es
+                // opcional—, así que la única lectura posible es un tipo array, y detrás de él
+                // sólo puede venir `.class`. El camino de los primitivos ya lo hacía (`int[]
+                // .class`); éste es el mismo para los tipos de referencia.
+                TokenKind::LBracket if self.kind_at(1) == TokenKind::RBracket => {
+                    let Some(name) = Self::type_name_of(&e) else {
+                        return Err(self.error("`[].class` necesita un nombre de tipo".to_string()));
+                    };
+                    let mut ty = Type::Class(name);
+                    while self.at(TokenKind::LBracket) && self.kind_at(1) == TokenKind::RBracket {
+                        self.bump();
+                        self.bump();
+                        ty = Type::Array(Box::new(ty));
+                    }
+                    self.expect(TokenKind::Dot)?;
+                    self.expect(TokenKind::Class)?;
+                    e = Expr::new(pos, ExprKind::ClassLit(ty));
+                }
                 // `Outer.this` (§15.8.4): el `this` **cualificado** de la clase envolvente. `this` es
                 // keyword, así que —como `.class`— se reconoce acá, reconstruyendo el tipo del nombre.
                 TokenKind::Dot if self.kind_at(1) == TokenKind::This => {
@@ -2166,7 +2217,9 @@ impl Parser {
             }
             T::StringLiteral => {
                 self.bump();
-                ExprKind::StringLit(decode_string(&tok.text).ok_or_else(|| self.error("literal string inválido"))?)
+                ExprKind::StringLit(
+                    decode_string(&tok.text).map_err(|m| self.error(m.to_string()))?,
+                )
             }
             T::True => {
                 self.bump();
@@ -2223,6 +2276,29 @@ impl Parser {
                 self.expect(T::RParen)?;
                 let cases = self.switch_body()?;
                 ExprKind::Switch { selector: Box::new(selector), cases }
+            }
+            // `int.class` / `void.class` / `int[].class` (§15.8.2). El nombre del tipo es una
+            // **keyword**, así que no llega por el camino de `Identifier` y hay que reconocerlo acá.
+            // Es la **única** forma en que un primitivo aparece donde va una expresión, así que lo
+            // que sigue solo puede ser `[]`* `.class`; cualquier otra cosa es un error de sintaxis.
+            T::Int
+            | T::Long
+            | T::Short
+            | T::Byte
+            | T::Char
+            | T::Boolean
+            | T::Float
+            | T::Double
+            | T::Void => {
+                let mut ty = self.base_type()?;
+                while self.at(T::LBracket) && self.kind_at(1) == T::RBracket {
+                    self.bump();
+                    self.bump();
+                    ty = Type::Array(Box::new(ty));
+                }
+                self.expect(T::Dot)?;
+                self.expect(T::Class)?;
+                ExprKind::ClassLit(ty)
             }
             other => return Err(self.error(format!("se esperaba una expresión, se encontró {other:?}"))),
         };
@@ -2442,6 +2518,19 @@ fn parse_int_literal(text: &str) -> Option<i64> {
     }
 }
 
+// El valor de un literal entero **negado**. Todo lo que `parse_int_literal` acepta se niega
+// envolviendo; lo único que aquella rechaza y acá es legal es el decimal 2^63, cuya negación es
+// exactamente `Long.MIN_VALUE` (§3.10.1). Se parsea sin signo para poder verlo.
+fn parse_negated_int_literal(text: &str) -> Option<i64> {
+    if let Some(v) = parse_int_literal(text) {
+        return Some(v.wrapping_neg());
+    }
+    let clean: String = text.chars().filter(|&c| c != '_').collect();
+    let t = clean.trim_end_matches(['l', 'L']);
+    let v = t.parse::<u64>().ok()?;
+    if v == 1u64 << 63 { Some(i64::MIN) } else { None }
+}
+
 fn parse_float_literal(text: &str) -> Option<f32> {
     let clean: String = text.chars().filter(|&c| c != '_').collect();
     clean.trim_end_matches(['f', 'F']).parse().ok()
@@ -2452,30 +2541,44 @@ fn parse_double_literal(text: &str) -> Option<f64> {
     clean.trim_end_matches(['d', 'D']).parse().ok()
 }
 
-fn decode_char(text: &str) -> Option<char> {
+/// Decodifica un literal `char` a la **unidad de codigo UTF-16** que vale (JLS 3.10.4).
+///
+/// No devuelve un `char` de Rust a proposito: \u d800 es Java valido -es lo que vale
+/// `Character.MIN_HIGH_SURROGATE`- y no hay `char` de Rust que lo sostenga, porque un
+/// sustituto **suelto** no es un *scalar value* de Unicode. Antes se decodificaba a `char` y
+/// el `from_u32` devolvia `None`, o sea *literal char invalido* para un literal legal.
+fn decode_char(text: &str) -> Option<u16> {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() < 2 {
         return None;
     }
     let inner = &chars[1..chars.len() - 1]; // sin las comillas
-    let decoded = unescape(inner)?;
-    let mut it = decoded.chars();
-    let c = it.next()?;
-    if it.next().is_some() {
-        return None; // más de un carácter
+    match unescape_utf16(inner)?[..] {
+        [u] => Some(u),
+        _ => None, // vacio, o mas de una unidad de codigo
     }
-    Some(c)
 }
 
-fn decode_string(text: &str) -> Option<String> {
+/// Decodifica un literal `String`. Va por **UTF-16** y recompone despues, porque un caracter
+/// suplementario se escribe como un **par** de escapes (\u d83d \u de00) y decodificar cada
+/// escape por separado a un `char` de Rust falla en el primero: un sustituto suelto no es un
+/// *scalar value*. Juntos si son un caracter, y `from_utf16` es quien los junta.
+///
+/// Queda un caso que no se puede representar y se **rechaza fuerte**: un sustituto **suelto**
+/// dentro de un `String`. Es Java legal, pero un `String` de Rust no lo sostiene, y sostenerlo
+/// pide llevar todos los literales como `Vec<u16>`. Un error claro es mejor que una
+/// sustitucion silenciosa por U+FFFD.
+fn decode_string(text: &str) -> std::result::Result<String, &'static str> {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() >= 6 && chars[0] == '"' && chars[1] == '"' && chars[2] == '"' {
-        return decode_text_block(&chars[3..chars.len() - 3]);
+        return decode_text_block(&chars[3..chars.len() - 3]).ok_or("literal string invalido");
     }
     if chars.len() < 2 {
-        return None;
+        return Err("literal string invalido");
     }
-    unescape(&chars[1..chars.len() - 1])
+    let units = unescape_utf16(&chars[1..chars.len() - 1]).ok_or("literal string invalido")?;
+    String::from_utf16(&units)
+        .map_err(|_| "un sustituto suelto en un literal String todavia no se soporta")
 }
 
 /// ¿Es *white space* horizontal a efectos del destripado de un text block (§3.10.6)? Los
@@ -2559,6 +2662,48 @@ fn decode_text_block(inner: &[char]) -> Option<String> {
 }
 
 /// Decodifica las secuencias de escape de Java en `chars` a un `String`.
+/// Como [`unescape`], pero a **unidades de codigo UTF-16**, que es lo que Java manipula: es el
+/// unico nivel donde \u d800 se puede representar. Un escape \u es una unidad de codigo tal
+/// cual (JLS 3.3), no un *code point*: por eso se empuja sin validar que sea un scalar value.
+fn unescape_utf16(chars: &[char]) -> Option<Vec<u16>> {
+    let mut out: Vec<u16> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' {
+            i += 1;
+            let e = *chars.get(i)?;
+            match e {
+                'n' => out.push(u16::from(b'\n')),
+                't' => out.push(u16::from(b'\t')),
+                'r' => out.push(u16::from(b'\r')),
+                'b' => out.push(0x08),
+                'f' => out.push(0x0c),
+                's' => out.push(u16::from(b' ')),
+                '0' => out.push(0),
+                other if matches!(other, '\\' | '\'' | '"') => out.push(other as u16),
+                'u' => {
+                    // JLS 3.3: una `u` de mas es legal (`\uu0041`), y el valor son cuatro higits.
+                    while chars.get(i + 1) == Some(&'u') {
+                        i += 1;
+                    }
+                    let hex: String = chars.get(i + 1..i + 5)?.iter().collect();
+                    out.push(u16::from_str_radix(&hex, 16).ok()?);
+                    i += 4;
+                }
+                other => {
+                    let mut buf = [0u16; 2];
+                    out.extend_from_slice(other.encode_utf16(&mut buf));
+                }
+            }
+        } else {
+            let mut buf = [0u16; 2];
+            out.extend_from_slice(chars[i].encode_utf16(&mut buf));
+        }
+        i += 1;
+    }
+    Some(out)
+}
+
 fn unescape(chars: &[char]) -> Option<String> {
     unescape_impl(chars, false)
 }
@@ -2609,6 +2754,54 @@ mod tests {
         let (cu, errors) = parse(tokenize(src).unwrap());
         assert!(errors.is_empty(), "errores de parseo inesperados: {errors:?}");
         cu
+    }
+
+    /// #228 - un `char` de Java es una unidad de codigo UTF-16, no un *scalar value* de
+    /// Unicode: un sustituto **suelto** es un literal legal, y es lo que vale
+    /// `Character.MIN_HIGH_SURROGATE`. Antes se decodificaba a un `char` de Rust, que no puede
+    /// sostenerlo, asi que un literal legal se rechazaba como invalido.
+    #[test]
+    fn a_lone_surrogate_is_a_valid_char_literal() {
+        let stmts = parse_body("char c = '\\ud800'; char d = '\\u0041';");
+        let mut vistos: Vec<u16> = Vec::new();
+        for s in &stmts {
+            if let StmtKind::LocalVar { init: Some(Expr { kind: ExprKind::CharLit(c), .. }), .. } =
+                &s.kind
+            {
+                vistos.push(*c);
+            }
+        }
+        assert_eq!(vistos, vec![0xd800u16, 0x0041u16]);
+    }
+
+    /// Y el **par** sustituto en un `String` se recompone en el caracter suplementario que es:
+    /// decodificar cada escape por separado fallaba en el primero.
+    #[test]
+    fn a_surrogate_pair_in_a_string_becomes_one_character() {
+        let stmts = parse_body("String s = \"\\ud83d\\ude00\";");
+        let StmtKind::LocalVar { init: Some(Expr { kind: ExprKind::StringLit(s), .. }), .. } =
+            &stmts[0].kind
+        else {
+            panic!("una local con un literal String")
+        };
+        assert_eq!(s.chars().count(), 1, "un solo caracter: {s:?}");
+        assert_eq!(s.chars().next().map(u32::from), Some(0x1f600));
+    }
+
+    /// #224 - `import IntStream;` no es Java (7.5: del paquete sin nombre no se importa). Se
+    /// aceptaba en silencio y el tipo resolvia igual por otro camino.
+    #[test]
+    fn an_import_without_a_package_is_rejected() {
+        let (_, errors) = parse(tokenize("import IntStream; class C {}").unwrap());
+        assert!(!errors.is_empty(), "un import sin cualificar es error de sintaxis");
+    }
+
+    /// La contraprueba: un `import` cualificado y un on-demand de un paquete de un solo
+    /// nombre siguen andando.
+    #[test]
+    fn a_qualified_import_and_a_single_name_wildcard_still_parse() {
+        let cu = parse_src("import java.util.List; import p.*; class C {}");
+        assert_eq!(cu.imports.len(), 2);
     }
 
     /// Parsea el cuerpo de un método envuelto en una clase, devolviendo sus sentencias.

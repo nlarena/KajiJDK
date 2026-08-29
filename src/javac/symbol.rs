@@ -166,6 +166,17 @@ pub struct SymbolTable {
     /// Tipos **externos** modelados (el *class finder*): nombre simple → símbolo sintético.
     /// No cuelgan de ningún paquete, así que no aparecen en el volcado.
     externals: HashMap<String, SymbolId>,
+    /// Los mismos externos, pero por **nombre completo** (`jakarta.persistence.criteria.TemporalField`).
+    ///
+    /// El mapa de arriba está indexado por nombre **simple**, así que dos clases homónimas de
+    /// paquetes distintos se pisan: la primera en cargarse se queda con la clave y la segunda **no se
+    /// puede cargar ni nombrar**. Pasó con `TemporalField`, que existe en `java.time.temporal` y en
+    /// `jakarta.persistence.criteria`: el chequeo de abstractos reclamaba el `getFrom` del que no era.
+    ///
+    /// Este mapa es el que permite que las dos coexistan. El simple sigue existiendo porque una
+    /// referencia por nombre simple es lo normal en el fuente; cuando hay ambigüedad la decide quien
+    /// tiene el contexto (paquete e imports), que es `try_load`, no la tabla.
+    externals_fqn: HashMap<String, SymbolId>,
     /// Posición de fuente de cada símbolo declarado (para errores de fases que trabajan sobre
     /// la tabla, como la detección de ciclos).
     positions: HashMap<SymbolId, (u32, u32)>,
@@ -216,6 +227,7 @@ impl SymbolTable {
             classes: HashMap::new(),
             packages: HashMap::new(),
             externals: HashMap::new(),
+            externals_fqn: HashMap::new(),
             positions: HashMap::new(),
             static_single: HashMap::new(),
             static_on_demand: Vec::new(),
@@ -359,18 +371,51 @@ impl SymbolTable {
         });
         self.set_scope_owner(members, id);
         self.externals.insert(simple.to_string(), id);
+        self.externals_fqn.insert(format!("java.lang.{simple}"), id);
         id
     }
 
     /// El tipo externo modelado con ese nombre simple, si está registrado.
+    ///
+    /// Ojo: con dos homónimos de paquetes distintos, acá está el que se cargó **primero**. Para
+    /// desambiguar hay que preguntar por el nombre completo con [`Self::external_fqn`].
     pub fn external(&self, simple: &str) -> Option<SymbolId> {
         self.externals.get(simple).copied()
     }
 
-    /// Registra un símbolo externo ya construido bajo su nombre simple (para el *class finder*
-    /// real, que arma el símbolo con sus miembros leídos del `.class`).
-    pub fn register_external(&mut self, simple: &str, id: SymbolId) {
-        self.externals.insert(simple.to_string(), id);
+    /// El tipo externo con ese **nombre completo** (`java.util.stream.Stream`). Es la consulta
+    /// exacta: no la afecta que otro homónimo se haya cargado antes.
+    pub fn external_fqn(&self, fqn: &str) -> Option<SymbolId> {
+        self.externals_fqn.get(fqn).copied()
+    }
+
+    /// Registra un símbolo externo ya construido (para el *class finder* real, que arma el símbolo
+    /// con sus miembros leídos del `.class`). `fqn` es el nombre **completo** con puntos.
+    ///
+    /// Se indexa por las dos claves: por nombre completo **siempre**, y por nombre simple **solo si
+    /// está libre**. Lo segundo es lo que hace que, entre dos homónimos, gane el que se cargó
+    /// primero — y por eso `load_externals` carga en dos fases: primero lo que la unidad **nombra**
+    /// (que es lo que debe ganar la clave simple) y después lo que se arrastra por las firmas.
+    pub fn register_external(&mut self, fqn: &str, id: SymbolId) {
+        let simple = fqn.rsplit('.').next().unwrap_or(fqn);
+        self.externals.entry(simple.to_string()).or_insert(id);
+        self.externals_fqn.insert(fqn.to_string(), id);
+    }
+
+    /// Registra un **alias** por nombre simple para un externo ya cargado.
+    ///
+    /// Lo usa un tipo **anidado** que el fuente nombra a secas porque lo importó
+    /// (`import p.Outer.Kind;` + `Kind`, §7.5.1): su clave natural es `Outer$Kind`, y sin el alias
+    /// se cargaba bien y aun así no se encontraba — la firma salía `Object` y un `implements`
+    /// escrito así desaparecía del class file (#239/#245).
+    ///
+    /// El alias se registra **solo** para el nombre que la unidad escribió, no para todo anidado que
+    /// se cargue de rebote. Registrar cada nombre interior de oficio parece más simple y es peor:
+    /// `java.lang.Thread$State` reclamaría la clave `State` y taparía cualquier `State` propio del
+    /// fuente. El espacio de externos es plano, así que solo entra lo que alguien pidió por ese
+    /// nombre.
+    pub fn alias_external(&mut self, simple: &str, id: SymbolId) {
+        self.externals.entry(simple.to_string()).or_insert(id);
     }
 
     /// El `Package` de nombre `name` (o el paquete sin nombre si `None`), creándolo la

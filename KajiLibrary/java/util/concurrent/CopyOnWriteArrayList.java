@@ -1,5 +1,9 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.Iterator;
 import java.util.List;
@@ -185,6 +189,15 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
     public Iterator<E> iterator() {
         return new CowItr<E>(elements);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED |
+                        Spliterator.IMMUTABLE);
+    }
 }
 
 // The snapshot iterator: it holds the array the list had at creation, so later writes
@@ -207,4 +220,5 @@ final class CowItr<E> implements Iterator<E> {
         cursor++;
         return e;
     }
+
 }

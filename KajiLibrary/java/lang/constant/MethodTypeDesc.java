@@ -198,4 +198,15 @@ final class ConstantMethodTypeDesc implements MethodTypeDesc {
     public String toString() {
         return "MethodTypeDesc[" + displayDescriptor() + "]";
     }
+
+    /**
+     * Unsupported: resolving a descriptor needs `java.lang.invoke`, which this library does not
+     * have. Everything else about this type works without it.
+     *
+     * @param lookup the lookup that would perform the resolution
+     * @throws UnsupportedOperationException always
+     */
+    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
+    }
 }

@@ -217,6 +217,17 @@ fn arg_as_type(arg: &RTypeArg) -> RType {
 /// Los supertipos **directos** de un tipo, ya sustituidos: mirar `ArrayList<String>` da
 /// `AbstractList<String>` y `List<String>`, no `AbstractList<E>`.
 pub fn direct_supertypes(table: &SymbolTable, ty: &RType) -> Vec<RType> {
+    // Un array **no** tiene símbolo, pero sí supertipos (§4.10.3): `Object`, `Cloneable` y
+    // `java.io.Serializable`, más `S[]` por cada supertipo directo `S` del elemento. Devolver la
+    // lista vacía dejaba a los arrays sin `Object` encima: sin sus miembros (`getClass`,
+    // `hashCode`) y sin poder pasarse a un parámetro `Object` (#261).
+    if let RType::Array(elem) = ty {
+        let mut out = array_roots(table);
+        if !matches!(**elem, RType::Prim(_)) {
+            out.extend(direct_supertypes(table, elem).into_iter().map(|s| RType::Array(Box::new(s))));
+        }
+        return out;
+    }
     let Some(base) = erased_id(ty) else { return Vec::new() };
     let subst = subst_of(table, ty);
     let mut out = Vec::new();
@@ -227,6 +238,18 @@ pub fn direct_supertypes(table: &SymbolTable, ty: &RType) -> Vec<RType> {
         out.push(substitute(i, &subst));
     }
     out
+}
+
+/// La clase en la que **buscar los miembros** de un receptor. Para casi todo es su erasure; para
+/// un **array** es `java.lang.Object` (§10.7: los miembros de un array son los de `Object`, más el
+/// campo `length` y un `clone()` covariante, que van por caminos propios). Sin esto, `unArray.
+/// getClass()` no encontraba ningún candidato y —al no haber siquiera un símbolo de clase— la
+/// llamada quedaba sin binding y sin diagnóstico (#261).
+pub fn member_class(table: &SymbolTable, ty: &RType) -> Option<SymbolId> {
+    match ty {
+        RType::Array(_) => object_id(table),
+        other => erased_id(other),
+    }
 }
 
 /// El `SymbolId` de un tipo referencia, sea crudo o parametrizado (su erasure).
@@ -252,21 +275,36 @@ pub fn is_subtype(table: &SymbolTable, s: &RType, t: &RType) -> bool {
         (RType::Prim(a), RType::Prim(b)) => widens_to(*a, *b),
         // Arrays: covariantes en el tipo elemento (§4.10.3).
         (RType::Array(a), RType::Array(b)) => is_subtype(table, a, b),
+        // Algo es subtipo de una captura **solo** por su cota **inferior** (`? super B`):
+        // `s <: CAP` sii `s <: lower(CAP)` (transitivo por `lower <: CAP`). Sin cota inferior, nada
+        // salvo la propia captura (que ya cubrió el `s == t` de arriba).
+        //
+        // Va **antes** que el arm de variable de tipo, y esa precedencia es la corrección: con el
+        // orden anterior, `T <: CAP` —donde `CAP` es la captura de `? super T`, o sea con `lower =
+        // T`— entraba por el arm de `TypeVar` y preguntaba `Object <: CAP`, que es falso. Resultado:
+        // pasar un `List<? super T>` a un parámetro **del mismo tipo declarado** se rechazaba
+        // (#253). El caso no es raro: es lo que hace cualquier reenvío de un parámetro con comodín.
+        (_, RType::Capture { lower, .. }) => {
+            lower.as_ref().is_some_and(|lo| is_subtype(table, s, lo))
+        }
         // Una variable de tipo es subtipo de sus cotas.
         (RType::TypeVar(v), _) => bounds_of(table, *v).iter().any(|b| is_subtype(table, b, t)),
         // Una variable de **captura** (§5.1.10) es subtipo de su cota **superior** (y de sus
         // supertipos): `CAP <: t` sii `upper(CAP) <: t`.
         (RType::Capture { upper, .. }, _) => is_subtype(table, upper, t),
-        // Y algo es subtipo de una captura **solo** por su cota **inferior** (`? super B`):
-        // `s <: CAP` sii `s <: lower(CAP)` (transitivo por `lower <: CAP`). Sin cota inferior, nada
-        // salvo la propia captura (que ya cubrió el `s == t` de arriba).
-        (_, RType::Capture { lower, .. }) => {
-            lower.as_ref().is_some_and(|lo| is_subtype(table, s, lo))
-        }
         // Una intersección es subtipo de `t` si **algún** miembro lo es (`A & B <: A`).
         (RType::Intersection(ms), _) => ms.iter().any(|m| is_subtype(table, m, t)),
         // Y `s` es subtipo de una intersección si lo es de **todos** sus miembros.
         (_, RType::Intersection(ms)) => ms.iter().all(|m| is_subtype(table, s, m)),
+        // Un array contra un tipo **no** array: solo sus tres raíces (§4.10.3). Sin este arm caía
+        // al catch-all, donde `erased_id` de un array es `None` y la respuesta era un `false` liso:
+        // `System.arraycopy(char[], int, Object, int, int)` **no resolvía**, y como `System` es un
+        // tipo externo la indulgencia de la pasada 2 se tragaba el error y el codegen no emitía la
+        // llamada (#261). Once fuentes de la biblioteca compilaban así, mudas y rotas.
+        (RType::Array(_), _) => {
+            let Some(tb) = erased_id(t) else { return false };
+            array_roots(table).iter().any(|r| erased_id(r) == Some(tb))
+        }
         _ => {
             let (Some(sb), Some(tb)) = (erased_id(s), erased_id(t)) else { return false };
             if object_id(table) == Some(tb) {
@@ -334,7 +372,18 @@ fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg) -> bool {
 
 /// ¿`t` es una variable de tipo declarada por un **método** (una variable de inferencia), y no por
 /// una clase? Solo aparecen sin sustituir durante la aplicabilidad de un método genérico.
+///
+/// Atraviesa los **arrays**: `A[]` con `A` de un método está tan pendiente de inferir como `A`, y
+/// sin esto un `<A> A[] toArray(IntFunction<A[]> g)` no aceptaba un `IntFunction<String[]>` — el
+/// argumento de tipo era `Array(TypeVar)` y no un `TypeVar` pelado, así que caía en la invariancia
+/// y se comparaba `String[]` contra `A[]` (#221).
+///
+/// **No** atraviesa los tipos parametrizados a propósito: ahí la indulgencia empezaría a hacer
+/// aplicables sobrecargas que no lo son, y el precio de equivocarse es elegir la incorrecta.
 fn is_inference_var(table: &SymbolTable, t: &RType) -> bool {
+    if let RType::Array(elem) = t {
+        return is_inference_var(table, elem);
+    }
     let RType::TypeVar(v) = t else { return false };
     table
         .symbol(*v)
@@ -354,7 +403,28 @@ pub fn bounds_of(table: &SymbolTable, tv: SymbolId) -> Vec<RType> {
 }
 
 fn object_id(table: &SymbolTable) -> Option<SymbolId> {
-    table.external("Object")
+    well_known(table, "java.lang.Object")
+}
+
+/// Un tipo de la plataforma por su nombre **cualificado**, con el nombre simple como red: el índice
+/// por FQN es el fiable (dos paquetes distintos pueden traer el mismo nombre simple), pero no todo
+/// externo llega por ahí.
+fn well_known(table: &SymbolTable, fqn: &str) -> Option<SymbolId> {
+    table
+        .external_fqn(fqn)
+        .or_else(|| table.external(fqn.rsplit('.').next().unwrap_or(fqn)))
+}
+
+/// Los tres supertipos que tiene **todo** array, cualquiera sea su elemento (§4.10.3).
+fn array_roots(table: &SymbolTable) -> Vec<RType> {
+    [
+        "java.lang.Object",
+        "java.lang.Cloneable",
+        "java.io.Serializable",
+    ]
+    .iter()
+    .filter_map(|n| well_known(table, n).map(RType::Class))
+    .collect()
 }
 
 /// El *widening* primitivo (§5.1.2), que es el subtipado entre primitivos (§4.10.1).

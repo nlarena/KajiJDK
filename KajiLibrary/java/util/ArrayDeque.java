@@ -295,6 +295,15 @@ public class ArrayDeque<E> implements Deque<E> {
     public Iterator<E> descendingIterator() {
         return new ArrayDequeItr<E>(this, false);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED |
+                        Spliterator.NONNULL);
+    }
 }
 
 // Walks the deque by logical index, head-to-tail or tail-to-head. Top-level package-private
@@ -337,4 +346,5 @@ final class ArrayDequeItr<E> implements Iterator<E> {
         }
         return e;
     }
+
 }

@@ -52,6 +52,16 @@ pub struct Frame {
     /// initialization — rather than one from an `invoke`. On return, a synthetic
     /// frame must *not* advance the caller's pc (the triggering instruction resumes).
     synthetic: bool,
+    /// Set only by a `java.lang.String` constructor, which cannot return its result the way
+    /// every other constructor does — by writing fields of `this`.
+    ///
+    /// A String is sized when it is allocated, because its characters sit inline, and the `new`
+    /// opcode sizes an instance from its declared fields (`String` declares none). So the object
+    /// a String constructor receives has room for nothing and cannot be grown. The constructor
+    /// therefore builds a *separate* String and publishes it here, as
+    /// `(the object it was handed, the one it built)`; `return_void` then rewrites the caller's
+    /// references from the first to the second. See `Exec::string_publish`.
+    published: Option<(usize, usize)>,
     /// If this frame runs a `synchronized` method, the heap offset of the object whose
     /// monitor it holds — `this` for an instance method, the `Class` mirror for a static
     /// one. `None` for an ordinary method. The VM releases this monitor when the frame is
@@ -65,7 +75,15 @@ impl Frame {
     pub fn new(method: MethodId, max_locals: usize, args: Vec<Value>) -> Self {
         let mut locals = args;
         locals.resize(max_locals, Value::Int(0));
-        Frame { method, pc: 0, stack: Vec::new(), locals, synthetic: false, monitor: None }
+        Frame {
+            method,
+            pc: 0,
+            stack: Vec::new(),
+            locals,
+            synthetic: false,
+            published: None,
+            monitor: None,
+        }
     }
 
     /// Builds a call frame, placing `args` into the leading locals with **category-2
@@ -79,7 +97,15 @@ impl Frame {
         slot_widths: &[usize],
     ) -> Self {
         let mut frame =
-            Frame { method, pc: 0, stack: Vec::new(), locals: Vec::new(), synthetic: false, monitor: None };
+            Frame {
+                method,
+                pc: 0,
+                stack: Vec::new(),
+                locals: Vec::new(),
+                synthetic: false,
+                published: None,
+                monitor: None,
+            };
         frame.reset_for_call(method, max_locals, args, slot_widths);
         frame
     }
@@ -104,6 +130,7 @@ impl Frame {
         self.method = method;
         self.pc = 0;
         self.synthetic = false;
+        self.published = None;
         self.monitor = None;
         self.stack.clear();
         self.locals.clear();
@@ -142,13 +169,17 @@ impl Frame {
         self.locals.clear();
         self.pc = 0;
         self.synthetic = false;
+        self.published = None;
         self.monitor = None;
     }
 
     /// Whether this frame holds no values at all — the invariant every frame in the pool must
     /// satisfy (see [`Frame::scrub`]). Used by the pool's assertions and its tests.
     pub fn is_scrubbed(&self) -> bool {
-        self.stack.is_empty() && self.locals.is_empty() && self.monitor.is_none()
+        self.stack.is_empty()
+            && self.locals.is_empty()
+            && self.monitor.is_none()
+            && self.published.is_none()
     }
 
     /// A frame for a VM-run `<clinit>` (no arguments). Marked synthetic so its
@@ -178,6 +209,18 @@ impl Frame {
 
     /// The object whose monitor this frame holds, if it runs a `synchronized` method —
     /// the monitor the VM must release when the frame is popped.
+    /// Records what a `java.lang.String` constructor built, against the object it was handed.
+    /// See the `published` field for why a String constructor cannot simply fill `this`.
+    pub fn set_published(&mut self, handed: usize, built: usize) {
+        self.published = Some((handed, built));
+    }
+
+    /// Takes what this frame published, if anything. Taken rather than read: the value is
+    /// consumed exactly once, by the `return` that ends the constructor.
+    pub fn take_published(&mut self) -> Option<(usize, usize)> {
+        self.published.take()
+    }
+
     pub fn monitor(&self) -> Option<usize> {
         self.monitor
     }

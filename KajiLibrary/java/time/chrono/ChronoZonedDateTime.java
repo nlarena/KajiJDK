@@ -24,7 +24,7 @@ import java.time.temporal.TemporalUnit;
 // (the JDK's `<D extends ChronoLocalDate>` erases to what the descriptors below already say), not
 // Comparable, and without `query`/`format`/`range`/`timeLineOrder`/`from`. Covariant redeclarations
 // of with/plus/minus are omitted — the Temporal ones carry the same contract.
-public interface ChronoZonedDateTime extends Temporal {
+public interface ChronoZonedDateTime extends Temporal, Comparable<ChronoZonedDateTime> {
 
     ChronoLocalDateTime toLocalDateTime();
 
@@ -44,6 +44,35 @@ public interface ChronoZonedDateTime extends Temporal {
 
     // Each intermediate is bound to a local rather than chained: a chained call through an
     // interface-typed intermediate is silently dropped (finding #108).
+    /**
+     * The natural order: by instant, then by local date-time, then by zone id.
+     *
+     * <p>Deliberately NOT the same as {@code isBefore}/{@code isAfter}/{@code isEqual}, which
+     * compare the instant and nothing else -- and that difference is the whole point. Two zoned
+     * date-times at the same instant in different zones are not equal, so an ordering that stopped
+     * at the instant would return 0 for them and a {@code TreeSet} would keep only one. The JDK
+     * breaks the tie for exactly that reason, and so does this.
+     *
+     * <p>A {@code default} because it is one in the JDK, so adding {@link Comparable} (#276)
+     * breaks no implementor.
+     */
+    @Override
+    default int compareTo(ChronoZonedDateTime other) {
+        int byInstant = InstantOrder.compare(this, other);
+        if (byInstant != 0) {
+            return byInstant;
+        }
+        ChronoLocalDateTime mine = this.toLocalDateTime();
+        ChronoLocalDateTime theirs = other.toLocalDateTime();
+        int byLocal = mine.compareTo(theirs);
+        if (byLocal != 0) {
+            return byLocal;
+        }
+        ZoneId zone = this.getZone();
+        ZoneId otherZone = other.getZone();
+        return zone.getId().compareTo(otherZone.getId());
+    }
+
     default ChronoLocalDate toLocalDate() {
         ChronoLocalDateTime dateTime = this.toLocalDateTime();
         return dateTime.toLocalDate();

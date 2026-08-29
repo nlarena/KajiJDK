@@ -1,0 +1,17 @@
+    javac::attribute::tests::a_parameterized_call_still_accepts_a_subtype_argument
+    javac::attribute::tests::a_ternary_of_two_wrappers_is_usable_as_either_shared_supertype
+    javac::attribute::tests::an_inherited_external_method_still_resolves
+    javac::attribute::tests::boxing_reaches_an_intermediate_supertype
+    javac::attribute::tests::substitutes_the_receiver_type_arguments_in_a_jdk_call
+    javac::check::tests::a_same_package_classpath_type_resolves_by_simple_name
+    javac::check::tests::not_implementing_an_external_interfaces_methods_is_reported
+    javac::codegen::tests::a_jdk_annotation_gets_a_fully_qualified_descriptor
+    javac::codegen::tests::the_filer_hands_generated_source_back_to_rust
+    javac::desugar::tests::desugared_assert_guard_still_type_checks
+    javac::desugar::tests::desugared_assert_still_type_checks
+    javac::desugar::tests::desugared_try_with_resources_still_type_checks
+    javac::enter::tests::a_jdk_generic_method_keeps_its_type_variable
+    javac::enter::tests::loads_wrappers_with_their_real_hierarchy
+    javac::enter::tests::reads_the_generic_signature_of_a_jdk_class
+    javac::types::tests::lub_of_types_sharing_several_supertypes_is_an_intersection
+    jvm::interpreter::gc::tests::clinit_failure_wraps_in_exception_in_initializer_error

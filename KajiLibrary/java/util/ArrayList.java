@@ -116,6 +116,14 @@ public class ArrayList<E> implements List<E> {
             this.elementData = grown;
         }
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED);
+    }
 }
 
 // ArrayList's iterator, as a same-file top-level class holding the list explicitly. It does NOT
@@ -139,4 +147,5 @@ final class ArrayListItr<E> implements Iterator<E> {
         this.cursor = this.cursor + 1;
         return element;
     }
+
 }

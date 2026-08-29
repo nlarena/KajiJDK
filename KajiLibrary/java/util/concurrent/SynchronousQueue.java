@@ -1,5 +1,9 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractQueue;
 import java.util.Iterator;
@@ -249,6 +253,13 @@ public class SynchronousQueue<E> extends AbstractQueue<E> implements BlockingQue
     public Iterator<E> iterator() {
         return new EmptyItr<E>();
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this, 0);
+    }
 }
 
 // The iterator over nothing. Top-level and package-private rather than nested, since a
@@ -262,4 +273,5 @@ final class EmptyItr<E> implements Iterator<E> {
     public E next() {
         throw new NoSuchElementException();
     }
+
 }

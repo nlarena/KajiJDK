@@ -1306,6 +1306,17 @@ final class FrozenMap<K, V> implements Map<K, V> {
         return this.backing.get(key);
     }
 
+    // Lectura: delega (finding #205). El Set que devuelve el backing ya es una copia, asi que
+    // mutarlo no toca este mapa — que es justo lo que un mapa congelado quiere.
+    public Set<K> keySet() {
+        return this.backing.keySet();
+    }
+
+    // Mutador: tira, como todos los demas de esta clase y como los `Map.of()` del JDK.
+    public void putAll(Map<? extends K, ? extends V> m) {
+        throw new UnsupportedOperationException();
+    }
+
     public V put(K key, V value) {
         throw new UnsupportedOperationException();
     }

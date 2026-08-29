@@ -8,7 +8,9 @@ package java.lang.reflect;
  * caller can recover from. Contrast {@link MalformedParameterizedTypeException}, which is thrown
  * when the signature parses but means something impossible.
  */
-public class GenericSignatureFormatError extends Error {
+// Bajo ClassFormatError: una firma generica mal formada es un archivo de clase mal formado, y
+// quien atrapa lo segundo espera atrapar lo primero.
+public class GenericSignatureFormatError extends ClassFormatError {
 
     /**
      * Creates an error with no detail message.

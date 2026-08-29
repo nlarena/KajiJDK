@@ -48,8 +48,12 @@ pub struct ExtField {
     pub ty: Type,
     /// El tipo **genérico** del atributo `Signature`, si lo tiene.
     pub generic_ty: Option<Type>,
-    /// `ACC_STATIC` — distingue `getstatic`/`getfield` en el emisor (`System.out` es un campo
-    /// **estático**). Sin él, todo campo externo se trataba como de instancia.
+    /// `ACC_STATIC` — **finding #110**. Sin esto el compilador no sabe que un campo del classpath es
+    /// estático: `codegen::field_info` elige el opcode por los modificadores del símbolo, y un
+    /// `modifiers` vacío significa "de instancia" por default silencioso. Consecuencia:
+    /// `Integer.MAX_VALUE` salía `getfield` —opcode equivocado **y** con un receptor inventado— y la
+    /// VM moría con `field_offset: field not found`. Los flags ya se leían del `.class`; para los
+    /// campos simplemente se descartaban.
     pub is_static: bool,
 }
 
@@ -69,6 +73,12 @@ pub struct ExtMethod {
     pub is_private: bool,
     /// La firma **genérica** del atributo `Signature`, si la tiene.
     pub signature: Option<MethodSig>,
+    /// Las excepciones **comprobadas** que declara, del atributo `Exceptions` (§4.7.5), en forma
+    /// *dotted*. Se **escribía** al emitir y no se **leía** al cargar, así que un método del
+    /// classpath parecía no declarar ninguna: implementar un `Callable.call() throws Exception`
+    /// se rechazaba con "más ancho que lo que permite `Callable`" (§8.4.8.3) — y el atributo estaba
+    /// ahí, idéntico al que imprime el `javap` del JDK (#104/#256).
+    pub throws: Vec<String>,
 }
 
 /// Una `ClassSignature` parseada (§4.7.9.1): `<E:Ljava/lang/Object;>Ljava/lang/Object;Ljava/util/Collection<TE;>;`
@@ -109,10 +119,12 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
 
     let mut fields = Vec::new();
     for _ in 0..r.u2()? {
+        // **Finding #110**: este `access` se leía y se **tiraba** (`r.u2()?; // access`). Es el
+        // origen del bug: sin `ACC_STATIC` no hay forma de que el codegen elija `getstatic`.
         let access = r.u2()?;
         let fname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _) = read_attributes(&mut r, &pool)?;
+        let (sig, _, _) = read_attributes(&mut r, &pool)?;
         fields.push(ExtField {
             name: fname,
             ty: parse_field_desc(&desc)?,
@@ -126,7 +138,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let mname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _) = read_attributes(&mut r, &pool)?;
+        let (sig, _, throws) = read_attributes(&mut r, &pool)?;
         let (params, ret) = parse_method_desc(&desc)?;
         methods.push(ExtMethod {
             name: mname,
@@ -137,10 +149,11 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
             is_static: access & ACC_STATIC != 0,
             is_private: access & ACC_PRIVATE != 0,
             signature: sig.as_deref().and_then(parse_method_signature),
+            throws,
         });
     }
 
-    let (class_sig, nested) = read_attributes(&mut r, &pool)?;
+    let (class_sig, nested, _) = read_attributes(&mut r, &pool)?;
     Some(ExternalClass {
         name,
         is_interface: access_flags & ACC_INTERFACE != 0,
@@ -250,9 +263,10 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
 /// Lee la tabla de atributos, devolviendo el valor del **`Signature`** si aparece (§4.7.9.1) y
 /// salteando todo lo demás. A diferencia de saltear a ciegas, acá hay que resolver el nombre de
 /// cada atributo contra el constant pool.
-fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<(Option<String>, Vec<String>)> {
+fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<(Option<String>, Vec<String>, Vec<String>)> {
     let mut signature = None;
     let mut nested = Vec::new();
+    let mut throws = Vec::new();
     for _ in 0..r.u2()? {
         let name = pool.utf8(r.u2()?);
         let len = r.u4()? as usize;
@@ -278,10 +292,24 @@ fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<(Option<String>, Vec<S
                     }
                 }
             }
+            // `Exceptions` (§4.7.5): `u2 number_of_exceptions` + un índice `Class` por excepción.
+            Some("Exceptions") if data.len() >= 2 => {
+                let count = ((data[0] as usize) << 8) | data[1] as usize;
+                for k in 0..count {
+                    let base = 2 + k * 2;
+                    if base + 2 > data.len() {
+                        break;
+                    }
+                    let idx = ((data[base] as u16) << 8) | data[base + 1] as u16;
+                    if let Some(n) = pool.class_name(idx) {
+                        throws.push(n);
+                    }
+                }
+            }
             _ => {}
         }
     }
-    Some((signature, nested))
+    Some((signature, nested, throws))
 }
 
 // ---- descriptores → Type ----

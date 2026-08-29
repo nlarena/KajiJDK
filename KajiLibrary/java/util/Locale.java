@@ -41,7 +41,7 @@ public final class Locale {
         return US;
     }
 
-    public String toString() {
+    public final String toString() {
         if (this.country.length() == 0) {
             return this.language;
         }

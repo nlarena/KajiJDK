@@ -40,6 +40,24 @@ pub const HEADER_SIZE: usize = 8;
 /// `Err` and the dispatch loop turns it into a thrown object (`throw_exception`).
 const NULL_POINTER: &str = "java/lang/NullPointerException";
 
+/// The heap size of an instance of `name`.
+///
+/// `[header | inherited fields | own fields]`, one slot per field — except for
+/// `java.lang.String`, whose characters do not live in fields at all. The VM lays them out
+/// inline after a length word (see [`crate::jvm::interpreter::strings`]), so an instance with
+/// no characters is still bigger than its header.
+///
+/// Sizing it correctly matters even though `new` cannot know how long the string will be: the
+/// object it produces is what a String constructor runs on, and it must be a *readable empty
+/// String* rather than a header with nothing behind it. Getting this wrong does not fail at the
+/// allocation, it fails later and elsewhere, as a read past the end of the heap block.
+fn instance_size(metaspace: &mut MetaspaceService, name: &str) -> usize {
+    if name == "java/lang/String" {
+        return crate::jvm::interpreter::strings::STRING_HEADER;
+    }
+    HEADER_SIZE + instance_field_slots(metaspace, name) * SLOT_SIZE
+}
+
 /// Allocates a fresh, zero-initialised instance of `name` on the heap and returns
 /// its offset (the object reference). Lays out `[header | inherited fields | own
 /// fields]`: the size counts the instance fields of `name` **and every
@@ -48,8 +66,7 @@ const NULL_POINTER: &str = "java/lang/NullPointerException";
 /// `class_id` is filled with the class's `Class<…>` mirror offset, so the object
 /// knows what it is.
 pub fn allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {
-    let slots = instance_field_slots(metaspace, name);
-    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let size = instance_size(metaspace, name);
     let offset = heap.malloc(size);
 
     // Header: point `class_id` at the class's mirror (its `Class<…>` offset), so an
@@ -72,8 +89,7 @@ pub fn allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: 
 /// strings, mirrors, `Thread` objects) keep the panicking [`allocate`] — their failure
 /// paths aren't cleanly recoverable mid-operation, so exhaustion there stays fatal.
 pub fn try_allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> Option<usize> {
-    let slots = instance_field_slots(metaspace, name);
-    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let size = instance_size(metaspace, name);
     let offset = heap.try_malloc(size)?;
     let uuid = metaspace.class_id(name).to_string();
     let class_id = metaspace.class_object(&uuid).unwrap_or(0) as u32;
@@ -88,8 +104,7 @@ pub fn try_allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, na
 /// resulting object with the write barrier ([`HeapService::store_reference`]) so an Old→young
 /// pointer is remembered.
 pub fn allocate_old(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {
-    let slots = instance_field_slots(metaspace, name);
-    let size = HEADER_SIZE + slots * SLOT_SIZE;
+    let size = instance_size(metaspace, name);
     let offset = heap.malloc_old(size);
     let uuid = metaspace.class_id(name).to_string();
     let class_id = metaspace.class_object(&uuid).unwrap_or(0) as u32;

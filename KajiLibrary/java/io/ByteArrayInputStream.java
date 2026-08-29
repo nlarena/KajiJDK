@@ -18,7 +18,7 @@ public class ByteArrayInputStream extends InputStream {
         this.count = buf.length;
     }
 
-    public int read() {
+    public synchronized int read() {
         if (this.pos < this.count) {
             int b = this.buf[this.pos] & 0xff;
             this.pos = this.pos + 1;
@@ -27,7 +27,7 @@ public class ByteArrayInputStream extends InputStream {
         return -1;
     }
 
-    public int available() {
+    public synchronized int available() {
         return this.count - this.pos;
     }
 }

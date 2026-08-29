@@ -70,6 +70,14 @@ impl Exec<'_> {
             // No advance: the caller's pc stays at the invoke; the callee's
             // `return` advances it (so unwinding lands on the right pc).
         }
+        // Un método **sin cuerpo** también llega por acá, y hasta ahora nadie preguntaba: un
+        // método `private native` se invoca con `invokespecial`, no con `invokevirtual`, porque
+        // un privado no se despacha dinámicamente (JVMS §6.5). Sin esta consulta se le empujaba
+        // un frame y el bucle indexaba un `code` vacío — exactamente el modo de falla que #225
+        // documentó para `invokeinterface`. El embudo es el mismo que usan las otras dos.
+        if let Some(step) = self.dispatch_bodiless(callee, &locals) {
+            return step;
+        }
         // A `private synchronized` method (or a synchronized `super.m()`) locks its
         // receiver (`this`, the leading local). Constructors can't be synchronized.
         let lock = self.shared.metaspace.is_synchronized(callee).then(|| match locals[0] {

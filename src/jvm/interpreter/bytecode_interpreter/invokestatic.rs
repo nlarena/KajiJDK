@@ -189,6 +189,31 @@ impl Exec<'_> {
                 self.advance_past_call();
                 return Step::Continue;
             }
+            // `String.publish(built)`: how a String constructor hands back its result.
+            //
+            // Every other constructor answers by writing fields of `this`. A String cannot: its
+            // characters sit inline and are sized when the object is allocated, and the `new`
+            // opcode sizes an instance from its *declared* fields, of which `String` has none.
+            // The object the constructor was handed therefore has room for nothing, and a heap
+            // block does not grow in place. So the constructor builds a separate String and says
+            // so here; the `return` that ends it rewrites the caller's references.
+            //
+            // `self.top()` is the constructor's own frame — `publish` is called from inside it —
+            // so local 0 is the object `new` allocated, still untouched.
+            Intrinsic::StringPublish => {
+                let built = match args.first() {
+                    Some(Value::Reference(offset)) => *offset,
+                    other => panic!("String.publish: expected a reference, found {other:?}"),
+                };
+                let frame = self.top();
+                let handed = match frame.load(0) {
+                    Value::Reference(offset) => offset,
+                    other => panic!("String.publish: local 0 is not the receiver, it is {other:?}"),
+                };
+                frame.set_published(handed, built);
+                self.advance_past_call();
+                return Step::Continue;
+            }
             // `LockSupport.park()` / `unpark(Thread)`: the block/wake primitive AQS is built on.
             // Scheduler ops (they suspend/wake a thread), so handled here, not the native bridge.
             // `park`/`park(Object blocker)` block the current thread (the blocker is ignored);

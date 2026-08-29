@@ -1,5 +1,9 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractQueue;
 import java.util.Iterator;
@@ -176,6 +180,14 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E> implements Queue<
         }
         return new ClqItr<E>(start);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.CONCURRENT);
+    }
 }
 
 // A singly-linked cell. `item` is cleared when the element leaves the queue, which is how a
@@ -228,4 +240,5 @@ final class ClqItr<E> implements Iterator<E> {
         advance(cursor.next);
         return e;
     }
+
 }

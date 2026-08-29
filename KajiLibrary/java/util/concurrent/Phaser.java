@@ -259,7 +259,7 @@ public class Phaser {
     }
 
     // The current phase, or a negative value once terminated.
-    public int getPhase() {
+    public final int getPhase() {
         int p;
         synchronized (sync) {
             p = currentPhase();

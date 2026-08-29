@@ -81,6 +81,37 @@ pub struct ConstantPool {
     double: HashMap<u64, u16>,
 }
 
+/// **UTF-8 modificado** (JVMS §4.4.7), que no es UTF-8. Dos diferencias, y las dos importan:
+///
+/// - `U+0000` va en **dos** bytes (`C0 80`), para que una cadena nunca contenga un NUL;
+/// - un code point **suplementario** (arriba de `U+FFFF`) va como su **par sustituto** de UTF-16,
+///   cada sustituto en tres bytes —seis en total— en vez de los cuatro del UTF-8 estándar.
+///
+/// Escribirlo en UTF-8 a secas produce un `.class` que **ningún lector conforme acepta**: el
+/// nuestro lo rechaza con `invalid modified UTF-8 in a Utf8 constant` y `run-headless` ni lo carga
+/// (#259). Es peor que #228 —ahí se rechaza el fuente—, porque acá el archivo se emite ilegible.
+///
+/// La implementación pasa por `encode_utf16`, y eso es lo que resuelve los dos casos de una: un
+/// suplementario **ya sale** como dos sustitutos, y cada sustituto cae en la rama de tres bytes.
+fn modified_utf8(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    for u in s.encode_utf16() {
+        match u {
+            0x0001..=0x007F => out.push(u as u8),
+            0x0000 | 0x0080..=0x07FF => {
+                out.push(0xC0 | (u >> 6) as u8);
+                out.push(0x80 | (u & 0x3F) as u8);
+            }
+            _ => {
+                out.push(0xE0 | (u >> 12) as u8);
+                out.push(0x80 | ((u >> 6) & 0x3F) as u8);
+                out.push(0x80 | (u & 0x3F) as u8);
+            }
+        }
+    }
+    out
+}
+
 impl ConstantPool {
     pub fn new() -> Self {
         Self::default()
@@ -264,9 +295,11 @@ impl ConstantPool {
         for entry in &self.entries {
             match entry {
                 Const::Utf8(s) => {
+                    // El largo es el de los bytes **modificados**, que no es `s.len()`.
+                    let bytes = modified_utf8(s);
                     out.push(TAG_UTF8);
-                    out.extend_from_slice(&(s.len() as u16).to_be_bytes());
-                    out.extend_from_slice(s.as_bytes());
+                    out.extend_from_slice(&(bytes.len() as u16).to_be_bytes());
+                    out.extend_from_slice(&bytes);
                 }
                 Const::Integer(v) => {
                     out.push(TAG_INTEGER);
@@ -978,6 +1011,27 @@ impl Default for ClassFile {
 
 #[cfg(test)]
 mod tests {
+    use super::modified_utf8;
+
+    /// #259 - el pool va en **UTF-8 modificado** (JVMS 4.4.7), no en UTF-8. Los bytes esperados del
+    /// caracter suplementario se comprobaron **contra el `javac` del JDK 25**: emite exactamente
+    /// `ed a0 b4 ed b5 a0` para `U+1D160`, el par sustituto `U+D834 U+DD60` en tres bytes cada uno.
+    #[test]
+    fn the_constant_pool_uses_modified_utf8_not_plain_utf8() {
+        // ASCII: identico al UTF-8 estandar.
+        assert_eq!(modified_utf8("Ab1"), b"Ab1");
+        // `U+0000` en dos bytes, para que la cadena nunca contenga un NUL.
+        assert_eq!(modified_utf8("\u{0}"), vec![0xC0, 0x80]);
+        assert_ne!(modified_utf8("\u{0}"), "\u{0}".as_bytes());
+        // BMP: igual que el estandar (dos y tres bytes).
+        assert_eq!(modified_utf8("\u{f1}"), "\u{f1}".as_bytes());
+        assert_eq!(modified_utf8("\u{20ac}"), "\u{20ac}".as_bytes());
+        // Suplementario: **seis** bytes (el par sustituto), no los cuatro del UTF-8 estandar.
+        let nota = "\u{1D160}";
+        assert_eq!(nota.as_bytes().len(), 4);
+        assert_eq!(modified_utf8(nota), vec![0xED, 0xA0, 0xB4, 0xED, 0xB5, 0xA0]);
+    }
+
     use super::*;
     use crate::jvm::class_file::ClassFile as JvmClass;
     use crate::jvm::parser::ConstantPoolEntry;

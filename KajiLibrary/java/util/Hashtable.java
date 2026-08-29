@@ -100,6 +100,30 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
 
     // Which bucket a hash belongs in. The mask clears the sign bit: `%` on a negative int
     // yields a negative result, which would index out of the array.
+    // Las claves vivas: recorrer los buckets y sus cadenas de colision (finding #205).
+    // `synchronized` como el resto de `Hashtable`, que es su razon de ser (§#201).
+    public synchronized Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        int i = 0;
+        while (i < this.table.length) {
+            HtEntry<K, V> e = this.table[i];
+            while (e != null) {
+                out.add(e.key);
+                e = e.next;
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public synchronized void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     private int indexFor(int hash) {
         return (hash & 0x7FFFFFFF) % table.length;
     }

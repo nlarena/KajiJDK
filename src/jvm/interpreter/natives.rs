@@ -14,8 +14,10 @@ use std::fmt::Write;
 use crate::jvm::class_file::ClassFile;
 
 use super::apt::AptContext;
-use super::bytecode_interpreter::class_operations;
-use super::bytecode_interpreter::objects_operations::{allocate_old, field_offset, HEADER_SIZE};
+use super::bytecode_interpreter::objects_operations::{
+    allocate_old, field_offset, HEADER_SIZE, SLOT_SIZE,
+};
+use super::bytecode_interpreter::{array_operations, class_operations, objects_operations};
 use super::frame::Value;
 use super::heap::HeapService;
 use super::metaspace::MetaspaceService;
@@ -53,6 +55,31 @@ pub fn install_filer() {
     FILER.with(|f| *f.borrow_mut() = Some(FilerState::default()));
 }
 
+/// Los `StringWriter` que el Filer registró, como offsets del heap — **raíces del GC que sostiene
+/// la VM**. El canal sobrevive a los frames que los crearon (el compilador lo drena *después* de
+/// que el procesador retorna), así que ninguna pila los mantiene vivos: sin esto, una colección
+/// que mueve objetos dejaría cada offset apuntando a donde el writer *solía* estar, y el texto
+/// generado se recuperaría vacío.
+pub fn filer_roots() -> Vec<usize> {
+    FILER.with(|f| {
+        f.borrow()
+            .as_ref()
+            .map(|state| state.pending.iter().map(|&(_, r)| r as usize).collect())
+            .unwrap_or_default()
+    })
+}
+
+/// Reescribe los offsets que el GC remapeó, en el mismo orden en que [`filer_roots`] los entregó.
+pub fn remap_filer_roots(refs: &[usize]) {
+    FILER.with(|f| {
+        if let Some(state) = f.borrow_mut().as_mut() {
+            for (entry, &offset) in state.pending.iter_mut().zip(refs) {
+                entry.1 = offset as u32;
+            }
+        }
+    });
+}
+
 /// **Desarma** el canal y devuelve todo lo que el procesador registró, en orden de creación. Si no
 /// había Filer armado, devuelve un vector vacío.
 pub fn drain_filer() -> Vec<(String, u32)> {
@@ -66,6 +93,10 @@ pub fn drain_filer() -> Vec<(String, u32)> {
 /// surfaces (the visualizer shows it; a headless run would flush it). `apt` is the
 /// reified compiler model (APT fase 3), or `None` outside a processor run — the
 /// `jdk/internal/apt/SymElement` natives read the symbol table through it.
+/// El instante en que arranco esta VM, para que `nanoTime` mida desde algo fijo.
+static NANO_ORIGIN: std::sync::LazyLock<std::time::Instant> =
+    std::sync::LazyLock::new(std::time::Instant::now);
+
 pub fn dispatch(
     class: &str,
     name: &str,
@@ -165,17 +196,51 @@ pub fn dispatch(
         }
 
         // --- Arrays: System.arraycopy -------------------------------------------
-        // Bulk copy between arrays — the memcpy the VM does for you. Assumes 4-byte
-        // elements (int/reference arrays); byte/char arrays would need their width.
+        // La copia a granel entre arrays. Dos cosas que parecen detalle y no lo son:
+        //
+        // 1. **El ancho del elemento sale de la CLASE del array**, no de una suposición. Un
+        //    `char[]` mide dos bytes por elemento y un `long[]` ocho; copiar todo con paso de
+        //    cuatro no solo escribe basura, además se **sale del array por el final** — que es
+        //    de dónde salían los pánicos "range end index N out of range for slice of length
+        //    N-4" en cuanto algo copiaba texto.
+        //
+        // 2. **El solapamiento**. El contrato dice que se comporta como si el origen se copiara
+        //    primero a un buffer temporal, así que con el mismo array y rangos que se pisan la
+        //    dirección del recorrido decide el resultado. Un `delete` de un `StringBuilder` es
+        //    exactamente ese caso, y hacia abajo funcionaba por casualidad.
         ("java/lang/System", "arraycopy", "(Ljava/lang/Object;ILjava/lang/Object;II)V") => {
-            const ARRAY_HEADER: usize = 12; // object header (8) + length word (4)
-            const ELEM: usize = 4;
+            use super::bytecode_interpreter::array_operations::{
+                array_element_width, ARRAY_HEADER_SIZE,
+            };
             let (src, src_pos) = (reference(&args[0]), int(&args[1]) as usize);
             let (dst, dst_pos) = (reference(&args[2]), int(&args[3]) as usize);
             let length = int(&args[4]) as usize;
-            for i in 0..length {
-                let value = heap.read_u32(src + ARRAY_HEADER + (src_pos + i) * ELEM);
-                heap.write_u32(dst + ARRAY_HEADER + (dst_pos + i) * ELEM, value);
+            let class = metaspace
+                .class_name_at_mirror(heap.read_u32(src) as usize)
+                .map(str::to_string)
+                .expect("System.arraycopy: el origen no es un array conocido");
+            let width = array_element_width(&class);
+            let from = src + ARRAY_HEADER_SIZE + src_pos * width;
+            let to = dst + ARRAY_HEADER_SIZE + dst_pos * width;
+            // Un array de referencias se copia slot a slot y **por la puerta del barrier**: un
+            // `write_u8` dejaría al GC sin enterarse de la referencia nueva.
+            let of_references = matches!(class.as_bytes().get(1), Some(b'L' | b'['));
+            if of_references {
+                let slots: Vec<usize> =
+                    (0..length).map(|i| heap.read_u32(from + i * width) as usize).collect();
+                for (i, value) in slots.into_iter().enumerate() {
+                    heap.store_reference(dst, to + i * width, value);
+                }
+            } else if to > from {
+                for i in (0..length * width).rev() {
+                    let byte = heap.read_u8(from + i);
+                    heap.write_u8(to + i, byte);
+                }
+            } else {
+                for i in 0..length * width {
+                    let byte = heap.read_u8(from + i);
+                    heap.write_u8(to + i, byte);
+                }
             }
             None
         }
@@ -210,7 +275,9 @@ pub fn dispatch(
         // model to hang them on). `getAnnotation` is deliberately absent — returning an annotation
         // *object* would mean synthesising a proxy class implementing the @interface, as the JDK
         // does; presence is the part of the API that needs no such object.
-        ("java/lang/Class", "isAnnotationPresent", "(Ljava/lang/Class;)Z") => {
+        // `annotationPresent0` es el nombre de la costura privada de KajiLibrary;
+        // `isAnnotationPresent` el de la copia compilada de `boot/`. Los dos, mientras convivan.
+        ("java/lang/Class", "annotationPresent0" | "isAnnotationPresent", "(Ljava/lang/Class;)Z") => {
             let this = metaspace
                 .class_name_at_mirror(reference(&args[0]))
                 .expect("Class.isAnnotationPresent: no class at this mirror")
@@ -290,6 +357,600 @@ pub fn dispatch(
             let simple = format!("{base}{}", "[]".repeat(dims));
             Some(Value::Reference(strings::intern(metaspace, heap, &simple)))
         }
+        // --- Class: la capa de METADATOS -----------------------------------------
+        //
+        // Todo lo que sigue sale del archivo de clase y de nada mas: flags, superclase,
+        // interfaces, tipo componente. Es la mitad de `java.lang.Class` que no necesita el
+        // modelo de objetos de `java.lang.reflect`.
+        //
+        // Los que el JDK declara `native` -- `isInstance`, `getSuperclass`, `isAssignableFrom`,
+        // `isHidden` -- se llaman igual, para que la superficie publica coincida hasta el
+        // modificador. El resto son costuras **privadas** con sufijo `0`: la logica que se puede
+        // escribir en Java se escribe en Java, que es la misma regla que dejo a `String` con
+        // cuatro costuras privadas y toda su API en el lenguaje.
+
+        ("java/lang/Class", "name0", "()Ljava/lang/String;") => {
+            // El nombre INTERNO, crudo, con barras: `java/lang/String`, `[I`, `int`. El lado
+            // Java le pone los puntos para `getName` y lo corta por la barra para el paquete,
+            // asi que la costura entrega la forma sin decidir nada.
+            let internal = mirror_name(metaspace, reference(&args[0]));
+            Some(Value::Reference(strings::intern(metaspace, heap, &internal)))
+        }
+
+        ("java/lang/Class", "getSuperclass", "()Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            // Un array hereda de Object; un primitivo no hereda de nada, y una interfaz tampoco
+            // -- `Runnable.class.getSuperclass()` es null, no Object.
+            let parent = if name.starts_with('[') {
+                Some("java/lang/Object".to_string())
+            } else if is_primitive_name(&name) {
+                None
+            } else {
+                metaspace.get_or_load(&name).and_then(|cf| {
+                    if cf.is_interface() || cf.super_class == 0 {
+                        None
+                    } else {
+                        cf.class_name(cf.super_class).map(str::to_string)
+                    }
+                })
+            };
+            let mirror = match parent {
+                Some(p) => mirror_for(metaspace, heap, &p),
+                None => 0,
+            };
+            Some(Value::Reference(mirror))
+        }
+
+        ("java/lang/Class", "isAssignableFrom", "(Ljava/lang/Class;)Z") => {
+            let target = mirror_name(metaspace, reference(&args[0]));
+            let candidate = mirror_name(metaspace, reference(&args[1]));
+            // La identidad primero, y es la unica respuesta posible entre primitivos: `int` no
+            // participa de ninguna jerarquia, asi que solo es asignable a si mismo.
+            let assignable = candidate == target
+                || (!is_primitive_name(&target)
+                    && !is_primitive_name(&candidate)
+                    && class_operations::is_subtype(metaspace, &candidate, &target));
+            Some(Value::Int(assignable as i32))
+        }
+
+        // No fabricamos clases ocultas (las de `Lookup.defineHiddenClass`), asi que ninguna lo es.
+        ("java/lang/Class", "isHidden", "()Z") => Some(Value::Int(0)),
+
+        ("java/lang/Class", "modifiers0", "()I") => {
+            const PUBLIC: u16 = 0x0001;
+            const FINAL: u16 = 0x0010;
+            const SUPER: u16 = 0x0020;
+            const ABSTRACT: u16 = 0x0400;
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let flags = if is_primitive_name(&name) {
+                PUBLIC | FINAL | ABSTRACT
+            } else if name.starts_with('[') {
+                // Un array toma la VISIBILIDAD de su componente y es siempre final y abstracto:
+                // `String[]` es publico porque `String` lo es, y un componente package-private
+                // hace package-private al array.
+                let component = component_name(&name);
+                let visibility = match component {
+                    Some(ref c) if !is_primitive_name(c) && !c.starts_with('[') => {
+                        metaspace.get_or_load(c).map(|cf| cf.access_flags & 0x0007).unwrap_or(PUBLIC)
+                    }
+                    _ => PUBLIC,
+                };
+                visibility | FINAL | ABSTRACT
+            } else {
+                // ACC_SUPER se saca: no es un modificador del lenguaje (la especificacion dice
+                // que se ignore) y comparte bit con `synchronized`, asi que dejarlo haria que
+                // `Modifier.toString` imprimiera una clase "synchronized".
+                metaspace.get_or_load(&name).map(|cf| cf.access_flags).unwrap_or(0) & !SUPER
+            };
+            Some(Value::Int(flags as i32))
+        }
+
+        ("java/lang/Class", "isPrimitive0", "()Z") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            Some(Value::Int(is_primitive_name(&name) as i32))
+        }
+
+        ("java/lang/Class", "interfaces0", "()[Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            // Todo array implementa Cloneable y Serializable (JLS §10.7), y en ese orden; un
+            // primitivo no implementa nada.
+            let names: Vec<String> = if name.starts_with('[') {
+                vec!["java/lang/Cloneable".to_string(), "java/io/Serializable".to_string()]
+            } else if is_primitive_name(&name) {
+                Vec::new()
+            } else {
+                metaspace
+                    .get_or_load(&name)
+                    .map(|cf| {
+                        cf.interfaces
+                            .iter()
+                            .filter_map(|&i| cf.class_name(i).map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let mut mirrors = Vec::with_capacity(names.len());
+            for n in &names {
+                mirrors.push(mirror_for(metaspace, heap, n));
+            }
+            Some(Value::Reference(reference_array(
+                metaspace,
+                heap,
+                "[Ljava/lang/Class;",
+                &mirrors,
+            )))
+        }
+
+        ("java/lang/Class", "componentType0", "()Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let mirror = match component_name(&name) {
+                Some(component) => mirror_for(metaspace, heap, &component),
+                None => 0, // no es un array
+            };
+            Some(Value::Reference(mirror))
+        }
+
+        ("java/lang/Class", "arrayType0", "()Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let array_class = format!("[{}", descriptor_of(&name));
+            let mirror = mirror_for(metaspace, heap, &array_class);
+            Some(Value::Reference(mirror))
+        }
+
+        ("java/lang/Class", "forName0", "(Ljava/lang/String;)Ljava/lang/Class;") => {
+            // El nombre llega en forma binaria con puntos ("java.lang.String") o ya como
+            // descriptor de array ("[I", "[Ljava.lang.String;"). Devolver 0 y no panicar es
+            // deliberado: el que no exista es una respuesta normal, y el lado Java la convierte
+            // en ClassNotFoundException.
+            let dotted = strings::read(heap, reference(&args[0]));
+            let internal = dotted.replace('.', "/");
+            if internal.starts_with('[') {
+                return Some(Value::Reference(mirror_for(metaspace, heap, &internal)));
+            }
+            if metaspace.get_or_load(&internal).is_none() {
+                return Some(Value::Reference(0));
+            }
+            Some(Value::Reference(mirror_for(metaspace, heap, &internal)))
+        }
+
+        // --- Class: los ATRIBUTOS del archivo de clase ---------------------------
+        //
+        // Todo lo que sigue sale de atributos que `ClassFile` guarda en crudo y nadie leia:
+        // `InnerClasses`, `EnclosingMethod`, `NestHost`, `NestMembers`, `PermittedSubclasses` y
+        // `Record`. Son la unica fuente de la estructura que el LENGUAJE tiene y el archivo de
+        // clase pierde: un `.class` no sabe que estaba adentro de otro -- los dos son archivos
+        // sueltos con un `$` en el nombre --, y estos atributos son lo que reconstruye eso.
+
+        // --- ClassLoader: definir y encontrar --------------------------------------
+
+        ("java/lang/ClassLoader", "defineClass0",
+            "(Ljava/lang/String;[BII)Ljava/lang/Class;") => {
+            // Un `.class` que llega como bytes en vez de como archivo. Es la unica forma de
+            // meter una clase en la VM sin pasar por el classpath, y es de lo que viven los
+            // proxies dinamicos y los generadores de bytecode.
+            // Estatica: los argumentos arrancan en 0, sin receptor delante.
+            let bytes: Vec<u8> = {
+                let array = reference(&args[1]);
+                if array == 0 {
+                    return Some(Value::Reference(0));
+                }
+                let offset = int(&args[2]) as usize;
+                let length = int(&args[3]) as usize;
+                (0..length)
+                    .map(|i| {
+                        heap.read_u8(array + array_operations::ARRAY_HEADER_SIZE + offset + i)
+                    })
+                    .collect()
+            };
+            let Ok(class) = ClassFile::from_bytes(&bytes) else {
+                return Some(Value::Reference(0));
+            };
+            let Some(internal) = class.class_name(class.this_class).map(str::to_string) else {
+                return Some(Value::Reference(0));
+            };
+            // El nombre que el llamador dijo tiene que coincidir con el que el archivo dice; si
+            // no, es un `NoClassDefFoundError` en el JDK y acá un cero que el lado Java traduce.
+            let asked = reference(&args[0]);
+            if asked != 0 {
+                let dotted = strings::read(heap, asked);
+                if dotted.replace('.', "/") != internal {
+                    return Some(Value::Reference(0));
+                }
+            }
+            metaspace.add(internal.clone(), class);
+            class_operations::load_class(metaspace, heap, &internal);
+            Some(Value::Reference(mirror_for(metaspace, heap, &internal)))
+        }
+
+        ("java/lang/Class", "nestHost0", "()Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let host = attribute_class(metaspace, &name, "NestHost", 0);
+            let mirror = match host {
+                Some(h) => mirror_for(metaspace, heap, &h),
+                // Sin atributo, una clase es su propio nido. No es un valor por defecto
+                // arbitrario: una clase de nivel superior sin anidados ES un nido de uno.
+                None => reference(&args[0]),
+            };
+            Some(Value::Reference(mirror))
+        }
+
+        ("java/lang/Class", "nestMembers0", "()[Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let members = attribute_class_list(metaspace, &name, "NestMembers");
+            let mut mirrors = vec![reference(&args[0])];
+            for m in &members {
+                if *m != name {
+                    mirrors.push(mirror_for(metaspace, heap, m));
+                }
+            }
+            Some(Value::Reference(reference_array(metaspace, heap, "[Ljava/lang/Class;", &mirrors)))
+        }
+
+        ("java/lang/Class", "permittedSubclasses0", "()[Ljava/lang/Class;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let permitted = attribute_class_list(metaspace, &name, "PermittedSubclasses");
+            if !has_attribute(metaspace, &name, "PermittedSubclasses") {
+                // Null y no un array vacio: "no es sellada" y "es sellada y no permite a nadie"
+                // son cosas distintas, y `isSealed` se apoya en esa diferencia.
+                return Some(Value::Reference(0));
+            }
+            let mut mirrors = Vec::with_capacity(permitted.len());
+            for p in &permitted {
+                mirrors.push(mirror_for(metaspace, heap, p));
+            }
+            Some(Value::Reference(reference_array(metaspace, heap, "[Ljava/lang/Class;", &mirrors)))
+        }
+
+        ("java/lang/Class", "declaringClass0", "()Ljava/lang/Class;") => {
+            // La clase que DECLARA a esta, o 0. Una local o anonima no tiene: su entrada de
+            // `InnerClasses` deja el `outer_class_info` en cero, que es exactamente como el
+            // archivo de clase distingue "anidada" de "declarada adentro de un metodo".
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let outer = inner_class_entry(metaspace, &name).and_then(|e| e.1);
+            let mirror = match outer {
+                Some(o) => mirror_for(metaspace, heap, &o),
+                None => 0,
+            };
+            Some(Value::Reference(mirror))
+        }
+
+        ("java/lang/Class", "enclosingClass0", "()Ljava/lang/Class;") => {
+            // La que la ENCIERRA, que para una local o anonima es la del `EnclosingMethod` y
+            // para una anidada es la que la declara.
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let enclosing = attribute_class(metaspace, &name, "EnclosingMethod", 0)
+                .or_else(|| inner_class_entry(metaspace, &name).and_then(|e| e.1));
+            let mirror = match enclosing {
+                Some(e) => mirror_for(metaspace, heap, &e),
+                None => 0,
+            };
+            Some(Value::Reference(mirror))
+        }
+
+        ("java/lang/Class", "innerName0", "()Ljava/lang/String;") => {
+            // El nombre simple que el FUENTE le dio, o 0 si es anonima. Es la unica forma exacta
+            // de contestar `getSimpleName`, `isAnonymousClass` y `isMemberClass`: derivarlo del
+            // `$` del nombre binario acierta casi siempre y falla con una clase de nivel superior
+            // que de verdad se llame `A$B`.
+            let name = mirror_name(metaspace, reference(&args[0]));
+            match inner_class_entry(metaspace, &name).and_then(|e| e.2) {
+                Some(simple) => {
+                    Some(Value::Reference(strings::intern(metaspace, heap, &simple)))
+                }
+                None => Some(Value::Reference(0)),
+            }
+        }
+
+        ("java/lang/Class", "isInnerClass0", "()Z") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            Some(Value::Int(inner_class_entry(metaspace, &name).is_some() as i32))
+        }
+
+        ("java/lang/Class", "hasEnclosingMethod0", "()Z") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let present = attribute_body(metaspace, &name, "EnclosingMethod")
+                .map(|b| b.len() >= 4 && (b[2] != 0 || b[3] != 0))
+                .unwrap_or(false);
+            Some(Value::Int(present as i32))
+        }
+
+        ("java/lang/Class", "enclosingMethodInfo0", "()[Ljava/lang/String;") => {
+            // `{clase, nombre, descriptor}` del metodo que encierra a una clase local o anonima,
+            // o 0. El atributo `EnclosingMethod` guarda la clase siempre y el metodo solo cuando
+            // la clase nacio adentro de uno -- una anonima declarada en un inicializador de campo
+            // tiene clase y no tiene metodo, y ese cero es informacion, no un hueco.
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let indices = {
+                let Some(body) = attribute_body(metaspace, &name, "EnclosingMethod") else {
+                    return Some(Value::Reference(0));
+                };
+                if body.len() < 4 {
+                    return Some(Value::Reference(0));
+                }
+                (
+                    u16::from_be_bytes([body[0], body[1]]),
+                    u16::from_be_bytes([body[2], body[3]]),
+                )
+            };
+            if indices.1 == 0 {
+                return Some(Value::Reference(0));
+            }
+            let (owner, method, descriptor) = {
+                let Some(class) = metaspace.get(&name) else {
+                    return Some(Value::Reference(0));
+                };
+                let Some(owner) = class.class_name(indices.0).map(str::to_string) else {
+                    return Some(Value::Reference(0));
+                };
+                let Some((m, d)) = class.name_and_type(indices.1) else {
+                    return Some(Value::Reference(0));
+                };
+                (owner, m.to_string(), d.to_string())
+            };
+            let parts = vec![
+                strings::intern(metaspace, heap, &owner),
+                strings::intern(metaspace, heap, &method),
+                strings::intern(metaspace, heap, &descriptor),
+            ];
+            Some(Value::Reference(reference_array(
+                metaspace,
+                heap,
+                "[Ljava/lang/String;",
+                &parts,
+            )))
+        }
+
+        ("java/lang/Class", "declaredClasses0", "()[Ljava/lang/Class;") => {
+            // Las que ESTA declara: las entradas de su propio `InnerClasses` cuyo
+            // `outer_class_info` es ella. La tabla trae tambien las clases anidadas que la clase
+            // solo MENCIONA -- por eso hay que filtrar por el outer y no tomarla entera.
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let declared = declared_inner_classes(metaspace, &name);
+            let mut mirrors = Vec::with_capacity(declared.len());
+            for d in &declared {
+                mirrors.push(mirror_for(metaspace, heap, d));
+            }
+            Some(Value::Reference(reference_array(metaspace, heap, "[Ljava/lang/Class;", &mirrors)))
+        }
+
+        ("java/lang/Class", "recordComponents0",
+            "()[Ljava/lang/reflect/RecordComponent;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let Some(components) = record_components(metaspace, &name) else {
+                return Some(Value::Reference(0)); // no es un record
+            };
+            class_operations::load_class(metaspace, heap, "java/lang/reflect/RecordComponent");
+            let empty: Vec<usize> = vec![0; components.len()];
+            let array =
+                reference_array(metaspace, heap, "[Ljava/lang/reflect/RecordComponent;", &empty);
+            let owner = reference(&args[0]);
+            for (slot, (component, descriptor)) in components.into_iter().enumerate() {
+                let Some(object) = objects_operations::try_allocate(
+                    metaspace,
+                    heap,
+                    "java/lang/reflect/RecordComponent",
+                ) else {
+                    break;
+                };
+                let at = array_operations::ARRAY_HEADER_SIZE + slot * SLOT_SIZE;
+                heap.store_reference(array, array + at, object);
+                let interned = strings::intern(metaspace, heap, &component);
+                let type_mirror = mirror_for(metaspace, heap, &internal_name_of(&descriptor));
+                const RC: &str = "java/lang/reflect/RecordComponent";
+                let clazz_at = field_offset(metaspace, RC, "clazz");
+                let name_at = field_offset(metaspace, RC, "name");
+                let type_at = field_offset(metaspace, RC, "type");
+                heap.store_reference(object, object + clazz_at, owner);
+                heap.store_reference(object, object + name_at, interned);
+                heap.store_reference(object, object + type_at, type_mirror);
+            }
+            Some(Value::Reference(array))
+        }
+
+        ("java/lang/Class", "declaredConstructors0",
+            "()[Ljava/lang/reflect/Constructor;") => {
+            // Un constructor es un metodo llamado `<init>` y nada mas: la reflexion lo presenta
+            // como otra cosa porque se invoca de otra forma -- aloca antes de correr --, pero en
+            // el archivo de clase vive en la misma tabla que los demas.
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let declared: Vec<(String, u16, Vec<String>)> =
+                if name.starts_with('[') || is_primitive_name(&name) {
+                    Vec::new()
+                } else {
+                    metaspace
+                        .get_or_load(&name)
+                        .map(|cf| {
+                            cf.methods
+                                .iter()
+                                .filter_map(|m| {
+                                    if cf.utf8(m.name_index)? != "<init>" {
+                                        return None;
+                                    }
+                                    let d = cf.utf8(m.descriptor_index)?.to_string();
+                                    Some((d, m.access_flags, declared_exceptions(cf, m)))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+            class_operations::load_class(metaspace, heap, "java/lang/reflect/Constructor");
+            let empty: Vec<usize> = vec![0; declared.len()];
+            let array =
+                reference_array(metaspace, heap, "[Ljava/lang/reflect/Constructor;", &empty);
+            let owner = reference(&args[0]);
+            for (slot, (descriptor, flags, throws)) in declared.into_iter().enumerate() {
+                let Some(object) = objects_operations::try_allocate(
+                    metaspace,
+                    heap,
+                    "java/lang/reflect/Constructor",
+                ) else {
+                    break;
+                };
+                let at = array_operations::ARRAY_HEADER_SIZE + slot * SLOT_SIZE;
+                heap.store_reference(array, array + at, object);
+
+                let (parameters, _) = split_descriptor(&descriptor);
+                let mut parameter_mirrors = Vec::with_capacity(parameters.len());
+                for p in &parameters {
+                    parameter_mirrors.push(mirror_for(metaspace, heap, p));
+                }
+                let parameter_array =
+                    reference_array(metaspace, heap, "[Ljava/lang/Class;", &parameter_mirrors);
+                let mut throws_mirrors = Vec::with_capacity(throws.len());
+                for t in &throws {
+                    throws_mirrors.push(mirror_for(metaspace, heap, t));
+                }
+                let throws_array =
+                    reference_array(metaspace, heap, "[Ljava/lang/Class;", &throws_mirrors);
+
+                const CTOR: &str = "java/lang/reflect/Constructor";
+                let clazz_at = field_offset(metaspace, CTOR, "clazz");
+                let params_at = field_offset(metaspace, CTOR, "parameterTypes");
+                let throws_at = field_offset(metaspace, CTOR, "exceptionTypes");
+                let mods_at = field_offset(metaspace, CTOR, "modifiers");
+                let slot_at = field_offset(metaspace, CTOR, "slot");
+                heap.store_reference(object, object + clazz_at, owner);
+                heap.store_reference(object, object + params_at, parameter_array);
+                heap.store_reference(object, object + throws_at, throws_array);
+                heap.write_u32(object + mods_at, flags as u32);
+                heap.write_u32(object + slot_at, slot as u32);
+            }
+            Some(Value::Reference(array))
+        }
+
+        ("java/lang/Class", "declaredMethods0", "()[Ljava/lang/reflect/Method;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            // `<init>` y `<clinit>` no son metodos para la reflexion: el primero sale por
+            // `getDeclaredConstructors` y el segundo no sale por ningun lado, porque nadie
+            // puede llamarlo.
+            let declared: Vec<(String, String, u16, Vec<String>)> =
+                if name.starts_with('[') || is_primitive_name(&name) {
+                    Vec::new()
+                } else {
+                    metaspace
+                        .get_or_load(&name)
+                        .map(|cf| {
+                            cf.methods
+                                .iter()
+                                .filter_map(|m| {
+                                    let n = cf.utf8(m.name_index)?.to_string();
+                                    if n == "<init>" || n == "<clinit>" {
+                                        return None;
+                                    }
+                                    let d = cf.utf8(m.descriptor_index)?.to_string();
+                                    Some((n, d, m.access_flags, declared_exceptions(cf, m)))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+            class_operations::load_class(metaspace, heap, "java/lang/reflect/Method");
+            // El array primero y en Old, cada `Method` adentro apenas se crea: ver
+            // `declaredFields0` para por que el orden inverso los dejaria sin raiz.
+            let empty: Vec<usize> = vec![0; declared.len()];
+            let array = reference_array(metaspace, heap, "[Ljava/lang/reflect/Method;", &empty);
+            let owner = reference(&args[0]);
+            for (slot, (method_name, descriptor, flags, throws)) in
+                declared.into_iter().enumerate()
+            {
+                let Some(object) =
+                    objects_operations::try_allocate(metaspace, heap, "java/lang/reflect/Method")
+                else {
+                    break;
+                };
+                let at = array_operations::ARRAY_HEADER_SIZE + slot * SLOT_SIZE;
+                heap.store_reference(array, array + at, object);
+
+                let (parameters, returns) = split_descriptor(&descriptor);
+                let interned = strings::intern(metaspace, heap, &method_name);
+                let return_mirror = mirror_for(metaspace, heap, &returns);
+                let mut parameter_mirrors = Vec::with_capacity(parameters.len());
+                for p in &parameters {
+                    parameter_mirrors.push(mirror_for(metaspace, heap, p));
+                }
+                let parameter_array =
+                    reference_array(metaspace, heap, "[Ljava/lang/Class;", &parameter_mirrors);
+                let mut throws_mirrors = Vec::with_capacity(throws.len());
+                for t in &throws {
+                    throws_mirrors.push(mirror_for(metaspace, heap, t));
+                }
+                let throws_array =
+                    reference_array(metaspace, heap, "[Ljava/lang/Class;", &throws_mirrors);
+
+                let clazz_at = field_offset(metaspace, "java/lang/reflect/Method", "clazz");
+                let name_at = field_offset(metaspace, "java/lang/reflect/Method", "name");
+                let ret_at = field_offset(metaspace, "java/lang/reflect/Method", "returnType");
+                let params_at =
+                    field_offset(metaspace, "java/lang/reflect/Method", "parameterTypes");
+                let throws_at =
+                    field_offset(metaspace, "java/lang/reflect/Method", "exceptionTypes");
+                let mods_at = field_offset(metaspace, "java/lang/reflect/Method", "modifiers");
+                let slot_at = field_offset(metaspace, "java/lang/reflect/Method", "slot");
+                heap.store_reference(object, object + clazz_at, owner);
+                heap.store_reference(object, object + name_at, interned);
+                heap.store_reference(object, object + ret_at, return_mirror);
+                heap.store_reference(object, object + params_at, parameter_array);
+                heap.store_reference(object, object + throws_at, throws_array);
+                heap.write_u32(object + mods_at, flags as u32);
+                heap.write_u32(object + slot_at, slot as u32);
+            }
+            Some(Value::Reference(array))
+        }
+
+        ("java/lang/Class", "declaredFields0", "()[Ljava/lang/reflect/Field;") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let declared: Vec<(String, String, u16)> = if name.starts_with('[')
+                || is_primitive_name(&name)
+            {
+                Vec::new()
+            } else {
+                metaspace
+                    .get_or_load(&name)
+                    .map(|cf| {
+                        cf.fields
+                            .iter()
+                            .filter_map(|f| {
+                                let n = cf.utf8(f.name_index)?.to_string();
+                                let d = cf.utf8(f.descriptor_index)?.to_string();
+                                Some((n, d, f.access_flags))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            class_operations::load_class(metaspace, heap, "java/lang/reflect/Field");
+            // El array se aloca PRIMERO y en Old, y cada `Field` entra por el barrier apenas se
+            // crea. Al reves -- juntar los `Field` en un `Vec` de Rust y armar el array despues --
+            // los dejaria sin raiz: son objetos jovenes que solo un `Vec` de Rust conoce, y el
+            // primer minor GC de la vuelta siguiente los moveria debajo de nuestros pies.
+            let empty: Vec<usize> = vec![0; declared.len()];
+            let array =
+                reference_array(metaspace, heap, "[Ljava/lang/reflect/Field;", &empty);
+            let owner = reference(&args[0]);
+            for (slot, (field_name, descriptor, flags)) in declared.into_iter().enumerate() {
+                let Some(object) =
+                    objects_operations::try_allocate(metaspace, heap, "java/lang/reflect/Field")
+                else {
+                    break;
+                };
+                let at = array_operations::ARRAY_HEADER_SIZE + slot * SLOT_SIZE;
+                heap.store_reference(array, array + at, object);
+                let interned = strings::intern(metaspace, heap, &field_name);
+                let type_mirror = mirror_for(metaspace, heap, &internal_name_of(&descriptor));
+                let clazz_at = field_offset(metaspace, "java/lang/reflect/Field", "clazz");
+                let name_at = field_offset(metaspace, "java/lang/reflect/Field", "name");
+                let type_at = field_offset(metaspace, "java/lang/reflect/Field", "type");
+                let mods_at = field_offset(metaspace, "java/lang/reflect/Field", "modifiers");
+                let slot_at = field_offset(metaspace, "java/lang/reflect/Field", "slot");
+                heap.store_reference(object, object + clazz_at, owner);
+                heap.store_reference(object, object + name_at, interned);
+                heap.store_reference(object, object + type_at, type_mirror);
+                heap.write_u32(object + mods_at, flags as u32);
+                heap.write_u32(object + slot_at, slot as u32);
+            }
+            Some(Value::Reference(array))
+        }
+
         ("java/lang/Class", "getPrimitiveClass", "(Ljava/lang/String;)Ljava/lang/Class;") => {
             // The primitive type's `Class` mirror — `int.class` compiles to `getstatic
             // Integer.TYPE`, whose `<clinit>` calls this. A header-only mirror (like an array
@@ -356,47 +1017,114 @@ pub fn dispatch(
             Some(Value::Reference(element))
         }
 
+        // El reloj de pared, en milisegundos desde la epoca. Declarado hace rato del lado
+        // Java y sin implementar de este; lo destapo `java.util.Random`, cuyo constructor sin
+        // argumentos se siembra de aca.
+        ("java/lang/System", "currentTimeMillis", "()J") => {
+            let since = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            Some(Value::Long(since))
+        }
+
+        // --- las propiedades del sistema ---------------------------------------
+        //
+        // Que propiedades existen es cosa de la implementacion, no de la especificacion: el JDK
+        // documenta un conjunto minimo y cada plataforma agrega lo suyo. Estas son las que esta
+        // VM puede responder de verdad; para cualquier otra clave devuelve `null`, que es
+        // exactamente lo que el contrato dice para una clave ausente.
+        ("java/lang/System", "getProperty0", "(Ljava/lang/String;)Ljava/lang/String;") => {
+            let key = strings::read(heap, reference(&args[0]));
+            let value = match key.as_str() {
+                "java.version" | "java.specification.version" => Some("25"),
+                "java.vm.specification.version" => Some("25"),
+                "java.vm.name" | "java.vendor" => Some("KajiJDK"),
+                "line.separator" => Some(if cfg!(windows) { "\r\n" } else { "\n" }),
+                "file.separator" => Some(if cfg!(windows) { "\\" } else { "/" }),
+                "path.separator" => Some(if cfg!(windows) { ";" } else { ":" }),
+                "os.name" => Some(std::env::consts::OS),
+                "os.arch" => Some(std::env::consts::ARCH),
+                "native.encoding" | "file.encoding" => Some("UTF-8"),
+                _ => None,
+            };
+            match value {
+                Some(text) => Some(Value::Reference(strings::intern(metaspace, heap, text))),
+                None => Some(Value::Reference(0)),
+            }
+        }
+
+        // --- las costuras de bits de Double/Float -------------------------------
+        //
+        // Reinterpretar los bits de un flotante es lo unico que el bytecode NO puede hacer: no
+        // hay opcode que lea un `double` como un `long` sin convertir el VALOR. De ahi que sean
+        // nativas — y que lo sean en el JDK tambien, con estos mismos nombres.
+        //
+        // `raw` significa que un NaN se devuelve tal cual, con su carga util; la canonicalizacion
+        // a 0x7ff8000000000000 la hace `doubleToLongBits`, que es Java y esta en la biblioteca.
+        ("java/lang/Double", "doubleToRawLongBits" | "doubleToLongBits", "(D)J") => {
+            Some(Value::Long(double(&args[0]).to_bits() as i64))
+        }
+        ("java/lang/Double", "longBitsToDouble", "(J)D") => {
+            Some(Value::Double(f64::from_bits(long(&args[0]) as u64)))
+        }
+        ("java/lang/Float", "floatToRawIntBits" | "floatToIntBits", "(F)I") => {
+            Some(Value::Int(float(&args[0]).to_bits() as i32))
+        }
+        ("java/lang/Float", "intBitsToFloat", "(I)F") => {
+            Some(Value::Float(f32::from_bits(int(&args[0]) as u32)))
+        }
+
         // --- String -------------------------------------------------------------
-        ("java/lang/String", "length", "()I") => {
+        // Dos nombres para la misma costura. `rawLength` es la de KajiLibrary, privada, con el
+        // String como parametro explicito; `length` es la que declara la copia compilada de
+        // `boot/`, publica y de instancia. El cuerpo es el mismo porque el receptor de una y el
+        // primer argumento de la otra ocupan la MISMA posicion, `args[0]`. Se aceptan las dos
+        // mientras los dos arboles convivan (ver COMPILER_FINDINGS sobre boot/ vs KajiLibrary).
+        ("java/lang/String", "rawLength" | "length", "(Ljava/lang/String;)I" | "()I") => {
             // The receiver is a heap String; its length word holds the UTF-8 byte count.
             Some(Value::Int(strings::length(heap, reference(&args[0])) as i32))
         }
         // charAt(int): the i-th byte (ASCII; our String is UTF-8, fine for ASCII).
-        ("java/lang/String", "charAt", "(I)C") => {
+        ("java/lang/String", "rawCharAt" | "charAt", "(Ljava/lang/String;I)C" | "(I)C") => {
             Some(Value::Int(strings::char_at(heap, reference(&args[0]), int(&args[1]) as usize) as i32))
         }
         // equals(Object): true if the other is a String with the same text.
-        // (Simplified: assumes the argument is a String reference.)
+        // valueOf(char[], offset, count): the seam KajiLibrary builds every String through —
+        // `StringBuilder.toString`, `substring`, `Writer.write(String)`'s inverse, etc. A `char[]`
+        // stores UTF-16 code units two bytes wide (after the 12-byte array header); we slice
+        // `[offset, offset+count)`, decode them, and intern the text as a fresh heap String.
+        // Los tres que KajiLibrary ya NO declara nativos -- los implementa en Java sobre
+        // `charAt`, que ademas es lo que arregla el hash de las cadenas no-ASCII. Siguen aca
+        // porque la copia de `boot/` los declara nativos y la VM los carga a ella en los tests.
         ("java/lang/String", "equals", "(Ljava/lang/Object;)Z") => {
             let other = reference(&args[1]);
             let equal = other != 0 && strings::read(heap, reference(&args[0])) == strings::read(heap, other);
             Some(Value::Int(equal as i32))
         }
-        // hashCode(): Java's `s[0]*31^(n-1) + … + s[n-1]` over the bytes (ASCII).
         ("java/lang/String", "hashCode", "()I") => {
             let text = strings::read(heap, reference(&args[0]));
-            let hash = text.bytes().fold(0i32, |h, b| h.wrapping_mul(31).wrapping_add(b as i32));
+            let hash = text.chars().flat_map(|c| { let mut b = [0u16; 2]; c.encode_utf16(&mut b).to_vec() })
+                .fold(0i32, |h, u| h.wrapping_mul(31).wrapping_add(u as i32));
             Some(Value::Int(hash))
         }
-        // valueOf(char[], offset, count): the seam KajiLibrary builds every String through —
-        // `StringBuilder.toString`, `substring`, `Writer.write(String)`'s inverse, etc. A `char[]`
-        // stores UTF-16 code units two bytes wide (after the 12-byte array header); we slice
-        // `[offset, offset+count)`, decode them, and intern the text as a fresh heap String.
-        ("java/lang/String", "valueOf", "([CII)Ljava/lang/String;") => {
+        ("java/lang/String", "startsWith", "(Ljava/lang/String;)Z") => {
+            let text = strings::read(heap, reference(&args[0]));
+            let prefix = strings::read(heap, reference(&args[1]));
+            Some(Value::Int(text.starts_with(&prefix) as i32))
+        }
+        ("java/lang/String", "rawValueOf" | "valueOf", "([CII)Ljava/lang/String;") => {
             const ARRAY_HEADER: usize = 12; // object header (8) + length word (4)
             let array = reference(&args[0]);
             let start = int(&args[1]) as usize;
             let count = int(&args[2]) as usize;
             let units: Vec<u16> =
                 (0..count).map(|i| heap.read_u16(array + ARRAY_HEADER + (start + i) * 2)).collect();
-            let text = String::from_utf16_lossy(&units);
-            Some(Value::Reference(strings::intern(metaspace, heap, &text)))
-        }
-        // startsWith(prefix): whether the receiver begins with the argument String.
-        ("java/lang/String", "startsWith", "(Ljava/lang/String;)Z") => {
-            let text = strings::read(heap, reference(&args[0]));
-            let prefix = strings::read(heap, reference(&args[1]));
-            Some(Value::Int(text.starts_with(&prefix) as i32))
+            // Interned as UNITS, not through a Rust `String`. Going through one would be lossy in
+            // a way Java can observe: `from_utf16_lossy` turns an unpaired surrogate into U+FFFD,
+            // and a `char[]` is allowed to hold one. `new String(chars).charAt(0)` must answer
+            // 0xD800 when that is what was put in.
+            Some(Value::Reference(strings::intern_units(metaspace, heap, &units)))
         }
 
         // The CAS primitive (H5) — the atomic root of every lock-free counter. Compare the
@@ -456,6 +1184,373 @@ pub fn dispatch(
 }
 
 /// The `int` payload of an argument (a verifier-guaranteed `Int`).
+// --- El vecindario de `java.lang.Class`: nombres, mirrors y descriptores -------------------------
+//
+// Un mirror es una identidad, no un objeto con campos: la VM guarda uno por clase cargada, y
+// tambien por cada clase array sintetica y por cada primitivo (que no tienen archivo de clase
+// ninguno). Estas cuatro funciones son la traduccion entre las tres formas en que un tipo se
+// nombra -- nombre interno (`java/lang/String`, `[I`, `int`), descriptor (`Ljava/lang/String;`) y
+// mirror -- y existen para que las nativas de arriba no la repitan cada una a su manera.
+
+// --- Los atributos de clase que `ClassFile` guarda en crudo -------------------------------------
+//
+// `ClassFile` parsea el cuerpo de unos pocos atributos y deja los demas como bytes. Estos
+// lectores son la otra mitad: cada uno conoce el formato de §4.7 del que le toca y nada mas.
+
+/// El cuerpo crudo del atributo `wanted` de la clase `name`, si lo tiene.
+fn attribute_body<'a>(
+    metaspace: &'a mut MetaspaceService,
+    name: &str,
+    wanted: &str,
+) -> Option<&'a [u8]> {
+    let class = metaspace.get_or_load(name)?;
+    class
+        .attributes
+        .iter()
+        .find(|a| class.utf8(a.name_index) == Some(wanted))
+        .map(|a| a.info.as_slice())
+}
+
+fn has_attribute(metaspace: &mut MetaspaceService, name: &str, wanted: &str) -> bool {
+    attribute_body(metaspace, name, wanted).is_some()
+}
+
+/// El nombre de clase que el atributo `wanted` nombra en el offset `at` de su cuerpo.
+fn attribute_class(
+    metaspace: &mut MetaspaceService,
+    name: &str,
+    wanted: &str,
+    at: usize,
+) -> Option<String> {
+    let index = {
+        let body = attribute_body(metaspace, name, wanted)?;
+        if body.len() < at + 2 {
+            return None;
+        }
+        u16::from_be_bytes([body[at], body[at + 1]])
+    };
+    let class = metaspace.get(name)?;
+    class.class_name(index).map(str::to_string)
+}
+
+/// Los nombres de clase de un atributo con forma `u2 count` + `u2[] classes` -- que es la de
+/// `NestMembers` y la de `PermittedSubclasses`.
+fn attribute_class_list(
+    metaspace: &mut MetaspaceService,
+    name: &str,
+    wanted: &str,
+) -> Vec<String> {
+    let indices = {
+        let Some(body) = attribute_body(metaspace, name, wanted) else {
+            return Vec::new();
+        };
+        if body.len() < 2 {
+            return Vec::new();
+        }
+        let count = u16::from_be_bytes([body[0], body[1]]) as usize;
+        (0..count)
+            .filter_map(|i| {
+                let at = 2 + i * 2;
+                (at + 1 < body.len()).then(|| u16::from_be_bytes([body[at], body[at + 1]]))
+            })
+            .collect::<Vec<u16>>()
+    };
+    let Some(class) = metaspace.get(name) else {
+        return Vec::new();
+    };
+    indices.iter().filter_map(|&i| class.class_name(i).map(str::to_string)).collect()
+}
+
+/// La entrada de `InnerClasses` que habla de la clase `name` MISMA, como
+/// `(interna, externa, nombre simple)`. La externa es `None` para una local o anonima, y el
+/// nombre simple es `None` para una anonima -- que es como el archivo de clase distingue los tres
+/// casos sin decirlo con un flag.
+fn inner_class_entry(
+    metaspace: &mut MetaspaceService,
+    name: &str,
+) -> Option<(String, Option<String>, Option<String>)> {
+    let entries = inner_classes(metaspace, name);
+    entries.into_iter().find(|e| e.0 == name)
+}
+
+/// Toda la tabla `InnerClasses` de la clase `name`, decodificada.
+fn inner_classes(
+    metaspace: &mut MetaspaceService,
+    name: &str,
+) -> Vec<(String, Option<String>, Option<String>)> {
+    let rows = {
+        let Some(body) = attribute_body(metaspace, name, "InnerClasses") else {
+            return Vec::new();
+        };
+        if body.len() < 2 {
+            return Vec::new();
+        }
+        let count = u16::from_be_bytes([body[0], body[1]]) as usize;
+        (0..count)
+            .filter_map(|i| {
+                let at = 2 + i * 8;
+                if at + 5 >= body.len() {
+                    return None;
+                }
+                Some((
+                    u16::from_be_bytes([body[at], body[at + 1]]),
+                    u16::from_be_bytes([body[at + 2], body[at + 3]]),
+                    u16::from_be_bytes([body[at + 4], body[at + 5]]),
+                ))
+            })
+            .collect::<Vec<(u16, u16, u16)>>()
+    };
+    let Some(class) = metaspace.get(name) else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter_map(|&(inner, outer, simple)| {
+            let inner_name = class.class_name(inner)?.to_string();
+            let outer_name = class.class_name(outer).map(str::to_string);
+            let simple_name = class.utf8(simple).map(str::to_string);
+            Some((inner_name, outer_name, simple_name))
+        })
+        .collect()
+}
+
+/// Las clases que `name` declara adentro: las entradas cuyo `outer_class_info` es ella.
+fn declared_inner_classes(metaspace: &mut MetaspaceService, name: &str) -> Vec<String> {
+    inner_classes(metaspace, name)
+        .into_iter()
+        .filter(|(inner, outer, _)| {
+            inner != name && outer.as_deref() == Some(name)
+        })
+        .map(|(inner, _, _)| inner)
+        .collect()
+}
+
+/// Los componentes de un record, como `(nombre, descriptor)`, o `None` si la clase no lo es.
+fn record_components(
+    metaspace: &mut MetaspaceService,
+    name: &str,
+) -> Option<Vec<(String, String)>> {
+    let pairs = {
+        let body = attribute_body(metaspace, name, "Record")?;
+        if body.len() < 2 {
+            return Some(Vec::new());
+        }
+        let count = u16::from_be_bytes([body[0], body[1]]) as usize;
+        let mut at = 2;
+        let mut out = Vec::with_capacity(count);
+        for _ in 0..count {
+            if at + 5 >= body.len() {
+                break;
+            }
+            let name_index = u16::from_be_bytes([body[at], body[at + 1]]);
+            let descriptor_index = u16::from_be_bytes([body[at + 2], body[at + 3]]);
+            let attributes = u16::from_be_bytes([body[at + 4], body[at + 5]]) as usize;
+            at += 6;
+            // Cada componente puede traer sus propios atributos (`Signature`, anotaciones); se
+            // saltean leyendo su largo, que es un u4 detras del indice del nombre.
+            for _ in 0..attributes {
+                if at + 5 >= body.len() {
+                    break;
+                }
+                let length = u32::from_be_bytes([
+                    body[at + 2],
+                    body[at + 3],
+                    body[at + 4],
+                    body[at + 5],
+                ]) as usize;
+                at += 6 + length;
+            }
+            out.push((name_index, descriptor_index));
+        }
+        out
+    };
+    let class = metaspace.get(name)?;
+    Some(
+        pairs
+            .iter()
+            .filter_map(|&(n, d)| Some((class.utf8(n)?.to_string(), class.utf8(d)?.to_string())))
+            .collect(),
+    )
+}
+
+/// Los tipos que un metodo declara en su `throws`, leidos del atributo `Exceptions` (§4.7.5).
+/// Vacio cuando no lo tiene, que es lo mismo que no declarar ninguno.
+///
+/// El atributo se parsea acá y no en `ClassFile` porque su cuerpo se guarda crudo: son dos
+/// bytes de cuenta y dos por indice al pool, y este es el unico lector que hay.
+fn declared_exceptions(class: &ClassFile, member: &crate::jvm::parser::MemberInfo) -> Vec<String> {
+    for attribute in &member.attributes {
+        if class.utf8(attribute.name_index) != Some("Exceptions") {
+            continue;
+        }
+        let body = &attribute.info;
+        if body.len() < 2 {
+            return Vec::new();
+        }
+        let count = u16::from_be_bytes([body[0], body[1]]) as usize;
+        let mut out = Vec::with_capacity(count);
+        for i in 0..count {
+            let at = 2 + i * 2;
+            if at + 1 >= body.len() {
+                break;
+            }
+            let index = u16::from_be_bytes([body[at], body[at + 1]]);
+            if let Some(name) = class.class_name(index) {
+                out.push(name.to_string());
+            }
+        }
+        return out;
+    }
+    Vec::new()
+}
+
+/// Un descriptor de metodo partido en `(nombres internos de los parametros, del retorno)`.
+/// `(Ljava/lang/String;[IJ)V` → `(["java/lang/String", "[I", "long"], "void")`.
+fn split_descriptor(descriptor: &str) -> (Vec<String>, String) {
+    let bytes = descriptor.as_bytes();
+    let mut i = 1; // saltar el '('
+    let mut parameters = Vec::new();
+    while i < bytes.len() && bytes[i] != b')' {
+        let start = i;
+        while i < bytes.len() && bytes[i] == b'[' {
+            i += 1;
+        }
+        if i < bytes.len() && bytes[i] == b'L' {
+            while i < bytes.len() && bytes[i] != b';' {
+                i += 1;
+            }
+        }
+        i += 1;
+        parameters.push(internal_name_of(&descriptor[start..i]));
+    }
+    let returns = if i + 1 <= descriptor.len() {
+        internal_name_of(&descriptor[i + 1..])
+    } else {
+        "void".to_string()
+    };
+    (parameters, returns)
+}
+
+/// El nombre interno de la clase que un mirror nombra.
+pub(super) fn mirror_name(metaspace: &MetaspaceService, mirror: usize) -> String {
+    metaspace
+        .class_name_at_mirror(mirror)
+        .expect("Class: no hay ninguna clase en este mirror")
+        .to_string()
+}
+
+/// Las nueve palabras que nombran un tipo primitivo. No hay archivo de clase detras de ninguna,
+/// asi que el nombre **es** la identidad.
+fn is_primitive_name(name: &str) -> bool {
+    matches!(
+        name,
+        "int" | "long" | "double" | "float" | "short" | "byte" | "char" | "boolean" | "void"
+    )
+}
+
+/// El descriptor de campo de un nombre interno: `int` → `I`, `java/lang/String` →
+/// `Ljava/lang/String;`, y un array ya viene en forma de descriptor.
+pub(super) fn descriptor_of(name: &str) -> String {
+    match name {
+        "int" => "I".to_string(),
+        "long" => "J".to_string(),
+        "double" => "D".to_string(),
+        "float" => "F".to_string(),
+        "short" => "S".to_string(),
+        "byte" => "B".to_string(),
+        "char" => "C".to_string(),
+        "boolean" => "Z".to_string(),
+        "void" => "V".to_string(),
+        n if n.starts_with('[') => n.to_string(),
+        n => format!("L{n};"),
+    }
+}
+
+/// La vuelta de [`descriptor_of`]: el nombre interno que un descriptor de campo nombra.
+fn internal_name_of(descriptor: &str) -> String {
+    match descriptor.as_bytes().first() {
+        Some(b'I') => "int".to_string(),
+        Some(b'J') => "long".to_string(),
+        Some(b'D') => "double".to_string(),
+        Some(b'F') => "float".to_string(),
+        Some(b'S') => "short".to_string(),
+        Some(b'B') => "byte".to_string(),
+        Some(b'C') => "char".to_string(),
+        Some(b'Z') => "boolean".to_string(),
+        Some(b'V') => "void".to_string(),
+        Some(b'L') => descriptor[1..descriptor.len() - 1].to_string(),
+        _ => descriptor.to_string(), // ya es un array
+    }
+}
+
+/// El nombre interno del tipo COMPONENTE de una clase array, o `None` si no es un array. Una
+/// dimension menos: `[[I` → `[I`, y recien `[I` → `int`.
+fn component_name(array_class: &str) -> Option<String> {
+    let inner = array_class.strip_prefix('[')?;
+    Some(internal_name_of(inner))
+}
+
+/// El mirror de un nombre interno cualquiera, creandolo si hace falta. Las tres formas de tipo
+/// llegan por caminos distintos: un array por su mirror sintetico, un primitivo por el suyo
+/// (idem, pero indexado por la palabra clave) y una clase de verdad cargandola.
+fn mirror_for(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {
+    if name.starts_with('[') {
+        return array_operations::array_class_mirror(metaspace, heap, name);
+    }
+    if is_primitive_name(name) {
+        return primitive_mirror(metaspace, heap, name);
+    }
+    class_operations::load_class(metaspace, heap, name);
+    let uuid = metaspace.class_id(name).to_string();
+    metaspace.class_object(&uuid).unwrap_or(0)
+}
+
+/// El mirror de un primitivo por su palabra clave, creado la primera vez y cacheado despues --
+/// que es lo que hace que `int.class == int.class`. Solo cabecera: un primitivo no tiene
+/// estaticos, y como todo mirror va a **Old**, donde el GC no lo mueve.
+fn primitive_mirror(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    keyword: &str,
+) -> usize {
+    let uuid = metaspace.class_id(keyword).to_string();
+    if let Some(offset) = metaspace.class_object(&uuid) {
+        return offset;
+    }
+    let offset = heap.malloc_old(HEADER_SIZE);
+    metaspace.set_class_object(&uuid, offset);
+    class_operations::load_class(metaspace, heap, "java/lang/Class");
+    let class_uuid = metaspace.class_id("java/lang/Class").to_string();
+    let class_mirror = metaspace.class_object(&class_uuid).unwrap_or(0);
+    heap.write_u32(offset, class_mirror as u32);
+    offset
+}
+
+/// Un array de referencias de la clase `array_class`, con los elementos ya adentro. En **Old** y
+/// por el write barrier, por lo mismo que `build_object_array`: el llamador tiene las referencias
+/// en un `Vec` de Rust que no es raiz de nada.
+fn reference_array(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    array_class: &str,
+    elements: &[usize],
+) -> usize {
+    let mirror = array_operations::array_class_mirror(metaspace, heap, array_class);
+    let offset =
+        heap.malloc_old(array_operations::ARRAY_HEADER_SIZE + elements.len() * SLOT_SIZE);
+    heap.write_u32(offset, mirror as u32);
+    heap.write_u32(offset + array_operations::LENGTH_OFFSET, elements.len() as u32);
+    for (i, &value) in elements.iter().enumerate() {
+        if value != 0 {
+            heap.store_reference(
+                offset,
+                offset + array_operations::ARRAY_HEADER_SIZE + i * SLOT_SIZE,
+                value,
+            );
+        }
+    }
+    offset
+}
+
 fn int(value: &Value) -> i32 {
     match value {
         Value::Int(n) => *n,
@@ -472,6 +1567,20 @@ fn long(value: &Value) -> i64 {
 }
 
 /// The heap offset of a reference argument (a verifier-guaranteed `Reference`).
+fn double(value: &Value) -> f64 {
+    match value {
+        Value::Double(d) => *d,
+        other => panic!("se esperaba un double, llego {other:?}"),
+    }
+}
+
+fn float(value: &Value) -> f32 {
+    match value {
+        Value::Float(f) => *f,
+        other => panic!("se esperaba un float, llego {other:?}"),
+    }
+}
+
 fn reference(value: &Value) -> usize {
     match value {
         Value::Reference(offset) => *offset,

@@ -7,7 +7,7 @@
 public class LambdaRef {
     public static int run() {
         String greeting = "hola";
-        Sizer f = s -> (s + greeting).length();
+        LambdaSizer f = s -> (s + greeting).length();
 
         if (f.apply("a") != 5) return -1; // "ahola"
 
@@ -21,6 +21,9 @@ public class LambdaRef {
     }
 }
 
-interface Sizer {
+// El auxiliar lleva el prefijo del probe: `java/` es un paquete por defecto **plano**, asi
+// que dos fuentes que declaren la misma clase escriben el mismo `.class` y gana la ultima
+// compilada -- el resultado de la suite pasa a depender del orden de compilacion (#273).
+interface LambdaSizer {
     int apply(String s);
 }

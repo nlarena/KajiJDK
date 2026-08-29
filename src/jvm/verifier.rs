@@ -532,6 +532,7 @@ fn transfer(
             0xac => {
                 let v = pop(&mut state, &name, pc)?;
                 expect(&v, &VType::Int, metaspace, &name, pc)?;
+                expect_declared_return(&descriptor, Some(&VType::Int), "ireturn", &name, pc)?;
                 flow.fallthrough = false;
             }
 
@@ -541,6 +542,7 @@ fn transfer(
                 if is_constructor {
                     assert_no_uninitialized(&state, &name, pc, "constructor return")?;
                 }
+                expect_declared_return(&descriptor, None, "return", &name, pc)?;
                 flow.fallthrough = false;
             }
 
@@ -594,11 +596,13 @@ fn transfer(
             0xad => {
                 let v = pop(&mut state, &name, pc)?;
                 expect(&v, &VType::Long, metaspace, &name, pc)?;
+                expect_declared_return(&descriptor, Some(&VType::Long), "lreturn", &name, pc)?;
                 flow.fallthrough = false;
             }
             0xaf => {
                 let v = pop(&mut state, &name, pc)?;
                 expect(&v, &VType::Double, metaspace, &name, pc)?;
+                expect_declared_return(&descriptor, Some(&VType::Double), "dreturn", &name, pc)?;
                 flow.fallthrough = false;
             }
             // areturn → pop a reference assignable to the method's declared return
@@ -608,6 +612,7 @@ fn transfer(
                 if !is_reference(&v) {
                     return Err(err(&name, pc, format!("areturn: {v:?} is not a reference")));
                 }
+                expect_declared_return(&descriptor, Some(&v), "areturn", &name, pc)?;
                 if let Some(ret) = return_type(&descriptor) {
                     expect(&v, &ret, metaspace, &name, pc)?;
                 }
@@ -666,6 +671,7 @@ fn transfer(
             0xae => {
                 let v = pop(&mut state, &name, pc)?;
                 expect(&v, &VType::Float, metaspace, &name, pc)?;
+                expect_declared_return(&descriptor, Some(&VType::Float), "freturn", &name, pc)?;
                 flow.fallthrough = false;
             }
 
@@ -1811,6 +1817,35 @@ fn parse_params(descriptor: &str) -> Vec<VType> {
     params
 }
 
+/// JVMS §6.5 — each `Xreturn` variant demands a specific **declared** return type: `ireturn` only
+/// in a method returning boolean/byte/char/short/int, `lreturn` only in one returning long, plain
+/// `return` only in a `void` one. Checking just the value on the stack is not enough: it lets an
+/// `ireturn` through in a `()J` descriptor — a structurally invalid class file that passes the
+/// verifier and only blows up when executed (#217b).
+///
+/// `want` is `None` for the void `return`; a `Reference` matches any declared reference type (the
+/// assignability of the *value* is checked separately by the `areturn` arm).
+fn expect_declared_return(
+    descriptor: &str,
+    want: Option<&VType>,
+    op: &str,
+    method: &str,
+    pc: usize,
+) -> Result<(), VerifyError> {
+    let declared = return_type(descriptor);
+    let ok = match (want, declared.as_ref()) {
+        (None, None) => true,
+        (Some(VType::Reference(_)), Some(d)) => is_reference(d),
+        (Some(w), Some(d)) => w == d,
+        _ => false,
+    };
+    if ok {
+        return Ok(());
+    }
+    let shown = declared.map_or_else(|| "void".to_string(), |d| format!("{d:?}"));
+    Err(err(method, pc, format!("{op}: the method's declared return type is {shown}")))
+}
+
 /// The return type of a method `descriptor`, or `None` for `void`.
 fn return_type(descriptor: &str) -> Option<VType> {
     let close = descriptor.find(')')?;
@@ -2279,6 +2314,32 @@ mod tests {
         // middle of `bipush 5`, whose boundaries are {0, 2}).
         let bad = ExceptionTableEntry { start_pc: 1, end_pc: 2, handler_pc: 0, catch_type: 0 };
         assert!(structural_check(&code(vec![0x10, 0x05, 0xac], vec![bad]), "m").is_err());
+    }
+
+    /// #217b — el verificador tiene que cotejar el `Xreturn` contra el **descriptor declarado**,
+    /// no solo contra el valor de la pila. Un `ireturn` en un `()J` deja la pila consistente
+    /// (`getstatic size:I` empuja un `Int`, `ireturn` lo saca): sin este chequeo el class file
+    /// pasa la verificación y revienta recién al ejecutarse, con un `expected a long, found Int`.
+    #[test]
+    fn return_opcode_must_match_the_declared_return_type() {
+        let int = VType::Int;
+        let long = VType::Long;
+        let obj = VType::Reference("java/lang/String".to_string());
+        // La forma correcta de cada uno.
+        assert!(expect_declared_return("()I", Some(&int), "ireturn", "m", 0).is_ok());
+        assert!(expect_declared_return("()Z", Some(&int), "ireturn", "m", 0).is_ok()); // boolean ⊂ int
+        assert!(expect_declared_return("()J", Some(&long), "lreturn", "m", 0).is_ok());
+        assert!(expect_declared_return("()V", None, "return", "m", 0).is_ok());
+        assert!(expect_declared_return("()Ljava/lang/Object;", Some(&obj), "areturn", "m", 0).is_ok());
+        assert!(expect_declared_return("()[I", Some(&obj), "areturn", "m", 0).is_ok()); // un array es referencia
+        // El caso de #217: `ireturn` en un método que declara `long`.
+        assert!(expect_declared_return("()J", Some(&int), "ireturn", "m", 0).is_err());
+        // Y el resto de los cruces, incluido el `return` pelado en un método con valor.
+        assert!(expect_declared_return("()I", Some(&long), "lreturn", "m", 0).is_err());
+        assert!(expect_declared_return("()V", Some(&int), "ireturn", "m", 0).is_err());
+        assert!(expect_declared_return("()I", None, "return", "m", 0).is_err());
+        assert!(expect_declared_return("()I", Some(&obj), "areturn", "m", 0).is_err());
+        assert!(expect_declared_return("()Ljava/lang/String;", Some(&int), "ireturn", "m", 0).is_err());
     }
 
     #[test]

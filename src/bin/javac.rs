@@ -85,21 +85,39 @@ fn main() {
         }
     }
 
-    let (mode, path) = match args.first().map(String::as_str) {
-        Some("--tokens") => (Mode::Tokens, args.get(1)),
-        Some("--symbols") => (Mode::Symbols, args.get(1)),
-        Some("--check") => (Mode::Check, args.get(1)),
-        Some("--desugar") => (Mode::Desugar, args.get(1)),
-        Some("--emit") => (Mode::Emit, args.get(1)),
-        Some("--ast-raw") => (Mode::AstRaw, args.get(1)),
-        Some(_) => (Mode::AstTree, args.first()),
-        None => (Mode::AstTree, None),
+    // **Finding #240**: acá se tomaba **un solo** archivo (`args.get(1)`) y los demás se descartaban
+    // **en silencio** — `javac --emit A.java B.java` escribía `A.class` y de `B` no decía nada. Ahora
+    // se procesan todos, uno por uno.
+    //
+    // Ojo con lo que esto **no** arregla: cada archivo se sigue compilando como una unidad
+    // independiente, así que uno no ve los tipos del otro. Eso es el **finding #234** (una invocación
+    // con varios archivos no resuelve cruzado) y se arregla en otro lado — acá lo único que cambia es
+    // que ningún archivo se pierda sin aviso.
+    let (mode, inputs): (Mode, Vec<&String>) = match args.first().map(String::as_str) {
+        Some("--tokens") => (Mode::Tokens, args[1..].iter().collect()),
+        Some("--symbols") => (Mode::Symbols, args[1..].iter().collect()),
+        Some("--check") => (Mode::Check, args[1..].iter().collect()),
+        Some("--desugar") => (Mode::Desugar, args[1..].iter().collect()),
+        Some("--emit") => (Mode::Emit, args[1..].iter().collect()),
+        Some("--ast-raw") => (Mode::AstRaw, args[1..].iter().collect()),
+        Some(_) => (Mode::AstTree, args.iter().collect()),
+        None => (Mode::AstTree, Vec::new()),
     };
-    let Some(input) = path else {
-        eprintln!("uso: javac [-cp <dirs>] [--tokens | --symbols | --check | --desugar | --emit | --ast-raw] <archivo.java>");
+    if inputs.is_empty() {
+        eprintln!("uso: javac [-cp <dirs>] [--tokens | --symbols | --check | --desugar | --emit | --ast-raw] <archivo.java>...");
         process::exit(2);
-    };
+    }
 
+    // `--emit` procesa **todos** los archivos en una sola compilación: comparten la tabla de
+    // símbolos, así que cada uno ve los tipos de los otros (#234). Los demás modos siguen archivo
+    // por archivo — son de inspección, y no hay nada que cruzar.
+    if matches!(mode, Mode::Emit) {
+        emit_all(&inputs, &extra_classpath, &lint_set);
+        return;
+    }
+
+    for input in inputs {
+    let input: &str = input;
     let source = fs::read_to_string(input).unwrap_or_else(|err| {
         eprintln!("javac: no se pudo leer {input}: {err}");
         process::exit(1);
@@ -157,23 +175,46 @@ fn main() {
             }
             Err(err) => fail(input, &source, err),
         },
-        // Compila y **escribe un `.class` por clase**, cada uno con el nombre de **su** clase (no el
-        // del archivo), en el mismo directorio que el fuente. Una unidad con varios tipos, o con
-        // clases sintéticas (`C$1` del `switch`-enum), produce varios archivos.
-        Mode::Emit => {
-            // Los avisos de `-Xlint` se imprimen antes de emitir (no impiden la emisión).
-            let warnings =
-                jvm::javac::lint_cp(&source, &extra_classpath, &lint_set).unwrap_or_default();
-            if !warnings.is_empty() {
-                eprint!("{}", jvm::javac::render_diagnostics(&warnings, &source, input));
-            }
-            match jvm::javac::compile_cp(&source, &extra_classpath) {
-            Ok(classes) => {
-                for (internal, bytes) in &classes {
+        Mode::Emit => unreachable!("`--emit` se procesa antes del bucle, con todos los archivos"),
+    }
+    }
+}
+
+/// Compila **todos** los archivos juntos y escribe un `.class` por clase, con el nombre de **su**
+/// clase (no el del archivo), al lado de **su** fuente. Una unidad con varios tipos, o con clases
+/// sintéticas (`C$1` del `switch`-enum), produce varios archivos.
+///
+/// Que sea una sola compilación y no una por archivo es lo que hace que dos clases se vean entre
+/// sí (#234). Un error en cualquiera de los archivos aborta la emisión de **todos**: es una unidad
+/// de trabajo, y emitir la mitad dejaría un directorio a medias que parece completo.
+fn emit_all(inputs: &[&String], extra_classpath: &[std::path::PathBuf], lint_set: &jvm::javac::lint::LintSet) {
+    let sources: Vec<String> = inputs
+        .iter()
+        .map(|input| {
+            fs::read_to_string(input.as_str()).unwrap_or_else(|err| {
+                eprintln!("javac: no se pudo leer {input}: {err}");
+                process::exit(1);
+            })
+        })
+        .collect();
+    // Los avisos de `-Xlint` se imprimen antes de emitir (no impiden la emisión).
+    for (input, source) in inputs.iter().zip(&sources) {
+        let warnings = jvm::javac::lint_cp(source, extra_classpath, lint_set).unwrap_or_default();
+        if !warnings.is_empty() {
+            eprint!("{}", jvm::javac::render_diagnostics(&warnings, source, input));
+        }
+    }
+    let refs: Vec<&str> = sources.iter().map(String::as_str).collect();
+    match jvm::javac::compile_units_cp(&refs, extra_classpath) {
+        Ok(per_unit) => {
+            for ((input, source), classes) in inputs.iter().zip(&sources).zip(&per_unit) {
+                let _ = source;
+                for (internal, bytes) in classes {
                     // El nombre de archivo es el último segmento del nombre interno (`com/foo/A$B`
                     // → `A$B.class`); el paquete no se traduce a subdirectorios.
                     let simple = internal.rsplit('/').next().unwrap_or(internal);
-                    let out = std::path::Path::new(input).with_file_name(format!("{simple}.class"));
+                    let out =
+                        std::path::Path::new(input.as_str()).with_file_name(format!("{simple}.class"));
                     if let Err(err) = fs::write(&out, bytes) {
                         eprintln!("javac: no se pudo escribir {}: {err}", out.display());
                         process::exit(1);
@@ -181,8 +222,16 @@ fn main() {
                     println!("javac: escrito {} ({} bytes)", out.display(), bytes.len());
                 }
             }
-            Err(err) => fail(input, &source, err),
-            }
+        }
+        // El error trae línea y columna pero no de qué archivo: se renderiza contra el primero que
+        // lo contenga. Con un solo archivo —el caso normal— es exacto.
+        Err(err) => {
+            let (input, source) = inputs
+                .iter()
+                .zip(&sources)
+                .find(|(_, s)| err.line as usize <= s.lines().count())
+                .unwrap_or((&inputs[0], &sources[0]));
+            fail(input, source, err)
         }
     }
 }
@@ -212,6 +261,7 @@ fn print_token_table(tokens: &[jvm::javac::token::Token]) {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Mode {
     Tokens,
     Symbols,

@@ -122,6 +122,14 @@ public class LinkedHashSet<E> implements Set<E> {
     public Iterator<E> iterator() {
         return new LinkedHashSetItr<E>(map);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.DISTINCT | Spliterator.SIZED | Spliterator.ORDERED);
+    }
 }
 
 // Walks the backing map's order list, one entry at a time — no snapshot, no extra storage, and
@@ -150,4 +158,5 @@ final class LinkedHashSetItr<E> implements Iterator<E> {
         next = map.afterEntry(next);
         return key;
     }
+
 }

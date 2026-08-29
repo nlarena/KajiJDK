@@ -1,5 +1,9 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractSet;
 import java.util.Iterator;
@@ -57,5 +61,15 @@ public class CopyOnWriteArraySet<E> extends AbstractSet<E> implements Serializab
     // never throws ConcurrentModificationException.
     public Iterator<E> iterator() {
         return al.iterator();
+    }
+
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.DISTINCT | Spliterator.SIZED | Spliterator.SUBSIZED |
+                        Spliterator.IMMUTABLE);
     }
 }

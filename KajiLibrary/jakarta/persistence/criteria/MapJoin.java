@@ -77,5 +77,5 @@ public interface MapJoin<Z, K, V>
      * Create an expression that corresponds to the map entry.
      * @return expression corresponding to the map entry
      */
-    // OMITIDO (subset): Expression<Map.Entry<K, V>> entry();  -- finding #101
+    Expression<Map.Entry<K, V>> entry();
 }

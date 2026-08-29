@@ -1,5 +1,8 @@
 package java.util.concurrent;
 
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractQueue;
 import java.util.Collection;
@@ -188,5 +191,14 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         // AbqItr is this package's snapshot iterator, written for ArrayBlockingQueue; the
         // semantics are identical, so it is reused rather than duplicated.
         return new AbqItr<E>(snapshot);
+    }
+
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.SIZED | Spliterator.SUBSIZED | Spliterator.NONNULL);
     }
 }

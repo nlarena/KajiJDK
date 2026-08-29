@@ -108,7 +108,7 @@ use super::ast::{
     AssignOp, Binding, BinOp, BootstrapArg, Block, CaseLabel, CatchClause, ClassDecl,
     CompilationUnit, Expr, ExprKind, FieldDecl, IndyCall, LambdaBody, Member, MethodDecl,
     MethodRefQualifier, Modifier, Param, Pattern, Pos, PrimType, Stmt, StmtKind, SwitchBody,
-    SwitchCase, Type, TypeKind, UnOp,
+    SwitchCase, Type, TypeKind, TypeParam, UnOp,
 };
 use super::attribute::{candidates, constructors, functional_sam};
 use super::codegen::{internal_name, rtype_desc};
@@ -185,6 +185,7 @@ pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
         cur_method: String::new(),
         lambda_ordinal: 0,
         cur_method_sig: None,
+        cur_method_type_params: Vec::new(),
         has_this: false,
         enclosing_type: None,
         cur_fqn: String::new(),
@@ -243,6 +244,10 @@ struct Desugarer<'a> {
     /// un **inicializador** (o fuera de un método). Lo lee `lift_local_class` para el atributo
     /// `EnclosingMethod` (§4.7.7) de la local/anónima que levanta.
     cur_method_sig: Option<(String, String)>,
+    /// Los parámetros de tipo del método envolvente. El método sintético de una lambda los
+    /// hereda: sin ellos, un parámetro suyo tipado `T` no resuelve al emitir el descriptor y cae
+    /// a `Object`, que no es la *erasure* de una `T` con cota (#282).
+    cur_method_type_params: Vec<TypeParam>,
     /// Si en el punto actual hay `this` disponible (falso en `static`): una lambda solo puede
     /// **capturar** `this` —y su implementación ser un método de instancia— cuando lo hay.
     has_this: bool,
@@ -274,6 +279,12 @@ struct Desugarer<'a> {
 
 /// El scope que contiene los tipos top-level (el del paquete) — el `enclosing` del scope de miembros
 /// de cualquier tipo top-level. Necesario para registrar la clase sintética en el lugar correcto.
+/// La interfaz que **declara** el SAM. No siempre es la que la lambda instancia: `BinaryOperator<T>`
+/// hereda su `apply` de `BiFunction`, y es contra *esa* que hay que sustituir.
+fn sam_owner(table: &SymbolTable, sam: SymbolId) -> SymbolId {
+    table.symbol(sam).owner.unwrap_or(sam)
+}
+
 fn top_level_scope(table: &SymbolTable, types: &[ClassDecl]) -> ScopeId {
     types
         .first()
@@ -586,8 +597,18 @@ fn hoist_initializers(class: &mut ClassDecl, consts: &super::codegen::ConstField
     for member in &mut class.members {
         match member {
             Member::Field(f) => {
-                let is_static = f.modifiers.contains(&Modifier::Static);
-                let is_final = f.modifiers.contains(&Modifier::Final);
+                // **Finding #124**: acá se miraban los modificadores **declarados**, y en una interfaz
+                // vienen vacíos — JLS §9.3 da `public static final` por implícitos. El campo se tomaba
+                // entonces por uno **de instancia**, se iba a `instances`, y más abajo eso sintetizaba
+                // un **constructor sobre la interfaz**: un `<init>()V` ilegal, emitido además como
+                // `default`, que arranca con `aload_0; invokespecial Object.<init>` sobre un `this` que
+                // no puede existir, y que nadie llama — así que el campo quedaba sin asignar.
+                //
+                // Con los modificadores implícitos, un campo de interfaz es estático y su inicializador
+                // se va al `<clinit>`, que es donde manda JVMS §2.9.2.
+                let mods = super::enter::implicit_field_mods(class.kind, &f.modifiers);
+                let is_static = mods.contains(&Modifier::Static);
+                let is_final = mods.contains(&Modifier::Final);
                 // Un `static final` con inicializador de expresión constante (§15.29) **no** se baja al
                 // `<clinit>`: su valor va al atributo `ConstantValue` del campo, que la JVM asigna al
                 // preparar la clase. Se deja `f.init` en su lugar para que el codegen lo lea y emita.
@@ -628,7 +649,14 @@ fn hoist_initializers(class: &mut ClassDecl, consts: &super::codegen::ConstField
     if !instances.is_empty() {
         // Sin ningún constructor donde meterlos, hace falta uno: el por defecto que el emisor
         // sintetizaría es `super(); return`, y ahí los inicializadores se perderían.
-        if !class.members.iter().any(|m| matches!(m, Member::Method(me) if me.is_constructor)) {
+        //
+        // **Nunca en una interfaz** (finding #124): no puede declarar `<init>`, y con los
+        // modificadores implícitos aplicados arriba ya no debería llegar nada a `instances` desde una
+        // — todos sus campos son estáticos. La guarda deja el invariante escrito en vez de confiado.
+        let es_interfaz = matches!(class.kind, TypeKind::Interface | TypeKind::Annotation);
+        if !es_interfaz
+            && !class.members.iter().any(|m| matches!(m, Member::Method(me) if me.is_constructor))
+        {
             class.members.push(Member::Method(MethodDecl {
                 doc: None,
                 annotations: Vec::new(),
@@ -783,6 +811,7 @@ impl Desugarer<'_> {
         // La numeración de lambdas es por método: se salva la del método envolvente (una clase local
         // se procesa en medio de él) y se restaura al salir, para que sus lambdas posteriores sigan.
         let saved_lambda_ordinal = std::mem::take(&mut self.lambda_ordinal);
+        let saved_method_tps = std::mem::take(&mut self.cur_method_type_params);
         self.cur_class = self.table.class(&fqn);
         // Una interna de **instancia**: se le sintetiza el campo `this$0` y se le inyecta a los
         // constructores el parámetro/asignación de la instancia envolvente, **antes** de recorrer sus
@@ -795,6 +824,7 @@ impl Desugarer<'_> {
                 Member::Method(m) => {
                     self.cur_method = m.name.clone();
                     self.lambda_ordinal = 0; // la primera lambda de cada método es `$0`
+                    self.cur_method_type_params = m.type_params.clone();
                     // El método/constructor envolvente, para el `EnclosingMethod` de una local que
                     // declare en su cuerpo: su nombre (`<init>` para un ctor) y descriptor emitido.
                     self.cur_method_sig = self.cur_class.map(|cid| {
@@ -853,6 +883,7 @@ impl Desugarer<'_> {
         self.has_this = saved_has_this;
         self.cur_method_sig = saved_method_sig;
         self.lambda_ordinal = saved_lambda_ordinal;
+        self.cur_method_type_params = saved_method_tps;
         // Los inicializadores de **instancia** corren dentro de cada constructor, después del
         // `super()` (§8.6/§12.5): se copian al frente de su cuerpo. Un constructor que delega en
         // `this(...)` **no** los corre — ya los corrió aquel.
@@ -949,7 +980,9 @@ impl Desugarer<'_> {
     ///   desde afuera; el bucle da exactamente eso.
     /// - `valueOf` compara contra los nombres **literales** acá adentro, en vez de delegar en
     ///   `Enum.valueOf(Class, String)`: esa versión va por `Class.enumConstantDirectory()`, o sea
-    ///   reflexión sobre el `$VALUES` de otra clase.
+    ///   reflexión sobre el `$VALUES` de otra clase. **No es negociable** mientras no haya reflexión:
+    ///   `java.lang.Enum` de KajiLibrary **no declara** ese método, a propósito, así que delegar deja
+    ///   sin compilar a todo archivo que declare un `enum` (finding #250, 70 fuentes caídas).
     ///
     /// Los símbolos del constructor, de `values()` y de `valueOf()` se **registran** acá: `enter` no
     /// los vio, y la re-atribución los busca por la tabla, no por el AST.
@@ -1110,21 +1143,52 @@ impl Desugarer<'_> {
             is_constructor: false,
         }));
 
-        // 6. `valueOf(String)`: delega en `java.lang.Enum.valueOf(Class, String)` con un `checkcast` a
-        //    `E`, byte a byte como javac (§8.9.3) — es `Enum.valueOf` la que valida el nombre y tira el
-        //    `IllegalArgumentException`. El `target` cualificado a `Enum` es imprescindible: sin él la
-        //    re-atribución auto-resolvería a `E.valueOf` (recursión infinita).
+        // 6. `valueOf(String)`: **autocontenido**, comparando contra los nombres literales acá
+        //    adentro:
+        //
+        //        if ($n.equals("ROJO"))  return ROJO;
+        //        if ($n.equals("VERDE")) return VERDE;
+        //        throw new IllegalArgumentException($n);
+        //
+        //    Es un desvío deliberado de javac, que emite
+        //    `return (E) Enum.valueOf(E.class, $n);`. **Finding #250 — regresión:** en algún momento
+        //    se cambió a esa delegación "para coincidir byte a byte con javac", y eso rompió la
+        //    compilación de **todo** archivo que declare un `enum`: `java.lang.Enum.valueOf(Class,
+        //    String)` **no existe en KajiLibrary, y su ausencia es intencional** — la versión real va
+        //    por `Class.enumConstantDirectory()`, o sea reflexión sobre el `$VALUES` de otra clase,
+        //    que no tenemos. El costo medido de la regresión fueron **70 de 941 fuentes sin `.class`**.
+        //
+        //    Ojo con el precedente de al lado: `values()` sí se pudo alinear con javac (usa
+        //    `$VALUES.clone()`, que el emisor y la VM soportan). La diferencia es que ahí el opcode
+        //    existe; acá la dependencia es la reflexión, y por eso este desvío se queda.
+        //
+        //    Dos detalles que **no** hay que "mejorar" — los dos se probaron y rompen:
+        //    - El receptor es el **literal** (`"ROJO".equals($n)`), no el argumento. Con `$n` de
+        //      receptor un nombre `null` daría `NullPointerException`, que es lo que manda §8.9.3,
+        //      pero acá no hay con que distinguirlo del caso "no matchea", y la forma con literal es
+        //      la que estaba probada.
+        //    - El `IllegalArgumentException` va **sin argumentos**. Pasarle `$n` hace que el
+        //      verificador estricto rechace el método (`<init> receiver … is not an uninitialized
+        //      object`) cuando el tipo no resuelve en el classpath del que compila — que es
+        //      justamente el caso de los tests con classpath minimo.
         let arg = "$n".to_string();
-        let vo_call = ex(ExprKind::Call {
-            target: Some(Box::new(name("Enum"))),
-            name: "valueOf".to_string(),
-            args: vec![ex(ExprKind::ClassLit(ety.clone())), name(&arg)],
-            type_args: Vec::new(),
-        });
-        let vo_body = Block(vec![st(StmtKind::Return(Some(ex(ExprKind::Cast {
-            ty: ety.clone(),
-            expr: Box::new(vo_call),
-        }))))]);
+        let mut vo_stmts: Vec<Stmt> = Vec::new();
+        for c in &class.enum_constants {
+            let cmp = call(ex(ExprKind::StringLit(c.name.clone())), "equals", vec![name(&arg)]);
+            vo_stmts.push(st(StmtKind::If {
+                cond: cmp,
+                then: boxst(StmtKind::Return(Some(name(&c.name)))),
+                els: None,
+            }));
+        }
+        // Nombre desconocido: el mismo error que manda §8.9.3.
+        vo_stmts.push(st(StmtKind::Throw(ex(ExprKind::NewObject {
+            ty: Type::Class("IllegalArgumentException".to_string()),
+            args: Vec::new(),
+            body: None,
+            outer: None,
+        }))));
+        let vo_body = Block(vo_stmts);
         let vo_params = vec![Param { annotations: Vec::new(), ty: string, name: arg, varargs: false, is_final: false, type_annos: Vec::new() }];
         self.register_method(cid, scope, "valueOf", &vo_params, &ety, false);
         out.push(Member::Method(MethodDecl {
@@ -2655,7 +2719,12 @@ impl Desugarer<'_> {
         let sam_name = self.table.symbol(sam).name.clone();
         // Los tipos **instanciados** del SAM (los que la lambda ve de verdad): se sustituyen los
         // parámetros de tipo de la interfaz (`Function<Integer,Integer>` ⇒ `(Integer)Integer`).
-        let subst = types::subst_of(self.table, &iface);
+        // Va por `subst_for` y no por `subst_of` porque el SAM puede estar declarado en una
+        // **superinterfaz**: el de `BinaryOperator<T>` es el `apply` de `BiFunction<T,T,T>`, y sus
+        // tipos hablan del `T`/`U`/`R` de *BiFunction*. Con la sustitución de la interfaz sola esas
+        // variables sobrevivían sin sustituir, y el método sintético quedaba declarando un retorno
+        // `R` que no es ningún tipo — invisible porque la erasure lo borra a `Object` igual (#208).
+        let subst = types::subst_for(self.table, &iface, sam_owner(self.table, sam));
         let inst_params: Vec<RType> =
             sam_params.iter().map(|p| types::substitute(p, &subst)).collect();
         let inst_ret = types::substitute(&sam_ret, &subst);
@@ -2720,7 +2789,13 @@ impl Desugarer<'_> {
             return_annos: Vec::new(),
             pos: e.pos,
             modifiers,
-            type_params: Vec::new(),
+            // Los del método envolvente. Un parámetro de la lambda tipado con una variable de
+            // tipo de ese método —`(T a, T b) -> …` dentro de `<T extends Comparable<…>> …`—
+            // solo se puede *borrar* bien si `T` sigue siendo nombrable acá: sin esto el emisor
+            // no la resolvía y escribía `Object`, mientras el `MethodHandle` del pool escribía
+            // la cota. Los dos descriptores del MISMO método dejaban de coincidir y el call site
+            // moría con `NoSuchMethodError` (#282).
+            type_params: self.cur_method_type_params.clone(),
             return_type,
             name: impl_name.clone(),
             params: method_params,
@@ -2803,7 +2878,8 @@ impl Desugarer<'_> {
         let (sam_params, sam_ret) = (sam_params.clone(), sam_ret.clone());
         let sam_name = self.table.symbol(sam).name.clone();
         let sam_arity = sam_params.len();
-        let subst = types::subst_of(self.table, &iface);
+        // Igual que en la lambda: el SAM puede venir de una superinterfaz (ver `lower_lambda`).
+        let subst = types::subst_for(self.table, &iface, sam_owner(self.table, sam));
         let inst_params: Vec<RType> =
             sam_params.iter().map(|p| types::substitute(p, &subst)).collect();
         let inst_ret = types::substitute(&sam_ret, &subst);
@@ -3570,7 +3646,7 @@ fn metafactory_indy(
 fn concat_const(kind: &ExprKind) -> Option<String> {
     match kind {
         ExprKind::StringLit(s) => Some(s.clone()),
-        ExprKind::CharLit(c) => Some(c.to_string()),
+        ExprKind::CharLit(c) => char::from_u32(u32::from(*c)).map(|ch| ch.to_string()),
         ExprKind::BoolLit(b) => Some(b.to_string()),
         ExprKind::IntLit(i) | ExprKind::LongLit(i) => Some(i.to_string()),
         _ => None,

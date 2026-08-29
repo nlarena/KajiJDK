@@ -365,6 +365,14 @@ public class LinkedList<E> implements List<E>, Deque<E> {
     public E pop() {
         return removeFirst();
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED);
+    }
 }
 
 // One link: its element and both neighbours. Package-private and top-level rather than
@@ -410,4 +418,5 @@ final class LinkedListItr<E> implements Iterator<E> {
         }
         return e;
     }
+
 }

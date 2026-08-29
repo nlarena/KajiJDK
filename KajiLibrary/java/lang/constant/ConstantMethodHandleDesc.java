@@ -1,20 +1,21 @@
 package java.lang.constant;
 
-import java.lang.constant.DirectMethodHandleDesc.Kind;
+import java.lang.constant.DirectMethodHandleDesc;
+
 
 // The implementation of `DirectMethodHandleDesc`, in its own file rather than beside the
 // interface: a top-level class cannot see a nested type declared by a sibling in the SAME file
-// (finding #101), so `Kind` has to arrive through an import — and an import needs its own
+// (finding #101), so `DirectMethodHandleDesc.Kind` has to arrive through an import — and an import needs its own
 // compilation unit to be worth anything here. Importing the nested type directly is the form
 // that resolves; the qualified `DirectMethodHandleDesc.Kind` does not.
 final class ConstantMethodHandleDesc implements DirectMethodHandleDesc {
 
-    private final Kind kind;
+    private final DirectMethodHandleDesc.Kind kind;
     private final ClassDesc owner;
     private final String name;
     private final String lookupDescriptor;
 
-    ConstantMethodHandleDesc(Kind kind, ClassDesc owner, String name, String lookupDescriptor) {
+    ConstantMethodHandleDesc(DirectMethodHandleDesc.Kind kind, ClassDesc owner, String name, String lookupDescriptor) {
         this.kind = kind;
         this.owner = owner;
         this.name = name;
@@ -27,11 +28,11 @@ final class ConstantMethodHandleDesc implements DirectMethodHandleDesc {
     // incompatible"), even though the emitted `interfaces[]` table is correct. Declaring the
     // factory here makes the same relation a source-to-classpath one, which the compiler does
     // accept, and the caller then only reads the return type off this method's descriptor.
-    static DirectMethodHandleDesc make(Kind kind, ClassDesc owner, String name, String lookupDescriptor) {
+    static DirectMethodHandleDesc make(DirectMethodHandleDesc.Kind kind, ClassDesc owner, String name, String lookupDescriptor) {
         return new ConstantMethodHandleDesc(kind, owner, name, lookupDescriptor);
     }
 
-    public Kind kind() {
+    public DirectMethodHandleDesc.Kind kind() {
         return kind;
     }
 
@@ -68,7 +69,7 @@ final class ConstantMethodHandleDesc implements DirectMethodHandleDesc {
         // interface variants (INTERFACE_STATIC, INTERFACE_SPECIAL, INTERFACE_VIRTUAL) share both
         // the byte and the shape of their invocation type with their class counterparts. It also
         // sidesteps finding #101: an imported nested type resolves in a TYPE position, but
-        // `Kind.STATIC` in a VALUE position is read as a variable and does not resolve.
+        // `DirectMethodHandleDesc.Kind.STATIC` in a VALUE position is read as a variable and does not resolve.
         int ref = kind.refKind;
         MethodTypeDesc type;
         if (ref == 1) {
@@ -124,5 +125,16 @@ final class ConstantMethodHandleDesc implements DirectMethodHandleDesc {
         // string-concat desugar reports `append` as ambiguous (finding #122 — a class's
         // declaration and its interface's re-declaration count as two candidates).
         return "MethodHandleDesc[" + owner.displayName() + "::" + name + lookupDescriptor + "]";
+    }
+
+    /**
+     * Unsupported: resolving a descriptor needs `java.lang.invoke`, which this library does not
+     * have. Everything else about this type works without it.
+     *
+     * @param lookup the lookup that would perform the resolution
+     * @throws UnsupportedOperationException always
+     */
+    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

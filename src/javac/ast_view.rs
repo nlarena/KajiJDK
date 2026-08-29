@@ -254,7 +254,11 @@ fn expr_node(expr: &Expr) -> Node {
         ExprKind::LongLit(v) => leaf(format!("LongLit {v}")),
         ExprKind::FloatLit(v) => leaf(format!("FloatLit {v}")),
         ExprKind::DoubleLit(v) => leaf(format!("DoubleLit {v}")),
-        ExprKind::CharLit(c) => leaf(format!("CharLit {c:?}")),
+        ExprKind::CharLit(c) => leaf(match char::from_u32(u32::from(*c)) {
+            Some(ch) => format!("CharLit {ch:?}"),
+            // Un sustituto suelto no tiene `char` que lo muestre: va por su valor.
+            None => format!("CharLit 0x{c:04x}"),
+        }),
         ExprKind::StringLit(s) => leaf(format!("StringLit {s:?}")),
         ExprKind::BoolLit(b) => leaf(format!("BoolLit {b}")),
         ExprKind::Null => leaf("Null"),

@@ -206,6 +206,14 @@ impl Exec<'_> {
                 self.advance_past_call();
                 return Step::Continue;
             }
+            // `Method.invoke`: acá y no en el puente de nativas porque tiene que correr bytecode
+            // — el puente no puede empujar un frame. El receptor es el objeto `Method`.
+            Intrinsic::MethodInvoke => return self.method_invoke(receiver, &locals),
+            // `Constructor.newInstance`: idem, y ademas aloca. El receptor es el objeto
+            // `Constructor`.
+            Intrinsic::ConstructorNewInstance => {
+                return self.constructor_new_instance(receiver, &locals)
+            }
             _ => {}
         }
 
@@ -461,7 +469,7 @@ impl Exec<'_> {
 
     /// Reads a reference array (an `Object[]`) into a `Vec<Value>` of its elements — the spread a
     /// `MethodHandle.invokeWithArguments` needs. Layout: `[class_id | mark | length | elements…]`.
-    fn read_reference_array(&self, array: usize) -> Vec<Value> {
+    pub(super) fn read_reference_array(&self, array: usize) -> Vec<Value> {
         let length = self.shared.heap.read_u32(array + HEADER_SIZE) as usize;
         let base = array + HEADER_SIZE + SLOT_SIZE;
         (0..length)

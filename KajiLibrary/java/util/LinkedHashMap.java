@@ -1,9 +1,8 @@
 package java.util;
 
-// Same-package imports work around the frozen javac's finder (finding #4). `Entry` is imported
+// Same-package imports work around the frozen javac's finder (finding #4). `Map.Entry` is imported
 // rather than written `Map.Entry`, because a qualified nested type is not resolved (finding #101).
 import java.util.Map;
-import java.util.Map.Entry;
 
 // A hash map that also remembers the **order its keys were first inserted in**. It is the map
 // you reach for when a HashMap's arbitrary order would be a bug — building a config file whose
@@ -172,6 +171,29 @@ public class LinkedHashMap<K, V> implements Map<K, V> {
 
     // --- Map ------------------------------------------------------------------------
 
+    // Recorre la **lista de orden** (`head` -> `after`), no la tabla: es la que define el orden
+    // de iteracion de un LinkedHashMap (finding #205).
+    //
+    // Divergencia: el JDK devuelve una vista **ordenada por insercion**; este devuelve un HashSet,
+    // que no conserva ese orden. Se recorre en orden, pero el Set resultante no lo promete.
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        LhmEntry<K, V> e = this.head;
+        while (e != null) {
+            out.add(e.key);
+            e = e.after;
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     public int size() {
         return size;
     }
@@ -309,7 +331,7 @@ public class LinkedHashMap<K, V> implements Map<K, V> {
 
     // The subclass hook. Called with the eldest entry after every insertion; returning true
     // evicts it. The default never does, which makes a plain LinkedHashMap unbounded.
-    protected boolean removeEldestEntry(Entry<K, V> eldest) {
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
         return false;
     }
 
@@ -345,7 +367,7 @@ public class LinkedHashMap<K, V> implements Map<K, V> {
 // Top-level package-private rather than nested, since a nested class inside a *generic* class
 // is miscompiled (finding #13). It implements {@link Map.Entry} so `removeEldestEntry` can be
 // handed the eldest entry without exposing this type.
-final class LhmEntry<K, V> implements Entry<K, V> {
+final class LhmEntry<K, V> implements Map.Entry<K, V> {
 
     int hash;
     K key;

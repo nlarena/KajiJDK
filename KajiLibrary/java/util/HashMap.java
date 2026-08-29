@@ -51,6 +51,27 @@ public class HashMap<K, V> implements Map<K, V> {
         return this.keys[this.slotFor(key)] != null;
     }
 
+    // Direccionamiento abierto: las claves vivas son los slots no nulos de `keys` (finding #205).
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        int i = 0;
+        while (i < this.keys.length) {
+            if (this.keys[i] != null) {
+                out.add((K) this.keys[i]);
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     public V put(K key, V value) {
         if (this.size * 2 >= this.keys.length) {
             this.resize();

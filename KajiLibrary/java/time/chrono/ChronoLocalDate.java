@@ -14,13 +14,36 @@ import java.time.temporal.ChronoUnit;
 // rest as defaults. A KajiLibrary subset: unlike the JDK it does not extend Comparable, and omits the
 // members that would pull in ChronoPeriod / ChronoLocalDateTime (until(ChronoLocalDate), atTime) or
 // locale/format machinery (getEra, format, query).
-public interface ChronoLocalDate extends Temporal, TemporalAdjuster {
+public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<ChronoLocalDate> {
 
     Chronology getChronology();
 
     int lengthOfMonth();
 
     long toEpochDay();
+
+    /**
+     * The natural order: by epoch day, and -- when two dates of DIFFERENT calendars name the same
+     * day -- by chronology id. That tie-break is not decoration: without it two dates that are not
+     * {@code equals} would compare 0, and a {@code TreeSet} would silently drop one of them.
+     *
+     * <p>A {@code default} because it is one in the JDK, so adding {@link Comparable} (#276)
+     * breaks no implementor.
+     */
+    @Override
+    default int compareTo(ChronoLocalDate other) {
+        long mine = this.toEpochDay();
+        long theirs = other.toEpochDay();
+        if (mine < theirs) {
+            return -1;
+        }
+        if (mine > theirs) {
+            return 1;
+        }
+        Chronology chrono = this.getChronology();
+        Chronology otherChrono = other.getChronology();
+        return chrono.getId().compareTo(otherChrono.getId());
+    }
 
     default boolean isLeapYear() {
         return this.getChronology().isLeapYear(this.getLong(ChronoField.YEAR));

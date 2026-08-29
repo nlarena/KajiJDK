@@ -1,5 +1,8 @@
 package java.util.concurrent;
 
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractQueue;
 import java.util.Collection;
@@ -461,6 +464,14 @@ public class LinkedTransferQueue<E> extends AbstractQueue<E> implements Transfer
     public Iterator<E> iterator() {
         return new LtqItr<E>(toArray());
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.CONCURRENT);
+    }
 }
 
 // A queued element plus the one bit that makes a transfer possible: whether a consumer has
@@ -498,4 +509,5 @@ final class LtqItr<E> implements Iterator<E> {
         cursor = cursor + 1;
         return (E) value;
     }
+
 }

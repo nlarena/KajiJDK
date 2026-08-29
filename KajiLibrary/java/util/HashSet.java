@@ -100,6 +100,13 @@ public class HashSet<E> implements Set<E> {
             }
         }
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this, Spliterator.DISTINCT | Spliterator.SIZED);
+    }
 }
 
 // HashSet's iterator, as a same-file top-level class (compiler-generated enclosing capture is
@@ -132,4 +139,5 @@ final class HashSetItr<E> implements Iterator<E> {
         this.advance();
         return element;
     }
+
 }

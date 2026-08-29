@@ -69,10 +69,22 @@ const ACC_SUPER: u16 = 0x0020;
 const ACC_INTERFACE: u16 = 0x0200;
 const ACC_ABSTRACT: u16 = 0x0400;
 const ACC_NATIVE: u16 = 0x0100; // método implementado por el VM, sin `Code` (§4.6)
+// `ACC_VARARGS`: el último parámetro es un `T...` (§4.6). NO es decorativo y no lo cubre el
+// descriptor, que dice `[LT;` y nada más. Es lo ÚNICO que le dice a **otra** unidad de
+// compilación que la llamada puede escribirse desplegada: sin el flag, un `f(a, b)` contra
+// este método no encuentra sobrecarga aplicable (#118).
+const ACC_VARARGS: u16 = 0x0080;
+// Flags **de campo** (§4.5). Comparten bit con dos de método —`ACC_VOLATILE` con `ACC_BRIDGE`,
+// `ACC_TRANSIENT` con `ACC_VARARGS`— y por eso no pueden salir de la misma tabla que los demás: son
+// tablas distintas, no un espacio común. Es lo que dejó a `volatile`/`transient` sin emitir (#115,
+// #236) mientras el resto de los modificadores sí salían.
+const ACC_VOLATILE: u16 = 0x0040;
+const ACC_TRANSIENT: u16 = 0x0080;
+const ACC_SYNCHRONIZED: u16 = 0x0020; // el método toma el monitor del receptor al entrar (§4.6)
 const ACC_BRIDGE: u16 = 0x0040; // método puente sintetizado (§4.6)
-const ACC_VARARGS: u16 = 0x0080; // método de aridad variable (`T...`) (§4.6)
 const ACC_SYNTHETIC: u16 = 0x1000; // no aparece en el fuente (§4.6)
 const ACC_ENUM: u16 = 0x4000; // tipo/campo `enum` (§4.1/§4.5)
+const ACC_ANNOTATION: u16 = 0x2000; // el tipo es un `@interface` (§4.1)
 const ACC_MODULE: u16 = 0x8000; // el `.class` es un descriptor de módulo (§4.1)
 const ACC_OPEN: u16 = 0x0020; // `open module` (§4.7.25)
 const ACC_TRANSITIVE: u16 = 0x0020; // `requires transitive` (§4.7.25)
@@ -100,8 +112,11 @@ pub fn generate(
     // Qué anotaciones son type annotations por su `@Target` (§9.6.4.1) — para rutearlas a
     // `RuntimeVisibleTypeAnnotations` en vez de (o además de) `RuntimeVisibleAnnotations`.
     let tu = type_use_info(unit);
+    // El `SourceFile` (4.7.10) es un atributo de la **unidad de compilacion**, no de cada clase:
+    // las secundarias y las anidadas comparten archivo con la principal.
+    let src = unit_source_file(unit);
     for class in &unit.types {
-        gen_type(class, base, table, &rt, &tu, &mut out, &mut errors);
+        gen_type(class, base, table, &rt, &tu, &src, &mut out, &mut errors);
     }
     // Un `module-info.java` (§7.7) produce un `module-info.class` con el atributo `Module`.
     if let Some(module) = &unit.module {
@@ -243,18 +258,37 @@ fn gen_type(
     table: &SymbolTable,
     rt: &std::collections::HashSet<String>,
     tu: &TypeUseInfo,
+    src: &str,
     out: &mut Vec<(String, Vec<u8>)>,
     errors: &mut Vec<Error>,
 ) {
     let fqn = if enclosing.is_empty() { class.name.clone() } else { format!("{enclosing}.{}", class.name) };
     if let Some(cid) = table.class(&fqn) {
-        let bytes = gen_class(class, cid, table, rt, tu, errors);
+        let bytes = gen_class(class, cid, table, rt, tu, src, errors);
         out.push((internal_name(table, cid), bytes));
     }
     for member in &class.members {
         if let Member::Type(nested) = member {
-            gen_type(nested, &fqn, table, rt, tu, out, errors);
+            gen_type(nested, &fqn, table, rt, tu, src, out, errors);
         }
+    }
+}
+
+/// El nombre del archivo de la unidad para el atributo `SourceFile` (4.7.10).
+///
+/// El compilador no recibe la **ruta** de la fuente, asi que el nombre se deduce del tipo que le da
+/// nombre al archivo: el **publico** de nivel superior si lo hay -que segun 7.6 obliga a que el
+/// archivo se llame como el-, y si no el primero declarado. Es exacto para toda unidad que respete
+/// esa regla, que es toda la que compile un `javac` con el chequeo de nombres puesto.
+///
+/// Antes cada clase escribia **su propio** nombre, asi que una secundaria decia "Secundaria.java" y
+/// una anidada "Kind.java" -archivos que no existen-. Un depurador que quiera abrir la fuente por
+/// ese nombre no la encuentra.
+fn unit_source_file(unit: &super::ast::CompilationUnit) -> String {
+    let publica = unit.types.iter().find(|c| c.modifiers.contains(&Modifier::Public));
+    match publica.or_else(|| unit.types.first()) {
+        Some(c) => format!("{}.java", c.name),
+        None => "unknown.java".to_string(),
     }
 }
 
@@ -265,9 +299,11 @@ fn gen_class(
     table: &SymbolTable,
     rt: &std::collections::HashSet<String>,
     tu: &TypeUseInfo,
+    src: &str,
     errors: &mut Vec<Error>,
 ) -> Vec<u8> {
     let scope = member_scope(table, cid);
+    audit_declared_types(table, scope, class, errors);
 
     let mut cf = ClassFile::new();
     let this_internal = internal_name(table, cid);
@@ -288,9 +324,9 @@ fn gen_class(
     // rechaza (`Unmatched bit 0x8` para `static`). El nivel de acceso real de un anidado lo lleva
     // `InnerClasses`; a nivel clase, un anidado package-private queda solo con `ACC_SUPER`.
     let mut class_level = class_flags(&class.modifiers) & !(ACC_STATIC | ACC_PRIVATE | ACC_PROTECTED);
-    // Un tipo miembro de una interfaz es implícitamente `public` (§9.5): sin esto un `record`/clase
-    // anidado en una interfaz salía package-private (`final class` en vez de `public final class`).
-    if member_of_interface(table, cid) {
+    // §9.5 — un tipo **miembro de una interfaz** es implícitamente `public` (y `static`; el `static`
+    // va en la entrada de `InnerClasses`, no acá).
+    if is_interface_member(table, cid) {
         class_level |= ACC_PUBLIC;
     }
     cf.access_flags = if is_interface {
@@ -302,6 +338,19 @@ fn gen_class(
     if class.kind == TypeKind::Record {
         cf.access_flags |= ACC_FINAL;
     }
+    // Un `@interface` (§9.6) es una **interfaz de anotación**, y eso son **dos** cosas que la spec
+    // pone y el fuente no escribe: el flag `ACC_ANNOTATION` (§4.1) y el `extends
+    // java.lang.annotation.Annotation` implícito (§9.6). Sin el flag, `Class.isAnnotation()` niega
+    // que lo sea; sin la superinterfaz, una anotación no es asignable a `Annotation`, que es el
+    // tipo por el que la reflexión las devuelve — o sea que ninguna de las dos mitades de la
+    // reflexión de anotaciones podía funcionar (#276).
+    //
+    // La superinterfaz se agrega **acá** y no en la lista de `implements` de más abajo a propósito:
+    // no está escrita en el fuente, así que agregarla al AST la haría aparecer en el `Signature` y
+    // en los chequeos de override como si el programador la hubiera puesto.
+    if class.kind == TypeKind::Annotation {
+        cf.access_flags |= ACC_ANNOTATION;
+    }
     // Un `enum` (§8.9) lleva `ACC_ENUM`, y es implícitamente `final` salvo que declare un método
     // `abstract` (que obligaría a cuerpos de constante). Real javac: enum simple = `FINAL|SUPER|ENUM`.
     // Sin esto, la reflexión no lo ve como enum (`Class.isEnum()`) y falta el `final`.
@@ -312,7 +361,7 @@ fn gen_class(
         });
         cf.access_flags |= if has_abstract_method { ACC_ABSTRACT } else { ACC_FINAL };
     }
-    cf.source_file = Some(cf.pool.utf8(&format!("{}.java", class.name)));
+    cf.source_file = Some(cf.pool.utf8(src));
     cf.annotations = build_annotations(&mut cf.pool, table, scope, &class.annotations, rt, tu);
     // `RuntimeVisibleTypeAnnotations` (§4.7.20) de la clase, juntando: parámetros de tipo
     // (`class C<@Foo T>`, target 0x00), sus **cotas** (`<T extends @A A>`, 0x11), el `extends`
@@ -367,12 +416,13 @@ fn gen_class(
             }
         }
     }
-    // Un tipo de anotación (`@interface`) implementa implícitamente `java.lang.annotation.Annotation`
-    // (§9.6.1): es su super-interfaz directa en el `.class`, igual que la emite javac. Sin ella la
-    // reflexión no reconocería el tipo como anotación.
-    if class.kind == TypeKind::Annotation {
+    // El `extends java.lang.annotation.Annotation` implícito de un `@interface` (§9.6). Va después
+    // de las escritas para que el orden de las escritas no cambie.
+    if class.kind == TypeKind::Annotation && this_internal != "java/lang/annotation/Annotation" {
         let idx = cf.pool.class("java/lang/annotation/Annotation");
-        cf.interfaces.push(idx);
+        if !cf.interfaces.contains(&idx) {
+            cf.interfaces.push(idx);
+        }
     }
     // `PermittedSubclasses` (§4.7.31): un tipo `sealed` graba en el `.class` sus subtipos
     // autorizados (el `permits` explícito o el implícito de la misma unidad). Sin esto, el tipo no
@@ -438,8 +488,18 @@ fn gen_class(
                 // `ConstantValue` (§4.7.2): un `static final` con inicializador de expresión constante.
                 // El desugar lo dejó sin bajar al `<clinit>` (dejó `f.init` en su lugar), justamente
                 // para que se emita acá; los que no son constantes tienen `f.init == None`.
-                let is_const_field = f.modifiers.contains(&Modifier::Static)
-                    && f.modifiers.contains(&Modifier::Final);
+                // **Finding #238**: acá se miraban los modificadores **declarados** (`f.modifiers`),
+                // y en una interfaz esos vienen vacíos — `long NOPOS = -1L;` no escribe
+                // `public static final` porque JLS §9.3 los da por implícitos. Resultado: el campo
+                // salía con `flags: (0x0000)` (ni público, ni estático, ni final) y **sin**
+                // `ConstantValue`, o sea un class file que el `javap` real marca como inválido.
+                //
+                // Se usa la **misma** función que `enter` aplica al símbolo, no una copia: si las dos
+                // divergieran, el campo se emitiría con unos flags y se resolvería con otros — que es
+                // exactamente la clase de desajuste que produjo #110 y #112.
+                let field_mods = super::enter::implicit_field_mods(class.kind, &f.modifiers);
+                let is_const_field =
+                    field_mods.contains(&Modifier::Static) && field_mods.contains(&Modifier::Final);
                 let constant_value = f
                     .init
                     .as_ref()
@@ -455,7 +515,7 @@ fn gen_class(
                 // Flags del campo, con los extras de `enum` (§4.5): una **constante** lleva `ACC_ENUM`
                 // (lo que la reflexión usa para `Field.isEnumConstant()`), y el arreglo sintético
                 // `$VALUES` lleva `ACC_SYNTHETIC`. Real javac: constante = `0x4019`, `$VALUES` = `0x101a`.
-                let mut field_flags = class_flags(&f.modifiers);
+                let mut field_flags = self::field_flags(&field_mods);
                 if class.kind == TypeKind::Enum {
                     if class.enum_constants.iter().any(|c| c.name == f.name) {
                         field_flags |= ACC_ENUM;
@@ -709,6 +769,12 @@ fn stmt_sync_depth(s: &Stmt) -> u16 {
     }
 }
 
+/// Un tipo de **referencia** (JVMS 4.3.2): clase, interfaz o array. Lo unico sobre lo que un
+/// `checkcast` tiene sentido.
+fn is_ref(rt: &RType) -> bool {
+    matches!(rt, RType::Class(_) | RType::Parameterized { .. } | RType::Array(_))
+}
+
 /// El nombre para un `CHECKCAST` sobre `rt`: el interno de la clase, o el descriptor de un array.
 fn checkcast_name(table: &SymbolTable, rt: &RType) -> String {
     match rt {
@@ -754,7 +820,12 @@ fn bridge_methods(
         if !matches!(sym.kind, SymbolKind::Method { is_constructor: false, .. }) {
             continue;
         }
-        if sym.modifiers.contains(&Modifier::Static) || sym.modifiers.contains(&Modifier::Abstract) {
+        // Un `static` no entra en la vtable, asi que no hay nada que puentear. Un **abstracto** si:
+        // el puente lo necesita el *llamador* que ve el supertipo, no la implementacion. javac lo
+        // emite igual —concreto, con cuerpo `aload_0; invokevirtual <el angosto>; areturn`— y el
+        // despacho virtual lo lleva al override real de la subclase concreta. Saltearlos costaba
+        // ~25 miembros de `java.nio` (`Buffer slice()`, `duplicate()`, …) (#233).
+        if sym.modifiers.contains(&Modifier::Static) {
             continue;
         }
         let name = sym.name.clone();
@@ -948,19 +1019,137 @@ fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<Sy
     None
 }
 
+/// Audita que **todo nombre de tipo escrito en las declaraciones** de la clase resuelva a un
+/// símbolo, y reporta el que no. Sin esto el generador **fabrica** un artefacto plausible en vez de
+/// fallar: el descriptor degrada a `Ljava/lang/Object;` y el `Signature` escribe el nombre tal como
+/// se lo escribió (`LInner;`), que no es ninguna clase. Los dos caminos calculan lo mismo por
+/// separado, así que ni siquiera coinciden entre sí — el descriptor miente por lo bajo y la firma
+/// miente por lo alto (#208).
+///
+/// Que el nombre no resuelva **acá** no es un error del programa: el chequeo ya rechaza los tipos
+/// que no existen. Es que la resolución del chequeo y la del generador no coincidieron, y eso es un
+/// defecto del compilador que hay que ver, no tapar con un `Object`.
+fn audit_declared_types(
+    table: &SymbolTable,
+    scope: ScopeId,
+    class: &ClassDecl,
+    errors: &mut Vec<Error>,
+) {
+    // Los parámetros de tipo **en alcance**: los de la clase más los de **cada** método. Que los de
+    // un método se toleren en otro es a propósito: el alcance de un `<V>` ya lo chequea la fase
+    // semántica (§8.4.4), y acá hace falta la vista ancha porque el **desazucarado** ya corrió — el
+    // método sintético de una lambda (`lambda$andThen$0`) hereda en su firma el `V` del método que
+    // la contiene, pero no su lista de parámetros de tipo. Sin la vista ancha, cada lambda dentro
+    // de un método genérico se reportaría como tipo irresoluble.
+    let mut tvars: HashSet<String> = class.type_params.iter().map(|p| p.name.clone()).collect();
+    for member in &class.members {
+        if let Member::Method(m) = member {
+            tvars.extend(m.type_params.iter().map(|p| p.name.clone()));
+        }
+    }
+    let report = |ty: &Type, pos: Pos, tvars: &HashSet<String>, errors: &mut Vec<Error>| {
+        let mut malos = Vec::new();
+        collect_unresolved(table, scope, tvars, ty, &mut malos);
+        for name in malos {
+            errors.push(Error::new(
+                format!("el generador de bytecode no puede resolver el tipo `{name}`"),
+                pos.line,
+                pos.col,
+            ));
+        }
+    };
+    // La cabecera: cotas de los parámetros de tipo, `extends`, `implements`, `permits`. El `extends`
+    // que no resuelve es el que hacía desaparecer la cláusula del class file en silencio.
+    for tp in &class.type_params {
+        for b in &tp.bounds {
+            report(b, class.pos, &tvars, errors);
+        }
+    }
+    for ty in class.extends.iter().chain(&class.implements).chain(&class.permits) {
+        report(ty, class.pos, &tvars, errors);
+    }
+    for c in &class.components {
+        report(&c.ty, class.pos, &tvars, errors);
+    }
+    for member in &class.members {
+        match member {
+            Member::Field(f) => report(&f.ty, f.pos, &tvars, errors),
+            Member::Method(m) => {
+                for tp in &m.type_params {
+                    for b in &tp.bounds {
+                        report(b, m.pos, &tvars, errors);
+                    }
+                }
+                report(&m.return_type, m.pos, &tvars, errors);
+                for prm in &m.params {
+                    report(&prm.ty, m.pos, &tvars, errors);
+                }
+                for t in &m.throws {
+                    report(t, m.pos, &tvars, errors);
+                }
+            }
+            // Un tipo anidado se audita en **su** `gen_class`, con su propio alcance.
+            _ => {}
+        }
+    }
+}
+
+/// Los nombres de [`Type`] que no resuelven, bajando por arrays y argumentos de tipo.
+fn collect_unresolved(
+    table: &SymbolTable,
+    scope: ScopeId,
+    tvars: &HashSet<String>,
+    ty: &Type,
+    out: &mut Vec<String>,
+) {
+    match ty {
+        Type::Prim(_) | Type::Void | Type::Var => {}
+        Type::Array(e) => collect_unresolved(table, scope, tvars, e, out),
+        Type::Class(name) => {
+            if !tvars.contains(name) && resolve_type_id(table, scope, name).is_none() {
+                out.push(name.clone());
+            }
+        }
+        Type::Parameterized { base, args } => {
+            if !tvars.contains(base) && resolve_type_id(table, scope, base).is_none() {
+                out.push(base.clone());
+            }
+            for a in args {
+                match a {
+                    TypeArg::Type(t) => collect_unresolved(table, scope, tvars, t, out),
+                    TypeArg::Extends(t) | TypeArg::Super(t) => {
+                        collect_unresolved(table, scope, tvars, t, out);
+                    }
+                    TypeArg::Wildcard => {}
+                }
+            }
+        }
+    }
+}
+
+/// Si el método declara un `T...`.
+///
+/// Solo el **último** parámetro puede serlo (JLS §8.4.1), así que basta mirar ese; el resto de la
+/// firma no cambia y el descriptor tampoco (`T...` y `T[]` son el mismo `[LT;`). Lo que cambia es
+/// que quien llame desde otra unidad puede desplegar los argumentos, y eso viaja solo en el flag.
+fn is_varargs(m: &MethodDecl) -> bool {
+    m.params.last().is_some_and(|p| p.varargs)
+}
+
 fn class_flags(mods: &[Modifier]) -> u16 {
     mods.iter().fold(0, |f, m| f | modifier_flag(*m))
 }
 
-/// ¿`cid` es un **tipo miembro de una interfaz** (o `@interface`)? Un tipo así es implícitamente
-/// `public static` (§9.5), aunque no lo escriba el fuente — flags que van tanto a los access_flags de
-/// clase como a su entrada de `InnerClasses`.
-fn member_of_interface(table: &SymbolTable, cid: SymbolId) -> bool {
-    class_owner(table, cid).is_some_and(|o| {
-        matches!(
-            table.symbol(o).kind,
-            SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
-        )
+/// Los flags de un **campo** (§4.5): los comunes, más `volatile` y `transient`, que **solo** existen
+/// para campos. `strictfp` no se mapea a propósito: desde la v17 es implícito y el javac real
+/// tampoco emite `ACC_STRICT` (avisa que el modificador sobra).
+fn field_flags(mods: &[Modifier]) -> u16 {
+    mods.iter().fold(0, |f, m| {
+        f | match m {
+            Modifier::Volatile => ACC_VOLATILE,
+            Modifier::Transient => ACC_TRANSIENT,
+            other => modifier_flag(*other),
+        }
     })
 }
 
@@ -973,11 +1162,40 @@ fn modifier_flag(m: Modifier) -> u16 {
         Modifier::Final => ACC_FINAL,
         Modifier::Abstract => ACC_ABSTRACT,
         Modifier::Native => ACC_NATIVE,
+        // `ACC_SYNCHRONIZED` no es decorativo: es lo **único** que hace que la JVM tome el monitor
+        // del receptor al entrar al método y lo suelte en cualquier salida (§2.11.10). Sin él, un
+        // `wait()`/`notifyAll()` en el cuerpo corre sin el monitor y tira
+        // `IllegalMonitorStateException`, así que todo diseño de espera/aviso queda inejecutable —
+        // y no hay rodeo posible, porque el modificador es parte de la API (#255).
+        //
+        // Comparte el bit 0x0020 con `ACC_SUPER` de las clases y con `ACC_OPEN`/`ACC_TRANSITIVE` de
+        // los módulos, pero no hay ambigüedad: son tablas de flags **distintas** (§4.1 vs §4.6), y
+        // esta función solo se aplica a miembros.
+        Modifier::Synchronized => ACC_SYNCHRONIZED,
         _ => 0,
     }
 }
 
 // ---- descriptores (JVMS §4.3) ----
+
+/// El envoltorio cuyo campo `TYPE` es el *mirror* de este primitivo (§15.8.2), o `None` si el tipo
+/// no es primitivo. `void` también tiene el suyo: `java.lang.Void.TYPE`.
+fn primitive_wrapper(ty: &Type) -> Option<&'static str> {
+    Some(match ty {
+        Type::Void => "java/lang/Void",
+        Type::Prim(p) => match p {
+            PrimType::Byte => "java/lang/Byte",
+            PrimType::Char => "java/lang/Character",
+            PrimType::Double => "java/lang/Double",
+            PrimType::Float => "java/lang/Float",
+            PrimType::Int => "java/lang/Integer",
+            PrimType::Long => "java/lang/Long",
+            PrimType::Short => "java/lang/Short",
+            PrimType::Boolean => "java/lang/Boolean",
+        },
+        _ => return None,
+    })
+}
 
 fn prim_desc(p: PrimType) -> &'static str {
     match p {
@@ -1035,9 +1253,61 @@ pub(crate) fn rtype_desc(table: &SymbolTable, rt: &RType) -> String {
 }
 
 pub(crate) fn method_descriptor(table: &SymbolTable, scope: ScopeId, m: &MethodDecl) -> String {
-    let params: String = m.params.iter().map(|p| type_desc(table, scope, &p.ty)).collect();
-    let ret = if m.is_constructor { "V".to_string() } else { type_desc(table, scope, &m.return_type) };
+    let tv = &m.type_params;
+    let params: String = m.params.iter().map(|p| type_desc_m(table, scope, tv, &p.ty)).collect();
+    let ret = if m.is_constructor {
+        "V".to_string()
+    } else {
+        type_desc_m(table, scope, tv, &m.return_type)
+    };
     format!("({params}){ret}")
+}
+
+/// El descriptor de un tipo **dentro de la firma de un método genérico**. Igual que [`type_desc`],
+/// salvo que los parámetros de tipo **del propio método** (`<N extends Number> N f(Class<N>)`) no
+/// viven en el scope de la clase: `resolve_type_id` no los encontraba y se caía al `Object` por
+/// defecto.
+///
+/// Que fuera *silencioso* es lo que lo hizo durar: el `Signature` sale **bien** —lo arma otro camino,
+/// que sí recibe la lista de `type_params`— y el **descriptor** mal. Es la peor combinación posible,
+/// porque el `javap` muestra la firma genérica correcta y el desajuste solo aparece al **sobreescribir**:
+/// un override escrito con la borradura correcta tiene otro descriptor, no sobreescribe, y da
+/// `AbstractMethodError` en runtime (#100/#241).
+///
+/// La borradura de una variable de tipo es la de su **primera cota** (§4.6), que puede a su vez
+/// nombrar a un hermano (`<A, B extends A>`); de ahí la recursión, acotada por `depth` para que un
+/// ciclo declarado (`<A extends B, B extends A>`) no cuelgue el compilador.
+fn type_desc_m(table: &SymbolTable, scope: ScopeId, tvars: &[TypeParam], ty: &Type) -> String {
+    type_desc_bounded(table, scope, tvars, ty, 0)
+}
+
+fn type_desc_bounded(
+    table: &SymbolTable,
+    scope: ScopeId,
+    tvars: &[TypeParam],
+    ty: &Type,
+    depth: u8,
+) -> String {
+    if depth > 8 {
+        return "Ljava/lang/Object;".to_string(); // cota cíclica: la erasure es `Object`
+    }
+    match ty {
+        Type::Array(inner) => format!("[{}", type_desc_bounded(table, scope, tvars, inner, depth)),
+        Type::Class(name) | Type::Parameterized { base: name, .. } => {
+            match tvars.iter().find(|tp| &tp.name == name) {
+                // Una variable de tipo **del método**: su descriptor es el de su primera cota, o
+                // `Object` si no declaró ninguna.
+                Some(tp) => match tp.bounds.first() {
+                    Some(b) => type_desc_bounded(table, scope, tvars, b, depth + 1),
+                    None => "Ljava/lang/Object;".to_string(),
+                },
+                // Cualquier otra cosa —incluidas las variables de tipo de la **clase**, que sí
+                // están en el scope— la resuelve el camino de siempre.
+                None => type_desc(table, scope, ty),
+            }
+        }
+        _ => type_desc(table, scope, ty),
+    }
 }
 
 /// Los parámetros formales para `MethodParameters` (§4.7.24): el nombre + `ACC_FINAL` si se declaró
@@ -1258,6 +1528,20 @@ fn class_owner(table: &SymbolTable, id: SymbolId) -> Option<SymbolId> {
     matches!(table.symbol(owner).kind, SymbolKind::Class { .. }).then_some(owner)
 }
 
+/// ¿Es `id` un tipo **miembro de una interfaz**? Sus miembros son implícitamente `public` y
+/// `static` (§9.5), igual que los campos lo son `public static final` (§9.3) y los métodos `public`
+/// (§9.4). Sin esto, un tipo anidado de una interfaz salía **package-private** y quedaba inusable
+/// desde otro paquete — lo que obligó a escribir el `public` a mano en los ocho anidados de
+/// `javax.lang.model.element.ModuleElement` (#242).
+fn is_interface_member(table: &SymbolTable, id: SymbolId) -> bool {
+    class_owner(table, id).is_some_and(|o| {
+        matches!(
+            table.symbol(o).kind,
+            SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
+        )
+    })
+}
+
 /// Las entradas `InnerClasses` (§4.7.6) que el `.class` de `cid` debe listar: su **cadena de
 /// enclosing** (él mismo si es anidado + sus ancestros anidados) y las clases que **contiene** (las
 /// de dueño `cid`). Es lo que menciona el `.class` — lo que necesita la reflexión para reconstruir
@@ -1307,15 +1591,21 @@ fn inner_entry(pool: &mut ConstantPool, table: &SymbolTable, id: SymbolId) -> In
     if matches!(sym.kind, SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }) {
         flags |= ACC_INTERFACE | ACC_ABSTRACT;
     }
-    // Miembro de interfaz: implícitamente `public static` (§9.5), también en su entrada `InnerClasses`.
-    if member_of_interface(table, id) {
+    // §9.5, la otra mitad: acá sí van el `public` **y** el `static` implícitos. El javac real emite
+    // `public static` para los tres casos (interfaz, clase y enum miembros de una interfaz).
+    if is_interface_member(table, id) {
         flags |= ACC_PUBLIC | ACC_STATIC;
     }
 
     let (outer, name) = if all_digits {
         (0, 0) // anónima: sin dueño ni nombre
     } else if starts_digit {
-        (0, pool.utf8(&simple)) // local: sin dueño, con nombre
+        // Local: sin dueño, con nombre — y el nombre es el del FUENTE, sin el prefijo numérico.
+        // Ese prefijo existe sólo para desambiguar el nombre BINARIO (dos clases locales
+        // llamadas igual en dos métodos distintos compartirían archivo si no), y meterlo acá
+        // hace que `getSimpleName()` devuelva `1Local` en vez de `Local`.
+        let source = simple.trim_start_matches(|c: char| c.is_ascii_digit());
+        (0, pool.utf8(source))
     } else {
         // miembro: dueño = su clase envolvente, nombre = el simple
         let outer = class_owner(table, id)
@@ -1470,7 +1760,7 @@ fn gen_method(
         if is_interface {
             flags |= ACC_PUBLIC;
         }
-        if m.params.last().is_some_and(|p| p.varargs) {
+        if is_varargs(m) {
             flags |= ACC_VARARGS;
         }
         return MethodInfo {
@@ -1506,11 +1796,12 @@ fn gen_method(
         rt,
         tu,
     );
-    // La categoría del tipo de retorno, para convertir el valor de cada `return` al contexto de
-    // asignación (§5.2): un `return <float>` en un método `double` necesita `f2d`.
-    e.ret_cat = match &m.return_type {
-        Type::Prim(p) => category(&RType::Prim(*p)),
-        _ => 4,
+    // La categoría del retorno sale del **mismo** descriptor que se declara arriba: el opcode
+    // `Xreturn` y el descriptor no pueden discrepar (§4.6, §6.5).
+    e.ret_cat = if m.is_constructor {
+        0
+    } else {
+        cat_of_desc(&type_desc(table, scope, &m.return_type))
     };
     // `this` (slot 0) en los métodos de instancia y constructores; luego los parámetros. Se anotan
     // también sus **tipos de verificación**: son los locales ya asignados al entrar, y de ahí parte
@@ -1613,6 +1904,9 @@ fn gen_method(
     // `ACC_SYNTHETIC`, igual que el campo `$VALUES`. Real javac: `$values()` = `0x100a`.
     if m.name == "$values" {
         method_flags |= ACC_SYNTHETIC;
+    }
+    if is_varargs(m) {
+        method_flags |= ACC_VARARGS;
     }
     MethodInfo {
         access_flags: method_flags,
@@ -2226,6 +2520,36 @@ const GOTO: u8 = 0xa7;
 
 /// El índice de comparación dentro de una familia (`eq ne lt ge gt le`), ya **invertido** si el
 /// salto es "cuando la condición sea falsa": saltar si `a < b` es falso ⇒ saltar si `a >= b`.
+/// Cuanto RESTARLE al opcode de comparacion para elegir su forma.
+///
+/// La aritmetica de `LCMP + (cat - 1) * 2` aterriza en 0x96 (`fcmpg`) y 0x98 (`dcmpg`), o sea
+/// que la base ya es la forma `g`; devolver 1 la baja a la `l` (0x95 / 0x97) y 0 la deja.
+/// Para `long` siempre 0: `lcmp` es unico y restarle daria otro opcode.
+///
+/// La eleccion NO es cosmetica y no la cubre el descriptor. Con NaN toda comparacion tiene que
+/// dar falso (menos `!=`), y el opcode de comparacion no sabe que rama viene despues: lo unico
+/// que puede hacer es entregar un -1 o un +1 elegido para que la rama que SI viene salga como
+/// corresponde.
+///
+/// De ahi la regla, que depende del operador del FUENTE y no de la rama emitida -- una condicion
+/// negada (`when == false`) invierte la rama pero no invierte cual de las dos formas sirve:
+///
+/// - `<` y `<=` piden la `g`: NaN da +1, que hace fallar la prueba de "menor" y acertar su negacion.
+/// - `>` y `>=` piden la `l`: NaN da -1, simetricamente.
+/// - `==` y `!=` funcionan con cualquiera (NaN nunca da 0); se emite la `l`, como javac.
+///
+/// Emitir siempre la `g` -- que es lo que se hacia -- deja `x >= NaN` y `x > NaN` en **true**
+/// (finding #266).
+fn nan_variant(cat: u8, op: BinOp) -> u8 {
+    if cat == 1 {
+        return 0; // `lcmp`: no hay NaN entre los longs, y no hay segunda forma
+    }
+    match op {
+        BinOp::Lt | BinOp::Le => 0, // la `g`, que es la base
+        _ => 1,                     // la `l`
+    }
+}
+
 fn cmp_index(op: BinOp, when: bool) -> Option<u8> {
     let idx = match op {
         BinOp::Eq => 0,
@@ -2261,6 +2585,32 @@ fn category(rt: &RType) -> u8 {
         RType::Prim(PrimType::Double) => 3,
         RType::Prim(_) | RType::Void => 0,
         _ => 4,
+    }
+}
+
+/// La categoría de un valor **tal como está en la pila** — no la de su tipo estático. Es la que
+/// manda para decidir si hace falta una ampliación: `boolean`/`byte`/`char`/`short`/`int` viven
+/// todos como `Int`.
+fn cat_of_vtype(vt: &VType) -> u8 {
+    match vt {
+        VType::Int => 0,
+        VType::Long => 1,
+        VType::Float => 2,
+        VType::Double => 3,
+        _ => 4,
+    }
+}
+
+/// La categoría que corresponde a un **descriptor de retorno**. Se saca del descriptor y no del
+/// tipo sintáctico a propósito: el opcode `Xreturn` y el descriptor que declara el método tienen
+/// que salir de la **misma** fuente, o el class file queda estructuralmente inválido (#217).
+fn cat_of_desc(desc: &str) -> u8 {
+    match desc.as_bytes().first() {
+        Some(b'J') => 1,
+        Some(b'F') => 2,
+        Some(b'D') => 3,
+        Some(b'L') | Some(b'[') => 4,
+        _ => 0,
     }
 }
 
@@ -2461,7 +2811,9 @@ fn operand_to_string(e: &Expr, consts: &ConstFieldMap) -> Option<String> {
     }
     match &e.kind {
         ExprKind::BoolLit(b) => return Some(b.to_string()),
-        ExprKind::CharLit(c) => return Some(c.to_string()),
+        // Un sustituto suelto no tiene `char` de Rust, asi que no se pliega: lo emite el
+        // camino normal, que trabaja sobre la unidad de codigo.
+        ExprKind::CharLit(c) => return char::from_u32(u32::from(*c)).map(|ch| ch.to_string()),
         _ => {}
     }
     Some(match const_eval_num(e, consts)? {
@@ -4113,6 +4465,14 @@ impl<'a> Emitter<'a> {
             self.stack = vec![VType::Object(exc.clone())];
             self.max_stack = self.max_stack.max(1);
             self.locals_t = entry_locals.clone();
+            // Un *handler* **siempre** es alcanzable: se llega por excepción, no por caída. Si el
+            // cuerpo del `try` termina en `throw` o `return`, `reachable` quedó en `false`, y sin
+            // resetearlo acá el `if self.reachable` del final del `catch` no emitía **ni la copia
+            // en línea del `finally` ni el `goto`**: el `catch` caía derecho dentro del handler
+            // catch-all, que hace `astore` de un throwable que nadie apiló (#257). El caso es
+            // exactamente "el `catch` de verdad se dispara y hay `finally`", que es la forma más
+            // común de las tres.
+            self.reachable = true;
             // Scope del `catch`: la variable de la excepción vive en el handler (§14.20).
             self.open_scope();
             if let Some(slot) = c.slot {
@@ -4317,6 +4677,17 @@ impl<'a> Emitter<'a> {
             }
             // `C.class` → `ldc` de una entrada `Class` del pool (la JVM la resuelve al objeto).
             ExprKind::ClassLit(ty) => {
+                // §15.8.2 — el literal de un **primitivo** no puede ser un `ldc` de clase: no hay
+                // entrada `CONSTANT_Class` para `int`. Es el campo `TYPE` de su envoltorio, que es
+                // lo que emite el javac real. Un **array** sí es un `ldc`, pero de su **descriptor**
+                // (`[I`), no de un nombre interno.
+                if let Some(wrapper) = primitive_wrapper(ty) {
+                    let fref = self.pool.fieldref(wrapper, "TYPE", "Ljava/lang/Class;");
+                    self.op(GETSTATIC);
+                    self.u16(fref);
+                    self.push(VType::Object("java/lang/Class".to_string()));
+                    return;
+                }
                 let internal = match vtype_of_type(self.table, self.scope, ty) {
                     VType::Object(n) => n,
                     _ => "java/lang/Object".to_string(),
@@ -4418,9 +4789,12 @@ impl<'a> Emitter<'a> {
                         None => self.load_this(),
                     }
                 }
-                for a in args {
-                    self.expr(a);
-                }
+                self.emit_args(e, args);
+                // `super.m(...)` **no** despacha virtualmente: va por `invokespecial` con la
+                // **superclase directa** como dueño del methodref — no la clase que declara el
+                // método. (Comprobado contra el javac del JDK 25: para `C extends B extends A` con
+                // `f` declarado en `A`, emite `invokespecial B.f`, no `A.f`.)
+                let via_super = target.as_ref().is_some_and(|t| matches!(t.kind, ExprKind::Super));
                 let ctor_call = name == "super" || name == "this";
                 // Un `super(...)`/`this(...)` **sin binding** es una clase padre que no declara
                 // constructores: rige el `()V` implícito, que no tiene símbolo. Con argumentos, en
@@ -4437,7 +4811,7 @@ impl<'a> Emitter<'a> {
                         self.unsupported(e.pos, "un `super(...)`/`this(...)` que no resolvió a ningún constructor");
                     }
                 } else {
-                    self.invoke(e, args, is_static);
+                    self.invoke(e, args, is_static, via_super);
                 }
                 // Un `super(...)`/`this(...)` explícito **inicializa** el `this`: de acá en más el
                 // verificador lo deja usar.
@@ -4470,7 +4844,11 @@ impl<'a> Emitter<'a> {
                 self.push(VType::Int); // el 0/1 del resultado
                 self.code_type_annos(0x43, &off.to_be_bytes(), &e.type_annos);
             }
-            ExprKind::Super => self.unsupported(e.pos, "`super`"),
+            // `super` **como receptor** es el mismo `this`: lo que cambia no es el objeto sino el
+            // **despacho** (§15.12.4.4), que pasa a `invokespecial` sobre la superclase — eso lo
+            // resuelve el arm de `Call`. Acá alcanza con empujarlo. El verificador lo acepta porque
+            // `this` es subtipo de su superclase (#231/#125).
+            ExprKind::Super => self.load_this(),
             // `c ? a : b` es un `if/else` que deja **un** valor en la pila. Cada rama se promueve al
             // tipo del ternario entero (§15.25): `flag ? 1 : 2L` tiene que dejar un `long` por los
             // dos caminos, o el frame del destino no cerraría.
@@ -4575,9 +4953,22 @@ impl<'a> Emitter<'a> {
         self.push(vtype_of(self.table, &arr_ty));
     }
 
-    fn invoke(&mut self, call: &Expr, args: &[Expr], is_static: bool) {
-        let Some(Binding::Method(mid)) = call.binding else { return };
-        let Some(owner) = self.table.symbol(mid).owner else { return };
+    fn invoke(&mut self, call: &Expr, args: &[Expr], is_static: bool, via_super: bool) {
+        // Sin binding **no hay nada que emitir**, y salir en silencio es la peor salida posible: los
+        // argumentos ya se empujaron, así que el método sigue con la pila corrida y el `.class` sale
+        // igual. Lo destapó `s.length(1, 2)` contra un tipo del classpath, que compilaba a
+        // `iconst_1; iconst_2; ireturn` — sin receptor, sin llamada y sin un solo diagnóstico (#261).
+        // La pasada 2 es **indulgente** a propósito con las sobrecargas de un tipo externo (no
+        // modelamos toda firma del JDK); esa indulgencia puede terminar en "no sé el tipo", pero no
+        // puede terminar en un class file roto y mudo.
+        let Some(Binding::Method(mid)) = call.binding else {
+            self.unsupported(call.pos, "una llamada que no resolvió a ningún método");
+            return;
+        };
+        let Some(owner) = self.table.symbol(mid).owner else {
+            self.unsupported(call.pos, "una llamada a un método sin clase declarante");
+            return;
+        };
         let class_internal = internal_name(self.table, owner);
         let is_ctor = matches!(self.table.symbol(mid).kind, SymbolKind::Method { is_constructor: true, .. });
         let mname = if is_ctor { "<init>".to_string() } else { self.table.symbol(mid).name.clone() };
@@ -4619,6 +5010,15 @@ impl<'a> Emitter<'a> {
         if is_static {
             let mref = self.pool.methodref(&class_internal, &mname, &desc);
             self.op(INVOKESTATIC);
+            self.u16(mref);
+        } else if via_super {
+            // `super.m(...)`: `invokespecial` con la **superclase directa** como dueño. Que sea la
+            // superclase y no la clase declarante es lo que hace el javac real, y es lo que da la
+            // semántica de §15.12.4.4 — saltear el override de *esta* clase y empezar a buscar
+            // desde arriba, aunque el método venga heredado de más lejos.
+            let sup = self.super_class.clone();
+            let mref = self.pool.methodref(&sup, &mname, &desc);
+            self.op(INVOKESPECIAL);
             self.u16(mref);
         } else if is_ctor {
             let mref = self.pool.methodref(&class_internal, &mname, &desc);
@@ -4663,7 +5063,42 @@ impl<'a> Emitter<'a> {
         if !matches!(ret, RType::Void) {
             let t = vtype_of(self.table, &ret);
             self.push(t);
+            self.synthetic_cast(call, &ret);
         }
+    }
+
+    /// El **cast sintetico** (JLS 5.5, JVMS 4.10.1.9) que sigue a una llamada cuyo retorno declarado
+    /// se **borra**: `List<String>.get` esta declarado `E` y su descriptor dice `Object`, asi que lo
+    /// que queda en la pila es un `Object`. Encadenar ahi -`l.get(0).length()`- emite un
+    /// `invokevirtual String.length` sobre un `Object`, y eso **no verifica**: la JVM real lo rechaza
+    /// con `VerifyError` antes de ejecutar una sola instruccion.
+    ///
+    /// Nuestro interprete no lo rechazaba -despacha por el objeto real- y por eso el defecto era
+    /// invisible de este lado: es de la familia "compila, corre aca, revienta en la JVM de verdad".
+    ///
+    /// **Diferencia deliberada con el javac real:** el javac lo inserta solo donde el contexto pide
+    /// el tipo angosto (`return`, argumento, receptor) y lo omite cuando el destino es mas ancho
+    /// (`Object o = l.get(0);`) o cuando el valor se descarta. Aca se inserta siempre que el tipo del
+    /// sitio sea **estrictamente mas angosto** que el retorno borrado, que es correcto -el cast no
+    /// puede fallar en un programa bien tipado- y cuesta un `checkcast` de mas en esas dos formas.
+    /// Saber el contexto pide un pase aparte; el `checkcast` de mas no rompe nada.
+    fn synthetic_cast(&mut self, call: &Expr, declared: &RType) {
+        let Some(site) = call.ty.clone() else { return };
+        let want = types::erasure(self.table, &site);
+        let have = types::erasure(self.table, declared);
+        // Solo referencias, solo si el sitio es **mas angosto**, y nunca si ya coinciden.
+        if want == have || !is_ref(&want) || !is_ref(&have) {
+            return;
+        }
+        if !types::is_subtype(self.table, &want, &have) {
+            return;
+        }
+        let name = checkcast_name(self.table, &want);
+        let cc = self.pool.class(&name);
+        self.op(CHECKCAST);
+        self.u16(cc);
+        self.pop(1);
+        self.push(vtype_of(self.table, &want));
     }
 
     // ---- condiciones como saltos ----
@@ -4747,7 +5182,7 @@ impl<'a> Emitter<'a> {
                     }
                     _ => {
                         // `long`/`float`/`double`: primero comparar a un `int` (-1/0/1), luego saltar.
-                        self.op(LCMP + (cat - 1) * 2);
+                        self.op(LCMP + (cat - 1) * 2 - nan_variant(cat, *op));
                         self.pop(2);
                         self.push(VType::Int);
                         self.pop(1);
@@ -4933,6 +5368,7 @@ impl<'a> Emitter<'a> {
             self.expr(array);
             self.expr(index);
             self.expr(value);
+            self.widen_cat(category(&self.ty_of(target)));
             let kind = array_kind(&self.ty_of(target));
             if leave {
                 // Usada como expresión (`b = a[i] = v`): hay que dejar el valor en la pila.
@@ -4957,6 +5393,7 @@ impl<'a> Emitter<'a> {
                 self.expr(value);
                 let ty = self.ty_of(target);
                 let cat = category(&ty);
+                self.widen_cat(cat);
                 if leave {
                     self.dup(cat);
                 }
@@ -4969,6 +5406,7 @@ impl<'a> Emitter<'a> {
                 let fref = self.pool.fieldref(&cls, &name, &desc);
                 if is_static {
                     self.expr(value);
+                    self.widen_cat(cat);
                     if leave {
                         self.dup(cat);
                     }
@@ -4983,6 +5421,7 @@ impl<'a> Emitter<'a> {
                         _ => self.load_this(),
                     }
                     self.expr(value);
+                    self.widen_cat(cat);
                     self.op(PUTFIELD);
                     self.u16(fref);
                     self.pop(2); // el receptor y el valor
@@ -5009,9 +5448,7 @@ impl<'a> Emitter<'a> {
         self.u16(cidx);
         self.push(VType::Uninit(at));
         self.dup1(); // la copia que sobrevive al constructor
-        for a in args {
-            self.expr(a);
-        }
+        self.emit_args(e, args);
         // El descriptor sale del constructor que resolvió la pasada 2; sin él, `()V`.
         let desc = match e.binding {
             Some(Binding::Method(mid)) => match self.table.resolved(mid) {
@@ -5284,6 +5721,57 @@ impl<'a> Emitter<'a> {
         self.push_cat(to);
     }
 
+    /// **Ampliación primitiva implícita** (JLS §5.1.2). `self.expr(..)` deja el valor con el ancho
+    /// de su *propio* tipo; si el contexto pide uno más ancho —retorno, inicialización o asignación
+    /// de local, asignación de campo, paso de argumento, `array store`— hay que emitir el `i2l`/
+    /// `i2d`/`l2d`/… o el class file queda **estructuralmente inválido**: un `ireturn` en un
+    /// descriptor `()J` no lo arregla nadie después (#217).
+    ///
+    /// El origen se toma de la **pila**, no del tipo estático: es lo único que describe con certeza
+    /// qué hay ahí (un `Integer` desempaquetado ya es `Int`, y `boolean`/`byte`/`char`/`short`
+    /// también). Solo se amplía: `from < to` en la escala int(0) < long(1) < float(2) < double(3).
+    /// Un destino de categoría 4 es una referencia — eso es *boxing*, y no se decide acá.
+    fn widen_cat(&mut self, to: u8) {
+        if to > 3 {
+            return;
+        }
+        let Some(from) = self.stack.last().map(cat_of_vtype) else {
+            return;
+        };
+        if from <= 3 && from < to {
+            self.convert(from, to);
+        }
+    }
+
+    /// `widen_cat` a partir del tipo destino.
+    fn widen_to(&mut self, target: &RType) {
+        self.widen_cat(category(target));
+    }
+
+    /// Los tipos de parámetro del método al que resolvió esta llamada — para ampliar cada argumento
+    /// al tipo del parámetro. `None` si la llamada no resolvió: sin firma no hay a qué ampliar.
+    fn param_types(&self, call: &Expr) -> Option<Vec<RType>> {
+        let Some(Binding::Method(mid)) = call.binding else {
+            return None;
+        };
+        match self.table.resolved(mid) {
+            Some(Resolved::Method { params, .. }) => Some(params.clone()),
+            _ => None,
+        }
+    }
+
+    /// Emite los argumentos de una llamada, cada uno **ampliado** al tipo de su parámetro.
+    fn emit_args(&mut self, call: &Expr, args: &[Expr]) {
+        let ptys = self.param_types(call);
+        for (i, a) in args.iter().enumerate() {
+            self.expr(a);
+            // `.get(i)`: con varargs la aridad puede no coincidir; sin parámetro, no se amplía.
+            if let Some(p) = ptys.as_ref().and_then(|v| v.get(i)).cloned() {
+                self.widen_to(&p);
+            }
+        }
+    }
+
     /// Carga una constante **angosta** del pool: `ldc` si el índice entra en un byte, si no `ldc_w`.
     fn ldc(&mut self, idx: u16) {
         if idx <= 255 {
@@ -5441,8 +5929,8 @@ mod tests {
     use crate::jvm::interpreter::metaspace::MetaspaceService;
     use crate::jvm::verifier::verify_method;
     use super::{
-        ATHROW, BIPUSH, DUP, INVOKEDYNAMIC, INVOKESPECIAL, IRETURN, LOOKUPSWITCH, MONITORENTER,
-        MONITOREXIT, TABLESWITCH,
+        ATHROW, BIPUSH, DUP, GETSTATIC, INVOKEDYNAMIC, INVOKESPECIAL, IRETURN, LDC, LOOKUPSWITCH,
+        MONITORENTER, MONITOREXIT, TABLESWITCH,
     };
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -5780,6 +6268,40 @@ mod tests {
         let src = "public class M { public static double half(long n) { return n * 0.5; } }";
         match run(src, "M", "half", vec![Value::Long(7)]) {
             Some(Value::Double(d)) => assert_eq!(d, 3.5),
+            other => panic!("se esperaba un double, salió {other:?}"),
+        }
+    }
+
+    #[test]
+    fn implicit_widening_reaches_all_five_assignment_contexts() {
+        // #217 — la ampliación primitiva implícita (§5.1.2) no es solo la promoción binaria: hace
+        // falta en **cinco** posiciones más, y en cada una su ausencia produce un class file
+        // estructuralmente inválido (un `ireturn` en un `()J`), no un resultado equivocado.
+        // El harness verifica antes de correr, así que cada caso falla si falta el `i2l`.
+        let long_of = |body: &str| {
+            let src = format!(
+                "public class M {{ static int n = 3; static long f; static long id(long v) {{ return v; }}                  public static long test() {{ {body} }} }}"
+            );
+            run_long(&src, "M", "test", vec![])
+        };
+        assert_eq!(long_of("return M.n;"), 3); // 1. return
+        assert_eq!(long_of("long x = M.n; return x;"), 3); // 2. init de local
+        assert_eq!(long_of("long x = 0L; x = M.n; return x;"), 3); // 3. asignación a local
+        assert_eq!(long_of("M.f = M.n; return M.f;"), 3); // 4. asignación a campo
+        assert_eq!(long_of("return M.id(M.n);"), 3); // 5. paso de argumento
+        assert_eq!(
+            long_of("long[] a = new long[1]; a[0] = M.n; return a[0];"),
+            3
+        ); // 6. array store
+    }
+
+    #[test]
+    fn implicit_widening_also_emits_i2d_not_just_i2l() {
+        // El mismo agujero llegaba a `double`: se reportó como "falta el `i2l`", pero el destino
+        // más ancho puede ser cualquiera de la escala int < long < float < double.
+        let src = "public class M { static int n = 3; static double take(double v) { return v; }                    public static double test() { double x = M.n; return M.take(x) + M.n; } }";
+        match run(src, "M", "test", vec![]) {
+            Some(Value::Double(d)) => assert_eq!(d, 6.0),
             other => panic!("se esperaba un double, salió {other:?}"),
         }
     }
@@ -6682,6 +7204,22 @@ mod tests {
         assert_eq!(*code.last().unwrap(), ATHROW, "el último opcode es `athrow`, sin `return` muerto detrás");
     }
 
+    #[test]
+    fn a_catch_that_fires_still_runs_its_finally_and_jumps_past_the_handler() {
+        // #257 — el caso que faltaba: el `catch` se dispara **de verdad** y hay `finally`. El cuerpo
+        // del `try` termina en `throw`, así que `reachable` quedaba en `false` y el final del
+        // `catch` no emitía ni la copia en línea del `finally` ni el `goto`: el `catch` caía derecho
+        // dentro del handler catch-all, que hace `astore` de un throwable que nadie apiló. Un
+        // handler siempre es alcanzable — se llega por excepción, no por caída.
+        let src = "public class M { static int t; public static int f() { t = 0;                    try { throw new RuntimeException(); }                    catch (RuntimeException e) { t = t + 1; }                    finally { t = t + 10; } return t; } }";
+        assert_eq!(run_int(src, "M", "f", vec![]), 11); // el `catch` Y el `finally`, una sola vez cada uno
+        verify_all(src, "M");
+        // Y los controles que ya andaban siguen andando: sin excepción, y con la excepción saliendo.
+        let sin = "public class M { static int t; public static int f() { t = 0;                    try { t = t + 1; } catch (RuntimeException e) { t = t + 100; }                    finally { t = t + 10; } return t; } }";
+        assert_eq!(run_int(sin, "M", "f", vec![]), 11);
+        verify_all(sin, "M");
+    }
+
     // ---- StackMapTable ----
 
     #[test]
@@ -7336,6 +7874,170 @@ mod tests {
     const ACC_SYNTHETIC: u16 = 0x1000;
 
     /// Compila `src` y re-parsea la clase `simple` con la JVM propia.
+    /// #208 — un tipo que el generador **no** resuelve no se emite: se reporta.
+    ///
+    /// El `import` de tipo único se da por bueno en la fase semántica (no hay forma de descartarlo
+    /// sin classpath), así que el nombre llega sin resolver al generador. Antes salía un `.class`
+    /// con dos mentiras distintas: descriptor `Ljava/lang/Object;` y `Signature: LNoExiste;`, que no
+    /// es ninguna clase. Ahora falla, que es lo único honesto.
+    #[test]
+    fn an_unresolvable_type_in_a_signature_is_reported_not_invented() {
+        let e = crate::javac::compile("import p.NoExiste; class C { void f(NoExiste x, Class<?> t) {} }")
+            .expect_err("un tipo que no resuelve no puede emitirse");
+        assert!(
+            e.message.contains("NoExiste"),
+            "el error tiene que nombrar el tipo: {}",
+            e.message
+        );
+    }
+
+    /// La contraprueba: una **variable de tipo** del método no es un tipo sin resolver. Su
+    /// descriptor es el de su erasure, y eso ya andaba; lo que no puede es dispararse la auditoría.
+    #[test]
+    fn a_method_type_variable_is_not_reported_as_unresolvable() {
+        let c = compiled_class("class C { <T extends Number> T id(T x) { return x; } }", "C");
+        assert!(has_method(&c, "id", "(Ljava/lang/Number;)Ljava/lang/Number;", 0));
+    }
+
+    /// El SAM puede estar declarado en una **superinterfaz**, y entonces sus tipos hablan de las
+    /// variables de *esa* interfaz. Sin sustituir por la cadena de herencia, el método sintético de
+    /// la lambda quedaba declarando un retorno `R2` —el parámetro de `F2`, que no es ningún tipo—.
+    /// La erasure lo tapaba borrándolo a `Object`; se ve recién cuando la variable tiene cota.
+    #[test]
+    fn a_lambda_of_an_inherited_sam_substitutes_the_superinterfaces_type_variables() {
+        let c = compiled_class(
+            "interface F2<A, B, R2 extends Number> { R2 ap(A a, B b); }              interface Bin extends F2<String, String, Integer> {                  static Bin uno() { return (a, b) -> Integer.valueOf(1); } }",
+            "Bin",
+        );
+        // El método sintético de la lambda devuelve `Integer` —el argumento que `Bin` le dio a
+        // `R2`—, no la cota de `R2` ni `Object`.
+        assert!(
+            c.methods.iter().any(|m| {
+                let n = c.utf8(m.name_index).unwrap_or("");
+                let d = c.utf8(m.descriptor_index).unwrap_or("");
+                n.starts_with("lambda$") && d.ends_with(")Ljava/lang/Integer;")
+            }),
+            "descriptores emitidos: {:?}",
+            c.methods
+                .iter()
+                .map(|m| (c.utf8(m.name_index), c.utf8(m.descriptor_index)))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// El bytecode del primer metodo llamado `name`.
+    fn code_named(jvm: &ClassFile, name: &str) -> Vec<u8> {
+        let m = jvm
+            .methods
+            .iter()
+            .find(|m| jvm.utf8(m.name_index) == Some(name))
+            .unwrap_or_else(|| panic!("el metodo {name}"));
+        jvm.member_code(m).expect("con Code").code.clone()
+    }
+
+    /// El valor del atributo `SourceFile` (4.7.10) de la clase.
+    fn source_file_of(jvm: &ClassFile) -> Option<String> {
+        let a = jvm.attributes.iter().find(|a| jvm.utf8(a.name_index) == Some("SourceFile"))?;
+        let idx = u16::from_be_bytes([a.info[0], a.info[1]]);
+        jvm.utf8(idx).map(str::to_string)
+    }
+
+    /// Hay un `Fieldref` a `clase.nombre` en el pool.
+    fn has_fieldref(jvm: &ClassFile, class: &str, name: &str) -> bool {
+        use crate::jvm::parser::constant_pool::ConstantPoolEntry as E;
+        jvm.constant_pool.iter().any(|e| {
+            let E::FieldRef { class_index, name_and_type_index } = e else { return false };
+            let Some(E::Class { name_index }) = jvm.constant_pool.get(*class_index as usize - 1)
+            else {
+                return false;
+            };
+            let Some(E::NameAndType { name_index: n, .. }) =
+                jvm.constant_pool.get(*name_and_type_index as usize - 1)
+            else {
+                return false;
+            };
+            jvm.utf8(*name_index) == Some(class) && jvm.utf8(*n) == Some(name)
+        })
+    }
+
+    /// El **cast sintetico** (5.5): el retorno de un metodo generico llega **borrado** a la pila,
+    /// asi que encadenar sobre el emitia un `invokevirtual Hoja.n` sobre un `Object`. Eso no
+    /// verifica —la JVM real lo rechaza con `VerifyError` antes de ejecutar nada— y de este lado no
+    /// se veia porque nuestro interprete despacha por el objeto real.
+    #[test]
+    fn a_call_on_an_erased_generic_return_gets_its_checkcast() {
+        let c = compiled_class(
+            "class Hoja { int n() { return 3; } }              interface Caja<T> { T get(); }              class C { static int f(Caja<Hoja> b) { return b.get().n(); } }",
+            "C",
+        );
+        let code = code_named(&c, "f");
+        let cc = code.iter().position(|&b| b == super::CHECKCAST).expect("hay checkcast");
+        let iv = code.iter().position(|&b| b == 0xb6).expect("hay invokevirtual");
+        assert!(cc < iv, "el checkcast va **antes** del despacho: {code:?}");
+    }
+
+    /// #276 — un `@interface` es una **interfaz de anotacion**, y eso son **dos** cosas que la
+    /// spec pone y el fuente no escribe: el flag `ACC_ANNOTATION` (JVMS 4.1) y el `extends
+    /// java.lang.annotation.Annotation` implicito (JLS 9.6).
+    ///
+    /// Sin el flag, `Class.isAnnotation()` **niega** que lo sea; sin la superinterfaz, una
+    /// anotacion no es asignable a `Annotation`, que es el tipo por el que la reflexion las
+    /// devuelve. O sea que ninguna de las dos mitades de la reflexion de anotaciones podia
+    /// funcionar — con la clase entera bien formada y todos sus miembros correctos, que es por lo
+    /// que ninguna comparacion de firmas lo veia.
+    #[test]
+    fn an_annotation_type_gets_acc_annotation_and_its_implicit_superinterface() {
+        let c = compiled_class("@interface Marca { String valor(); }", "Marca");
+        assert_eq!(
+            c.access_flags & 0x2000,
+            0x2000,
+            "falta ACC_ANNOTATION: flags = {:#06x}",
+            c.access_flags
+        );
+        // Y sigue siendo una interfaz: ACC_ANNOTATION **acompania** a ACC_INTERFACE, no lo suple.
+        assert_eq!(c.access_flags & 0x0200, 0x0200, "ACC_INTERFACE tambien va");
+        let supers: Vec<&str> = c.interfaces.iter().filter_map(|&i| c.class_name(i)).collect();
+        assert!(
+            supers.contains(&"java/lang/annotation/Annotation"),
+            "falta la superinterfaz implicita: {supers:?}"
+        );
+    }
+
+    /// #209 - el literal de clase de un **primitivo** (15.8.2). No hay entrada
+    /// `CONSTANT_Class` para `int`, asi que no es un `ldc`: es el campo `TYPE` de su
+    /// envoltorio. Antes ni parseaba, con lo cual no habia **ninguna** expresion Java cuyo
+    /// valor fuera el mirror de un primitivo.
+    #[test]
+    fn a_primitive_class_literal_is_the_wrappers_type_field() {
+        let c = compiled_class(
+            "class C { static Class<?> a() { return int.class; } \
+             static Class<?> b() { return void.class; } \
+             static Class<?> d() { return int[].class; } }",
+            "C",
+        );
+        assert_eq!(code_named(&c, "a")[0], GETSTATIC, "`int.class` es un getstatic, no un ldc");
+        assert!(has_fieldref(&c, "java/lang/Integer", "TYPE"), "el campo es `Integer.TYPE`");
+        assert!(has_fieldref(&c, "java/lang/Void", "TYPE"), "`void.class` es `Void.TYPE`");
+        // Un **array** de primitivo si es un `ldc`, pero de su descriptor (`[I`).
+        assert_eq!(code_named(&c, "d")[0], LDC);
+    }
+
+    /// #235 - el `SourceFile` (4.7.10) es de la **unidad**, no de cada clase. Una secundaria
+    /// decia "Secundaria.java" y una anidada "Anidada.java": archivos que no existen, y que un
+    /// depurador no encuentra.
+    #[test]
+    fn every_class_of_a_unit_reports_the_same_source_file() {
+        let src = "public class Principal { static class Anidada {} } class Secundaria {}";
+        for simple in ["Principal", "Principal$Anidada", "Secundaria"] {
+            let c = compiled_class(src, simple);
+            assert_eq!(
+                source_file_of(&c).as_deref(),
+                Some("Principal.java"),
+                "el SourceFile de {simple}"
+            );
+        }
+    }
+
     fn compiled_class(src: &str, simple: &str) -> ClassFile {
         let (_, bytes) = compile_all(src)
             .into_iter()
@@ -8391,12 +9093,17 @@ mod tests {
 
     #[test]
     fn a_local_class_has_a_name_but_no_outer() {
-        // Una local: sin `outer` (no es miembro), con nombre (el renombrado `1L`).
+        // Una local: sin `outer` (no es miembro), y con el nombre **del fuente**.
+        //
+        // El `1` del binario `M$1L` es del compilador, no del programa: está ahí para que dos
+        // locales llamadas `L` en dos métodos distintos no colisionen. `inner_name` es lo que
+        // `getSimpleName()` devuelve, así que dejarle el prefijo hacía que una clase declarada
+        // `L` dijera llamarse `1L` — un nombre que no se puede escribir en Java (#278).
         let src = "class M { Object f() { class L {} return new L(); } }";
         let jvm = compiled_class(src, "M$1L");
         let e = inner_classes(&jvm).into_iter().find(|(i, ..)| i == "M$1L").expect("la local");
         assert_eq!(e.1, None, "una local no tiene outer");
-        assert_eq!(e.2.as_deref(), Some("1L"), "una local tiene nombre");
+        assert_eq!(e.2.as_deref(), Some("L"), "una local se llama como la declararon");
     }
 
     #[test]
@@ -8430,6 +9137,134 @@ mod tests {
         // Un método normal sigue con su `Code`, sin ninguno de esos flags.
         let normal = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("two")).unwrap();
         assert!(normal.access_flags & (0x0100 | 0x0400) == 0, "`two` es un método normal");
+    }
+
+    #[test]
+    fn a_synchronized_method_emits_acc_synchronized() {
+        // #255 — el flag es lo **único** que hace que la JVM tome el monitor del receptor (§2.11.10).
+        // Sin él, un `wait()`/`notifyAll()` en el cuerpo tira `IllegalMonitorStateException`, así que
+        // no es un adorno del `javap`: es la diferencia entre que el método funcione o no.
+        let jvm = compiled_class(
+            "class S { public synchronized int uno() { return 1; }              public static synchronized int dos() { return 2; }              public int tres() { return 3; } }",
+            "S",
+        );
+        let flags = |n: &str| {
+            jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(n)).unwrap().access_flags
+        };
+        assert_eq!(flags("uno"), 0x0001 | 0x0020, "public synchronized");
+        assert_eq!(flags("dos"), 0x0001 | 0x0008 | 0x0020, "public static synchronized");
+        assert_eq!(flags("tres") & 0x0020, 0, "un método normal no lleva ACC_SYNCHRONIZED");
+    }
+
+    #[test]
+    fn a_method_type_parameter_erases_to_its_bound_not_to_object() {
+        // #100/#241 — la borradura de una variable de tipo es su **primera cota** (§4.6). Funcionaba
+        // para los parámetros de tipo de la **clase** y no para los del **método**: esos no viven en
+        // el scope de la clase, así que `resolve_type_id` fallaba y se caía al `Object` por defecto.
+        // El `Signature` salía bien por otro camino, que es lo que lo hizo durar tanto: el `javap`
+        // muestra la firma genérica correcta y el desajuste solo aparece al sobreescribir
+        // (`AbstractMethodError`). Los descriptores de abajo se cotejaron contra el javac del JDK 25.
+        let jvm = compiled_class(
+            "public class M<A extends Number, T> {                public <N extends Number> N met(Class<N> c) { return null; }                public <U extends Comparable<U>> void cmp(U u) { }                public <X> void sinCota(X x) { }                public <B extends Number> B[] arreglo(B[] b) { return b; }                public void deClase(A a, T t) { } }",
+            "M",
+        );
+        let desc = |n: &str| {
+            let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some(n)).unwrap();
+            jvm.utf8(m.descriptor_index).unwrap().to_string()
+        };
+        assert_eq!(desc("met"), "(Ljava/lang/Class;)Ljava/lang/Number;");
+        assert_eq!(desc("cmp"), "(Ljava/lang/Comparable;)V");
+        assert_eq!(desc("sinCota"), "(Ljava/lang/Object;)V"); // sin cota, la erasure sí es Object
+        assert_eq!(desc("arreglo"), "([Ljava/lang/Number;)[Ljava/lang/Number;"); // atraviesa el array
+        // Control: los parámetros de tipo de la **clase** seguían andando y siguen.
+        assert_eq!(desc("deClase"), "(Ljava/lang/Number;Ljava/lang/Object;)V");
+    }
+
+    #[test]
+    fn a_field_gets_acc_volatile_and_acc_transient() {
+        // #115/#236 — los dos comparten bit con flags de **método** (`ACC_BRIDGE` 0x0040 y
+        // `ACC_VARARGS` 0x0080), asi que no pueden salir de la misma tabla: son tablas distintas
+        // (§4.5 vs §4.6), no un espacio comun. Esa colision es la razon de que faltaran.
+        // `strictfp` no emite nada a proposito: desde la v17 es implicito y el javac real tampoco
+        // lo emite (avisa que el modificador sobra).
+        let jvm = compiled_class(
+            "public class M { public volatile int v; public transient int t;              public volatile transient long vt; public int normal;              public strictfp double s() { return 1.0; } }",
+            "M",
+        );
+        let ff = |n: &str| {
+            jvm.fields.iter().find(|f| jvm.utf8(f.name_index) == Some(n)).unwrap().access_flags
+        };
+        assert_eq!(ff("v"), 0x0041); // ACC_PUBLIC | ACC_VOLATILE
+        assert_eq!(ff("t"), 0x0081); // ACC_PUBLIC | ACC_TRANSIENT
+        assert_eq!(ff("vt"), 0x00c1); // los dos a la vez
+        assert_eq!(ff("normal"), 0x0001);
+        let m = jvm.methods.iter().find(|m| jvm.utf8(m.name_index) == Some("s")).unwrap();
+        assert_eq!(m.access_flags, 0x0001, "`strictfp` no emite ACC_STRICT en la v17+");
+    }
+
+    #[test]
+    fn a_member_type_of_an_interface_is_implicitly_public() {
+        // #242 — §9.5: los tipos miembro de una interfaz son implicitamente `public` y `static`,
+        // igual que sus campos son `public static final` (§9.3) y sus metodos `public` (§9.4).
+        // Sin esto quedaban package-private e inusables desde otro paquete. Los valores se
+        // cotejaron contra el javac del JDK 25.
+        let src = "public interface I { interface In { } class C { } enum E { A } }";
+        assert_eq!(compiled_class(src, "I$In").access_flags, 0x0601); // PUBLIC|INTERFACE|ABSTRACT
+        assert_eq!(compiled_class(src, "I$C").access_flags, 0x0021); // PUBLIC|SUPER
+        assert_eq!(compiled_class(src, "I$E").access_flags, 0x4031); // PUBLIC|FINAL|SUPER|ENUM
+        // Control: un miembro de una **clase** no recibe nada implicito.
+        let dentro = compiled_class("public class K { interface In { } }", "K$In");
+        assert_eq!(dentro.access_flags, 0x0600, "un anidado de clase no es publico por implicacion");
+    }
+
+    #[test]
+    fn a_super_call_uses_invokespecial_on_the_direct_superclass() {
+        // #231/#125 — `super.m()` no despacha virtualmente (§15.12.4.4): saltea el override de
+        // **esta** clase. El emisor ni siquiera soportaba `super` como receptor.
+        // Dos cosas se cotejaron contra el javac del JDK 25: que el opcode es `invokespecial`, y
+        // que el dueño del methodref es la **superclase directa** y no la clase que declara el
+        // metodo — con `C extends B extends A` y `f` declarado en `A`, javac emite `B.f`.
+        let src = "public class M {                    static class A { int f() { return 1; } int g() { return 9; } }                    static class B extends A { }                    static class C extends B { int f() { return super.f() + 1; }                                               int h() { return super.g(); } } }";
+        // El comportamiento en runtime lo cubre `repros/finding_231.java` (da 2); acá se verifica la
+        // **forma**, que es donde estaba el defecto, y que el resultado pasa el verificador estricto.
+        verify_all(src, "M$C");
+        let c = compiled_class(src, "M$C");
+        let code = |n: &str| {
+            let m = c.methods.iter().find(|m| c.utf8(m.name_index) == Some(n)).unwrap();
+            c.member_code(m).expect("con Code").code.clone()
+        };
+        // aload_0; invokespecial …  (0x2a, 0xb7)
+        assert_eq!(&code("f")[0..2], &[0x2a, 0xb7]);
+        assert_eq!(&code("h")[0..2], &[0x2a, 0xb7]);
+    }
+
+    #[test]
+    fn an_abstract_covariant_override_still_gets_its_bridge() {
+        // #233 — el puente lo necesita el **llamador** que ve el supertipo, no la implementacion,
+        // asi que hace falta aunque el metodo que estrecha el retorno sea `abstract`. javac lo
+        // emite igual, y **concreto**: `aload_0; invokevirtual <el angosto>; areturn`. El despacho
+        // virtual lo lleva al override real de la subclase concreta.
+        let jvm = compiled_class(
+            "public class M {                abstract static class Base { abstract Object dame(); }                abstract static class Media extends Base { public abstract String dame(); } }",
+            "M$Media",
+        );
+        let br = jvm
+            .methods
+            .iter()
+            .find(|m| jvm.utf8(m.descriptor_index) == Some("()Ljava/lang/Object;"))
+            .expect("el puente `Object dame()` debe estar");
+        assert_eq!(br.access_flags, 0x1041); // ACC_PUBLIC | ACC_BRIDGE | ACC_SYNTHETIC
+        let code = jvm.member_code(br).expect("el puente lleva cuerpo, no es abstracto").code;
+        assert_eq!(code[0], 0x2a, "aload_0");
+        assert_eq!(code[1], 0xb6, "invokevirtual, no invokespecial");
+        assert_eq!(*code.last().unwrap(), 0xb0, "areturn");
+        // Y el metodo angosto sigue siendo el abstracto declarado.
+        let real = jvm
+            .methods
+            .iter()
+            .find(|m| jvm.utf8(m.descriptor_index) == Some("()Ljava/lang/String;"))
+            .expect("el metodo declarado");
+        assert!(real.access_flags & 0x0400 != 0, "sigue ACC_ABSTRACT");
     }
 
     // ---- atributo Signature (§4.7.9) ----
@@ -8548,20 +9383,31 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_valueof_delegates_to_enum_valueof() {
-        // §8.9.3: `valueOf(String)` delega en `Enum.valueOf(Class, String)` con un `checkcast` a `E`,
-        // byte a byte como javac. Ya no arma la cadena de `equals` + `IllegalArgumentException`.
+    fn an_enum_valueof_is_self_contained() {
+        // **Finding #250.** Este test afirmaba lo contrario: que `valueOf` **delegara** en
+        // `Enum.valueOf(Class, String)` "byte a byte como javac". Esa delegación es exactamente la
+        // regresión: `java.lang.Enum` de KajiLibrary **no declara** ese método —y su ausencia es
+        // deliberada, porque el real va por reflexión sobre el `$VALUES` de otra clase— así que
+        // delegar dejó sin compilar a **70 de 941** fuentes de la biblioteca, toda la que declarara
+        // un `enum`.
+        //
+        // El criterio correcto es el inverso: el `valueOf` sintetizado tiene que ser
+        // **autocontenido**, comparando nombres literales acá adentro. `values()` sí se pudo alinear
+        // con javac (`$VALUES.clone()`); la diferencia es que ahí el opcode existe y acá la
+        // dependencia sería la reflexión.
         let jvm = compiled_class("enum E { A, B }", "E");
         let refs = method_refs(&jvm);
         assert!(
-            refs.iter().any(|(o, n, d)| o == "java/lang/Enum"
-                && n == "valueOf"
-                && d == "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Enum;"),
-            "`valueOf` debe delegar en `Enum.valueOf`: {refs:?}",
+            !refs.iter().any(|(o, n, _)| o == "java/lang/Enum" && n == "valueOf"),
+            "`valueOf` no debe delegar en `Enum.valueOf` (finding #250): {refs:?}",
         );
         assert!(
-            !pool_mentions(&jvm, "IllegalArgumentException"),
-            "el viejo camino con `IllegalArgumentException` ya no se emite",
+            refs.iter().any(|(o, n, _)| o == "java/lang/String" && n == "equals"),
+            "`valueOf` compara los nombres con `String.equals`: {refs:?}",
+        );
+        assert!(
+            pool_mentions(&jvm, "IllegalArgumentException"),
+            "un nombre desconocido tira `IllegalArgumentException` (§8.9.3)",
         );
     }
 
@@ -8935,6 +9781,12 @@ mod tests {
                 break;
             }
         }
+        // Una colección **explícita** antes de drenar. El canal del Filer guarda offsets crudos y
+        // sobrevive a los frames que crearon los writers, así que si no fuera raíz del GC el
+        // writer se movería y el texto volvería vacío. Sin este `gc_minor` el test solo fallaba
+        // cuando el programa alcanzaba a llenar Eden por su cuenta — una casualidad, no una prueba.
+        jvm.exec().gc_minor();
+
         let pending = drain_filer();
         let recovered: Vec<(String, String)> = pending
             .into_iter()

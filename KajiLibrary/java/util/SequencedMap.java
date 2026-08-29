@@ -1,6 +1,5 @@
 package java.util;
 
-import java.util.Map.Entry;
 
 // A map with a defined encounter order over its entries (Java 21): LinkedHashMap, or a sorted
 // map. It can be asked for its first and last entry, and reversed as a view.
@@ -11,20 +10,20 @@ public interface SequencedMap<K, V> extends Map<K, V> {
 
     SequencedMap<K, V> reversed();
 
-    default Entry<K, V> firstEntry() {
+    default Map.Entry<K, V> firstEntry() {
         throw new UnsupportedOperationException();
     }
 
-    default Entry<K, V> lastEntry() {
+    default Map.Entry<K, V> lastEntry() {
         throw new UnsupportedOperationException();
     }
 
     // Remove and return the first entry, or null if the map is empty.
-    default Entry<K, V> pollFirstEntry() {
+    default Map.Entry<K, V> pollFirstEntry() {
         throw new UnsupportedOperationException();
     }
 
-    default Entry<K, V> pollLastEntry() {
+    default Map.Entry<K, V> pollLastEntry() {
         throw new UnsupportedOperationException();
     }
 

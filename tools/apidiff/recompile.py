@@ -14,6 +14,8 @@ resultado que importa.
 
 Variables de entorno:
     KAJI_ROOT   raiz del repo (por defecto: dos niveles arriba de este script)
+    KAJI_JAVAC  el javac a usar (por defecto: bin/javac.exe, el congelado). Sirve para medir el
+                efecto de un arreglo *antes* de congelarlo.
 """
 import json
 import os
@@ -25,7 +27,7 @@ ROOT = os.environ.get(
     "KAJI_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 )
 LIB = os.path.join(ROOT, "KajiLibrary")
-JAVAC = os.path.join(ROOT, "bin", "javac.exe")
+JAVAC = os.environ.get("KAJI_JAVAC", os.path.join(ROOT, "bin", "javac.exe"))
 BS = chr(92)
 
 

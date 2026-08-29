@@ -111,14 +111,55 @@ fn load_externals(table: &mut SymbolTable, finder: &ClassFinder, unit: &Compilat
     for name in JAVA_LANG {
         names.insert((*name).to_string());
     }
+    // **Fase 1**: los tipos que la unidad **nombra**. Ganan la clave del espacio de externos (que es
+    // plano, por nombre simple), que es lo que corresponde: si el archivo escribe `TemporalField`, el
+    // que vale es el de su paquete o su import, no uno homónimo traído de rebote.
+    let mut pending: Vec<String> = Vec::new();
     for name in names {
-        try_load(table, finder, &name, imports, unit.package.as_deref());
+        try_load(table, finder, &name, imports, unit.package.as_deref(), &mut pending);
+    }
+    // **Fase 2** (finding #251): los tipos que aparecen en las **firmas** de los externos ya
+    // cargados — el retorno de un método del classpath, sin ir más lejos. Sin esto, encadenar sobre
+    // ese retorno no resuelve y la llamada se descarta en silencio.
+    //
+    // Va en rondas porque cargar uno puede descubrir otros (el retorno de un método del tipo recién
+    // traído). Corta cuando una ronda no agrega nada; el tope de rondas es una red de seguridad para
+    // que un grafo patológico no cuelgue la compilación, no un límite que se espere alcanzar.
+    let mut vistos: HashSet<String> = HashSet::new();
+    for _ in 0..8 {
+        if pending.is_empty() {
+            break;
+        }
+        let ronda: Vec<String> = std::mem::take(&mut pending);
+        for dotted in ronda {
+            if !vistos.insert(dotted.clone()) {
+                continue;
+            }
+            if table.external_fqn(&dotted).is_some() || table.class(&dotted).is_some() {
+                continue;
+            }
+            if let Some(referido) =
+                internal_candidates(&dotted).into_iter().find_map(|c| finder.find(&c))
+            {
+                build_external(table, finder, &referido, &mut pending);
+            }
+        }
     }
 }
 
 fn collect_type_names(class: &ClassDecl, out: &mut HashSet<String>) {
     for ty in class.extends.iter().chain(class.implements.iter()) {
         collect_from_type(ty, out);
+    }
+    // Las **cotas** de los parámetros de tipo (`<M extends JavaFileManager>`). Un tipo que solo
+    // aparece ahí no se cargaba del classpath, y entonces la cota quedaba sin resolver: un receptor
+    // de tipo `M` no encontraba ningún miembro y la llamada se caía (#263). Se notaba solo con la
+    // cota escrita por **nombre simple** vía `import` — con el nombre calificado, la resolución la
+    // cargaba por otro camino, que es lo que hacía parecer caprichoso al defecto.
+    for tp in &class.type_params {
+        for b in &tp.bounds {
+            collect_from_type(b, out);
+        }
     }
     for c in &class.components {
         collect_from_type(&c.ty, out);
@@ -135,6 +176,12 @@ fn collect_type_names(class: &ClassDecl, out: &mut HashSet<String>) {
                 collect_from_type(&m.return_type, out);
                 for p in &m.params {
                     collect_from_type(&p.ty, out);
+                }
+                // Ídem para los parámetros de tipo del **método** (`<T extends Comparable<T>> …`).
+                for tp in &m.type_params {
+                    for b in &tp.bounds {
+                        collect_from_type(b, out);
+                    }
                 }
                 for t in &m.throws {
                     collect_from_type(t, out);
@@ -467,12 +514,35 @@ fn collect_from_expr(e: &Expr, out: &mut HashSet<String>) {
 
 /// Intenta cargar `name` desde el classpath (si no es ya del fuente o un externo cargado).
 /// Prueba rutas candidatas: el nombre cualificado, o `java/lang/<simple>` + los imports.
+/// Los nombres **internos** que puede tener un nombre cualificado punteado.
+///
+/// El fuente no distingue un paquete de un tipo envolvente: `p.Outer.Kind` es tanto la clase `Kind`
+/// del paquete `p.Outer` (`p/Outer/Kind`) como el tipo **anidado** `Kind` de la clase `p.Outer`
+/// (`p/Outer$Kind`), y solo el disco sabe cuál existe. Se prueban de la más externa a la más
+/// anidada, así el paquete gana cuando los dos existen.
+///
+/// Traducir con un `replace('.', "/")` a secas —que es lo que se hacía— nunca encuentra un anidado:
+/// de ahí que `import p.Outer.Kind;` + nombre simple degradara a `Object`, y que un `implements`
+/// escrito así **desapareciera** del class file (#239/#245).
+fn internal_candidates(dotted: &str) -> Vec<String> {
+    let parts: Vec<&str> = dotted.split('.').collect();
+    (1..=parts.len())
+        .rev()
+        .map(|split| {
+            let pkg = parts[..split].join("/");
+            let nested = parts[split..].join("$");
+            if nested.is_empty() { pkg } else { format!("{pkg}${nested}") }
+        })
+        .collect()
+}
+
 fn try_load(
     table: &mut SymbolTable,
     finder: &ClassFinder,
     name: &str,
     imports: &Imports,
     pkg: Option<&str>,
+    pending: &mut Vec<String>,
 ) {
     let simple = name.rsplit('.').next().unwrap_or(name);
     if table.class(name).is_some() || table.external(simple).is_some() {
@@ -480,11 +550,16 @@ fn try_load(
     }
     let mut candidates: Vec<String> = Vec::new();
     if name.contains('.') {
-        candidates.push(name.replace('.', "/"));
+        candidates.extend(internal_candidates(name));
     } else {
         candidates.push(format!("java/lang/{name}"));
         if let Some(fqn) = imports.single.get(name) {
-            candidates.push(fqn.replace('.', "/"));
+            candidates.extend(internal_candidates(fqn));
+        }
+        // `import p.Outer.*;` — el prefijo puede ser un **paquete** (`p/Outer/Nombre`) o una
+        // **clase** cuyos tipos miembro se importan (`p/Outer$Nombre`).
+        for prefix in &imports.on_demand {
+            candidates.extend(internal_candidates(&format!("{prefix}.{name}")));
         }
         // Mismo paquete (§6.5.5.1): un tipo del **paquete actual** en el classpath es visible por su
         // nombre simple, sin `import` (finding #4). P. ej. `List` desde `package java.util` → busca
@@ -503,12 +578,26 @@ fn try_load(
     // en un **paquete** y se lo referencia por su nombre simple (`K1` vs el registrado `p.K1`). Sin
     // esto, compilar con el propio output en el `-cp` cargaba cada clase hermana como un externo
     // redundante que arrastra su jerarquía — el disparo lento del #19.
-    if candidates.iter().any(|c| table.class(&c.replace('/', ".")).is_some()) {
+    // El nombre con el que se registra un tipo **fuente** usa puntos en todos los niveles
+    // (`p.Outer.Inner`), así que el candidato hay que volverlo a puntear **entero** — `/` y `$` —.
+    // Con solo el `/`, un candidato anidado (`p/Outer$Inner`) no matcheaba su propio fuente y se
+    // cargaba del classpath una copia externa que después ganaba la clave por nombre simple.
+    if candidates
+        .iter()
+        .any(|c| table.class(&c.replace('/', ".").replace('$', ".")).is_some())
+    {
         return;
     }
     for internal in candidates {
         if let Some(ext) = finder.find(&internal) {
-            build_external(table, finder, &ext);
+            build_external(table, finder, &ext, pending);
+            // Si la unidad lo nombró **simple** y lo que se encontró es un tipo **anidado**, hace
+            // falta el alias: su clave natural es `Outer$Kind` y el fuente escribió `Kind` (§7.5.1).
+            if !name.contains('.') && internal.contains('$') {
+                if let Some(cid) = table.external_fqn(&ext.name) {
+                    table.alias_external(name, cid);
+                }
+            }
             return;
         }
     }
@@ -516,9 +605,17 @@ fn try_load(
 
 /// Construye el símbolo de un tipo externo a partir de lo leído del `.class`, con sus campos y
 /// métodos. Se registra por nombre simple (sin dueño → invisible al volcado).
-fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalClass) {
+fn build_external(
+    table: &mut SymbolTable,
+    finder: &ClassFinder,
+    ext: &ExternalClass,
+    pending: &mut Vec<String>,
+) {
     let simple = ext.name.rsplit('.').next().unwrap_or(&ext.name).to_string();
-    if table.external(&simple).is_some() {
+    // La guardia va por **nombre completo**, no por el simple: si fuera por el simple, un homónimo ya
+    // cargado de otro paquete haría que este **nunca** se construya (era el caso de los dos
+    // `TemporalField`). Ver `SymbolTable::register_external`.
+    if table.external_fqn(&ext.name).is_some() {
         return;
     }
     let members = table.new_scope(None, None);
@@ -545,7 +642,7 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         modifiers: Vec::new(),
     });
     table.set_scope_owner(members, cid);
-    table.register_external(&simple, cid);
+    table.register_external(&ext.name, cid);
 
     // Los parámetros de tipo de la clase (`<E>` de `List<E>`): sin estos símbolos, las `E` de sus
     // firmas no resolverían a nada.
@@ -556,14 +653,22 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
     for f in &ext.fields {
         // La firma genérica gana sobre el descriptor borrado (`E` en vez de `Object`).
         let ty = f.generic_ty.clone().unwrap_or_else(|| f.ty.clone());
-        // El flag `static` del `.class` distingue `getstatic`/`getfield` en el emisor: sin él,
-        // `System.out` (campo estático) salía como `getfield` sin receptor — bytecode corrupto.
-        let modifiers = if f.is_static { vec![Modifier::Static] } else { Vec::new() };
+        // **Finding #110, la mitad que faltaba.** El lector ya poblaba `ExtField.is_static` desde
+        // `ACC_STATIC`, pero acá el símbolo se creaba con `modifiers: Vec::new()` y el flag se
+        // perdía. `codegen::field_info` decide el opcode por **estos** modificadores, así que "no es
+        // estático" quedaba como el default silencioso de **todo** campo del classpath: un
+        // `Integer.MAX_VALUE` salía `getfield` —opcode equivocado y con un receptor inventado— y la
+        // VM moría con `field_offset: field not found`. El `.is_static` se venía consumiendo para los
+        // **métodos** de acá abajo y nunca para los campos.
+        let mut mods = Vec::new();
+        if f.is_static {
+            mods.push(Modifier::Static);
+        }
         let s = table.new_symbol(Symbol {
             name: f.name.clone(),
             kind: SymbolKind::Field { ty },
             owner: Some(cid),
-            modifiers,
+            modifiers: mods,
         });
         table.define(members, &f.name, s);
     }
@@ -609,7 +714,11 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
                 params: psig,
                 return_type: ret,
                 is_constructor: m.name == "<init>",
-                throws: Vec::new(),
+                // Del atributo `Exceptions` del `.class` (§4.7.5). Sin esto, un método del
+                // classpath parecía no declarar ninguna excepción comprobada y el chequeo de
+                // §8.4.8.3 rechazaba el override legal — `implements Callable<T>` con
+                // `call() throws Exception` no compilaba (#104/#256).
+                throws: m.throws.iter().cloned().map(Type::Class).collect(),
             },
             owner: Some(cid),
             modifiers: mmods,
@@ -637,13 +746,14 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
     let supers: Vec<String> =
         ext.super_name.iter().chain(ext.interfaces.iter()).cloned().collect();
     for dotted in supers {
-        let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
         // No re-cargar un supertipo ya externo, ni uno que es un tipo **fuente** de esta compilación
         // (source-shadows-classpath, #19: evita arrastrar la jerarquía externa redundante cuando el
         // propio output está en el `-cp`).
-        if table.external(simple).is_none() && table.class(&dotted).is_none() {
+        // Por **nombre completo**: un homonimo ya cargado de otro paquete no debe impedir que este
+        // supertipo se construya (ver `register_external`).
+        if table.external_fqn(&dotted).is_none() && table.class(&dotted).is_none() {
             if let Some(sup) = finder.find(&dotted.replace('.', "/")) {
-                build_external(table, finder, &sup);
+                build_external(table, finder, &sup, pending);
             }
         }
     }
@@ -669,7 +779,7 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
         if table.external(simple).is_none() && table.class(&dotted).is_none() {
             if let Some(dep) = finder.find(&dotted.replace('.', "/")) {
-                build_external(table, finder, &dep);
+                build_external(table, finder, &dep, pending);
             }
         }
     }
@@ -687,15 +797,56 @@ fn build_external(table: &mut SymbolTable, finder: &ClassFinder, ext: &ExternalC
         // La clave con que `build_external` lo registra en externals (su nombre simple *dotted*,
         // `Diagnostic$Kind`) vs. el nombre por el que se lo referencia anidado (`Kind`).
         let ext_key = nested_dotted.rsplit('.').next().unwrap_or(nested_dotted).to_string();
-        if table.external(&ext_key).is_none() && table.class(nested_dotted).is_none() {
+        if table.external_fqn(nested_dotted).is_none() && table.class(nested_dotted).is_none() {
             if let Some(nested_ext) = finder.find(&nested_dotted.replace('.', "/")) {
-                build_external(table, finder, &nested_ext);
+                build_external(table, finder, &nested_ext, pending);
             }
         }
         if let Some(nsid) = table.external(&ext_key) {
             table.define(members, suffix, nsid);
         }
     }
+
+    // **Carga transitiva de las FIRMAS** (finding #251). Hasta acá se cargaban la jerarquía y los
+    // tipos anidados, pero **no** los tipos que aparecen en los parámetros y retornos de los
+    // miembros. Eso alcanzaba mientras la fuente nombrara todo lo que usa — y por eso el defecto
+    // parecía caprichoso: dependía de si el archivo **escribía** el tipo en algún lado.
+    //
+    // El caso: `RandomGeneratorFactory.all()` devuelve un `Stream`. Si la unidad no menciona
+    // `Stream`, nadie lo carga, el receptor de `.count()` queda sin resolver, y la llamada
+    // encadenada **se descarta en silencio** — `invokestatic all; invokeinterface count; l2i`
+    // desaparece y el método sale con un `ireturn` sobre pila vacía. En Java válido no se importa
+    // lo que no se escribe: encadenar sobre el retorno de un método es la forma normal de usar una
+    // API fluida, así que la fuente correcta era la que fallaba.
+    //
+    // **No se cargan acá, se DIFIEREN.** Los externos se registran en un espacio plano **por nombre
+    // simple**, así que el primero que llega se queda con la clave. Si estas cargas corrieran en el
+    // acto, un tipo traído por una firma podría ganarle la clave a uno que la **propia unidad
+    // nombra**: pasó con `TemporalField`, del que hay uno en `java.time.temporal` y otro en
+    // `jakarta.persistence.criteria`, y el chequeo de abstractos empezó a reclamar el `getFrom` del
+    // que no era. Difiriéndolas a una segunda fase (`load_externals`), lo que la unidad escribe se
+    // resuelve primero y estas solo rellenan lo que falte.
+    //
+    // Nota: el parser de signatures representa una **variable de tipo** como `Type::Class("T")`, así
+    // que la lista incluye nombres como "T" que después no encuentran nada — un miss memoizado
+    // (#19), barato, y preferible a adivinar por la forma del nombre.
+    let mut referenced: HashSet<String> = HashSet::new();
+    for f in &ext.fields {
+        collect_from_type(f.generic_ty.as_ref().unwrap_or(&f.ty), &mut referenced);
+    }
+    for m in &ext.methods {
+        match &m.signature {
+            Some(sig) => {
+                sig.params.iter().for_each(|p| collect_from_type(p, &mut referenced));
+                collect_from_type(&sig.ret, &mut referenced);
+            }
+            None => {
+                m.params.iter().for_each(|p| collect_from_type(p, &mut referenced));
+                collect_from_type(&m.ret, &mut referenced);
+            }
+        }
+    }
+    pending.extend(referenced);
 }
 
 /// Crea los símbolos `TypeVar` de una lista de parámetros de tipo, en `scope`, con dueño `owner`.
@@ -721,27 +872,53 @@ pub fn enter(unit: &CompilationUnit) -> (SymbolTable, Vec<Error>) {
 /// classpath por defecto, así los tipos que estén ahí (p. ej. los ya compilados de KajiLibrary)
 /// **sombrean** a los del JDK. `extra_classpath` vacío = comportamiento por defecto.
 pub fn enter_cp(unit: &CompilationUnit, extra_classpath: &[PathBuf]) -> (SymbolTable, Vec<Error>) {
+    enter_cp_multi(std::slice::from_ref(unit), extra_classpath)
+}
+
+/// [`enter_cp`] sobre **varias** unidades de compilación a la vez, en una sola tabla.
+///
+/// Es lo que hace que `javac A.java B.java` vea a `B` desde `A` (#234). No alcanza con correr
+/// `enter_cp` por archivo: el orden de las fases tiene que ser **global**, no por unidad. Enter de
+/// *todas* las clases primero —así una referencia adelantada tiene a quién resolver, sin importar
+/// el orden de los archivos ni si se referencian mutuamente—, después MemberEnter de todas, y
+/// recién entonces la resolución.
+///
+/// Los `import` sí son **por unidad** (§7.5) y se respetan: cada `resolve_type_decl` corre con los
+/// suyos. La excepción conocida son los `import static`, que la tabla guarda en un único mapa
+/// global; con varios archivos, uno podría ver el estático importado por otro. Es una aproximación
+/// heredada de cuando la invocación era siempre de un archivo, y se deja anotada acá porque es el
+/// único punto donde la separación por unidad se pierde.
+pub fn enter_cp_multi(
+    units: &[CompilationUnit],
+    extra_classpath: &[PathBuf],
+) -> (SymbolTable, Vec<Error>) {
     let mut table = SymbolTable::new();
     let mut errors = Vec::new();
-    let pkg = unit.package.as_deref();
 
-    // El paquete (o el paquete sin nombre) es el dueño de los tipos top-level.
-    let pkg_id = table.get_or_create_package(pkg);
-    let pkg_scope = match &table.symbol(pkg_id).kind {
-        SymbolKind::Package { members } => *members,
-        _ => unreachable!("get_or_create_package devuelve un Package"),
-    };
-    // Prefijo para cualificar los nombres: el paquete ("" = sin nombre).
-    let base = pkg.unwrap_or("");
+    // El paquete de cada unidad (o el paquete sin nombre) es el dueño de sus tipos top-level.
+    let mut pkgs: Vec<(SymbolId, ScopeId, String)> = Vec::new();
+    for unit in units {
+        let pkg = unit.package.as_deref();
+        let pkg_id = table.get_or_create_package(pkg);
+        let pkg_scope = match &table.symbol(pkg_id).kind {
+            SymbolKind::Package { members } => *members,
+            _ => unreachable!("get_or_create_package devuelve un Package"),
+        };
+        pkgs.push((pkg_id, pkg_scope, pkg.unwrap_or("").to_string()));
+    }
 
-    // Enter — **todos** los símbolos de clase primero (top-level y anidados, recursivo), así
-    // cualquier nombre de tipo tiene a quién resolver.
-    for class in &unit.types {
-        enter_type(&mut table, &mut errors, class, pkg_id, pkg_scope, base, base, false);
+    // Enter — **todos** los símbolos de clase de **todas** las unidades primero (top-level y
+    // anidados, recursivo), así cualquier nombre de tipo tiene a quién resolver.
+    for (unit, (pkg_id, pkg_scope, base)) in units.iter().zip(&pkgs) {
+        for class in &unit.types {
+            enter_type(&mut table, &mut errors, class, *pkg_id, *pkg_scope, base, base, false);
+        }
     }
     // MemberEnter — recién ahora los contenidos de cada clase (recursivo en las anidadas).
-    for class in &unit.types {
-        member_enter_type(&mut table, &mut errors, class, base);
+    for (unit, (_, _, base)) in units.iter().zip(&pkgs) {
+        for class in &unit.types {
+            member_enter_type(&mut table, &mut errors, class, base);
+        }
     }
     // Las clases **locales** (§14.3) no se registran acá: viven en cuerpos de método y su registro
     // pide **renombrarlas** a un nombre único (`1L`, `2L`…) para que dos homónimas en distintos
@@ -751,29 +928,37 @@ pub fn enter_cp(unit: &CompilationUnit, extra_classpath: &[PathBuf]) -> (SymbolT
 
     // Resolución — cierra la pasada 1: carga tipos externos, procesa imports y valida que los
     // tipos de supertipos y firmas existan, reportando los que no se encuentran.
-    let imports = Imports::from_unit(unit);
+    //
     // **Class finder real**: carga desde el classpath los tipos externos referenciados, con
-    // sus miembros leídos del `.class`.
+    // sus miembros leídos del `.class`. Se construye una vez y sirve a todas las unidades.
     let finder = ClassFinder::new(extra_classpath);
-    load_externals(&mut table, &finder, unit, &imports);
+    let per_unit: Vec<Imports> = units.iter().map(Imports::from_unit).collect();
+    for (unit, imports) in units.iter().zip(&per_unit) {
+        load_externals(&mut table, &finder, unit, imports);
+    }
     // Respaldo: stubs modelados de `java.lang` para lo que no se encontró en disco.
     for &name in JAVA_LANG {
         table.add_external(name);
     }
     // Registrar los `import static` como salida para la pasada 2 (no afectan la resolución de
     // *tipos* de la pasada 1 — importan miembros estáticos, que se resuelven en los cuerpos).
-    for imp in &unit.imports {
-        if imp.is_static {
-            if imp.wildcard {
-                table.static_on_demand.push(imp.path.clone());
-            } else if let Some((owner, member)) = imp.path.rsplit_once('.') {
-                table.static_single.insert(member.to_string(), owner.to_string());
+    for unit in units {
+        for imp in &unit.imports {
+            if imp.is_static {
+                if imp.wildcard {
+                    table.static_on_demand.push(imp.path.clone());
+                } else if let Some((owner, member)) = imp.path.rsplit_once('.') {
+                    table.static_single.insert(member.to_string(), owner.to_string());
+                }
             }
         }
     }
+    // Cada unidad resuelve con **sus** imports (§7.5) y su propio paquete base.
     let mut reported = HashSet::new();
-    for class in &unit.types {
-        resolve_type_decl(&mut table, &mut errors, class, base, &imports, &mut reported);
+    for ((unit, imports), (_, _, base)) in units.iter().zip(&per_unit).zip(&pkgs) {
+        for class in &unit.types {
+            resolve_type_decl(&mut table, &mut errors, class, base, imports, &mut reported);
+        }
     }
     // Persistir los tipos resueltos: el grafo `clase→super/interfaces` y las firmas
     // `campo/método → RType` — salida para la pasada 2.
@@ -1050,21 +1235,51 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
     // Un supertipo leído del `.class` viene como **nombre interno** (`java/util/AbstractList`); se
     // normaliza a puntos para tratarlo igual que uno del fuente.
     let dotted = name.replace('/', ".");
+    // **Finding #119/#120**: este atajo se tomaba para **cualquier** nombre bajo `java.lang.`, y
+    // `rest` se usaba como si fuera el nombre simple. Para un tipo de un **subpaquete**
+    // (`java.lang.ref.WeakReference`) `rest` queda `"ref.WeakReference"`, que no es la clave de
+    // ningún externo —se registran por nombre simple—, así que devolvía `None` **cortando antes** del
+    // camino genérico de nombres cualificados de más abajo, que lo habría resuelto sin problema.
+    //
+    // De ahí el sabor raro de los dos findings: el tipo resolvía en unas posiciones y en otras no, y
+    // el descriptor salía `Object` o la llamada desaparecía. Se verificó que es el prefijo y no el
+    // paquete: la misma jerarquía en `zz.ref` compila bien, y movida a `java.lang.zzref` reproduce.
+    //
+    // El atajo sigue existiendo por lo que fue creado (el shadowing del fuente, #5), pero solo para
+    // un miembro **directo** de `java.lang`. Un `java.lang.Thread.State` cae al camino de abajo, que
+    // sabe bajar a un tipo anidado.
     if let Some(rest) = dotted.strip_prefix("java.lang.") {
-        // **Shadowing** del fuente (semántica `--patch-module`, finding #5): si esta compilación
-        // **declara** `java.lang.X` (p. ej. se está compilando `java.lang.String` en sí), ese tipo
-        // del fuente gana sobre el externo del classpath. Sin esto, el `String` que devuelve
-        // `Object.toString()` (leído del `.class`) ligaba al `String` **externo**, distinto del que se
-        // compila, y el override covariante los veía como dos tipos distintos.
-        return table.class(&dotted).or_else(|| table.external(rest)).map(|id| (id, false));
+        if !rest.contains('.') {
+            // **Shadowing** del fuente (semántica `--patch-module`, finding #5): si esta compilación
+            // **declara** `java.lang.X` (p. ej. se está compilando `java.lang.String` en sí), ese tipo
+            // del fuente gana sobre el externo del classpath. Sin esto, el `String` que devuelve
+            // `Object.toString()` (leído del `.class`) ligaba al `String` **externo**, distinto del que se
+            // compila, y el override covariante los veía como dos tipos distintos.
+            return table.class(&dotted).or_else(|| table.external(rest)).map(|id| (id, false));
+        }
+        // Subpaquete: el shadowing del fuente sigue valiendo, pero el nombre simple es el último
+        // segmento, no todo el `rest`.
+        if let Some(id) = table.class(&dotted) {
+            return Some((id, false));
+        }
     }
     if dotted.contains('.') {
         // Cualificado: una clase del **fuente** (por su nombre completo) o un **externo** por su
         // nombre simple. El fallback a externo es lo que hace resolver `java.util.AbstractList` a la
         // `AbstractList` cargada —los externos se registran por nombre simple—, sin lo cual la
         // cadena de supertipos de un genérico del JDK quedaba rota (y la indulgencia, sin cerrar).
+        // Orden: fuente por su nombre completo → externo **por nombre completo** → externo por
+        // nombre simple. El del medio es lo que hace que un cualificado resuelva **al suyo** cuando
+        // hay dos homónimos: sin él, `jakarta.persistence.criteria.TemporalField` caía en el
+        // `java.time.temporal.TemporalField` que hubiera ganado la clave simple. El fallback al
+        // simple se queda porque los supertipos leídos de un `.class` llegan cualificados y su tipo
+        // puede haberse registrado desde otra ruta.
         let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
-        if let Some(id) = table.class(&dotted).or_else(|| table.external(simple)) {
+        if let Some(id) = table
+            .class(&dotted)
+            .or_else(|| table.external_fqn(&dotted))
+            .or_else(|| table.external(simple))
+        {
             return Some((id, false));
         }
         // Tipo **anidado** `Outer.Inner` (`Map.Entry`, `Outer.Mid.Inner`): se parte en el **último**
@@ -1115,23 +1330,29 @@ fn detect_cycles(table: &SymbolTable, errors: &mut Vec<Error>) {
 struct Imports {
     single: HashMap<String, String>, // nombre simple → nombre cualificado
     has_wildcard: bool,
+    /// Los prefijos de los `import X.*`. Se guardan **con su path** y no solo como un booleano
+    /// porque un `import p.Outer.*;` importa los tipos miembro de la **clase** `p.Outer`, y para
+    /// encontrarlos hay que probar `p/Outer$Nombre` — un `has_wildcard` a secas no dice contra qué.
+    on_demand: Vec<String>,
 }
 
 impl Imports {
     fn from_unit(unit: &CompilationUnit) -> Imports {
         let mut single = HashMap::new();
         let mut has_wildcard = false;
+        let mut on_demand = Vec::new();
         for imp in &unit.imports {
             if imp.is_static {
                 continue;
             }
             if imp.wildcard {
                 has_wildcard = true;
+                on_demand.push(imp.path.clone());
             } else if let Some(simple) = imp.path.rsplit('.').next() {
                 single.insert(simple.to_string(), imp.path.clone());
             }
         }
-        Imports { single, has_wildcard }
+        Imports { single, has_wildcard, on_demand }
     }
 }
 
@@ -1229,12 +1450,25 @@ fn check_type(
 /// single-type → `java.lang` (class finder) → cualificado. Ante un `import *` se es indulgente
 /// (no podemos saber sin classpath). Es la resolución de la **pasada 1** (solo existencia).
 fn resolve_class_name(table: &SymbolTable, scope: ScopeId, name: &str, imports: &Imports) -> bool {
+    // **Finding #119/#120**: igual que en `resolve_name_to_sym`, este atajo valia para cualquier
+    // nombre bajo `java.lang.` y devolvia `false` de una para los **subpaquetes**
+    // (`java.lang.ref.WeakReference` → `rest` = `"ref.WeakReference"`, que no es clave de ningun
+    // externo), cortando antes del camino de cualificados que sigue.
     if let Some(rest) = name.strip_prefix("java.lang.") {
-        return table.external(rest).is_some();
+        if !rest.contains('.') {
+            return table.external(rest).is_some();
+        }
     }
     if name.contains('.') {
         if table.class(name).is_some() {
             return true;
+        }
+        // Un externo se registra por su **nombre simple**, asi que un cualificado de subpaquete
+        // (`java.lang.ref.WeakReference`, `java.util.stream.Stream`) resuelve por ahi.
+        if let Some(simple) = name.rsplit('.').next() {
+            if table.external(simple).is_some() {
+                return true;
+            }
         }
         // Tipo **anidado** `Outer.Inner` (`Map.Entry`, `Diagnostic.Kind`): resolver el `outer` y ver
         // si tiene ese miembro-tipo. Sin esto, un tipo anidado en firma daba un falso "no se
@@ -2395,7 +2629,7 @@ fn add_synth(table: &mut SymbolTable, scope: ScopeId, cid: SymbolId, name: &str,
 }
 
 /// Modificadores implícitos de un campo: en una interfaz, `public static final`.
-fn implicit_field_mods(kind: TypeKind, declared: &[Modifier]) -> Vec<Modifier> {
+pub(crate) fn implicit_field_mods(kind: TypeKind, declared: &[Modifier]) -> Vec<Modifier> {
     let mut m = declared.to_vec();
     if matches!(kind, TypeKind::Interface | TypeKind::Annotation) {
         for imp in [Modifier::Public, Modifier::Static, Modifier::Final] {

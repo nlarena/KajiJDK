@@ -46,25 +46,37 @@ public class EnumMap<K extends Enum, V> implements Map<K, V> {
     // Values by ordinal. `vals[i] == null` means absent.
     private Object[] vals;
 
+    // Las CLAVES por ordinal, en paralelo a `vals` (finding #205). Sin esto no hay `keySet()`
+    // posible: de un ordinal no se vuelve a la constante sin el universo del enum, y obtenerlo
+    // pide `Class.getEnumConstants()` — reflexion sobre `$VALUES`, que la VM no implementa.
+    // Guardar la clave que ya nos pasaron cuesta un puntero por entrada y no necesita nada.
+    private Object[] keys;
+
     private int size;
 
     public EnumMap(Class<K> keyType) {
         this.keyType = keyType;
         this.vals = new Object[8];
+        this.keys = new Object[8];
     }
 
     public EnumMap(EnumMap<K, V> m) {
         this.keyType = m.keyType;
         this.vals = new Object[m.vals.length];
+        this.keys = new Object[m.vals.length];
         for (int i = 0; i < m.vals.length; i++) {
             this.vals[i] = m.vals[i];
+            this.keys[i] = m.keys[i];
         }
         this.size = m.size;
     }
 
-    // The ordinal of `key`, or -1 if it is not a constant of this map's enum type. `key` is bound
-    // to an `Enum` local before `ordinal()` is called on it: a call on a receiver whose static
-    // type is a *type variable* is silently dropped by our javac (finding #111), and `K` is one.
+    // The ordinal of `key`, or -1 if it is not a constant of this map's enum type.
+    //
+    // El bind a un local `Enum` antes de llamar `ordinal()` ya no es un rodeo: lo era por el
+    // finding #111 (una llamada sobre un receptor de tipo *variable de tipo* se descartaba en
+    // silencio), que quedo **arreglado el 2026-08-24**. Se conserva porque el parametro es `Object`
+    // y el cast hace falta igual, pero ya no hay nada que esquivar.
     private int ordinalOf(Object key) {
         int index = -1;
         if (key != null && keyType.isInstance(key)) {
@@ -99,10 +111,35 @@ public class EnumMap<K extends Enum, V> implements Map<K, V> {
                 newLength = newLength * 2;
             }
             Object[] bigger = new Object[newLength];
+            Object[] biggerKeys = new Object[newLength];
             for (int i = 0; i < vals.length; i++) {
                 bigger[i] = vals[i];
+                biggerKeys[i] = keys[i];
             }
             vals = bigger;
+            keys = biggerKeys;
+        }
+    }
+
+    // Las claves presentes, recorridas en orden de ordinal (finding #205). Divergencia: el JDK
+    // devuelve una vista ordenada por ordinal; esta es un HashSet, que no conserva ese orden.
+    public Set<K> keySet() {
+        HashSet<K> out = new HashSet<K>();
+        int i = 0;
+        while (i < vals.length) {
+            if (vals[i] != null) {
+                out.add((K) keys[i]);
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
         }
     }
 
@@ -141,6 +178,7 @@ public class EnumMap<K extends Enum, V> implements Map<K, V> {
             size = size + 1;
         }
         vals[i] = maskNull(value);
+        keys[i] = key;
         return (V) unmaskNull(old);
     }
 
@@ -150,6 +188,7 @@ public class EnumMap<K extends Enum, V> implements Map<K, V> {
         if (i >= 0 && i < vals.length && vals[i] != null) {
             old = vals[i];
             vals[i] = null;
+            keys[i] = null;
             size = size - 1;
         }
         return (V) unmaskNull(old);

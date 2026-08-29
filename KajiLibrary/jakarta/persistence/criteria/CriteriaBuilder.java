@@ -18,8 +18,8 @@
 
 package jakarta.persistence.criteria;
 
-// import java.math.BigDecimal;  (omitido con toBigDecimal/toBigInteger)
-// import java.math.BigInteger;  (omitido con toBigDecimal/toBigInteger)
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.temporal.Temporal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -878,14 +878,14 @@ public interface CriteriaBuilder {
      * @param number  numeric expression
      * @return {@literal Expression<BigDecimal>}
      */
-    // OMITIDO (subset): Expression<BigDecimal> toBigDecimal(Expression<? extends Number> number);  -- vuelve cuando exista java.math
+    Expression<BigDecimal> toBigDecimal(Expression<? extends Number> number);
 
     /**
      * Typecast.  Returns same expression object.
      * @param number  numeric expression
      * @return {@literal Expression<BigInteger>}
      */
-    // OMITIDO (subset): Expression<BigInteger> toBigInteger(Expression<? extends Number> number);  -- vuelve cuando exista java.math
+    Expression<BigInteger> toBigInteger(Expression<? extends Number> number);
 	
     /**
      * Typecast.  Returns same expression object.

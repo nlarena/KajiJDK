@@ -37,6 +37,17 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster, Comparab
         return new LocalDateTime(LocalDate.of(year, month, dayOfMonth), LocalTime.of(hour, minute, second));
     }
 
+    /**
+     * The full form, down to the nanosecond. {@code LocalTime} already had its four-argument
+     * {@code of}; what was missing was the bridge, and {@code ZonedDateTime.of(int x7, ZoneId)}
+     * -- the only caller -- could not compile without it (#266).
+     */
+    public static LocalDateTime of(int year, int month, int dayOfMonth, int hour, int minute,
+            int second, int nanoOfSecond) {
+        return new LocalDateTime(LocalDate.of(year, month, dayOfMonth),
+            LocalTime.of(hour, minute, second, nanoOfSecond));
+    }
+
     public static LocalDateTime now() {
         long millis = System.currentTimeMillis();
         return new LocalDateTime(LocalDate.ofEpochDay(millis / 86400000L),

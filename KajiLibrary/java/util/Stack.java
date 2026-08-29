@@ -26,7 +26,7 @@ public class Stack<E> extends Vector<E> {
     // Pop and peek take the vector's own monitor, so a push racing a pop cannot observe the
     // stack half-updated. Single-exit, since a `return` from inside a synchronized block
     // leaks the monitor with our javac (finding #105).
-    public E pop() {
+    public synchronized E pop() {
         Object top;
         synchronized (this) {
             int n = elementCount;
@@ -40,7 +40,7 @@ public class Stack<E> extends Vector<E> {
         return (E) top;
     }
 
-    public E peek() {
+    public synchronized E peek() {
         Object top;
         synchronized (this) {
             int n = elementCount;
@@ -62,7 +62,7 @@ public class Stack<E> extends Vector<E> {
 
     // The 1-based distance from the top, or -1. One-based because 1 means "the top", which
     // reads better than 0 for a stack — and is a trap for anyone who assumes it is an index.
-    public int search(Object o) {
+    public synchronized int search(Object o) {
         int distance;
         synchronized (this) {
             distance = -1;

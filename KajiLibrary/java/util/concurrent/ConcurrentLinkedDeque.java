@@ -1,5 +1,9 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractCollection;
 import java.util.Deque;
@@ -327,6 +331,14 @@ public class ConcurrentLinkedDeque<E> extends AbstractCollection<E> implements D
         }
         return new CldItr<E>(start, false);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.CONCURRENT);
+    }
 }
 
 // A doubly linked cell. `item` is cleared on removal (that is the "dead" marker an iterator
@@ -392,4 +404,5 @@ final class CldItr<E> implements Iterator<E> {
         advance(step(cursor));
         return e;
     }
+
 }

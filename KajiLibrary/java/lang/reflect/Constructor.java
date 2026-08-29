@@ -156,7 +156,12 @@ public final class Constructor<T> extends Executable {
      *
      * @return the type variables; empty if it is not generic
      */
-    public native TypeVariable<?>[] getTypeParameters();
+    public TypeVariable<Constructor<T>>[] getTypeParameters() {
+        // Vacio, y es la respuesta correcta: los parametros de tipo viven solo en
+        // el atributo `Signature`, la VM no lo lee, y un constructor sin
+        // `Signature` no declara ninguno.
+        return new TypeVariable[0];
+    }
 
     /**
      * Returns the annotated use of the type this constructor constructs.
@@ -168,6 +173,79 @@ public final class Constructor<T> extends Executable {
     public native AnnotatedType getAnnotatedReturnType();
 
     /**
+     * Whether this constructor was declared with a variable arity parameter.
+     */
+    public boolean isVarArgs() {
+        return (this.modifiers & 0x0080) != 0;
+    }
+
+    /** Whether the compiler generated this constructor rather than a programmer writing it. */
+    public boolean isSynthetic() {
+        return (this.modifiers & 0x1000) != 0;
+    }
+
+    /**
+     * Whether {@code obj} is a {@code Constructor} describing the same constructor.
+     *
+     * <p>No return type in the comparison, unlike {@link Method#equals(Object)}: a constructor
+     * has none, which is also why a class cannot declare two that differ only there.
+     *
+     * @param obj the object to compare against
+     */
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof Constructor)) {
+            return false;
+        }
+        Constructor<?> other = (Constructor<?>) obj;
+        if (this.clazz != other.getDeclaringClass()) {
+            return false;
+        }
+        Class<?>[] mine = this.parameterTypes;
+        Class<?>[] theirs = other.getParameterTypes();
+        if (mine.length != theirs.length) {
+            return false;
+        }
+        int i = 0;
+        while (i < mine.length) {
+            if (mine[i] != theirs[i]) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    /** The declaring class's name hashed, which is the JDK's formula. */
+    public int hashCode() {
+        return this.clazz.getName().hashCode();
+    }
+
+    /**
+     * Suppresses the access check for this constructor.
+     *
+     * <p>A no-op here, because KajiJDK performs no access check on a reflective call in the first
+     * place. Declared rather than merely inherited because the JDK declares it too.
+     *
+     * @param flag whether to suppress the check
+     */
+    public void setAccessible(boolean flag) {
+        super.setAccessible(flag);
+    }
+
+    /** The parameter types in the generic model, erased. */
+    public Type[] getGenericParameterTypes() {
+        return super.getGenericParameterTypes();
+    }
+
+    /** The declared exception types in the generic model, erased. */
+    public Type[] getGenericExceptionTypes() {
+        return super.getGenericExceptionTypes();
+    }
+
+    /**
      * Creates a new instance by invoking this constructor with {@code args}.
      *
      * <p>Backed by the VM.
@@ -175,5 +253,5 @@ public final class Constructor<T> extends Executable {
      * @param args the arguments
      * @return the new instance
      */
-    public native T newInstance(Object[] args);
+    public native T newInstance(Object... args);
 }

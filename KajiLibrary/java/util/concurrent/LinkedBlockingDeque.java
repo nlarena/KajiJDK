@@ -1,5 +1,8 @@
 package java.util.concurrent;
 
+import java.util.Spliterator;
+import java.util.Spliterators;
+
 import java.io.Serializable;
 import java.util.AbstractQueue;
 import java.util.Collection;
@@ -686,6 +689,14 @@ public class LinkedBlockingDeque<E> extends AbstractQueue<E> implements Blocking
     public Iterator<E> descendingIterator() {
         return new LbdItr<E>(toArray(), false);
     }
+
+    /**
+     * A spliterator over these elements.
+     */
+    public Spliterator<E> spliterator() {
+        return Spliterators.spliterator(this,
+                Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.CONCURRENT);
+    }
 }
 
 // A node of the doubly linked chain. Fields, not accessors: it is package-private plumbing.
@@ -740,4 +751,5 @@ final class LbdItr<E> implements Iterator<E> {
         }
         return (E) value;
     }
+
 }
