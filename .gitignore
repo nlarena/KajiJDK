@@ -9,13 +9,18 @@
 /.float_battery.txt
 /.jdk25_tmp/
 
-# Herramientas congeladas (`bin/*.exe`): SI se commitean. La nota anterior las excluia por
-# pesar ~48 MB, que era el costo de la build `windows-gnu`; la `msvc` da 11 MB para las diez,
-# y a ese precio tener el snapshot exacto en el historial vale mas que ahorrarlo. Que el
-# binario viaje con el repo es lo que hace que un `.class` distinto signifique "la fuente
-# cambio" y no "el compilador cambio", que es la senal que el dogfooding necesita leer.
-# Aun asi: los `.exe` no deltifican, o sea que CADA refresco suma otros ~11 MB. Refrescar
-# solo cuando haya una razon (un fix que la biblioteca necesita), nunca por rutina.
+# Herramientas congeladas (`bin/*.exe`): NO se commitean. Decision del 2026-08-28, y es la
+# definitiva -- esta regla ya se dio vuelta dos veces, asi que el motivo queda escrito para
+# que no se vuelva a discutir por tamano:
+#
+#   El peso NO es el argumento (11 MB con msvc, 59 MB con gnu; depende de la maquina que los
+#   construya, que es justamente la razon por la que no sirven como referencia compartida).
+#   El argumento es que un binario en el historial no reproduce nada: no se puede diffear, no
+#   se puede auditar, y cada refresco agrega otra copia entera porque los .exe no deltifican.
+#   Lo que hace falta guardar es la RECETA y la procedencia, no el artefacto -- y eso vive en
+#   bin/FROZEN.md, que si se commitea. Reconstruirlos son 34 segundos.
+/bin/*
+!/bin/FROZEN.md
 
 # Stray artifacts (not part of the project)
 /out.txt

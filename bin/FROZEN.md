@@ -2,20 +2,33 @@
 
 Snapshot binario de **todas** las herramientas del proyecto, commiteado a propósito.
 
-**Por qué se commitea.** La sesión de biblioteca compila KajiLibrary con un `javac` *fijo*:
-si cada máquina usa el que le salga de su `src/javac` del momento, un `.class` distinto deja
-de significar "la fuente cambió" y pasa a significar "el compilador cambió", que es
-exactamente la señal que el dogfooding necesita leer. Congelarlas también desacopla el
-trabajo de biblioteca de que el árbol de `src/` compile en ese instante — que no es
-hipotético: hay sesiones editando `src/jvm/` en paralelo.
+**Por qué NO se commitean los `.exe`** (decisión del 2026-08-28, y es la definitiva).
+Esta regla se dio vuelta dos veces discutiendo tamaño, así que el motivo real queda escrito:
 
-> **Costo, para tenerlo presente:** son ~11 MB y los `.exe` no deltifican, así que **cada
-> refresco suma otros ~11 MB al historial**. Refrescar sólo cuando haya una razón (un fix de
-> compilador que la biblioteca necesita), no por rutina.
->
-> El `.gitignore` los excluyó por un tiempo, con el argumento de que eran ~48 MB. Ese número
-> era el de la build `windows-gnu`; la `msvc` da 11 MB para las diez herramientas, y a ese
-> precio el snapshot exacto en el historial vale más que el ahorro. Quedan commiteados.
+- El **peso no es el argumento**. Son 11 MB con `msvc` y 59 MB con `gnu` — depende de qué
+  máquina los construya, que es *justamente* por qué no sirven como referencia compartida:
+  dos personas con el mismo commit obtienen binarios distintos.
+- Un binario en el historial **no reproduce nada**: no se puede diffear, no se puede auditar,
+  y cada refresco agrega una copia entera porque los `.exe` no deltifican.
+- Lo que hay que conservar es la **receta y la procedencia**, no el artefacto. Eso es este
+  archivo, y sí se commitea. Reconstruir las diez herramientas son **34 segundos**.
+
+Lo que el snapshot resuelve sigue en pie y no cambia: la sesión de biblioteca compila con un
+`javac` **fijo**, para que un `.class` distinto signifique "cambió la fuente" y no "cambió el
+compilador". Eso se logra igual con un `bin/` local reconstruido desde el commit que dice la
+tabla de procedencia — lo que no hace falta es que los bytes viajen en el repo.
+
+### Reconstruirlos
+
+```
+git archive HEAD | tar -x -C /tmp/kaji-frozen-src
+CARGO_TARGET_DIR=/tmp/kaji-frozen-target cargo build --release --manifest-path /tmp/kaji-frozen-src/Cargo.toml
+cp /tmp/kaji-frozen-target/release/*.exe bin/
+```
+
+Desde una copia limpia, **no** desde el working tree: lo que el snapshot promete es "esto es
+exactamente el commit tal", y ya hubo cuatro refrescos donde el árbol tenía cambios sin
+commitear que no debían entrar. Después, actualizar la tabla de procedencia de abajo.
 
 ## El snapshot puede quedar ATRAS de lo que la biblioteca necesita
 
