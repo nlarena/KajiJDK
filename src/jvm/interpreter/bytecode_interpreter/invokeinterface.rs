@@ -74,6 +74,13 @@ impl Exec<'_> {
                 None => return self.throw_exception("java/lang/NoSuchMethodError"),
             };
 
+        // The implementation may have no bytecode: **native** (`String`'s primitives are, and
+        // `String` implements `CharSequence`, so it is the ordinary case rather than an exotic
+        // one) or **abstract**. Neither may get a frame.
+        if let Some(step) = self.dispatch_bodiless(callee, &locals) {
+            return step;
+        }
+
         let max_locals = self.shared.metaspace.max_locals(callee);
         // A `synchronized` implementation locks its receiver (`this`); otherwise no lock.
         let lock = self.shared.metaspace.is_synchronized(callee).then_some(receiver);

@@ -7,7 +7,10 @@
 //! the heap's byte-writers (to lay out the header + fields).
 
 use super::objects_operations::{self, HEADER_SIZE, SLOT_SIZE};
+use crate::jvm::parser::attributes::constant_value;
+use crate::jvm::parser::constant_pool::ConstantPoolEntry;
 use crate::jvm::interpreter::frame::{Frame, Value};
+use crate::jvm::interpreter::strings;
 use crate::jvm::interpreter::heap::HeapService;
 use crate::jvm::interpreter::metaspace::MetaspaceService;
 
@@ -68,6 +71,74 @@ pub fn load_class(metaspace: &mut MetaspaceService, heap: &mut HeapService, name
         metaspace.class_object(&class_uuid).unwrap_or(0)
     };
     heap.write_u32(offset, class_mirror as u32);
+
+    // §5.4.2 Preparation, second half: a static field carrying a `ConstantValue` (§4.7.2)
+    // starts at that constant instead of at its type's default. The real `javac` folds every
+    // compile-time constant into its use sites, so a JDK class never depends on this — **ours
+    // does not fold**, and emitted a `getstatic` against a field whose value lived only in the
+    // attribute, so every `static final int` read back 0 (COMPILER_FINDINGS #216).
+    //
+    // Done *after* `set_class_object` and the header write, and that ordering is load-bearing:
+    // a `String` constant has to be interned, and interning needs this class's own mirror to
+    // already be registered for the case where the class being prepared **is**
+    // `java/lang/String`.
+    for (field, value) in static_constant_values(metaspace, name) {
+        let at = static_slot(metaspace, heap, name, &field);
+        match value {
+            StaticConstant::Int(v) => heap.write_u32(at, v as u32),
+            StaticConstant::Float(v) => heap.write_u32(at, v.to_bits()),
+            StaticConstant::Long(v) => heap.write_u64(at, v as u64),
+            StaticConstant::Double(v) => heap.write_u64(at, v.to_bits()),
+            StaticConstant::Str(text) => {
+                let interned = strings::intern(metaspace, heap, &text);
+                heap.write_u32(at, interned as u32);
+            }
+        }
+    }
+}
+
+/// A value a `ConstantValue` attribute prescribes for a static field (§4.7.2 allows exactly
+/// the primitives and `String`). Owned, so Preparation can write them without holding a borrow
+/// of the class file across the interning allocation.
+enum StaticConstant {
+    Int(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    Str(String),
+}
+
+/// The `(field, constant)` pairs `class` declares through `ConstantValue`. A field without the
+/// attribute simply keeps the zeroed slot Preparation already gave it.
+fn static_constant_values(metaspace: &MetaspaceService, class: &str) -> Vec<(String, StaticConstant)> {
+    let Some(cf) = metaspace.get(class) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for field in cf.fields.iter().filter(|f| f.is_static()) {
+        let Some(name) = cf.utf8(field.name_index) else { continue };
+        let index = field
+            .attributes
+            .iter()
+            .find(|a| cf.utf8(a.name_index) == Some("ConstantValue"))
+            .and_then(|a| constant_value::index(&a.info));
+        let Some(index) = index.filter(|&i| i != 0) else { continue };
+        let value = match cf.constant_pool.get((index - 1) as usize) {
+            Some(ConstantPoolEntry::Integer(v)) => StaticConstant::Int(*v),
+            Some(ConstantPoolEntry::Float(v)) => StaticConstant::Float(*v),
+            Some(ConstantPoolEntry::Long(v)) => StaticConstant::Long(*v),
+            Some(ConstantPoolEntry::Double(v)) => StaticConstant::Double(*v),
+            Some(ConstantPoolEntry::String { string_index }) => {
+                match cf.constant_pool.get((*string_index as usize).wrapping_sub(1)) {
+                    Some(ConstantPoolEntry::Utf8(text)) => StaticConstant::Str(text.clone()),
+                    _ => continue,
+                }
+            }
+            _ => continue,
+        };
+        out.push((name.to_string(), value));
+    }
+    out
 }
 
 /// `new` (0xbb): allocate an instance of the class named at `cp_index` (resolved
@@ -183,6 +254,20 @@ pub fn static_reference(
 ) -> usize {
     let at = static_slot(metaspace, heap, class, field);
     heap.read_u32(at) as usize
+}
+
+/// The fallible half of [`static_reference`]: `None` when no class in the chain declares the
+/// static `field`. Same distinction [`try_field_offset`][objects_operations::try_field_offset]
+/// draws — a field the **VM** named is a request for the library's cooperation, not a
+/// requirement on it, so its absence has to be an answer rather than a crash.
+pub fn try_static_reference(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    class: &str,
+    field: &str,
+) -> Option<usize> {
+    static_declaring_class(metaspace, class, field)?;
+    Some(static_reference(metaspace, heap, class, field))
 }
 
 /// Resolves a static field to its **absolute heap offset** in the declaring class's

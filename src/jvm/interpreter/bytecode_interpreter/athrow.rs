@@ -119,22 +119,30 @@ impl Exec<'_> {
         // The `Thread` argument the handler receives. For `main` this is where its object gets
         // fabricated (an allocation — hence the parking above).
         self.thread_current();
-        let handler_at = objects_operations::field_offset(
+        // `uncaughtExceptionHandler` and its static default are fields the **VM** names on
+        // `Thread`. A library that declares neither simply has no handler to offer — which is an
+        // answer, not a malformed class (COMPILER_FINDINGS #227: KajiLibrary's `Thread` declares
+        // target/tid/name/interrupted and nothing else).
+        let handler_at = objects_operations::try_field_offset(
             &mut self.shared.metaspace,
             "java/lang/Thread",
             "uncaughtExceptionHandler",
         );
-        let mut handler = self.shared.heap.read_u32(self.current_thread_obj() + handler_at) as usize;
+        let mut handler = match handler_at {
+            Some(off) => self.shared.heap.read_u32(self.current_thread_obj() + off) as usize,
+            None => 0,
+        };
         if handler == 0 {
             // No per-thread handler: fall back to the process-wide default, read straight out of
             // `Thread`'s mirror. (`static_reference` can allocate that mirror, so `handler` is
             // read *after* it — and the thread object is re-read below.)
-            handler = class_operations::static_reference(
+            handler = class_operations::try_static_reference(
                 &mut self.shared.metaspace,
                 &mut self.shared.heap,
                 "java/lang/Thread",
                 "defaultUncaughtExceptionHandler",
-            );
+            )
+            .unwrap_or(0);
         }
         let exception = self.parked_exception(exception);
         if handler == 0 {
@@ -173,9 +181,14 @@ impl Exec<'_> {
         use std::fmt::Write;
         let thread_name = self.current_thread_name();
         let dotted = exc_class.replace('/', ".");
+        // Both fields are read by a name the VM chose, so both are optional: the report degrades
+        // to just the class name rather than taking the VM down with it.
         let msg_off =
-            objects_operations::field_offset(&mut self.shared.metaspace, exc_class, "message");
-        let msg_ref = self.shared.heap.read_u32(exception + msg_off) as usize;
+            objects_operations::try_field_offset(&mut self.shared.metaspace, exc_class, "message");
+        let msg_ref = match msg_off {
+            Some(off) => self.shared.heap.read_u32(exception + off) as usize,
+            None => 0,
+        };
         let header = if msg_ref == 0 {
             dotted
         } else {
@@ -183,8 +196,11 @@ impl Exec<'_> {
         };
         let _ = writeln!(self.shared.console, "Exception in thread \"{thread_name}\" {header}");
         let bt_off =
-            objects_operations::field_offset(&mut self.shared.metaspace, exc_class, "backtrace");
-        let bt_ref = self.shared.heap.read_u32(exception + bt_off) as usize;
+            objects_operations::try_field_offset(&mut self.shared.metaspace, exc_class, "backtrace");
+        let bt_ref = match bt_off {
+            Some(off) => self.shared.heap.read_u32(exception + off) as usize,
+            None => 0,
+        };
         if bt_ref != 0 {
             let _ = writeln!(self.shared.console, "{}", strings::read(&self.shared.heap, bt_ref));
         }
@@ -197,9 +213,15 @@ impl Exec<'_> {
         if obj == 0 {
             return "main".to_string();
         }
-        let name_off =
-            objects_operations::field_offset(&mut self.shared.metaspace, "java/lang/Thread", "name");
-        let name_ref = self.shared.heap.read_u32(obj + name_off) as usize;
+        let name_off = objects_operations::try_field_offset(
+            &mut self.shared.metaspace,
+            "java/lang/Thread",
+            "name",
+        );
+        let name_ref = match name_off {
+            Some(off) => self.shared.heap.read_u32(obj + off) as usize,
+            None => 0, // a `Thread` without a `name` field reports like an unnamed one
+        };
         if name_ref == 0 {
             "main".to_string()
         } else {
@@ -297,6 +319,17 @@ impl Exec<'_> {
     /// operand stack** (a GC root the collector scans and forwards) across the intern and read it
     /// back at its possibly-new location. Returns that up-to-date offset.
     fn capture_backtrace(&mut self, exception: usize, exc_class: &str) -> usize {
+        // `backtrace` is a field the **VM** named, not one a `Throwable` owes us: the library on
+        // the bootclasspath may declare only `message`/`cause` (COMPILER_FINDINGS #227), and that
+        // is a perfectly legal Throwable. Ask first — and ask *before* rendering, so a library
+        // that doesn't cooperate costs nothing instead of costing an interned string with
+        // nowhere to go. The offset is a layout offset, not a heap address, so it survives the
+        // collection interning may trigger.
+        let Some(off) =
+            objects_operations::try_field_offset(&mut self.shared.metaspace, exc_class, "backtrace")
+        else {
+            return exception;
+        };
         let trace = self.render_backtrace();
         self.top().push(Value::Reference(exception));
         let interned = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &trace);
@@ -304,10 +337,6 @@ impl Exec<'_> {
             Value::Reference(offset) => offset,
             _ => exception,
         };
-        // Every thrown object is a Throwable subtype (the verifier guarantees it), so it inherits
-        // the `backtrace` field; no further allocation happens before the write, so both offsets
-        // stay valid.
-        let off = objects_operations::field_offset(&mut self.shared.metaspace, exc_class, "backtrace");
         self.shared.heap.write_u32(exception + off, interned as u32);
         exception
     }

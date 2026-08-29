@@ -406,8 +406,24 @@ fn total_slots(fields: &[(String, String)]) -> usize {
 /// superclass fields first, so folding [`place_field`] over the super-first field list lands
 /// each field (and its 8-alignment padding) exactly where the object stores it.
 pub fn field_offset(metaspace: &mut MetaspaceService, named_class: &str, field: &str) -> usize {
-    field_offset_in(&layout_fields_mut(metaspace, named_class), field)
+    try_field_offset(metaspace, named_class, field)
         .expect("field_offset: field not found in the class or its superclasses")
+}
+
+/// The fallible half of [`field_offset`]: `None` when neither the class nor any superclass
+/// declares `field`.
+///
+/// The distinction is not stylistic. A caller that reads a field the *bytecode* named requires
+/// it to exist, and a missing one is a linkage failure worth the panic. A caller that reads a
+/// field by a name the **VM** chose — `backtrace`, say — is asking the library to cooperate with
+/// an implementation detail, and a library that declares no such field is not malformed. That
+/// second kind must degrade, not die (COMPILER_FINDINGS #227).
+pub fn try_field_offset(
+    metaspace: &mut MetaspaceService,
+    named_class: &str,
+    field: &str,
+) -> Option<usize> {
+    field_offset_in(&layout_fields_mut(metaspace, named_class), field)
 }
 
 /// The total instance-field **slots** of `name` plus those of every superclass — the object's
