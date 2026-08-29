@@ -2182,6 +2182,42 @@ mod tests {
         }
     }
 
+    // Deterministic repro of the `RunningCtx::pending_exception` hole — single-threaded, `green`,
+    // no race involved. A record component's `equals` throws; the `ObjectMethods` bootstrap calls
+    // it through `call_virtual`, which returns `None` with the exception parked in
+    // `pending_exception`, and `record_equals`'s `None => false` arm reads that as "the component
+    // has no equals" and carries on. Nobody in Java-land saw a throw, but the VM is now carrying
+    // an exception that the next opcode with a `take_pending_throw()` delivers somewhere unrelated.
+    //
+    // Real `java` (JDK 25) answers **110**: the component's equals propagates out of the record's
+    // equals (10), and the later `new` is clean (100). Anything else is the bug — 1001 means the
+    // exception was swallowed and resurfaced at the `new`.
+    //
+    // `pending_exception` is also invisible to the collector (`gc::roots` walks `threads[*].frames`
+    // and `Exec::parked` syncs only `frames`), so an exception parked across a moving collection is
+    // a stale reference on top of being delivered in the wrong place.
+    #[test]
+    fn pending_exception_is_not_swallowed_by_record_equals() {
+        assert_eq!(run_int("java/PeStale.class"), 110); // green — igual que el `java` real
+    }
+
+    // The same defect in its second shape — and the test that originally exposed the *stale
+    // reference*, not just the misplaced delivery. With the exception parked, an allocation storm
+    // ran on top of it (`newarray`/`arraylength` do not call `take_pending_throw`, so nothing
+    // reclaimed it), the minor collection recycled a throwable no root was holding, and the later
+    // `new` panicked in `athrow.rs` with "cannot resolve the thrown object's class".
+    //
+    // It no longer reaches the storm: the component's exception now propagates out of the record's
+    // equals, so the method returns at the first `catch` — which is exactly what real `java` (JDK
+    // 25) does, and it answers **110** too. What this guards now is that propagation. The GC-root
+    // property itself is guarded directly by `a_parked_exception_survives_a_moving_collection`
+    // in `bytecode_interpreter.rs`, because with every consumer taking the exception before the
+    // frame runs another instruction, no Java program can hold one across a safepoint any more.
+    #[test]
+    fn a_throwing_record_component_propagates_out_of_equals() {
+        assert_eq!(run_int("java/PeGcStale.class"), 110); // green — igual que el `java` real
+    }
+
     // RELIABLE reproduction of the os-parallel stale-reference bug (see the project memory
     // `os-parallel-gc-stale-ref-heisenbug`). 12 workers run an allocation storm (constant minor GCs)
     // while `main` holds every worker reference across the storm, then dispatches `join` on each. In

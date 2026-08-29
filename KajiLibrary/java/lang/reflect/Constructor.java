@@ -1,33 +1,87 @@
 package java.lang.reflect;
 
-// KajiLibrary's java.lang.reflect.Constructor — a reflective constructor. A KajiLibrary subset (as
-// Method): populated by the VM, getters read the metadata, newInstance() is a native.
-public final class Constructor<T> extends AccessibleObject implements Member {
+/**
+ * A reflective constructor.
+ *
+ * <p>KajiLibrary subset, as {@link Method}: the object is populated by the VM, the getters read that
+ * metadata, and {@link #newInstance} is a native.
+ *
+ * <h2>Now a subclass of {@link Executable}</h2>
+ *
+ * <p>Everything shared with {@code Method} — parameters, exception types, modifiers, and
+ * {@link Executable#getParameters} — moved one level up. What is left here is what makes a
+ * constructor different from a method, and it is a short list: it has no return type, its
+ * {@link #getName} borrows the declaring class's, and instead of invoking on a receiver it
+ * <em>produces</em> one.
+ *
+ * <p>{@link #getDeclaringClass} narrows the inherited {@code Class<?>} to {@code Class<T>} — the
+ * covariant override the JDK also uses, and the reason {@code Constructor<T>} is generic at all:
+ * {@code newInstance} can then return a {@code T} instead of an {@code Object}.
+ *
+ * <h2>What is still missing</h2>
+ *
+ * <p>{@code getAnnotation}, {@code getAnnotations}, {@code getDeclaredAnnotations} and
+ * {@code getParameterAnnotations} are inherited abstract and not defined here; our javac rejects
+ * every spelling of an override returning {@code Annotation[]} or {@code Annotation[][]}. See
+ * {@link Parameter} for the full write-up. All four would be {@code native} and unimplemented by the
+ * VM regardless.
+ */
+public final class Constructor<T> extends Executable {
 
     private Class<T> clazz;
     private Class<?>[] parameterTypes;
+    private Class<?>[] exceptionTypes;
     private int modifiers;
     private int slot;
 
     private Constructor() {
     }
 
+    /**
+     * Returns the class that declares this constructor.
+     *
+     * @return the declaring class
+     */
     public Class<T> getDeclaringClass() {
         return this.clazz;
     }
 
+    /**
+     * Returns the binary name of the class this constructor constructs.
+     *
+     * <p>A constructor has no name of its own — {@code <init>} is the class file's spelling, not the
+     * language's — so reflection reports the class's name, which is also what source code writes at
+     * the {@code new} site.
+     *
+     * @return the declaring class's binary name
+     */
     public String getName() {
         return this.clazz.getName();
     }
 
+    /**
+     * Returns this constructor's Java language modifiers, as a bitmask.
+     *
+     * @return the modifiers, decodable with {@link Modifier}
+     */
     public int getModifiers() {
         return this.modifiers;
     }
 
+    /**
+     * Returns this constructor's parameter types, in declaration order.
+     *
+     * @return the parameter types; empty if it takes none
+     */
     public Class<?>[] getParameterTypes() {
         return this.parameterTypes;
     }
 
+    /**
+     * Returns how many parameters this constructor declares.
+     *
+     * @return the parameter count
+     */
     public int getParameterCount() {
         if (this.parameterTypes == null) {
             return 0;
@@ -35,14 +89,91 @@ public final class Constructor<T> extends AccessibleObject implements Member {
         return this.parameterTypes.length;
     }
 
-    public boolean isSynthetic() {
-        return (this.modifiers & 0x00001000) != 0;
+    /**
+     * Returns the checked exception types this constructor declares.
+     *
+     * @return the exception types; empty if it declares none
+     */
+    public Class<?>[] getExceptionTypes() {
+        return this.exceptionTypes;
     }
 
-    public boolean isVarArgs() {
-        return (this.modifiers & 0x00000080) != 0;
+    /**
+     * Returns a string describing this constructor, including modifiers and fully-qualified type
+     * names.
+     *
+     * <p>Format: {@code modifiers declaringClass(paramTypes) throws excTypes} — the JDK's, minus the
+     * type parameters, which need the {@code Signature} attribute the VM cannot yet supply. There is
+     * no return type in the output, because there is none to print.
+     *
+     * @return the generic string form
+     */
+    public String toGenericString() {
+        StringBuilder out = new StringBuilder();
+        String mods = Modifier.toString(this.modifiers & Modifier.constructorModifiers());
+        if (mods.length() > 0) {
+            out.append(mods);
+            out.append(' ');
+        }
+        out.append(this.clazz.getName());
+        out.append('(');
+        appendTypeList(out, this.parameterTypes);
+        out.append(')');
+        if (this.exceptionTypes != null && this.exceptionTypes.length > 0) {
+            out.append(" throws ");
+            appendTypeList(out, this.exceptionTypes);
+        }
+        return out.toString();
     }
 
-    // Creates a new instance by invoking this constructor with `args`. Backed by the VM.
+    // As Method.appendTypeList: comma-separated binary names, null-tolerant so that a partially
+    // populated Constructor is still printable.
+    private static void appendTypeList(StringBuilder out, Class<?>[] types) {
+        if (types == null) {
+            return;
+        }
+        for (int i = 0; i < types.length; i = i + 1) {
+            if (i > 0) {
+                out.append(',');
+            }
+            out.append(types[i].getName());
+        }
+    }
+
+    /**
+     * Returns a string describing this constructor. Same format as {@link #toGenericString}.
+     *
+     * @return the string form
+     */
+    public String toString() {
+        return toGenericString();
+    }
+
+    /**
+     * Returns the type parameters this constructor declares.
+     *
+     * <p>Backed by the VM: needs the {@code Signature} attribute parsed into {@link TypeVariable}s.
+     *
+     * @return the type variables; empty if it is not generic
+     */
+    public native TypeVariable<?>[] getTypeParameters();
+
+    /**
+     * Returns the annotated use of the type this constructor constructs.
+     *
+     * <p>Backed by the VM: needs {@code RuntimeVisibleTypeAnnotations} parsing.
+     *
+     * @return the annotated return type
+     */
+    public native AnnotatedType getAnnotatedReturnType();
+
+    /**
+     * Creates a new instance by invoking this constructor with {@code args}.
+     *
+     * <p>Backed by the VM.
+     *
+     * @param args the arguments
+     * @return the new instance
+     */
     public native T newInstance(Object[] args);
 }

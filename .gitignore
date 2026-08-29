@@ -9,8 +9,12 @@
 /.float_battery.txt
 /.jdk25_tmp/
 
-# Frozen Nivel-0 javap snapshot (binary, not committed)
-/bin/
+# Herramientas congeladas (`bin/*.exe`): NO se commitean — son ~48 MB y los `.exe` no
+# deltifican, así que cada refresco duplicaría el peso del historial. Se reconstruyen desde
+# un commit con la receta de `bin/FROZEN.md`, que sí viaja con el repo justamente para que
+# el snapshot sea reproducible sin cargar los binarios.
+/bin/*
+!/bin/FROZEN.md
 
 # Stray artifacts (not part of the project)
 /out.txt

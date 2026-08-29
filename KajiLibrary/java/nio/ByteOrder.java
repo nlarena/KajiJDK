@@ -19,6 +19,17 @@ public final class ByteOrder {
     /** The order in which the least significant byte comes first. */
     public static final ByteOrder LITTLE_ENDIAN = new ByteOrder("LITTLE_ENDIAN");
 
+    /**
+     * The machine's own order, resolved once.
+     *
+     * <p>Private and separate from {@link #LITTLE_ENDIAN} even though it holds the same object:
+     * the two say different things. {@code LITTLE_ENDIAN} is a constant of the format world and
+     * would keep its meaning on a big-endian machine; this one is a fact about the machine, and
+     * naming it is what lets {@link #nativeOrder()} be a field read rather than a decision taken
+     * again on every call.
+     */
+    private static final ByteOrder NATIVE_ORDER = LITTLE_ENDIAN;
+
     private final String name;
 
     private ByteOrder(String name) {
@@ -34,7 +45,7 @@ public final class ByteOrder {
      * @return {@link #LITTLE_ENDIAN}
      */
     public static ByteOrder nativeOrder() {
-        return LITTLE_ENDIAN;
+        return NATIVE_ORDER;
     }
 
     /**

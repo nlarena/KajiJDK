@@ -250,13 +250,25 @@ struct RunningCtx {
     /// Floors for exception unwinding: while a `call_java`-driven nested execution runs (a
     /// `<clinit>`, an intrinsic callback), its synthetic base frame index sits here. An exception
     /// that reaches a floor with no handler stops there — surfacing to the VM via
-    /// `pending_exception` — instead of tearing through the code that made the call. A stack,
+    /// `parked_exception` — instead of tearing through the code that made the call. A stack,
     /// because such calls nest.
     exception_floor: Vec<usize>,
-    /// An exception that unwound out of a `call_java` boundary (heap offset of the throwable),
-    /// waiting for the caller to re-deliver it — e.g. a `<clinit>` failure re-thrown by the
-    /// opcode that triggered initialization.
-    pending_exception: Option<usize>,
+    /// Whether an exception unwound out of a `call_java` boundary and is waiting for the caller to
+    /// re-deliver it — e.g. a `<clinit>` failure re-thrown by the opcode that triggered
+    /// initialization.
+    ///
+    /// **It is a flag, not the reference.** The throwable itself is parked on the **operand stack
+    /// of the frame that will deliver it** ([`Exec::park_exception`]), because that is somewhere
+    /// the collector already looks: `gc::roots` walks `threads[*].frames`, and a safepoint syncs
+    /// those frames into the thread's slot. Holding the heap offset here instead — which is what
+    /// this field used to be — made it invisible to every collector path, so a moving collection
+    /// with an exception in flight left a dangling offset that the next
+    /// [`Exec::take_pending_throw`] would try to throw. It is also invisible in the other
+    /// direction: in `os` each thread owns its `RunningCtx`, so the stop-the-world coordinator
+    /// cannot reach a sibling's copy even in principle. Regression tests: `java/PeStale.java` and
+    /// `java/PeGcStale.java`. The same reasoning is why the frame pool must never hold a
+    /// reference, and why `capture_backtrace` parks its exception on the operand stack too.
+    parked_exception: bool,
     /// **Frame pool** (Fase F): retired frames, kept for the next call instead of being dropped.
     /// A method call used to allocate two `Vec`s (the callee's `locals` and its operand stack)
     /// and free them again on `return`; that is ~72 ns of pure allocator traffic on a call that
@@ -3058,6 +3070,13 @@ impl Exec<'_> {
                     u16::from_be_bytes([code[pc + 1], code[pc + 2]])
                 };
                 self.invokedynamic(cp_index);
+                // A bootstrap can run user code (a record component's `equals`/`hashCode`/
+                // `toString`, a lambda's constructor, a condy's bootstrap). If it threw, the
+                // exception is parked on this frame: deliver it instead of stepping over a call
+                // site that never produced a value.
+                if let Some(step) = self.take_pending_throw() {
+                    return step;
+                }
                 self.top().advance(5);
                 Step::Continue
             }
@@ -3521,7 +3540,7 @@ impl Exec<'_> {
                 // A prior initialization threw: the class is permanently unusable — every active
                 // use now fails with NoClassDefFoundError (JVMS §5.5).
                 let ncdfe = self.new_exception_object("java/lang/NoClassDefFoundError");
-                self.running.pending_exception = Some(ncdfe);
+                self.park_exception(ncdfe);
                 return;
             }
             InitState::NotStarted => {}
@@ -3533,7 +3552,7 @@ impl Exec<'_> {
         // propagates unchanged.
         if let Some(superclass) = self.shared.metaspace.superclass_name(class) {
             self.ensure_initialized(&superclass);
-            if self.running.pending_exception.is_some() {
+            if self.threw() {
                 self.shared.metaspace.set_init_state(class, InitState::Erroneous);
                 return;
             }
@@ -3548,7 +3567,7 @@ impl Exec<'_> {
         // returns nothing for one. A failure propagates exactly like the superclass's.
         for iface in self.shared.metaspace.default_method_superinterfaces(class) {
             self.ensure_initialized(&iface);
-            if self.running.pending_exception.is_some() {
+            if self.threw() {
                 self.shared.metaspace.set_init_state(class, InitState::Erroneous);
                 return;
             }
@@ -3561,20 +3580,21 @@ impl Exec<'_> {
         // ExceptionInInitializerError (JVMS §5.5) before it reaches the triggering code.
         if let Some(clinit) = self.shared.metaspace.resolve_method(class, "<clinit>", "()V") {
             self.call_java(clinit, Vec::new(), &[]);
-            if let Some(exc) = self.running.pending_exception.take() {
+            if self.threw() {
                 self.shared.metaspace.set_init_state(class, InitState::Erroneous);
+                // Peeked, not taken: the throwable stays parked — and therefore rooted — while we
+                // classify it and allocate the wrapper.
+                let exc = self.peek_parked_exception();
                 let exc_class = self.exception_class_name(exc);
                 let is_error = class_operations::is_subtype(
                     &mut self.shared.metaspace,
                     &exc_class,
                     "java/lang/Error",
                 );
-                let delivered = if is_error {
-                    exc
-                } else {
-                    self.new_exception_object("java/lang/ExceptionInInitializerError")
-                };
-                self.running.pending_exception = Some(delivered);
+                if !is_error {
+                    let wrapper = self.new_exception_object("java/lang/ExceptionInInitializerError");
+                    self.replace_parked_exception(wrapper);
+                }
                 return;
             }
         }
@@ -3606,12 +3626,12 @@ impl Exec<'_> {
         widths: &[usize],
     ) -> Option<Value> {
         // VM-pushed synthetic frames count against the same depth limit (JVMS §6.3).
-        // `call_java` reports failure through `pending_exception` (see the return below),
+        // `call_java` reports failure through the parked exception (see the return below),
         // so the overflow surfaces the same way any exception escaping the callee would —
         // as a bare object, like the NoClassDefFoundError in `ensure_initialized`.
         if self.running.frames.len() >= Self::MAX_FRAMES {
             let soe = self.new_exception_object("java/lang/StackOverflowError");
-            self.running.pending_exception = Some(soe);
+            self.park_exception(soe);
             return None;
         }
         let max_locals = self.shared.metaspace.max_locals(method);
@@ -3628,7 +3648,8 @@ impl Exec<'_> {
         frame.mark_synthetic();
         self.running.frames.push(frame);
         // Mark this call's boundary: an exception that reaches `base` with no handler stops there
-        // (see `unwind_with`) and surfaces via `pending_exception` rather than unwinding further.
+        // (see `unwind_with`) and surfaces parked on our caller's operand stack rather than
+        // unwinding further.
         self.running.exception_floor.push(base);
 
         // Drive it on the *current* thread — `run_one`, not `step`, so the scheduler
@@ -3640,7 +3661,7 @@ impl Exec<'_> {
 
         // The callee threw and it unwound out to our boundary: there is no return value, and the
         // exception stays pending for our caller to re-deliver.
-        if self.running.pending_exception.is_some() {
+        if self.threw() {
             return None;
         }
 
@@ -3661,7 +3682,9 @@ impl Exec<'_> {
     pub(super) fn apt_new_instance(&mut self, class: &str) -> Option<usize> {
         class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, class);
         self.ensure_initialized(class);
-        if self.running.pending_exception.is_some() {
+        // Adaptado al merge: el remoto escribio esto contra `pending_exception: Option<usize>`,
+        // que en paralelo paso a ser un flag con el throwable parkeado en la pila de operandos.
+        if self.threw() {
             return None;
         }
         Some(objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, class))
@@ -3677,7 +3700,8 @@ impl Exec<'_> {
     /// Si el driver quedó con una excepción pendiente (una inicialización o un `process` que
     /// escapó), la retira y devuelve el nombre interno de su clase — para reporte. `None` si no hay.
     pub(super) fn apt_take_pending(&mut self) -> Option<String> {
-        let exc = self.running.pending_exception.take()?;
+        // Adaptado al merge, igual que arriba.
+        let exc = self.take_parked_exception()?;
         Some(self.exception_class_name(exc))
     }
 
@@ -4910,6 +4934,59 @@ mod tests {
         assert_eq!(reused.method(), fresh.method());
         assert_eq!(reused.is_synthetic(), fresh.is_synthetic());
         assert_eq!(reused.monitor(), fresh.monitor());
+    }
+
+    /// A **parked exception is a GC root**, which is the whole reason it lives on the operand
+    /// stack instead of in `RunningCtx`. Parks a throwable that nothing else references, fills Eden
+    /// so the next safepoint runs a *copying* minor collection, and checks that the throwable came
+    /// through it: moved to a new address, and still naming its class.
+    ///
+    /// The assert that it **moved** is the load-bearing one — if the collection left the object
+    /// where it was, the test would pass without proving anything about forwarding.
+    ///
+    /// This is tested here rather than end-to-end because the end-to-end window is now closed by
+    /// design: every consumer of a parked exception takes it before the frame runs another
+    /// instruction, so no Java program can hold one across a safepoint on the paths we fixed. The
+    /// invariant still has to hold for the paths we did not — and for the next one somebody adds.
+    #[test]
+    fn a_parked_exception_survives_a_moving_collection() {
+        use crate::jvm::class_file::ClassFile;
+        use std::path::PathBuf;
+
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let class = ClassFile::from_path("java/Lambdas.class").expect("load Lambdas");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run");
+        let max_locals = metaspace.max_locals(entry);
+        let mut jvm = JVM::new(metaspace, Frame::new(entry, max_locals, Vec::new()));
+
+        // A throwable nothing else refers to: after parking, the operand stack is its only root.
+        let exception = jvm.exec().new_exception_object("java/lang/RuntimeException");
+        jvm.exec().park_exception(exception);
+
+        // Fill Eden to the minor's trigger so the collection below evacuates the young generation.
+        while jvm.shared.heap.eden_used() * 10 < jvm.shared.heap.eden_capacity() * 9 {
+            objects_operations::allocate(
+                &mut jvm.shared.metaspace,
+                &mut jvm.shared.heap,
+                "java/lang/RuntimeException",
+            );
+        }
+        jvm.exec().collect_at_safepoint();
+
+        let moved = jvm.exec().peek_parked_exception();
+        assert_ne!(
+            moved, exception,
+            "the minor collection did not move the throwable — the test proves nothing unless it does"
+        );
+        let class_at = jvm.shared.heap.read_u32(moved) as usize;
+        assert_eq!(
+            jvm.shared.metaspace.class_name_at_mirror(class_at),
+            Some("java/lang/RuntimeException"),
+            "the parked throwable was left un-forwarded: its offset no longer names its class"
+        );
     }
 
     /// The pool is a cache, not a graveyard: past its cap the extra frames are dropped, so a

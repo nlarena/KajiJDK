@@ -66,12 +66,12 @@ impl Exec<'_> {
                 return Step::Continue;
             }
             // Not handled here. If this frame is a `call_java` boundary (a `<clinit>` or intrinsic
-            // callback the VM drove), stop: surface the exception to the VM via `pending_exception`
+            // callback the VM drove), stop: park the exception on the caller's operand stack
             // instead of unwinding through the code that made the call. `call_java` observes it.
             let top_index = self.running.frames.len() - 1;
             if self.running.exception_floor.last() == Some(&top_index) {
-                self.running.pending_exception = Some(exception);
                 self.pop_frame(); // drop the synthetic boundary frame; the VM takes over
+                self.park_exception(exception); // onto the caller's stack, where the GC can see it
                 return Step::Continue;
             }
             if self.running.frames.len() == 1 {
@@ -107,7 +107,7 @@ impl Exec<'_> {
     /// and the handler itself is arbitrary Java.
     ///
     /// A handler that throws is deliberately swallowed: it unwinds only as far as the `call_java`
-    /// boundary (which parks it in `pending_exception`), we drop it, and the default report goes
+    /// boundary (which parks it on the operand stack), we drop it, and the default report goes
     /// out for the *original* exception. A broken handler cannot silence the failure it was meant
     /// to report, and cannot re-enter this path either.
     fn dispatch_uncaught(&mut self, exception: usize) -> Option<usize> {
@@ -142,9 +142,9 @@ impl Exec<'_> {
         }
         let args = vec![Value::Reference(self.current_thread_obj()), Value::Reference(exception)];
         // `void`, so there is no result to read — but `call_virtual` reports a *throw* through
-        // `pending_exception`, and that we do care about.
+        // parking it, and that we do care about.
         let _ = self.call_virtual(handler, "uncaughtException", "(Ljava/lang/Thread;Ljava/lang/Throwable;)V", args);
-        if self.running.pending_exception.take().is_some() {
+        if self.take_parked_exception().is_some() {
             return Some(self.parked_exception(exception));
         }
         None
@@ -207,12 +207,71 @@ impl Exec<'_> {
         }
     }
 
-    /// If an exception unwound out of a `call_java` boundary and is waiting in
-    /// `pending_exception`, take it and deliver it into the **current** frame (the code that made
-    /// the call) — resuming the ordinary unwind, now with no floor in the way. Returns the throw
-    /// `Step` for the opcode to return, or `None` if nothing is pending.
+    /// Parks `exception` for the caller to re-deliver: pushes it onto the **current frame's operand
+    /// stack** and raises the flag.
+    ///
+    /// The operand stack is the parking spot precisely because it is a **GC root** — `gc::roots`
+    /// walks `threads[*].frames`, and reaching a safepoint syncs those frames into the thread's
+    /// slot, so a collection that moves the throwable forwards this reference like any other.
+    /// Keeping the offset in `RunningCtx` instead put it somewhere no collector path can see.
+    ///
+    /// Pushing *below* whatever the frame is already holding is safe: the interpreter only ever
+    /// addresses the operand stack relative to its top, and every consumer takes the parked value
+    /// back off before the frame runs another instruction ([`Self::take_pending_throw`]), so the
+    /// push and the pop cancel. A frame that catches clears its stack anyway.
+    pub(super) fn park_exception(&mut self, exception: usize) {
+        assert!(
+            !self.running.frames.is_empty(),
+            "park_exception: no frame to park on — the exception would have nowhere rooted to live"
+        );
+        debug_assert!(!self.running.parked_exception, "park_exception: one is already parked");
+        self.top().push(Value::Reference(exception));
+        self.running.parked_exception = true;
+    }
+
+    /// Whether an exception is parked waiting to be re-delivered. The question a caller of
+    /// [`Exec::call_java`] has to ask before believing a `None` means "returned void".
+    pub(super) fn threw(&self) -> bool {
+        self.running.parked_exception
+    }
+
+    /// Reads the parked throwable **without unparking it**, so it stays rooted on the operand stack
+    /// while the VM decides what to do with it.
+    pub(super) fn peek_parked_exception(&mut self) -> usize {
+        assert!(self.running.parked_exception, "peek_parked_exception: nothing is parked");
+        match self.top().stack().last() {
+            Some(Value::Reference(offset)) => *offset,
+            other => panic!("peek_parked_exception: the parked slot held {other:?}, not a reference"),
+        }
+    }
+
+    /// Swaps the parked throwable for another one, keeping the slot rooted the whole time — what
+    /// JVMS §5.5 needs when a non-`Error` initializer failure gets wrapped in
+    /// `ExceptionInInitializerError`.
+    pub(super) fn replace_parked_exception(&mut self, exception: usize) {
+        assert!(self.running.parked_exception, "replace_parked_exception: nothing is parked");
+        self.top().pop();
+        self.top().push(Value::Reference(exception));
+    }
+
+    /// Takes the parked exception back off the operand stack, or `None` if nothing is parked.
+    pub(super) fn take_parked_exception(&mut self) -> Option<usize> {
+        if !self.running.parked_exception {
+            return None;
+        }
+        self.running.parked_exception = false;
+        match self.top().pop() {
+            Value::Reference(offset) => Some(offset),
+            other => panic!("take_parked_exception: the parked slot held {other:?}, not a reference"),
+        }
+    }
+
+    /// If an exception unwound out of a `call_java` boundary and is parked, take it and deliver it
+    /// into the **current** frame (the code that made the call) — resuming the ordinary unwind, now
+    /// with no floor in the way. Returns the throw `Step` for the opcode to return, or `None` if
+    /// nothing is pending.
     pub(super) fn take_pending_throw(&mut self) -> Option<Step> {
-        let exception = self.running.pending_exception.take()?;
+        let exception = self.take_parked_exception()?;
         Some(self.unwind_with(exception))
     }
 

@@ -1,14 +1,22 @@
 package java.lang.invoke;
 
+import java.lang.reflect.Member;
+
 // What a DIRECT method handle is made of, once cracked open: a reference kind, a declaring class,
 // a name and a type. The nine `REF_*` constants are the JVMS 4.4.8 reference kinds, the same
 // bytes `DirectMethodHandleDesc.Kind` wraps in the nominal world — this is the loaded twin of
 // that enum.
 //
-// OMITTED (subset): `reflectAs(Class<T>, MethodHandles.Lookup)`. Its type variable is BOUNDED
-// (`T extends Member`), which our compiler erases to `Object` instead of to the bound (#100), and
-// its second parameter is a NESTED type from another file, which erases to `Object` too (#101).
-// Two separate defects on one signature, and no source spelling avoids either.
+// `reflectAs` is now declared, and the two defects that kept it out are both sidestepped rather
+// than fixed. Its type variable is BOUNDED (`T extends Member`) and our compiler erases a bounded
+// variable to `Object` instead of to its leftmost bound (#100), so it is written RAW, returning
+// the bound — which is precisely the descriptor the JDK emits. Its second parameter is a nested
+// type from another file, which cannot be spelled the Java way (#101/#208), so it is written with
+// the type's binary name; see the note in `MethodHandles.java`.
+//
+// What is LOST by writing it raw is only compile-time precision: a caller of the JDK's version
+// gets a `Method` back from `reflectAs(Method.class, lk)` without a cast, and a caller of this one
+// has to cast. The class file is identical either way.
 public interface MethodHandleInfo {
 
     public static final int REF_getField = 1;
@@ -28,6 +36,12 @@ public interface MethodHandleInfo {
     String getName();
 
     MethodType getMethodType();
+
+    // The inverse of `Lookup.unreflect*`: recover the `Method`, `Constructor` or `Field` the
+    // handle was made from. The `Lookup` parameter is not decoration — cracking a handle open
+    // hands back a member that the caller may not be allowed to touch, so the access check that
+    // making the handle required has to be paid again here.
+    Member reflectAs(Class<?> expected, MethodHandles$Lookup lookup);
 
     int getModifiers();
 

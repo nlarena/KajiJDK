@@ -8,6 +8,13 @@ package java.nio;
  */
 public class BufferOverflowException extends RuntimeException {
 
+    /**
+     * The serialization identity the JDK fixed for this class. Kept literally so that a stream
+     * written by either implementation is readable by the other; a value we made up would be a
+     * silent incompatibility rather than a missing feature.
+     */
+    private static final long serialVersionUID = -5484897634319144535L;
+
     /** Constructs an instance with no detail message. */
     public BufferOverflowException() {
         super();
