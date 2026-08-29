@@ -19,6 +19,7 @@ macro_rules! pln {
 }
 
 pub mod burst;
+pub mod fuzz;
 pub mod javac;
 pub mod javap;
 pub mod jvm;
