@@ -57,6 +57,11 @@ import jdk.internal.random.Xoshiro256PlusPlus;
  */
 public final class RandomGeneratorFactory {
 
+    // El contador que hace distintos a dos generadores creados en el mismo milisegundo.
+    private static final java.util.concurrent.atomic.AtomicLong SIGUIENTE_SEMILLA =
+            new java.util.concurrent.atomic.AtomicLong(1L);
+
+
     private final int index;
 
     private RandomGeneratorFactory(int index) {
@@ -314,6 +319,25 @@ public final class RandomGeneratorFactory {
      * @implSpec The chosen class is constructed directly rather than reflectively, which is what
      *           lets this registry work without {@code Constructor.newInstance}.
      */
+    /**
+     * Creates a generator of this algorithm, seeded from a value chosen at random.
+     *
+     * @return a new generator
+     * @implNote The seed mixes the clock with a per-call counter. The clock alone is not enough:
+     *           two generators created in the same millisecond would run the same sequence, which
+     *           is exactly the trap this method exists to avoid.
+     */
+    public RandomGenerator create() {
+        long n = SIGUIENTE_SEMILLA.getAndIncrement();
+        long seed = System.currentTimeMillis() ^ (n * -7046029254386353131L);
+        // El mismo mezclador de 64 bits que usa `SplittableRandom`: sin el, semillas consecutivas
+        // quedan consecutivas, y varios generadores arrancarian en estados vecinos.
+        seed = (seed ^ (seed >>> 30)) * -4658895280553007687L;
+        seed = (seed ^ (seed >>> 27)) * -7723592293110705685L;
+        seed = seed ^ (seed >>> 31);
+        return this.create(seed);
+    }
+
     public RandomGenerator create(long seed) {
         int i = this.index;
         if (i == 0) {

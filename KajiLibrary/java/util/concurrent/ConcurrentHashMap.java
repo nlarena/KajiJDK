@@ -153,4 +153,39 @@ public class ConcurrentHashMap<K, V> implements ConcurrentMap<K, V>, Serializabl
         }
         return prev;
     }
+
+    /**
+     * Los valores de este mapa.
+     *
+     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
+     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
+
+    /**
+     * Los pares de este mapa.
+     *
+     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
+     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
+     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.HashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            java.util.Map.Entry<K, V> e = Map.entry(k, this.get(k));   // #285: el
+            out.add(e);                                               // local nombra el tipo
+        }
+        return out;
+    }
 }

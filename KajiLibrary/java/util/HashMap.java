@@ -9,7 +9,7 @@ import java.util.Map;
 // marks an empty bucket; removal re-inserts the trailing cluster to preserve the probe
 // invariant. (Null keys are not supported, unlike the JDK.) Map has no iteration in our subset,
 // so no helper class is needed.
-public class HashMap<K, V> implements Map<K, V> {
+public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
 
     private Object[] keys;
     private Object[] values;
@@ -19,6 +19,14 @@ public class HashMap<K, V> implements Map<K, V> {
         this.keys = new Object[16];
         this.values = new Object[16];
         this.size = 0;
+    }
+
+    // Copia los pares de otro mapa. El de siempre para quedarse con una foto de un mapa ajeno.
+    public HashMap(Map<? extends K, ? extends V> m) {
+        this.keys = new Object[16];
+        this.values = new Object[16];
+        this.size = 0;
+        this.putAll(m);
     }
 
     public int size() {
@@ -149,5 +157,39 @@ public class HashMap<K, V> implements Map<K, V> {
                 this.put((K) oldKeys[i], (V) oldValues[i]);
             }
         }
+    }
+
+    /**
+     * Los valores de este mapa.
+     *
+     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
+     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
+
+    /**
+     * Los pares de este mapa.
+     *
+     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
+     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
+     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.HashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            out.add(new FixedEntry<K, V>(k, this.get(k)));
+        }
+        return out;
     }
 }

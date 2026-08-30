@@ -1,16 +1,23 @@
 package repro101;
 
-// Finding #101 — a qualified reference to a nested type, `Outer.Nested`, is not resolved; only the
-// simple name `Nested` (in scope, or via a single-type import) works. Reproduces both within the same
-// file (self-qualified `finding_101.Flag`) and across files (a sibling naming `Outer.Flag` with Outer
-// on the classpath). The JDK resolves all of these.
+// Repro de #101 - un nombre CALIFICADO de tipo anidado, `Outer.Nested`, no resolvia.
 //
-//   Flag[] viaSimple()            -> OK
-//   finding_101.Flag[] viaQualified() -> error: no se encuentra el símbolo: finding_101.Flag
+//   bin\javac.exe --emit -cp KajiLibrary KajiLibrary\repros\finding_101.java
 //
-// Same family as #20 (a qualified `new` name is miscompiled): the compiler's name resolution doesn't
-// walk from an enclosing type to its member type through the `Outer.Nested` form. Workaround: import
-// the nested type (`import pkg.Outer.Nested;`) and use the simple name.
+// ANTES: solo andaba el nombre simple `Nested` —en scope o traido por un import de un solo
+// tipo—. La forma calificada fallaba, dentro del mismo archivo y entre archivos:
+//
+//   Flag[] viaSimple()                 OK
+//   finding_101.Flag[] viaQualified()  error: no se encuentra el simbolo: finding_101.Flag
+//
+// El rodeo era importar el tipo anidado y usar el nombre simple.
+//
+// AHORA: **compila entero**. `#101` figura arreglado y verificado (2026-08-24) en
+// COMPILER_FINDINGS.md. Comprobado de nuevo en la tanda de colecciones: `Map.Entry` como tipo de
+// retorno, como parametro y en `implements Map.Entry<K, V>` resuelve sin rodeo, que es lo que
+// permitio escribir `FixedEntry` sin recurrir al nombre binario `Map$Entry`.
+//
+// Queda como REGRESION.
 public class finding_101 {
 
     enum Flag {
@@ -19,10 +26,10 @@ public class finding_101 {
     }
 
     Flag[] viaSimple() {
-        return null;                       // OK — simple name in scope
+        return null;                       // nombre simple: siempre anduvo
     }
 
     finding_101.Flag[] viaQualified() {
-        return null;                       // FAILS — qualified Outer.Nested reference not resolved
+        return null;                       // nombre calificado: es el que fallaba con #101
     }
 }

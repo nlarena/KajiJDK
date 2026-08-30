@@ -28,7 +28,7 @@ import java.util.Set;
 // modelled. size/isEmpty/contains/add/remove/clear/iterator are declared here rather than
 // inherited, because the JDK's LinkedHashSet gets them from HashSet and AbstractCollection,
 // neither of which ours can extend without `super` calls (unsupported by our bytecode generator).
-public class LinkedHashSet<E> implements Set<E> {
+public class LinkedHashSet<E> extends AbstractSet<E> implements Set<E> {
 
     // The value every key maps to. Its identity is irrelevant — only "there is an entry here"
     // matters — so a single instance is shared by every element of every LinkedHashSet.

@@ -52,4 +52,78 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     public void clear() {
         throw new UnsupportedOperationException();
     }
+    // Los valores, como Collection.
+    //
+    // **Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+    // respaldada por el mapa; esta es una copia. Y a diferencia de `keySet()`, los valores **si**
+    // pueden repetirse, por eso es una Collection y no un Set.
+    public Collection<V> values() {
+        ArrayList<V> out = new ArrayList<V>();
+        Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
+
+    /**
+     * Igualdad por contenido: mismas claves, y cada una con el mismo valor.
+     *
+     * <p>Misma ausencia que la de AbstractList, y por la misma razon invisible: al heredar el
+     * `equals` de Object, un HashMap y un LinkedHashMap con el mismo contenido daban false.
+     *
+     * <p>Se recorre por `keySet()` y `get()` en vez de comparar los dos entrySet como hace el
+     * JDK, porque asi la igualdad no depende de que las entradas de cada implementacion tengan su
+     * propio `equals` bien puesto: alcanza con que el mapa sepa buscar por clave.
+     *
+     * <p>El caso del valor null pide el paso extra de `containsKey`: "no esta la clave" y "esta,
+     * y vale null" se ven igual desde `get`, y no son lo mismo.
+     */
+    public boolean equals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof Map)) {
+            return false;
+        }
+        Map<?, ?> other = (Map<?, ?>) o;
+        if (other.size() != this.size()) {
+            return false;
+        }
+        Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            V v = this.get(k);
+            Object w = other.get(k);
+            if (v == null) {
+                if (w != null || !other.containsKey(k)) {
+                    return false;
+                }
+            } else {
+                if (!v.equals(w)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * El hash que exige el contrato de Map: la SUMA de los hash de las entradas, y el de una
+     * entrada es `hash(clave) ^ hash(valor)`.
+     *
+     * <p>Que sea una suma y no una combinacion posicional es a proposito: un mapa no tiene orden,
+     * asi que la cuenta tiene que dar lo mismo recorrido como se lo recorra. Es la unica forma de
+     * que un HashMap y un TreeMap iguales tengan el mismo hash.
+     */
+    public int hashCode() {
+        int h = 0;
+        Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            V v = this.get(k);
+            h = h + ((k == null ? 0 : k.hashCode()) ^ (v == null ? 0 : v.hashCode()));
+        }
+        return h;
+    }
 }

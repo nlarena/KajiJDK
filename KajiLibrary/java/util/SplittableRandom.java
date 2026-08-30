@@ -1,5 +1,9 @@
 package java.util;
 
+// Same-package imports work around the frozen javac's finder (finding #4).
+import java.util.random.RandomGenerator;
+import java.util.stream.Stream;
+
 import java.util.random.RandomGenerator;
 
 // A generator built for splitting: `split()` hands back a new instance whose stream is
@@ -22,8 +26,10 @@ import java.util.random.RandomGenerator;
 // cheaper and better than deriving them from the primitive).
 //
 // Subset: the stream methods (ints/longs/doubles/splits) are omitted, as is the nested
-// SplittableGenerator interface the JDK also implements (a nested type does not resolve, #101).
-public final class SplittableRandom implements RandomGenerator {
+// Implementa `RandomGenerator.SplittableGenerator`, que es donde vive el contrato de partirse.
+// La nota vieja decia que un tipo anidado no resolvia (#101); eso quedo arreglado.
+public final class SplittableRandom
+        implements RandomGenerator, RandomGenerator.SplittableGenerator {
 
     private long seed;
     // The per-instance increment. Odd by construction, so the counter visits every 64-bit value
@@ -119,4 +125,35 @@ public final class SplittableRandom implements RandomGenerator {
         return mix32(nextSeed());
     }
 
+
+    /**
+     * Un generador nuevo, con la entropia sacada de `source` en vez de la propia.
+     *
+     * <p>Es lo que permite **reproducir** una particion entera: dos corridas que partan del mismo
+     * `source` obtienen exactamente los mismos hijos, sin importar cuanto haya consumido este
+     * generador por su cuenta.
+     */
+    public SplittableRandom split(RandomGenerator.SplittableGenerator source) {
+        long newSeed = source.nextLong();
+        long newGamma = mixGamma(source.nextLong());
+        return new SplittableRandom(newSeed, newGamma);
+    }
+
+    public Stream<RandomGenerator.SplittableGenerator> splits(long streamSize) {
+        return this.splits(streamSize, this);
+    }
+
+    public Stream<RandomGenerator.SplittableGenerator> splits(long streamSize,
+            RandomGenerator.SplittableGenerator source) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        Object[] a = new Object[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.split(source);
+            i = i + 1;
+        }
+        return (Stream<RandomGenerator.SplittableGenerator>) Stream.of(a);
+    }
 }

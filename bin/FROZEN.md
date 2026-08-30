@@ -30,6 +30,88 @@ Desde una copia limpia, **no** desde el working tree: lo que el snapshot promete
 exactamente el commit tal", y ya hubo cuatro refrescos donde el árbol tenía cambios sin
 commitear que no debían entrar. Después, actualizar la tabla de procedencia de abajo.
 
+
+### Refresco 2026-08-30, tanda s (Optional/Random/SplittableRandom)
+
+Misma copia limpia superpuesta que el refresco anterior, con los mismos tres archivos de
+`src/fuzz/` dejados **afuera** (siguen a medio editar por la otra sesión, y el árbol de trabajo
+sigue sin compilar por eso).
+
+**Los que cambiaron en esta tanda:** `src/javac.rs`, `src/bin/javac.rs`, y de `src/javac/`
+`{symbol,enter,attribute,types,check,desugar,codegen}.rs`. Llevan **#303-#306** y **#308**:
+
+- **#303** — un tipo de `java.lang` del **mismo round** no lo veía el `import java.lang.*`
+  implícito de otra unidad. Sin esto no se puede compilar `StrictMath` junto con `Random`.
+- **#304** — el diagnóstico señalaba el **archivo equivocado** con varios fuentes. `Error` ahora
+  lleva de qué unidad salió.
+- **#305** — `null` era aplicable a un parámetro **primitivo**, y el generador emitía `aconst_null`
+  contra un descriptor `(J)V`. Se modeló `RType::Null`.
+- **#306** — una lambda pasada a un método genérico de **otra clase** no compilaba.
+- **#308** — `() -> c[1]++` era un **no-op** (el bloque equivalente andaba).
+
+**Verificado sobre estos binarios**, no sobre los de `src/`:
+
+- De las **45** pruebas comparables, **43** dan el mismo entero que `java` real; las dos que no son
+  `JcIc` y `WdWide`, de siempre. Las cuatro nuevas: `LogTest` **-1250194933** (compara `log` **por
+  bits**, ~700 evaluaciones, más 150 `nextGaussian()`), `OptRndTest` **-1**, `RgTest` **-1** y
+  `AtomTest` **-1** (la familia atómica, que #309 tenía rota entera).
+- Los repros nuevos dan lo mismo que `java` real: `finding_305` → 2, `finding_306` → 1,
+  `finding_308` → 1111, `finding_309` → 2068615891. `finding_305b` y `finding_307` **no compilan**, que es lo que se espera de
+  ellos (`finding_307` está abierto).
+- La biblioteca recompila **1034/1035** — el mismo y único `SymElement`, donde javac tiene razón.
+- Los `.class` del árbol están en **punto fijo** (1464/1464 idénticos) y dos recompilaciones
+  seguidas dan bytes idénticos.
+- **La medición que más dice de cada arreglo**: con #305 puesto, recompilar la biblioteca entera
+  cambió el bytecode de **dos** clases de 1464 —`Random` y `RandomAdapter`, las que se estaban
+  arreglando—; #306 y #308 no cambiaron ninguna. Son arreglos puros. **#309 cambió cuatro**, y esas
+  cuatro son el hallazgo: estaban versionadas con bytecode roto.
+
+### Este refresco NO salió de una copia limpia a secas — y por qué igual respeta la regla
+
+Sigue valiendo lo que la regla protege —**que no se cuele trabajo ajeno o a medio hacer**— y no el
+gesto de escribir `git archive`. Este refresco (2026-08-30, tanda r) se hizo así:
+
+- Se partió de `git archive HEAD` (`67ac198`).
+- Se superpusieron **once** archivos, nombrados uno por uno: los del compilador y los dos de la VM.
+- Y esta vez **hubo que dejar algo afuera**, que es justamente para lo que existe la regla: mientras
+  se trabajaba aparecieron tres archivos modificados de `src/fuzz/` —`campaigns.rs`, `gen.rs` y
+  `reduce.rs`—, de otra sesión y sin commitear. **No entraron.** Se verificó archivo por archivo que
+  son los únicos tres que quedan afuera.
+
+**Los once que entraron:**
+
+```
+src/javac/{attribute,check,codegen,desugar,enter,infer,parser,symbol,transtypes}.rs
+src/jvm/interpreter/{natives,heap}.rs
+src/jvm/interpreter/bytecode_interpreter/array_operations.rs
+```
+
+Llevan los arreglos #281-#283, #289, #290, #293-#295, #297-#301, más el nativo `Array.newArray`.
+Sin ellos el snapshot no sirve: la biblioteca actual no compila.
+
+El nuevo de esta tanda es `heap.rs`, que lleva **#302**: el hash de identidad pasa a guardarse en la
+palabra de marca del encabezado en vez de salir del offset, para que no cambie cuando el recolector
+mueve el objeto.
+
+**Y esta vez el árbol de trabajo directamente no compila**: los tres archivos de `src/fuzz/` que
+quedaron afuera están a medio editar por la otra sesión, con errores de tipos. Todo lo de la tanda se
+construyó y se probó sobre esta misma copia limpia — que es, de hecho, el único árbol que compila.
+
+**Verificado sobre estos binarios**, no sobre los de `src/`:
+
+- Las **ocho** pruebas de comportamiento de `java.util` dan el mismo entero que `java` real:
+  `ArrTest` 11246595, `CollTest` 123156332, `TreeTest` 5341435, `StzTest` 16859132,
+  `ScanTest` 1156108, `TmSvTest` 16894, `LocPropTest` 1204219, `LoteTest` 311293.
+- Los **286 tests de la VM pasan**, incluidos los del GC — la verificación que #302 necesitaba,
+  porque toca la palabra de marca del recolector.
+- Los repros de los findings cerrados en esta tanda corren a lo documentado: `finding_274` → 1,
+  `finding_300` → 1/1/1/2, `finding_301` → 11/7/12, y `zz299/Uso` declara `zz299.Type` (que es
+  exactamente lo que #299 arregló).
+- La biblioteca recompila **1034/1035**. El único fallo es `SymElement`, que no es del compilador:
+  la clase no implementa `asType` y javac tiene razón.
+- Los `.class` del árbol están en **punto fijo**, y dos recompilaciones seguidas dan bytes
+  idénticos.
+
 ## El snapshot puede quedar ATRAS de lo que la biblioteca necesita
 
 Es el riesgo propio de congelar, y ya mordio una vez. Se deja escrito el caso porque el sintoma
@@ -75,11 +157,36 @@ costo media sesion aprender del otro lado: **un `.class` del arbol tambien puede
 
 | | |
 |---|---|
-| Commit | `8f0de93` |
-| Construido desde | una copia **limpia de HEAD** (`git archive HEAD`), no del árbol de trabajo |
-| Toolchain | `rustc 1.96.0 (ac68faa20 2026-05-25)`, host `x86_64-pc-windows-msvc`, LLVM 22.1.2 |
+| Commit | `67ac198` |
+| Construido desde | copia limpia de HEAD (`git archive HEAD`) **+ los 16 archivos del compilador y la VM**. Los 3 de `src/fuzz/`, de otra sesión, quedaron afuera a propósito |
+| Toolchain | `rustc 1.98.0 (88d9e12ae 2026-08-18)`, host `x86_64-pc-windows-gnu` |
 | Perfil | `cargo build --release` |
-| Fecha | 2026-08-25 |
+| Fecha | 2026-08-30 (tanda s) |
+| Herramientas | **11** |
+| Peso | 61 MB — el toolchain es `gnu`, no `msvc`; ver la nota de arriba sobre por qué el peso no es el argumento |
+
+**Por qué se refrescó**: cinco findings más, y dos de ellos hacen falta para compilar la biblioteca
+tal como está — **#303** (sin él no se puede compilar `StrictMath` junto con `Random`) y **#305**
+(sin él `Random.from` emite bytecode que no verifica). Los otros tres: **#304** (el diagnóstico
+señalaba el archivo equivocado), **#306** (una lambda hacia un genérico de otra clase no compilaba) y
+**#308** (`() -> c[1]++` era un no-op) y **#309**, el más grave de los seis.
+
+**#309** — un `++`/`--` sobre un campo o un elemento de arreglo, en posición de **valor**, no emitía
+**nada**: ni código ni diagnóstico. Tenía mal compiladas las cuatro clases de
+`java.util.concurrent.atomic` (`return value++` es literalmente su `getAndIncrement`), y **el punto
+fijo no podía verlo**, porque los dos lados de esa comparación los emite el mismo compilador. Por eso
+este refresco **cambia `.class` versionados** que no venían de un cambio de fuente.
+
+#305, #308 y #309 cambian qué bytecode se emite; #303 y #306, qué fuente se acepta; #304, solo el
+mensaje.
+
+La tanda anterior (r) cerró **#274**, **#299**, **#300** y **#301**, los cuatro de resolución de
+nombres, y su descripción quedó en el historial de abajo.
+
+### Historial — los refrescos anteriores
+
+Lo que sigue hasta `## Las herramientas` describe refrescos **viejos** y se conserva por la
+trazabilidad. La procedencia vigente es la tabla de arriba.
 
 Se construyó desde una copia limpia y no desde el working tree a propósito, y **las cuatro veces
 importó**: las cuatro veces el árbol tenía archivos modificados sin commitear, y **ninguno de esos
@@ -153,16 +260,17 @@ las diez herramientas.
 
 | Binario | SHA-256 | Qué es |
 |---|---|---|
-| `javac.exe` | `9dc6…a634` | El compilador. `--emit X.java` → `X.class` |
-| `jvm.exe` | `5d71…0bb2` | El desensamblador estilo `javap` (Nivel 0) y CLI principal |
-| `run-headless.exe` | `587d…cc20` | Corre `<File.class> <método>` con el intérprete (modo green) |
-| `jvm-step.exe` | `cc56…1b5f` | El visor paso a paso del intérprete |
-| `javac-step.exe` | `2ae3…0c24` | El visor paso a paso del compilador |
-| `jdb.exe` | `61f3…af3d` | El depurador (Fase I, JPDA) |
-| `jvm-jdwp.exe` | `edf9…f580` | Servidor JDWP (`dt_socket`) sobre nuestra VM |
-| `jdi-attach.exe` | `b2ac…9478` | Cliente JDI de attach |
-| `jimage.exe` | `26a1…417e` | Lector/escritor del contenedor `jimage` |
-| `jlink.exe` | `a933…5be7` | Enlazador de imágenes de runtime |
+| `javac.exe` | `ba32…e18c` | El compilador. `--emit X.java` → `X.class` |
+| `jvm.exe` | `6983…f7f6` | El desensamblador estilo `javap` (Nivel 0) y CLI principal |
+| `run-headless.exe` | `8697…a674` | Corre `<File.class> <método>` con el intérprete (modo green) |
+| `jvm-step.exe` | `3deb…5f60` | El visor paso a paso del intérprete |
+| `javac-step.exe` | `ba28…227c` | El visor paso a paso del compilador |
+| `jdb.exe` | `8624…6342` | El depurador (Fase I, JPDA) |
+| `jvm-jdwp.exe` | `f825…664b` | Servidor JDWP (`dt_socket`) sobre nuestra VM |
+| `jdi-attach.exe` | `7c87…b513` | Cliente JDI de attach |
+| `jimage.exe` | `77ed…67bf` | Lector/escritor del contenedor `jimage` |
+| `jlink.exe` | `2657…0e68` | Enlazador de imágenes de runtime |
+| `javadoc.exe` | `a075…72bd` | El generador de documentación |
 
 Hashes completos: `sha256sum bin/*.exe` (o `Get-FileHash`).
 

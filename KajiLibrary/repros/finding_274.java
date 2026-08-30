@@ -1,4 +1,11 @@
-// #274: un nombre CALIFICADO no se reconoce como tipo dentro de una expresion.
+// #274: un nombre CALIFICADO no se reconoce como tipo dentro de una expresion. SIGUE ABIERTO.
+//
+//   bin\javac.exe --emit -cp KajiLibrary KajiLibraryeprosinding_274.java
+//
+//   error: no se encuentra el simbolo: java
+//           return java.lang.reflect.Modifier.PUBLIC;
+//                  ^
+//     simbolo:   variable java
 //
 // En una declaracion resuelve; en una expresion el compilador lee `java.lang.reflect.Modifier`
 // como una cadena de accesos a campo que arranca en una variable llamada `java`, y el error lo

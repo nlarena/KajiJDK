@@ -369,16 +369,24 @@ impl Checker<'_> {
     /// Resuelve un tipo de excepción (de un `throws`/`catch`) a su [`RType`]. `None` si no nombra un
     /// tipo resoluble.
     fn resolve_exc(&self, cid: SymbolId, ty: &Type) -> Option<RType> {
-        let name = match ty {
-            Type::Class(n) | Type::Parameterized { base: n, .. } => n,
-            _ => return None,
-        };
         let scope = match &self.table.symbol(cid).kind {
             SymbolKind::Class { members, .. } => *members,
             _ => return None,
         };
-        let id = self.table.resolve_type(scope, name).or_else(|| self.table.external(name))?;
-        Some(RType::Class(id))
+        // Va por la resolución **general** de tipos y no por una propia (#300). La de antes miraba
+        // el scope y después `external(name)`, y las dos claves son por nombre **simple**: un
+        // `catch (java.io.IOException e)` calificado no resolvía a nada, el handler se descartaba
+        // en silencio, y el `try` que sí lo atrapaba daba
+        // *"excepción chequeada IOException sin capturar ni declarar en throws"*.
+        //
+        // El error era **espurio** —el bytecode del handler lo emite el codegen, que resuelve por
+        // otro camino— pero rechazaba fuente válido, y encima solo cuando el `throws` y el `catch`
+        // se escribían con formas distintas del mismo nombre.
+        match super::attribute::resolve_rtype(self.table, scope, ty) {
+            RType::Class(id) => Some(RType::Class(id)),
+            RType::Parameterized { base, .. } => Some(RType::Class(base)),
+            _ => None,
+        }
     }
 
     /// Chequea una excepción `thrown` lanzada en `pos`: error si es **chequeada** y ningún tipo de
@@ -1431,6 +1439,7 @@ impl Checker<'_> {
             RType::Capture { upper, .. } => self.name_of(upper),
             RType::Intersection(ms) => ms.first().map_or_else(|| "?".to_string(), |m| self.name_of(m)),
             RType::InferVar(_) => "?".to_string(),
+            RType::Null => "<null>".to_string(),
             RType::Unresolved => "?".to_string(),
         }
     }

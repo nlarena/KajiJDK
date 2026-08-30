@@ -139,6 +139,19 @@ pub struct HeapService {
 /// The GC sets it during the mark phase; it's 0 (unmarked) the rest of the time.
 const MARK_OFFSET: usize = 4;
 
+/// El contador del que sale cada hash de identidad nuevo.
+///
+/// Sale de un contador y **no del offset** del objeto, aunque el offset sea gratis y unico entre
+/// los vivos: los objetos mueren, y el asignador reusa sus direcciones. Cien `new Object()` en un
+/// bucle que solo guarda sus hashes son cien objetos basura al instante, y con el offset como
+/// semilla varios terminaban con el mismo numero -- estable, que era lo que #302 pedia, pero
+/// inutil para repartir en cubetas.
+///
+/// El contador se mezcla antes de guardarse porque los valores consecutivos no sirven de hash: una
+/// tabla que enmascara los bits bajos los mandaria todos a cubetas vecinas.
+static SIGUIENTE_HASH: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x9E37_79B9);
+
 /// Where the heap's bytes actually are, for a caller that must reach them without going through
 /// an accessor — today exactly one: the JIT ([`HeapService::jit_bases`]).
 ///
@@ -712,23 +725,64 @@ impl HeapService {
         self.free_list.iter().map(|b| (b.offset, b.size)).collect()
     }
 
-    /// Sets an object's **mark bit** (used by the GC's mark phase to flag it live).
+    /// Sets an object's **mark bit** — el bit 0 de la palabra de marca.
+    ///
+    /// Solo el bit 0, porque los otros 31 llevan el **hash de identidad** (ver
+    /// [`Self::identity_hash`]). Antes esta palabra era un booleano y se escribía entera; pisarla
+    /// ahora borraría el hash de todo objeto vivo en cada marcado.
     pub fn set_mark(&mut self, offset: usize) {
-        self.write_u32(offset + MARK_OFFSET, 1);
+        let w = self.read_u32(offset + MARK_OFFSET);
+        self.write_u32(offset + MARK_OFFSET, w | 1);
     }
 
     /// Whether an object is currently marked (reachable, as of the last mark phase).
     pub fn is_marked(&self, offset: usize) -> bool {
-        self.read_u32(offset + MARK_OFFSET) != 0
+        self.read_u32(offset + MARK_OFFSET) & 1 != 0
     }
 
     /// Clears the mark bit on every allocated object — the reset the mark phase runs
-    /// first, so a fresh trace starts from a clean slate.
+    /// first, so a fresh trace starts from a clean slate. **Solo el bit 0**: el hash de
+    /// identidad de los bits 1..31 sobrevive al marcado, como tiene que ser.
     pub fn clear_all_marks(&mut self) {
         for i in 0..self.objects.len() {
             let offset = self.objects[i].offset;
-            self.write_u32(offset + MARK_OFFSET, 0);
+            let w = self.read_u32(offset + MARK_OFFSET);
+            self.write_u32(offset + MARK_OFFSET, w & !1);
         }
+    }
+
+    /// El **hash de identidad** de un objeto: se calcula la primera vez que se lo pide y se guarda
+    /// en la palabra de marca, en los bits 1..31.
+    ///
+    /// Guardarlo es todo el punto, y es lo que arregla #302. Antes se devolvía el **offset** del
+    /// objeto, que es su identidad pero no es estable: el recolector copiador lo mueve, y el hash
+    /// cambiaba con él. `Object.hashCode()` tiene que devolver siempre lo mismo mientras el objeto
+    /// viva —es el contrato del que cuelgan `HashMap` y `HashSet`—, así que un hash que se mueve
+    /// hace que una clave puesta antes de una colección no se encuentre después.
+    ///
+    /// Es el mismo arreglo que hace HotSpot, y por la misma razón: el hash se materializa **a
+    /// demanda** (la mayoría de los objetos no lo piden nunca) y vive en el encabezado, que el
+    /// `evacuate_block` copia con el resto del objeto.
+    ///
+    /// El valor sale de un contador global mezclado (ver [`SIGUIENTE_HASH`]), no del offset. Se
+    /// fuerza a no ser cero, que es la marca de "todavía no se asignó".
+    pub fn identity_hash(&mut self, offset: usize) -> i32 {
+        let w = self.read_u32(offset + MARK_OFFSET);
+        let guardado = w >> 1;
+        if guardado != 0 {
+            return guardado as i32;
+        }
+        let mut h = SIGUIENTE_HASH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        h = h.wrapping_mul(0x9E37_79B1);
+        h ^= h >> 15;
+        h = h.wrapping_mul(0x85EB_CA6B);
+        h ^= h >> 13;
+        h &= 0x7FFF_FFFF;
+        if h == 0 {
+            h = 1;
+        }
+        self.write_u32(offset + MARK_OFFSET, (h << 1) | (w & 1));
+        h as i32
     }
 
     // Every byte accessor routes Eden offsets to the lock-free arena, everything else to `memory`

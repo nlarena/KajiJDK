@@ -850,6 +850,19 @@ public final class StrictMath {
     }
 
     /**
+     * El logaritmo natural, con el algoritmo de fdlibm.
+     *
+     * <p>Delega en {@link Math#log(double)}, que **es** fdlibm: no hay dos versiones. La distincion
+     * entre las dos clases existe para las funciones donde `Math` puede usar un intrinseco de la
+     * maquina y `StrictMath` no; aca no hay tal intrinseco, asi que las dos dan el mismo bit.
+     *
+     * @see Math#log(double)
+     */
+    public static double log(double a) {
+        return Math.log(a);
+    }
+
+    /**
      * The remainder with the quotient taken to the NEAREST integer; always exact.
      *
      * @see Math#IEEEremainder(double, double)

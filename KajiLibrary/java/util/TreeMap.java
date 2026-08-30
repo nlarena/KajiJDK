@@ -15,9 +15,16 @@ package java.util;
 // Ordering comes from the keys' own {@link Comparable}, or from a {@link Comparator} handed
 // to the constructor.
 //
-// Subset of the JDK's: the NavigableMap/SortedMap navigation (headMap/tailMap/ceilingKey/…)
-// and the collection views (keySet/values/entrySet) are not modelled — our `Map` has neither.
-public class TreeMap<K, V> implements Map<K, V> {
+// Es un `NavigableMap` completo: la navegacion (ceiling/floor/higher/lower, los tres cortes,
+// el mapa descendente) sale entera de cuatro busquedas primitivas sobre el arbol, y los cortes son
+// **vistas** -- escribir en un `subMap` escribe en el mapa.
+//
+// Lo que sigue divergiendo son `values()` y `entrySet()`, que son copias y no vistas. `keySet()`
+// si es una vista desde esta tanda, y ordenada: antes devolvia un HashSet, o sea que recorrer las
+// claves de un mapa **ordenado** salia en orden de hash. `values()` y `entrySet()` heredaban ese
+// desorden por construirse sobre el; ahora recorren el arbol.
+public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>,
+        TmWalk<K, V> {
 
     private TmNode<K, V> root;
     private int size;
@@ -32,6 +39,26 @@ public class TreeMap<K, V> implements Map<K, V> {
         this.comparator = comparator;
     }
 
+    // Copia el contenido de otro mapa, ordenandolo por el orden natural de las claves.
+    public TreeMap(Map<? extends K, ? extends V> m) {
+        this.comparator = null;
+        this.putAll(m);
+    }
+
+    // Copia un mapa que **ya viene ordenado**, y se queda con su comparador.
+    //
+    // Que herede el comparador no es un detalle: sin el, copiar un mapa ordenado al reves daria
+    // uno ordenado al derecho, con las mismas claves y otro recorrido. Con el, la copia es
+    // equivalente al original en todo.
+    public TreeMap(SortedMap<K, ? extends V> m) {
+        this.comparator = (Comparator<K>) m.comparator();
+        Iterator<K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
     public Comparator<K> comparator() {
         return comparator;
     }
@@ -40,7 +67,7 @@ public class TreeMap<K, V> implements Map<K, V> {
     // Both arguments are taken as `Object` on purpose: calling a method on a receiver whose
     // static type is a *type variable* is silently dropped by our javac (finding #111), so
     // the natural-ordering path binds the key to a `Comparable` local first.
-    private int compare(Object a, Object b) {
+    int compare(Object a, Object b) {
         int c;
         if (comparator != null) {
             c = comparator.compare((K) a, (K) b);
@@ -70,17 +97,13 @@ public class TreeMap<K, V> implements Map<K, V> {
 
     // --- Map ---
 
-    // Recorrido **in-order** con los helpers que el mapa ya tiene, o sea en orden de clave
-    // (finding #205). Divergencia: el JDK devuelve un `NavigableSet` ordenado; este un HashSet,
-    // que no conserva el orden.
+    // Las claves, en orden y como **vista**: quitar de aca quita del mapa.
+    //
+    // Antes era un `HashSet` copiado, y esa era una divergencia mas cara de lo que parecia:
+    // recorrer las claves de un mapa **ordenado** salia en orden de hash. Y como `values()` y
+    // `entrySet()` se construian sobre este, las tres vistas del TreeMap estaban desordenadas.
     public Set<K> keySet() {
-        HashSet<K> out = new HashSet<K>();
-        TmNode<K, V> p = firstNode();
-        while (p != null) {
-            out.add(p.key);
-            p = successor(p);
-        }
-        return out;
+        return this.navigableKeySet();
     }
 
     public void putAll(Map<? extends K, ? extends V> m) {
@@ -207,8 +230,232 @@ public class TreeMap<K, V> implements Map<K, V> {
         return p.key;
     }
 
-    // Package-private from here down: TreeSet walks the tree through these to implement its
-    // iterators, since our `Map` has no keySet view to borrow one from.
+
+    // --- NavigableMap: las cuatro busquedas primitivas ---
+    //
+    // Toda la navegacion sale de estas cuatro, y las cuatro son la misma bajada por el arbol con
+    // el signo cambiado. `ceiling` es el menor nodo >= la clave; `floor`, el mayor <=; `higher` y
+    // `lower` son los mismos con la desigualdad estricta.
+    //
+    // Cada una cuesta O(log n) y no recorre nada: baja recordando el mejor candidato visto. Ese
+    // candidato es la clave del asunto -- cuando la busqueda se pasa de largo, el ultimo nodo por
+    // el que se paso "del lado bueno" es exactamente la respuesta.
+
+    TmNode<K, V> getCeilingNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            int c = this.compare(key, p.key);
+            if (c < 0) {
+                best = p;
+                p = p.left;
+            } else if (c > 0) {
+                p = p.right;
+            } else {
+                best = p;
+                p = null;
+            }
+        }
+        return best;
+    }
+
+    TmNode<K, V> getFloorNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            int c = this.compare(key, p.key);
+            if (c > 0) {
+                best = p;
+                p = p.right;
+            } else if (c < 0) {
+                p = p.left;
+            } else {
+                best = p;
+                p = null;
+            }
+        }
+        return best;
+    }
+
+    TmNode<K, V> getHigherNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            if (this.compare(key, p.key) < 0) {
+                best = p;
+                p = p.left;
+            } else {
+                p = p.right;
+            }
+        }
+        return best;
+    }
+
+    TmNode<K, V> getLowerNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            if (this.compare(key, p.key) > 0) {
+                best = p;
+                p = p.right;
+            } else {
+                p = p.left;
+            }
+        }
+        return best;
+    }
+
+    // Envuelve un nodo como entrada, o null si no hay nodo.
+    //
+    // La entrada que sale es una **foto**: `setValue` sobre ella se niega en vez de escribir en el
+    // mapa. Es lo mismo que hace el JDK con las entradas que devuelve la navegacion, y por la
+    // misma razon -- son el resultado de una consulta, no una vista de la posicion.
+    static <K, V> Map.Entry<K, V> entryOf(TmNode<K, V> p) {
+        if (p == null) {
+            return null;
+        }
+        return new FixedEntry<K, V>(p.key, p.value);
+    }
+
+    // --- NavigableMap: entradas y claves vecinas ---
+
+    public Map.Entry<K, V> firstEntry() {
+        return entryOf(this.firstNode());
+    }
+
+    public Map.Entry<K, V> lastEntry() {
+        return entryOf(this.lastNode());
+    }
+
+    public Map.Entry<K, V> lowerEntry(K key) {
+        return entryOf(this.getLowerNode(key));
+    }
+
+    public Map.Entry<K, V> floorEntry(K key) {
+        return entryOf(this.getFloorNode(key));
+    }
+
+    public Map.Entry<K, V> ceilingEntry(K key) {
+        return entryOf(this.getCeilingNode(key));
+    }
+
+    public Map.Entry<K, V> higherEntry(K key) {
+        return entryOf(this.getHigherNode(key));
+    }
+
+    static <K, V> K keyOf(TmNode<K, V> p) {
+        if (p == null) {
+            return null;
+        }
+        return p.key;
+    }
+
+    public K lowerKey(K key) {
+        return keyOf(this.getLowerNode(key));
+    }
+
+    public K floorKey(K key) {
+        return keyOf(this.getFloorNode(key));
+    }
+
+    public K ceilingKey(K key) {
+        return keyOf(this.getCeilingNode(key));
+    }
+
+    public K higherKey(K key) {
+        return keyOf(this.getHigherNode(key));
+    }
+
+    // Saca y devuelve la primera entrada, o null si el mapa esta vacio. La foto se toma **antes**
+    // de borrar, porque despues el nodo ya no tiene sus enlaces.
+    public Map.Entry<K, V> pollFirstEntry() {
+        TmNode<K, V> p = this.firstNode();
+        Map.Entry<K, V> e = entryOf(p);
+        if (p != null) {
+            this.remove(p.key);
+        }
+        return e;
+    }
+
+    public Map.Entry<K, V> pollLastEntry() {
+        TmNode<K, V> p = this.lastNode();
+        Map.Entry<K, V> e = entryOf(p);
+        if (p != null) {
+            this.remove(p.key);
+        }
+        return e;
+    }
+
+    // Los dos de SequencedMap que un mapa ordenado **no puede** cumplir: la posicion de una clave
+    // la decide el orden, no quien la inserta. El JDK tambien se niega, y es lo unico honesto --
+    // aceptar y poner la clave donde le toque seria mentir sobre el "First".
+    public V putFirst(K k, V v) {
+        throw new UnsupportedOperationException();
+    }
+
+    public V putLast(K k, V v) {
+        throw new UnsupportedOperationException();
+    }
+
+    // --- NavigableMap: las vistas ---
+    //
+    // Las cinco son la misma clase con distintos limites: `TmView` guarda el mapa, un piso, un
+    // techo y un sentido. Un `headMap` es un TmView sin piso, un `descendingMap` es uno sin
+    // limites y del reves, y un `subMap` los tiene todos.
+
+    public NavigableMap<K, V> descendingMap() {
+        return new TmView<K, V>(this, true, null, false, true, null, false, true);
+    }
+
+    public NavigableMap<K, V> reversed() {
+        return this.descendingMap();
+    }
+
+    public NavigableSet<K> navigableKeySet() {
+        return new TreeSet<K>((NavigableMap) this, true);
+    }
+
+    public NavigableSet<K> descendingKeySet() {
+        return new TreeSet<K>((NavigableMap) this.descendingMap(), true);
+    }
+
+    public NavigableMap<K, V> subMap(K from, boolean fromInclusive, K to, boolean toInclusive) {
+        return new TmView<K, V>(this, false, from, fromInclusive, false, to, toInclusive, false);
+    }
+
+    public NavigableMap<K, V> headMap(K to, boolean inclusive) {
+        return new TmView<K, V>(this, true, null, false, false, to, inclusive, false);
+    }
+
+    public NavigableMap<K, V> tailMap(K from, boolean inclusive) {
+        return new TmView<K, V>(this, false, from, inclusive, true, null, false, false);
+    }
+
+    // Las tres formas de SortedMap, que son las de arriba con la inclusividad que fijo la
+    // especificacion hace veinticinco anios: el piso entra, el techo no.
+    public SortedMap<K, V> subMap(K from, K to) {
+        return this.subMap(from, true, to, false);
+    }
+
+    public SortedMap<K, V> headMap(K to) {
+        return this.headMap(to, false);
+    }
+
+    public SortedMap<K, V> tailMap(K from) {
+        return this.tailMap(from, true);
+    }
+
+    // --- recorrido para las vistas (TmWalk) ---
+
+    public TmNode<K, V> walkFirst() {
+        return this.firstNode();
+    }
+
+    public TmNode<K, V> walkNext(TmNode<K, V> n) {
+        return this.successor(n);
+    }
+
+    // Package-private from here down: las vistas y los iteradores caminan el arbol por aca.
     TmNode<K, V> firstNode() {
         TmNode<K, V> p = root;
         if (p != null) {
@@ -555,6 +802,41 @@ public class TreeMap<K, V> implements Map<K, V> {
             }
         }
         return height;
+    }
+
+    /**
+     * Los valores de este mapa.
+     *
+     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
+     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        TmNode<K, V> p = this.firstNode();
+        while (p != null) {
+            out.add(p.value);
+            p = this.successor(p);
+        }
+        return out;
+    }
+
+    /**
+     * Los pares de este mapa.
+     *
+     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
+     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
+     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.LinkedHashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.LinkedHashSet<java.util.Map.Entry<K, V>>();
+        TmNode<K, V> p = this.firstNode();
+        while (p != null) {
+            out.add(new FixedEntry<K, V>(p.key, p.value));
+            p = this.successor(p);
+        }
+        return out;
     }
 }
 

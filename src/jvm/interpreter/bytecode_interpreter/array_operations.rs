@@ -38,6 +38,26 @@ pub fn array_element_width(array_class: &str) -> usize {
     element_width(&array_class[1..])
 }
 
+/// Allocates an array of `count` elements of the class `array_class` (`"[I"`,
+/// `"[Ljava/lang/String;"`) — the reflective counterpart of `newarray`/`anewarray`.
+///
+/// It exists for `java.lang.reflect.Array.newArray`, which is the only way to build an array
+/// whose element type is known solely at run time. `Collection.toArray(T[])` needs exactly that:
+/// the caller hands in a `String[0]` precisely so it gets a `String[]` back, and there is no
+/// bytecode that allocates "an array of whatever class this mirror names".
+///
+/// Same `Err(OUT_OF_MEMORY)` contract as the opcodes: exhaustion is a throwable condition, not a
+/// VM panic.
+pub fn allocate_array_of_class(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    array_class: &str,
+    count: usize,
+) -> Result<usize, &'static str> {
+    let elem_size = array_element_width(array_class);
+    allocate_array(metaspace, heap, array_class, count, elem_size)
+}
+
 // The implicit exceptions array opcodes can raise; returned as `Err` for the
 // dispatch loop to throw (`throw_exception`).
 const NULL_POINTER: &str = "java/lang/NullPointerException";

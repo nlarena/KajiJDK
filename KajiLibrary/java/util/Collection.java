@@ -54,4 +54,62 @@ public interface Collection<E> extends Iterable<E> {
         return Spliterators.spliterator(this, 0);
     }
 
+    // ---- las operaciones en bloque -----------------------------------------------------------
+    //
+    // Abstractas, como en el JDK. `AbstractCollection` las deriva a partir de `iterator()`,
+    // `size()`, `contains()`, `add()` y `remove()`, asi que una implementacion que herede del
+    // esqueleto no escribe ninguna.
+
+    // Si todos los elementos de `c` estan en esta coleccion.
+    boolean containsAll(Collection<?> c);
+
+    // Agrega todos los de `c`; devuelve si esta coleccion cambio.
+    boolean addAll(Collection<? extends E> c);
+
+    // Quita todas las apariciones de cada elemento de `c`.
+    boolean removeAll(Collection<?> c);
+
+    // Deja solo los elementos que tambien estan en `c`.
+    boolean retainAll(Collection<?> c);
+
+    // Los elementos en un arreglo nuevo, en el orden del iterador.
+    Object[] toArray();
+
+    // Los elementos en `a` si entran, o en un arreglo nuevo del mismo tipo dinamico si no.
+    <T> T[] toArray(T[] a);
+
+    // Los elementos en un arreglo que fabrica `generator` con el tamano justo.
+    //
+    // Existe para poder escribir `c.toArray(String[]::new)` en vez de `c.toArray(new String[0])`,
+    // que es la misma idea dicha sin el arreglo vacio de por medio.
+    default <T> T[] toArray(java.util.function.IntFunction<T[]> generator) {
+        return this.toArray(generator.apply(0));
+    }
+
+    // Quita los elementos que cumplan `filter`; devuelve si algo cambio.
+    default boolean removeIf(java.util.function.Predicate<? super E> filter) {
+        boolean cambio = false;
+        Object[] foto = this.toArray();
+        int i = 0;
+        while (i < foto.length) {
+            if (filter.test((E) foto[i])) {
+                while (this.remove(foto[i])) {
+                    cambio = true;
+                }
+            }
+            i = i + 1;
+        }
+        return cambio;
+    }
+
+    // Un stream posiblemente paralelo sobre estos elementos.
+    //
+    // **Divergencia deliberada**: aca devuelve el mismo stream secuencial que `stream()`. La
+    // biblioteca no tiene todavia el motor de division en paralelo, y un metodo que dijera
+    // "paralelo" y corriera secuencial es preferible a uno que no exista: el resultado es el
+    // mismo, solo que sin la ganancia.
+    default java.util.stream.Stream<E> parallelStream() {
+        return this.stream();
+    }
+
 }

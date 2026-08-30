@@ -111,7 +111,7 @@ use super::ast::{
     SwitchCase, Type, TypeKind, TypeParam, UnOp,
 };
 use super::attribute::{candidates, constructors, functional_sam};
-use super::codegen::{internal_name, rtype_desc};
+use super::codegen::{concat_needs_value_of, internal_name, rtype_desc};
 use super::symbol::{
     ParamSig, RType, Resolved, ScopeId, Symbol, SymbolId, SymbolKind, SymbolTable,
 };
@@ -819,6 +819,8 @@ impl Desugarer<'_> {
         if let (Some(cid), Some(outer)) = (self.cur_class, self.enclosing_type) {
             self.capture_enclosing_instance(class, cid, outer);
         }
+        // Se toma antes del bucle porque adentro `class` está prestado mutable.
+        let enclosing_kind = class.kind;
         for member in &mut class.members {
             match member {
                 Member::Method(m) => {
@@ -841,10 +843,20 @@ impl Desugarer<'_> {
                 Member::Type(nested) => {
                     // El enclosing de una interna de **instancia** es la clase actual; para una
                     // anidada estática (o interface/enum/record) no hay captura.
+                    //
+                    // Y tampoco la hay si la **envolvente** es una interfaz: un tipo miembro de una
+                    // interfaz es implícitamente `static` (§9.5) aunque no lo diga, así que no
+                    // existe instancia envolvente que capturar. Sin este segundo filtro, a los
+                    // constructores de una `class` anidada en una `interface` se les inyectaba el
+                    // parámetro de cabecera `Outer this$0` — y entonces `new Inner(x)` no encontraba
+                    // ningún constructor aplicable, porque el único que había pedía dos argumentos
+                    // (#295).
                     let saved = self.enclosing_type;
                     let saved_store = self.enclosing_store;
-                    self.enclosing_type =
-                        is_instance_inner(nested).then_some(self.cur_class).flatten();
+                    self.enclosing_type = (is_instance_inner(nested)
+                        && enclosing_kind != TypeKind::Interface)
+                        .then_some(self.cur_class)
+                        .flatten();
                     // El campo `this$0` solo se materializa si la interna **usa** la instancia
                     // envolvente (§8.1.3); si no, javac igual pasa el parámetro (para el `requireNonNull`)
                     // pero omite el campo.
@@ -2563,7 +2575,7 @@ impl Desugarer<'_> {
         // ¿Se pasó el array directamente? (aridad exacta y el último arg encaja en el array).
         if args.len() == params.len() {
             if let (Some(last), Some(vararg)) = (args.last().and_then(|a| a.ty.as_ref()), params.last()) {
-                if types::is_subtype(self.table, last, vararg) {
+                if varargs_passthrough(self.table, last, vararg) {
                     return;
                 }
             }
@@ -2628,9 +2640,17 @@ impl Desugarer<'_> {
                 }
                 _ => {
                     recipe.push(CONCAT_TAG_ARG);
-                    dyn_descs.push_str(
-                        &op.ty.as_ref().map_or_else(|| "Ljava/lang/Object;".to_string(), |t| rtype_desc(self.table, t)),
-                    );
+                    // #282: una referencia que no es ya un `String` viaja al call site **convertida**
+                    // — el codegen le mete el `String.valueOf(Object)` justo despues de empujarla,
+                    // con este mismo predicado. Es lo que hace javac, y es lo que el bootstrap
+                    // espera: `StringConcatFactory` no llama a `toString()` por su cuenta.
+                    if concat_needs_value_of(self.table, &op.ty) {
+                        dyn_descs.push_str("Ljava/lang/String;");
+                    } else {
+                        dyn_descs.push_str(
+                            &op.ty.as_ref().map_or_else(|| "Ljava/lang/Object;".to_string(), |t| rtype_desc(self.table, t)),
+                        );
+                    }
                     captures.push(op);
                 }
             }
@@ -2704,6 +2724,44 @@ impl Desugarer<'_> {
     /// - **Call site**: el `invokedynamic` empuja las capturas; su *bootstrap* es
     ///   `LambdaMetafactory.metafactory`, con los `MethodType` borrado/instanciado y el `MethodHandle`
     ///   de la implementación como argumentos estáticos (§4.7.23).
+    /// Reemplaza por su *erasure* las variables de tipo que **no se pueden nombrar acá**: las que
+    /// no son ni del método envolvente ni de la clase envolvente.
+    ///
+    /// Es el arreglo del #306. La sustitución del SAM resuelve las variables de la **interfaz**,
+    /// no las que entran por el **tipo esperado**. Un
+    /// `<X extends Throwable> T orElseThrow(Supplier<? extends X>)` al que se le pasa una lambda
+    /// deja el retorno instanciado en `X`, y ese `X` es de un método de **otra clase**: acá no hay
+    /// declaración a la que apunte. El método sintético salía declarando un retorno `X` que no
+    /// resuelve y el generador cortaba con "no puede resolver el tipo `X`" — un programa Java
+    /// correcto que no compilaba.
+    ///
+    /// Nameable es exactamente lo que ese método sintético puede escribir en su firma: los `<T>` del
+    /// método que lo contiene —que se le copian al `type_params` (#282)— y los de la clase.
+    ///
+    /// Borrar no es una salida por la tangente: el descriptor usa la *erasure* igual (§4.6), así que
+    /// el bytecode sale idéntico. Lo único que se pierde es precisión en el `Signature` de un método
+    /// privado sintético, que no lo lee nadie. Por lo mismo es inocuo que una variable de una clase
+    /// **envolvente** (el `T` del outer, usable desde una inner) se borre también, aunque sí sea
+    /// nombrable: de más, y sin consecuencia.
+    fn erase_unnameable(&self, t: &RType) -> RType {
+        match t {
+            RType::TypeVar(id) => {
+                let del_metodo = self
+                    .cur_method_type_params
+                    .iter()
+                    .any(|p| p.name == self.table.symbol(*id).name);
+                let de_la_clase = self.table.symbol(*id).owner == self.cur_class;
+                if del_metodo || de_la_clase {
+                    t.clone()
+                } else {
+                    types::erasure(self.table, t)
+                }
+            }
+            RType::Array(e) => RType::Array(Box::new(self.erase_unnameable(e))),
+            _ => t.clone(),
+        }
+    }
+
     fn lower_lambda(&mut self, e: &mut Expr) {
         // Sin target funcional resuelto no hay contra qué bajar: queda como `Lambda` y la corta el
         // emisor.
@@ -2728,13 +2786,27 @@ impl Desugarer<'_> {
         let inst_params: Vec<RType> =
             sam_params.iter().map(|p| types::substitute(p, &subst)).collect();
         let inst_ret = types::substitute(&sam_ret, &subst);
+        // Y se borran las variables de tipo que el sintético no puede nombrar (#306).
+        let inst_params: Vec<RType> =
+            inst_params.iter().map(|t| self.erase_unnameable(t)).collect();
+        let inst_ret = self.erase_unnameable(&inst_ret);
 
         let ExprKind::Lambda { params, body } = std::mem::replace(&mut e.kind, ExprKind::Null) else {
             return;
         };
         let mut body = *body;
         // Bajar el azúcar del **cuerpo** antes de extraerlo (concatenación, lambdas anidadas…).
+        //
+        // El cuerpo-expresión de una lambda con SAM `void` es una **posición de descarte**: su valor
+        // no se usa, igual que en una sentencia-expresión. Por eso va por `discard_expr`, que es
+        // donde `x++` se reescribe a `x += 1` y `lower_compound` reparte el *lvalue*.
+        //
+        // Con `expr` a secas —lo que hacía— el `++` llegaba crudo al generador, y para un **elemento
+        // de arreglo** se emitía algo que no incrementaba nada: `() -> c[1]++` era un no-op, mientras
+        // `() -> { c[1]++; }` andaba. Una diferencia entre dos formas que el JLS declara
+        // equivalentes, sin error ni aviso — el peor tipo de bug (#308).
         match &mut body {
+            LambdaBody::Expr(be) if matches!(inst_ret, RType::Void) => self.discard_expr(be),
             LambdaBody::Expr(be) => self.expr(be),
             LambdaBody::Block(b) => self.block(b),
         }
@@ -2883,6 +2955,10 @@ impl Desugarer<'_> {
         let inst_params: Vec<RType> =
             sam_params.iter().map(|p| types::substitute(p, &subst)).collect();
         let inst_ret = types::substitute(&sam_ret, &subst);
+        // Y se borran las variables de tipo que el sintético no puede nombrar (#306).
+        let inst_params: Vec<RType> =
+            inst_params.iter().map(|t| self.erase_unnameable(t)).collect();
+        let inst_ret = self.erase_unnameable(&inst_ret);
 
         // Inspeccionar el qualifier **sin** moverlo (si no se puede bajar, se deja el `MethodRef`).
         let ExprKind::MethodRef { qualifier, name, .. } = &e.kind else { return };
@@ -3587,9 +3663,24 @@ impl Desugarer<'_> {
     /// ¿`id` es una interna de **instancia** (una `class` no-estática miembro de otra clase)?
     fn is_instance_inner_id(&self, id: SymbolId) -> bool {
         let s = self.table.symbol(id);
+        // Una **anónima** (`$1`) o una **local** (`1L`) no son tipos *miembro*: se crean en el
+        // cuerpo de un método y, si ese método tiene `this`, capturan. Se reconocen por el nombre
+        // sintético que les puso `hoist_anonymous`/`register_local_classes` — ningún identificador
+        // del fuente empieza con `$` ni con un dígito.
+        let sintetica =
+            s.name.starts_with('$') || s.name.starts_with(|c: char| c.is_ascii_digit());
+        // Un tipo **miembro** de una interfaz es implícitamente `static` (§9.5): no hay instancia
+        // envolvente que capturar, porque una interfaz no tiene instancias (#295). La anónima de un
+        // método `default` queda afuera de la regla justamente porque no es un tipo miembro — y
+        // ponerla adentro dejaba a los `$1` de `Spliterator` y `PrimitiveIterator` sin su parámetro
+        // de cabecera.
+        let dueña_captura = matches!(
+            s.owner.map(|o| &self.table.symbol(o).kind),
+            Some(SymbolKind::Class { kind, .. }) if sintetica || *kind != TypeKind::Interface
+        );
         matches!(s.kind, SymbolKind::Class { kind: TypeKind::Class, .. })
             && !s.modifiers.contains(&Modifier::Static)
-            && matches!(s.owner.map(|o| &self.table.symbol(o).kind), Some(SymbolKind::Class { .. }))
+            && dueña_captura
     }
 }
 
@@ -3677,6 +3768,33 @@ fn this0_assign() -> Stmt {
 fn val_assign(field: &str) -> Stmt {
     let target = ex(ExprKind::Field { expr: Box::new(ex(ExprKind::This)), name: field.to_string() });
     st(StmtKind::Expr(assign_expr(target, name(field))))
+}
+
+/// ¿El único argumento de un varargs **ya es** el array, y por lo tanto se pasa tal cual (§15.12.4.2)?
+///
+/// El caso directo lo resuelve el subtipado: `Object[]` contra `Object...`, `String[]` contra
+/// `String...`. Lo que faltaba es el **varargs genérico**: `String[]` contra `T...` no es un
+/// subtipo de nada —`T` todavía no está instanciado—, así que el array se envolvía en otro y
+/// `Arrays.asList(arr)` devolvía una lista de **un** elemento: el arreglo. Silencioso y muy caro
+/// (#298).
+///
+/// La condición correcta es la de §4.5.1, la misma de #290: una variable de tipo solo liga tipos
+/// **referencia**. Con `T...`:
+///
+/// - `String[]` → `T` liga `String` y el array pasa tal cual;
+/// - `int[]` → `T` no puede ligar `int`, así que liga `int[]` y el array **se envuelve** —que es
+///   justamente lo que hace el javac real, y por eso `Arrays.asList(new int[]{1,2})` da una lista
+///   de un solo elemento.
+fn varargs_passthrough(table: &SymbolTable, arg: &RType, vararg: &RType) -> bool {
+    if types::is_subtype(table, arg, vararg) {
+        return true;
+    }
+    match (arg, vararg) {
+        (RType::Array(a), RType::Array(v)) => {
+            matches!(**v, RType::TypeVar(_)) && !matches!(**a, RType::Prim(_))
+        }
+        _ => false,
+    }
 }
 
 /// ¿Es `class` una **interna de instancia** (una `class` no-estática)? Las interfaces, `enum` y
@@ -4266,7 +4384,8 @@ fn rtype_to_type(table: &SymbolTable, t: &RType) -> Type {
         RType::Capture { upper, .. } => rtype_to_type(table, upper),
         RType::Intersection(ms) => ms.first().map_or(Type::Var, |m| rtype_to_type(table, m)),
         RType::InferVar(_) => Type::Var,
-        RType::Unresolved => Type::Var,
+        // El tipo nulo no se puede escribir, asi que no hay `Type` que lo nombre.
+        RType::Null | RType::Unresolved => Type::Var,
     }
 }
 

@@ -274,7 +274,7 @@ public class ConcurrentSkipListSet<E> extends AbstractSet<E> implements Navigabl
     }
 
     @Override
-    public SequencedSet<E> reversed() {
+    public NavigableSet<E> reversed() {
         NavigableMap<E, Object> view = this.m.descendingMap();
         return this.setOver(view);
     }

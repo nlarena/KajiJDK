@@ -14,6 +14,6 @@ public class UnknownFormatConversionException extends IllegalFormatException {
     }
 
     public String getMessage() {
-        return "Conversion = \x27" + conversion + "\x27";
+        return "Conversion = '" + conversion + "'";
     }
 }

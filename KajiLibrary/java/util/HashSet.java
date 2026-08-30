@@ -9,7 +9,7 @@ import java.util.Iterator;
 // if the element is already present; `remove` re-inserts the trailing cluster to keep the
 // probe invariant. `iterator()` walks the table (see HashSetItr below). (The JDK's HashSet
 // delegates to a HashMap; ours holds its own table.)
-public class HashSet<E> implements Set<E> {
+public class HashSet<E> extends AbstractSet<E> implements Set<E> {
 
     // Package-private so HashSetItr can walk the table (still implementation, not API surface).
     Object[] table;
@@ -18,6 +18,62 @@ public class HashSet<E> implements Set<E> {
     public HashSet() {
         this.table = new Object[16];
         this.size = 0;
+    }
+
+    /**
+     * Con capacidad inicial.
+     *
+     * <p>La tabla se dimensiona al **doble** de lo pedido, y eso no es un margen arbitrario: esta
+     * implementacion es de direccionamiento abierto con sondeo lineal, y a partir de la mitad de
+     * ocupacion los grupos de colisiones empiezan a fundirse entre si. Pedir capacidad para `n`
+     * quiere decir "quiero meter `n` sin que se agrande", y para eso hacen falta `2n` casilleros.
+     */
+    public HashSet(int initialCapacity) {
+        if (initialCapacity < 0) {
+            throw new IllegalArgumentException("Illegal initial capacity: " + initialCapacity);
+        }
+        int cap = initialCapacity * 2;
+        if (cap < 16) {
+            cap = 16;
+        }
+        this.table = new Object[cap];
+        this.size = 0;
+    }
+
+    // El factor de carga se acepta y se **ignora**: esta tabla no lo usa (ver arriba). El JDK lo
+    // toma para decidir cuando agrandar; aca ese umbral esta fijo en la mitad.
+    public HashSet(int initialCapacity, float loadFactor) {
+        this(initialCapacity);
+        if (loadFactor <= 0) {
+            throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
+        }
+    }
+
+    /**
+     * Un conjunto dimensionado para `numElements` sin que se agrande.
+     *
+     * <p>Existe porque `new HashSet<>(n)` **no** quiere decir eso: ese `n` es la capacidad de la
+     * tabla, no la cantidad de elementos, y con el factor de carga del JDK un `new HashSet<>(100)`
+     * se agranda a los 75. Es una de las trampas mas viejas de la API, y por eso Java 19 agrego
+     * esta fabrica con un nombre que si dice lo que hace.
+     */
+    public static <T> HashSet<T> newHashSet(int numElements) {
+        if (numElements < 0) {
+            throw new IllegalArgumentException("Negative number of elements: " + numElements);
+        }
+        return new HashSet<T>(numElements);
+    }
+
+    // Copia los elementos de otra coleccion, descartando los repetidos.
+    //
+    // No es un lujo: es el idioma con el que se congela un argumento que el llamador podria seguir
+    // modificando (`this.violaciones = new HashSet<>(violaciones)`), y no habia forma de escribirlo.
+    // Hasta #293 se podia escribir igual y compilaba **mal** en silencio -- el argumento se evaluaba,
+    // se llamaba al constructor sin argumentos y el conjunto nacia vacio.
+    public HashSet(Collection<? extends E> c) {
+        this.table = new Object[16];
+        this.size = 0;
+        this.addAll(c);
     }
 
     public int size() {

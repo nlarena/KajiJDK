@@ -20,7 +20,7 @@ import java.util.NoSuchElementException;
 // iterating the reverse of a {@link LinkedList} is O(n^2) — every `get` re-walks the chain. It
 // is correct, and it is the honest consequence of the subset; a copy would iterate fast and
 // stop being a view, which is the wrong trade.
-final class ReverseOrderListView<E> implements List<E> {
+final class ReverseOrderListView<E> extends AbstractList<E> implements List<E> {
 
     private final List<E> base;
 

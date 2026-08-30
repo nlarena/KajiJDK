@@ -1,17 +1,34 @@
-// Repro de #248 - una llamada generica estatica se descarta en silencio cuando la inferencia
-// tiene que bajar a una variable de tipo ANIDADA en un argumento de tipo.
+// Repro de #248 - una llamada generica estatica no resuelve cuando la inferencia tiene que bajar
+// a una variable de tipo ANIDADA dentro de un argumento de tipo. SIGUE ABIERTO.
 //
-// Con el parametro declarado INVARIANTE (Function<T, Stream<U>>) el call site compilaba sin
-// invokestatic, y el llamador se quedaba con el argumento equivocado:
+//   bin\javac.exe --emit -cp KajiLibrary KajiLibrary\repros\finding_248.java
+//
+// La forma: `Function<T, Stream<U>>` — la `U` esta anidada dentro de `Stream<U>`, y eso es lo que
+// rompe la inferencia. Es la firma de `Collectors.flatMapping`. Declarar el parametro como lo
+// declara el JDK (`Function<T, ? extends Stream<? extends U>>`) lo hace resolver, que es el
+// control `tomaComodin` de abajo.
+//
+// EL SINTOMA CAMBIO, y conviene tenerlo escrito porque el reporte viejo ya no describe lo que
+// pasa. Antes compilaba **mudo** y dejaba el call site mal armado, sin el `invokestatic`:
 //
 //   15: aload_1     // mapper, colgado en la pila
 //   16: aload_0     // downstream
 //   17: astore_2    // c = downstream  (!!)
 //
-// Es la forma de Collectors.flatMapping. Declararlo como el JDK
-// (Function<T, ? extends Stream<? extends U>>) lo hacia resolver.
+// Hoy falla fuerte, con un diagnostico que nombra el problema:
 //
-// Esperado: invariante() y conComodin() emiten ambas `invokestatic` y devuelven 7.
+//   error: no se encontro un metodo `tomaInvariante(Function<String, Stream<Integer>>, Integer)`
+//          aplicable
+//     metodo finding_248.tomaInvariante(Function<T, Stream<U>>, A) no es aplicable
+//       (los argumentos no coinciden: Function<String, Stream<Integer>> no se convierte a
+//        Function<T, Stream<U>>)
+//
+// Es una mejora —"no compila" es mejor que "compila y revienta lejos"— pero el defecto es el
+// mismo y sigue abierto: la inferencia no liga `T` ni `U` a traves del anidamiento. El javac real
+// compila este archivo sin chistar.
+//
+// Objetivo cuando se arregle: `invariante()` y `conComodin()` emiten ambas `invokestatic` y
+// devuelven 7.
 import java.util.function.Function;
 import java.util.stream.Stream;
 

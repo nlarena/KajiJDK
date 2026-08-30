@@ -66,6 +66,152 @@ public final class UUID implements Comparable<UUID>, Serializable {
     // Parse the canonical text form. Like the JDK this is tolerant about field WIDTH — it wants
     // five dash-separated hex fields and takes the low bits of each, so "1-2-3-4-5" parses to
     // 00000001-0002-0003-0004-000000000005 — but it is strict about there being exactly five.
+    /**
+     * El UUID de version 3 para un nombre: el MD5 de los bytes, con la version y la variante
+     * estampadas encima.
+     *
+     * <p>Lo que lo hace util es que es **determinista**: el mismo nombre da siempre el mismo id, en
+     * cualquier maquina y sin coordinacion. Es lo contrario de `randomUUID()`, y sirve para lo
+     * contrario -- darle una identidad estable a algo que ya tiene un nombre unico (una URL, un
+     * DN, una ruta) sin tener que guardar la correspondencia en ningun lado.
+     *
+     * <p>MD5 esta roto para criptografia desde 2004 y aca no importa: no se lo usa para autenticar
+     * nada, solo para repartir nombres en el espacio de 128 bits. Es lo que la RFC 4122 fija para
+     * la version 3, y cambiarlo cambiaria los ids.
+     */
+    public static UUID nameUUIDFromBytes(byte[] name) {
+        byte[] h = md5(name);
+        // Los seis bits que la RFC reserva: cuatro para la version (3) y dos para la variante
+        // (IETF). El resto del hash queda intacto.
+        h[6] = (byte) ((h[6] & 0x0f) | 0x30);
+        h[8] = (byte) ((h[8] & 0x3f) | 0x80);
+        long msb = 0;
+        long lsb = 0;
+        for (int i = 0; i < 8; i++) {
+            msb = (msb << 8) | (h[i] & 0xffL);
+        }
+        for (int i = 8; i < 16; i++) {
+            lsb = (lsb << 8) | (h[i] & 0xffL);
+        }
+        return new UUID(msb, lsb);
+    }
+
+    // ---- MD5 (RFC 1321) --------------------------------------------------------------------
+    //
+    // Va escrito aca y no contra `java.security.MessageDigest` porque esa clase no existe en la
+    // biblioteca. Es la unica razon; el dia que exista, esto se reemplaza por tres lineas.
+
+    // Los desplazamientos de cada una de las 64 vueltas, cuatro patrones de a dieciseis.
+    private static final int[] MD5_S = {
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+        5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+        4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+        6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+    };
+
+    // La tabla de constantes: `T[i] = floor(2^32 * abs(sin(i + 1)))`, con el angulo en radianes.
+    //
+    // Va literal y no calculada porque `Math.sin` no esta en esta biblioteca. Una tabla escrita a
+    // mano es justo donde se cuela un digito cambiado, asi que la prueba de comportamiento compara
+    // el UUID resultante contra el de `java` real -- un solo bit distinto en cualquiera de las 64
+    // constantes cambia los 128 bits de la salida.
+    private static final int[] MD5_K = {
+        0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
+        0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+        0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
+        0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+        0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
+        0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+        0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
+        0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+        0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
+        0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+        0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
+        0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+        0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
+        0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+        0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
+        0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
+    };
+
+    private static byte[] md5(byte[] msg) {
+        // Relleno: un 0x80, ceros hasta dejar 8 bytes libres en el ultimo bloque, y el largo en
+        // **bits** como entero de 64, little-endian. Ese largo al final es lo que impide que dos
+        // mensajes distintos con el mismo relleno colisionen por construccion.
+        long bits = ((long) msg.length) * 8L;
+        int total = msg.length + 1;
+        while (total % 64 != 56) {
+            total = total + 1;
+        }
+        total = total + 8;
+        byte[] m = new byte[total];
+        System.arraycopy(msg, 0, m, 0, msg.length);
+        m[msg.length] = (byte) 0x80;
+        for (int i = 0; i < 8; i++) {
+            m[total - 8 + i] = (byte) (bits >>> (8 * i));
+        }
+
+        int a0 = 0x67452301;
+        int b0 = 0xefcdab89;
+        int c0 = 0x98badcfe;
+        int d0 = 0x10325476;
+
+        int[] w = new int[16];
+        int bloque = 0;
+        while (bloque < total) {
+            // Las palabras del bloque, little-endian.
+            for (int i = 0; i < 16; i++) {
+                int o = bloque + i * 4;
+                w[i] = (m[o] & 0xff) | ((m[o + 1] & 0xff) << 8)
+                        | ((m[o + 2] & 0xff) << 16) | ((m[o + 3] & 0xff) << 24);
+            }
+            int a = a0;
+            int b = b0;
+            int c = c0;
+            int d = d0;
+            for (int i = 0; i < 64; i++) {
+                int f;
+                int g;
+                if (i < 16) {
+                    f = (b & c) | (~b & d);
+                    g = i;
+                } else if (i < 32) {
+                    f = (d & b) | (~d & c);
+                    g = (5 * i + 1) % 16;
+                } else if (i < 48) {
+                    f = b ^ c ^ d;
+                    g = (3 * i + 5) % 16;
+                } else {
+                    f = c ^ (b | ~d);
+                    g = (7 * i) % 16;
+                }
+                f = f + a + MD5_K[i] + w[g];
+                a = d;
+                d = c;
+                c = b;
+                b = b + Integer.rotateLeft(f, MD5_S[i]);
+            }
+            a0 = a0 + a;
+            b0 = b0 + b;
+            c0 = c0 + c;
+            d0 = d0 + d;
+            bloque = bloque + 64;
+        }
+
+        byte[] out = new byte[16];
+        escribirLE(out, 0, a0);
+        escribirLE(out, 4, b0);
+        escribirLE(out, 8, c0);
+        escribirLE(out, 12, d0);
+        return out;
+    }
+
+    private static void escribirLE(byte[] out, int off, int v) {
+        for (int i = 0; i < 4; i++) {
+            out[off + i] = (byte) (v >>> (8 * i));
+        }
+    }
+
     public static UUID fromString(String name) {
         int len = name.length();
         if (len > 36) {

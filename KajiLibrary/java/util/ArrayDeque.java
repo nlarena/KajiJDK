@@ -11,7 +11,7 @@ package java.util;
 //
 // Null elements are rejected, as in the JDK: null is the "empty" answer of peek/poll, so
 // storing one would make an absent element indistinguishable from a present null.
-public class ArrayDeque<E> implements Deque<E> {
+public class ArrayDeque<E> extends AbstractCollection<E> implements Deque<E> {
 
     // The backing array; the live elements are the `size` slots starting at `head`, wrapping.
     private Object[] elements;
@@ -20,6 +20,21 @@ public class ArrayDeque<E> implements Deque<E> {
 
     public ArrayDeque() {
         elements = new Object[16];
+    }
+
+    // Copia los elementos de otra coleccion, en el orden de su iterador: el primero queda al
+    // frente.
+    public ArrayDeque(Collection<? extends E> c) {
+        this(c.size() < 1 ? 1 : c.size() + 1);
+        Iterator<? extends E> it = c.iterator();
+        while (it.hasNext()) {
+            this.addLast(it.next());
+        }
+    }
+
+    // Una copia superficial: mismo contenido, arreglo propio.
+    public ArrayDeque<E> clone() {
+        return new ArrayDeque<E>(this);
     }
 
     public ArrayDeque(int numElements) {

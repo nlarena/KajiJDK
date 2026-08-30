@@ -66,6 +66,30 @@ public class PriorityQueue<E> extends AbstractQueue<E> {
         this.comparator = (Comparator<E>) comparator;
     }
 
+    /**
+     * Copia otra cola, **con su comparador**.
+     *
+     * <p>Que herede el comparador es lo que distingue a este constructor de
+     * `PriorityQueue(Collection)`: con aquel, copiar una cola ordenada al reves daria una ordenada
+     * al derecho, con los mismos elementos y otra cabeza.
+     */
+    public PriorityQueue(PriorityQueue<? extends E> c) {
+        this(11, (Comparator<? super E>) c.comparator());
+        Iterator<E> it = ((PriorityQueue<E>) c).iterator();
+        while (it.hasNext()) {
+            this.offer(it.next());
+        }
+    }
+
+    // Idem desde un conjunto ordenado: tambien trae su comparador.
+    public PriorityQueue(SortedSet<? extends E> c) {
+        this(11, (Comparator<? super E>) c.comparator());
+        Iterator<E> it = ((SortedSet<E>) c).iterator();
+        while (it.hasNext()) {
+            this.offer(it.next());
+        }
+    }
+
     // Building from a collection one offer at a time is O(n log n). The JDK does better with
     // Floyd's bottom-up heapify (O(n)) when it can; ours takes the simple route, since the
     // difference only shows up on a bulk load.

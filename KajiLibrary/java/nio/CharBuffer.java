@@ -35,7 +35,7 @@ import java.util.stream.IntStream;
  * cannot name the interface it belongs to.
  */
 public abstract class CharBuffer extends Buffer
-        implements Comparable<CharBuffer>, Appendable, CharSequence {
+        implements Comparable<CharBuffer>, Appendable, CharSequence, Readable {
 
     /**
      * The backing array, or {@code null} for a view over a {@link ByteBuffer}. Every accessor

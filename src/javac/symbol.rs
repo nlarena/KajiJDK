@@ -51,6 +51,17 @@ pub enum RType {
     /// del módulo `infer`**: la inferencia la resuelve a un tipo concreto antes de devolver, así que el
     /// resto del compilador nunca la ve.
     InferVar(u32),
+    /// El **tipo nulo** (§4.1): el tipo del literal `null`. No tiene nombre y no se puede escribir.
+    ///
+    /// Existe como variante propia porque la alternativa —tiparlo `Unresolved`, que es lo que se
+    /// hacía— lo volvía **indulgente**, y un `null` indulgente es aplicable a cualquier parámetro,
+    /// primitivos incluidos. Con `f(long)` y `f(Void)` en la mesa, `f(null)` elegía la de `long` y
+    /// el codegen emitía `aconst_null` contra un descriptor `(J)V`: bytecode que ningún verificador
+    /// acepta, salido de un compilador que no dijo nada (#305).
+    ///
+    /// La regla es corta y es la que faltaba: el tipo nulo es subtipo de **todo** tipo referencia y
+    /// de **ningún** primitivo (§4.10.2, §5.3).
+    Null,
     /// El nombre no resolvió (ya reportado como error en la validación).
     Unresolved,
 }
@@ -389,6 +400,24 @@ impl SymbolTable {
         self.externals_fqn.get(fqn).copied()
     }
 
+    /// El tipo de **este mismo round** que el `import java.lang.*` implícito hace visible (§7.3).
+    ///
+    /// Compilar `java.lang.StrictMath` y `java.util.Random` en la **misma** invocación fallaba: el
+    /// `StrictMath` que `Random` nombra no resolvía. Por separado andaba, y esa asimetría es la
+    /// firma del bug — el `import java.lang.*` implícito solo miraba el *class finder*, así que veía
+    /// el `.class` en disco y no el hermano que se está compilando al lado.
+    ///
+    /// Es un fallback de **resolución**, no un alias en la tabla de externos, y la distinción no es
+    /// cosmética: `check.rs` define "externo" como *estar en esa tabla*, y a los externos les afloja
+    /// los chequeos de miembros. Meter ahí un tipo del fuente lo volvería incontrolable justo en
+    /// `java.lang`, que es lo que más se apoya.
+    pub fn java_lang_source(&self, simple: &str) -> Option<SymbolId> {
+        if simple.contains('.') {
+            return None;
+        }
+        self.classes.get(&format!("java.lang.{simple}")).copied()
+    }
+
     /// Registra un símbolo externo ya construido (para el *class finder* real, que arma el símbolo
     /// con sus miembros leídos del `.class`). `fqn` es el nombre **completo** con puntos.
     ///
@@ -416,6 +445,24 @@ impl SymbolTable {
     /// nombre.
     pub fn alias_external(&mut self, simple: &str, id: SymbolId) {
         self.externals.entry(simple.to_string()).or_insert(id);
+    }
+
+    /// Como [`Self::alias_external`], pero **pisando** al que tuviera la clave.
+    ///
+    /// Existe para un solo caso, y conviene que siga siendo así: cuando la unidad **escribe** un
+    /// nombre simple y el tipo que le corresponde por su paquete o por un `import` no es el que
+    /// tiene la clave, hay que quitársela (§6.5.5.1). La clave se la puede haber llevado un
+    /// homónimo que nadie nombró, traído de rebote como supertipo de otro externo — ver #299.
+    pub fn override_external(&mut self, simple: &str, id: SymbolId) {
+        self.externals.insert(simple.to_string(), id);
+    }
+
+    /// El nombre **binario** de un tipo (`java.lang.reflect.Type`), si el símbolo es una clase.
+    pub fn binary_name(&self, id: SymbolId) -> Option<&str> {
+        match &self.symbols[id].kind {
+            SymbolKind::Class { binary, .. } => Some(binary),
+            _ => None,
+        }
     }
 
     /// El `Package` de nombre `name` (o el paquete sin nombre si `None`), creándolo la
@@ -725,6 +772,8 @@ impl SymbolTable {
             RType::Intersection(ms) => {
                 ms.iter().map(|m| self.rtype_str(m)).collect::<Vec<_>>().join(" & ")
             }
+            // El tipo nulo no tiene nombre escribible; `javac` lo muestra asi en sus mensajes.
+            RType::Null => "<null>".to_string(),
             RType::Unresolved => "?".to_string(),
         }
     }

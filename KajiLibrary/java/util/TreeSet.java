@@ -1,76 +1,227 @@
 package java.util;
 
-// A set that keeps its elements in sorted order, backed by a {@link TreeMap} — exactly how
-// the JDK builds it. A set is a map whose values carry no information, so every element is
-// stored as a key mapped to one shared placeholder object; all the work (ordering, balancing,
-// O(log n) lookup) is the tree's, and this class is the thin projection that hides the values.
+// Un conjunto ordenado, apoyado en un {@link TreeMap} — exactamente como lo arma el JDK. Un
+// conjunto es un mapa cuyos valores no dicen nada, asi que cada elemento se guarda como clave
+// apuntando a un unico objeto centinela compartido; todo el trabajo (orden, balanceo, busqueda
+// en O(log n)) es del arbol, y esta clase es la proyeccion delgada que esconde los valores.
 //
-// That is the whole design: `add` is `put`, `contains` is `containsKey`, `remove` is `remove`,
-// and iteration walks the tree in order.
+// Ese es el diseno entero: `add` es `put`, `contains` es `containsKey`, `remove` es `remove`, y
+// recorrer es recorrer el arbol en orden.
 //
-// Subset of the JDK's: the NavigableSet/SortedSet navigation (subSet/headSet/tailSet/
-// ceiling/floor/…) is not modelled, since our `Set` is a plain marker over `Collection`.
-public class TreeSet<E> implements Set<E> {
+// Lo que se apoya no es un `TreeMap` sino un **`NavigableMap` cualquiera**, y eso es lo que hace
+// que las vistas salgan gratis: `headSet(x)` es este mismo conjunto sobre `mapa.headMap(x)`, y
+// `descendingSet()` sobre `mapa.descendingMap()`. Los quince metodos de navegacion se escriben una
+// sola vez y funcionan igual sobre el conjunto entero o sobre un corte de un corte al reves.
+//
+// El mismo mecanismo da las vistas de clave de un mapa: `TreeMap.navigableKeySet()` devuelve un
+// TreeSet sobre el mapa, con `noAdd` puesto. Es la unica diferencia entre un conjunto y la vista
+// de claves de un mapa: la vista **no** puede agregar, porque no sabria que valor poner.
+public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E> {
 
-    // The single value every key maps to. Its identity is irrelevant — only "there is an
-    // entry here" matters — so one instance is shared by every element of every TreeSet.
+    // El unico valor al que apunta toda clave. Su identidad no importa — solo cuenta que "hay una
+    // entrada aca" — asi que una instancia alcanza para todos los elementos de todos los TreeSet.
     private static final Object PRESENT = new Object();
 
-    private final TreeMap<E, Object> map;
+    private final NavigableMap<E, Object> map;
+
+    // El mismo mapa visto como recorrible. Se guarda aparte porque `NavigableMap` no promete
+    // saber caminarse nodo a nodo; los dos que llegan aca — TreeMap y TmView — si.
+    private final TmWalk<E, Object> walk;
+
+    // Puesto cuando este conjunto es la vista de claves de un mapa: entonces `add` se niega.
+    private final boolean noAdd;
 
     public TreeSet() {
-        this.map = new TreeMap<E, Object>();
+        this(new TreeMap<E, Object>(), false);
     }
 
     public TreeSet(Comparator<E> comparator) {
-        this.map = new TreeMap<E, Object>(comparator);
+        this(new TreeMap<E, Object>(comparator), false);
+    }
+
+    // Copia los elementos de otra coleccion, ordenandolos por su orden natural.
+    public TreeSet(Collection<? extends E> c) {
+        this(new TreeMap<E, Object>(), false);
+        this.addAll(c);
+    }
+
+    // Copia un conjunto que **ya viene ordenado**, y se queda con su comparador — igual que
+    // `TreeMap(SortedMap)`, y por la misma razon: sin el comparador la copia se reordenaria.
+    public TreeSet(SortedSet<E> s) {
+        this(new TreeMap<E, Object>((Comparator<E>) s.comparator()), false);
+        this.addAll(s);
+    }
+
+    TreeSet(NavigableMap<E, Object> map, boolean noAdd) {
+        this.map = map;
+        this.walk = (TmWalk<E, Object>) map;
+        this.noAdd = noAdd;
+    }
+
+    // Envuelve una vista del mapa de atras conservando la restriccion de agregado: un corte de
+    // una vista de claves sigue sin poder agregar.
+    private TreeSet<E> over(NavigableMap<E, Object> view) {
+        return new TreeSet<E>(view, this.noAdd);
     }
 
     public int size() {
-        return map.size();
+        return this.map.size();
     }
 
     public boolean isEmpty() {
-        return map.isEmpty();
+        return this.map.isEmpty();
     }
 
     public boolean contains(Object o) {
-        return map.containsKey(o);
+        return this.map.containsKey(o);
     }
 
-    // A set add reports whether the element was *new*, which is exactly whether put found
-    // no previous entry.
+    // Un `add` de conjunto informa si el elemento era **nuevo**, que es exactamente si el `put` no
+    // encontro nada antes.
     public boolean add(E e) {
-        return map.put(e, PRESENT) == null;
+        if (this.noAdd) {
+            throw new UnsupportedOperationException();
+        }
+        return this.map.put(e, PRESENT) == null;
     }
 
     public boolean remove(Object o) {
-        return map.remove(o) != null;
+        return this.map.remove(o) != null;
     }
 
     public void clear() {
-        map.clear();
+        this.map.clear();
     }
 
-    public Comparator<E> comparator() {
-        return map.comparator();
-    }
-
-    // The smallest element, by the set's ordering.
-    public E first() {
-        return map.firstKey();
-    }
-
-    public E last() {
-        return map.lastKey();
+    public Comparator<? super E> comparator() {
+        return this.map.comparator();
     }
 
     public Iterator<E> iterator() {
-        return new TreeSetItr<E>(map, true);
+        return new TmKeyItr<E, Object>(this.walk, this.map);
     }
 
     public Iterator<E> descendingIterator() {
-        return new TreeSetItr<E>(map, false);
+        return this.descendingSet().iterator();
+    }
+
+    // --- SortedSet ---
+
+    public E first() {
+        return this.map.firstKey();
+    }
+
+    public E last() {
+        return this.map.lastKey();
+    }
+
+    // --- SequencedCollection ---
+    //
+    // Los extremos se leen y se sacan, pero **no se ponen**: en un conjunto ordenado la posicion
+    // la decide el orden, no quien inserta. Es la misma negativa que `TreeMap.putFirst`.
+
+    public E getFirst() {
+        return this.first();
+    }
+
+    public E getLast() {
+        return this.last();
+    }
+
+    public E removeFirst() {
+        E e = this.first();
+        this.remove(e);
+        return e;
+    }
+
+    public E removeLast() {
+        E e = this.last();
+        this.remove(e);
+        return e;
+    }
+
+    public void addFirst(E e) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void addLast(E e) {
+        throw new UnsupportedOperationException();
+    }
+
+    // Se estrecha a NavigableSet, que es lo que `NavigableSet.reversed()` promete desde que lleva
+    // su propio default.
+    public NavigableSet<E> reversed() {
+        return this.descendingSet();
+    }
+
+    // --- NavigableSet: los vecinos ---
+    //
+    // Las cuatro son la navegacion del mapa mirando solo las claves. `lower` es el mayor elemento
+    // estrictamente menor; `floor`, el mayor <=; y `ceiling`/`higher` los simetricos hacia
+    // arriba. Devuelven null cuando no hay ninguno, que es la unica respuesta razonable — a
+    // diferencia de `first`/`last`, que prometen un elemento y por eso lanzan.
+
+    public E lower(E e) {
+        return this.map.lowerKey(e);
+    }
+
+    public E floor(E e) {
+        return this.map.floorKey(e);
+    }
+
+    public E ceiling(E e) {
+        return this.map.ceilingKey(e);
+    }
+
+    public E higher(E e) {
+        return this.map.higherKey(e);
+    }
+
+    public E pollFirst() {
+        Map.Entry<E, Object> e = this.map.pollFirstEntry();
+        if (e == null) {
+            return null;
+        }
+        return e.getKey();
+    }
+
+    public E pollLast() {
+        Map.Entry<E, Object> e = this.map.pollLastEntry();
+        if (e == null) {
+            return null;
+        }
+        return e.getKey();
+    }
+
+    // --- NavigableSet: las vistas ---
+
+    public NavigableSet<E> descendingSet() {
+        return this.over(this.map.descendingMap());
+    }
+
+    public NavigableSet<E> subSet(E from, boolean fromInclusive, E to, boolean toInclusive) {
+        return this.over(this.map.subMap(from, fromInclusive, to, toInclusive));
+    }
+
+    public NavigableSet<E> headSet(E to, boolean inclusive) {
+        return this.over(this.map.headMap(to, inclusive));
+    }
+
+    public NavigableSet<E> tailSet(E from, boolean inclusive) {
+        return this.over(this.map.tailMap(from, inclusive));
+    }
+
+    // Las tres formas de SortedSet: el piso entra, el techo no.
+    public SortedSet<E> subSet(E from, E to) {
+        return this.subSet(from, true, to, false);
+    }
+
+    public SortedSet<E> headSet(E to) {
+        return this.headSet(to, false);
+    }
+
+    public SortedSet<E> tailSet(E from) {
+        return this.tailSet(from, true);
     }
 
     /**
@@ -88,42 +239,4 @@ public class TreeSet<E> implements Set<E> {
             }
         };
     }
-}
-
-// Walks the backing tree in order (or in reverse), one node at a time through the map's
-// successor/predecessor links — no snapshot, no extra storage. Top-level package-private
-// rather than nested, since a nested class inside a *generic* class is miscompiled (#13).
-final class TreeSetItr<E> implements Iterator<E> {
-
-    private final TreeMap<E, Object> map;
-    private final boolean ascending;
-    private TmNode<E, Object> next;
-
-    TreeSetItr(TreeMap<E, Object> map, boolean ascending) {
-        this.map = map;
-        this.ascending = ascending;
-        if (ascending) {
-            this.next = map.firstNode();
-        } else {
-            this.next = map.lastNode();
-        }
-    }
-
-    public boolean hasNext() {
-        return next != null;
-    }
-
-    public E next() {
-        if (next == null) {
-            throw new NoSuchElementException();
-        }
-        E key = next.key;
-        if (ascending) {
-            next = map.successor(next);
-        } else {
-            next = map.predecessor(next);
-        }
-        return key;
-    }
-
 }

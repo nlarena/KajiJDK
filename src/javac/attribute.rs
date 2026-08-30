@@ -30,6 +30,7 @@ use super::symbol::{RType, RTypeArg, Resolved, ScopeId, SymbolId, SymbolKind, Sy
 use super::infer;
 use super::types;
 use super::Error;
+use super::codegen::max_sync_depth;
 
 /// Corre la atribución sobre todos los cuerpos de `unit`, **decorándolo** y devolviendo los
 /// errores encontrados.
@@ -85,7 +86,7 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
                     env.define(&name, rt);
                 }
                 if let Some(body) = &mut m.body {
-                    attrib_block(&mut env, body);
+                    attrib_body(&mut env, body);
                 }
                 env.pop();
             }
@@ -104,7 +105,7 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
                     next_slot: 0,
                 };
                 env.push();
-                attrib_block(&mut env, block);
+                attrib_body(&mut env, block);
                 env.pop();
             }
             // Un inicializador de instancia corre **dentro del constructor**: tiene `this`.
@@ -121,7 +122,7 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
                     next_slot: 1, // el 0 es `this`
                 };
                 env.push();
-                attrib_block(&mut env, block);
+                attrib_body(&mut env, block);
                 env.pop();
             }
             // El **inicializador de un campo** (§8.3.2): se tipa *in situ* contra el tipo declarado,
@@ -195,7 +196,7 @@ fn attrib_local_class(env: &mut Env, lc: &mut ClassDecl) {
             sub.define(&name, rt);
         }
         if let Some(body) = &mut m.body {
-            attrib_block(&mut sub, body);
+            attrib_body(&mut sub, body);
         }
         sub.pop();
     }
@@ -401,6 +402,24 @@ fn slot_width(ty: &RType) -> u16 {
 }
 
 // ---- sentencias ----
+
+/// Atribuye el **cuerpo de un método** (o de un inicializador): igual que [`attrib_block`], pero
+/// reservando antes los slots que el codegen le da a los `synchronized` del cuerpo.
+///
+/// El codegen coloca el objeto de cada monitor y el aparcadero de excepción de su handler en una
+/// región de dos slots por nivel de anidamiento, justo **encima de los parámetros** — y da por
+/// hecho que los locales del cuerpo empiezan por encima de ella. La atribución, que es quien
+/// reparte los slots, no lo sabía: numeraba desde el primer slot libre tras los parámetros y le
+/// pisaba el monitor al primer local declarado dentro del `synchronized`.
+///
+/// El efecto era bytecode roto en silencio: el `istore` del local machacaba la referencia
+/// bloqueada, y el `monitorexit` de la salida recibía un `int` — "monitorexit: expected an object
+/// reference on the stack". Hacía falta un local **declarado dentro** del bloque para verlo, que
+/// es justo lo que no tenían los casos de prueba.
+fn attrib_body(env: &mut Env, block: &mut Block) {
+    env.next_slot += 2 * max_sync_depth(&block.0);
+    attrib_block(env, block);
+}
 
 fn attrib_block(env: &mut Env, block: &mut Block) {
     env.push();
@@ -841,7 +860,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         ExprKind::CharLit(_) => (RType::Prim(PrimType::Char), None),
         ExprKind::BoolLit(_) => (RType::Prim(PrimType::Boolean), None),
         ExprKind::StringLit(_) => (class_rtype(env.table, "String"), None),
-        ExprKind::Null => (RType::Unresolved, None),
+        ExprKind::Null => (RType::Null, None),
         ExprKind::This => {
             // `this` vive en el slot 0 de la frame (→ `aload_0`), y **no existe** en un contexto
             // estático (§8.4.3.2): un método/inicializador `static` no tiene instancia.
@@ -855,9 +874,19 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             if !env.has_this {
                 env.error(pos, "`super` no se puede usar en un contexto estático".into());
             }
-            let t = match env.table.super_class(env.class) {
-                Some(s) => RType::Class(s),
-                None => RType::Unresolved,
+            // El tipo del `super` es el supertipo **ya instanciado** —`Hashtable<Object,Object>`,
+            // no `Hashtable` a secas—, y por eso sale del `Resolved::Class` de esta clase y no de
+            // `super_class`, que solo da el símbolo (#301).
+            //
+            // Con el crudo, `super.keys()` devolvía `Enumeration<K>` con la `K` **sin sustituir**,
+            // así que asignarlo a un `Enumeration<Object>` daba *"tipo incompatible"*. El mismo
+            // `this.keys()` andaba, porque ahí el receptor sí lleva sus argumentos.
+            let t = match env.table.resolved(env.class) {
+                Some(Resolved::Class { super_type: Some(st), .. }) => st.clone(),
+                _ => match env.table.super_class(env.class) {
+                    Some(s) => RType::Class(s),
+                    None => RType::Unresolved,
+                },
             };
             let b = if env.has_this { Some(Binding::Local { slot: 0 }) } else { None };
             (t, b)
@@ -1058,7 +1087,16 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                 })
                 .collect();
             let recv = match receiver {
-                Some(t) => attrib_expr(env, t),
+                Some(t) => {
+                    // §6.5.2, igual que en el acceso a campo: el receptor puede ser un **tipo
+                    // calificado** (`java.util.Objects.requireNonNull(x)`) y no una cadena de
+                    // campos. Va antes de atribuirlo como expresión, que es lo que fallaba.
+                    if reclassify_as_type(env, t) {
+                        t.ty.clone().unwrap_or(RType::Unresolved)
+                    } else {
+                        attrib_expr(env, t)
+                    }
+                }
                 // Sin receptor: el método puede ser de esta clase, heredado, o de una clase
                 // **envolvente** (inner class). Se busca por la cadena de `owner`; el desugar
                 // reescribe el acceso a un método envolvente como `this$0.m()`.
@@ -1233,9 +1271,16 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         // en este arm queda **tapada** por el binding del patrón.
         ExprKind::Field { expr: receiver, name } => {
             let name = name.clone();
+            // §6.5.2 primero: `java.util.Arrays.asList` no es una cadena de campos que arranca en
+            // una variable `java`, es un **tipo calificado** más un miembro (#274).
+            let es_tipo = reclassify_as_type(env, receiver);
             // **Capture conversion** (§5.1.10): un acceso a campo sobre `Pair<? extends N>` ve el
             // componente por su variable de captura (usable como `N`). Preserva la *erasure*.
-            let recv = types::capture(env.table, &attrib_expr(env, receiver));
+            let recv = if es_tipo {
+                receiver.ty.clone().unwrap_or(RType::Unresolved)
+            } else {
+                types::capture(env.table, &attrib_expr(env, receiver))
+            };
             // `Outer.Inner` — acceso a un **tipo anidado** cualificado: si el receptor es un nombre
             // de tipo y `name` nombra un tipo anidado suyo, esto es una **referencia de tipo**, no un
             // acceso a campo. Sin este caso, `Outer.Inner.v()` fallaba buscando un campo `Inner`.
@@ -1339,11 +1384,33 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                     // `public (Object)`, como javac.
                     cands.retain(|&id| ctor_accessible(env.table, id, env.class));
                     let cname = env.table.symbol(*cid).name.clone();
-                    if cands.is_empty() {
+                    let elegido = if cands.is_empty() {
                         None
                     } else {
-                        resolve_overload(env, &cands, &arg_types, &cname, pos, &rt).map(Binding::Method)
+                        resolve_overload(env, &cands, &arg_types, &cname, pos, &rt)
+                    };
+                    // Ningún constructor aplicó y **hay** argumentos: es un error del fuente, y
+                    // hasta #293 se pasaba en silencio — el codegen caía al `()V` y emitía un
+                    // `invokespecial` que se llevaba el último argumento como receptor.
+                    //
+                    // Sobre un tipo **externo** se calla, igual que en la llamada a método: nuestra
+                    // resolución no modela toda firma del JDK, así que un no-match puede ser una
+                    // limitación nuestra. Ahí el que se planta es el codegen, que no puede emitir
+                    // nada correcto de todos modos.
+                    if elegido.is_none() && !args.is_empty() && !is_external(env.table, *cid) {
+                        let sig: Vec<String> =
+                            arg_types.iter().map(|a| env.table.rtype_str(a)).collect();
+                        let notes = overload_candidate_notes(env.table, &cands, &arg_types, &rt);
+                        env.error_with_notes(
+                            pos,
+                            format!(
+                                "no se encontró un constructor `{cname}({})` aplicable",
+                                sig.join(", ")
+                            ),
+                            notes,
+                        );
                     }
+                    elegido.map(Binding::Method)
                 }
                 _ => None,
             };
@@ -1400,7 +1467,16 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                     attrib_expr(env, e);
                 }
             }
-            (RType::Array(Box::new(resolve_rtype(env.table, env.class_scope, elem))), None)
+            // El tipo creado tiene **una dimensión por cada `[]`** (§15.10.1): `new int[2][3]` es
+            // un `int[][]`, no un `int[]`. Envolver una sola vez —lo que hacía antes— tipaba
+            // `new int[2][3]` como `int[]`, y la declaración `int[][] a = …` lo rechazaba con
+            // "tipo incompatible" (finding #281). `max(1)` es por si `dims` viniera vacío: el
+            // resultado sigue siendo al menos un array, como antes.
+            let mut t = resolve_rtype(env.table, env.class_scope, elem);
+            for _ in 0..dims.len().max(1) {
+                t = RType::Array(Box::new(t));
+            }
+            (t, None)
         }
         ExprKind::Switch { selector, cases } => {
             attrib_expr(env, selector);
@@ -1464,6 +1540,58 @@ pub(crate) fn nested_type_in(table: &SymbolTable, owner: SymbolId, simple: &str)
         .find(|&id| matches!(table.symbol(id).kind, SymbolKind::Class { .. }))
 }
 
+/// La cadena de identificadores de un `a.b.c` **puramente nominal** (`Name` y `Field` encadenados),
+/// o `None` si algún eslabón es otra cosa (una llamada, un índice, un paréntesis).
+fn dotted_name(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Name(n) => Some(n.clone()),
+        ExprKind::Field { expr, name } => Some(format!("{}.{name}", dotted_name(expr)?)),
+        _ => None,
+    }
+}
+
+/// **Reclasificación de un nombre ambiguo** (§6.5.2): intenta leer `receiver` como un nombre de
+/// **tipo calificado** (`java.util.Arrays`) en vez de como una cadena de accesos a campo.
+///
+/// Devuelve `true` si lo logró, dejando el receptor ya atribuido como ese tipo — el llamador
+/// entonces **no** debe atribuirlo como expresión.
+///
+/// El problema que resuelve (#274): `java.lang.reflect.Modifier.PUBLIC` llega al atribuidor como
+/// `Field{Field{Field{Name("java"), "lang"}, "reflect"}, "Modifier"}`, o sea como una cadena que
+/// arranca en una **variable** llamada `java`. En una declaración el mismo nombre resolvía bien,
+/// porque ahí se lee como tipo desde el principio; en una expresión el error era
+/// *"no se encuentra el símbolo: java"*, que no se parece a la causa.
+///
+/// El orden importa y es el del JLS: gana el prefijo **más corto** que resuelva. Por eso lo primero
+/// que se mira es el primer identificador: si `java` nombra un local, un campo o un tipo en scope,
+/// esto **es** una cadena de accesos y no hay nada que reclasificar. Recién si no nombra nada se
+/// prueba la cadena entera como tipo.
+fn reclassify_as_type(env: &mut Env, receiver: &mut Expr) -> bool {
+    let Some(dotted) = dotted_name(receiver) else {
+        return false;
+    };
+    let primero = dotted.split('.').next().unwrap_or(&dotted);
+    if primero == dotted {
+        return false; // un nombre simple ya lo resuelve `resolve_name`
+    }
+    if env.lookup_local(primero).is_some()
+        || lookup_field(env.table, env.class, primero).is_some()
+        || env.table.resolve_type(env.class_scope, primero).is_some()
+        || env.table.external(primero).is_some()
+    {
+        return false;
+    }
+    let rt = resolve_rtype(env.table, env.class_scope, &Type::Class(dotted));
+    match rt {
+        RType::Class(id) => {
+            receiver.ty = Some(RType::Class(id));
+            receiver.binding = Some(Binding::Class(id));
+            true
+        }
+        _ => false,
+    }
+}
+
 fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>) {
     if let Some((ty, slot)) = env.lookup_local(name) {
         return (ty, Some(Binding::Local { slot }));
@@ -1486,6 +1614,11 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     }
     // ¿Un nombre de tipo (para un acceso estático `Tipo.x`)? Lo damos como la clase.
     if let Some(id) = env.table.resolve_type(env.class_scope, name) {
+        return (RType::Class(id), Some(Binding::Class(id)));
+    }
+    // Ídem, para el nombre en posición de **expresión** (`StrictMath.log(x)`): la clase del round
+    // que el `import java.lang.*` implícito hace visible.
+    if let Some(id) = env.table.java_lang_source(name) {
         return (RType::Class(id), Some(Binding::Class(id)));
     }
     if let Some(id) = env.table.external(name) {
@@ -1663,8 +1796,31 @@ fn assignable(table: &SymbolTable, from: &RType, to: &RType) -> bool {
         return true;
     }
     match (from, to) {
+        // El **tipo nulo** (§4.10.2): subtipo de todo tipo referencia, de ningún primitivo. Va
+        // primero porque `is_reference` lo da por referencia --lo es-- y el arm genérico de más
+        // abajo lo mandaría a `is_subtype_strict`, que no tiene con qué decidirlo.
+        (RType::Null, t) => is_reference(t),
+        // Nada se convierte **a** `null`: el tipo nulo no se puede escribir, así que nunca es el
+        // tipo de un parámetro ni de una variable. La igualdad consigo mismo ya la atajó la guardia
+        // de arriba.
+        (_, RType::Null) => false,
         (RType::Prim(a), RType::Prim(b)) => widening_ok(*a, *b),
-        (RType::Array(a), RType::Array(b)) => assignable(table, a, b),
+        // Arreglo a arreglo: la covarianza de §4.10.3 vale **solo entre tipos referencia**.
+        //
+        // Delegar en `assignable` a secas dejaba pasar el brazo de boxing de mas abajo, y con eso
+        // `int[]` resultaba asignable a `T[]` —via `int` → `Integer` → `T`—. En Java no: un
+        // arreglo de primitivos solo es asignable a un arreglo del MISMO primitivo. `int[]` no es
+        // `Integer[]`, y esa es la razon por la que `Integer[]` y `int[]` conviven como tipos
+        // distintos en vez de que uno absorba al otro.
+        //
+        // Lo que producia: `Arrays.copyOf(int[], int)` elegia el generico `<T> T[] copyOf(T[],
+        // int)` y emitia la llamada a la sobrecarga de `Object[]`; y `Arrays.compare(int[],
+        // int[])` se declaraba ambigua entre la primitiva y la generica (finding #290).
+        (RType::Array(a), RType::Array(b)) => match (&**a, &**b) {
+            (RType::Prim(x), RType::Prim(y)) => x == y,
+            (RType::Prim(_), _) | (_, RType::Prim(_)) => false,
+            _ => assignable(table, a, b),
+        },
         // **Boxing** (§5.1.7) seguido opcionalmente de *widening* de referencia: `int` → `Integer`,
         // y también `int` → `Number`/`Object` (el wrapper es subtipo). El contexto de asignación
         // (§5.2) lo permite; la conversión concreta (`Integer.valueOf`) la inserta `transtypes`.
@@ -1788,6 +1944,16 @@ fn is_string(table: &SymbolTable, t: &RType) -> bool {
     matches!(t, RType::Class(c) if table.symbol(*c).name == "String")
 }
 fn class_rtype(table: &SymbolTable, simple: &str) -> RType {
+    // El tipo del **fuente** gana sobre el externo homónimo (#294). Compilando `java.lang.String`
+    // en sí, el tipo de un literal —y el de una concatenación, que es lo que lo destapó— tiene que
+    // ser **esa** clase y no el `java.lang.String` sintético que el modelo de externos fabrica.
+    //
+    // Con dos símbolos distintos que se imprimen igual, nada unificaba: pasar una concatenación a
+    // un constructor del classpath que toma `String` daba "String no se convierte a String" —y ni
+    // eso se veía, porque sobre un tipo externo la resolución falla en silencio.
+    if let Some(id) = table.class(&format!("java.lang.{simple}")) {
+        return RType::Class(id);
+    }
     match table.external(simple) {
         Some(id) => RType::Class(id),
         None => RType::Unresolved,
@@ -1820,8 +1986,32 @@ fn convertible(table: &SymbolTable, from: &RType, to: &RType, boxing: bool) -> b
         return true;
     }
     match (from, to) {
+        // El **tipo nulo** (§4.10.2): subtipo de todo tipo referencia, de ningún primitivo. Va
+        // primero porque `is_reference` lo da por referencia --lo es-- y el arm genérico de más
+        // abajo lo mandaría a `is_subtype_strict`, que no tiene con qué decidirlo.
+        (RType::Null, t) => is_reference(t),
+        // Nada se convierte **a** `null`: el tipo nulo no se puede escribir, así que nunca es el
+        // tipo de un parámetro ni de una variable. La igualdad consigo mismo ya la atajó la guardia
+        // de arriba.
+        (_, RType::Null) => false,
         (RType::Prim(a), RType::Prim(b)) => widening_ok(*a, *b),
-        (RType::Array(a), RType::Array(b)) => convertible(table, a, b, false),
+        // Arreglo a arreglo: si alguno de los dos elementos es **primitivo**, tienen que ser el
+        // MISMO primitivo. No hay covarianza, no hay boxing, y —esto es lo que faltaba— tampoco
+        // vale la indulgencia con las variables de tipo.
+        //
+        // Recursar a secas dejaba pasar `int` → `T` por el `lenient(to)` del principio: una
+        // variable de metodo es indulgente a proposito, para que la inferencia la resuelva
+        // despues. Adentro de un arreglo esa indulgencia no corresponde — `int[]` no es `T[]`
+        // para ningun `T`, porque una variable de tipo solo liga tipos referencia (§4.5.1).
+        //
+        // Lo que producia: `Arrays.copyOf(int[], int)` elegia `<T> T[] copyOf(T[], int)` y emitia
+        // la llamada a la sobrecarga de `Object[]`; `Arrays.compare(int[], int[])` se declaraba
+        // ambigua entre la primitiva y la generica (finding #290).
+        (RType::Array(a), RType::Array(b)) => match (&**a, &**b) {
+            (RType::Prim(x), RType::Prim(y)) => x == y,
+            (RType::Prim(_), _) | (_, RType::Prim(_)) => false,
+            _ => convertible(table, a, b, false),
+        },
         // Boxing, opcionalmente seguido de *widening* de referencia (§5.1.7 + §5.1.5).
         (RType::Prim(p), t) if boxing && is_reference(t) => match table.external(types::wrapper_of(*p)) {
             Some(w) => is_subtype_strict(table, &RType::Class(w), t),
@@ -2342,6 +2532,28 @@ fn resolve_rtype_arg(table: &SymbolTable, scope: ScopeId, arg: &TypeArg) -> RTyp
 
 /// Resuelve un nombre de tipo a [`RType`]: primero por scope (anidados, params de tipo, mismo
 /// paquete), después como externo del classpath.
+/// La clase **fuente** de esta compilación que lleva ese nombre escrito como lo escribe un `.class`
+/// del classpath: con puntos, y con `$` entre los niveles anidados.
+///
+/// Existe para consultarla **antes** que los externos (#294). Cuando una firma leída del classpath
+/// nombra un tipo que esta misma compilación está construyendo desde el fuente —`java.lang.String`
+/// mientras se compila `String.java`, o `ModuleElement$Directive` mientras se compila
+/// `ModuleElement.java`—, sin esto se resolvía al símbolo **externo** homónimo, que es otro
+/// símbolo. Los dos se imprimen igual y no unifican con nada, así que el diagnóstico era el
+/// desconcertante "String no se convierte a String".
+///
+/// El síntoma no era ese mensaje, porque nadie lo veía: la resolución fallaba en silencio y el
+/// codegen emitía el constructor implícito. Ver #293, que es lo que lo destapó.
+fn source_class_named(table: &SymbolTable, name: &str) -> Option<SymbolId> {
+    if let Some(id) = table.class(name) {
+        return Some(id);
+    }
+    if name.contains('$') {
+        return table.class(&name.replace('$', "."));
+    }
+    None
+}
+
 fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
     if let Some(id) = table.resolve_type(scope, name) {
         if matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. }) {
@@ -2349,6 +2561,11 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         } else {
             RType::Class(id)
         }
+    } else if let Some(id) = source_class_named(table, name) {
+        RType::Class(id)
+    } else if let Some(id) = table.java_lang_source(name) {
+        // El `import java.lang.*` implícito sobre los tipos del fuente de este round (§7.3).
+        RType::Class(id)
     } else if let Some(id) = table.external(name) {
         RType::Class(id)
     } else if let Some((outer, simple)) = name.rsplit_once('.') {
@@ -2357,7 +2574,9 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         // `new` (`new java.lang.Object()`) quedaba `Unresolved` y el codegen no podía emitir el `new` +
         // `invokespecial` — finding #20. (En otras posiciones no se notaba: un `Unresolved` de un local
         // o retorno no rompe la emisión.)
-        if let Some(id) = table.external(simple) {
+        if let Some(id) = source_class_named(table, simple) {
+            RType::Class(id)
+        } else if let Some(id) = table.external(simple) {
             RType::Class(id)
         } else if let RType::Class(oid) | RType::Parameterized { base: oid, .. } =
             resolve_type_name(table, scope, outer)
@@ -3067,6 +3286,7 @@ mod tests {
         match t {
             RType::Prim(p) => format!("{p:?}").to_lowercase(),
             RType::Void => "void".to_string(),
+            RType::Null => "null".to_string(),
             RType::Class(id) | RType::TypeVar(id) => table.symbol(*id).name.clone(),
             RType::Parameterized { base, args } => {
                 let a: Vec<String> = args

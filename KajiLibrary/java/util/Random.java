@@ -15,10 +15,38 @@ import java.util.random.RandomGenerator;
 // own nextInt/nextInt(int)/nextDouble/nextBoolean because the JDK specifies THOSE exact bodies for
 // this class: the values a given seed produces are part of Random's contract, not free to inherit.
 //
-// Subset: the stream methods (ints/longs/doubles) and nextGaussian are omitted.
+// Los flujos (ints/longs/doubles) los aporta `RandomGenerator` como defaults; aca solo estan los
+// metodos cuyos valores son parte del contrato de ESTA clase.
 public class Random implements RandomGenerator {
 
     private long seed;
+
+    // El segundo gaussiano, guardado. El metodo de abajo produce **dos** valores por vuelta y seria
+    // un desperdicio tirar uno: la llamada impar calcula el par y devuelve el primero, la par
+    // devuelve el que quedo. De paso, esto es lo que hace que la secuencia dependa de la paridad de
+    // las llamadas, y por eso los dos campos son parte del estado y no una optimizacion local.
+    private double nextNextGaussian;
+
+    private boolean haveNextNextGaussian;
+
+
+    /**
+     * Un `Random` que delega en el generador dado.
+     *
+     * <p>El puente entre la API vieja y la nueva, y va en esta direccion porque es la que hace
+     * falta: hay mucho codigo que **pide un `Random`** como parametro --`Collections.shuffle`, sin
+     * ir mas lejos-- y no se puede cambiar. Con esto se le puede pasar un generador moderno
+     * (`SplittableRandom`, `Xoshiro256PlusPlus`) sin tocar esa firma.
+     *
+     * <p>El que sale **no tiene semilla propia**: `setSeed` se niega, porque la semilla vive en el
+     * generador de atras y este objeto no tiene como cambiarla.
+     */
+    public static Random from(java.util.random.RandomGenerator generator) {
+        if (generator == null) {
+            throw new NullPointerException();
+        }
+        return new RandomAdapter(generator);
+    }
 
     public Random() {
         this(System.currentTimeMillis());
@@ -26,6 +54,21 @@ public class Random implements RandomGenerator {
 
     public Random(long seed) {
         setSeed(seed);
+    }
+
+    /**
+     * El constructor **sin semilla**, para una subclase que no tiene ninguna.
+     *
+     * <p>Hace falta por algo que no se ve hasta que explota: el `Random(long)` de arriba llama a
+     * `setSeed`, que es **virtual**. Una subclase que se niega a aceptar semilla --y `RandomAdapter`
+     * se niega, porque la suya vive en el generador de atras-- reventaria durante su propia
+     * construccion, antes de que nadie llegue a usarla. `Random.from` devolvia un objeto que tiraba
+     * `UnsupportedOperationException` al crearse.
+     *
+     * <p>`Void` no tiene instancias, asi que el unico argumento posible es `null`: no hay forma de
+     * confundir esta sobrecarga con la de la semilla, ni de llamarla por accidente.
+     */
+    Random(Void sinSemilla) {
     }
 
     // The seed is scrambled and masked to 48 bits on the way in, as the JDK does.
@@ -82,6 +125,50 @@ public class Random implements RandomGenerator {
         return (((long) next(26) << 27) + next(27)) * 1.1102230246251565E-16;
     }
 
+
+    /**
+     * Un valor de una normal de media 0 y desvio 1.
+     *
+     * <p>Es el **metodo polar de Marsaglia**, y esta escrito con esa forma exacta porque el
+     * resultado es parte del contrato: dos `Random` con la misma semilla tienen que dar los mismos
+     * gaussianos, bit por bit. El algoritmo:
+     *
+     * <ol>
+     * <li>Se tiran puntos uniformes en el cuadrado {@code [-1,1]x[-1,1]} hasta que uno caiga dentro
+     *     del circulo unitario. Los de afuera se descartan --de ahi el bucle-- y los de adentro
+     *     quedan con angulo uniforme, que es lo que hace falta.</li>
+     * <li>Con {@code s} el radio al cuadrado, el factor
+     *     {@code sqrt(-2*log(s)/s)} convierte ese punto en un par de normales independientes.</li>
+     * </ol>
+     *
+     * <p>Se usan `StrictMath.sqrt` y `StrictMath.log` --no `Math`-- justamente porque el valor esta
+     * en el contrato: `Math` tiene permiso de usar un intrinseco de la maquina y dar un ulp
+     * distinto, y aca eso cambiaria la secuencia.
+     *
+     * <p>Cuidado con `s == 0`: no solo haria una division por cero, sino que `log(0)` es
+     * {@code -infinito}. El bucle lo descarta junto con los de afuera del circulo.
+     */
+    public synchronized double nextGaussian() {
+        if (this.haveNextNextGaussian) {
+            this.haveNextNextGaussian = false;
+            return this.nextNextGaussian;
+        }
+        double v1 = 0.0d;
+        double v2 = 0.0d;
+        double s = 0.0d;
+        boolean sirve = false;
+        while (!sirve) {
+            v1 = 2 * nextDouble() - 1;
+            v2 = 2 * nextDouble() - 1;
+            s = v1 * v1 + v2 * v2;
+            sirve = s < 1 && s != 0;
+        }
+        double multiplier = StrictMath.sqrt(-2 * StrictMath.log(s) / s);
+        this.nextNextGaussian = v2 * multiplier;
+        this.haveNextNextGaussian = true;
+        return v1 * multiplier;
+    }
+
     public void nextBytes(byte[] bytes) {
         int i = 0;
         while (i < bytes.length) {
@@ -96,5 +183,55 @@ public class Random implements RandomGenerator {
                 i++;
             }
         }
+    }
+}
+
+// El `Random` que devuelve `Random.from`: reenvia todo al generador de atras.
+//
+// Extiende `Random` --y no lo envuelve-- porque el punto es pasarselo a codigo que pide un `Random`
+// por tipo. La semilla heredada queda sin usar: todos los metodos que la leerian estan
+// sobreescritos.
+final class RandomAdapter extends Random {
+
+    private final java.util.random.RandomGenerator atras;
+
+    RandomAdapter(java.util.random.RandomGenerator atras) {
+        // El constructor sin semilla: el de arriba llamaria al `setSeed` de aca abajo, que se niega.
+        super(null);
+        this.atras = atras;
+    }
+
+    // La semilla vive en el generador de atras, y este objeto no tiene como cambiarla. Negarse es
+    // lo unico honesto: aceptar y no hacer nada seria peor.
+    public synchronized void setSeed(long seed) {
+        throw new UnsupportedOperationException();
+    }
+
+    public long nextLong() {
+        return this.atras.nextLong();
+    }
+
+    public int nextInt() {
+        return this.atras.nextInt();
+    }
+
+    public int nextInt(int bound) {
+        return this.atras.nextInt(bound);
+    }
+
+    public boolean nextBoolean() {
+        return this.atras.nextBoolean();
+    }
+
+    public double nextDouble() {
+        return this.atras.nextDouble();
+    }
+
+    public float nextFloat() {
+        return this.atras.nextFloat();
+    }
+
+    public void nextBytes(byte[] bytes) {
+        this.atras.nextBytes(bytes);
     }
 }

@@ -1,5 +1,11 @@
 package java.util.random;
 
+// Same-package imports work around the frozen javac's finder (finding #4).
+import java.util.stream.DoubleStream;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+import java.util.stream.Stream;
+
 /**
  * An object that generates a stream of pseudorandom values.
  *
@@ -263,5 +269,297 @@ public interface RandomGenerator {
                 k = k + 1;
             }
         }
+    }
+
+    // ---- los flujos de valores ------------------------------------------------------------------
+    //
+    // Doce fabricas que son la misma idea cuatro veces por tipo: con o sin cantidad, con o sin
+    // rango. Estan aca --y no en cada generador-- porque no dependen de nada mas que de `nextInt`,
+    // `nextLong` y `nextDouble`, que es justamente lo que cada implementacion aporta.
+    //
+    // **Divergencia deliberada, y es la unica**: las formas **sin cantidad** (`ints()`, `longs()`,
+    // `doubles()`) se niegan en vez de devolver un flujo infinito.
+    //
+    // El JDK las define como "efectivamente ilimitadas", y eso pide un flujo **perezoso**: los
+    // valores se generan a medida que alguien los pide, y `limit(n)` corta antes de generar el
+    // resto. Los flujos de esta biblioteca estan respaldados por un arreglo y son **ansiosos** --
+    // se materializan enteros al crearse --, asi que un flujo infinito no se puede representar.
+    //
+    // De las dos salidas posibles se elige la ruidosa. Devolver un prefijo largo y fingir que es
+    // infinito andaria para `ints().limit(10)` y daria **menos** valores de los pedidos para
+    // `ints().limit(un_millon)`, en silencio. Un metodo que se niega y dice con que reemplazarlo es
+    // peor de usar y mejor de confiar.
+    private static UnsupportedOperationException sinTamano(String cual) {
+        return new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use " + cual + "(streamSize)");
+    }
+
+    /**
+     * `streamSize` enteros pseudoaleatorios.
+     *
+     * @throws IllegalArgumentException si `streamSize` es negativo
+     */
+    default IntStream ints(long streamSize) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        int[] a = new int[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.nextInt();
+            i = i + 1;
+        }
+        return IntStream.of(a);
+    }
+
+    // `streamSize` enteros en `[origin, bound)`.
+    default IntStream ints(long streamSize, int randomNumberOrigin, int randomNumberBound) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        int[] a = new int[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.nextInt(randomNumberOrigin, randomNumberBound);
+            i = i + 1;
+        }
+        return IntStream.of(a);
+    }
+
+    default IntStream ints() {
+        throw sinTamano("ints");
+    }
+
+    default IntStream ints(int randomNumberOrigin, int randomNumberBound) {
+        throw sinTamano("ints");
+    }
+
+    default LongStream longs(long streamSize) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        long[] a = new long[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.nextLong();
+            i = i + 1;
+        }
+        return LongStream.of(a);
+    }
+
+    default LongStream longs(long streamSize, long randomNumberOrigin, long randomNumberBound) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        long[] a = new long[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.nextLong(randomNumberOrigin, randomNumberBound);
+            i = i + 1;
+        }
+        return LongStream.of(a);
+    }
+
+    default LongStream longs() {
+        throw sinTamano("longs");
+    }
+
+    // Ojo con esta: **no** es la de la cantidad. `longs(long, long)` son origen y limite; la de una
+    // sola cantidad es `longs(long)`. La colision de firmas es del JDK y se replica tal cual.
+    default LongStream longs(long randomNumberOrigin, long randomNumberBound) {
+        throw sinTamano("longs");
+    }
+
+    default DoubleStream doubles(long streamSize) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        double[] a = new double[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.nextDouble();
+            i = i + 1;
+        }
+        return DoubleStream.of(a);
+    }
+
+    default DoubleStream doubles(long streamSize, double randomNumberOrigin,
+            double randomNumberBound) {
+        if (streamSize < 0) {
+            throw new IllegalArgumentException("streamSize must be non-negative");
+        }
+        double[] a = new double[(int) streamSize];
+        int i = 0;
+        while (i < a.length) {
+            a[i] = this.nextDouble(randomNumberOrigin, randomNumberBound);
+            i = i + 1;
+        }
+        return DoubleStream.of(a);
+    }
+
+    default DoubleStream doubles() {
+        throw sinTamano("doubles");
+    }
+
+    default DoubleStream doubles(double randomNumberOrigin, double randomNumberBound) {
+        throw sinTamano("doubles");
+    }
+
+    /**
+     * Un generador que sabe **partirse**: dar otro generador independiente del primero.
+     *
+     * <p>Existe por un problema muy concreto del paralelismo. Compartir un generador entre hilos
+     * exige sincronizarlo, y eso lo vuelve el cuello de botella; darle a cada hilo su propia semilla
+     * "al azar" no garantiza nada -- dos semillas cercanas pueden dar secuencias solapadas. Partir
+     * resuelve las dos cosas: cada hilo se lleva un generador propio, sin candado, y con la garantia
+     * de que las secuencias no se pisan.
+     *
+     * <p>Las formas con `source` toman la entropia de **otro** generador en vez de la propia, que es
+     * lo que permite reproducir una particion entera desde una sola semilla.
+     */
+    interface SplittableGenerator extends RandomGenerator {
+
+        SplittableGenerator split();
+
+        SplittableGenerator split(SplittableGenerator source);
+
+        Stream<SplittableGenerator> splits(long streamSize);
+
+        Stream<SplittableGenerator> splits(long streamSize, SplittableGenerator source);
+
+        // Las dos sin cantidad se niegan, por la misma razon que `ints()`/`longs()`/`doubles()`:
+        // los flujos de esta biblioteca son ansiosos y no pueden ser infinitos.
+        default Stream<SplittableGenerator> splits() {
+            throw new UnsupportedOperationException(
+                    "los flujos de esta biblioteca son ansiosos: use splits(streamSize)");
+        }
+
+        default Stream<SplittableGenerator> splits(SplittableGenerator source) {
+            throw new UnsupportedOperationException(
+                    "los flujos de esta biblioteca son ansiosos: use splits(streamSize, source)");
+        }
+    }
+
+    // ---- los estaticos de fabrica ---------------------------------------------------------------
+
+    /**
+     * Un generador del algoritmo que se nombra.
+     *
+     * <p>Los nombres son los doce de `RandomGeneratorFactory.names()`. Uno que no este ahi es un
+     * `IllegalArgumentException`, no un generador por defecto silencioso: pedir `"Xoshiro256"` y
+     * recibir otra cosa seria el peor resultado posible, porque el codigo seguiria andando con
+     * propiedades estadisticas que no son las que pidio.
+     *
+     * @throws IllegalArgumentException si no hay implementacion de ese algoritmo
+     */
+    static RandomGenerator of(String name) {
+        return RandomGeneratorFactory.of(name).create();
+    }
+
+    /**
+     * El generador por defecto.
+     *
+     * <p>Delega en `RandomGeneratorFactory.getDefault()`, y esa delegacion es el punto: si los dos
+     * eligieran por su cuenta podrian dejar de coincidir, y "el algoritmo por defecto" pasaria a
+     * depender de por cual de las dos puertas se entro.
+     */
+    static RandomGenerator getDefault() {
+        return RandomGeneratorFactory.getDefault().create();
+    }
+
+    // ---- las distribuciones ----------------------------------------------------------------------
+
+    /**
+     * Si el algoritmo esta **desaconsejado**.
+     *
+     * <p>`false` acá, y lo sobreescribe el que lo este. Hoy no lo esta **ninguno** de los doce, y se
+     * verifico contra el JDK 25 en vez de darlo por sentado: `java.util.Random` es el candidato
+     * obvio --su LCG de 48 bits sobrevive solo por compatibilidad, porque su secuencia es parte del
+     * contrato y mejorarla romperia a todo el que dependa de ella-- y sin embargo `java` real
+     * tambien devuelve `false` para el. Coincide con lo que dice `RandomGeneratorFactory`.
+     */
+    default boolean isDeprecated() {
+        return false;
+    }
+
+    /**
+     * Un valor de una normal de media 0 y desvio 1.
+     *
+     * <p>Es el metodo polar de Marsaglia: se tiran puntos uniformes en el cuadrado
+     * {@code [-1,1]x[-1,1]} hasta que uno caiga dentro del circulo unitario, y el factor
+     * {@code sqrt(-2*log(s)/s)} lo convierte en una normal.
+     *
+     * <p><b>El valor no es parte del contrato, y la distincion importa.</b> `java.util.Random`
+     * **sobreescribe** este metodo y ahi el valor **si** lo es --su javadoc nombra el algoritmo, asi
+     * que dos `Random` con la misma semilla tienen que dar los mismos gaussianos--. Este default no
+     * nombra ninguno: lo unico que promete es la distribucion. Por eso no se copio la version del
+     * JDK (un ziggurat con tablas de 256 entradas): daria otros numeros y ninguno de los dos estaria
+     * mal.
+     *
+     * <p>A diferencia del de `Random`, este **no guarda** el segundo valor del par: se descarta uno
+     * de cada dos. Guardarlo pediria estado, y una interfaz no tiene donde ponerlo.
+     */
+    default double nextGaussian() {
+        double v1 = 0.0d;
+        double s = 0.0d;
+        boolean sirve = false;
+        while (!sirve) {
+            v1 = 2 * this.nextDouble() - 1;
+            double v2 = 2 * this.nextDouble() - 1;
+            s = v1 * v1 + v2 * v2;
+            // `s == 0` se descarta junto con los de afuera del circulo: no solo dividiria por cero,
+            // sino que `log(0)` es -infinito.
+            sirve = s < 1 && s != 0;
+        }
+        return v1 * StrictMath.sqrt(-2 * StrictMath.log(s) / s);
+    }
+
+    /**
+     * Un valor de una normal con la media y el desvio dados.
+     *
+     * @throws IllegalArgumentException si `stddev` es negativo
+     */
+    default double nextGaussian(double mean, double stddev) {
+        // `stddev < 0`, la forma directa, y **no** una negada que atrape tambien al `NaN`.
+        //
+        // La version negada (`!(stddev >= 0)`) parece mejor y esta mal: el contrato dice "si stddev
+        // es negativo", y `NaN` no es negativo. Se verifico contra `java` real, que devuelve `NaN`
+        // en vez de tirar. Un `-0.0` tampoco tira, y tambien coincide: `-0.0 < 0` es false.
+        if (stddev < 0.0d) {
+            throw new IllegalArgumentException("stddev must be non-negative");
+        }
+        return mean + stddev * this.nextGaussian();
+    }
+
+    /**
+     * Un valor de una exponencial de media 1.
+     *
+     * <p>Por transformada inversa: si {@code u} es uniforme en {@code (0,1]}, entonces
+     * {@code -log(u)} es exponencial de media 1. Se usa {@code 1 - nextDouble()} y no
+     * {@code nextDouble()} a secas justamente para que el cero quede afuera --`nextDouble()` es
+     * {@code [0,1)}, y `log(0)` daria infinito--.
+     *
+     * <p>Como el de arriba, el valor no es parte del contrato: solo la distribucion. El JDK usa un
+     * ziggurat, que es mas rapido y da otros numeros.
+     */
+    default double nextExponential() {
+        return -StrictMath.log(1.0d - this.nextDouble());
+    }
+
+    /**
+     * Un flujo de doubles equidistribuidos en el rango dado.
+     *
+     * <p>**Se niega**, por lo mismo que `ints()`/`longs()`/`doubles()`: el JDK lo define sin limite
+     * de cantidad, y los flujos de esta biblioteca son ansiosos. Ver la nota larga de `sinTamano`.
+     *
+     * <p>Y acá no hay siquiera un reemplazo con tamaño que ofrecer --`equiDoubles` no tiene una
+     * sobrecarga con `streamSize`--, asi que el mensaje manda a `doubles(streamSize, origin, bound)`,
+     * que es lo mas cerca que se puede estar.
+     */
+    default DoubleStream equiDoubles(double origin, double bound, boolean isOriginInclusive,
+            boolean isBoundInclusive) {
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos y `equiDoubles` no tiene una sobrecarga"
+                        + " con tamano: use doubles(streamSize, origin, bound)");
     }
 }

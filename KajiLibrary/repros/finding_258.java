@@ -1,39 +1,37 @@
 /**
- * An ARRAY is not accepted where a parameter is declared {@code Object}. Depending on where the
- * method is declared the compiler either refuses it or drops the call in silence.
+ * Repro de #258 - un ARRAY no se aceptaba donde el parametro esta declarado {@code Object}.
  *
  *   bin/javac.exe --emit -cp KajiLibrary KajiLibrary/repros/finding_258.java
- *   bin/run-headless.exe KajiLibrary/repros/finding_258.class copiaNativa
+ *   bin/run-headless.exe KajiLibrary/repros/finding_258.class copiaNativa   -> 9
  *
- * Two faces, one cause:
+ * ANTES tenia dos caras, y el lugar donde estuviera declarado el metodo decidia cual:
  *
- *   arrayComoObject   -- the method is in THIS file, so the call is an ERROR:
- *                        `no se encontro un metodo `take(int[], int[])` aplicable`
- *   copiaNativa       -- System.arraycopy is on the classpath, so the call is DROPPED:
- *                        the arguments are pushed, one `pop` follows, and the invokestatic
- *                        is simply not there. Returns 0 instead of 9, with no diagnostic.
+ *   arrayComoObject   el metodo esta en ESTE archivo, asi que la llamada era un ERROR:
+ *                     `no se encontro un metodo `take(int[], int[])` aplicable`
+ *   copiaNativa       `System.arraycopy` viene del classpath, asi que la llamada se DESCARTABA:
+ *                     se empujaban los argumentos, seguia un `pop`, y el invokestatic no estaba.
+ *                     Devolvia 0 en vez de 9, sin un solo diagnostico.
  *
- * Emitted for `copiaNativa`:
+ * Lo que emitia para `copiaNativa`:
  *
  *     15: aload_1      // dst
  *     16: iconst_0     // dstPos
  *     17: iconst_3     // length
- *     18: pop          <- and that is the whole call
+ *     18: pop          &lt;- y esa era toda la llamada
  *     19: aload_1
  *
- * Every control passes, which is what places the defect on the array-to-Object conversion and
- * nowhere else:
+ * La cara muda era la peligrosa: once fuentes de la biblioteca se compilaban rotas sin decir nada.
  *
- *   propioMismaAridad   a static void of this class, five arguments, arrays typed as arrays -> 9
- *   nativoConRetorno    System.identityHashCode: native, another class, returns int          -> 1
- *   nativoVoidSinArgs   System.gc: native, another class, void, no arguments                 -> 1
- *   ajenoNoNativo       a non-native static void of another class in this file               -> 5
- *   objetoComoObject    the same Object-typed helper called with real Objects                -> 7
+ * AHORA: **compila y `copiaNativa` devuelve 9**. `#258` figura cerrado en COMPILER_FINDINGS.md, y
+ * con una aclaracion que vale la pena: era **el mismo bug que #261**, encontrado en paralelo por
+ * dos caminos. La conversion de un array a `Object` por ampliacion de referencia no estaba.
  *
- * BLAST RADIUS: `System.arraycopy` is exactly this shape (`Object src, int, Object dest, int,
- * int`), so all 31 of its call sites across 12 KajiLibrary files silently do nothing --
- * `ArrayList`, `StringBuilder`, `StringBuffer` and eight `java.io` classes among them. They
- * work only for as long as they never have to copy.
+ * `arrayComoObject` sigue COMENTADO en el archivo: se dejo asi cuando era un error duro.
+ * Descomentarlo es la otra mitad de la regresion.
+ *
+ * Los controles siguen porque son los que ubicaban el defecto en la conversion array-a-Object y
+ * en ningun otro lado: `objetoComoObject`, `propioMismaAridad`, `nativoConRetorno` y
+ * `nativoVoidSinArgs` siempre pasaron.
  */
 public class finding_258 {
 

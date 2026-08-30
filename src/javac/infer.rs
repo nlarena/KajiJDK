@@ -74,11 +74,25 @@ struct BoundSet {
     upper: Vec<(u32, RType)>,
     /// `α = T` — igualdades (las que produce el containment de un argumento concreto).
     eq: Vec<(u32, RType)>,
+    /// Una restricción que se redujo a **false** de entrada, sin pasar por las cotas.
+    ///
+    /// No todo lo insatisfacible aparece como dos cotas que se contradicen: `int[] → α[]` es falso
+    /// por lo que **es**, no por lo que implica. Marcarlo acá es la forma de que
+    /// [`BoundSet::hard_false`] lo vea (finding #290).
+    falso: bool,
 }
 
 impl BoundSet {
     fn new(vars: Vec<u32>, origin: HashMap<u32, SymbolId>, fresh: Subst) -> Self {
-        BoundSet { vars, origin, fresh, lower: Vec::new(), upper: Vec::new(), eq: Vec::new() }
+        BoundSet {
+            vars,
+            origin,
+            fresh,
+            lower: Vec::new(),
+            upper: Vec::new(),
+            eq: Vec::new(),
+            falso: false,
+        }
     }
 
     fn is_var(&self, id: u32) -> bool {
@@ -113,9 +127,26 @@ impl BoundSet {
             RType::InferVar(v) if self.is_var(*v) => {
                 self.lower.push((*v, types::boxed(table, s)));
             }
-            // ‹S[] → α[]› ⇒ ‹S → α›.
+            // ‹S[] → α[]› ⇒ ‹S → α›, **pero solo si `S` es un tipo referencia**.
+            //
+            // Con `S` primitivo la restricción es **falsa**, y hay que decirlo acá: si se dejara
+            // recursar, el caso ‹S → α› de arriba **boxea**, y de `int[] → α[]` saldría
+            // `T = Integer`. Eso está bien para un argumento suelto —`id(1)` sí da `T = Integer`—
+            // y está mal dentro de un arreglo: `int[]` no es `Integer[]` ni ningún `T[]`, porque
+            // una variable de tipo solo liga tipos referencia (§4.5.1).
+            //
+            // Lo que producía: `Arrays.copyOf(int[], int)` resolvía al genérico `<T> T[]
+            // copyOf(T[], int)` en vez de al de `int[]`, emitía la llamada a la sobrecarga de
+            // `Object[]` y le ponía un `checkcast [Ljava/lang/Integer;` encima. Compilaba, y
+            // reventaba en el primer `aastore` sobre lo que en realidad era un `int[]`
+            // (finding #290).
             RType::Array(te) => {
                 if let RType::Array(se) = s {
+                    let destino_es_var = matches!(**te, RType::InferVar(v) if self.is_var(v));
+                    if destino_es_var && matches!(**se, RType::Prim(_)) {
+                        self.falso = true;
+                        return;
+                    }
                     self.reduce(table, se, te);
                 }
             }
@@ -531,6 +562,10 @@ impl BoundSet {
     /// A diferencia de [`satisfiable`](Self::satisfiable), **no** mira la cota declarada (eso lo reporta
     /// el sitio de la llamada, no la aplicabilidad) ni el *target* (§18.5.1 usa solo los argumentos).
     fn hard_false(&self, table: &SymbolTable) -> bool {
+        // Una restricción que ya se redujo a false no necesita que las cotas se contradigan.
+        if self.falso {
+            return true;
+        }
         let proper = |t: &RType| !mentions(t, &self.vars);
         for (i, (v, a)) in self.eq.iter().enumerate() {
             for (w, b) in self.eq.iter().skip(i + 1) {

@@ -17,6 +17,8 @@ import java.util.function.IntToDoubleFunction;
 import java.util.function.ObjIntConsumer;
 import java.util.function.Supplier;
 import java.util.function.BiConsumer;
+import java.util.Spliterator;
+import java.util.Spliterators;
 
 // KajiLibrary's java.util.stream.IntStream — a sequence of primitive ints supporting a
 // functional pipeline: intermediate ops (filter/map) return a new IntStream, terminal ops
@@ -677,6 +679,18 @@ final class IntStreamImpl implements IntStream {
         }
         this.closeHandlers.clear();
     }
+
+    /**
+     * A spliterator over this stream's elements.
+     *
+     * <p>Directly over the backing int[], which is a private snapshot: the split is a pure
+     * index range, with no copying and no iterator in between. ORDERED because a stream has an
+     * encounter order; SIZED and SUBSIZED come from the array-backed spliterator itself.
+     */
+    public Spliterator<Integer> spliterator() {
+        return Spliterators.spliterator(this.data, 0, this.size, Spliterator.ORDERED);
+    }
+
 }
 
 // The Iterator handed out by IntStreamImpl.iterator(): boxes each int on demand.

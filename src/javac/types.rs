@@ -48,7 +48,10 @@ pub fn erasure(table: &SymbolTable, ty: &RType) -> RType {
             Some(obj) => RType::Class(obj),
             None => RType::Unresolved,
         },
-        RType::Prim(_) | RType::Void | RType::Class(_) | RType::Unresolved => ty.clone(),
+        // El tipo nulo no tiene genericos que borrar: ya es su propia erasure.
+        RType::Prim(_) | RType::Void | RType::Class(_) | RType::Null | RType::Unresolved => {
+            ty.clone()
+        }
     }
 }
 
@@ -82,6 +85,7 @@ pub fn substitute(ty: &RType, subst: &Subst) -> RType {
         | RType::Class(_)
         | RType::Capture { .. }
         | RType::InferVar(_)
+        | RType::Null
         | RType::Unresolved => ty.clone(),
     }
 }

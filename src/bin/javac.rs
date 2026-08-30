@@ -223,13 +223,21 @@ fn emit_all(inputs: &[&String], extra_classpath: &[std::path::PathBuf], lint_set
                 }
             }
         }
-        // El error trae línea y columna pero no de qué archivo: se renderiza contra el primero que
-        // lo contenga. Con un solo archivo —el caso normal— es exacto.
+        // El error dice de **qué unidad** salió, así que se renderiza contra la suya. Antes se
+        // adivinaba —el primer archivo con suficientes líneas— y con varios archivos el diagnóstico
+        // señalaba uno sano, citando una línea que no tenía nada que ver.
+        //
+        // El respaldo sigue ahí para un error sin marca, pero ahora es el caso raro y no el normal.
         Err(err) => {
-            let (input, source) = inputs
-                .iter()
-                .zip(&sources)
-                .find(|(_, s)| err.line as usize <= s.lines().count())
+            let (input, source) = err
+                .unit
+                .and_then(|i| Some((inputs.get(i)?, sources.get(i)?)))
+                .or_else(|| {
+                    inputs
+                        .iter()
+                        .zip(&sources)
+                        .find(|(_, s)| err.line as usize <= s.lines().count())
+                })
                 .unwrap_or((&inputs[0], &sources[0]));
             fail(input, source, err)
         }

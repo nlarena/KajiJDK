@@ -1,25 +1,27 @@
+// Repro de #256 - el atributo `Exceptions` se ESCRIBIA pero no se LEIA de vuelta.
+//
+//   bin\javac.exe --emit -cp KajiLibrary KajiLibrary\repros\finding_256.java
+//
+// ANTES: un override que declaraba la misma excepcion chequeada que el metodo que implementa era
+// rechazado cuando ese metodo venia de un archivo de clase del CLASSPATH:
+//
+//   error: `call` declara lanzar `Exception`, mas ancho que lo que permite `Callable` (8.4.8.3)
+//
+// `java.util.concurrent.Callable.call()` esta declarado `throws Exception` en la fuente Y en el
+// class file emitido —`bin\jvm.exe -v` sobre `Callable.class` imprime el atributo, byte por byte
+// igual que el JDK—, pero el chequeador veia una clausula `throws` vacia en el metodo heredado.
+//
+// `Local`/`Mine` son el control: la misma forma con la interfaz en ESTE archivo siempre compilo,
+// lo que ubicaba la perdida al cruzar el borde del class file y no al escribirlo.
+//
+// AHORA: **compila entero**. `#104`/`#256` figuran cerrados en COMPILER_FINDINGS.md — el atributo
+// ya se lee. Queda como REGRESION: cubre las dos mitades a la vez, la del classpath y la local.
 import java.util.concurrent.Callable;
 
 /**
- * The `Exceptions` attribute is WRITTEN but not READ BACK: an override that declares the same
- * checked exception as the method it implements is rejected when that method comes from a class
- * file on the classpath.
- *
- *   bin/javac.exe --emit -cp KajiLibrary KajiLibrary/repros/finding_256.java
- *
- * Expected: compiles. `java.util.concurrent.Callable.call()` is declared `throws Exception`, in
- * the source AND in the emitted class file -- `bin/jvm.exe -v` on `Callable.class` prints the
- * attribute, byte for byte what the JDK prints.
- *
- * Actual: `error: `call` declara lanzar `Exception`, mas ancho que lo que permite `Callable`
- * (§8.4.8.3)` -- the checker sees an empty throws clause on the inherited method.
- *
- * `Local`/`Mine` are the control: the same shape with the interface in THIS file compiles, so the
- * attribute is lost crossing the class-file boundary, not when it is written.
- *
- * Blast radius: no cross-file implementation of any throwing interface method can be written.
- * `Callable` is the one that matters most -- it is how every task in java.util.concurrent is
- * expressed.
+ * El control del repro. `Local`/`Mine` reproducen la misma forma con la interfaz en ESTE archivo:
+ * siempre compilaron, y por eso ubicaban la perdida del atributo al cruzar el borde del class
+ * file y no al escribirlo. Se conservan porque una regresion podria romper una mitad sola.
  */
 public class finding_256 implements Callable<String> {
 

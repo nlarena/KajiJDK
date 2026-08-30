@@ -1,24 +1,26 @@
 package repro22;
 
-// Finding #22 — method resolution on `this` (explicit OR implicit receiver) only consults the
-// methods DECLARED in the class itself; it ignores every INHERITED method, whether inherited from
-// the superclass (java.lang.Object) or from an implemented interface. The JDK resolves all of these.
+// Repro de #22 - la resolucion de metodos sobre `this` ignoraba TODO lo heredado.
 //
-// Verified with the bootstrap Object (with getClass/hashCode/toString) on the classpath:
-//   this.getClass()                       -> error: no se encuentra el método: getClass
-//   this.hashCode()  (inherited)          -> error: no se encuentra el método: hashCode
-//   this.hashCode()  (own override)       -> OK
-//   this.toString()  (inherited)          -> error: no se encuentra el método: toString
-//   getClass()       (implicit receiver)  -> error: no se encuentra el método: getClass
-//   this.id()        (interface method)   -> error: no se encuentra el método: id
-//   other.id()       (interface-typed var)-> OK
-// The JDK compiles every one of these.
+//   bin\javac.exe --emit -cp KajiLibrary KajiLibrary\repros\finding_22.java
 //
-// So `this`-receiver resolution walks only the class's own declarations, not the superclass chain or
-// the implemented-interface methods. Workaround: rebind `this` to a supertype variable and call
-// through it (I self = this; self.id()  /  Object o = this; o.hashCode()), or use `super.m()` for
-// superclass methods.
-
+// ANTES: la resolucion sobre `this` (receptor explicito o implicito) solo miraba los metodos
+// DECLARADOS en la propia clase. Fallaban todos estos, que el JDK compila:
+//
+//   this.getClass()                       error: no se encuentra el metodo: getClass
+//   this.hashCode()   (heredado)          error: no se encuentra el metodo: hashCode
+//   this.toString()   (heredado)          error: no se encuentra el metodo: toString
+//   getClass()        (receptor implicito) error: no se encuentra el metodo: getClass
+//   this.id()         (de interfaz)       error: no se encuentra el metodo: id
+//
+// Y andaban solo los dos que no dependian de la herencia: `this.hashCode()` con override propio,
+// y `other.id()` a traves de una variable tipada por la interfaz.
+//
+// AHORA: **compila entero**. `#22` figura arreglado en COMPILER_FINDINGS.md, y de paso se
+// quitaron los rodeos que habia dejado en `AbstractChronology`.
+//
+// Queda como REGRESION: si la resolucion vuelve a mirar solo las declaraciones propias, este
+// archivo deja de compilar y lo dice en la primera linea.
 interface I {
     String id();
 }
@@ -26,17 +28,17 @@ interface I {
 class C {
     // A concrete class: inherited Object methods on `this` also fail to resolve.
     int inheritedObjectMethod() {
-        return this.getClass().hashCode();   // FAILS: getClass()/hashCode() inherited from Object
+        return this.getClass().hashCode();   // heredados de Object: fallaban con #22, hoy resuelven
     }
     int ownOverride() {
-        return this.hashCode();              // FAILS unless hashCode() is declared here
+        return this.hashCode();              // heredado: fallaba salvo que se declarara aca
     }
     public int hashCode() { return 1; }      // with this present, this.hashCode() above would resolve
 }
 
 abstract class A implements I {
     String viaThis() {
-        return this.id();                    // FAILS: id() inherited from implemented interface I
+        return this.id();                    // heredado de la interfaz I: fallaba con #22
     }
     String viaParam(I other) {
         return other.id();                   // OK: same method on a variable of the interface type

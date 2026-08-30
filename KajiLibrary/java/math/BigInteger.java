@@ -66,8 +66,19 @@ public final class BigInteger extends Number {
         return new BigInteger(sign, m);
     }
 
-    // Decimal only, with an optional leading sign — the radix constructors are omitted.
+    // Base diez, con signo opcional. Es `BigInteger(val, 10)`.
     public BigInteger(String val) {
+        this(val, 10);
+    }
+
+    /**
+     * El entero escrito en la base dada, con signo opcional.
+     *
+     * <p>Faltaba, y con el faltaba tambien `Scanner.nextBigInteger(radix)`, que es su unico usuario
+     * evidente. El cuerpo es el mismo Horner de siempre --`acc = acc * base + digito`-- con la base
+     * como parametro en vez de fija en diez: la version decimal ahora delega aca.
+     */
+    public BigInteger(String val, int radix) {
         int start = 0;
         int sign = 1;
         if (val.length() == 0) {
@@ -83,15 +94,18 @@ public final class BigInteger extends Number {
         if (start >= val.length()) {
             throw new NumberFormatException("Zero length BigInteger");
         }
-        // Horner in base 10 over the magnitude: acc = acc*10 + digit.
+        if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX) {
+            throw new NumberFormatException("Radix out of range");
+        }
+        // Horner sobre la magnitud: acc = acc * radix + digito.
         int[] acc = new int[0];
         int i = start;
         while (i < val.length()) {
-            char c = val.charAt(i);
-            if (c < '0' || c > '9') {
+            int d = Character.digit(val.charAt(i), radix);
+            if (d < 0) {
                 throw new NumberFormatException("Illegal digit");
             }
-            acc = BigInteger.mulAddSmall(acc, 10, c - '0');
+            acc = BigInteger.mulAddSmall(acc, radix, d);
             i = i + 1;
         }
         acc = BigInteger.strip(acc);

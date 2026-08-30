@@ -103,20 +103,38 @@ fn load_externals(table: &mut SymbolTable, finder: &ClassFinder, unit: &Compilat
         // `RuntimeVisible[Parameter]Annotations` — un tipo que la reflexión no encuentra.
         collect_annotation_names(class, &mut names);
     }
-    // Los tipos **core** de `java.lang` se cargan siempre, aunque ninguna firma los nombre: el
-    // fuente los usa igual sin declararlos (un literal `"x"` es un `String`, `id(1)` boxea a
-    // `Integer`), y sin su jerarquía real quedarían **opacos** — o sea, indulgentes: `Integer n =
-    // "hola";` no daría error. `collect_type_names` solo mira firmas, no cuerpos, así que no
-    // alcanza.
-    for name in JAVA_LANG {
-        names.insert((*name).to_string());
-    }
-    // **Fase 1**: los tipos que la unidad **nombra**. Ganan la clave del espacio de externos (que es
-    // plano, por nombre simple), que es lo que corresponde: si el archivo escribe `TemporalField`, el
-    // que vale es el de su paquete o su import, no uno homónimo traído de rebote.
+    // **Fase 1a**: los tipos que la unidad **nombra**. Ganan la clave del espacio de externos (que
+    // es plano, por nombre simple), que es lo que corresponde: si el archivo escribe
+    // `TemporalField`, el que vale es el de su paquete o su import, no uno homónimo traído de
+    // rebote.
+    //
+    // Van **ordenados** y **antes** que los core de `java.lang`, y las dos cosas importan (#299).
+    //
+    // Antes se metía todo en el mismo `HashSet` y se iteraba en su orden —o sea, en ninguno—. El
+    // problema es que cargar un externo arrastra sus supertipos, y `java.lang.Class` implementa
+    // `java.lang.reflect.Type`: si `Class` salía del set antes que el nombre `Type` que el archivo
+    // escribió, el `Type` de `java.lang.reflect` se quedaba con la clave simple y el del paquete
+    // propio no la recuperaba nunca. `jakarta.persistence.metamodel.MapAttribute.getKeyType()`
+    // salía declarando `java.lang.reflect.Type` —tipo equivocado, en la firma emitida— y el
+    // resultado cambiaba de una corrida a otra, que es lo que lo hacía desconcertante.
+    //
+    // El orden alfabético no tiene ningún significado: lo único que se le pide es ser **el mismo
+    // siempre**, para que el resultado no dependa del hash.
     let mut pending: Vec<String> = Vec::new();
-    for name in names {
-        try_load(table, finder, &name, imports, unit.package.as_deref(), &mut pending);
+    let mut propios: Vec<String> = names.iter().cloned().collect();
+    propios.sort();
+    for name in &propios {
+        try_load(table, finder, name, imports, unit.package.as_deref(), &mut pending);
+    }
+    // **Fase 1b**: los tipos **core** de `java.lang`, que se cargan siempre aunque ninguna firma los
+    // nombre: el fuente los usa igual sin declararlos (un literal `"x"` es un `String`, `id(1)`
+    // boxea a `Integer`), y sin su jerarquía real quedarían **opacos** — o sea, indulgentes:
+    // `Integer n = "hola";` no daría error. `collect_type_names` solo mira firmas, no cuerpos, así
+    // que no alcanza.
+    //
+    // Después de los propios, a propósito: lo que el archivo escribe tiene precedencia (§6.5.5.1).
+    for name in JAVA_LANG {
+        try_load(table, finder, name, imports, unit.package.as_deref(), &mut pending);
     }
     // **Fase 2** (finding #251): los tipos que aparecen en las **firmas** de los externos ya
     // cargados — el retorno de un método del classpath, sin ir más lejos. Sin esto, encadenar sobre
@@ -545,15 +563,25 @@ fn try_load(
     pending: &mut Vec<String>,
 ) {
     let simple = name.rsplit('.').next().unwrap_or(name);
-    if table.class(name).is_some() || table.external(simple).is_some() {
+    if table.class(name).is_some() {
         return;
     }
+    // Quién tiene hoy la clave simple. Antes bastaba con que estuviera ocupada para salir; ahora
+    // hay que mirar **quién** la ocupa, porque puede habérsela llevado un homónimo que la unidad
+    // nunca nombró (#299). Ver el bloque de abajo que la reclama.
+    let ocupante = table.external(simple);
+    // Los candidatos que el JLS hace **prevalecer** sobre cualquier otro: el paquete propio y un
+    // `import` de un solo tipo (§6.5.5.1). Solo esos reclaman la clave; `java.lang`, los `import`
+    // on-demand y el nombre pelado no, porque ahí el desempate por "el primero que llegó" es tan
+    // bueno como cualquier otro y pisar sería más riesgo que beneficio.
+    let mut con_precedencia: Vec<String> = Vec::new();
     let mut candidates: Vec<String> = Vec::new();
     if name.contains('.') {
         candidates.extend(internal_candidates(name));
     } else {
         candidates.push(format!("java/lang/{name}"));
         if let Some(fqn) = imports.single.get(name) {
+            con_precedencia.extend(internal_candidates(fqn));
             candidates.extend(internal_candidates(fqn));
         }
         // `import p.Outer.*;` — el prefijo puede ser un **paquete** (`p/Outer/Nombre`) o una
@@ -565,6 +593,7 @@ fn try_load(
         // nombre simple, sin `import` (finding #4). P. ej. `List` desde `package java.util` → busca
         // `java/util/List`. Antes solo se probaba `java/lang/List`, y quedaba sin resolver.
         if let Some(p) = pkg {
+            con_precedencia.push(format!("{}/{name}", p.replace('.', "/")));
             candidates.push(format!("{}/{name}", p.replace('.', "/")));
         }
         // Nombre **pelado**: un tipo del **paquete por defecto** en el classpath (su nombre interno
@@ -590,11 +619,27 @@ fn try_load(
     }
     for internal in candidates {
         if let Some(ext) = finder.find(&internal) {
+            // La clave ya la tiene **este mismo** tipo: no hay nada que hacer.
+            let ya_es_este = ocupante
+                .and_then(|id| table.binary_name(id))
+                .is_some_and(|b| b == ext.name);
+            if ya_es_este {
+                return;
+            }
             build_external(table, finder, &ext, pending);
-            // Si la unidad lo nombró **simple** y lo que se encontró es un tipo **anidado**, hace
-            // falta el alias: su clave natural es `Outer$Kind` y el fuente escribió `Kind` (§7.5.1).
-            if !name.contains('.') && internal.contains('$') {
-                if let Some(cid) = table.external_fqn(&ext.name) {
+            if let Some(cid) = table.external_fqn(&ext.name) {
+                // Si el candidato que ganó es de los que prevalecen —el paquete propio o un
+                // `import` de un solo tipo— se queda con la clave simple aunque estuviera ocupada.
+                // Es el arreglo de #299: sin esto, `MapAttribute.getKeyType()` declaraba el
+                // `java.lang.reflect.Type` que se coló como supertipo de `java.lang.Class` en vez
+                // del `Type` de su propio paquete.
+                if ocupante.is_none() || con_precedencia.contains(&internal) {
+                    table.override_external(simple, cid);
+                }
+                // Si la unidad lo nombró **simple** y lo que se encontró es un tipo **anidado**,
+                // hace falta el alias: su clave natural es `Outer$Kind` y el fuente escribió `Kind`
+                // (§7.5.1).
+                if !name.contains('.') && internal.contains('$') {
                     table.alias_external(name, cid);
                 }
             }
@@ -909,16 +954,20 @@ pub fn enter_cp_multi(
 
     // Enter — **todos** los símbolos de clase de **todas** las unidades primero (top-level y
     // anidados, recursivo), así cualquier nombre de tipo tiene a quién resolver.
-    for (unit, (pkg_id, pkg_scope, base)) in units.iter().zip(&pkgs) {
+    for (i, (unit, (pkg_id, pkg_scope, base))) in units.iter().zip(&pkgs).enumerate() {
+        let desde = errors.len();
         for class in &unit.types {
             enter_type(&mut table, &mut errors, class, *pkg_id, *pkg_scope, base, base, false);
         }
+        crate::javac::marcar_unidad(&mut errors, desde, i);
     }
     // MemberEnter — recién ahora los contenidos de cada clase (recursivo en las anidadas).
-    for (unit, (_, _, base)) in units.iter().zip(&pkgs) {
+    for (i, (unit, (_, _, base))) in units.iter().zip(&pkgs).enumerate() {
+        let desde = errors.len();
         for class in &unit.types {
             member_enter_type(&mut table, &mut errors, class, base);
         }
+        crate::javac::marcar_unidad(&mut errors, desde, i);
     }
     // Las clases **locales** (§14.3) no se registran acá: viven en cuerpos de método y su registro
     // pide **renombrarlas** a un nombre único (`1L`, `2L`…) para que dos homónimas en distintos
@@ -955,10 +1004,12 @@ pub fn enter_cp_multi(
     }
     // Cada unidad resuelve con **sus** imports (§7.5) y su propio paquete base.
     let mut reported = HashSet::new();
-    for ((unit, imports), (_, _, base)) in units.iter().zip(&per_unit).zip(&pkgs) {
+    for (i, ((unit, imports), (_, _, base))) in units.iter().zip(&per_unit).zip(&pkgs).enumerate() {
+        let desde = errors.len();
         for class in &unit.types {
             resolve_type_decl(&mut table, &mut errors, class, base, imports, &mut reported);
         }
+        crate::javac::marcar_unidad(&mut errors, desde, i);
     }
     // Persistir los tipos resueltos: el grafo `clase→super/interfaces` y las firmas
     // `campo/método → RType` — salida para la pasada 2.
@@ -1275,8 +1326,18 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
         // simple se queda porque los supertipos leídos de un `.class` llegan cualificados y su tipo
         // puede haberse registrado desde otra ruta.
         let simple = dotted.rsplit('.').next().unwrap_or(&dotted);
-        if let Some(id) = table
-            .class(&dotted)
+        // Un **anidado del fuente** nombrado como lo nombra un `.class`: `Outer$Inner`. El fuente
+        // lo registra con puntos en todos los niveles, así que hay que repuntear el `$` para
+        // encontrarlo — y hay que buscarlo **antes** que los externos (#294).
+        //
+        // Sin esto, compilar `ModuleElement.java` resolvía el parámetro
+        // `ModuleElement$Directive` de un constructor del classpath al `Directive` **externo**,
+        // distinto del `Directive` que ese mismo archivo declara. El diagnóstico era "Directive no
+        // se convierte a ModuleElement$Directive", que suena a otra cosa entera.
+        let anidado_fuente =
+            dotted.contains('$').then(|| table.class(&dotted.replace('$', "."))).flatten();
+        if let Some(id) = anidado_fuente
+            .or_else(|| table.class(&dotted))
             .or_else(|| table.external_fqn(&dotted))
             .or_else(|| table.external(simple))
         {
@@ -1295,6 +1356,12 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
     if let Some(id) = table.resolve_type(scope, name) {
         let is_var = matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. });
         return Some((id, is_var));
+    }
+    // El `import java.lang.*` implícito, mirando también los tipos **del fuente** de este round
+    // (§7.3). Va antes que el externo por el shadowing del #5: si esta compilación declara
+    // `java.lang.X`, ese gana sobre el `.class` homónimo del classpath.
+    if let Some(id) = table.java_lang_source(name) {
+        return Some((id, false));
     }
     table.external(name).map(|id| (id, false))
 }

@@ -1,0 +1,348 @@
+<title>Avance de java.util</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+  :root {
+    color-scheme: light;
+    --ground:        #f7f8fa;
+    --surface:       #fdfdfe;
+    --ink:           #101215;
+    --ink-2:         #565c66;
+    --ink-3:         #8b909a;
+    --rule:          #e4e6ea;
+    --track:         #e7e9ee;
+    --fill:          #2a78d6;
+    --fill-soft:     #9ec5f4;
+    --done:          #0ca30c;
+    --absent:        #b9bec7;
+    --chip:          #eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground:      #121316;
+      --surface:     #191b1f;
+      --ink:         #f3f4f6;
+      --ink-2:       #a9aeb8;
+      --ink-3:       #7e838d;
+      --rule:        #2a2d33;
+      --track:       #24272c;
+      --fill:        #3987e5;
+      --fill-soft:   #1c5cab;
+      --done:        #2fb62f;
+      --absent:      #4a4f57;
+      --chip:        #202329;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:      #121316;
+    --surface:     #191b1f;
+    --ink:         #f3f4f6;
+    --ink-2:       #a9aeb8;
+    --ink-3:       #7e838d;
+    --rule:        #2a2d33;
+    --track:       #24272c;
+    --fill:        #3987e5;
+    --fill-soft:   #1c5cab;
+    --done:        #2fb62f;
+    --absent:      #4a4f57;
+    --chip:        #202329;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ---- encabezado ---- */
+  header { display: flex; flex-direction: column; gap: 6px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .sub { margin: 0; color: var(--ink-2); max-width: 62ch; }
+
+  /* ---- resumen ---- */
+  .resumen {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .cifra { background: var(--surface); padding: 18px 20px; display: flex; flex-direction: column; gap: 2px; }
+  .cifra b {
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .cifra b .de { color: var(--ink-3); font-weight: 400; font-size: 19px; }
+  .cifra span { font-size: 13px; color: var(--ink-2); }
+
+  /* ---- secciones ---- */
+  section { display: flex; flex-direction: column; gap: 14px; }
+  h2 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+  }
+  h2 em {
+    font-style: normal;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-3);
+    letter-spacing: 0;
+  }
+  .nota { margin: -4px 0 0; font-size: 13.5px; color: var(--ink-2); max-width: 66ch; }
+
+  /* ---- barras ---- */
+  .barras { display: flex; flex-direction: column; gap: 7px; }
+  .fila {
+    display: grid;
+    grid-template-columns: 190px 1fr 74px;
+    align-items: center;
+    gap: 14px;
+  }
+  .clase {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pista {
+    height: 14px;
+    background: var(--track);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .relleno {
+    height: 100%;
+    background: var(--fill);
+    border-radius: 0 4px 4px 0;
+    min-width: 2px;
+  }
+  .relleno.cero { background: var(--absent); }
+  .cuenta {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- chips de completas ---- */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 5px;
+    background: var(--chip);
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tick { width: 6px; height: 6px; border-radius: 50%; background: var(--done); flex: none; }
+
+  /* ---- tabla ---- */
+  .tabla-envoltura { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 12px 7px 0; border-bottom: 1px solid var(--rule); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600; }
+  td.n { text-align: right; font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; padding-right: 0; }
+  td.c { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  details > summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ink-2);
+    padding: 4px 0;
+  }
+  details > summary:focus-visible { outline: 2px solid var(--fill); outline-offset: 3px; border-radius: 3px; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 16px;
+    font-size: 13px;
+    color: var(--ink-3);
+    max-width: 70ch;
+  }
+  footer code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+
+  @media (max-width: 620px) {
+    .resumen { grid-template-columns: 1fr; }
+    .fila { grid-template-columns: 130px 1fr 66px; gap: 10px; }
+    h1 { font-size: 25px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">KajiJDK &middot; biblioteca estándar</div>
+    <h1>Avance de <code style="font-family:'IBM Plex Mono',monospace;font-size:0.92em">java.util</code></h1>
+    <p class="sub">
+      Medido contra OpenJDK&nbsp;25 con clausura de herencia: cuenta lo que se puede
+      <em>llamar</em>, no lo que está declarado en cada clase. Un método heredado de una
+      superclase cuenta como presente; una redeclaración que el JDK hace solo para
+      documentar, no cuenta como hueco.
+    </p>
+  </header>
+
+  <div class="resumen">
+    <div class="cifra"><b>109<span class="de">/109</span></b><span>clases públicas</span></div>
+    <div class="cifra"><b>90<span class="de">/109</span></b><span>completas al 100&nbsp;%</span></div>
+    <div class="cifra"><b>1999<span class="de">/2097</span></b><span>miembros del contrato</span></div>
+  </div>
+
+  <section>
+    <h2>Lo que falta <em>19 clases incompletas</em></h2>
+    <p class="nota">
+      Ordenadas de más completa a menos. Ya no hay barras grises: las 109 clases
+      públicas del paquete existen.
+    </p>
+    <div class="barras" id="barras"></div>
+  </section>
+
+  <section>
+    <h2>Completas <em>90 clases al 100&nbsp;% del contrato</em></h2>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Ver los mismos datos como tabla</summary>
+      <div class="tabla-envoltura">
+        <table>
+          <thead>
+            <tr><th>Clase</th><th style="text-align:right">Tengo</th><th style="text-align:right">Contrato</th><th style="text-align:right">%</th></tr>
+          </thead>
+          <tbody id="tabla"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <footer>
+    Ya no queda ninguna clase de <code>java.util</code> sin escribir. Las tres últimas
+    —<code>Scanner</code>, <code>Timer</code> y <code>ServiceLoader</code>— entraron en la
+    misma tanda. Lo que les falta a los contratos son miembros que dependen de tipos que la
+    biblioteca todavía no tiene: los nueve constructores de <code>Scanner</code> que toman
+    <code>File</code>, <code>Path</code> o <code>ReadableByteChannel</code>, y el
+    <code>load(ModuleLayer, Class)</code> de <code>ServiceLoader</code>. El descubrimiento de
+    proveedores de <code>ServiceLoader</code> tampoco encuentra nada todavía: necesita
+    <code>ClassLoader.getResources</code>, y está aislado en un solo método.
+  </footer>
+
+</div>
+
+<script>
+  const INCOMPLETAS = [
+    ["NavigableMap",23,24],["LinkedList",44,46],["NavigableSet",20,21],["SortedSet",15,16],["Deque",
+    28,30],["SortedMap",12,13],["ResourceBundle",21,23],["HashMap",26,29],["ServiceLoader",8,9],["Sc
+    anner",64,73],["HexFormat",30,36],["BitSet",30,37],["SequencedMap",7,10],["EnumSet",9,14],["Link
+    edHashSet",9,14],["LinkedHashMap",14,22],["Base64",4,7],["Formatter",11,25],["Date",12,36]
+  ];
+
+  const AUSENTES = [];
+
+  const COMPLETAS = ["Arrays","Calendar","Locale","Collections","Vector","Properties","TreeMap","List","ArrayDeque","
+    ArrayList","Map","GregorianCalendar","Hashtable","TreeSet","Set","SimpleTimeZone","TimeZone","Ra
+    ndom","Spliterators","SplittableRandom","PriorityQueue","IdentityHashMap","Objects","Collection"
+    ,"Optional","EnumMap","WeakHashMap","AbstractList","Comparator","AbstractMap","HashSet","Spliter
+    ator","UUID","AbstractCollection","OptionalDouble","OptionalInt","OptionalLong","Currency","Time
+    r","LongSummaryStatistics","DoubleSummaryStatistics","IntSummaryStatistics","Observable","ListIt
+    erator","StringTokenizer","AbstractSequentialList","Dictionary","SequencedCollection","StringJoi
+    ner","AbstractQueue","PropertyPermission","Queue","Stack","ListResourceBundle","PropertyResource
+    Bundle","AbstractSet","ConcurrentModificationException","EventObject","FormatFlagsConversionMism
+    atchException","IllegalFormatConversionException","IllformedLocaleException","Iterator","NoSuchE
+    lementException","TimerTask","DuplicateFormatFlagsException","Enumeration","FormattableFlags","I
+    llegalFormatCodePointException","IllegalFormatFlagsException","IllegalFormatPrecisionException",
+    "IllegalFormatWidthException","MissingFormatArgumentException","MissingFormatWidthException","Mi
+    ssingResourceException","UnknownFormatConversionException","UnknownFormatFlagsException","EventL
+    istenerProxy","InputMismatchException","InvalidPropertiesFormatException","SequencedSet","Servic
+    eConfigurationError","TooManyListenersException","EmptyStackException","Formattable","FormatterC
+    losedException","Observer","PrimitiveIterator","EventListener","IllegalFormatException","RandomA
+    ccess"];
+
+  const barras = document.getElementById("barras");
+  for (const [clase, tengo, total] of INCOMPLETAS.concat(AUSENTES)) {
+    const pct = total ? (tengo / total) * 100 : 0;
+    const fila = document.createElement("div");
+    fila.className = "fila";
+    fila.innerHTML =
+      '<div class="clase" title="' + clase + '">' + clase + "</div>" +
+      '<div class="pista"><div class="relleno' + (tengo === 0 ? " cero" : "") +
+      '" style="width:' + (tengo === 0 ? 100 : pct.toFixed(1)) + '%"></div></div>' +
+      '<div class="cuenta">' + tengo + "/" + total + "</div>";
+    barras.appendChild(fila);
+  }
+
+  const chips = document.getElementById("chips");
+  for (const clase of COMPLETAS) {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.innerHTML = '<i class="tick"></i>' + clase;
+    chips.appendChild(c);
+  }
+
+  const tabla = document.getElementById("tabla");
+  const todas = INCOMPLETAS.concat(AUSENTES).concat(COMPLETAS.map(function (c) { return [c, 1, 1]; }));
+  for (const [clase, tengo, total] of INCOMPLETAS.concat(AUSENTES)) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td class="c">' + clase + "</td><td class=\"n\">" + tengo +
+      '</td><td class="n">' + total + '</td><td class="n">' +
+      (total ? Math.round((tengo / total) * 100) : 0) + "%</td>";
+    tabla.appendChild(tr);
+  }
+  for (const clase of COMPLETAS) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td class="c">' + clase + '</td><td class="n" colspan="3" style="color:var(--ink-3)">completa</td>';
+    tabla.appendChild(tr);
+  }
+</script>

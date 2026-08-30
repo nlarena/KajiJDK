@@ -69,6 +69,12 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
         init(initialCapacity, 0.75f);
     }
 
+    // Copia los pares de otro mapa.
+    public Hashtable(Map<? extends K, ? extends V> t) {
+        this();
+        this.putAll(t);
+    }
+
     public Hashtable(int initialCapacity, float loadFactor) {
         init(initialCapacity, loadFactor);
     }
@@ -379,6 +385,87 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
             b.append('}');
         }
         return b.toString();
+    }
+
+    /**
+     * Los valores de este mapa.
+     *
+     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
+     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
+
+    /**
+     * Los pares de este mapa.
+     *
+     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
+     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
+     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.HashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            out.add(new FixedEntry<K, V>(k, this.get(k)));
+        }
+        return out;
+    }
+    /**
+     * Igualdad y hash por contenido, como exige el contrato de Map.
+     *
+     * <p>Van escritos aca -- y no heredados -- porque esta clase no desciende de AbstractMap, que
+     * es donde vive la version comun. Sin esto, un Hashtable con el mismo contenido que un HashMap
+     * no era igual a el, y la simetria que el contrato de Map promete entre implementaciones
+     * distintas se rompia en cuanto aparecia Hashtable.
+     */
+    public boolean equals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof Map)) {
+            return false;
+        }
+        Map<?, ?> other = (Map<?, ?>) o;
+        if (other.size() != this.size()) {
+            return false;
+        }
+        Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            V v = this.get(k);
+            Object w = other.get(k);
+            if (v == null) {
+                if (w != null || !other.containsKey(k)) {
+                    return false;
+                }
+            } else {
+                if (!v.equals(w)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public int hashCode() {
+        int h = 0;
+        Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            V v = this.get(k);
+            h = h + ((k == null ? 0 : k.hashCode()) ^ (v == null ? 0 : v.hashCode()));
+        }
+        return h;
     }
 }
 

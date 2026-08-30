@@ -71,6 +71,51 @@ public class EnumMap<K extends Enum, V> implements Map<K, V> {
         this.size = m.size;
     }
 
+    /**
+     * Copia los pares de otro mapa cualquiera.
+     *
+     * <p>Si el origen ya es un EnumMap se delega en el constructor de arriba, que copia los
+     * arreglos directo. Si no, hay que **deducir el tipo del enum** de la primera clave, porque un
+     * EnumMap no puede existir sin el: sus arreglos van indexados por ordinal, y de un ordinal no
+     * se vuelve a la constante sin saber de que enum es.
+     *
+     * <p>De ahi que un mapa vacio que no sea EnumMap sea un error y no un mapa vacio: no hay
+     * primera clave de donde sacarlo. Es lo que hace el JDK.
+     */
+    public EnumMap(Map<K, ? extends V> m) {
+        if (m instanceof EnumMap) {
+            EnumMap<K, V> otro = (EnumMap<K, V>) m;
+            this.keyType = otro.keyType;
+            this.vals = new Object[otro.vals.length];
+            this.keys = new Object[otro.vals.length];
+            for (int i = 0; i < otro.vals.length; i++) {
+                this.vals[i] = otro.vals[i];
+                this.keys[i] = otro.keys[i];
+            }
+            this.size = otro.size;
+            return;
+        }
+        Iterator<K> it = m.keySet().iterator();
+        if (!it.hasNext()) {
+            throw new IllegalArgumentException("Specified map is empty");
+        }
+        K primera = it.next();
+        Object c = primera.getClass();
+        this.keyType = (Class<K>) c;
+        this.vals = new Object[8];
+        this.keys = new Object[8];
+        this.put(primera, m.get(primera));
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
+    // Una copia superficial: mismos pares, arreglos propios.
+    public EnumMap<K, V> clone() {
+        return new EnumMap<K, V>(this);
+    }
+
     // The ordinal of `key`, or -1 if it is not a constant of this map's enum type.
     //
     // El bind a un local `Enum` antes de llamar `ordinal()` ya no es un rodeo: lo era por el
@@ -274,5 +319,39 @@ public class EnumMap<K extends Enum, V> implements Map<K, V> {
             }
         }
         return h;
+    }
+
+    /**
+     * Los valores de este mapa.
+     *
+     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
+     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
+
+    /**
+     * Los pares de este mapa.
+     *
+     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
+     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
+     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.HashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            out.add(new FixedEntry<K, V>(k, this.get(k)));
+        }
+        return out;
     }
 }

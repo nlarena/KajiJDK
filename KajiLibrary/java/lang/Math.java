@@ -1603,6 +1603,114 @@ public final class Math {
     // ---- the square root ----
 
     /**
+     * El logaritmo natural.
+     *
+     * <p>Es el algoritmo de **fdlibm** --el mismo que usa el JDK--, y se escribe entero porque es la
+     * unica forma de que dos implementaciones den el **mismo double**. Una aproximacion "buena" no
+     * sirve: `Random.nextGaussian()` compone `log` con `sqrt`, y un ulp de diferencia se propaga a
+     * todos los valores que devuelve.
+     *
+     * <p>El metodo, en tres pasos:
+     *
+     * <ol>
+     * <li><b>Descomponer.</b> Todo double es {@code m * 2^k} con {@code m} en {@code [1, 2)}, asi
+     *     que {@code log(x) = k*log(2) + log(m)}. La parte {@code k*log(2)} es exacta.</li>
+     * <li><b>Centrar.</b> A {@code m} se lo lleva a {@code [sqrt(2)/2, sqrt(2))} ajustando {@code k},
+     *     porque el polinomio de abajo solo es preciso cerca de 1.</li>
+     * <li><b>Aproximar.</b> Con {@code s = f/(2+f)} y {@code f = m-1}, la serie
+     *     {@code log(1+f) = 2s + 2s^3/3 + 2s^5/5 + ...} converge rapidisimo, y siete coeficientes
+     *     alcanzan para el ultimo bit.</li>
+     * </ol>
+     *
+     * <p>Los dos pedazos de {@code log(2)} --alto y bajo-- son el truco que evita perder precision
+     * al sumar: {@code k*ln2_hi} es exacto porque {@code ln2_hi} tiene ceros en los bits bajos, y
+     * {@code ln2_lo} aporta lo que falta sin cancelarse contra el resto.
+     */
+    public static double log(double a) {
+        // Los siete coeficientes del polinomio, y log(2) partido en dos.
+        double ln2Hi = 6.93147180369123816490e-01d;
+        double ln2Lo = 1.90821492927058770002e-10d;
+        double dosAla54 = 1.80143985094819840000e+16d;
+        double lg1 = 6.666666666666735130e-01d;
+        double lg2 = 3.999999999940941908e-01d;
+        double lg3 = 2.857142874366239149e-01d;
+        double lg4 = 2.222219843214978396e-01d;
+        double lg5 = 1.818357216161805012e-01d;
+        double lg6 = 1.531383769920937332e-01d;
+        double lg7 = 1.479819860511658591e-01d;
+
+        double x = a;
+        long bits = Double.doubleToRawLongBits(x);
+        int hx = (int) (bits >>> 32);
+        int lx = (int) bits;
+        int k = 0;
+
+        if (hx < 0x00100000) {
+            // Subnormal o cero.
+            if (((hx & 0x7fffffff) | lx) == 0) {
+                return Double.NEGATIVE_INFINITY;      // log(+-0)
+            }
+            if (hx < 0) {
+                return Double.NaN;                    // log(negativo)
+            }
+            // Se escala a normal y se compensa en el exponente.
+            k = k - 54;
+            x = x * dosAla54;
+            bits = Double.doubleToRawLongBits(x);
+            hx = (int) (bits >>> 32);
+        }
+        if (hx >= 0x7ff00000) {
+            return x + x;                             // NaN o +infinito
+        }
+        k = k + (hx >> 20) - 1023;
+        hx = hx & 0x000fffff;
+        // El ajuste que centra la mantisa en [sqrt(2)/2, sqrt(2)).
+        int i = (hx + 0x95f64) & 0x100000;
+        long nuevos = (((long) (hx | (i ^ 0x3ff00000))) << 32) | (bits & 0xffffffffL);
+        x = Double.longBitsToDouble(nuevos);
+        k = k + (i >> 20);
+        double f = x - 1.0d;
+        double dk = (double) k;
+
+        if ((0x000fffff & (2 + hx)) < 3) {
+            // |f| < 2^-20: la serie se corta en el tercer termino.
+            if (f == 0.0d) {
+                if (k == 0) {
+                    return 0.0d;
+                }
+                return dk * ln2Hi + dk * ln2Lo;
+            }
+            double rr = f * f * (0.5d - 0.33333333333333333d * f);
+            if (k == 0) {
+                return f - rr;
+            }
+            return dk * ln2Hi - ((rr - dk * ln2Lo) - f);
+        }
+
+        double sx = f / (2.0d + f);
+        double z = sx * sx;
+        double w = z * z;
+        int ii = hx - 0x6147a;
+        int jj = 0x6b851 - hx;
+        double t1 = w * (lg2 + w * (lg4 + w * lg6));
+        double t2 = z * (lg1 + w * (lg3 + w * (lg5 + w * lg7)));
+        ii = ii | jj;
+        double rr = t2 + t1;
+        if (ii > 0) {
+            double hfsq = 0.5d * f * f;
+            if (k == 0) {
+                return f - (hfsq - sx * (hfsq + rr));
+            }
+            return dk * ln2Hi - ((hfsq - (sx * (hfsq + rr) + dk * ln2Lo)) - f);
+        }
+        if (k == 0) {
+            return f - sx * (f - rr);
+        }
+        return dk * ln2Hi - ((sx * (f - rr) - dk * ln2Lo) - f);
+    }
+
+
+    /**
      * The square root of {@code a}, correctly rounded.
      *
      * <p>Correctly rounded is not a nicety here, it is the specification: IEEE-754 lists the

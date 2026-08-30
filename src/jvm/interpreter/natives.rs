@@ -138,8 +138,11 @@ pub fn dispatch(
         ("java/lang/Object", "getClass", "()Ljava/lang/Class;") => {
             Some(Value::Reference(heap.read_u32(reference(&args[0])) as usize))
         }
-        // hashCode() (identity): the object's heap offset is its identity.
-        ("java/lang/Object", "hashCode", "()I") => Some(Value::Int(reference(&args[0]) as i32)),
+        // hashCode() (identity): se calcula una vez y se guarda en el encabezado, para que
+        // **no cambie** cuando el recolector mueva el objeto (#302). Antes era el offset a secas.
+        ("java/lang/Object", "hashCode", "()I") => {
+            Some(Value::Int(heap.identity_hash(reference(&args[0]))))
+        }
         // Throwable.toString(): "pkg.Class" or "pkg.Class: message". Reads the receiver's runtime
         // class name (Java has no Class.getName() yet) and the `message` field, then interns the
         // text. Called virtually, so a subclass instance (e.g. NullPointerException) reports its
@@ -163,7 +166,7 @@ pub fn dispatch(
         }
         // System.identityHashCode(Object): the same, as a static.
         ("java/lang/System", "identityHashCode", "(Ljava/lang/Object;)I") => {
-            Some(Value::Int(reference(&args[0]) as i32))
+            Some(Value::Int(heap.identity_hash(reference(&args[0]))))
         }
         // System.nanoTime(): a monotonic timer with an arbitrary origin (elapsed since the first
         // call in this process). Backs scheduling delays; never goes backwards.
@@ -1181,6 +1184,25 @@ pub fn dispatch(
                 }
             });
             None
+        }
+
+        // `Array.newArray(Class, int)`: un array cuyo tipo de elemento solo se conoce en runtime.
+        //
+        // No hay opcode para esto — `anewarray` lleva la clase en el constant pool — y es lo que
+        // necesita `Collection.toArray(T[])`: el llamador pasa un `String[0]` justamente para
+        // recibir un `String[]`, y el tipo del array sale del mirror, no del bytecode.
+        //
+        // El largo negativo ya lo rechaza `newInstance` del lado Java; esta puerta interna solo
+        // ve pedidos bien formados, asi que aca no se repite el chequeo.
+        ("java/lang/reflect/Array", "newArray", "(Ljava/lang/Class;I)Ljava/lang/Object;") => {
+            let component = mirror_name(metaspace, reference(&args[0]));
+            let count = int(&args[1]).max(0) as usize;
+            let array_class = format!("[{}", descriptor_of(&component));
+            let offset = super::bytecode_interpreter::array_operations::allocate_array_of_class(
+                metaspace, heap, &array_class, count,
+            )
+            .expect("Array.newArray: el heap no alcanza");
+            Some(Value::Reference(offset))
         }
 
         _ => panic!("no native implementation for {class}.{name}{descriptor}"),

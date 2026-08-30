@@ -19,6 +19,8 @@ import java.util.function.ToDoubleFunction;
 import java.util.function.IntConsumer;
 import java.util.function.LongConsumer;
 import java.util.function.DoubleConsumer;
+import java.util.Spliterator;
+import java.util.Spliterators;
 
 // KajiLibrary's java.util.stream.Stream<T> — a sequence of reference elements supporting a
 // functional pipeline: intermediate ops (filter/map/distinct/sorted/limit/skip/peek) return a
@@ -931,6 +933,18 @@ final class StreamImpl<T> implements Stream<T> {
         }
         return out;
     }
+
+    /**
+     * A spliterator over this stream's elements.
+     *
+     * <p>Directly over the backing Object[], which is a private snapshot: the split is a pure
+     * index range, with no copying and no iterator in between. ORDERED because a stream has an
+     * encounter order; SIZED and SUBSIZED come from the array-backed spliterator itself.
+     */
+    public Spliterator<T> spliterator() {
+        return Spliterators.spliterator(this.data, 0, this.size, Spliterator.ORDERED);
+    }
+
 }
 
 // The Iterator handed out by StreamImpl.iterator(). A same-file top-level class (the codebase's

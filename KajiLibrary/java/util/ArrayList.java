@@ -10,7 +10,7 @@ import java.util.Iterator;
 // Object[] that doubles when full, with O(1) indexed access and amortised O(1) append.
 // Insertion/removal in the middle shift the tail via a copy; `iterator()` walks by index
 // through an anonymous Iterator that captures the list.
-public class ArrayList<E> implements List<E> {
+public class ArrayList<E> extends AbstractList<E> implements List<E> {
 
     private Object[] elementData;
     private int size;
@@ -18,6 +18,43 @@ public class ArrayList<E> implements List<E> {
     public ArrayList() {
         this.elementData = new Object[10];
         this.size = 0;
+    }
+
+    /**
+     * Con capacidad inicial.
+     *
+     * <p>No cambia lo que la lista **hace**, solo cuanto trabaja: una lista que va a recibir mil
+     * elementos y arranca en diez se recopia unas siete veces por el camino. Es la unica razon para
+     * usarlo, y por eso el argumento es una estimacion y no un limite.
+     */
+    public ArrayList(int initialCapacity) {
+        if (initialCapacity < 0) {
+            throw new IllegalArgumentException("Illegal Capacity: " + initialCapacity);
+        }
+        this.elementData = new Object[initialCapacity == 0 ? 1 : initialCapacity];
+        this.size = 0;
+    }
+
+    // Copia los elementos de otra coleccion, en el orden en que los da su iterador.
+    public ArrayList(Collection<? extends E> c) {
+        Object[] a = c.toArray();
+        this.elementData = a.length == 0 ? new Object[1] : a;
+        this.size = a.length;
+    }
+
+    /**
+     * Achica el arreglo de atras al tamano actual.
+     *
+     * <p>Sirve despues de una carga grande seguida de muchos borrados: la capacidad no baja sola
+     * nunca, asi que una lista que llego a tener un millon de elementos sigue ocupando un millon de
+     * referencias aunque le queden diez.
+     */
+    public void trimToSize() {
+        if (this.size < this.elementData.length) {
+            Object[] mas = new Object[this.size == 0 ? 1 : this.size];
+            System.arraycopy(this.elementData, 0, mas, 0, this.size);
+            this.elementData = mas;
+        }
     }
 
     public int size() {

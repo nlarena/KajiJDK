@@ -15,6 +15,8 @@ import java.util.function.DoubleToLongFunction;
 import java.util.function.ObjDoubleConsumer;
 import java.util.function.Supplier;
 import java.util.function.BiConsumer;
+import java.util.Spliterator;
+import java.util.Spliterators;
 
 // KajiLibrary's java.util.stream.DoubleStream — the double-specialized primitive stream, the
 // mirror of IntStream/LongStream over double values. EAGER; a KajiLibrary subset. Unlike Int/Long
@@ -614,6 +616,18 @@ final class DoubleStreamImpl implements DoubleStream {
         }
         this.closeHandlers.clear();
     }
+
+    /**
+     * A spliterator over this stream's elements.
+     *
+     * <p>Directly over the backing double[], which is a private snapshot: the split is a pure
+     * index range, with no copying and no iterator in between. ORDERED because a stream has an
+     * encounter order; SIZED and SUBSIZED come from the array-backed spliterator itself.
+     */
+    public Spliterator<Double> spliterator() {
+        return Spliterators.spliterator(this.data, 0, this.size, Spliterator.ORDERED);
+    }
+
 }
 
 // The Iterator handed out by DoubleStreamImpl.iterator(): boxes each double on demand.

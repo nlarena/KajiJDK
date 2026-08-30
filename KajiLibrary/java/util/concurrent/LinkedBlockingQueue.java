@@ -17,7 +17,7 @@ import java.util.Iterator;
 // between opcodes is observably the same.
 //
 // Single-exit style throughout (finding #105).
-public class LinkedBlockingQueue<E> implements BlockingQueue<E>, Serializable {
+public class LinkedBlockingQueue<E> extends java.util.AbstractQueue<E> implements BlockingQueue<E>, Serializable {
 
     private final Object sync = new Object();
     private final int capacity;

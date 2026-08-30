@@ -592,7 +592,7 @@ public class ConcurrentSkipListMap<K, V> extends AbstractMap<K, V>
     }
 
     @Override
-    public SequencedMap<K, V> reversed() {
+    public NavigableMap<K, V> reversed() {
         return this.descendingMap();
     }
 
@@ -1133,7 +1133,7 @@ final class SkipSubMap<K, V> implements ConcurrentNavigableMap<K, V> {
     }
 
     @Override
-    public SequencedMap<K, V> reversed() {
+    public NavigableMap<K, V> reversed() {
         return this.descendingMap();
     }
 
@@ -1274,6 +1274,20 @@ final class SkipSubMap<K, V> implements ConcurrentNavigableMap<K, V> {
         return new SkipSubMap<K, V>(this.base, from, true, this.high, this.highInclusive,
                 this.descending);
     }
+
+    /**
+     * Los valores de este submapa.
+     *
+     * <p>Misma divergencia que el resto de la biblioteca: copia, no vista.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
 }
 
 /**
@@ -1296,7 +1310,7 @@ final class SkipSubMap<K, V> implements ConcurrentNavigableMap<K, V> {
  * different interface. Adding is refused -- there is no value to pair a new key with, and inventing
  * {@code null} would put an entry in the map that the caller never asked for.
  */
-final class SkipKeySet<K, V> implements NavigableSet<K> {
+final class SkipKeySet<K, V> extends java.util.AbstractSet<K> implements NavigableSet<K> {
 
     private final SkipSubMap<K, V> view;
 
@@ -1354,7 +1368,7 @@ final class SkipKeySet<K, V> implements NavigableSet<K> {
     }
 
     @Override
-    public SequencedSet<K> reversed() {
+    public NavigableSet<K> reversed() {
         return new SkipKeySet<K, V>(this.view.flipped());
     }
 
@@ -1456,7 +1470,7 @@ final class SkipKeySet<K, V> implements NavigableSet<K> {
  * answered by looking the key up rather than by comparing against a live node -- the node may
  * already be gone.
  */
-final class SkipEntrySet<K, V> implements Set<Map.Entry<K, V>> {
+final class SkipEntrySet<K, V> extends java.util.AbstractSet<Map.Entry<K, V>> implements Set<Map.Entry<K, V>> {
 
     private final SkipSubMap<K, V> view;
 
@@ -1527,7 +1541,7 @@ final class SkipEntrySet<K, V> implements Set<Map.Entry<K, V>> {
  * belong here. {@code remove} therefore drops the FIRST key holding that value, in the view order,
  * which is what "remove one occurrence" has to mean when the values carry no identity of their own.
  */
-final class SkipValues<K, V> implements Collection<V> {
+final class SkipValues<K, V> extends java.util.AbstractCollection<V> implements Collection<V> {
 
     private final SkipSubMap<K, V> view;
 

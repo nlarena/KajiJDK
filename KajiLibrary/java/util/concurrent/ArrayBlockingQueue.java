@@ -17,7 +17,7 @@ import java.util.Iterator;
 // wake, so waking the other camp too is merely a spurious wakeup.
 //
 // Single-exit style throughout (finding #105).
-public class ArrayBlockingQueue<E> implements BlockingQueue<E>, Serializable {
+public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements BlockingQueue<E>, Serializable {
 
     private final Object sync = new Object();
     private final Object[] items;

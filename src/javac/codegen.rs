@@ -729,7 +729,7 @@ fn split_range(start: usize, end: usize, gaps: &[(usize, usize)]) -> Vec<(usize,
 /// Anidamiento máximo de `synchronized` de un cuerpo, para reservar los slots de sus monitores (uno
 /// por nivel) y los aparcaderos de excepción de sus handlers (otro por nivel) por debajo de los
 /// temporales dinámicos del método.
-fn max_sync_depth(stmts: &[Stmt]) -> u16 {
+pub(crate) fn max_sync_depth(stmts: &[Stmt]) -> u16 {
     stmts.iter().map(stmt_sync_depth).max().unwrap_or(0)
 }
 
@@ -1233,6 +1233,28 @@ fn type_desc(table: &SymbolTable, scope: ScopeId, ty: &Type) -> String {
 }
 
 /// El descriptor de un [`RType`] ya resuelto (la *erasure* de los genéricos).
+/// Si un operando de concatenación necesita pasar por `String.valueOf(Object)` **antes** del
+/// call site: toda **referencia que no sea ya un `String`**.
+///
+/// El bootstrap `StringConcatFactory` no llama a `toString()` por nosotros — el `javac` real
+/// convierte antes y le pasa un `String`, y su call site lleva `Ljava/lang/String;` en el
+/// descriptor. Sin esta conversión el bootstrap recibe la referencia cruda y del lado de la VM
+/// `render` la lee **como si fuera un `String`**: los campos del objeto interpretados como el
+/// `char[]`. Eso da basura en silencio con un operando y una lectura fuera del heap con dos
+/// (finding #282).
+///
+/// Un operando **sin tipo** cuenta como referencia: el desugar lo declaraba `Ljava/lang/Object;`,
+/// que tampoco es un `String`, así que también hay que convertirlo.
+pub(crate) fn concat_needs_value_of(table: &SymbolTable, ty: &Option<RType>) -> bool {
+    match ty {
+        Some(t) => {
+            let desc = rtype_desc(table, t);
+            (desc.starts_with('L') || desc.starts_with('[')) && desc != "Ljava/lang/String;"
+        }
+        None => true,
+    }
+}
+
 pub(crate) fn rtype_desc(table: &SymbolTable, rt: &RType) -> String {
     match rt {
         RType::Void => "V".to_string(),
@@ -1248,7 +1270,9 @@ pub(crate) fn rtype_desc(table: &SymbolTable, rt: &RType) -> String {
         // La intersección se emite por su primer miembro (su *erasure*, §4.6).
         RType::Intersection(ms) => ms.first().map_or_else(|| "Ljava/lang/Object;".to_string(), |m| rtype_desc(table, m)),
         // Una variable de inferencia no debería emitirse (se resuelve antes); fallback a `Object`.
-        RType::InferVar(_) | RType::Unresolved => "Ljava/lang/Object;".to_string(),
+        // El tipo nulo se emite como `Object`: es lo que la JVM entiende, y una referencia
+        // nula es asignable a cualquier tipo referencia.
+        RType::Null | RType::InferVar(_) | RType::Unresolved => "Ljava/lang/Object;".to_string(),
     }
 }
 
@@ -2451,8 +2475,10 @@ const POP: u8 = 0x57;
 const POP2: u8 = 0x58;
 const IINC: u8 = 0x84; // incrementa un local `int` **sin tocar la pila**
 const DUP: u8 = 0x59;
+const DUP_X1: u8 = 0x5a;
 const DUP_X2: u8 = 0x5b;
 const DUP2: u8 = 0x5c;
+const DUP2_X1: u8 = 0x5d;
 const DUP2_X2: u8 = 0x5e;
 const GETSTATIC: u8 = 0xb2;
 const PUTSTATIC: u8 = 0xb3;
@@ -2462,6 +2488,7 @@ const INVOKEVIRTUAL: u8 = 0xb6;
 const NEW: u8 = 0xbb;
 const NEWARRAY: u8 = 0xbc; // arrays de primitivos (lleva un código de tipo)
 const ANEWARRAY: u8 = 0xbd; // arrays de referencias (lleva el índice de la clase)
+const MULTIANEWARRAY: u8 = 0xc5; // arrays de varias dimensiones (clase + cuántas dimensiones)
 const ARRAYLENGTH: u8 = 0xbe;
 const ATHROW: u8 = 0xbf;
 const CHECKCAST: u8 = 0xc0;
@@ -2654,7 +2681,11 @@ fn vtype_of(table: &SymbolTable, rt: &RType) -> VType {
         RType::Prim(PrimType::Float) => VType::Float,
         RType::Prim(PrimType::Double) => VType::Double,
         RType::Prim(_) => VType::Int,
-        RType::Void | RType::Unresolved | RType::InferVar(_) => VType::Top,
+        // `Top` para el tipo nulo, que es lo que ya hacia antes de tener variante propia
+        // (llegaba como `Unresolved`). El verificador de verdad tiene un tipo `null` asignable
+        // a toda referencia; el nuestro no, y aflojar el merge para agregarlo es un cambio
+        // aparte del que este finding pide.
+        RType::Void | RType::Null | RType::Unresolved | RType::InferVar(_) => VType::Top,
         RType::Array(_) => VType::Object(rtype_desc(table, rt)),
         RType::Class(id) | RType::TypeVar(id) => VType::Object(internal_name(table, *id)),
         RType::Parameterized { base, .. } => VType::Object(internal_name(table, *base)),
@@ -4882,8 +4913,24 @@ impl<'a> Emitter<'a> {
             // borrado, el `MethodHandle` de la implementación `lambda$…` y el `MethodType`
             // instanciado como argumentos estáticos (§4.7.23 / §5.4.3.6).
             ExprKind::Indy { info, captures } => {
+                // Solo la concatenación convierte sus operandos: el `LambdaMetafactory` y el
+                // `ObjectMethods` de un `record` reciben las capturas con su tipo propio.
+                let is_concat = info.bootstrap_owner == "java/lang/invoke/StringConcatFactory";
                 for c in captures {
                     self.expr(c);
+                    // #282: una referencia no-`String` se convierte acá, como hace javac. El
+                    // descriptor del call site ya dice `Ljava/lang/String;` para este operando
+                    // (lo puso `lower_concat` con este mismo predicado), así que los dos lados
+                    // no pueden discrepar.
+                    if is_concat && concat_needs_value_of(self.table, &c.ty) {
+                        let mref = self.pool.methodref(
+                            "java/lang/String",
+                            "valueOf",
+                            "(Ljava/lang/Object;)Ljava/lang/String;",
+                        );
+                        self.op(INVOKESTATIC);
+                        self.u16(mref);
+                    }
                 }
                 // El *bootstrap method* (siempre `REF_invokeStatic`) y sus argumentos estáticos, cada
                 // uno traducido a su entrada del pool según su clase.
@@ -5442,6 +5489,33 @@ impl<'a> Emitter<'a> {
             return;
         };
         let cls = internal_name(self.table, id);
+        // El descriptor sale del constructor que resolvió la pasada 2.
+        let resolved_desc = match e.binding {
+            Some(Binding::Method(mid)) => match self.table.resolved(mid) {
+                Some(Resolved::Method { params, .. }) => {
+                    let ps: String = params.iter().map(|t| rtype_desc(self.table, t)).collect();
+                    Some(format!("({ps})V"))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        // Sin constructor resuelto rige el `()V` implícito — pero **solo sin argumentos**. Con
+        // argumentos no hay a qué llamar, y emitir `()V` igual dejaba los argumentos empujados: el
+        // `invokespecial` se llevaba el **último** como receptor, corría `<init>` sobre un objeto
+        // ajeno —o sobre un `int`— y dejaba la pila desbalanceada para todo lo que siguiera.
+        // Es el mismo guard que ya tenía `super(...)`/`this(...)`, por la misma razón (#293).
+        let desc = match resolved_desc {
+            Some(d) => d,
+            None if args.is_empty() => "()V".to_string(),
+            None => {
+                self.unsupported(
+                    e.pos,
+                    "un `new` con argumentos que no resolvió a ningún constructor",
+                );
+                return;
+            }
+        };
         let cidx = self.pool.class(&cls);
         let at = self.bytes.len(); // el offset del `new` **es** la identidad del objeto
         self.op(NEW);
@@ -5449,17 +5523,6 @@ impl<'a> Emitter<'a> {
         self.push(VType::Uninit(at));
         self.dup1(); // la copia que sobrevive al constructor
         self.emit_args(e, args);
-        // El descriptor sale del constructor que resolvió la pasada 2; sin él, `()V`.
-        let desc = match e.binding {
-            Some(Binding::Method(mid)) => match self.table.resolved(mid) {
-                Some(Resolved::Method { params, .. }) => {
-                    let ps: String = params.iter().map(|t| rtype_desc(self.table, t)).collect();
-                    format!("({ps})V")
-                }
-                _ => "()V".to_string(),
-            },
-            _ => "()V".to_string(),
-        };
         let mref = self.pool.methodref(&cls, "<init>", &desc);
         self.op(INVOKESPECIAL);
         self.u16(mref);
@@ -5482,6 +5545,27 @@ impl<'a> Emitter<'a> {
         // El target `0x44` de un array apunta al **inicio** de la creación (donde arranca el cálculo de
         // la dimensión), no al `newarray`/`anewarray` en sí — así lo hace javac.
         let off = self.bytes.len() as u16;
+
+        // Más de una dimensión **con tamaño** (`new int[2][3]`) → `multianewarray` (§6.5): se
+        // empujan los tamaños dados, de afuera hacia adentro, y el opcode lleva la clase del
+        // array completo más cuántas dimensiones inicializar. Las que quedan sin tamaño
+        // (`new int[2][]`) no cuentan: esas filas nacen en null, y con una sola dimensión dada
+        // el camino de abajo ya emite el `anewarray` correcto sobre el tipo elemento `int[]`.
+        let sized = dims.iter().take_while(|d| d.is_some()).count();
+        if init.is_none() && sized > 1 {
+            for d in dims.iter().take(sized).flatten() {
+                self.expr(d);
+            }
+            let desc = rtype_desc(self.table, &self.ty_of(e));
+            let idx = self.pool.class(&desc);
+            self.op(MULTIANEWARRAY);
+            self.u16(idx);
+            self.op(sized as u8);
+            self.pop(sized); // los tamaños
+            self.push(VType::Object(desc));
+            self.code_type_annos(0x44, &off.to_be_bytes(), &e.type_annos);
+            return;
+        }
 
         // La longitud: la del inicializador, o la dimensión pedida.
         match init {
@@ -5585,7 +5669,11 @@ impl<'a> Emitter<'a> {
     /// valor es `iload` (deja el viejo) seguido de `iinc`, y `++x` es al revés. Los demás locales van
     /// por la forma general leer-modificar-escribir.
     fn incdec(&mut self, target: &Expr, up: bool, prefix: bool, leave: bool) {
-        let Some(Binding::Local { slot }) = target.binding else { return };
+        // Un destino que **no es un local** —un campo, un elemento de arreglo— va por el camino de
+        // abajo. Antes se salía acá con un `return` mudo: sin código y sin diagnóstico (#309).
+        let Some(Binding::Local { slot }) = target.binding else {
+            return self.incdec_lvalue(target, up, prefix, leave);
+        };
         let ty = self.ty_of(target);
         let cat = category(&ty);
         let delta: i32 = if up { 1 } else { -1 };
@@ -5623,6 +5711,160 @@ impl<'a> Emitter<'a> {
         let vt = vtype_of(self.table, &ty);
         self.set_local(slot, vt);
         self.store(cat, slot);
+    }
+
+    /// `f++` / `--a[i]` sobre un destino que **no es un local**: un campo (de instancia o estático) o
+    /// un elemento de arreglo.
+    ///
+    /// Este camino no existía, y su ausencia no se notaba porque [`incdec`] salía con un `return`
+    /// mudo: **sin código y sin error** (#309). En posición de descarte no se veía —ahí el desugar
+    /// reescribe `x++` a `x += 1` y lo resuelve el camino de asignación compuesta—, pero en posición
+    /// de **valor** el resultado era bytecode roto:
+    ///
+    /// ```text
+    /// long getAndIncrement() { return value++; }
+    ///   0: lstore_1     <- guarda desde una pila VACÍA
+    /// ```
+    ///
+    /// Lo que lo destapó fue `AtomicLong.getAndIncrement()`, que es exactamente esa línea y estaba
+    /// inutilizable. `return contador++;` es una de las formas más comunes que tiene Java.
+    ///
+    /// **El juego de pila.** El destino se evalúa **una sola vez** —re-evaluarlo repetiría sus
+    /// efectos— y la copia que sobrevive se coloca por debajo con el `dup_x`_n_ que corresponda:
+    ///
+    /// ```text
+    /// campo de instancia, postfijo:  recv, dup, getfield, dup_x1, const, add, putfield  -> [viejo]
+    /// campo de instancia, prefijo:   recv, dup, getfield, const, add, dup_x1, putfield  -> [nuevo]
+    /// estático, postfijo:            getstatic, dup, const, add, putstatic              -> [viejo]
+    /// elemento, postfijo:            arr, idx, dup2, xaload, dup_x2, const, add, xastore-> [viejo]
+    /// ```
+    ///
+    /// Con un valor de categoría 2 (`long`/`double`) cada `dup` pasa a su forma ancha (`dup2`,
+    /// `dup2_x1`, `dup2_x2`), que es de donde salía el *underflow*: una copia de un slot donde hacen
+    /// falta dos.
+    ///
+    /// **Lo que no cubre, y por qué corta fuerte en vez de aproximar.** Un destino `byte`/`short`/
+    /// `char` necesita además el truncado de §15.26.2 (`i2b`/`i2s`/`i2c`), que acá habría que
+    /// emitir a mano; el camino de descarte ya lo hace bien porque el desugar le mete el cast. Antes
+    /// que emitir un incremento que no trunca —que es un resultado *equivocado*, no uno faltante—,
+    /// se reporta. Es la misma decisión que toma `compound_effectful` unas líneas más abajo.
+    fn incdec_lvalue(&mut self, target: &Expr, up: bool, prefix: bool, leave: bool) {
+        let ty = self.ty_of(target);
+        let cat = category(&ty);
+        // Solo los cuatro tipos cuyo `add` es directo y no pide truncado.
+        let directo = matches!(
+            ty,
+            RType::Prim(PrimType::Int)
+                | RType::Prim(PrimType::Long)
+                | RType::Prim(PrimType::Float)
+                | RType::Prim(PrimType::Double)
+        );
+        if !directo {
+            self.unsupported(
+                target.pos,
+                "un `++`/`--` sobre un campo o elemento que no es int/long/float/double",
+            );
+            return;
+        }
+        let delta: i32 = if up { 1 } else { -1 };
+        let ancho2 = stack_width(cat) == 2;
+        let dup_x1 = if ancho2 { DUP2_X1 } else { DUP_X1 };
+        let dup_x2 = if ancho2 { DUP2_X2 } else { DUP_X2 };
+
+        // El `+ delta` y su efecto en el modelo de pila, que es igual en los tres casos.
+        let sumar = |s: &mut Self| {
+            match cat {
+                1 => s.push_long(delta as i64),
+                2 => s.push_float(delta as f32),
+                3 => s.push_double(delta as f64),
+                _ => s.push_int(delta),
+            }
+            s.op(IADD + cat);
+            s.pop(2);
+            s.push_cat(cat);
+        };
+
+        // --- a[i]++ ---------------------------------------------------------------------------
+        if let ExprKind::Index { array, index } = &target.kind {
+            let kind = array_kind(&ty);
+            self.expr(array);
+            self.expr(index);
+            self.op(DUP2);
+            let idx_t = self.stack[self.stack.len() - 1].clone();
+            let aref_t = self.stack[self.stack.len() - 2].clone();
+            self.push(aref_t);
+            self.push(idx_t); // [.., aref, idx, aref, idx]
+            self.op(IALOAD + kind);
+            self.pop(2);
+            self.push_cat(cat); // [.., aref, idx, viejo]
+            if leave && !prefix {
+                self.op(dup_x2);
+                self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+            }
+            sumar(self);
+            if leave && prefix {
+                self.op(dup_x2);
+                self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+            }
+            self.op(IASTORE + kind);
+            self.pop(3);
+            if leave {
+                self.push_cat(cat); // sobrevive la copia
+            }
+            return;
+        }
+
+        // --- campo ------------------------------------------------------------------------------
+        let Some(Binding::Field(fid)) = target.binding else {
+            self.unsupported(target.pos, "un `++`/`--` sobre un destino que no es una variable");
+            return;
+        };
+        let Some((cls, name, desc, is_static, _)) = self.field_info(fid) else { return };
+        let fref = self.pool.fieldref(&cls, &name, &desc);
+
+        if is_static {
+            self.op(GETSTATIC);
+            self.u16(fref);
+            self.push_cat(cat);
+            if leave && !prefix {
+                self.dup(cat);
+            }
+            sumar(self);
+            if leave && prefix {
+                self.dup(cat);
+            }
+            self.op(PUTSTATIC);
+            self.u16(fref);
+            self.pop(1);
+            return;
+        }
+
+        // El receptor **una sola vez**, y duplicado: sirve para el `getfield` y para el `putfield`.
+        match &target.kind {
+            ExprKind::Field { expr: recv, .. } => self.expr(recv),
+            // `f++` dentro de un método de instancia
+            _ => self.load_this(),
+        }
+        self.dup1(); // [.., o, o]
+        self.op(GETFIELD);
+        self.u16(fref);
+        self.pop(1);
+        self.push_cat(cat); // [.., o, viejo]
+        if leave && !prefix {
+            self.op(dup_x1);
+            self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+        }
+        sumar(self);
+        if leave && prefix {
+            self.op(dup_x1);
+            self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+        }
+        self.op(PUTFIELD);
+        self.u16(fref);
+        self.pop(2); // el receptor y el valor
+        if leave {
+            self.push_cat(cat); // sobrevive la copia, por debajo de los dos que consumió
+        }
     }
 
     /// Peephole: una asignación en **descarte** de la forma `x = x + c` / `x = x - c` sobre un local

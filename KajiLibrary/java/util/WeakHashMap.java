@@ -43,7 +43,7 @@ import java.util.Map;
 //
 // Subset of the JDK's: putAll, the collection views (keySet/values/entrySet) and
 // newWeakHashMap are not modelled.
-public class WeakHashMap<K, V> implements Map<K, V> {
+public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
 
     // A null key has no object to die with, so it is stored as this strongly-held sentinel and
     // translated back on the way out — a null-keyed entry simply never expires. A
@@ -70,6 +70,21 @@ public class WeakHashMap<K, V> implements Map<K, V> {
     public WeakHashMap(int initialCapacity) {
         queue = new ReferenceQueue();
         init(initialCapacity, 0.75f);
+    }
+
+    // Copia los pares de otro mapa. Las claves entran como referencias **debiles**, asi que la
+    // copia no impide que se recolecten -- que es todo el punto de este mapa.
+    public WeakHashMap(Map<? extends K, ? extends V> m) {
+        this();
+        this.putAll(m);
+    }
+
+    // Dimensionado para `numMappings` sin agrandarse. Misma razon que `HashSet.newHashSet`.
+    public static <K, V> WeakHashMap<K, V> newWeakHashMap(int numMappings) {
+        if (numMappings < 0) {
+            throw new IllegalArgumentException("Negative number of mappings: " + numMappings);
+        }
+        return new WeakHashMap<K, V>(numMappings * 2 < 16 ? 16 : numMappings * 2);
     }
 
     public WeakHashMap(int initialCapacity, float loadFactor) {
@@ -362,6 +377,40 @@ public class WeakHashMap<K, V> implements Map<K, V> {
                 e = next;
             }
         }
+    }
+
+    /**
+     * Los valores de este mapa.
+     *
+     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
+     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
+     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            out.add(this.get(it.next()));
+        }
+        return out;
+    }
+
+    /**
+     * Los pares de este mapa.
+     *
+     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
+     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
+     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.HashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        java.util.Iterator<K> it = this.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            out.add(new FixedEntry<K, V>(k, this.get(k)));
+        }
+        return out;
     }
 }
 

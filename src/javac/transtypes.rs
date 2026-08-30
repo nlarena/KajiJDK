@@ -187,6 +187,13 @@ impl Trans<'_> {
             }
             return;
         }
+        // El tipo del **elemento** de un `new T[]{…}`, leído antes de prestar `e.kind` — mismo
+        // motivo que la lambda de arriba. Es lo que hace falta para convertir cada elemento del
+        // inicializador al tipo del componente, que es donde faltaba el boxing (finding #289).
+        let elem_ty = match (&e.kind, &e.ty) {
+            (ExprKind::NewArray { .. }, Some(RType::Array(inner))) => Some((**inner).clone()),
+            _ => None,
+        };
         match &mut e.kind {
             ExprKind::Binary { op, lhs, rhs } => {
                 let op = *op;
@@ -259,9 +266,20 @@ impl Trans<'_> {
                     self.expr(d, scope);
                     self.coerce(d, &RType::Prim(PrimType::Int));
                 }
+                // Cada elemento se convierte al tipo del componente, igual que las dimensiones se
+                // convierten a `int` arriba. Sin esto, `Object[] a = { "x", 7 }` emitía un
+                // `aastore` con un `int` crudo en la pila: bytecode inválido que compilaba sin
+                // una queja y reventaba al ejecutar (finding #289).
+                //
+                // Es el **mismo** `coerce` que ya usaban la asignación y los argumentos, que es
+                // por lo que esos dos contextos sí boxeaban: la conversión estaba implementada,
+                // lo que faltaba era llamarla desde acá.
                 if let Some(es) = init {
                     for x in es.iter_mut() {
                         self.expr(x, scope);
+                        if let Some(t) = &elem_ty {
+                            self.coerce(x, t);
+                        }
                     }
                 }
             }

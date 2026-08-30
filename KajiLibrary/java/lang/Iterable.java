@@ -12,6 +12,25 @@ import java.util.Iterator;
 public interface Iterable<T> {
 
     Iterator<T> iterator();
+
+    /**
+     * Corre `action` sobre cada elemento, en el orden en que los da el iterador.
+     *
+     * <p>Faltaba, y era el unico miembro publico de Iterable que no estaba: sin el, `forEach` no
+     * existia en NINGUNA coleccion de la biblioteca -- lo hereda todo lo que sea Iterable, que es
+     * la mitad de java.util. LinkedBlockingDeque y LinkedTransferQueue lo declaraban por su
+     * cuenta, y no estaban sobreescribiendo nada.
+     *
+     * <p>Va como default y no como abstracto por la razon de siempre: declararlo abstracto
+     * obligaria a escribirlo en cada uno de los implementores, y el cuerpo seria este mismo.
+     */
+    default void forEach(java.util.function.Consumer<? super T> action) {
+        Iterator<T> it = this.iterator();
+        while (it.hasNext()) {
+            action.accept(it.next());
+        }
+    }
+
     /**
      * A spliterator over these elements.
      *

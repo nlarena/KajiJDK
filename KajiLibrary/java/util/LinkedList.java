@@ -11,13 +11,21 @@ package java.util;
 //
 // `get(int)` walks from the *nearer* end, which halves the average walk — the same trick the
 // JDK plays.
-public class LinkedList<E> implements List<E>, Deque<E> {
+public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>, Deque<E> {
 
     private LinkedNode<E> first;
     private LinkedNode<E> last;
     private int size;
 
     public LinkedList() {
+    }
+
+    // Copia los elementos de otra coleccion, en el orden de su iterador.
+    public LinkedList(Collection<? extends E> c) {
+        Iterator<? extends E> it = c.iterator();
+        while (it.hasNext()) {
+            this.addLast(it.next());
+        }
     }
 
     // --- linking primitives (everything else is written in terms of these three) ---

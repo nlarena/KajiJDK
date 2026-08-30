@@ -14,6 +14,6 @@ public class MissingFormatArgumentException extends IllegalFormatException {
     }
 
     public String getMessage() {
-        return "Format specifier \x27" + specifier + "\x27";
+        return "Format specifier '" + specifier + "'";
     }
 }

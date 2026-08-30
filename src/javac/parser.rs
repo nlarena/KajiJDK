@@ -2359,7 +2359,14 @@ impl Parser {
                 path.append(&mut ta.path);
                 type_annos.push(TypeUseAnnot { path, annotation: ta.annotation });
             }
-            let init = if self.at(TokenKind::LBrace) { Some(self.array_init()?) } else { None };
+            // El tipo de cada elemento del inicializador: el elemento bajo `ndims - 1` arrays
+            // (para `new int[][] {…}`, un `int[]`).
+            let mut elem_ty = elem.clone();
+            for _ in 1..ndims {
+                elem_ty = Type::Array(Box::new(elem_ty));
+            }
+            let init =
+                if self.at(TokenKind::LBrace) { Some(self.array_init(&elem_ty)?) } else { None };
             Ok(Expr::new(pos, ExprKind::NewArray { elem, dims, init }).with_type_annos(type_annos))
         } else {
             // `new @A Foo(...)`: la anotación líder va con path vacío; las anidadas del tipo elemento
@@ -2397,7 +2404,15 @@ impl Parser {
         Ok(members)
     }
 
-    fn array_init(&mut self) -> Result<Vec<Expr>> {
+    /// Los elementos de un `{ … }` de creación de array. `elem_ty` es el tipo de **cada
+    /// elemento** (para `new int[][] {…}`, un `int[]`).
+    ///
+    /// Cada elemento se lee con [`Self::var_init`], no con `expr`: un elemento puede ser a su vez
+    /// un `{ … }` (`new int[][] { {1,2}, {3} }`), y `var_init` es justamente quien sabe abrir esa
+    /// llave y quitarle una dimensión al tipo. Leerlos con `expr` daba "se esperaba una expresión,
+    /// se encontró LBrace" (finding #281) — que era el mismo anidamiento que la forma declarativa
+    /// `int[][] a = { {1,2} }` venía aceptando desde siempre, por pasar por `var_init`.
+    fn array_init(&mut self, elem_ty: &Type) -> Result<Vec<Expr>> {
         self.expect(TokenKind::LBrace)?;
         let mut elems = Vec::new();
         if !self.at(TokenKind::RBrace) {
@@ -2405,7 +2420,7 @@ impl Parser {
                 if self.at(TokenKind::RBrace) {
                     break; // coma final
                 }
-                elems.push(self.expr()?);
+                elems.push(self.var_init(elem_ty)?);
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
@@ -2679,8 +2694,15 @@ fn unescape_utf16(chars: &[char]) -> Option<Vec<u16>> {
                 'b' => out.push(0x08),
                 'f' => out.push(0x0c),
                 's' => out.push(u16::from(b' ')),
-                '0' => out.push(0),
                 other if matches!(other, '\\' | '\'' | '"') => out.push(other as u16),
+                // Escape **octal** (§3.10.7): de uno a tres digitos 0-7, con tope 0377. El caso
+                // `\\0` es el mas visto y era el unico que estaba; los otros se decodificaban
+                // como el digito suelto.
+                d if ('0'..='7').contains(&d) => {
+                    let (v, consumidos) = read_octal(chars, i);
+                    out.push(v);
+                    i += consumidos;
+                }
                 'u' => {
                     // JLS 3.3: una `u` de mas es legal (`\uu0041`), y el valor son cuatro higits.
                     while chars.get(i + 1) == Some(&'u') {
@@ -2690,10 +2712,12 @@ fn unescape_utf16(chars: &[char]) -> Option<Vec<u16>> {
                     out.push(u16::from_str_radix(&hex, 16).ok()?);
                     i += 4;
                 }
-                other => {
-                    let mut buf = [0u16; 2];
-                    out.extend_from_slice(other.encode_utf16(&mut buf));
-                }
+                // Cualquier otra letra tras la barra es un **escape ilegal** (§3.10.7), y el
+                // javac real lo rechaza con "illegal escape character". Antes se tragaba la barra
+                // y se quedaba con la letra, que es la peor de las dos opciones: `"\d"` --un
+                // patron de regex escrito con una barra de menos-- se volvia `"d"` en silencio, y
+                // el regex resultante matcheaba la letra `d` en vez de un digito (#297).
+                _ => return None,
             }
         } else {
             let mut buf = [0u16; 2];
@@ -2724,10 +2748,14 @@ fn unescape_impl(chars: &[char], text_block: bool) -> Option<String> {
                 'b' => out.push('\u{8}'),
                 'f' => out.push('\u{c}'),
                 's' => out.push(' '),
-                '0' => out.push('\0'),
                 '\\' => out.push('\\'),
                 '\'' => out.push('\''),
                 '"' => out.push('"'),
+                d if ('0'..='7').contains(&d) => {
+                    let (v, consumidos) = read_octal(chars, i);
+                    out.push(char::from_u32(u32::from(v))?);
+                    i += consumidos;
+                }
                 '\n' if text_block => {} // continuación de línea: se traga el `\n`
                 'u' => {
                     let hex: String = chars.get(i + 1..i + 5)?.iter().collect();
@@ -2735,7 +2763,8 @@ fn unescape_impl(chars: &[char], text_block: bool) -> Option<String> {
                     out.push(char::from_u32(code)?);
                     i += 4;
                 }
-                other => out.push(other),
+                // Igual que en `unescape_utf16`: un escape que no existe es un error (#297).
+                _ => return None,
             }
         } else {
             out.push(chars[i]);
@@ -2743,6 +2772,27 @@ fn unescape_impl(chars: &[char], text_block: bool) -> Option<String> {
         i += 1;
     }
     Some(out)
+}
+
+/// Lee un escape **octal** que arranca en `chars[i]` (§3.10.7): de uno a tres digitos, y con tres
+/// el primero tiene que ser 0-3 —el tope es `\377`—. Devuelve el valor y cuantos digitos **extra**
+/// se consumieron, para que el llamador adelante su indice.
+fn read_octal(chars: &[char], i: usize) -> (u16, usize) {
+    let digito = |c: Option<&char>| c.and_then(|c| c.to_digit(8));
+    let mut v = chars[i].to_digit(8).unwrap_or(0);
+    let mut extra = 0;
+    // El tercer digito solo entra si el primero es 0-3; si no, `\77` ya es el maximo de dos.
+    let tope = if v <= 3 { 2 } else { 1 };
+    while extra < tope {
+        match digito(chars.get(i + extra + 1)) {
+            Some(d) => {
+                v = v * 8 + d;
+                extra += 1;
+            }
+            None => break,
+        }
+    }
+    (v as u16, extra)
 }
 
 #[cfg(test)]

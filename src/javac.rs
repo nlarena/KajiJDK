@@ -57,17 +57,41 @@ pub struct Error {
     /// Error (default) o warning. Solo los `Error` cortan la compilación; los `Warning` los produce
     /// el pase de *lint* y el CLI los imprime aparte.
     pub severity: Severity,
+    /// De **qué unidad** de la compilación salió, por índice en la lista de fuentes.
+    ///
+    /// Con un solo archivo sobra; con varios es la diferencia entre un mensaje útil y uno que
+    /// miente. Antes el driver adivinaba --tomaba el primer archivo con suficientes líneas-- y
+    /// entonces un error de `Bbb.java:3` se imprimía como `Aaa.java:3`, **citando la línea 3 de
+    /// Aaa**, que no tiene nada que ver. La posición era correcta y el archivo no, que es la peor
+    /// combinación posible: manda a leer código sano.
+    ///
+    /// `None` en los diagnósticos que no salen de ninguna unidad en particular.
+    pub unit: Option<usize>,
 }
 
 impl Error {
     /// Un error sin notas en `(línea, columna)`.
     pub fn new(message: impl Into<String>, line: u32, col: u32) -> Error {
-        Error { message: message.into(), line, col, notes: Vec::new(), severity: Severity::Error }
+        Error {
+            message: message.into(),
+            line,
+            col,
+            notes: Vec::new(),
+            severity: Severity::Error,
+            unit: None,
+        }
     }
 
     /// Un **warning** (`-Xlint`) sin notas en `(línea, columna)`.
     pub fn warning(message: impl Into<String>, line: u32, col: u32) -> Error {
-        Error { message: message.into(), line, col, notes: Vec::new(), severity: Severity::Warning }
+        Error {
+            message: message.into(),
+            line,
+            col,
+            notes: Vec::new(),
+            severity: Severity::Warning,
+            unit: None,
+        }
     }
 
     /// El mismo error con sus sub-líneas explicativas (estilo `javac`).
@@ -139,6 +163,20 @@ pub fn render_diagnostics(diagnostics: &[Error], source: &str, filename: &str) -
         out.push_str(&format!("{warnings} warning{}\n", if warnings == 1 { "" } else { "s" }));
     }
     out
+}
+
+/// Marca con la unidad `i` los diagnósticos que `errors` sumó a partir del índice `desde`.
+///
+/// Se llama después de cada pase **por unidad**, que es donde se sabe la respuesta: el sitio que
+/// construye el error no la tiene, y hacérsela llegar querría enhebrar el índice por cientos de
+/// llamadas. Solo marca los que están sin marcar, para que un pase de más adentro que ya supo cuál
+/// era no lo pierda.
+pub(crate) fn marcar_unidad(errors: &mut [Error], desde: usize, i: usize) {
+    for e in &mut errors[desde..] {
+        if e.unit.is_none() {
+            e.unit = Some(i);
+        }
+    }
 }
 
 /// Alias de resultado del pipeline: `T` o un [`Error`] con posición.
@@ -266,25 +304,38 @@ pub fn compile_units_cp(
 ) -> Result<Vec<Vec<(String, Vec<u8>)>>> {
     let mut units = Vec::with_capacity(sources.len());
     let mut errors = Vec::new();
-    for source in sources {
-        let tokens = lexer::tokenize(source)?;
+    for (i, source) in sources.iter().enumerate() {
+        let tokens = lexer::tokenize(source).map_err(|mut e| {
+            e.unit = Some(i);
+            e
+        })?;
         let (unit, parse_errors) = parser::parse(tokens);
+        let desde = errors.len();
         errors.extend(parse_errors);
+        marcar_unidad(&mut errors, desde, i);
         units.push(unit);
     }
     // Pasada 1 **global**: Enter de todas las clases, después MemberEnter, después resolución.
+    // Sus diagnósticos ya vienen marcados de adentro: la pasada es global pero sus bucles son por
+    // unidad, así que ahí también se sabe cuál es.
     let (mut table, sem_errors) = enter::enter_cp_multi(&units, extra_classpath);
     errors.extend(sem_errors);
-    for unit in &mut units {
+    for (i, unit) in units.iter_mut().enumerate() {
+        let desde = errors.len();
         enter::register_local_classes(unit, &mut table, &mut errors);
         enter::hoist_anonymous(unit, &mut table, &mut errors);
+        marcar_unidad(&mut errors, desde, i);
     }
-    for unit in &mut units {
+    for (i, unit) in units.iter_mut().enumerate() {
+        let desde = errors.len();
         errors.extend(attribute::attribute(unit, &table));
+        marcar_unidad(&mut errors, desde, i);
     }
-    for unit in &units {
+    for (i, unit) in units.iter().enumerate() {
+        let desde = errors.len();
         errors.extend(check::check(unit, &table));
         errors.extend(flow::flow(unit));
+        marcar_unidad(&mut errors, desde, i);
     }
     if let Some(first) = errors.into_iter().next() {
         return Err(first); // no se emite bytecode para un programa con errores
@@ -297,14 +348,18 @@ pub fn compile_units_cp(
     }
     table.set_const_fields(const_fields);
     let mut out = Vec::with_capacity(units.len());
-    for unit in &mut units {
+    for (i, unit) in units.iter_mut().enumerate() {
         transtypes::trans_types(unit, &table);
         desugar::desugar(unit, &mut table);
         let lowered = attribute::attribute(unit, &table);
-        if let Some(first) = lowered.into_iter().next() {
+        if let Some(mut first) = lowered.into_iter().next() {
+            first.unit = Some(i);
             return Err(first);
         }
-        out.push(codegen::generate(unit, &table)?);
+        out.push(codegen::generate(unit, &table).map_err(|mut e| {
+            e.unit = Some(i);
+            e
+        })?);
     }
     Ok(out)
 }
