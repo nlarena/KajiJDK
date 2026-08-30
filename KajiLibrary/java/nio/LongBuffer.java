@@ -385,24 +385,18 @@ public abstract class LongBuffer extends Buffer implements Comparable<LongBuffer
     /**
      * Returns the backing array.
      *
-     * <p><strong>Declared {@code Object} rather than {@code long[]}</strong>, unlike the JDK: our
-     * javac rejects an override that narrows {@code Object} to an array type ("byte[] no es un
-     * subtipo de Object"), so the covariant form does not compile. The JDK's own bridge method
-     * has exactly this signature, so callers that were compiled against {@code Buffer} see no
-     * difference; callers that want the array must cast.
-     *
      * @return the array this buffer reads and writes
      * @throws ReadOnlyBufferException if this buffer is read-only
      * @throws UnsupportedOperationException if this buffer is a view and owns no array
      */
-    public Object array() {
+    public final long[] array() {
         if (hb == null) {
             throw new UnsupportedOperationException("view buffer has no backing array");
         }
         if (isReadOnly) {
             throw new ReadOnlyBufferException();
         }
-        return (Object) hb;
+        return hb;
     }
 
     /**
@@ -520,7 +514,7 @@ public abstract class LongBuffer extends Buffer implements Comparable<LongBuffer
      * @return the backing array, or {@code null}
      */
     Object base() {
-        return (Object) hb;
+        return hb;
     }
 
     /**

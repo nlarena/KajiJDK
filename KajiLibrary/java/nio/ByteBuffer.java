@@ -411,20 +411,18 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
     /**
      * Returns the backing array.
      *
-     * <p><strong>Declared {@code Object} rather than {@code byte[]}</strong>, unlike the JDK: our
-     * javac rejects an override that narrows {@code Object} to an array type ("byte[] no es un
-     * subtipo de Object" — the return-type check does not know JLS 4.10.3), so the covariant form
-     * does not compile. The JDK's own bridge method has exactly this signature, so a caller
-     * holding a {@code Buffer} sees no difference; a caller wanting the array must cast.
-     *
      * @return the array this buffer reads and writes
      * @throws ReadOnlyBufferException if this buffer is read-only
+     * @throws UnsupportedOperationException if this buffer has no backing array
      */
-    public Object array() {
+    public final byte[] array() {
+        if (hb == null) {
+            throw new UnsupportedOperationException();
+        }
         if (isReadOnly) {
             throw new ReadOnlyBufferException();
         }
-        return (Object) hb;
+        return hb;
     }
 
     /**
