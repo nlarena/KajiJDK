@@ -876,6 +876,103 @@ public final class StrictMath {
         return Math.fma(a, b, c);
     }
 
+    // ---- transcendentals: fdlibm, held in Math (see the note there) ----
+    //
+    // The JDK declares these native in StrictMath and lets Math delegate the other way; KajiLibrary
+    // keeps the single fdlibm implementation in Math (as it does for sqrt/fma) and delegates here.
+    // The result is the reference's either way: fdlibm meets both the StrictMath (bit-exact) and the
+    // Math (within 1 ulp) contracts at once.
+
+    /** @see Math#cbrt(double) */
+    public static double cbrt(double a) {
+        return Math.cbrt(a);
+    }
+
+    /** @see Math#exp(double) */
+    public static double exp(double a) {
+        return Math.exp(a);
+    }
+
+    /** @see Math#log(double) */
+    public static double log(double a) {
+        return Math.log(a);
+    }
+
+    /** @see Math#sin(double) */
+    public static double sin(double a) {
+        return Math.sin(a);
+    }
+
+    /** @see Math#cos(double) */
+    public static double cos(double a) {
+        return Math.cos(a);
+    }
+
+    /** @see Math#tan(double) */
+    public static double tan(double a) {
+        return Math.tan(a);
+    }
+
+    /** @see Math#expm1(double) */
+    public static double expm1(double a) {
+        return Math.expm1(a);
+    }
+
+    /** @see Math#log10(double) */
+    public static double log10(double a) {
+        return Math.log10(a);
+    }
+
+    /** @see Math#log1p(double) */
+    public static double log1p(double a) {
+        return Math.log1p(a);
+    }
+
+    /** @see Math#sinh(double) */
+    public static double sinh(double a) {
+        return Math.sinh(a);
+    }
+
+    /** @see Math#cosh(double) */
+    public static double cosh(double a) {
+        return Math.cosh(a);
+    }
+
+    /** @see Math#tanh(double) */
+    public static double tanh(double a) {
+        return Math.tanh(a);
+    }
+
+    /** @see Math#atan(double) */
+    public static double atan(double a) {
+        return Math.atan(a);
+    }
+
+    /** @see Math#asin(double) */
+    public static double asin(double a) {
+        return Math.asin(a);
+    }
+
+    /** @see Math#acos(double) */
+    public static double acos(double a) {
+        return Math.acos(a);
+    }
+
+    /** @see Math#atan2(double, double) */
+    public static double atan2(double y, double x) {
+        return Math.atan2(y, x);
+    }
+
+    /** @see Math#hypot(double, double) */
+    public static double hypot(double x, double y) {
+        return Math.hypot(x, y);
+    }
+
+    /** @see Math#pow(double, double) */
+    public static double pow(double x, double y) {
+        return Math.pow(x, y);
+    }
+
 
     // ---- a random number ----
 

@@ -50,23 +50,23 @@ public abstract class VarHandle implements Constable {
 
     // ---- read ----
 
-    public final native Object get(Object[] args);
+    public final native Object get(Object... args);
 
-    public final native Object getVolatile(Object[] args);
+    public final native Object getVolatile(Object... args);
 
-    public final native Object getOpaque(Object[] args);
+    public final native Object getOpaque(Object... args);
 
-    public final native Object getAcquire(Object[] args);
+    public final native Object getAcquire(Object... args);
 
     // ---- write ----
 
-    public final native void set(Object[] args);
+    public final native void set(Object... args);
 
-    public final native void setVolatile(Object[] args);
+    public final native void setVolatile(Object... args);
 
-    public final native void setOpaque(Object[] args);
+    public final native void setOpaque(Object... args);
 
-    public final native void setRelease(Object[] args);
+    public final native void setRelease(Object... args);
 
     // ---- compare-and-set ----
     //
@@ -76,15 +76,15 @@ public abstract class VarHandle implements Constable {
     // its own is what makes the loop cheap. Consequently every `weak*` call belongs inside a
     // retry loop, and the non-weak `compareAndSet` is the one that may be used bare.
 
-    public final native boolean compareAndSet(Object[] args);
+    public final native boolean compareAndSet(Object... args);
 
-    public final native boolean weakCompareAndSet(Object[] args);
+    public final native boolean weakCompareAndSet(Object... args);
 
-    public final native boolean weakCompareAndSetPlain(Object[] args);
+    public final native boolean weakCompareAndSetPlain(Object... args);
 
-    public final native boolean weakCompareAndSetAcquire(Object[] args);
+    public final native boolean weakCompareAndSetAcquire(Object... args);
 
-    public final native boolean weakCompareAndSetRelease(Object[] args);
+    public final native boolean weakCompareAndSetRelease(Object... args);
 
     // ---- compare-and-exchange ----
     //
@@ -92,46 +92,46 @@ public abstract class VarHandle implements Constable {
     // boolean. A retry loop written over this one does not have to re-read the variable after a
     // failure, because the failure already told it what it found.
 
-    public final native Object compareAndExchange(Object[] args);
+    public final native Object compareAndExchange(Object... args);
 
-    public final native Object compareAndExchangeAcquire(Object[] args);
+    public final native Object compareAndExchangeAcquire(Object... args);
 
-    public final native Object compareAndExchangeRelease(Object[] args);
+    public final native Object compareAndExchangeRelease(Object... args);
 
     // ---- read-modify-write ----
     //
     // Each returns the value the variable held BEFORE the update, which is what makes them
     // composable: the caller learns the old state and the new state in one atomic step.
 
-    public final native Object getAndSet(Object[] args);
+    public final native Object getAndSet(Object... args);
 
-    public final native Object getAndSetAcquire(Object[] args);
+    public final native Object getAndSetAcquire(Object... args);
 
-    public final native Object getAndSetRelease(Object[] args);
+    public final native Object getAndSetRelease(Object... args);
 
-    public final native Object getAndAdd(Object[] args);
+    public final native Object getAndAdd(Object... args);
 
-    public final native Object getAndAddAcquire(Object[] args);
+    public final native Object getAndAddAcquire(Object... args);
 
-    public final native Object getAndAddRelease(Object[] args);
+    public final native Object getAndAddRelease(Object... args);
 
-    public final native Object getAndBitwiseOr(Object[] args);
+    public final native Object getAndBitwiseOr(Object... args);
 
-    public final native Object getAndBitwiseOrAcquire(Object[] args);
+    public final native Object getAndBitwiseOrAcquire(Object... args);
 
-    public final native Object getAndBitwiseOrRelease(Object[] args);
+    public final native Object getAndBitwiseOrRelease(Object... args);
 
-    public final native Object getAndBitwiseAnd(Object[] args);
+    public final native Object getAndBitwiseAnd(Object... args);
 
-    public final native Object getAndBitwiseAndAcquire(Object[] args);
+    public final native Object getAndBitwiseAndAcquire(Object... args);
 
-    public final native Object getAndBitwiseAndRelease(Object[] args);
+    public final native Object getAndBitwiseAndRelease(Object... args);
 
-    public final native Object getAndBitwiseXor(Object[] args);
+    public final native Object getAndBitwiseXor(Object... args);
 
-    public final native Object getAndBitwiseXorAcquire(Object[] args);
+    public final native Object getAndBitwiseXorAcquire(Object... args);
 
-    public final native Object getAndBitwiseXorRelease(Object[] args);
+    public final native Object getAndBitwiseXorRelease(Object... args);
 
     // ---- invocation behaviour ----
     //

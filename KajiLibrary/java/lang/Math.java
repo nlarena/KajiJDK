@@ -1914,4 +1914,1277 @@ public final class Math {
         return result;
     }
 
+    // ======================================================================================
+    // The transcendental half -- fdlibm, ported.
+    //
+    // These are the functions whose contract is stated in ULPs, which the JDK meets by shipping
+    // fdlibm (today as `java.lang.FdLibm`, a Java translation of the C). They are ported here from
+    // that same reference, constant for constant and step for step, so the result is bit-for-bit the
+    // JDK's -- the only way a math library is allowed to be "close". `StrictMath` delegates to these.
+    //
+    // The bit games fdlibm plays on the two 32-bit halves of a double are expressed through these
+    // helpers: `hi(x)`/`lo(x)` read the high/low word, `withHi`/`withLo` return `x` with that word
+    // replaced. They stand in for the C macros `GET/SET_HIGH_WORD` and `__HI`/`__LO`.
+
+    private static int hi(double x) {
+        return (int) (Double.doubleToRawLongBits(x) >>> 32);
+    }
+
+    private static int lo(double x) {
+        return (int) Double.doubleToRawLongBits(x);
+    }
+
+    private static double withHi(double x, int high) {
+        long bits = Double.doubleToRawLongBits(x) & 0x00000000ffffffffL;
+        return Double.longBitsToDouble((((long) high) << 32) | bits);
+    }
+
+    private static double withLo(double x, int low) {
+        long bits = Double.doubleToRawLongBits(x) & 0xffffffff00000000L;
+        return Double.longBitsToDouble(bits | (((long) low) & 0x00000000ffffffffL));
+    }
+
+    // ---- cube root (fdlibm s_cbrt.c) ----
+
+    /**
+     * The cube root of {@code a}. Ported from fdlibm: a 5-bit seed by exponent division, refined to
+     * 23 bits by a rational approximation and to 53 by one Newton step, for an error under 0.667 ulp.
+     */
+    public static double cbrt(double a) {
+        // (682-0.03306235651)*2**20 and (664-0.03306235651)*2**20: the exponent-division seeds.
+        final int B1 = 715094163;
+        final int B2 = 696219795;
+        final double C = 5.42857142857142815906e-01; //  19/35
+        final double D = -7.05306122448979611050e-01; // -864/1225
+        final double E = 1.41428571428571436819e+00; //  99/70
+        final double F = 1.60714285714285720630e+00; //  45/28
+        final double G = 3.57142857142857150787e-01; //   5/14
+
+        if (a == 0.0d || a != a || a == Double.POSITIVE_INFINITY
+                || a == Double.NEGATIVE_INFINITY) {
+            return a; // signed zeros, NaN and infinities are their own cube roots
+        }
+        double sign = (a < 0.0d) ? -1.0d : 1.0d;
+        double x = Math.abs(a);
+
+        // Rough cube root to 5 bits, from dividing the biased exponent by three.
+        double t;
+        if (x < Double.MIN_NORMAL) { // subnormal: scale up by 2**54 first
+            t = Double.longBitsToDouble(0x4350000000000000L); // 2**54
+            t = t * x;
+            t = withHi(t, hi(t) / 3 + B2);
+        } else {
+            t = withHi(0.0d, hi(x) / 3 + B1);
+        }
+
+        // New cube root to 23 bits by a rational approximation.
+        double r = t * t / x;
+        double s = C + r * t;
+        t = t * (G + F / (s + E + D / s));
+
+        // Chop to 20 bits and nudge up, so t is a hair larger than cbrt(x).
+        t = withLo(t, 0);
+        t = withHi(t, hi(t) + 1);
+
+        // One Newton step to 53 bits, error < 0.667 ulp. t*t and r-t are exact here.
+        s = t * t;
+        r = x / s;
+        double w = t + t;
+        r = (r - t) / (w + r);
+        t = t + t * r;
+
+        return sign * t;
+    }
+
+    // ---- e^x (fdlibm e_exp.c) ----
+
+    /**
+     * {@code e} raised to {@code a}. Ported from fdlibm: reduce to {@code x = r + k*ln2} with
+     * {@code |r| <= 0.5 ln2}, evaluate {@code e^r} by a degree-5 rational, then scale by {@code 2^k}.
+     * Error under 1 ulp.
+     */
+    public static double exp(double a) {
+        final double one = 1.0d;
+        final double[] halF = {0.5d, -0.5d};
+        final double huge = 1.0e+300d;
+        final double twom1000 = Double.longBitsToDouble(0x0170000000000000L); // 2**-1000
+        final double o_threshold = 7.09782712893383973096e+02d;
+        final double u_threshold = -7.45133219101941108420e+02d;
+        final double[] ln2HI = {6.93147180369123816490e-01d, -6.93147180369123816490e-01d};
+        final double[] ln2LO = {1.90821492927058770002e-10d, -1.90821492927058770002e-10d};
+        final double invln2 = 1.44269504088896338700e+00d;
+        final double P1 = 1.66666666666666019037e-01d;
+        final double P2 = -2.77777777770155933842e-03d;
+        final double P3 = 6.61375632143793436117e-05d;
+        final double P4 = -1.65339022054652515390e-06d;
+        final double P5 = 4.13813679705723846039e-08d;
+
+        double x = a;
+        double y;
+        double hi = 0.0d;
+        double lo = 0.0d;
+        double c;
+        double t;
+        int k = 0;
+        int hx = hi(x);
+        int xsb = (hx >>> 31) & 1;    // sign bit of x
+        hx = hx & 0x7fffffff;         // high word of |x|
+
+        if (hx >= 0x40862E42) {       // |x| >= 709.78...
+            if (hx >= 0x7ff00000) {
+                if (((hx & 0xfffff) | lo(x)) != 0) {
+                    return x + x;                     // NaN
+                }
+                return (xsb == 0) ? x : 0.0d;         // exp(+-inf) = {inf, 0}
+            }
+            if (x > o_threshold) {
+                return huge * huge;                   // overflow
+            }
+            if (x < u_threshold) {
+                return twom1000 * twom1000;           // underflow
+            }
+        }
+
+        if (hx > 0x3fd62e42) {                // |x| > 0.5 ln2
+            if (hx < 0x3FF0A2B2) {            // and |x| < 1.5 ln2
+                hi = x - ln2HI[xsb];
+                lo = ln2LO[xsb];
+                k = 1 - xsb - xsb;
+            } else {
+                k = (int) (invln2 * x + halF[xsb]);
+                t = k;
+                hi = x - t * ln2HI[0];        // t*ln2HI is exact here
+                lo = t * ln2LO[0];
+            }
+            x = hi - lo;
+        } else if (hx < 0x3e300000) {         // |x| < 2**-28
+            if (huge + x > one) {
+                return one + x;               // trigger inexact
+            }
+        } else {
+            k = 0;
+        }
+
+        t = x * x;
+        c = x - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5))));
+        if (k == 0) {
+            return one - ((x * c) / (c - 2.0d) - x);
+        }
+        y = one - ((lo - (x * c) / (2.0d - c)) - hi);
+        if (k >= -1021) {
+            y = withHi(y, hi(y) + (k << 20)); // add k to y's exponent
+            return y;
+        }
+        y = withHi(y, hi(y) + ((k + 1000) << 20));
+        return y * twom1000;
+    }
+
+    // ---- natural logarithm (fdlibm e_log.c) ----
+
+    /**
+     * The natural logarithm of {@code a}. Ported from fdlibm: split {@code a = 2^k * (1+f)}, then
+     * {@code log(1+f)} from {@code s = f/(2+f)} through a polynomial in {@code s^2}. Error under 1 ulp.
+     */
+    public static double log(double a) {
+        final double ln2_hi = 6.93147180369123816490e-01d;
+        final double ln2_lo = 1.90821492927058770002e-10d;
+        final double two54 = 1.80143985094819840000e+16d;
+        final double Lg1 = 6.666666666666735130e-01d;
+        final double Lg2 = 3.999999999940941908e-01d;
+        final double Lg3 = 2.857142874366239149e-01d;
+        final double Lg4 = 2.222219843214978396e-01d;
+        final double Lg5 = 1.818357216161805012e-01d;
+        final double Lg6 = 1.531383769920937332e-01d;
+        final double Lg7 = 1.479819860511658591e-01d;
+
+        double x = a;
+        double hfsq;
+        double f;
+        double s;
+        double z;
+        double R;
+        double w;
+        double t1;
+        double t2;
+        double dk;
+        int k = 0;
+        int hx = hi(x);
+        int lx = lo(x);
+
+        if (hx < 0x00100000) {                     // x < 2**-1022
+            if (((hx & 0x7fffffff) | lx) == 0) {
+                return -two54 / 0.0d;              // log(+-0) = -inf
+            }
+            if (hx < 0) {
+                return (x - x) / 0.0d;             // log(-#) = NaN
+            }
+            k = k - 54;
+            x = x * two54;                         // subnormal: scale up
+            hx = hi(x);
+        }
+        if (hx >= 0x7ff00000) {
+            return x + x;
+        }
+        k = k + (hx >> 20) - 1023;
+        hx = hx & 0x000fffff;
+        int i = (hx + 0x95f64) & 0x100000;
+        x = withHi(x, hx | (i ^ 0x3ff00000));      // normalize x or x/2
+        k = k + (i >> 20);
+        f = x - 1.0d;
+        if ((0x000fffff & (2 + hx)) < 3) {         // |f| < 2**-20
+            if (f == 0.0d) {
+                if (k == 0) {
+                    return 0.0d;
+                }
+                dk = (double) k;
+                return dk * ln2_hi + dk * ln2_lo;
+            }
+            R = f * f * (0.5d - 0.33333333333333333d * f);
+            if (k == 0) {
+                return f - R;
+            }
+            dk = (double) k;
+            return dk * ln2_hi - ((R - dk * ln2_lo) - f);
+        }
+        s = f / (2.0d + f);
+        dk = (double) k;
+        z = s * s;
+        i = hx - 0x6147a;
+        w = z * z;
+        int j = 0x6b851 - hx;
+        t1 = w * (Lg2 + w * (Lg4 + w * Lg6));
+        t2 = z * (Lg1 + w * (Lg3 + w * (Lg5 + w * Lg7)));
+        i = i | j;
+        R = t2 + t1;
+        if (i > 0) {
+            hfsq = 0.5d * f * f;
+            if (k == 0) {
+                return f - (hfsq - s * (hfsq + R));
+            }
+            return dk * ln2_hi - ((hfsq - (s * (hfsq + R) + dk * ln2_lo)) - f);
+        }
+        if (k == 0) {
+            return f - s * (f - R);
+        }
+        return dk * ln2_hi - ((s * (f - R) - dk * ln2_lo) - f);
+    }
+
+    // ---- trigonometry (fdlibm, via the shared reduction in FdLibm) ----
+
+    /** The sine of {@code a} (radians). fdlibm: argument reduction (see {@link FdLibm}) + a kernel. */
+    public static double sin(double a) {
+        return FdLibm.sin(a);
+    }
+
+    /** The cosine of {@code a} (radians). fdlibm: argument reduction + a kernel. */
+    public static double cos(double a) {
+        return FdLibm.cos(a);
+    }
+
+    /** The tangent of {@code a} (radians). fdlibm: argument reduction + a kernel. */
+    public static double tan(double a) {
+        return FdLibm.tan(a);
+    }
+
+    // ---- e^x - 1 (fdlibm s_expm1.c) ----
+
+    /** {@code e^a - 1}, accurate near zero where {@code exp(a) - 1} would lose all its bits. */
+    public static double expm1(double a) {
+        final double one = 1.0d;
+        final double huge = 1.0e+300d;
+        final double tiny = 1.0e-300d;
+        final double o_threshold = 7.09782712893383973096e+02d;
+        final double ln2_hi = 6.93147180369123816490e-01d;
+        final double ln2_lo = 1.90821492927058770002e-10d;
+        final double invln2 = 1.44269504088896338700e+00d;
+        final double Q1 = -3.33333333333331316428e-02d;
+        final double Q2 = 1.58730158725481460165e-03d;
+        final double Q3 = -7.93650757867487942473e-05d;
+        final double Q4 = 4.00821782732936239552e-06d;
+        final double Q5 = -2.01099218183624371326e-07d;
+
+        double x = a;
+        double y;
+        double hival;
+        double loval;
+        double c = 0.0d;
+        double t;
+        double e;
+        double hxs;
+        double hfx;
+        double r1;
+        double twopk;
+        int k;
+        int hx = hi(x);
+        int xsb = hx & 0x80000000;
+        hx = hx & 0x7fffffff;
+        if (hx >= 0x4043687A) {
+            if (hx >= 0x40862E42) {
+                if (hx >= 0x7ff00000) {
+                    int low = lo(x);
+                    if (((hx & 0xfffff) | low) != 0) {
+                        return x + x;
+                    }
+                    return (xsb == 0) ? x : -1.0d;
+                }
+                if (x > o_threshold) {
+                    return huge * huge;
+                }
+            }
+            if (xsb != 0) {
+                if (x + tiny < 0.0d) {
+                    return tiny - one;
+                }
+            }
+        }
+        if (hx > 0x3fd62e42) {
+            if (hx < 0x3FF0A2B2) {
+                if (xsb == 0) {
+                    hival = x - ln2_hi;
+                    loval = ln2_lo;
+                    k = 1;
+                } else {
+                    hival = x + ln2_hi;
+                    loval = -ln2_lo;
+                    k = -1;
+                }
+            } else {
+                k = (int) (invln2 * x + ((xsb == 0) ? 0.5d : -0.5d));
+                t = k;
+                hival = x - t * ln2_hi;
+                loval = t * ln2_lo;
+            }
+            x = hival - loval;
+            c = (hival - x) - loval;
+        } else if (hx < 0x3c900000) {
+            t = huge + x;
+            return x - (t - (huge + x));
+        } else {
+            k = 0;
+        }
+        hfx = 0.5d * x;
+        hxs = x * hfx;
+        r1 = one + hxs * (Q1 + hxs * (Q2 + hxs * (Q3 + hxs * (Q4 + hxs * Q5))));
+        t = 3.0d - r1 * hfx;
+        e = hxs * ((r1 - t) / (6.0d - x * t));
+        if (k == 0) {
+            return x - (x * e - hxs);
+        }
+        twopk = Double.longBitsToDouble((((long) (0x3ff00000 + (k << 20))) & 0xffffffffL) << 32);
+        e = (x * (e - c) - c);
+        e -= hxs;
+        if (k == -1) {
+            return 0.5d * (x - e) - 0.5d;
+        }
+        if (k == 1) {
+            if (x < -0.25d) {
+                return -2.0d * (e - (x + 0.5d));
+            }
+            return one + 2.0d * (x - e);
+        }
+        if (k <= -2 || k > 56) {
+            y = one - (e - x);
+            if (k == 1024) {
+                y = y * 2.0d * Double.longBitsToDouble(0x7fe0000000000000L);
+            } else {
+                y = y * twopk;
+            }
+            return y - one;
+        }
+        t = one;
+        if (k < 20) {
+            t = withHi(t, 0x3ff00000 - (0x200000 >> k));
+            y = t - (e - x);
+            y = y * twopk;
+        } else {
+            t = withHi(t, ((0x3ff - k) << 20));
+            y = x - (e + t);
+            y += one;
+            y = y * twopk;
+        }
+        return y;
+    }
+
+    // ---- log(1 + x) (fdlibm s_log1p.c, with the JDK's grouping revision) ----
+
+    /**
+     * {@code log(1 + a)}, accurate near zero where {@code log(1 + a)} would lose bits. The final
+     * combination groups {@code k*ln2_lo} with the correction term rather than with {@code f} — the
+     * JDK's one revision to netlib fdlibm here, without which the result is 1 ulp off for {@code
+     * 1+a >= sqrt(2)}.
+     */
+    public static double log1p(double a) {
+        final double ln2_hi = 6.93147180369123816490e-01d;
+        final double ln2_lo = 1.90821492927058770002e-10d;
+        final double two54 = 1.80143985094819840000e+16d;
+        final double zero = 0.0d;
+        final double Lp1 = 6.666666666666735130e-01d;
+        final double Lp2 = 3.999999999940941908e-01d;
+        final double Lp3 = 2.857142874366239149e-01d;
+        final double Lp4 = 2.222219843214978396e-01d;
+        final double Lp5 = 1.818357216161805012e-01d;
+        final double Lp6 = 1.531383769920937332e-01d;
+        final double Lp7 = 1.479819860511658591e-01d;
+
+        double x = a;
+        double hfsq;
+        double f = 0.0d;
+        double c = 0.0d;
+        double s;
+        double z;
+        double R;
+        double u;
+        int k = 1;
+        int hx = hi(x);
+        int ax = hx & 0x7fffffff;
+        int hu = 0;
+        if (hx < 0x3FDA827A) {
+            if (ax >= 0x3ff00000) {
+                if (x == -1.0d) {
+                    return -two54 / zero;
+                }
+                return Double.NaN;
+            }
+            if (ax < 0x3e200000) {
+                if (two54 + x > zero && ax < 0x3c900000) {
+                    return x;
+                }
+                return x - x * x * 0.5d;
+            }
+            if (hx > 0 || hx <= 0xbfd2bec3) {
+                k = 0;
+                f = x;
+                hu = 1;
+            }
+        }
+        if (hx >= 0x7ff00000) {
+            return x + x;
+        }
+        if (k != 0) {
+            if (hx < 0x43400000) {
+                u = 1.0d + x;
+                hu = hi(u);
+                k = (hu >> 20) - 1023;
+                c = (k > 0) ? 1.0d - (u - x) : x - (u - 1.0d);
+                c /= u;
+            } else {
+                u = x;
+                hu = hi(u);
+                k = (hu >> 20) - 1023;
+                c = 0;
+            }
+            hu &= 0x000fffff;
+            if (hu < 0x6a09e) {
+                u = withHi(u, hu | 0x3ff00000);
+            } else {
+                k += 1;
+                u = withHi(u, hu | 0x3fe00000);
+                hu = (0x00100000 - hu) >> 2;
+            }
+            f = u - 1.0d;
+        }
+        hfsq = 0.5d * f * f;
+        if (f == zero) {
+            if (k == 0) {
+                return zero;
+            }
+            c += k * ln2_lo;
+            return k * ln2_hi + c;
+        }
+        s = f / (2.0d + f);
+        z = s * s;
+        R = z * (Lp1 + z * (Lp2 + z * (Lp3 + z * (Lp4 + z * (Lp5 + z * (Lp6 + z * Lp7))))));
+        if (k == 0) {
+            return f - (hfsq - s * (hfsq + R));
+        }
+        return k * ln2_hi - ((hfsq - (s * (hfsq + R) + (k * ln2_lo + c))) - f);
+    }
+
+    // ---- base-10 logarithm (fdlibm e_log10.c) ----
+
+    /** The base-10 logarithm of {@code a}. Splits off the power of two, then reuses {@link #log}. */
+    public static double log10(double a) {
+        final double two54 = 1.80143985094819840000e+16d;
+        final double ivln10 = 4.34294481903251816668e-01d;
+        final double log10_2hi = 3.01029995663611771306e-01d;
+        final double log10_2lo = 3.69423907715893078616e-13d;
+
+        double x = a;
+        double y;
+        double z;
+        int i;
+        int k = 0;
+        int hx = hi(x);
+        int lx = lo(x);
+        if (hx < 0x00100000) {
+            if (((hx & 0x7fffffff) | lx) == 0) {
+                return -two54 / 0.0d;
+            }
+            if (hx < 0) {
+                return (x - x) / 0.0d;
+            }
+            k -= 54;
+            x *= two54;
+            hx = hi(x);
+        }
+        if (hx >= 0x7ff00000) {
+            return x + x;
+        }
+        k += (hx >> 20) - 1023;
+        i = (int) (((long) k & 0x80000000L) >>> 31);
+        hx = (hx & 0x000fffff) | ((0x3ff - i) << 20);
+        y = (double) (k + i);
+        x = withHi(x, hx);
+        z = y * log10_2lo + ivln10 * log(x);
+        return z + y * log10_2hi;
+    }
+
+    // ---- hyperbolics (fdlibm), on exp/expm1 above ----
+
+    /** The hyperbolic sine of {@code a}. */
+    public static double sinh(double a) {
+        final double one = 1.0d;
+        final double shuge = 1.0e307d;
+        double t;
+        double w;
+        double h;
+        int jx = hi(a);
+        int ix = jx & 0x7fffffff;
+        if (ix >= 0x7ff00000) {
+            return a + a;
+        }
+        h = 0.5d;
+        if (jx < 0) {
+            h = -h;
+        }
+        if (ix < 0x40360000) {
+            if (ix < 0x3e300000) {
+                if (shuge + a > one) {
+                    return a;
+                }
+            }
+            t = expm1(Math.abs(a));
+            if (ix < 0x3ff00000) {
+                return h * (2.0d * t - t * t / (t + one));
+            }
+            return h * (t + t / (t + one));
+        }
+        if (ix < 0x40862E42) {
+            return h * exp(Math.abs(a));
+        }
+        if (ix <= 0x408633CE) {
+            w = exp(0.5d * Math.abs(a));
+            t = h * w;
+            return t * w;
+        }
+        return a * shuge;
+    }
+
+    /** The hyperbolic cosine of {@code a}. */
+    public static double cosh(double a) {
+        final double one = 1.0d;
+        final double half2 = 0.5d;
+        final double huge = 1.0e300d;
+        double t;
+        double w;
+        int ix = hi(a) & 0x7fffffff;
+        if (ix >= 0x7ff00000) {
+            return a * a;
+        }
+        if (ix < 0x3fd62e43) {
+            t = expm1(Math.abs(a));
+            w = one + t;
+            if (ix < 0x3c800000) {
+                return w;
+            }
+            return one + (t * t) / (w + w);
+        }
+        if (ix < 0x40360000) {
+            t = exp(Math.abs(a));
+            return half2 * t + half2 / t;
+        }
+        if (ix < 0x40862E42) {
+            return half2 * exp(Math.abs(a));
+        }
+        if (ix <= 0x408633CE) {
+            w = exp(half2 * Math.abs(a));
+            t = half2 * w;
+            return t * w;
+        }
+        return huge * huge;
+    }
+
+    /** The hyperbolic tangent of {@code a}. */
+    public static double tanh(double a) {
+        final double one = 1.0d;
+        final double tiny = 1.0e-300d;
+        double t;
+        double z;
+        int jx = hi(a);
+        int ix = jx & 0x7fffffff;
+        if (ix >= 0x7ff00000) {
+            if (jx >= 0) {
+                return one / a + one;
+            }
+            return one / a - one;
+        }
+        if (ix < 0x40360000) {
+            if (ix < 0x3c800000) {
+                return a * (one + a);
+            }
+            if (ix >= 0x3ff00000) {
+                t = expm1(2.0d * Math.abs(a));
+                z = one - 2.0d / (t + 2.0d);
+            } else {
+                t = expm1(-2.0d * Math.abs(a));
+                z = -t / (t + 2.0d);
+            }
+        } else {
+            z = one - tiny;
+        }
+        return (jx >= 0) ? z : -z;
+    }
+
+    // ---- inverse trigonometry (fdlibm) ----
+
+    private static final double[] ATANHI = {
+        4.63647609000806093515e-01, 7.85398163397448278999e-01,
+        9.82793723247329054082e-01, 1.57079632679489655800e+00
+    };
+    private static final double[] ATANLO = {
+        2.26987774529616870924e-17, 3.06161699786838301793e-17,
+        1.39033110312309984516e-17, 6.12323399573676603587e-17
+    };
+    private static final double[] ATAN_T = {
+        3.33333333333329318027e-01, -1.99999999998764832476e-01, 1.42857142725034663711e-01,
+        -1.11111104054623557880e-01, 9.09088713343650656196e-02, -7.69187620504482999495e-02,
+        6.66107313738753120669e-02, -5.83357013379057348645e-02, 4.97687799461593236017e-02,
+        -3.65315727442169155270e-02, 1.62858201153657823623e-02
+    };
+    private static final double PIO2_HI = 1.57079632679489655800e+00;
+    private static final double PIO2_LO = 6.12323399573676603587e-17;
+    private static final double PIO4_HI = 7.85398163397448278999e-01;
+    private static final double PS0 = 1.66666666666666657415e-01;
+    private static final double PS1 = -3.25565818622400915405e-01;
+    private static final double PS2 = 2.01212532134862925881e-01;
+    private static final double PS3 = -4.00555345006794114027e-02;
+    private static final double PS4 = 7.91534994289814532176e-04;
+    private static final double PS5 = 3.47933107596021167570e-05;
+    private static final double QS1 = -2.40339491173441421878e+00;
+    private static final double QS2 = 2.02094576023350569471e+00;
+    private static final double QS3 = -6.88283971605453293030e-01;
+    private static final double QS4 = 7.70381505559019352791e-02;
+
+    /** The arc tangent of {@code a}, in {@code [-pi/2, pi/2]}. */
+    public static double atan(double a) {
+        final double one = 1.0d;
+        final double huge = 1.0e300d;
+        double x = a;
+        double w;
+        double s1;
+        double s2;
+        double z;
+        int id;
+        int hx = hi(x);
+        int ix = hx & 0x7fffffff;
+        if (ix >= 0x44100000) {
+            int low = lo(x);
+            if (ix > 0x7ff00000 || (ix == 0x7ff00000 && low != 0)) {
+                return x + x;
+            }
+            if (hx > 0) {
+                return ATANHI[3] + ATANLO[3];
+            }
+            return -ATANHI[3] - ATANLO[3];
+        }
+        if (ix < 0x3fdc0000) {
+            if (ix < 0x3e400000) {
+                if (huge + x > one) {
+                    return x;
+                }
+            }
+            id = -1;
+        } else {
+            x = Math.abs(x);
+            if (ix < 0x3ff30000) {
+                if (ix < 0x3fe60000) {
+                    id = 0;
+                    x = (2.0d * x - one) / (2.0d + x);
+                } else {
+                    id = 1;
+                    x = (x - one) / (x + one);
+                }
+            } else {
+                if (ix < 0x40038000) {
+                    id = 2;
+                    x = (x - 1.5d) / (one + 1.5d * x);
+                } else {
+                    id = 3;
+                    x = -1.0d / x;
+                }
+            }
+        }
+        z = x * x;
+        w = z * z;
+        s1 = z * (ATAN_T[0] + w * (ATAN_T[2] + w * (ATAN_T[4] + w * (ATAN_T[6] + w * (ATAN_T[8] + w * ATAN_T[10])))));
+        s2 = w * (ATAN_T[1] + w * (ATAN_T[3] + w * (ATAN_T[5] + w * (ATAN_T[7] + w * ATAN_T[9]))));
+        if (id < 0) {
+            return x - x * (s1 + s2);
+        }
+        z = ATANHI[id] - ((x * (s1 + s2) - ATANLO[id]) - x);
+        return (hx < 0) ? -z : z;
+    }
+
+    /** The arc sine of {@code a}, in {@code [-pi/2, pi/2]}; NaN outside {@code [-1, 1]}. */
+    public static double asin(double a) {
+        final double one = 1.0d;
+        final double huge = 1.0e300d;
+        double x = a;
+        double t = 0.0d;
+        double w;
+        double p;
+        double q;
+        double c;
+        double r;
+        double s;
+        int hx = hi(x);
+        int ix = hx & 0x7fffffff;
+        if (ix >= 0x3ff00000) {
+            int lx = lo(x);
+            if (((ix - 0x3ff00000) | lx) == 0) {
+                return x * PIO2_HI + x * PIO2_LO;
+            }
+            return (x - x) / (x - x);
+        } else if (ix < 0x3fe00000) {
+            if (ix < 0x3e500000) {
+                if (huge + x > one) {
+                    return x;
+                }
+            } else {
+                t = x * x;
+                p = t * (PS0 + t * (PS1 + t * (PS2 + t * (PS3 + t * (PS4 + t * PS5)))));
+                q = one + t * (QS1 + t * (QS2 + t * (QS3 + t * QS4)));
+                w = p / q;
+                return x + x * w;
+            }
+        }
+        w = one - Math.abs(x);
+        t = w * 0.5d;
+        p = t * (PS0 + t * (PS1 + t * (PS2 + t * (PS3 + t * (PS4 + t * PS5)))));
+        q = one + t * (QS1 + t * (QS2 + t * (QS3 + t * QS4)));
+        s = sqrt(t);
+        if (ix >= 0x3FEF3333) {
+            w = p / q;
+            t = PIO2_HI - (2.0d * (s + s * w) - PIO2_LO);
+        } else {
+            w = s;
+            w = withLo(w, 0);
+            c = (t - w * w) / (s + w);
+            r = p / q;
+            p = 2.0d * s * r - (PIO2_LO - 2.0d * c);
+            q = PIO4_HI - 2.0d * w;
+            t = PIO4_HI - (p - q);
+        }
+        return (hx > 0) ? t : -t;
+    }
+
+    /** The arc cosine of {@code a}, in {@code [0, pi]}; NaN outside {@code [-1, 1]}. */
+    public static double acos(double a) {
+        final double one = 1.0d;
+        double x = a;
+        double z;
+        double p;
+        double q;
+        double r;
+        double w;
+        double s;
+        double c;
+        double df;
+        int hx = hi(x);
+        int ix = hx & 0x7fffffff;
+        if (ix >= 0x3ff00000) {
+            int lx = lo(x);
+            if (((ix - 0x3ff00000) | lx) == 0) {
+                if (hx > 0) {
+                    return 0.0d;
+                }
+                return PI + 2.0d * PIO2_LO;
+            }
+            return (x - x) / (x - x);
+        }
+        if (ix < 0x3fe00000) {
+            if (ix <= 0x3c600000) {
+                return PIO2_HI + PIO2_LO;
+            }
+            z = x * x;
+            p = z * (PS0 + z * (PS1 + z * (PS2 + z * (PS3 + z * (PS4 + z * PS5)))));
+            q = one + z * (QS1 + z * (QS2 + z * (QS3 + z * QS4)));
+            r = p / q;
+            return PIO2_HI - (x - (PIO2_LO - x * r));
+        } else if (hx < 0) {
+            z = (one + x) * 0.5d;
+            p = z * (PS0 + z * (PS1 + z * (PS2 + z * (PS3 + z * (PS4 + z * PS5)))));
+            q = one + z * (QS1 + z * (QS2 + z * (QS3 + z * QS4)));
+            s = sqrt(z);
+            r = p / q;
+            w = r * s - PIO2_LO;
+            return PI - 2.0d * (s + w);
+        } else {
+            z = (one - x) * 0.5d;
+            s = sqrt(z);
+            df = s;
+            df = withLo(df, 0);
+            c = (z - df * df) / (s + df);
+            p = z * (PS0 + z * (PS1 + z * (PS2 + z * (PS3 + z * (PS4 + z * PS5)))));
+            q = one + z * (QS1 + z * (QS2 + z * (QS3 + z * QS4)));
+            r = p / q;
+            w = r * s + c;
+            return 2.0d * (df + w);
+        }
+    }
+
+    /**
+     * The angle of the vector {@code (x, a)} — {@code atan2(a, x)} — in {@code [-pi, pi]}. Unlike the
+     * classic fdlibm, huge {@code |a/x|} is not short-circuited: {@code atan(|a/x|)} handles it
+     * (the ratio overflows to infinity and {@code atan(inf) = pi/2}), which is what the JDK does.
+     */
+    public static double atan2(double a, double x) {
+        final double tiny = 1.0e-300d;
+        final double zero = 0.0d;
+        final double pi_o_4 = 7.8539816339744827900E-01d;
+        final double pi_o_2 = 1.5707963267948965580E+00d;
+        final double pi_lo = 1.2246467991473531772E-16d;
+        double y = a;
+        double z;
+        int k;
+        int m;
+        int hx = hi(x);
+        int lx = lo(x);
+        int ix = hx & 0x7fffffff;
+        int hy = hi(y);
+        int ly = lo(y);
+        int iy = hy & 0x7fffffff;
+        if (((ix | ((lx | -lx) >>> 31)) > 0x7ff00000) || ((iy | ((ly | -ly) >>> 31)) > 0x7ff00000)) {
+            return x + y;
+        }
+        if (((hx - 0x3ff00000) | lx) == 0) {
+            return atan(y);
+        }
+        m = ((hy >>> 31) & 1) | ((hx >>> 30) & 2);
+        if ((iy | ly) == 0) {
+            switch (m) {
+                case 0:
+                case 1:
+                    return y;
+                case 2:
+                    return PI + tiny;
+                default:
+                    return -PI - tiny;
+            }
+        }
+        if ((ix | lx) == 0) {
+            return (hy < 0) ? -pi_o_2 - tiny : pi_o_2 + tiny;
+        }
+        if (ix == 0x7ff00000) {
+            if (iy == 0x7ff00000) {
+                switch (m) {
+                    case 0:
+                        return pi_o_4 + tiny;
+                    case 1:
+                        return -pi_o_4 - tiny;
+                    case 2:
+                        return 3.0d * pi_o_4 + tiny;
+                    default:
+                        return -3.0d * pi_o_4 - tiny;
+                }
+            } else {
+                switch (m) {
+                    case 0:
+                        return zero;
+                    case 1:
+                        return -zero;
+                    case 2:
+                        return PI + tiny;
+                    default:
+                        return -PI - tiny;
+                }
+            }
+        }
+        if (iy == 0x7ff00000) {
+            return (hy < 0) ? -pi_o_2 - tiny : pi_o_2 + tiny;
+        }
+        k = (iy - ix) >> 20;
+        if (hx < 0 && k < -60) {
+            z = 0.0d;
+        } else {
+            z = atan(Math.abs(y / x));
+        }
+        switch (m) {
+            case 0:
+                return z;
+            case 1:
+                return -z;
+            case 2:
+                return PI - (z - pi_lo);
+            default:
+                return (z - pi_lo) - PI;
+        }
+    }
+
+    // ---- Euclidean length (fdlibm e_hypot.c) ----
+
+    /** {@code sqrt(x^2 + y^2)} without intermediate overflow or underflow. */
+    public static double hypot(double x, double y) {
+        double a;
+        double b;
+        double t1;
+        double t2;
+        double y1;
+        double y2;
+        double w;
+        int j;
+        int k;
+        int ha = hi(x) & 0x7fffffff;
+        int hb = hi(y) & 0x7fffffff;
+        if (hb > ha) {
+            a = y;
+            b = x;
+            j = ha;
+            ha = hb;
+            hb = j;
+        } else {
+            a = x;
+            b = y;
+        }
+        a = withHi(a, ha);
+        b = withHi(b, hb);
+        if ((ha - hb) > 0x3c00000) {
+            return a + b;
+        }
+        k = 0;
+        if (ha > 0x5f300000) {
+            if (ha >= 0x7ff00000) {
+                int low;
+                w = a + b;
+                low = lo(a);
+                if (((ha & 0xfffff) | low) == 0) {
+                    w = a;
+                }
+                low = lo(b);
+                if (((hb ^ 0x7ff00000) | low) == 0) {
+                    w = b;
+                }
+                return w;
+            }
+            ha -= 0x25800000;
+            hb -= 0x25800000;
+            k += 600;
+            a = withHi(a, ha);
+            b = withHi(b, hb);
+        }
+        if (hb < 0x20b00000) {
+            if (hb <= 0x000fffff) {
+                int low = lo(b);
+                if ((hb | low) == 0) {
+                    return a;
+                }
+                t1 = withHi(0.0d, 0x7fd00000);
+                b *= t1;
+                a *= t1;
+                k -= 1022;
+            } else {
+                ha += 0x25800000;
+                hb += 0x25800000;
+                k -= 600;
+                a = withHi(a, ha);
+                b = withHi(b, hb);
+            }
+        }
+        w = a - b;
+        if (w > b) {
+            t1 = withHi(0.0d, ha);
+            t2 = a - t1;
+            w = sqrt(t1 * t1 - (b * (-b) - t2 * (a + t1)));
+        } else {
+            a = a + a;
+            y1 = withHi(0.0d, hb);
+            y2 = b - y1;
+            t1 = withHi(0.0d, ha + 0x00100000);
+            t2 = a - t1;
+            w = sqrt(t1 * y1 - (w * (-w) - (t1 * y2 + t2 * b)));
+        }
+        if (k != 0) {
+            int high = hi(1.0d);
+            t1 = withHi(1.0d, high + (k << 20));
+            return t1 * w;
+        }
+        return w;
+    }
+
+    // ---- x^y (fdlibm e_pow.c) ----
+
+    /** {@code x} raised to {@code y}, with all the special cases the spec pins down. */
+    public static double pow(double x, double y) {
+        final double one = 1.0d;
+        final double zero = 0.0d;
+        final double two = 2.0d;
+        final double huge = 1.0e300d;
+        final double tiny = 1.0e-300d;
+        final double two53 = 9007199254740992.0d;
+        final double[] bp = {1.0d, 1.5d};
+        final double[] dp_h = {0.0d, 5.84962487220764160156e-01d};
+        final double[] dp_l = {0.0d, 1.35003920212974897128e-08d};
+        final double L1 = 5.99999999999994648725e-01d;
+        final double L2 = 4.28571428578550184252e-01d;
+        final double L3 = 3.33333329818377432918e-01d;
+        final double L4 = 2.72728123808534006489e-01d;
+        final double L5 = 2.30660745775561366331e-01d;
+        final double L6 = 2.06975017800338417784e-01d;
+        final double P1 = 1.66666666666666019037e-01d;
+        final double P2 = -2.77777777770155933842e-03d;
+        final double P3 = 6.61375632143793436117e-05d;
+        final double P4 = -1.65339022054652515390e-06d;
+        final double P5 = 4.13813679705723846039e-08d;
+        final double lg2 = 6.93147180559945286227e-01d;
+        final double lg2_h = 6.93147182464599609375e-01d;
+        final double lg2_l = -1.90465429995776804525e-09d;
+        final double ovt = 8.0085662595372944372e-17d;
+        final double cp = 9.61796693925975554329e-01d;
+        final double cp_h = 9.61796700954437255859e-01d;
+        final double cp_l = -7.02846165095275826516e-09d;
+        final double ivln2 = 1.44269504088896338700e+00d;
+        final double ivln2_h = 1.44269502162933349609e+00d;
+        final double ivln2_l = 1.92596299112661746887e-08d;
+
+        double z;
+        double ax;
+        double z_h;
+        double z_l;
+        double p_h;
+        double p_l;
+        double y1;
+        double t1;
+        double t2;
+        double r;
+        double s;
+        double t;
+        double u;
+        double v;
+        double w;
+        int i;
+        int j;
+        int k;
+        int yisint;
+        int n;
+        int hx = hi(x);
+        int lx = lo(x);
+        int hy = hi(y);
+        int ly = lo(y);
+        int ix = hx & 0x7fffffff;
+        int iy = hy & 0x7fffffff;
+        if ((iy | ly) == 0) {
+            return one;
+        }
+        if (ix > 0x7ff00000 || (ix == 0x7ff00000 && lx != 0)
+                || iy > 0x7ff00000 || (iy == 0x7ff00000 && ly != 0)) {
+            return x + y;
+        }
+        yisint = 0;
+        if (hx < 0) {
+            if (iy >= 0x43400000) {
+                yisint = 2;
+            } else if (iy >= 0x3ff00000) {
+                k = (iy >> 20) - 0x3ff;
+                if (k > 20) {
+                    j = ly >>> (52 - k);
+                    if ((j << (52 - k)) == ly) {
+                        yisint = 2 - (j & 1);
+                    }
+                } else if (ly == 0) {
+                    j = iy >>> (20 - k);
+                    if ((j << (20 - k)) == iy) {
+                        yisint = 2 - (j & 1);
+                    }
+                }
+            }
+        }
+        if (ly == 0) {
+            if (iy == 0x7ff00000) {
+                if (((ix - 0x3ff00000) | lx) == 0) {
+                    return one;
+                } else if (ix >= 0x3ff00000) {
+                    return (hy >= 0) ? y : zero;
+                } else {
+                    return (hy < 0) ? -y : zero;
+                }
+            }
+            if (iy == 0x3ff00000) {
+                return (hy < 0) ? one / x : x;
+            }
+            if (hy == 0x40000000) {
+                return x * x;
+            }
+            if (hy == 0x3fe00000) {
+                if (hx >= 0) {
+                    return sqrt(x);
+                }
+            }
+        }
+        ax = Math.abs(x);
+        if (lx == 0) {
+            if (ix == 0x7ff00000 || ix == 0 || ix == 0x3ff00000) {
+                z = ax;
+                if (hy < 0) {
+                    z = one / z;
+                }
+                if (hx < 0) {
+                    if (((ix - 0x3ff00000) | yisint) == 0) {
+                        z = (z - z) / (z - z);
+                    } else if (yisint == 1) {
+                        z = -z;
+                    }
+                }
+                return z;
+            }
+        }
+        n = (hx >> 31) + 1;
+        if ((n | yisint) == 0) {
+            return (x - x) / (x - x);
+        }
+        s = one;
+        if ((n | (yisint - 1)) == 0) {
+            s = -one;
+        }
+        if (iy > 0x41e00000) {
+            if (iy > 0x43f00000) {
+                if (ix <= 0x3fefffff) {
+                    return (hy < 0) ? huge * huge : tiny * tiny;
+                }
+                if (ix >= 0x3ff00000) {
+                    return (hy > 0) ? huge * huge : tiny * tiny;
+                }
+            }
+            if (ix < 0x3fefffff) {
+                return (hy < 0) ? s * huge * huge : s * tiny * tiny;
+            }
+            if (ix > 0x3ff00000) {
+                return (hy > 0) ? s * huge * huge : s * tiny * tiny;
+            }
+            t = ax - one;
+            w = (t * t) * (0.5d - t * (0.3333333333333333333333d - t * 0.25d));
+            u = ivln2_h * t;
+            v = t * ivln2_l - w * ivln2;
+            t1 = u + v;
+            t1 = withLo(t1, 0);
+            t2 = v - (t1 - u);
+        } else {
+            double s2;
+            double s_h;
+            double s_l;
+            double t_h;
+            double t_l;
+            double ss;
+            n = 0;
+            if (ix < 0x00100000) {
+                ax *= two53;
+                n -= 53;
+                ix = hi(ax);
+            }
+            n += ((ix) >> 20) - 0x3ff;
+            j = ix & 0x000fffff;
+            ix = j | 0x3ff00000;
+            if (j <= 0x3988E) {
+                k = 0;
+            } else if (j < 0xBB67A) {
+                k = 1;
+            } else {
+                k = 0;
+                n += 1;
+                ix -= 0x00100000;
+            }
+            ax = withHi(ax, ix);
+            u = ax - bp[k];
+            v = one / (ax + bp[k]);
+            ss = u * v;
+            s_h = ss;
+            s_h = withLo(s_h, 0);
+            t_h = withHi(0.0d, ((ix >> 1) | 0x20000000) + 0x00080000 + (k << 18));
+            t_l = ax - (t_h - bp[k]);
+            s_l = v * ((u - s_h * t_h) - s_h * t_l);
+            s2 = ss * ss;
+            r = s2 * s2 * (L1 + s2 * (L2 + s2 * (L3 + s2 * (L4 + s2 * (L5 + s2 * L6)))));
+            r += s_l * (s_h + ss);
+            s2 = s_h * s_h;
+            t_h = 3.0d + s2 + r;
+            t_h = withLo(t_h, 0);
+            t_l = r - ((t_h - 3.0d) - s2);
+            u = s_h * t_h;
+            v = s_l * t_h + t_l * ss;
+            p_h = u + v;
+            p_h = withLo(p_h, 0);
+            p_l = v - (p_h - u);
+            z_h = cp_h * p_h;
+            z_l = cp_l * p_h + p_l * cp + dp_l[k];
+            t = (double) n;
+            t1 = (((z_h + z_l) + dp_h[k]) + t);
+            t1 = withLo(t1, 0);
+            t2 = z_l - (((t1 - t) - dp_h[k]) - z_h);
+        }
+        y1 = y;
+        y1 = withLo(y1, 0);
+        p_l = (y - y1) * t1 + y * t2;
+        p_h = y1 * t1;
+        z = p_l + p_h;
+        j = hi(z);
+        i = lo(z);
+        if (j >= 0x40900000) {
+            if (((j - 0x40900000) | i) != 0) {
+                return s * huge * huge;
+            } else {
+                if (p_l + ovt > z - p_h) {
+                    return s * huge * huge;
+                }
+            }
+        } else if ((j & 0x7fffffff) >= 0x4090cc00) {
+            if (((j - 0xc090cc00) | i) != 0) {
+                return s * tiny * tiny;
+            } else {
+                if (p_l <= z - p_h) {
+                    return s * tiny * tiny;
+                }
+            }
+        }
+        i = j & 0x7fffffff;
+        k = (i >> 20) - 0x3ff;
+        n = 0;
+        if (i > 0x3fe00000) {
+            n = j + (0x00100000 >> (k + 1));
+            k = ((n & 0x7fffffff) >> 20) - 0x3ff;
+            t = withHi(0.0d, (n & ~(0x000fffff >> k)));
+            n = ((n & 0x000fffff) | 0x00100000) >> (20 - k);
+            if (j < 0) {
+                n = -n;
+            }
+            p_h -= t;
+        }
+        t = p_l + p_h;
+        t = withLo(t, 0);
+        u = t * lg2_h;
+        v = (p_l - (t - p_h)) * lg2 + t * lg2_l;
+        z = u + v;
+        w = v - (z - u);
+        t = z * z;
+        t1 = z - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5))));
+        r = (z * t1) / (t1 - two) - (w + z * w);
+        z = one - (r - z);
+        j = hi(z);
+        j += (n << 20);
+        if ((j >> 20) <= 0) {
+            z = scalb(z, n);
+        } else {
+            z = withHi(z, j);
+        }
+        return s * z;
+    }
+
 }

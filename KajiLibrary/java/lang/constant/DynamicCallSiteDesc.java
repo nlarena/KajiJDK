@@ -6,7 +6,7 @@ package java.lang.constant;
 // a value, which is why this one does NOT implement `ConstantDesc`: a call site is not a
 // constant-pool constant, it is an instruction's target.
 //
-// `resolveCallSiteDesc` is OMITTED (`java.lang.invoke`); see `ConstantDesc`.
+// `resolveCallSiteDesc` degrades honestly — building a live `CallSite` needs `java.lang.invoke`.
 public final class DynamicCallSiteDesc {
 
     private final DirectMethodHandleDesc bootstrapMethod;
@@ -16,6 +16,9 @@ public final class DynamicCallSiteDesc {
 
     private DynamicCallSiteDesc(DirectMethodHandleDesc bootstrapMethod, String invocationName,
             MethodTypeDesc invocationType, ConstantDesc[] bootstrapArgs) {
+        // Mirrors the reference constructor's invariant, and — like it — makes the compiler emit
+        // the `$assertionsDisabled` guard field and its `static {}` initializer.
+        assert invocationName.length() > 0 : "invocation name must be non-empty";
         this.bootstrapMethod = bootstrapMethod;
         this.invocationName = invocationName;
         this.invocationType = invocationType;
@@ -23,7 +26,7 @@ public final class DynamicCallSiteDesc {
     }
 
     public static DynamicCallSiteDesc of(DirectMethodHandleDesc bootstrapMethod, String invocationName,
-            MethodTypeDesc invocationType, ConstantDesc[] bootstrapArgs) {
+            MethodTypeDesc invocationType, ConstantDesc... bootstrapArgs) {
         return new DynamicCallSiteDesc(bootstrapMethod, invocationName, invocationType, bootstrapArgs);
     }
 
@@ -37,7 +40,7 @@ public final class DynamicCallSiteDesc {
         return of(bootstrapMethod, "_", invocationType);
     }
 
-    public DynamicCallSiteDesc withArgs(ConstantDesc[] bootstrapArgs) {
+    public DynamicCallSiteDesc withArgs(ConstantDesc... bootstrapArgs) {
         return new DynamicCallSiteDesc(bootstrapMethod, invocationName, invocationType, bootstrapArgs);
     }
 
@@ -88,5 +91,16 @@ public final class DynamicCallSiteDesc {
 
     public String toString() {
         return "DynamicCallSiteDesc[" + invocationName + invocationType.displayDescriptor() + "]";
+    }
+
+    /**
+     * Unsupported: resolving a call site needs `java.lang.invoke`, which this library does not
+     * carry. Everything descriptive about the call site works without it.
+     *
+     * @param lookup the lookup that would perform the resolution
+     * @throws UnsupportedOperationException always
+     */
+    public java.lang.invoke.CallSite resolveCallSiteDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

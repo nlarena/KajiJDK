@@ -1,14 +1,12 @@
 package java.lang.constant;
 
 import java.lang.constant.DirectMethodHandleDesc;
-
-
+import java.lang.constant.DirectMethodHandleDesc.Kind;
+import java.lang.invoke.MethodHandle;
 
 // A nominal descriptor for a method handle. The factories all produce the *direct* flavour,
 // which is the only one a class file can hold literally; everything else is built by combinator
 // at run time and has no constant-pool form.
-//
-// `resolveConstantDesc` is OMITTED (`java.lang.invoke`); see `ConstantDesc`.
 //
 // The nested `DirectMethodHandleDesc.Kind` is reached through an import rather than as `DirectMethodHandleDesc.Kind`:
 // a qualified reference to a nested type does not resolve in our compiler, and worse, with an
@@ -29,21 +27,14 @@ public interface MethodHandleDesc extends ConstantDesc {
         return ConstantMethodHandleDesc.make(kind, owner, fieldName, fieldType.descriptorString());
     }
 
-    // OMITTED (subset): `static DirectMethodHandleDesc ofConstructor(ClassDesc, ClassDesc...)`.
-    //
-    // It needs the value `DirectMethodHandleDesc.Kind.CONSTRUCTOR`, and a static member of a nested type turns out to be
-    // unreachable from outside the file that declares it — by ANY spelling. All three forms were
-    // tried and all three fail with "no se encuentra el simbolo: variable DirectMethodHandleDesc.Kind":
-    //     DirectMethodHandleDesc.Kind.valueOf(8)          (fully qualified)
-    //     DirectMethodHandleDesc.Kind.valueOf(8)                                 (with the nested type imported)
-    //     CONSTRUCTOR                                     (with the constant statically imported)
-    // The type import works in a TYPE position — the parameters above prove it — so the defect is
-    // specific to using the nested type as a QUALIFIER. That sharpens finding #101, which until
-    // now recorded the type-position half.
-    //
-    // There is no source-level workaround: a `DirectMethodHandleDesc.Kind` value cannot be produced outside
-    // `DirectMethodHandleDesc.java`, and any helper that could produce one would be a member the
-    // JDK does not have, which the gate would reject as extra. The method returns when #101 does.
+    // A descriptor for a constructor of `owner` taking `paramTypes`. The handle's lookup
+    // descriptor is the method descriptor `(params)V`; the kind rides as `CONSTRUCTOR`, obtained
+    // through `Kind.valueOf(8)` (REF_newInvokeSpecial) since the imported nested type resolves in a
+    // value position here.
+    public static DirectMethodHandleDesc ofConstructor(ClassDesc owner, ClassDesc... paramTypes) {
+        String lookupDescriptor = MethodTypeDesc.of(ClassDesc.ofDescriptor("V"), paramTypes).descriptorString();
+        return ConstantMethodHandleDesc.make(Kind.valueOf(8), owner, "<init>", lookupDescriptor);
+    }
 
     // A view of this handle under a different type. The adaptation is a run-time operation, so
     // all a descriptor can do is record the intent.
@@ -55,6 +46,10 @@ public interface MethodHandleDesc extends ConstantDesc {
     // instance method the receiver becomes the first parameter, a constructor returns the class
     // it builds, and a field accessor turns into a getter or setter signature.
     MethodTypeDesc invocationType();
+
+    // Resolve to a live `MethodHandle`; covariantly narrows `ConstantDesc.resolveConstantDesc` so
+    // the compiler synthesizes the `Object`-returning bridge.
+    MethodHandle resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) throws java.lang.ReflectiveOperationException;
 
     boolean equals(Object o);
 }
@@ -101,7 +96,7 @@ final class AdaptedMethodHandleDesc implements MethodHandleDesc {
      * @param lookup the lookup that would perform the resolution
      * @throws UnsupportedOperationException always
      */
-    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+    public MethodHandle resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
         throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

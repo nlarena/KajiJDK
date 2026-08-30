@@ -57,7 +57,15 @@ public final class ConstantBootstraps {
     }
 
     public static Object invoke(MethodHandles$Lookup lookup, String name, Class<?> type,
-            MethodHandle handle, Object[] args) throws Throwable {
+            MethodHandle handle, Object... args) throws Throwable {
+        throw new UnsupportedOperationException("condy linkage is done by the VM");
+    }
+
+    // The shared tail of the bootstraps that adapt a handle's result to the requested type: run the
+    // handle, then coerce. Package-private in the reference, and — like everything here — the VM
+    // does the real work, so this declaration only fixes the descriptor the JDK exposes.
+    static Object makeConstant(MethodHandle handle, String name, Class<?> type, Object value,
+            Class<?> declaring) {
         throw new UnsupportedOperationException("condy linkage is done by the VM");
     }
 

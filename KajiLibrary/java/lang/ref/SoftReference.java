@@ -29,14 +29,14 @@ import java.lang.ref.ReferenceQueue;
  *
  * @param <T> the type of the referent
  */
-public class SoftReference extends Reference {
+public class SoftReference<T> extends Reference<T> {
 
     /**
      * Creates a soft reference to the given object, with no queue.
      *
      * @param referent the object to refer to softly
      */
-    public SoftReference(Object referent) {
+    public SoftReference(T referent) {
         super(referent, null);
     }
 
@@ -49,12 +49,20 @@ public class SoftReference extends Reference {
      * @param referent the object to refer to softly
      * @param queue the queue to enqueue onto when cleared, or {@code null}
      */
-    public SoftReference(Object referent, ReferenceQueue queue) {
+    public SoftReference(T referent, ReferenceQueue<? super T> queue) {
         super(referent, queue);
     }
 
-    // El override de `get()` se OMITE a proposito. El del JDK solo delega en el de `Reference`
-    // con un ajuste de alcanzabilidad, y `super.get()` no compila (finding #125: el emisor no
-    // soporta el acceso calificado por `super`). Heredarlo da el mismo comportamiento, y no
-    // declararlo es un subconjunto valido para el gate.
+    /**
+     * The referent, or {@code null} once the collector has cleared it. Declared here (not merely
+     * inherited) to match the reference, which overrides it to record access for its soft policy.
+     * KajiJDK's soft policy needs no such bookkeeping, so this reads the referent directly — the
+     * field is package-private in {@link Reference} and this class shares its package. (This is why
+     * it does not call {@code super.get()}, which our compiler rejects — finding #125.)
+     *
+     * @return the referent, or {@code null}
+     */
+    public T get() {
+        return (T) this.referent;
+    }
 }

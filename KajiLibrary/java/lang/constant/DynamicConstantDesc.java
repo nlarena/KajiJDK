@@ -32,7 +32,7 @@ public abstract class DynamicConstantDesc<T> implements ConstantDesc {
     // constante de enum, los VarHandle) necesitan descriptores que la biblioteca todavia no
     // tiene, y esos siguen devolviendose como estan.
     public static ConstantDesc ofCanonical(DirectMethodHandleDesc bootstrapMethod, String constantName,
-            ClassDesc constantType, ConstantDesc... bootstrapArgs) {
+            ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
         if (bootstrapArgs.length == 0 && bootstrapMethod.equals(ConstantDescs.BSM_NULL_CONSTANT)) {
             return ConstantDescs.NULL;
         }
@@ -109,26 +109,28 @@ public abstract class DynamicConstantDesc<T> implements ConstantDesc {
     public String toString() {
         return "DynamicConstantDesc[" + constantName + ":" + constantType.displayName() + "]";
     }
+
+    /**
+     * Resolve the {@code condy} by invoking its bootstrap. Covariantly narrows
+     * {@link ConstantDesc#resolveConstantDesc} to the constant's own type {@code T}. Concrete in
+     * the reference (it drives the bootstrap call); here it degrades honestly, because KajiLibrary
+     * does not carry the {@code java.lang.invoke} machinery that would perform the call.
+     *
+     * @param lookup the lookup that would perform the resolution
+     * @throws UnsupportedOperationException always
+     */
+    public T resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
+    }
 }
 
 // The concrete subclass the factories hand out. The JDK uses an anonymous class for this; ours
 // is named and package-private, because our compiler's anonymous classes carry captures we do
 // not need here, and the gate skips a class the JDK has no counterpart for.
-final class AnonymousDynamicConstantDesc extends DynamicConstantDesc {
+final class AnonymousDynamicConstantDesc extends DynamicConstantDesc<Object> {
 
     AnonymousDynamicConstantDesc(DirectMethodHandleDesc bootstrapMethod, String constantName,
             ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
         super(bootstrapMethod, constantName, constantType, bootstrapArgs);
-    }
-
-    /**
-     * Unsupported: resolving a descriptor needs `java.lang.invoke`, which this library does not
-     * have. Everything else about this type works without it.
-     *
-     * @param lookup the lookup that would perform the resolution
-     * @throws UnsupportedOperationException always
-     */
-    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
-        throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

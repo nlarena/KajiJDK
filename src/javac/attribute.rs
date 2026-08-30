@@ -1195,6 +1195,21 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                 } else {
                                     witness_subst(env, m, &type_args)
                                 };
+                                // Propagar la instanciación a los argumentos **poly**: su tipo se
+                                // fijó en la fase 2 con las variables de tipo del método aún sin
+                                // resolver (`Supplier<U>`); con `subst` ya inferida (`U = Process`)
+                                // se sustituye para que el desugar/emisor baje la lambda con su tipo
+                                // funcional **concreto** (`Supplier<Process>`) —sin esto el generador
+                                // de bytecode no puede resolver la `U` de una `supplyAsync(() -> …)`—.
+                                if !subst.is_empty() {
+                                    for a in args.iter_mut() {
+                                        if is_poly_arg(&a.kind) {
+                                            if let Some(ty) = a.ty.take() {
+                                                a.ty = Some(types::substitute(&ty, &subst));
+                                            }
+                                        }
+                                    }
+                                }
                                 let ret = if subst.is_empty() {
                                     ret
                                 } else {

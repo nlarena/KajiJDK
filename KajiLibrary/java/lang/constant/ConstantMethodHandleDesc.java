@@ -134,7 +134,7 @@ final class ConstantMethodHandleDesc implements DirectMethodHandleDesc {
      * @param lookup the lookup that would perform the resolution
      * @throws UnsupportedOperationException always
      */
-    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+    public java.lang.invoke.MethodHandle resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
         throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

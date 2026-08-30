@@ -639,7 +639,9 @@ fn build_external(
             members,
         },
         owner: None,
-        modifiers: Vec::new(),
+        // `ACC_PUBLIC` de la clase externa: #268 sólo actúa cuando la superclase es **package-private**
+        // (una superclase pública ya es nombrable y no necesita accesores).
+        modifiers: if ext.is_public { vec![Modifier::Public] } else { Vec::new() },
     });
     table.set_scope_owner(members, cid);
     table.register_external(&ext.name, cid);
@@ -691,6 +693,11 @@ fn build_external(
         // Los flags de acceso que la detección del **SAM** de una interfaz funcional necesita
         // (un `default`/`static` no es el método abstracto único).
         let mut mmods = Vec::new();
+        // `ACC_PUBLIC`: lo consulta #268 (los accesores sintéticos de una superclase package-private
+        // externa, como `AbstractStringBuilder`) para saber qué métodos exponer en la subclase pública.
+        if m.is_public {
+            mmods.push(Modifier::Public);
+        }
         if m.is_abstract {
             mmods.push(Modifier::Abstract);
         }

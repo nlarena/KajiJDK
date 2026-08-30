@@ -1,5 +1,7 @@
 package java.lang.reflect;
 
+import java.lang.annotation.Annotation;
+
 /**
  * A reflective method.
  *
@@ -207,13 +209,12 @@ public final class Method extends Executable {
     // `Annotation[][]` is rejected by the same compiler defect described in the class comment.
 
     /**
-     * Returns the annotated use of this method's return type.
-     *
-     * <p>Backed by the VM: needs {@code RuntimeVisibleTypeAnnotations} parsing.
-     *
-     * @return the annotated return type
+     * Returns the annotated use of this method's return type (carrying no type annotations here,
+     * as KajiLibrary does not model {@code RuntimeVisibleTypeAnnotations}).
      */
-    public native AnnotatedType getAnnotatedReturnType();
+    public AnnotatedType getAnnotatedReturnType() {
+        return new AnnotatedTypeImpl(this.returnType);
+    }
 
     /**
      * Whether this method was declared with a variable arity parameter.
@@ -322,5 +323,42 @@ public final class Method extends Executable {
      * @param args the arguments
      * @return the result, boxed if the return type is primitive
      */
-    public native Object invoke(Object obj, Object... args);
+    public Object invoke(Object obj, Object... args) {
+        // Not native: the VM intercepts this call (Intrinsic::MethodInvoke) and runs the target
+        // method directly, so this body is never reached. It exists so the surface matches the JDK's
+        // (whose invoke is also an ordinary method, not native).
+        throw new UnsupportedOperationException("Method.invoke is intercepted by the VM");
+    }
+
+    /**
+     * The default value of this annotation-interface element, or {@code null} if it has none (or is
+     * not an annotation element). KajiLibrary does not parse the {@code AnnotationDefault} attribute
+     * through reflection, so this reports "no default" -- correct for every non-annotation method.
+     */
+    public Object getDefaultValue() {
+        return null;
+    }
+
+    // ---- annotations ----
+    //
+    // A KajiLibrary subset, as on Field: method-level RUNTIME annotation reflection is not wired.
+    // A method with no runtime annotations -- the common case -- gets the right empty answers.
+
+    public Annotation[] getDeclaredAnnotations() {
+        return new Annotation[0];
+    }
+
+    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
+        if (annotationClass == null) {
+            throw new NullPointerException();
+        }
+        return null;
+    }
+
+    /** One (empty) annotation row per parameter. */
+    public Annotation[][] getParameterAnnotations() {
+        int n = this.parameterTypes == null ? 0 : this.parameterTypes.length;
+        // `new Annotation[n][0]` is not accepted by this javac; the reflective multi-dim create is.
+        return (Annotation[][]) Array.newInstance(Annotation.class, n, 0);
+    }
 }

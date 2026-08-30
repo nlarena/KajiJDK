@@ -18,6 +18,7 @@ use super::ast::{PrimType, Type, TypeArg, TypeParam};
 /// `ACC_VARARGS` (JVMS §4.6): el método se declaró con `...`. Lo necesita la fase 3 del
 /// overload resolution — el descriptor solo dice `[I`, no distingue `int[]` de `int...`.
 const ACC_VARARGS: u16 = 0x0080;
+const ACC_PUBLIC: u16 = 0x0001;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_PRIVATE: u16 = 0x0002;
 const ACC_ABSTRACT: u16 = 0x0400;
@@ -30,6 +31,10 @@ pub struct ExternalClass {
     /// `ACC_INTERFACE` — para registrarla con el `TypeKind` correcto (lo necesita la detección del
     /// SAM de una interfaz funcional).
     pub is_interface: bool,
+    /// `ACC_PUBLIC` — para #268: sólo una superclase **package-private** (no pública) fuerza a la
+    /// subclase pública a sintetizar accesores. Sin este flag toda clase externa parecería
+    /// package-private y se forwardearían métodos de superclases públicas de más.
+    pub is_public: bool,
     pub super_name: Option<String>,
     pub interfaces: Vec<String>,
     pub fields: Vec<ExtField>,
@@ -71,6 +76,11 @@ pub struct ExtMethod {
     /// otro nido (p. ej. el `private AssertionError(String)`, que no debe capturar `new
     /// AssertionError("...")`).
     pub is_private: bool,
+    /// `ACC_PUBLIC` — lo necesitan los **accesores sintéticos** de #268: una clase pública que
+    /// hereda un método público de una superclase package-private **externa** (del classpath, como
+    /// `AbstractStringBuilder`) tiene que sintetizarles el forwarder, y para saber que el método es
+    /// público hay que haber leído el flag (antes se descartaba, como el `ACC_STATIC` de #110).
+    pub is_public: bool,
     /// La firma **genérica** del atributo `Signature`, si la tiene.
     pub signature: Option<MethodSig>,
     /// Las excepciones **comprobadas** que declara, del atributo `Exceptions` (§4.7.5), en forma
@@ -148,6 +158,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
             is_abstract: access & ACC_ABSTRACT != 0,
             is_static: access & ACC_STATIC != 0,
             is_private: access & ACC_PRIVATE != 0,
+            is_public: access & ACC_PUBLIC != 0,
             signature: sig.as_deref().and_then(parse_method_signature),
             throws,
         });
@@ -157,6 +168,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
     Some(ExternalClass {
         name,
         is_interface: access_flags & ACC_INTERFACE != 0,
+        is_public: access_flags & ACC_PUBLIC != 0,
         super_name,
         interfaces,
         fields,

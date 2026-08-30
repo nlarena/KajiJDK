@@ -60,6 +60,11 @@ public interface AnnotatedType extends AnnotatedElement {
      */
     Type getType();
 
-    // getAnnotation, getAnnotations and getDeclaredAnnotations are inherited from AnnotatedElement.
-    // The JDK repeats their declarations here for javadoc; see the class comment for why we cannot.
+    // Re-declared from AnnotatedElement to match the JDK's own surface (it repeats them here).
+
+    <T extends java.lang.annotation.Annotation> T getAnnotation(Class<T> annotationClass);
+
+    java.lang.annotation.Annotation[] getAnnotations();
+
+    java.lang.annotation.Annotation[] getDeclaredAnnotations();
 }

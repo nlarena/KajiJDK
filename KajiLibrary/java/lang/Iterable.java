@@ -4,6 +4,7 @@ package java.lang;
 // desde java.lang (finding #210).
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Consumer;
 
 import java.util.Iterator;
 
@@ -12,6 +13,19 @@ import java.util.Iterator;
 public interface Iterable<T> {
 
     Iterator<T> iterator();
+
+    /**
+     * Perform {@code action} for each element, in iteration order, until all are done or it throws.
+     */
+    default void forEach(Consumer<? super T> action) {
+        if (action == null) {
+            throw new NullPointerException();
+        }
+        for (T element : this) {
+            action.accept(element);
+        }
+    }
+
     /**
      * A spliterator over these elements.
      *

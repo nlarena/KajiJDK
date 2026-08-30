@@ -8,10 +8,11 @@ package java.lang.constant;
 // `Enum.EnumDesc` holding one of these plus the constant's name, and the VM matches by name on
 // both sides instead of ever calling `getstatic` on the constant.
 //
-// The JDK's `resolveConstantDesc(MethodHandles.Lookup)` and the `TypeDescriptor.OfField` bridges
-// are OMITTED — they need `java.lang.invoke`. See `ConstantDesc` for the reasoning; the gate
-// takes a subset.
-public interface ClassDesc extends ConstantDesc {
+// Extends `TypeDescriptor.OfField` so that `arrayType()`/`componentType()` become the field-type
+// descriptor operations the interface family expects — the covariant narrowing to `ClassDesc`
+// makes the compiler synthesize the `OfField`-returning bridges. `resolveConstantDesc` is present
+// but degrades honestly: KajiLibrary's `java.lang.invoke` cannot load a class from a descriptor.
+public interface ClassDesc extends ConstantDesc, java.lang.invoke.TypeDescriptor.OfField {
 
     // A descriptor for the class with this binary name (dotted, e.g. `java.lang.Thread$State`).
     // `public` is spelled out although interface members are implicitly public: our compiler
@@ -61,7 +62,7 @@ public interface ClassDesc extends ConstantDesc {
         return ClassDesc.of(DescNames.binaryNameOf(descriptorString()) + "$" + nestedName);
     }
 
-    default ClassDesc nested(String firstNestedName, String[] moreNestedNames) {
+    default ClassDesc nested(String firstNestedName, String... moreNestedNames) {
         ClassDesc current = nested(firstNestedName);
         int i = 0;
         while (i < moreNestedNames.length) {
@@ -112,6 +113,11 @@ public interface ClassDesc extends ConstantDesc {
 
     // The class-file spelling.
     String descriptorString();
+
+    // Resolve this descriptor to a live `Class` using the given lookup. Covariantly narrows the
+    // `Object`-returning method of `ConstantDesc`, which is what makes the compiler emit the
+    // `Object` bridge the interface family expects.
+    Class<?> resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) throws java.lang.ReflectiveOperationException;
 
     boolean equals(Object o);
 }
@@ -191,7 +197,7 @@ final class ConstantClassDesc implements ClassDesc {
      * @param lookup the lookup that would perform the resolution
      * @throws UnsupportedOperationException always
      */
-    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+    public Class<?> resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
         throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

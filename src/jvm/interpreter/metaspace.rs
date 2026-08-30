@@ -107,6 +107,8 @@ pub enum Intrinsic {
     ThreadStart,
     /// `Thread.join()`.
     ThreadJoin,
+    /// `Thread.join(long)` — join with a millisecond deadline.
+    ThreadJoinTimed,
     /// `Thread.interrupt()`.
     ThreadInterrupt,
     /// `Thread.getState()`.
@@ -169,13 +171,17 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
             _ => Intrinsic::None,
         },
         "java/lang/Thread" => match (name, descriptor) {
-            ("sleep", _) => Intrinsic::ThreadSleep,
-            ("yield", _) => Intrinsic::ThreadYield,
+            // Only the plain `sleep(long)` / `yield()` are scheduler primitives; the
+            // `sleep(long,int)` and `sleep(Duration)` overloads are ordinary Java that convert
+            // to millis and call `sleep(long)`, so they must NOT be intercepted here.
+            ("sleep", "(J)V") => Intrinsic::ThreadSleep,
+            ("yield", "()V") => Intrinsic::ThreadYield,
             ("holdsLock", _) => Intrinsic::ThreadHoldsLock,
             ("currentThread", _) => Intrinsic::ThreadCurrentThread,
             ("nextThreadNum", _) => Intrinsic::ThreadNextThreadNum,
             ("start", "()V") => Intrinsic::ThreadStart,
             ("join", "()V") => Intrinsic::ThreadJoin,
+            ("join", "(J)V") => Intrinsic::ThreadJoinTimed,
             ("interrupt", "()V") => Intrinsic::ThreadInterrupt,
             ("getState", "()Ljava/lang/Thread$State;") => Intrinsic::ThreadGetState,
             _ => Intrinsic::None,

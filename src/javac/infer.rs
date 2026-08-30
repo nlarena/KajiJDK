@@ -804,6 +804,17 @@ pub fn infer_call_nested(
             .find(|(idx, ..)| *idx == i)
             .map(|(.., r)| r.clone())
             .unwrap_or_else(|| a.clone());
+        // Un argumento **poly** (lambda / *method ref*) que la fase 2 re-atribuyó con el tipo de su
+        // parámetro se lleva los **parámetros de tipo crudos** del propio método (`Sup<U>` con `U` sin
+        // freshear). Reducir `Sup<U>` contra `Sup<fresh_U>` genera un `fresh_U = U` espurio que **choca**
+        // con la igualdad que fija el *target* (`fresh_U = String`), como si fueran dos igualdades
+        // incompatibles (§18.5.1) — es exactamente el falso "restricciones incompatibles" de
+        // `supplyAsync(() -> …)` con un retorno `CompletableFuture<U>`. La restricción real de una lambda
+        // sale de su **cuerpo**, no de su tipo autorreferencial; y el *target* + los argumentos concretos
+        // ya infieren `U`. Así que este argumento no reduce.
+        if mentions_type_params(&arg_ty, &vars_orig) {
+            continue;
+        }
         bounds.reduce(table, &arg_ty, &p);
     }
     if let Some(t) = target {
@@ -848,6 +859,32 @@ fn fresh_vars(table: &SymbolTable, params: &[SymbolId]) -> (Vec<u32>, Subst, Has
         origin.insert(id, p);
     }
     (ids, fresh, origin)
+}
+
+/// ¿El tipo `ty` menciona alguno de los **parámetros de tipo** `vars` (como [`RType::TypeVar`])?
+/// Sirve para detectar un argumento **poly** re-atribuido con el tipo crudo de su parámetro (`Sup<U>`),
+/// que no debe reducirse contra las variables frescas de la misma invocación (ver el bucle de
+/// [`infer_call_nested`]).
+fn mentions_type_params(ty: &RType, vars: &[SymbolId]) -> bool {
+    match ty {
+        RType::TypeVar(v) => vars.contains(v),
+        RType::Array(e) => mentions_type_params(e, vars),
+        RType::Parameterized { args, .. } => args.iter().any(|a| arg_mentions(a, vars)),
+        RType::Capture { upper, lower, .. } => {
+            mentions_type_params(upper, vars)
+                || lower.as_deref().is_some_and(|l| mentions_type_params(l, vars))
+        }
+        RType::Intersection(ms) => ms.iter().any(|t| mentions_type_params(t, vars)),
+        _ => false,
+    }
+}
+
+fn arg_mentions(a: &RTypeArg, vars: &[SymbolId]) -> bool {
+    match a {
+        RTypeArg::Type(t) => mentions_type_params(t, vars),
+        RTypeArg::Extends(t) | RTypeArg::Super(t) => mentions_type_params(t, vars),
+        RTypeArg::Wildcard => false,
+    }
 }
 
 /// Infiere los argumentos de tipo de un **diamante** (`new Caja<>()`, §15.9.3).

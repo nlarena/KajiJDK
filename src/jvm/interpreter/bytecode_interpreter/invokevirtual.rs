@@ -126,8 +126,20 @@ impl Exec<'_> {
                     None => return self.throw_exception("java/lang/NoSuchMethodError"),
                 }
             }
-            SiteKind::Signature(_) | SiteKind::NoTarget => {
-                unreachable!("invokevirtual never records an interface or targetless site")
+            // A method that resolves only through a superinterface (an abstract method with no
+            // stable vtable slot — see `resolve_virtual_kind`). Dispatched by signature on the
+            // receiver's own merged table, exactly as `invokeinterface` does: the concrete
+            // implementation the runtime class provides is the one selected.
+            SiteKind::Signature(signature) => {
+                let mirror_offset = self.shared.heap.read_u32(receiver) as usize;
+                self.shared.metaspace.set_receiver_class(caller, pc, mirror_offset as u32);
+                match self.shared.metaspace.vtable_method_at_mirror_by_signature(mirror_offset, signature) {
+                    Some(callee) => callee,
+                    None => return self.throw_exception("java/lang/NoSuchMethodError"),
+                }
+            }
+            SiteKind::NoTarget => {
+                unreachable!("invokevirtual never records a targetless site")
             }
         };
 
@@ -152,6 +164,15 @@ impl Exec<'_> {
                 return Step::Continue;
             }
             Intrinsic::ThreadJoin => return self.thread_join(receiver),
+            // `Thread.join(long)`: join with a deadline. The millis are the long arg popped
+            // under the receiver (locals[1]). Handled here for the same reason as `join()`.
+            Intrinsic::ThreadJoinTimed => {
+                let ms = match locals.get(1) {
+                    Some(Value::Long(v)) => *v,
+                    _ => 0,
+                };
+                return self.thread_join_timed(receiver, ms);
+            }
             // `Thread.interrupt()`: set the receiver's interrupt flag and wake it if it's parked
             // in an interruptible block. Handled here (not the native bridge) because it touches
             // the thread list and scheduler.
@@ -322,10 +343,25 @@ impl Exec<'_> {
                 None => Err("java/lang/NoSuchMethodError"),
             };
         }
-        match self.shared.metaspace.vtable_slot(static_class, name, descriptor) {
-            Some(slot) => Ok(SiteKind::Vtable(slot)),
-            None => Err("java/lang/NoSuchMethodError"),
+        if let Some(slot) = self.shared.metaspace.vtable_slot(static_class, name, descriptor) {
+            return Ok(SiteKind::Vtable(slot));
         }
+        // No stable vtable slot for the static type. That is not always a linkage error: the
+        // method can still **resolve** through a superinterface as an *abstract* method (JVMS
+        // §5.4.3.3), which `build_vtable` deliberately gives no slot (only concrete class methods
+        // and interface `default`s take slots). The archetype is `EnumSet.add`: `add` is declared
+        // by `Set` and implemented only by the concrete `RegularEnumSet`, so `EnumSet` — abstract,
+        // implementing `Set` but not overriding `add` — has no `add` in its table, yet
+        // `invokevirtual java/util/EnumSet.add` is exactly what javac emits for a call on a
+        // variable of static type `EnumSet`. When the method resolves, dispatch it by **signature**
+        // on the receiver's own table, precisely as `invokeinterface` does — the selected method is
+        // whatever the runtime class provides. Only a signature that resolves *nowhere* is the real
+        // NoSuchMethodError.
+        if self.shared.metaspace.resolve_method(static_class, name, descriptor).is_some() {
+            let signature = self.shared.metaspace.intern_signature(name, descriptor);
+            return Ok(SiteKind::Signature(signature));
+        }
+        Err("java/lang/NoSuchMethodError")
     }
 
     /// Invoke a `MethodHandle` (`invoke`/`invokeExact`). Reads the target off the handle on the

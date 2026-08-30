@@ -1,5 +1,7 @@
 package java.lang.reflect;
 
+import java.lang.annotation.Annotation;
+
 /**
  * A reflective constructor.
  *
@@ -170,7 +172,34 @@ public final class Constructor<T> extends Executable {
      *
      * @return the annotated return type
      */
-    public native AnnotatedType getAnnotatedReturnType();
+    public AnnotatedType getAnnotatedReturnType() {
+        return new AnnotatedTypeImpl(this.clazz);
+    }
+
+    /** A constructor's receiver type, or {@code null} for one that takes no receiver. */
+    public AnnotatedType getAnnotatedReceiverType() {
+        if (Modifier.isStatic(this.getModifiers())) {
+            return null;
+        }
+        return new AnnotatedTypeImpl(this.clazz);
+    }
+
+    public Annotation[] getDeclaredAnnotations() {
+        return new Annotation[0];
+    }
+
+    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
+        if (annotationClass == null) {
+            throw new NullPointerException();
+        }
+        return null;
+    }
+
+    /** One (empty) annotation row per parameter. */
+    public Annotation[][] getParameterAnnotations() {
+        int n = this.getParameterTypes().length;
+        return (Annotation[][]) Array.newInstance(Annotation.class, n, 0);
+    }
 
     /**
      * Whether this constructor was declared with a variable arity parameter.
@@ -253,5 +282,10 @@ public final class Constructor<T> extends Executable {
      * @param args the arguments
      * @return the new instance
      */
-    public native T newInstance(Object... args);
+    public T newInstance(Object... args) {
+        // Not native: the VM intercepts this call (Intrinsic::ConstructorNewInstance), allocates and
+        // runs the constructor directly, so this body is never reached. It exists so the surface
+        // matches the JDK's (whose newInstance is an ordinary method).
+        throw new UnsupportedOperationException("Constructor.newInstance is intercepted by the VM");
+    }
 }

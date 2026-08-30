@@ -31,8 +31,11 @@ import java.io.Serializable;
  * @implNote A KajiLibrary subset. Absent are the classification families that need their own
  *           tables — {@code getType}, {@code getDirectionality}, {@code isMirrored},
  *           {@code UnicodeBlock}, {@code UnicodeScript} and the Java-identifier predicates —
- *           and the {@code Constable} interface. What is here is the part the rest of the
- *           library needs: case, the basic classes, code points, and radix conversion.
+ *           and the {@code Constable} interface. The name lookups {@code getName} and
+ *           {@code codePointOf} are present in shape but throw {@code UnsupportedOperationException}
+ *           for the same reason: they need the Unicode name table ({@code uniName.dat}), not carried
+ *           here. What works fully is the part the rest of the library needs: case, the basic
+ *           classes, code points, and radix conversion.
  */
 public final class Character implements Comparable<Character>, Serializable {
 
@@ -3750,5 +3753,46 @@ public final class Character implements Comparable<Character>, Serializable {
 
     // Other_ID_Continue: los que continuan un identificador Unicode sin entrar en las categorias.
     private static final int[] OTHER_ID_CONTINUE = new int[] {183, 903, 4969, 4970, 4971, 4972, 4973, 4974, 4975, 4976, 4977, 6618, 8472, 8494, 12443, 12444, 12539, 65381, };
+
+    // ---- nombres Unicode: getName / codePointOf ----
+    //
+    // Los dos dependen de la BASE DE NOMBRES Unicode (`getName('A')` == "LATIN CAPITAL LETTER A"),
+    // que el JDK envia como un recurso aparte (`uniName.dat`, ~150.000 entradas) y NO se calcula.
+    // KajiLibrary no lleva esa tabla (ver el @implNote de la clase), asi que la busqueda del nombre
+    // en si no esta disponible y lanza UnsupportedOperationException. Lo que SI es fiel y no necesita
+    // tabla se conserva: la validacion del code point en getName y el saneo del argumento en
+    // codePointOf (incluida la NPE si es null), de modo que la superficie observable coincide con la
+    // del JDK hasta el punto exacto donde haria falta la tabla.
+
+    /**
+     * The Unicode name of the character {@code codePoint}, e.g. {@code "LATIN CAPITAL LETTER A"}.
+     *
+     * @throws IllegalArgumentException if {@code codePoint} is not a valid Unicode code point
+     * @throws UnsupportedOperationException for every valid code point: KajiLibrary does not carry
+     *         the Unicode name table ({@code uniName.dat}) the lookup needs
+     */
+    public static String getName(int codePoint) {
+        if (!Character.isValidCodePoint(codePoint)) {
+            throw new IllegalArgumentException("Not a valid Unicode code point: 0x"
+                    + Integer.toHexString(codePoint).toUpperCase());
+        }
+        throw new UnsupportedOperationException(
+                "la tabla de nombres Unicode (uniName.dat) no esta en KajiLibrary");
+    }
+
+    /**
+     * The code point of the character whose Unicode name is {@code name} — the inverse of
+     * {@link #getName(int)}.
+     *
+     * @throws NullPointerException if {@code name} is null
+     * @throws UnsupportedOperationException KajiLibrary does not carry the Unicode name table
+     *         ({@code uniName.dat}) the lookup needs
+     */
+    public static int codePointOf(String name) {
+        // Fiel hasta donde no hace falta la tabla: NPE si es null, y el mismo saneo que el JDK.
+        name = name.trim().toUpperCase();
+        throw new UnsupportedOperationException(
+                "la tabla de nombres Unicode (uniName.dat) no esta en KajiLibrary");
+    }
 
 }

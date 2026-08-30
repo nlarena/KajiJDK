@@ -3,8 +3,7 @@ package java.time.format;
 import java.time.DateTimeException;
 
 // KajiLibrary's java.time.format.DateTimeParseException — thrown when text cannot be parsed into a
-// date-time. Carries the text being parsed and the index at which the error occurred. A KajiLibrary
-// subset: the cause-carrying constructor is omitted (the exception chain has no (String, Throwable)).
+// date-time. Carries the text being parsed and the index at which the error occurred.
 public class DateTimeParseException extends DateTimeException {
 
     private final String parsedString;
@@ -12,6 +11,12 @@ public class DateTimeParseException extends DateTimeException {
 
     public DateTimeParseException(String message, CharSequence parsedData, int errorIndex) {
         super(message);
+        this.parsedString = parsedData.toString();
+        this.errorIndex = errorIndex;
+    }
+
+    public DateTimeParseException(String message, CharSequence parsedData, int errorIndex, Throwable cause) {
+        super(message, cause);
         this.parsedString = parsedData.toString();
         this.errorIndex = errorIndex;
     }

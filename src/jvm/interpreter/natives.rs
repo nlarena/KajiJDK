@@ -14,6 +14,8 @@ use std::fmt::Write;
 use crate::jvm::class_file::ClassFile;
 
 use super::apt::AptContext;
+use super::bytecode_interpreter::annotation_factory::{self, Element};
+use crate::jvm::parser::attributes::annotations::{self, ResolvedAnnotation};
 use super::bytecode_interpreter::objects_operations::{
     allocate_old, field_offset, HEADER_SIZE, SLOT_SIZE,
 };
@@ -93,10 +95,6 @@ pub fn drain_filer() -> Vec<(String, u32)> {
 /// surfaces (the visualizer shows it; a headless run would flush it). `apt` is the
 /// reified compiler model (APT fase 3), or `None` outside a processor run — the
 /// `jdk/internal/apt/SymElement` natives read the symbol table through it.
-/// El instante en que arranco esta VM, para que `nanoTime` mida desde algo fijo.
-static NANO_ORIGIN: std::sync::LazyLock<std::time::Instant> =
-    std::sync::LazyLock::new(std::time::Instant::now);
-
 pub fn dispatch(
     class: &str,
     name: &str,
@@ -174,6 +172,38 @@ pub fn dispatch(
             let start = START.get_or_init(Instant::now);
             Some(Value::Long(start.elapsed().as_nanos() as i64))
         }
+        // System.mapLibraryName(name): the platform's file name for a native library, e.g.
+        // `foo` -> `foo.dll` on Windows, `libfoo.dylib` on macOS, `libfoo.so` elsewhere. Native
+        // because the mapping is a property of the host, not of bytecode. (KajiJDK loads no native
+        // libraries -- see load/loadLibrary -- but the name it *would* look for is still well-defined.)
+        ("java/lang/System", "mapLibraryName", "(Ljava/lang/String;)Ljava/lang/String;") => {
+            let name = strings::read(heap, reference(&args[0]));
+            let mapped = if cfg!(windows) {
+                format!("{name}.dll")
+            } else if cfg!(target_os = "macos") {
+                format!("lib{name}.dylib")
+            } else {
+                format!("lib{name}.so")
+            };
+            Some(Value::Reference(strings::intern(metaspace, heap, &mapped)))
+        }
+        // System.setIn0/setOut0/setErr0(stream): the native seams behind setIn/setOut/setErr. They
+        // exist because `in`/`out`/`err` are `public static final`: bytecode cannot reassign a final
+        // field, but native code writes the slot directly (exactly how the JDK does it). A reference
+        // static is a single slot holding a heap offset, written like `putstatic` (no barrier: the
+        // mirror's statics are scanned as GC roots).
+        ("java/lang/System", "setIn0", "(Ljava/io/InputStream;)V")
+        | ("java/lang/System", "setOut0", "(Ljava/io/PrintStream;)V")
+        | ("java/lang/System", "setErr0", "(Ljava/io/PrintStream;)V") => {
+            let field = match name {
+                "setIn0" => "in",
+                "setOut0" => "out",
+                _ => "err",
+            };
+            let at = class_operations::static_slot(metaspace, heap, "java/lang/System", field);
+            heap.write_u32(at, reference(&args[0]) as u32);
+            None
+        }
 
         // Runtime.availableProcessors(): how many CPUs the VM can actually use — the host's
         // parallelism, which only the OS can answer. Falls back to 1 (the value the JVMS
@@ -181,6 +211,14 @@ pub fn dispatch(
         ("java/lang/Runtime", "availableProcessors", "()I") => Some(Value::Int(
             std::thread::available_parallelism().map_or(1, |n| n.get() as i32),
         )),
+        // Runtime.gc(): a hint. KajiJDK's GC runs on its own schedule; an explicit request is a
+        // no-op (a correct answer -- gc() has never been a guarantee) rather than a forced cycle.
+        ("java/lang/Runtime", "gc", "()V") => None,
+        // Memory accounting: KajiJDK does not expose the heap's real figures, so it reports a fixed,
+        // plausible budget -- enough for callers that only compare or log these.
+        ("java/lang/Runtime", "maxMemory", "()J") => Some(Value::Long(256 * 1024 * 1024)),
+        ("java/lang/Runtime", "totalMemory", "()J") => Some(Value::Long(64 * 1024 * 1024)),
+        ("java/lang/Runtime", "freeMemory", "()J") => Some(Value::Long(32 * 1024 * 1024)),
 
         // --- Math (would map to CPU instructions under a JIT) --------------------
         ("java/lang/Math", "abs", "(I)I") => Some(Value::Int(int(&args[0]).abs())),
@@ -291,6 +329,25 @@ pub fn dispatch(
                 .map(ClassFile::runtime_visible_annotation_types)
                 .is_some_and(|types| types.contains(&wanted));
             Some(Value::Int(present as i32))
+        }
+        // --- Class.getAnnotation & friends: reflection that hands back the annotation as an OBJECT.
+        // Where `annotationPresent0` answers *presence* by a descriptor compare, this materialises a
+        // real instance of each @interface. For every entry in `RuntimeVisibleAnnotations`, the VM
+        // spins a class implementing the @interface whose element methods return the values written
+        // at the use site (falling back to the @interface's defaults), then allocates one — an
+        // annotation object carries no instance fields, so allocation alone is a complete object and
+        // no `<init>` needs to run. The Java side filters this array by type
+        // (getAnnotation/getAnnotationsByType/…). No @Inherited walk: only *directly present*
+        // class-level annotations, matching `isAnnotationPresent`.
+        ("java/lang/Class", "declaredAnnotations0", "()[Ljava/lang/annotation/Annotation;") => {
+            let this = mirror_name(metaspace, reference(&args[0]));
+            let objects = annotation_objects(metaspace, heap, &this);
+            Some(Value::Reference(reference_array(
+                metaspace,
+                heap,
+                "[Ljava/lang/annotation/Annotation;",
+                &objects,
+            )))
         }
         ("java/lang/Class", "descriptorString", "()Ljava/lang/String;") => {
             // The field descriptor of the class this mirror names. A **primitive** mirror is named
@@ -951,6 +1008,43 @@ pub fn dispatch(
             Some(Value::Reference(array))
         }
 
+        // --- reflective field access (java.lang.reflect.Field) -------------------------------
+        // The typed raw seams the Field's Java layer calls after its own type-check/widening/boxing.
+        // Each locates the field's slot from the Field object (its clazz/name/modifiers) and the
+        // target: a static field lives on the owner's Class mirror, an instance field at the target's
+        // offset. `getInt0` covers every 4-byte field (boolean/byte/short/char/int, and float via its
+        // bit pattern); `getLong0` the 8-byte ones; `getReference0` the object fields. The width the
+        // native reads is fixed per method — the Java side already picked the right one from the type.
+        ("java/lang/reflect/Field", "getInt0", "(Ljava/lang/Object;)I") => {
+            let (at, _) = field_slot_addr(metaspace, heap, reference(&args[0]), reference(&args[1]));
+            Some(Value::Int(heap.read_u32(at) as i32))
+        }
+        ("java/lang/reflect/Field", "getLong0", "(Ljava/lang/Object;)J") => {
+            let (at, _) = field_slot_addr(metaspace, heap, reference(&args[0]), reference(&args[1]));
+            Some(Value::Long(heap.read_u64(at) as i64))
+        }
+        ("java/lang/reflect/Field", "getReference0", "(Ljava/lang/Object;)Ljava/lang/Object;") => {
+            let (at, _) = field_slot_addr(metaspace, heap, reference(&args[0]), reference(&args[1]));
+            Some(Value::Reference(heap.read_u32(at) as usize))
+        }
+        ("java/lang/reflect/Field", "setInt0", "(Ljava/lang/Object;I)V") => {
+            let (at, _) = field_slot_addr(metaspace, heap, reference(&args[0]), reference(&args[1]));
+            heap.write_u32(at, int(&args[2]) as u32);
+            None
+        }
+        ("java/lang/reflect/Field", "setLong0", "(Ljava/lang/Object;J)V") => {
+            let (at, _) = field_slot_addr(metaspace, heap, reference(&args[0]), reference(&args[1]));
+            heap.write_u64(at, long(&args[2]) as u64);
+            None
+        }
+        ("java/lang/reflect/Field", "setReference0", "(Ljava/lang/Object;Ljava/lang/Object;)V") => {
+            let (at, holder) =
+                field_slot_addr(metaspace, heap, reference(&args[0]), reference(&args[1]));
+            // A reference store goes through the write barrier so the GC learns of the new edge.
+            heap.store_reference(holder, at, reference(&args[2]));
+            None
+        }
+
         ("java/lang/Class", "getPrimitiveClass", "(Ljava/lang/String;)Ljava/lang/Class;") => {
             // The primitive type's `Class` mirror — `int.class` compiles to `getstatic
             // Integer.TYPE`, whose `<clinit>` calls this. A header-only mirror (like an array
@@ -1217,6 +1311,123 @@ fn attribute_body<'a>(
 
 fn has_attribute(metaspace: &mut MetaspaceService, name: &str, wanted: &str) -> bool {
     attribute_body(metaspace, name, wanted).is_some()
+}
+
+/// The absolute heap offset of the slot a `Field` object names, and the object that HOLDS it (for
+/// the write barrier). A static field's slot lives on the owner's `Class` mirror; an instance
+/// field's at the target object's offset. Reads the Field's own `clazz`/`name`/`modifiers`.
+fn field_slot_addr(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    field_obj: usize,
+    target: usize,
+) -> (usize, usize) {
+    const F: &str = "java/lang/reflect/Field";
+    let clazz_off = field_offset(metaspace, F, "clazz");
+    let name_off = field_offset(metaspace, F, "name");
+    let mods_off = field_offset(metaspace, F, "modifiers");
+    let clazz_mirror = heap.read_u32(field_obj + clazz_off) as usize;
+    let owner = metaspace
+        .class_name_at_mirror(clazz_mirror)
+        .expect("Field.clazz has no class")
+        .to_string();
+    let name_ref = heap.read_u32(field_obj + name_off) as usize;
+    let name = strings::read(heap, name_ref);
+    let mods = heap.read_u32(field_obj + mods_off);
+    if mods & 0x0008 != 0 {
+        // static: the slot is on the owner's Class mirror.
+        let at = class_operations::static_slot(metaspace, heap, &owner, &name);
+        let uuid = metaspace.class_id(&owner).to_string();
+        let holder = metaspace.class_object(&uuid).unwrap_or(0);
+        (at, holder)
+    } else {
+        // instance: the slot is at the target object's field offset.
+        let at = target + field_offset(metaspace, &owner, &name);
+        (at, target)
+    }
+}
+
+/// Materialise every `RuntimeVisibleAnnotation` on class `this` as an object, returning their heap
+/// offsets — backs `Class.declaredAnnotations0`. Each is an instance of a class the VM spins
+/// implementing the @interface (see `annotation_factory`). Since annotation objects carry no
+/// instance fields, `allocate` alone yields a complete object; the constructor (just `super()`)
+/// need not run, which is what lets this stay a plain native without re-entering the interpreter.
+fn annotation_objects(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    this: &str,
+) -> Vec<usize> {
+    // Resolve the attribute into an owned tree FIRST, so the class-file borrow ends before we begin
+    // mutating the metaspace (spinning + loading the synthetic classes).
+    let resolved: Vec<ResolvedAnnotation> = match metaspace.get_or_load(this) {
+        Some(cf) => cf
+            .attributes
+            .iter()
+            .find(|a| cf.utf8(a.name_index) == Some("RuntimeVisibleAnnotations"))
+            .map(|a| annotations::resolve(cf, &a.info))
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let mut objects = Vec::with_capacity(resolved.len());
+    for (i, ann) in resolved.iter().enumerate() {
+        let iface = ann
+            .type_descriptor
+            .strip_prefix('L')
+            .and_then(|s| s.strip_suffix(';'))
+            .unwrap_or(&ann.type_descriptor)
+            .to_string();
+        let elements = annotation_elements(metaspace, &iface, ann);
+        // One spun class per (annotated class, annotation slot): stable, so repeated reflection
+        // over the same class reuses it instead of minting a new class each call.
+        let synthetic = format!("{this}$$Anno${i}");
+        if metaspace.get(&synthetic).is_none() {
+            let bytes = annotation_factory::generate_annotation_class(&synthetic, &iface, &elements);
+            match ClassFile::from_bytes(&bytes) {
+                Ok(class) => metaspace.add(synthetic.clone(), class),
+                Err(_) => continue,
+            }
+        }
+        class_operations::load_class(metaspace, heap, &synthetic);
+        objects.push(objects_operations::allocate(metaspace, heap, &synthetic));
+    }
+    objects
+}
+
+/// The elements to give the factory for one annotation: every accessor the @interface declares,
+/// paired with the value written at the use site or, absent that, the accessor's `AnnotationDefault`.
+fn annotation_elements(
+    metaspace: &mut MetaspaceService,
+    iface: &str,
+    ann: &ResolvedAnnotation,
+) -> Vec<Element> {
+    let cf = match metaspace.get_or_load(iface) {
+        Some(cf) => cf,
+        None => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for m in &cf.methods {
+        let (Some(name), Some(desc)) = (cf.utf8(m.name_index), cf.utf8(m.descriptor_index)) else {
+            continue;
+        };
+        // Element accessors are non-static, parameterless, and not <init>/<clinit>.
+        if m.is_static() || name.starts_with('<') || !desc.starts_with("()") {
+            continue;
+        }
+        let value = if let Some((_, v)) = ann.elements.iter().find(|(n, _)| n.as_str() == name) {
+            v.clone()
+        } else if let Some(def) =
+            m.attributes.iter().find(|a| cf.utf8(a.name_index) == Some("AnnotationDefault"))
+        {
+            match annotations::resolve_default(cf, &def.info) {
+                Some(v) => v,
+                None => continue,
+            }
+        } else {
+            continue;
+        };
+        out.push(Element { name: name.to_string(), descriptor: desc.to_string(), value });
+    }
+    out
 }
 
 /// El nombre de clase que el atributo `wanted` nombra en el offset `at` de su cuerpo.

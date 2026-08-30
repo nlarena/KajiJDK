@@ -2,14 +2,19 @@ package java.lang.constant;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.TypeDescriptor;
 
 // A nominal descriptor for a method's signature: the return type plus the parameter types, all
 // of them `ClassDesc`s. It is the piece that makes a `MethodHandleDesc` or an `indy` call site
 // describable without loading a single class.
 //
-// `resolveConstantDesc` and the `TypeDescriptor.OfMethod` bridges are OMITTED (`java.lang.invoke`);
-// see `ConstantDesc`.
-public interface MethodTypeDesc extends ConstantDesc {
+// Extends `TypeDescriptor.OfMethod` so the covariant narrowings (`ClassDesc` for `OfField`,
+// `MethodTypeDesc` for `OfMethod`) synthesize the bridge methods the interface family expects; the
+// parameter-differing operations get explicit `default` delegations below. `resolveConstantDesc`
+// degrades honestly — KajiLibrary's `java.lang.invoke` cannot build a `MethodType` from a
+// descriptor.
+public interface MethodTypeDesc extends ConstantDesc, TypeDescriptor.OfMethod {
 
     // Parses the class-file spelling, `(II)Ljava/lang/String;`.
     public static MethodTypeDesc ofDescriptor(String descriptor) {
@@ -33,7 +38,7 @@ public interface MethodTypeDesc extends ConstantDesc {
         return new ConstantMethodTypeDesc(returnDesc, params);
     }
 
-    public static MethodTypeDesc of(ClassDesc returnDesc, ClassDesc[] paramDescs) {
+    public static MethodTypeDesc of(ClassDesc returnDesc, ClassDesc... paramDescs) {
         return new ConstantMethodTypeDesc(returnDesc, paramDescs);
     }
 
@@ -53,7 +58,34 @@ public interface MethodTypeDesc extends ConstantDesc {
 
     MethodTypeDesc dropParameterTypes(int start, int end);
 
-    MethodTypeDesc insertParameterTypes(int pos, ClassDesc[] paramDescs);
+    MethodTypeDesc insertParameterTypes(int pos, ClassDesc... paramDescs);
+
+    // Resolve to a live `MethodType`; covariantly narrows `ConstantDesc.resolveConstantDesc`, which
+    // is what makes the compiler synthesize the `Object`-returning bridge.
+    MethodType resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) throws java.lang.ReflectiveOperationException;
+
+    // ---- TypeDescriptor.OfMethod bridges whose parameter type is the interface `OfField` rather
+    // than `ClassDesc`. The covariant-return ones (`returnType`, `parameterType`, `parameterArray`,
+    // `dropParameterTypes`) are synthesized automatically; these three, whose parameters differ,
+    // are spelled out as delegations. Every `OfField` handed in is a `ClassDesc` in this library.
+
+    default TypeDescriptor.OfMethod changeReturnType(TypeDescriptor.OfField newReturn) {
+        return changeReturnType((ClassDesc) newReturn);
+    }
+
+    default TypeDescriptor.OfMethod changeParameterType(int index, TypeDescriptor.OfField newParameter) {
+        return changeParameterType(index, (ClassDesc) newParameter);
+    }
+
+    default TypeDescriptor.OfMethod insertParameterTypes(int pos, TypeDescriptor.OfField[] parameterTypes) {
+        ClassDesc[] descs = new ClassDesc[parameterTypes.length];
+        int i = 0;
+        while (i < parameterTypes.length) {
+            descs[i] = (ClassDesc) parameterTypes[i];
+            i = i + 1;
+        }
+        return insertParameterTypes(pos, descs);
+    }
 
     String descriptorString();
 
@@ -206,7 +238,7 @@ final class ConstantMethodTypeDesc implements MethodTypeDesc {
      * @param lookup the lookup that would perform the resolution
      * @throws UnsupportedOperationException always
      */
-    public Object resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
+    public MethodType resolveConstantDesc(java.lang.invoke.MethodHandles.Lookup lookup) {
         throw new UnsupportedOperationException("resolution needs java.lang.invoke");
     }
 }

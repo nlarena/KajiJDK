@@ -80,7 +80,10 @@ public final class RecordComponent {
      *
      * @return the generic type
      */
-    public native Type getGenericType();
+    public Type getGenericType() {
+        // The erased type here, as no Signature is parsed -- correct for a non-generic component.
+        return this.type;
+    }
 
     /**
      * Returns the accessor method the record declares for this component.
@@ -110,5 +113,27 @@ public final class RecordComponent {
      */
     public String toString() {
         return this.type.getName() + " " + this.name;
+    }
+
+    /** The component's type as an {@link AnnotatedType} (no type annotations modelled). */
+    public AnnotatedType getAnnotatedType() {
+        return new AnnotatedTypeImpl(this.type);
+    }
+
+    // ---- annotations (component-level runtime annotations not modelled: "none") ----
+
+    public java.lang.annotation.Annotation[] getAnnotations() {
+        return new java.lang.annotation.Annotation[0];
+    }
+
+    public java.lang.annotation.Annotation[] getDeclaredAnnotations() {
+        return new java.lang.annotation.Annotation[0];
+    }
+
+    public <T extends java.lang.annotation.Annotation> T getAnnotation(Class<T> annotationClass) {
+        if (annotationClass == null) {
+            throw new NullPointerException();
+        }
+        return null;
     }
 }

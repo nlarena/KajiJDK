@@ -25,7 +25,7 @@ import java.lang.ref.ReferenceQueue;
  *
  * @param <T> the type of the referent
  */
-public class PhantomReference extends Reference {
+public class PhantomReference<T> extends Reference<T> {
 
     /**
      * Creates a phantom reference to the given object, registered with a queue.
@@ -34,7 +34,7 @@ public class PhantomReference extends Reference {
      * @param queue the queue to enqueue onto once the referent is unreachable; a phantom
      *              reference with a {@code null} queue can never report anything
      */
-    public PhantomReference(Object referent, ReferenceQueue queue) {
+    public PhantomReference(T referent, ReferenceQueue<? super T> queue) {
         super(referent, queue);
     }
 
@@ -43,7 +43,7 @@ public class PhantomReference extends Reference {
      *
      * @return {@code null}, always — the referent is deliberately unreachable through this class
      */
-    public Object get() {
+    public T get() {
         return null;
     }
 }
