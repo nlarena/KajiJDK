@@ -70,6 +70,60 @@ public final class Formatter implements Closeable, Flushable {
         this.locale = l;
     }
 
+    /**
+     * Un `Formatter` que escribe a un archivo, **truncando** lo que hubiera.
+     *
+     * <p>Se apoya en `FileOutputStream`, y de ahi viene la advertencia que importa: **hay que
+     * cerrar**. Lo escrito se acumula en un buffer y va al disco en `flush`/`close`; un `Formatter`
+     * de archivo que se abandona pierde lo que quedaba. La forma segura es un try-with-resources,
+     * que es para lo que la clase implementa `Closeable`.
+     *
+     * @throws java.io.FileNotFoundException si es un directorio, o no se puede escribir ahi
+     */
+    public Formatter(java.io.File file) throws java.io.FileNotFoundException {
+        this(file, Charset.defaultCharset(), Locale.getDefault());
+    }
+
+    public Formatter(java.io.File file, String charsetName)
+            throws java.io.FileNotFoundException, java.io.UnsupportedEncodingException {
+        this(file, cargarCharset(charsetName), Locale.getDefault());
+    }
+
+    public Formatter(java.io.File file, String charsetName, Locale l)
+            throws java.io.FileNotFoundException, java.io.UnsupportedEncodingException {
+        this(file, cargarCharset(charsetName), l);
+    }
+
+    public Formatter(java.io.File file, Charset charset, Locale l)
+            throws java.io.FileNotFoundException {
+        this(new java.io.FileOutputStream(file), charset, l);
+    }
+
+    /**
+     * Idem, por nombre de archivo.
+     *
+     * <p>Es `new Formatter(new File(fileName))`, y existe porque el caso mas comun --escribir a una
+     * ruta-- no deberia pedir construir un objeto intermedio.
+     */
+    public Formatter(String fileName) throws java.io.FileNotFoundException {
+        this(fileName == null ? null : new java.io.File(fileName));
+    }
+
+    public Formatter(String fileName, String charsetName)
+            throws java.io.FileNotFoundException, java.io.UnsupportedEncodingException {
+        this(fileName == null ? null : new java.io.File(fileName), charsetName);
+    }
+
+    public Formatter(String fileName, String charsetName, Locale l)
+            throws java.io.FileNotFoundException, java.io.UnsupportedEncodingException {
+        this(fileName == null ? null : new java.io.File(fileName), charsetName, l);
+    }
+
+    public Formatter(String fileName, Charset charset, Locale l)
+            throws java.io.FileNotFoundException {
+        this(fileName == null ? null : new java.io.File(fileName), charset, l);
+    }
+
     public Formatter(java.io.OutputStream os) {
         this(os, Charset.defaultCharset(), Locale.getDefault());
     }

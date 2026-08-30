@@ -104,6 +104,48 @@ public final class Scanner implements Iterator<String>, Closeable {
         this.sourceClosed = true;
     }
 
+    /**
+     * Un `Scanner` sobre el contenido de un archivo.
+     *
+     * <p>Se apoya en `FileInputStream`, que lee el archivo entero al abrirse. Vale la nota de aquel:
+     * lo que se recorre es la **foto** del momento de construir el `Scanner`, no un archivo que se
+     * sigue leyendo -- un cambio posterior no se ve.
+     *
+     * @throws java.io.FileNotFoundException si no existe, es un directorio, o no se puede leer
+     */
+    public Scanner(java.io.File source) throws java.io.FileNotFoundException {
+        this(source, Charset.defaultCharset());
+    }
+
+    public Scanner(java.io.File source, String charsetName) throws java.io.FileNotFoundException {
+        this(source, Charset.forName(charsetName));
+    }
+
+    public Scanner(java.io.File source, Charset charset) throws java.io.FileNotFoundException {
+        this(new java.io.FileInputStream(source), charset);
+    }
+
+    /**
+     * Idem, por `Path`.
+     *
+     * <p>Un `Path` de esta biblioteca es una ruta y nada mas, asi que esto es exactamente la forma
+     * con `File` pasando por `toString()`. Existen las dos porque el JDK tiene las dos, y porque
+     * quien ya tiene un `Path` no deberia tener que convertirlo a mano.
+     */
+    public Scanner(java.nio.file.Path source) throws java.io.FileNotFoundException {
+        this(source, Charset.defaultCharset());
+    }
+
+    public Scanner(java.nio.file.Path source, String charsetName)
+            throws java.io.FileNotFoundException {
+        this(source, Charset.forName(charsetName));
+    }
+
+    public Scanner(java.nio.file.Path source, Charset charset)
+            throws java.io.FileNotFoundException {
+        this(source == null ? null : new java.io.File(source.toString()), charset);
+    }
+
     public Scanner(java.nio.channels.ReadableByteChannel source) {
         this(source, Charset.defaultCharset());
     }

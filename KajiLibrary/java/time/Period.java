@@ -228,7 +228,7 @@ public final class Period implements TemporalAmount, java.time.chrono.ChronoPeri
         if (unit == ChronoUnit.DAYS) {
             return this.days;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public List<TemporalUnit> getUnits() {

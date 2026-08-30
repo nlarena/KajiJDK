@@ -473,7 +473,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         if (unit == ChronoUnit.NANOS) {
             return this.plusNanos(amountToAdd);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public Temporal minus(long amountToSubtract, TemporalUnit unit) {
@@ -493,7 +493,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         if (unit == ChronoUnit.SECONDS) {
             return totalNanos / NANOS_PER_SECOND;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public Temporal adjustInto(Temporal temporal) {
@@ -570,5 +570,24 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
 
     public String format(DateTimeFormatter formatter) {
         return formatter.format(this);
+    }
+
+    /**
+     * Lee `text` con ese formateador.
+     *
+     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
+     * quiere**, pasando su propio `from`. Por eso un patron que no traiga fecha y hora
+     * falla aca y no al usar el resultado.
+     *
+     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
+     *     que encaja no alcanza para una fecha y hora
+     */
+    public static LocalDateTime parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
+        java.time.temporal.TemporalQuery<LocalDateTime> consulta = LocalDateTime::from;
+        return formatter.parse(text, consulta);
     }
 }

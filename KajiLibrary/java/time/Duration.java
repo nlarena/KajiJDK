@@ -441,7 +441,7 @@ public final class Duration implements TemporalAmount, Comparable<Duration> {
         if (unit == ChronoUnit.NANOS) {
             return this.nanos;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public List<TemporalUnit> getUnits() {

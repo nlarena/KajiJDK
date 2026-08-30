@@ -227,7 +227,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         if (field == ChronoField.NANO_OF_SECOND) {
             return this.nano;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public boolean isSupported(TemporalUnit unit) {
@@ -340,7 +340,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         if (field == ChronoField.NANO_OF_SECOND) {
             return new LocalTime(this.hour, this.minute, this.second, (int) newValue);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public LocalTime plus(long amountToAdd, TemporalUnit unit) {
@@ -356,7 +356,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         if (unit == ChronoUnit.HOURS) {
             return this.plusHours(amountToAdd);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public LocalTime minus(long amountToSubtract, TemporalUnit unit) {
@@ -378,7 +378,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         if (unit == ChronoUnit.HOURS) {
             return nanosDiff / (3600L * NANOS_PER_SECOND);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public Temporal adjustInto(Temporal temporal) {
@@ -495,5 +495,24 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
             v = v * 10 + (s.charAt(k) - '0');
         }
         return v;
+    }
+
+    /**
+     * Lee `text` con ese formateador.
+     *
+     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
+     * quiere**, pasando su propio `from`. Por eso un patron que no traiga una hora
+     * falla aca y no al usar el resultado.
+     *
+     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
+     *     que encaja no alcanza para una hora
+     */
+    public static LocalTime parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
+        java.time.temporal.TemporalQuery<LocalTime> consulta = LocalTime::from;
+        return formatter.parse(text, consulta);
     }
 }

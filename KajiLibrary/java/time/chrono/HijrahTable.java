@@ -124,6 +124,33 @@ final class HijrahTable {
         return len;
     }
 
+    /** El primer anio tabulado. */
+    static int primerAnio() {
+        return minYear();
+    }
+
+    /** El ultimo. Fuera de la tabla no hay respuesta definida. */
+    static int ultimoAnio() {
+        return maxYear();
+    }
+
+    /**
+     * El dia epoch del dia `dayOfYear` del anio `year`.
+     *
+     * <p>Se suma directo al arranque del anio en vez de convertirlo a mes y dia: los meses hijri
+     * salen de la tabla, asi que ir por el mes seria dar una vuelta larga para llegar al mismo
+     * numero.
+     */
+    static long epochDayOfYearDay(int year, int dayOfYear) {
+        checkYear(year);
+        int largo = lengthOfYear(year);
+        if (dayOfYear < 1 || dayOfYear > largo) {
+            throw new java.time.DateTimeException("Invalid day-of-year " + dayOfYear
+                    + " for Hijrah year " + year + " (length " + largo + ")");
+        }
+        return epochDayOf(year, 1, 1) + (long) (dayOfYear - 1);
+    }
+
     static long epochDayOf(int year, int month, int dayOfMonth) {
         HijrahTable.checkYear(year);
         long day = YEAR_START[year - HijrahTable.minYear()];

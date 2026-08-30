@@ -154,7 +154,7 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
         if (field == ChronoField.NANO_OF_SECOND) {
             return this.nanos;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public boolean isSupported(TemporalUnit unit) {
@@ -183,7 +183,7 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
         if (unit == ChronoUnit.DAYS) {
             return this.plusSeconds(amountToAdd * 86400L);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public Instant minus(long amountToSubtract, TemporalUnit unit) {
@@ -298,7 +298,7 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
         if (unit == ChronoUnit.MILLIS) {
             return secondsDiff * 1000L + nanosDiff / 1000000L;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     // --- TemporalAdjuster ---

@@ -6063,3 +6063,217 @@ pasó.
   por una razón que vale anotar — el `KajiLibrary` de la copia limpia era el de **antes** del merge,
   así que probaban una biblioteca vieja contra un compilador nuevo. No era un bug: era una fecha. Es
   la misma lección que `bin/FROZEN.md` documenta para los `.exe`, un nivel más adentro.
+
+## Tanda: `java.util` al 100 %, el acceso a archivos, y `java.time`
+
+`java.util` **2097/2097 — las 109 clases**, desde 1944/2097 (92,7 %) al empezar la sesión. Los
+últimos catorce miembros no eran una pieza de `java.util`: eran el nivel de abajo.
+
+### El acceso a archivos
+
+`Scanner(File)`, `Scanner(Path)`, `Formatter(File)` y `Formatter(String)` estaban bloqueados desde
+hacía dos tandas, y siempre por lo mismo: **la VM no sabía abrir un archivo**. El `java.io` que llegó
+por merge trajo los streams (`PrintStream` real, `BufferedReader`, `InputStreamReader`,
+`OutputStreamWriter`) pero no `FileInputStream` ni nativos de filesystem — `File.exists()` devolvía
+`false` siempre.
+
+Escribirlos igual habría dado un `new Scanner(archivoQueExiste)` que tira `FileNotFoundException`:
+un miembro que **miente sobre el mundo**, no uno que falta. Por eso quedaron afuera hasta ahora.
+
+**Seis nativos, y nada más.** `jdk.internal.io.Fs`: `readAllBytes`, `writeAllBytes`, `stat`, `size`,
+`delete`, `mkdir`. Todo lo demás —`File.getParent`, `FileInputStream`, `Scanner`, `Formatter`— se
+construye arriba en Java, donde se lee, se prueba y se corrige sin recompilar la VM. Bajar a Rust es
+la excepción, y esta lista es exactamente donde no hay alternativa.
+
+**Tres decisiones que son diferencias reales con el JDK**, y las tres están escritas en el código
+donde alguien las va a leer:
+
+- **El archivo se lee o escribe entero de una.** No hay descriptor abierto, ni posición, ni `close`
+  que pueda faltar. Un archivo de un giga entra en memoria dos veces; a cambio no hay ningún estado
+  que se pueda quedar colgado, que es la clase de error más difícil de encontrar en una VM. Cuando
+  haga falta streaming de verdad, la puerta es agregar un handle en `Fs` — `Scanner` y `Formatter`
+  hablan con `InputStream`, no con el nativo, así que no se enteran.
+- **`FileOutputStream` hay que cerrarlo.** Lo escrito se acumula y va al disco en `flush`/`close`. En
+  el JDK conviene cerrar porque el sistema operativo termina escribiendo lo ya entregado; acá no hay
+  nada entregado hasta el `flush`, así que un stream abandonado **pierde** lo que quedaba. Lo dice el
+  javadoc de `Formatter(File)`, que es donde el usuario se lo va a encontrar.
+- **`createNewFile()` no es atómico.** Entre el `exists()` y la escritura otro proceso puede crear el
+  archivo. El javadoc del JDK promete atomicidad y éste no la tiene, así que se dice de frente en vez
+  de dejar que alguien lo descubra.
+
+**Ninguno de los nativos tira.** Devuelven `null`, `false` o cero, y el lado Java decide qué
+excepción corresponde. Es a propósito: el nativo no tiene con qué distinguir "no existe" de "no tengo
+permiso", y adivinar mal sería peor que no decir nada. `FileInputStream` sí distingue el directorio,
+que falla de una forma distinta y con su propio mensaje — confundirlo con "no existe" manda a buscar
+al lugar equivocado.
+
+**Y `stat` devuelve las cinco banderas juntas**, no cinco nativos. Salen de una sola consulta al
+sistema: preguntarlas por separado tocaría el disco cinco veces y —peor— podría dar respuestas de
+momentos distintos si algo cambia en el medio.
+
+Se siguió la convención que la otra sesión dejó escrita en `IOException`: **todo `java.io` de esta
+biblioteca es sin `throws`**, porque las bases se escribieron así y un override no puede ensanchar
+las excepciones chequeadas (§8.4.8.3). `FileInputStream`/`FileOutputStream` señalan con
+`UncheckedIOException` envolviendo la `IOException`, con la nota que explica por qué — el motivo no se
+pierde y el código compila contra esas bases.
+
+`FileTest` da **-1** con nuestra VM y con `java` real: 44 comprobaciones que crean, escriben, leen,
+anexan, truncan y borran archivos de verdad, más directorios, `Scanner` sobre archivo y por `Path`, y
+`Formatter` a archivo. La prueba crea sus propios archivos en vez de leer alguno del repo, para que
+los dos lados vean exactamente el mismo contenido.
+
+### `java.time`
+
+| paquete | al empezar | ahora |
+|---|---|---|
+| `java.time.temporal` | 131/173 (75,7 %) | **173/173 — 100 %**, las 16 clases |
+| `java.time` | 458/892 (51,3 %) | ~700/892 (78 %) |
+| `java.time.chrono` | 287/538 (53,3 %) | 360/553 (65 %) |
+
+Cerradas: `Duration` 62/62, `Period` 43/43, `Instant` 50/50, `Clock` 16/16, `ZoneId` 14/14,
+`ZoneOffset` 24/24, `InstantSource` 7/7, `DayOfWeek`, `Month`, `ChronoField`, `ChronoUnit`,
+`TemporalField`, `TemporalUnit`, `TemporalAccessor`, `TemporalAdjusters`, `IsoFields`,
+`JulianFields`, `WeekFields`. Y `LocalDate` 87/88, `LocalTime` 65/66, `LocalDateTime` 85/93,
+`Year` 47/48, `YearMonth` 50/51, `MonthDay` 29/30.
+
+**Completar una interfaz base rompe a los que se apoyaban en que estuviera incompleta, y eso es lo
+que uno quiere.** Pasó tres veces seguidas y conviene anotarlo como patrón:
+
+- completar `TemporalField` dejó sin compilar a `IsoFields`, `JulianFields` y `WeekFields`;
+- completar `ChronoLocalDate` dejó sin compilar a `MinguoDate`, `ThaiBuddhistDate`, `JapaneseDate` y
+  `HijrahDate`.
+
+Los siete estaban incompletos y **nada lo notaba**, porque el contrato que debían cumplir también lo
+estaba. El compilador los delató en la recompilación, uno por uno. Los siete se cerraron.
+
+De paso, los métodos puente que le faltaban a `LocalDate` no eran un hueco del generador —sí los
+emite— sino que `ChronoLocalDate` no declaraba los retornos estrechados. Completándolo, los puentes
+salieron solos.
+
+### Lo que queda afuera, y por qué
+
+Siete `parse(CharSequence, DateTimeFormatter)` —en `LocalDate`, `LocalTime`, `LocalDateTime`, `Year`,
+`YearMonth` y `MonthDay`— siguen sin escribirse: `DateTimeFormatter` está en 3/48 y **no sabe
+parsear**. Escribirlos sería la misma clase de mentira que `Scanner(File)` antes de los nativos.
+
+Y una limitación del compilador anotada sin arreglar: `Temporal.super.plus(...)` —la forma
+cualificada de llamar al `default` de una superinterfaz, §15.12.1— no la parsea. En `ChronoLocalDate`
+se repitió el cuerpo, que es una línea y hace lo mismo, con el comentario que lo dice.
+
+### Verificación
+
+- **`java.util` 2097/2097**, las 109 clases al 100 %.
+- La biblioteca recompila **1091/1093**; los dos que fallan son `SymElement` y `StructuredTaskScope`,
+  los dos de siempre.
+- **1441 tests de Rust pasan**; los 20 que fallan son los 18 de `javac::` de siempre —comparados
+  nombre por nombre, no por conteo— más `JcIc` y `WdWide`.
+- `FileTest` da **-1** con las dos VMs.
+
+## Tanda: `java.time` al 100 %, `chrono` casi, y el parseo
+
+`java.time` **892/892 — las 25 clases**, desde 458/892 (51,3 %) al empezar la sesión y 876/892 al
+empezar esta tanda. `java.time.temporal` sigue en **173/173**. `java.time.chrono` pasó de 376/553 a
+**576/589**.
+
+### Lo que destrabó el paquete entero
+
+Los últimos nueve miembros de `java.time` eran el mismo: `parse(CharSequence, DateTimeFormatter)`, uno
+por clase, y los nueve estaban bloqueados por lo mismo — **el formateador no sabía parsear**. Era el
+caso `Scanner(File)` otra vez: escribirlos sin el nivel de abajo habría dado nueve métodos que tiran.
+
+Se le enseñó a parsear **exactamente el lenguaje que ya sabía formatear**, y esa simetría es el
+diseño, no una casualidad: lo que este formateador escribe, lo vuelve a leer. Un patrón con una letra
+que no soporta falla igual en los dos sentidos y con el mismo mensaje, en vez de escribir algo que
+después no se puede releer. De paso se agregaron las letras que faltaban en los dos lados —`X`, `x`,
+`Z` para el desplazamiento y `V` para la zona—, que son las que `OffsetTime`, `OffsetDateTime` y
+`ZonedDateTime` necesitan para que su `parse` sirva de algo.
+
+Lo que devuelve el parseo es una bolsa de campos (`Parsed`), no una fecha: quien parsea no sabe —ni
+tiene por qué— en qué clase van a entrar. Los campos **crudos se conservan además de los resueltos**,
+y eso importa: `Year.from` lee `YEAR` directo, así que si la resolución los consumiera, un patrón de
+`"yyyy"` no daría un `Year`.
+
+### `TemporalQueries` devolvía un objeto nuevo cada vez
+
+Un error que no rompía nada visiblemente y que estaba en el centro de todo. Un temporal reconoce qué
+le preguntaron comparando `query == TemporalQueries.zone()` **por identidad** —así está en el JDK y
+así estaba escrito en toda esta biblioteca— porque una `TemporalQuery` no tiene ningún otro dato con
+el que identificarse. `zone()` devolvía `new ZoneIdQuery()`, así que **ninguna de esas comparaciones
+acertó nunca**: todos los `query()` caían al `queryFrom` genérico, que para las consultas marcadoras
+devuelve `null`.
+
+Todo compilaba. `zonedDateTime.query(zone())` daba `null`, y el síntoma salía tres capas más arriba
+como un "Unable to obtain ZonedDateTime" al parsear. Lo encontró `FmtTest`.
+
+### Dos huecos más que la prueba destapó
+
+- **`ZonedDateTime` delegaba `isSupported`/`getLong`/`get` enteros en su `LocalDateTime`**, que no
+  tiene `OFFSET_SECONDS` ni `INSTANT_SECONDS`. Formatear una fecha con zona con un patrón que llevara
+  `X` fallaba, y desde afuera parecía un problema del formateador.
+- **Veinticuatro `throw new IllegalArgumentException()` pelados** en `java.time`, sobre un campo o una
+  unidad no soportada. El contrato pide `UnsupportedTemporalTypeException`, y la diferencia no es de
+  nombre: esa **extiende `DateTimeException`**, que es lo que el resto de `java.time` atrapa. Un IAE
+  sin mensaje se escapaba de todos esos `catch` y salía sin decir qué campo era.
+
+### Finding #314 — el generador no encontraba un tipo del fuente nombrado entero
+
+En una compilación **multi-unidad**, un tipo hermano de **otro paquete** escrito con su nombre
+completo no resolvía en el generador: `resolve_type_id` buscaba en el scope, en los externos por
+nombre simple, y bajaba a los anidados, pero **nunca miraba las clases del fuente por su nombre
+cualificado**. Como los externos se indexan por nombre simple y el *shadowing* del fuente (#5) impide
+—con toda la razón— cargar del classpath un tipo que está en el round, no quedaba ningún camino.
+
+Lo audita `audit_declared_types`, así que salía como «el generador de bytecode no puede resolver el
+tipo `java.time.chrono.ChronoZonedDateTime`» sobre una clase que estaba en la misma línea de comandos.
+
+**Por qué ninguna de las tres redes lo veía**, que es la parte que vale la pena anotar: la biblioteca
+recompila **de a un archivo**, así que el hermano llega como externo por el `-cp` y ese camino no se
+pisa; el punto fijo compila igual, de a uno; y el multi-unidad solo lo usaba APT, cuyos generados no
+se nombran entre paquetes. Un hueco exactamente en la intersección de lo que ninguna prueba hacía.
+
+La consecuencia práctica era que **dos clases que se referencian mutuamente no se podían escribir**:
+ninguna compila primero, y juntas tampoco. Salió al escribir `ChronoLocalDateTimeImpl` y
+`ChronoZonedDateTimeImpl`, que se nombran una a la otra.
+
+Antes de esto se persiguió un fantasma: `--check` con dos archivos también fallaba, y parecía el mismo
+bug. No lo era — **`--check` compila de a un archivo por diseño**, así que el repro no probaba lo que
+parecía. La ablación (revertir el arreglo y ver si el síntoma vuelve) lo mostró en un minuto, y el
+cambio que se había hecho en `enter.rs` se revirtió por innecesario.
+
+### `atTime` perdía el calendario
+
+`minguoDate.atTime(hora)` devolvía un `LocalDateTime`, y un `LocalDateTime` **es del calendario ISO**:
+su `getChronology()` contestaba `ISO` sobre una fecha Minguo. El día epoch era correcto y todo lo
+demás mentía. Se escribieron `ChronoLocalDateTimeImpl` y `ChronoZonedDateTimeImpl` —las dos que el JDK
+tiene de paquete— y ahora el ISO sigue dando `LocalDateTime`, que sabe más, y los otros calendarios
+dan la implementación que los conserva.
+
+### `Chronology`, otra vez el patrón de la interfaz base
+
+`Chronology` estaba en 11/34 y **las cinco cronologías heredaban su hueco**. Completarla —seis métodos
+abstractos, doce `default`, cuatro estáticos— las cerró a las cinco de una: las cuatro no-ISO pasaron
+de 11/33 a **33/33** y `IsoChronology` de 10/39 a **39/39**. Lo mismo con `Era` (1/8 → 7/8), que cerró
+las cinco eras, y con `ChronoLocalDateTime`/`ChronoZonedDateTime`, cuyas redeclaraciones covariantes
+son las que hacen que el compilador emita los **métodos puente** en `LocalDateTime` y `ZonedDateTime`.
+
+### Lo que queda afuera, y por qué
+
+- **`getDisplayName(TextStyle, Locale)`** en `Chronology` y en las cinco `Era`: los nombres traducidos
+  de calendarios y eras son datos del CLDR, no código. Devolver `"CE"` para cualquier locale sería un
+  miembro que **miente sobre lo que le pidieron**. Misma pared que la tzdb.
+- **`Chronology.ofLocale`** solo mira la extensión Unicode `ca` explícita. El JDK además tiene el mapa
+  de "qué calendario usa cada región", que es la misma pared; sin él, `th-TH` da ISO acá y budista en
+  el JDK. Se prefiere esa diferencia, visible y escrita, a un mapa parcial que acierte a veces.
+- **`ChronoPeriodImpl.writeReplace()`**: es el gancho de la serialización de Java, que esta biblioteca
+  no implementa.
+- El resto de `java.time.format` (65/145): los `ISO_*` predefinidos, los localizados, `DecimalStyle`,
+  `parseBest`, `toFormat`.
+
+### Verificación
+
+- **`java.time` 892/892**, las 25 clases al 100 %. `java.time.temporal` **173/173**.
+  `java.time.chrono` 576/589.
+- `FmtTest` da **-1** con nuestra VM y con `java` real: 60 comprobaciones de parseo, ida y vuelta, y
+  casos que **no** tienen que andar. Las que dependen del locale —nombres de mes, AM/PM— se
+  comprueban por ida y vuelta y no contra texto escrito a mano: el `java` real en español escribe
+  `jul` y `a. m.`, así que comparar la cadena compararía el locale y no el parser.

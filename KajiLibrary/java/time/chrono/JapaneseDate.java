@@ -149,6 +149,44 @@ public final class JapaneseDate implements ChronoLocalDate {
         buf.append(Integer.toString(day));
         return buf.toString();
     }
+    // ---- las cuatro entradas que faltaban --------------------------------------------------------
+
+    /** Hoy, en la zona por defecto del sistema. */
+    public static JapaneseDate now() {
+        return JapaneseDate.deIso(java.time.LocalDate.now());
+    }
+
+    /** Hoy en esa zona. */
+    public static JapaneseDate now(java.time.ZoneId zone) {
+        return JapaneseDate.deIso(java.time.LocalDate.now(zone));
+    }
+
+    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    public static JapaneseDate now(java.time.Clock clock) {
+        return JapaneseDate.deIso(java.time.LocalDate.now(clock));
+    }
+
+    /**
+     * La fecha que `temporal` tiene, leida en el calendario japones.
+     *
+     * @throws java.time.DateTimeException si `temporal` no lleva una fecha, o si cae antes del
+     *     comienzo de la era Meiji
+     */
+    public static JapaneseDate from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof JapaneseDate) {
+            return (JapaneseDate) temporal;
+        }
+        return JapaneseDate.deIso(java.time.LocalDate.from(temporal));
+    }
+
+    // El anio proleptico japones **es** el ISO --lo unico propio es la capa de eras-- asi que aca no
+    // hay ningun corrimiento que deshacer, a diferencia del minguo o el budista.
+    private static JapaneseDate deIso(java.time.LocalDate iso) {
+        return JapaneseDate.of(iso.getYear(), iso.getMonthValue(), iso.getDayOfMonth());
+    }
 }
 
 // The era boundaries — the part of this calendar that is DATA rather than arithmetic.
@@ -167,6 +205,37 @@ public final class JapaneseDate implements ChronoLocalDate {
 final class EraTable {
 
     private EraTable() {
+    }
+
+    /** Las eras admitidas, de la mas antigua a la mas reciente. */
+    static java.util.List<Era> todas() {
+        return java.util.Arrays.asList(new Era[] {
+            JapaneseEra.MEIJI, JapaneseEra.TAISHO, JapaneseEra.SHOWA, JapaneseEra.HEISEI,
+            JapaneseEra.REIWA,
+        });
+    }
+
+    /**
+     * El rango del campo `ERA`.
+     *
+     * <p>Los valores de las eras japonesas arrancan en -1 (Meiji) y no en 0, que es la numeracion
+     * del JDK; el maximo es el de la era corriente y **crece cuando hay una era nueva**, que es la
+     * unica parte de este calendario que depende de un hecho del mundo.
+     */
+    static java.time.temporal.ValueRange rangoDeEras() {
+        return java.time.temporal.ValueRange.of((long) JapaneseEra.MEIJI.getValue(),
+                (long) JapaneseEra.REIWA.getValue());
+    }
+
+    /**
+     * El rango del campo `YEAR_OF_ERA`.
+     *
+     * <p>El minimo es 1 --toda era empieza en su anio 1-- y el maximo es el de la era mas larga, que
+     * es Showa con 64 anios. Es un rango **suelto**: dice cuanto puede llegar a valer el campo en
+     * alguna era, no cuanto vale en la de una fecha dada.
+     */
+    static java.time.temporal.ValueRange rangoDeAnioDeEra() {
+        return java.time.temporal.ValueRange.of(1L, 64L);
     }
 
     static long firstSupportedEpochDay() {

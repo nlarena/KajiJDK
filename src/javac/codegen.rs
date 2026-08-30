@@ -1145,6 +1145,26 @@ fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<Sy
     if let Some(id) = table.resolve_type(scope, name).or_else(|| table.external(name)) {
         return Some(id);
     }
+    // Un tipo **del fuente** nombrado **cualificado** (#314). Los externos se indexan por nombre
+    // simple, así que un `java.time.chrono.ChronoZonedDateTime` escrito entero solo podía resolver
+    // por el `external(simple)` de más abajo — y ese no existe cuando el tipo **es** del round: el
+    // shadowing del fuente (#5) hace que `try_load` no cargue nada del classpath, con toda la razón.
+    // Resultado: en una compilación **multi-unidad**, un hermano de **otro paquete** nombrado entero
+    // no resolvía, y como esto lo audita `audit_declared_types`, salía como "el generador no puede
+    // resolver el tipo" sobre una clase que estaba en la misma línea de comandos.
+    //
+    // Por qué ninguna red lo veía: la biblioteca recompila **de a un archivo**, así que el hermano
+    // llega como externo por el `-cp` y este camino no se pisa; el punto fijo compila igual, de a
+    // uno; y el multi-unidad solo lo usaba APT, cuyos generados no se nombran entre paquetes. Salió
+    // al emitir `ChronoZonedDateTime` y `ZonedDateTime` juntos, que es lo que hay que hacer cuando
+    // una interfaz y su implementador cambian a la vez.
+    //
+    // Va **antes** del `external(simple)`: el fuente gana sobre el classpath, que es el mismo orden
+    // que ya usa `resolve_name_to_sym` en la pasada 1. El `$` se repuntea porque un anidado del
+    // fuente se registra con puntos en todos los niveles.
+    if let Some(id) = table.class(name).or_else(|| table.class(&name.replace('$', "."))) {
+        return Some(id);
+    }
     // Cualificado / **anidado** (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`): por nombre simple
     // (externo registrado así) o, si no, resolviendo el `outer` y bajando a su miembro-tipo. Sin esto,
     // el descriptor de un `Map.Entry<..>` en firma se emitía borrado a `Object` y el `Signature` con el

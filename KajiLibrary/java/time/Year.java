@@ -210,7 +210,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
         if (field == ChronoField.YEAR) {
             return this.year;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public boolean isSupported(TemporalUnit unit) {
@@ -222,7 +222,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
         if (field == ChronoField.YEAR) {
             return new Year((int) newValue);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public Temporal plus(long amountToAdd, TemporalUnit unit) {
@@ -238,7 +238,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
         if (unit == ChronoUnit.MILLENNIA) {
             return this.plusYears(amountToAdd * 1000L);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public Temporal minus(long amountToSubtract, TemporalUnit unit) {
@@ -260,7 +260,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
         if (unit == ChronoUnit.MILLENNIA) {
             return yearsDiff / 1000L;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public Temporal adjustInto(Temporal temporal) {
@@ -319,5 +319,24 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
             year = year * 10 + (s.charAt(k) - '0');
         }
         return Year.of(sign * year);
+    }
+
+    /**
+     * Lee `text` con ese formateador.
+     *
+     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
+     * quiere**, pasando su propio `from`. Por eso un patron que no traiga el anio
+     * falla aca y no al usar el resultado.
+     *
+     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
+     *     que encaja no alcanza para un anio
+     */
+    public static Year parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
+        java.time.temporal.TemporalQuery<Year> consulta = Year::from;
+        return formatter.parse(text, consulta);
     }
 }

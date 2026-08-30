@@ -466,7 +466,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         if (field == ChronoField.DAY_OF_YEAR) {
             return this.getDayOfYear();
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public boolean isSupported(TemporalUnit unit) {
@@ -488,7 +488,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         if (field == ChronoField.EPOCH_DAY) {
             return LocalDate.ofEpochDay(newValue);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public LocalDate plus(long amountToAdd, TemporalUnit unit) {
@@ -504,7 +504,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         if (unit == ChronoUnit.YEARS) {
             return this.plusYears(amountToAdd);
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public LocalDate minus(long amountToSubtract, TemporalUnit unit) {
@@ -520,7 +520,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         if (unit == ChronoUnit.WEEKS) {
             return daysDiff / 7L;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     // --- TemporalAdjuster ---
@@ -712,5 +712,24 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
             v = v * 10 + (s.charAt(k) - '0');
         }
         return v;
+    }
+
+    /**
+     * Lee `text` con ese formateador.
+     *
+     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
+     * quiere**, pasando su propio `from`. Por eso un patron que no traiga una fecha
+     * falla aca y no al usar el resultado.
+     *
+     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
+     *     que encaja no alcanza para una fecha
+     */
+    public static LocalDate parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
+        java.time.temporal.TemporalQuery<LocalDate> consulta = LocalDate::from;
+        return formatter.parse(text, consulta);
     }
 }

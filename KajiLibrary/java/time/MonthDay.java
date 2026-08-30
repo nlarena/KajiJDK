@@ -158,7 +158,7 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
         if (field == ChronoField.DAY_OF_MONTH) {
             return this.day;
         }
-        throw new IllegalArgumentException();
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public Temporal adjustInto(Temporal temporal) {
@@ -210,5 +210,24 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
             v = v * 10 + (s.charAt(k) - '0');
         }
         return v;
+    }
+
+    /**
+     * Lee `text` con ese formateador.
+     *
+     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
+     * quiere**, pasando su propio `from`. Por eso un patron que no traiga mes y dia
+     * falla aca y no al usar el resultado.
+     *
+     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
+     *     que encaja no alcanza para un mes y dia
+     */
+    public static MonthDay parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
+        java.time.temporal.TemporalQuery<MonthDay> consulta = MonthDay::from;
+        return formatter.parse(text, consulta);
     }
 }

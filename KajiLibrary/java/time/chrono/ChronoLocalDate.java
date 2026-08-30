@@ -53,13 +53,19 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
         return this.getChronology().eraOf(this.get(ChronoField.ERA));
     }
 
-    /** Esta fecha con esa hora. */
+    /**
+     * Esta fecha con esa hora, **en este calendario**.
+     *
+     * <p>Antes esto devolvia un `LocalDateTime` armado desde el dia epoch, y un `LocalDateTime` es
+     * del calendario ISO: `minguoDate.atTime(hora).getChronology()` contestaba `ISO` sobre una fecha
+     * Minguo. El dia epoch es correcto y todo lo demas mentia. Ahora el ISO sigue dando
+     * `LocalDateTime` --que sabe mas-- y los otros calendarios dan la implementacion que los conserva.
+     */
     default ChronoLocalDateTime atTime(java.time.LocalTime localTime) {
         if (localTime == null) {
             throw new NullPointerException("localTime");
         }
-        return java.time.LocalDateTime.of(java.time.LocalDate.ofEpochDay(this.toEpochDay()),
-                localTime);
+        return ChronoLocalDateTimeImpl.of(this, localTime);
     }
 
     /**

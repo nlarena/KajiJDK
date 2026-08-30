@@ -16,6 +16,9 @@ import java.time.temporal.ChronoUnit;
 //
 // Los tres campos son independientes, como en `java.time.Period`: "1 mes y 1 dia" no son 31 dias ni
 // 32, y cuantos resulten depende de a que fecha se le sumen.
+// Queda afuera `writeReplace()`: es el gancho de la serializacion de Java, y esta biblioteca no la
+// implementa. Un `writeReplace` que devuelva cualquier cosa sin que exista el mecanismo del otro lado
+// seria un miembro con la firma correcta y ningun efecto.
 final class ChronoPeriodImpl implements ChronoPeriod {
 
     private final Chronology chrono;

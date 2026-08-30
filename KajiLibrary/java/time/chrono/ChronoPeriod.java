@@ -62,4 +62,23 @@ public interface ChronoPeriod extends TemporalAmount {
     default ChronoPeriod negated() {
         return this.multipliedBy(-1);
     }
+
+    /**
+     * El periodo que va de `startDateInclusive` a `endDateExclusive`, en el calendario **de la
+     * primera**.
+     *
+     * <p>Que mande la primera no es una convencion arbitraria: un periodo de "1 mes" solo quiere
+     * decir algo dentro de un calendario, y el resultado se va a sumar a la fecha de partida. Si la
+     * segunda es de otro calendario se la convierte antes; lo que se conserva es el dia, que es lo
+     * unico que las dos comparten.
+     */
+    static ChronoPeriod between(ChronoLocalDate startDateInclusive, ChronoLocalDate endDateExclusive) {
+        if (startDateInclusive == null) {
+            throw new NullPointerException("startDateInclusive");
+        }
+        if (endDateExclusive == null) {
+            throw new NullPointerException("endDateExclusive");
+        }
+        return startDateInclusive.until(endDateExclusive);
+    }
 }

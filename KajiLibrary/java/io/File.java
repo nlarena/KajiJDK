@@ -4,6 +4,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
+import jdk.internal.io.Fs;
 
 // KajiLibrary's java.io.File -- an abstract path name. The path-manipulation half is fully modelled
 // (naming, parents, absoluteness, normalization, URI/URL conversion, ordering); the file-system half
@@ -164,52 +165,84 @@ public class File implements Serializable, Comparable<File> {
         return new URL(this.toURI().toString());
     }
 
-    // ---- file-system state (inert: KajiJDK has no file system) ----
+    // ---- el estado en el disco ----
+    //
+    // Los seis salen de **una sola** llamada a `Fs.stat`, que devuelve las banderas juntas. Es a
+    // proposito: preguntarlas por separado tocaria el disco una vez por cada una y --peor-- podria
+    // dar respuestas de momentos distintos si algo cambia en el medio. Aca cada metodo hace su
+    // propia consulta igual, porque una `File` no cachea nada: el archivo puede aparecer o
+    // desaparecer entre dos llamadas, y una respuesta guardada seria una mentira con fecha.
 
     public boolean canRead() {
-        return false;
+        return (Fs.stat(this.path) & Fs.SE_LEE) != 0;
     }
 
     public boolean canWrite() {
-        return false;
+        return (Fs.stat(this.path) & Fs.SE_ESCRIBE) != 0;
     }
 
+    /**
+     * Si se puede ejecutar.
+     *
+     * <p>Se responde con "se puede leer", que en Windows es lo mismo para cualquier archivo y en
+     * POSIX no. Es la unica de las tres que esta biblioteca no distingue, y se documenta en vez de
+     * devolver `false` --que seria mentir sobre todo ejecutable-- o `true` --que lo seria sobre
+     * todo lo demas--.
+     */
     public boolean canExecute() {
-        return false;
+        return (Fs.stat(this.path) & Fs.SE_LEE) != 0;
     }
 
     public boolean exists() {
-        return false;
+        return (Fs.stat(this.path) & Fs.EXISTE) != 0;
     }
 
     public boolean isDirectory() {
-        return false;
+        return (Fs.stat(this.path) & Fs.ES_DIRECTORIO) != 0;
     }
 
     public boolean isFile() {
-        return false;
+        return (Fs.stat(this.path) & Fs.ES_ARCHIVO) != 0;
     }
 
     public boolean isHidden() {
         return this.getName().startsWith(".");
     }
 
+    /**
+     * Cuando se modifico por ultima vez.
+     *
+     * <p>Devuelve 0 -- "no se sabe" --, que es lo que el contrato dice para un archivo del que no se
+     * puede obtener la fecha. El nativo no la expone todavia; agregarla es una linea de Rust, y
+     * hasta entonces esto no inventa una fecha.
+     */
     public long lastModified() {
         return 0L;
     }
 
     public long length() {
-        return 0L;
+        return Fs.size(this.path);
     }
 
-    // ---- file-system mutation (inert) ----
+    // ---- mutacion ----
 
+    /**
+     * Crea el archivo si no existe. `true` si lo creo esta llamada.
+     *
+     * <p>La comprobacion y la creacion **no** son atomicas aca, a diferencia del JDK: entre el
+     * `exists()` y el `writeAllBytes` otro proceso puede crear el archivo, y entonces esto devuelve
+     * `true` habiendolo pisado con vacio. Se dice de frente porque el javadoc del JDK promete
+     * atomicidad y este no la tiene.
+     */
     public boolean createNewFile() throws IOException {
-        return false;
+        if (this.exists()) {
+            return false;
+        }
+        return Fs.writeAllBytes(this.path, new byte[0], false);
     }
 
     public boolean delete() {
-        return false;
+        return Fs.delete(this.path);
     }
 
     public void deleteOnExit() {
@@ -236,11 +269,12 @@ public class File implements Serializable, Comparable<File> {
     }
 
     public boolean mkdir() {
-        return false;
+        return Fs.mkdir(this.path, false);
     }
 
+    /** Idem, creando tambien los directorios padres que falten. */
     public boolean mkdirs() {
-        return false;
+        return Fs.mkdir(this.path, true);
     }
 
     public boolean renameTo(File dest) {

@@ -500,6 +500,27 @@ mod tests {
         assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
     }
 
+    /// **El cast que lee el campo ancho, contra el JDK de referencia.**
+    ///
+    /// Dos cosas en la misma sentencia y por eso vale la campaña: un `checkcast` que puede fallar y,
+    /// si no falla, un `getfield` de 64 bits sobre el objeto recién estrechado. El resultado sale
+    /// por un local `long`, así que el valor cruza un `lstore` y un `lload` antes de que alguien lo
+    /// mire — que es donde una VM que perdiera la mitad alta lo perdería.
+    ///
+    /// `cargo test --release --lib wide_casts_agree -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn wide_casts_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { cast_share: 40, object_share: 35, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-wide-cast"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
     /// **Recursión contra el JDK de referencia.**
     ///
     /// Lo que se pone a prueba no es el opcode —una llamada estática es una llamada estática— sino
@@ -928,6 +949,18 @@ mod jit_coverage {
             // so every entry method carrying one runs interpreted on both arms. Measuring it is
             // what turns "do not pair this against the JIT" from advice into a number.
             ("objects + reference fields", GenConfig { ref_field_share: 60, ..base }),
+            // El par que le pone precio al **cast que lee el campo ancho**. Las dos filas dejan la
+            // jerarquía idéntica —`long b` declarado y escrito por el constructor en las dos— y
+            // varían una sola cosa: si un cast puede llegar a ese campo. Ese aislamiento es el
+            // punto, y costó una perilla: apagar `wide_fields` habría sacado el campo de todos
+            // lados y la diferencia habría vuelto a medir la mitad ancha entera.
+            //
+            // Es el único camino de esta gramática por el que un cast que el JIT **puede** compilar
+            // termina leyendo un campo que **no** puede: `checkcast` está adentro del subconjunto,
+            // el resolver contesta un offset para un `int` de instancia y se niega con el resto, y
+            // la negativa es por método.
+            ("casts, sólo campo int ", GenConfig { cast_share: 40, wide_cast: false, ..base }),
+            ("casts, campo long      ", GenConfig { cast_share: 40, ..base }),
             ("everything (the default)", base),
         ];
         let mut rows = Vec::new();

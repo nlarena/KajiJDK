@@ -138,6 +138,121 @@ pub fn dispatch(
             None
         }
 
+        // --- Sistema de archivos -------------------------------------------------
+        //
+        // Los seis nativos que le dan a Java acceso al disco. Son pocos a proposito: todo lo demas
+        // --`File.getParent`, `Scanner`, `Formatter`-- se construye arriba de estos en Java, donde se
+        // puede leer y probar. Lo que **no** se puede escribir en Java es esto, y solo esto.
+        //
+        // **El archivo se lee o escribe entero de una.** No hay descriptor abierto, ni posicion, ni
+        // `close` que pueda faltar. Es una limitacion real --un archivo de un giga entra en memoria
+        // dos veces-- y a cambio no hay ningun estado que se pueda quedar colgado, que es la clase de
+        // error mas dificil de encontrar en una VM. Cuando haga falta streaming de verdad, la puerta
+        // es agregar un handle aca abajo, no cambiar lo de arriba.
+        //
+        // Todos toman la ruta como `String` y no como `File`: el nativo no sabe nada de la clase, y
+        // asi `java.io.File` puede cambiar sin tocar Rust.
+
+        // Los bytes del archivo, o `null` si no se puede leer. Devolver null y no tirar es lo que
+        // deja que el lado Java decida cual de las cuatro excepciones corresponde -- el nativo no
+        // tiene con que distinguir "no existe" de "no se puede leer".
+        ("jdk/internal/io/Fs", "readAllBytes", "(Ljava/lang/String;)[B") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            match std::fs::read(&ruta) {
+                Ok(bytes) => {
+                    let offset = match array_operations::allocate_array_of_class(
+                        metaspace, heap, "[B", bytes.len(),
+                    ) {
+                        Ok(o) => o,
+                        Err(_) => return Some(Value::Reference(0)),
+                    };
+                    for (i, &b) in bytes.iter().enumerate() {
+                        heap.write_u8(offset + array_operations::ARRAY_HEADER_SIZE + i, b);
+                    }
+                    Some(Value::Reference(offset))
+                }
+                Err(_) => Some(Value::Reference(0)),
+            }
+        }
+        // Escribe los bytes. `true` si se pudo. `append` decide si agrega o pisa.
+        ("jdk/internal/io/Fs", "writeAllBytes", "(Ljava/lang/String;[BZ)Z") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let arr = reference(&args[1]);
+            let anexar = matches!(args[2], Value::Int(1));
+            if arr == 0 {
+                return Some(Value::Int(0));
+            }
+            let n = heap.read_u32(arr + HEADER_SIZE) as usize;
+            let mut bytes = Vec::with_capacity(n);
+            for i in 0..n {
+                bytes.push(heap.read_u8(arr + array_operations::ARRAY_HEADER_SIZE + i));
+            }
+            let r = if anexar {
+                std::fs::OpenOptions::new().create(true).append(true).open(&ruta).and_then(|mut f| {
+                    use std::io::Write;
+                    f.write_all(&bytes)
+                })
+            } else {
+                std::fs::write(&ruta, &bytes)
+            };
+            Some(Value::Int(if r.is_ok() { 1 } else { 0 }))
+        }
+        // Los metadatos, empaquetados en un `int` de banderas: 1 = existe, 2 = es archivo,
+        // 4 = es directorio, 8 = se puede leer, 16 = se puede escribir.
+        //
+        // Van juntos y no en cinco nativos porque los cinco salen de **una sola** llamada al sistema:
+        // preguntarlos por separado consultaria el disco cinco veces, y --peor-- podria dar respuestas
+        // de momentos distintos si algo cambia en el medio.
+        ("jdk/internal/io/Fs", "stat", "(Ljava/lang/String;)I") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let mut banderas = 0i32;
+            if let Ok(md) = std::fs::metadata(&ruta) {
+                banderas |= 1;
+                if md.is_file() {
+                    banderas |= 2;
+                }
+                if md.is_dir() {
+                    banderas |= 4;
+                }
+                banderas |= 8;
+                if !md.permissions().readonly() {
+                    banderas |= 16;
+                }
+            }
+            Some(Value::Int(banderas))
+        }
+        // El tamaño en bytes, o 0 si no se puede saber -- que es lo que devuelve `File.length()`
+        // para lo que no existe.
+        ("jdk/internal/io/Fs", "size", "(Ljava/lang/String;)J") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let n = std::fs::metadata(&ruta).map(|m| m.len()).unwrap_or(0);
+            Some(Value::Long(n as i64))
+        }
+        // Borra un archivo o un directorio **vacio**. `true` si se pudo.
+        //
+        // Vacio a proposito: `File.delete()` no borra recursivamente, y un nativo que si lo hiciera
+        // convertiria un `delete()` sobre el directorio equivocado en una perdida de datos.
+        ("jdk/internal/io/Fs", "delete", "(Ljava/lang/String;)Z") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let ok = if std::fs::metadata(&ruta).map(|m| m.is_dir()).unwrap_or(false) {
+                std::fs::remove_dir(&ruta).is_ok()
+            } else {
+                std::fs::remove_file(&ruta).is_ok()
+            };
+            Some(Value::Int(if ok { 1 } else { 0 }))
+        }
+        // Crea un directorio. `todos` decide si tambien los padres que falten.
+        ("jdk/internal/io/Fs", "mkdir", "(Ljava/lang/String;Z)Z") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let todos = matches!(args[1], Value::Int(1));
+            let r = if todos {
+                std::fs::create_dir_all(&ruta)
+            } else {
+                std::fs::create_dir(&ruta)
+            };
+            Some(Value::Int(if r.is_ok() { 1 } else { 0 }))
+        }
+
         // --- Introspection / identity (things Java can't read of itself) ---------
         // getClass(): the receiver's header `class_id` *is* its Class<…> mirror.
         ("java/lang/Object", "getClass", "()Ljava/lang/Class;") => {

@@ -151,4 +151,46 @@ public final class ThaiBuddhistDate implements ChronoLocalDate {
         buf.append(Integer.toString(day));
         return buf.toString();
     }
+
+    // ---- las cuatro entradas que faltaban --------------------------------------------------------
+    //
+    // `now()` y `from(...)` son las dos formas de conseguir una fecha sin escribir sus numeros: una
+    // la saca del reloj, la otra la traduce de otro temporal. Sin ellas, la unica manera de tener
+    // una ThaiBuddhistDate de hoy era calcular a mano el anio budista, que es justo lo que la clase existe
+    // para no tener que hacer.
+
+    /** Hoy, en la zona por defecto del sistema. */
+    public static ThaiBuddhistDate now() {
+        return ThaiBuddhistDate.deIso(LocalDate.now());
+    }
+
+    /** Hoy en esa zona. */
+    public static ThaiBuddhistDate now(java.time.ZoneId zone) {
+        return ThaiBuddhistDate.deIso(LocalDate.now(zone));
+    }
+
+    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    public static ThaiBuddhistDate now(java.time.Clock clock) {
+        return ThaiBuddhistDate.deIso(LocalDate.now(clock));
+    }
+
+    /**
+     * La fecha que `temporal` tiene, leida en este calendario.
+     *
+     * @throws java.time.DateTimeException si `temporal` no lleva una fecha
+     */
+    public static ThaiBuddhistDate from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof ThaiBuddhistDate) {
+            return (ThaiBuddhistDate) temporal;
+        }
+        return ThaiBuddhistDate.deIso(LocalDate.from(temporal));
+    }
+
+    // El puente desde el ISO, que es como esta clase esta guardada por dentro.
+    private static ThaiBuddhistDate deIso(LocalDate iso) {
+        return ThaiBuddhistDate.of(iso.getYear() + YEARS_DIFFERENCE, iso.getMonthValue(), iso.getDayOfMonth());
+    }
 }

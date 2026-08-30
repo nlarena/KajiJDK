@@ -236,12 +236,12 @@
 
   <div class="resumen">
     <div class="cifra"><b>109<span class="de">/109</span></b><span>clases públicas</span></div>
-    <div class="cifra"><b>90<span class="de">/109</span></b><span>completas al 100&nbsp;%</span></div>
-    <div class="cifra"><b>1999<span class="de">/2097</span></b><span>miembros del contrato</span></div>
+    <div class="cifra"><b>109<span class="de">/109</span></b><span>completas al 100&nbsp;%</span></div>
+    <div class="cifra"><b>2097<span class="de">/2097</span></b><span>miembros del contrato</span></div>
   </div>
 
   <section>
-    <h2>Lo que falta <em>19 clases incompletas</em></h2>
+    <h2>Lo que falta <em>0 clases incompletas</em></h2>
     <p class="nota">
       Ordenadas de más completa a menos. Ya no hay barras grises: las 109 clases
       públicas del paquete existen.
@@ -250,7 +250,7 @@
   </section>
 
   <section>
-    <h2>Completas <em>90 clases al 100&nbsp;% del contrato</em></h2>
+    <h2>Completas <em>109 clases al 100&nbsp;% del contrato</em></h2>
     <div class="chips" id="chips"></div>
   </section>
 
@@ -283,32 +283,31 @@
 
 <script>
   const INCOMPLETAS = [
-    ["NavigableMap",23,24],["LinkedList",44,46],["NavigableSet",20,21],["SortedSet",15,16],["Deque",
-    28,30],["SortedMap",12,13],["ResourceBundle",21,23],["HashMap",26,29],["ServiceLoader",8,9],["Sc
-    anner",64,73],["HexFormat",30,36],["BitSet",30,37],["SequencedMap",7,10],["EnumSet",9,14],["Link
-    edHashSet",9,14],["LinkedHashMap",14,22],["Base64",4,7],["Formatter",11,25],["Date",12,36]
+    
   ];
 
   const AUSENTES = [];
 
-  const COMPLETAS = ["Arrays","Calendar","Locale","Collections","Vector","Properties","TreeMap","List","ArrayDeque","
-    ArrayList","Map","GregorianCalendar","Hashtable","TreeSet","Set","SimpleTimeZone","TimeZone","Ra
-    ndom","Spliterators","SplittableRandom","PriorityQueue","IdentityHashMap","Objects","Collection"
-    ,"Optional","EnumMap","WeakHashMap","AbstractList","Comparator","AbstractMap","HashSet","Spliter
-    ator","UUID","AbstractCollection","OptionalDouble","OptionalInt","OptionalLong","Currency","Time
-    r","LongSummaryStatistics","DoubleSummaryStatistics","IntSummaryStatistics","Observable","ListIt
-    erator","StringTokenizer","AbstractSequentialList","Dictionary","SequencedCollection","StringJoi
-    ner","AbstractQueue","PropertyPermission","Queue","Stack","ListResourceBundle","PropertyResource
-    Bundle","AbstractSet","ConcurrentModificationException","EventObject","FormatFlagsConversionMism
-    atchException","IllegalFormatConversionException","IllformedLocaleException","Iterator","NoSuchE
-    lementException","TimerTask","DuplicateFormatFlagsException","Enumeration","FormattableFlags","I
-    llegalFormatCodePointException","IllegalFormatFlagsException","IllegalFormatPrecisionException",
-    "IllegalFormatWidthException","MissingFormatArgumentException","MissingFormatWidthException","Mi
-    ssingResourceException","UnknownFormatConversionException","UnknownFormatFlagsException","EventL
-    istenerProxy","InputMismatchException","InvalidPropertiesFormatException","SequencedSet","Servic
-    eConfigurationError","TooManyListenersException","EmptyStackException","Formattable","FormatterC
-    losedException","Observer","PrimitiveIterator","EventListener","IllegalFormatException","RandomA
-    ccess"];
+  const COMPLETAS = ["Arrays","Calendar","Locale","Collections","Scanner","Vector","Properties","TreeMap","List","Lin
+    kedList","ArrayDeque","ArrayList","Map","BitSet","Date","HexFormat","GregorianCalendar","Hashtab
+    le","TreeSet","Deque","HashMap","Set","SimpleTimeZone","TimeZone","Formatter","Random","Splitera
+    tors","SplittableRandom","NavigableMap","PriorityQueue","ResourceBundle","IdentityHashMap","Link
+    edHashMap","NavigableSet","Objects","Collection","Optional","EnumMap","WeakHashMap","AbstractLis
+    t","Comparator","AbstractMap","HashSet","SortedSet","Spliterator","UUID","AbstractCollection","O
+    ptionalDouble","OptionalInt","OptionalLong","EnumSet","LinkedHashSet","Currency","SortedMap","Ti
+    mer","LongSummaryStatistics","DoubleSummaryStatistics","IntSummaryStatistics","Observable","Sequ
+    encedMap","ListIterator","ServiceLoader","StringTokenizer","AbstractSequentialList","Dictionary"
+    ,"Base64","SequencedCollection","StringJoiner","AbstractQueue","PropertyPermission","Queue","Sta
+    ck","ListResourceBundle","PropertyResourceBundle","AbstractSet","ConcurrentModificationException
+    ","EventObject","FormatFlagsConversionMismatchException","IllegalFormatConversionException","Ill
+    formedLocaleException","Iterator","NoSuchElementException","TimerTask","DuplicateFormatFlagsExce
+    ption","Enumeration","FormattableFlags","IllegalFormatCodePointException","IllegalFormatFlagsExc
+    eption","IllegalFormatPrecisionException","IllegalFormatWidthException","MissingFormatArgumentEx
+    ception","MissingFormatWidthException","MissingResourceException","UnknownFormatConversionExcept
+    ion","UnknownFormatFlagsException","EventListenerProxy","InputMismatchException","InvalidPropert
+    iesFormatException","SequencedSet","ServiceConfigurationError","TooManyListenersException","Empt
+    yStackException","Formattable","FormatterClosedException","Observer","PrimitiveIterator","EventL
+    istener","IllegalFormatException","RandomAccess"];
 
   const barras = document.getElementById("barras");
   for (const [clase, tengo, total] of INCOMPLETAS.concat(AUSENTES)) {

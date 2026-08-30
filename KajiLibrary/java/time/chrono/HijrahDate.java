@@ -30,6 +30,12 @@ public final class HijrahDate implements ChronoLocalDate {
         return new HijrahDate(HijrahTable.epochDayOf(prolepticYear, month, dayOfMonth));
     }
 
+    // De paquete: es como la cronologia arma una fecha sin pasar por mes y dia. No es publico
+    // porque el JDK no lo tiene --alli se llega por `HijrahChronology.dateEpochDay`--.
+    static HijrahDate ofEpochDay(long epochDay) {
+        return new HijrahDate(epochDay);
+    }
+
     public HijrahChronology getChronology() {
         return HijrahChronology.INSTANCE;
     }
@@ -265,5 +271,59 @@ public final class HijrahDate implements ChronoLocalDate {
         }
         buf.append(Integer.toString(day));
         return buf.toString();
+    }
+
+    // ---- las cuatro entradas que faltaban, mas la variante ----------------------------------------
+
+    /** Hoy, en la zona por defecto del sistema. */
+    public static HijrahDate now() {
+        return HijrahDate.ofEpochDay(java.time.LocalDate.now().toEpochDay());
+    }
+
+    /** Hoy en esa zona. */
+    public static HijrahDate now(java.time.ZoneId zone) {
+        return HijrahDate.ofEpochDay(java.time.LocalDate.now(zone).toEpochDay());
+    }
+
+    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    public static HijrahDate now(java.time.Clock clock) {
+        return HijrahDate.ofEpochDay(java.time.LocalDate.now(clock).toEpochDay());
+    }
+
+    /**
+     * La fecha que `temporal` tiene, leida en el calendario hijri.
+     *
+     * @throws java.time.DateTimeException si `temporal` no lleva una fecha, o si cae fuera de los
+     *     anios tabulados
+     */
+    public static HijrahDate from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof HijrahDate) {
+            return (HijrahDate) temporal;
+        }
+        return HijrahDate.ofEpochDay(java.time.LocalDate.from(temporal).toEpochDay());
+    }
+
+    /**
+     * Esta misma fecha en otra **variante** del calendario hijri.
+     *
+     * <p>El hijri no es un calendario sino una familia: la Umm al-Qura de Arabia Saudita, la
+     * tabular, y varias mas, que difieren en que dia empieza cada mes. Esta biblioteca **trae una
+     * sola tabla**, asi que la unica variante que existe es la que ya se esta usando; pedir esa
+     * devuelve `this` y pedir otra falla, en vez de devolver una fecha de un calendario que no se
+     * calculo.
+     *
+     * @throws java.time.DateTimeException si la variante no es la que se trae
+     */
+    public HijrahDate withVariant(HijrahChronology chronology) {
+        if (chronology == null) {
+            throw new NullPointerException("chronology");
+        }
+        if (chronology == HijrahChronology.INSTANCE) {
+            return this;
+        }
+        throw new java.time.DateTimeException("Unsupported Hijrah variant: " + chronology.getId());
     }
 }

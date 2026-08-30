@@ -1549,8 +1549,8 @@ impl JavaProgram {
                 Stmt::ArrayStore { index, value, .. } => in_expr(index) || in_expr(value),
                 Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => in_expr(arg),
                 Stmt::FieldStore { value, .. } => in_expr(value),
-                // A worker body cannot contain one — `Scope::foreign` forbids it, because `ssame`
-                // is emitted unqualified and does not resolve from another class.
+                // Sólo los argumentos del constructor: el cuerpo de un worker es otro método y
+                // sus expresiones se visitan por su cuenta.
                 Stmt::Fork { args, .. } => in_expr(&args.0) || in_expr(&args.1),
                 Stmt::MatrixStore { row, col, value, .. } => {
                     in_expr(row) || in_expr(col) || in_expr(value)
@@ -1873,7 +1873,7 @@ impl Program for JavaProgram {
             emit_same_helper(&mut out);
         }
         if let Some(body) = &self.recursive_body {
-            emit_recursive_helper(&mut out, body);
+            emit_recursive_helper(&mut out, body, &self.class);
         }
         for method in &self.methods {
             emit_method(&mut out, method, &self.class);
@@ -1911,7 +1911,8 @@ impl Program for JavaProgram {
         let _ = writeln!(out, "        int acc = 0;");
         let _ = writeln!(out, "        for (int w = 0; w < {}; w++) {{", self.warmup);
         let _ = writeln!(out, "            int r;");
-        let _ = writeln!(out, "            try {{ r = {}(); }}", self.entry.name);
+        let _ =
+            writeln!(out, "            try {{ r = {}.{}(); }}", self.class, self.entry.name);
         let _ = writeln!(
             out,
             "            catch (ArithmeticException e) {{ r = {}; }}",
@@ -2005,7 +2006,7 @@ fn emit_worker_class(out: &mut String, prefix: &str, bodies: &[ForkBody]) {
             emit_stmt(out, stmt, 5, prefix);
         }
         let mut e = String::new();
-        emit_expr(&mut e, &worker.result);
+        emit_expr(&mut e, &worker.result, prefix);
         let _ = writeln!(out, "                    v = {e};");
         let _ = writeln!(out, "                }} break;");
     }
@@ -2028,8 +2029,8 @@ fn emit_worker_class(out: &mut String, prefix: &str, bodies: &[ForkBody]) {
 ///
 /// The hierarchy is reachable from here precisely because it is emitted **beside** the public class
 /// rather than nested in it: `…B` is a top-level name, so a worker resolves it the same way the
-/// entry method does. What it still cannot reach are the program's own statics, which are emitted
-/// unqualified — see [`Scope::foreign`].
+/// entry method does. The program's own statics used to be out of reach for the opposite reason —
+/// they went out unqualified — and are reachable now that they go out qualified.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ForkBody {
     pub block: Block,
@@ -2283,12 +2284,12 @@ fn emit_race_worker(out: &mut String, prefix: &str, spin: u32) {
 /// Only the **second** argument is generated, and it cannot affect the descent because the measure
 /// is the first. That separation is the point: the interesting part of the program varies while the
 /// part that makes it finite does not.
-fn emit_recursive_helper(out: &mut String, body: &Expr) {
+fn emit_recursive_helper(out: &mut String, body: &Expr, prefix: &str) {
     let mut e = String::new();
-    emit_expr(&mut e, body);
+    emit_expr(&mut e, body, prefix);
     let _ = writeln!(out, "    static int rec(int d, int a) {{");
     let _ = writeln!(out, "        if (d <= 0) {{ return a; }}");
-    let _ = writeln!(out, "        return ((a * 31) + rec(d - 1, {e}));");
+    let _ = writeln!(out, "        return ((a * 31) + {prefix}.rec(d - 1, {e}));");
     let _ = writeln!(out, "    }}");
 }
 
@@ -2345,7 +2346,7 @@ fn emit_method(out: &mut String, method: &Method, prefix: &str) {
         emit_stmt(out, stmt, 2, prefix);
     }
     let mut result = String::new();
-    emit_expr(&mut result, &method.result);
+    emit_expr(&mut result, &method.result, prefix);
     let _ = writeln!(out, "        return {result};");
     let _ = writeln!(out, "    }}");
 }
@@ -2362,8 +2363,8 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         Stmt::Fork { slots, threads, counter, acc, args, bodies } => {
             let k = bodies.len();
             let (mut a, mut b) = (String::new(), String::new());
-            emit_expr(&mut a, &args.0);
-            emit_expr(&mut b, &args.1);
+            emit_expr(&mut a, &args.0, prefix);
+            emit_expr(&mut b, &args.1, prefix);
             // The arguments are evaluated **here**, in the enclosing scope, and handed over at
             // construction: nothing a worker runs can read a local that is still changing.
             let _ = writeln!(out, "int[] {slots} = new int[{k}];");
@@ -2399,17 +2400,17 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::Declare { name, ty, init } => {
             let mut e = String::new();
-            emit_expr(&mut e, init);
+            emit_expr(&mut e, init, prefix);
             let _ = writeln!(out, "{} {name} = {e};", ty.keyword());
         }
         Stmt::Assign { name, expr, .. } => {
             let mut e = String::new();
-            emit_expr(&mut e, expr);
+            emit_expr(&mut e, expr, prefix);
             let _ = writeln!(out, "{name} = {e};");
         }
         Stmt::If { cond, then, otherwise } => {
             let mut c = String::new();
-            emit_cond(&mut c, cond);
+            emit_cond(&mut c, cond, prefix);
             let _ = writeln!(out, "if ({c}) {{");
             for s in then {
                 emit_stmt(out, s, depth + 1, prefix);
@@ -2443,7 +2444,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::While { guard, limit, cond, body, label, post } => {
             let mut c = String::new();
-            emit_cond(&mut c, cond);
+            emit_cond(&mut c, cond, prefix);
             let _ = writeln!(out, "int {guard} = 0;");
             indent(out, depth);
             let etiqueta = label.as_ref().map_or(String::new(), |l| format!("{l}: "));
@@ -2469,7 +2470,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::Switch { selector, arms, default } => {
             let mut sel = String::new();
-            emit_expr(&mut sel, selector);
+            emit_expr(&mut sel, selector, prefix);
             let _ = writeln!(out, "switch ({sel}) {{");
             for arm in arms {
                 indent(out, depth);
@@ -2515,7 +2516,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::NarrowLocal { name, kind, value, declare } => {
             let mut v = String::new();
-            emit_expr(&mut v, value);
+            emit_expr(&mut v, value, prefix);
             let kw = kind.keyword();
             // El cast va **en cada asignación**, no sólo en la declaración: `b0 = <int>` sin él no
             // compila, y es exactamente el `i2b` que esta forma existe para poner en un `istore`.
@@ -2526,7 +2527,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::BoolLocal { name, cond, declare } => {
             let mut c = String::new();
-            emit_cond(&mut c, cond);
+            emit_cond(&mut c, cond, prefix);
             let _ = match declare {
                 true => writeln!(out, "boolean {name} = {c};"),
                 false => writeln!(out, "{name} = {c};"),
@@ -2534,7 +2535,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::MatrixRowNull { matrix, row } => {
             let mut r = String::new();
-            emit_expr(&mut r, row);
+            emit_expr(&mut r, row, prefix);
             let _ = writeln!(out, "{matrix}[{r}] = null;");
         }
         Stmt::ArrayNull { array } => {
@@ -2542,16 +2543,16 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         }
         Stmt::MatrixStore { matrix, row, col, value } => {
             let (mut r, mut c, mut v) = (String::new(), String::new(), String::new());
-            emit_expr(&mut r, row);
-            emit_expr(&mut c, col);
-            emit_expr(&mut v, value);
+            emit_expr(&mut r, row, prefix);
+            emit_expr(&mut c, col, prefix);
+            emit_expr(&mut v, value, prefix);
             let _ = writeln!(out, "{matrix}[{r}][{c}] = {v};");
         }
         Stmt::ArrayStore { array, index, value, .. } => {
             let mut i = String::new();
-            emit_expr(&mut i, index);
+            emit_expr(&mut i, index, prefix);
             let mut v = String::new();
-            emit_expr(&mut v, value);
+            emit_expr(&mut v, value, prefix);
             let _ = writeln!(out, "{array}[{i}] = {v};");
         }
         // Declared at the **base** type whatever is constructed — see [`Stmt::NewObject`]. The
@@ -2562,7 +2563,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
             match class {
                 Some(cls) => {
                     let mut e = String::new();
-                    emit_expr(&mut e, arg);
+                    emit_expr(&mut e, arg, prefix);
                     let _ = writeln!(
                         out,
                         "{prefix}{declared} {name} = new {prefix}{}({e});",
@@ -2577,7 +2578,7 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         Stmt::SetObject { name, class, arg } => match class {
             Some(cls) => {
                 let mut e = String::new();
-                emit_expr(&mut e, arg);
+                emit_expr(&mut e, arg, prefix);
                 let _ = writeln!(out, "{name} = new {prefix}{}({e});", cls.suffix());
             }
             None => {
@@ -2586,16 +2587,23 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         },
         Stmt::FieldStore { obj, field, value } => {
             let mut v = String::new();
-            emit_expr(&mut v, value);
+            emit_expr(&mut v, value, prefix);
             let _ = writeln!(out, "{obj}.{} = {v};", field.name());
         }
         Stmt::TypeProbe { name, obj, class, cast } => {
             let target = format!("{prefix}{}", class.suffix());
             let _ = match cast {
                 // The cast, which can fail: `ClassCastException` when `obj` is not a `target`.
-                Some(field) => {
-                    writeln!(out, "int {name} = ((({target}) {obj}).{});", field.name())
-                }
+                //
+                // El tipo del local es el del campo, no siempre `int`: leer `long b` a traves de un
+                // cast tiene que declarar un `long`. Era lo unico que faltaba para que la mitad
+                // ancha se alcanzara por esta via.
+                Some(field) => writeln!(
+                    out,
+                    "{} {name} = ((({target}) {obj}).{});",
+                    field.ty().keyword(),
+                    field.name()
+                ),
                 // The test, which cannot: `false` covers both "wrong class" and `null`.
                 None => writeln!(out, "int {name} = ({obj} instanceof {target}) ? 1 : 0;"),
             };
@@ -2689,10 +2697,10 @@ fn emit_double_lit(out: &mut String, bits: u64) {
 /// every finding suspect.
 /// A string question, emitted as the `int` it answers. The ternaries are how a `boolean` becomes
 /// a value at all: the grammar has no `boolean` locals, the same reason [`Expr::Ternary`] exists.
-fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr) {
+fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr, prefix: &str) {
     match probe {
         StrProbe::Length => {
-            emit_str(out, value);
+            emit_str(out, value, prefix);
             out.push_str(".length()");
         }
         // The whole ternary is parenthesised, not just its condition. Without the outer pair,
@@ -2701,9 +2709,9 @@ fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr) {
         // parenthesises itself for exactly this reason.
         StrProbe::Identity(other) => {
             out.push('(');
-            emit_str(out, value);
+            emit_str(out, value, prefix);
             out.push_str(".equals(");
-            emit_str(out, other);
+            emit_str(out, other, prefix);
             out.push_str(") ? 1 : 0)");
         }
         // **Through a helper, not inline.** Written as `("a" == "a")` the comparison never
@@ -2713,10 +2721,10 @@ fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr) {
         // and the campaign reported agreement over a check the VM never ran. Passing both sides as
         // **parameters** is what the folder cannot see through.
         StrProbe::Same(other) => {
-            out.push_str("ssame(");
-            emit_str(out, value);
+            let _ = write!(out, "{prefix}.ssame(");
+            emit_str(out, value, prefix);
             out.push_str(", ");
-            emit_str(out, other);
+            emit_str(out, other, prefix);
             out.push(')');
         }
     }
@@ -2724,27 +2732,27 @@ fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr) {
 
 /// A `String`-valued expression. Every form is parenthesised: `a + b` inside a `.length()` would
 /// otherwise bind the call to `b` alone.
-fn emit_str(out: &mut String, value: &StrExpr) {
+fn emit_str(out: &mut String, value: &StrExpr, prefix: &str) {
     match value {
         StrExpr::Lit(i) => {
             let _ = write!(out, "\"{}\"", STRING_POOL[*i % STRING_POOL.len()]);
         }
         StrExpr::Concat(a, b) => {
             out.push('(');
-            emit_str(out, a);
+            emit_str(out, a, prefix);
             out.push_str(" + ");
-            emit_str(out, b);
+            emit_str(out, b, prefix);
             out.push(')');
         }
         StrExpr::Fresh(a) => {
             out.push_str("new String(");
-            emit_str(out, a);
+            emit_str(out, a, prefix);
             out.push(')');
         }
     }
 }
 
-fn emit_expr(out: &mut String, expr: &Expr) {
+fn emit_expr(out: &mut String, expr: &Expr, prefix: &str) {
     match expr {
         Expr::IntLit(v) => emit_int_lit(out, *v),
         Expr::LongLit(v) => emit_long_lit(out, *v),
@@ -2756,64 +2764,64 @@ fn emit_expr(out: &mut String, expr: &Expr) {
         // error that only appears once a negative constant is drawn from the pool, i.e. constantly.
         Expr::Neg(inner) => {
             out.push_str("(- ");
-            emit_expr(out, inner);
+            emit_expr(out, inner, prefix);
             out.push(')');
         }
         Expr::Not(inner) => {
             out.push_str("(~ ");
-            emit_expr(out, inner);
+            emit_expr(out, inner, prefix);
             out.push(')');
         }
         Expr::Bin(op, a, b) => {
             out.push('(');
-            emit_expr(out, a);
+            emit_expr(out, a, prefix);
             let _ = write!(out, " {} ", op.symbol());
-            emit_expr(out, b);
+            emit_expr(out, b, prefix);
             out.push(')');
         }
         Expr::Shift(op, value, amount) => {
             out.push('(');
-            emit_expr(out, value);
+            emit_expr(out, value, prefix);
             let _ = write!(out, " {} ", op.symbol());
-            emit_expr(out, amount);
+            emit_expr(out, amount, prefix);
             out.push(')');
         }
         Expr::Cast(to, inner) => {
             let _ = write!(out, "(({})", to.keyword());
-            emit_expr(out, inner);
+            emit_expr(out, inner, prefix);
             out.push(')');
         }
         Expr::Ternary(cond, then, otherwise) => {
             out.push('(');
-            emit_cond(out, cond);
+            emit_cond(out, cond, prefix);
             out.push_str(" ? ");
-            emit_expr(out, then);
+            emit_expr(out, then, prefix);
             out.push_str(" : ");
-            emit_expr(out, otherwise);
+            emit_expr(out, otherwise, prefix);
             out.push(')');
         }
         Expr::Call(index, args, _) => {
-            let _ = write!(out, "m{index}(");
+            let _ = write!(out, "{prefix}.m{index}(");
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
-                emit_expr(out, arg);
+                emit_expr(out, arg, prefix);
             }
             out.push(')');
         }
         Expr::Classify(inner) => {
-            let _ = write!(out, "{}(", classifier_name(inner.ty()));
-            emit_expr(out, inner);
+            let _ = write!(out, "{prefix}.{}(", classifier_name(inner.ty()));
+            emit_expr(out, inner, prefix);
             out.push(')');
         }
-        Expr::Str(probe, value) => emit_str_probe(out, probe, value),
+        Expr::Str(probe, value) => emit_str_probe(out, probe, value, prefix),
         // Two pairs of parentheses, both load-bearing: the inner one so the cast takes the whole
         // operand rather than binding tighter than the expression's own operator, the outer one so
         // the promoted result sits where any other `int` would.
         Expr::Narrow(to, inner) => {
             let _ = write!(out, "(({}) ", to.keyword());
-            emit_expr(out, inner);
+            emit_expr(out, inner, prefix);
             out.push(')');
         }
         // No parentheses of their own: `a[i]` and `a.length` are *primary* expressions, the same
@@ -2821,19 +2829,19 @@ fn emit_expr(out: &mut String, expr: &Expr) {
         // subscript is a fresh bracket pair, which is a parenthesis by another name.
         Expr::ArrayLoad(name, _, index) => {
             let _ = write!(out, "{name}[");
-            emit_expr(out, index);
+            emit_expr(out, index, prefix);
             out.push(']');
         }
         Expr::MatrixLoad(name, _, row, col) => {
             let _ = write!(out, "{name}[");
-            emit_expr(out, row);
+            emit_expr(out, row, prefix);
             out.push_str("][");
-            emit_expr(out, col);
+            emit_expr(out, col, prefix);
             out.push(']');
         }
         Expr::Recurse(depth, inner) => {
-            let _ = write!(out, "rec({depth}, ");
-            emit_expr(out, inner);
+            let _ = write!(out, "{prefix}.rec({depth}, ");
+            emit_expr(out, inner, prefix);
             out.push(')');
         }
         Expr::NanLit(bits) => {
@@ -2843,12 +2851,12 @@ fn emit_expr(out: &mut String, expr: &Expr) {
         // arithmetic shift would smear it across the result.
         Expr::RawBitsHigh(inner) => {
             out.push_str("((int) (Double.doubleToRawLongBits(");
-            emit_expr(out, inner);
+            emit_expr(out, inner, prefix);
             out.push_str(") >>> 32))");
         }
         Expr::MatrixRowLength(name, row) => {
             let _ = write!(out, "{name}[");
-            emit_expr(out, row);
+            emit_expr(out, row, prefix);
             out.push_str("].length");
         }
         Expr::ArrayLength(name) => {
@@ -2868,33 +2876,33 @@ fn emit_expr(out: &mut String, expr: &Expr) {
     }
 }
 
-fn emit_cond(out: &mut String, cond: &Cond) {
+fn emit_cond(out: &mut String, cond: &Cond, prefix: &str) {
     match cond {
         Cond::BoolVar(name) => out.push_str(name),
         Cond::Cmp(op, a, b) => {
             out.push('(');
-            emit_expr(out, a);
+            emit_expr(out, a, prefix);
             let _ = write!(out, " {} ", op.symbol());
-            emit_expr(out, b);
+            emit_expr(out, b, prefix);
             out.push(')');
         }
         Cond::And(a, b) => {
             out.push('(');
-            emit_cond(out, a);
+            emit_cond(out, a, prefix);
             out.push_str(" && ");
-            emit_cond(out, b);
+            emit_cond(out, b, prefix);
             out.push(')');
         }
         Cond::Or(a, b) => {
             out.push('(');
-            emit_cond(out, a);
+            emit_cond(out, a, prefix);
             out.push_str(" || ");
-            emit_cond(out, b);
+            emit_cond(out, b, prefix);
             out.push(')');
         }
         Cond::Not(a) => {
             out.push_str("(!");
-            emit_cond(out, a);
+            emit_cond(out, a, prefix);
             out.push(')');
         }
     }
@@ -3041,18 +3049,6 @@ impl Local {
 #[derive(Clone, Debug, Default)]
 pub struct Scope {
     locals: Vec<Local>,
-    /// `true` when this scope lives inside **another class** — today, a [`Stmt::Fork`] worker body.
-    ///
-    /// What it forbids is everything the program emits **unqualified**: a call to one of its static
-    /// helpers ([`Expr::Call`]) and a call to a classifier ([`Expr::Classify`], emitted as
-    /// `fcls`/`dcls`). Both are perfectly good expressions in the class that declares them and
-    /// neither resolves from outside it, so this is a `javac` error rather than a wrong answer —
-    /// and one that would only ever appear on the seeds that generate threads, which is the worst
-    /// kind of intermittent.
-    ///
-    /// A property of the *scope* and not a flag on the generator, so it cannot be left switched on
-    /// after the worker bodies are done.
-    foreign: bool,
 }
 
 impl Scope {
@@ -3307,6 +3303,14 @@ pub struct GenConfig {
     /// The field is still absent from the emitted source when nothing reads it — see [`ObjUse`] —
     /// so a reduced case never carries a `long` a human then has to rule out.
     pub wide_fields: bool,
+    /// Si un cast puede leer el campo **ancho**, y no sólo el `int`.
+    ///
+    /// Separada de [`GenConfig::wide_fields`] a propósito, y no por simetría: apagar `wide_fields`
+    /// saca el `long b` de la jerarquía entera —del constructor, de las lecturas de campo, de
+    /// todo—, así que una fila del censo que lo apagara para medir el cast estaría midiendo la
+    /// mitad ancha de nuevo y no el cast. Con esta perilla la jerarquía queda igual y lo único que
+    /// cambia es **por dónde** se llega al campo, que es lo que había que ponerle precio.
+    pub wide_cast: bool,
     /// Out of 100, how often an object `new` is a plain `null` instead.
     ///
     /// A `null` receiver is a genuinely valuable path — `getfield`, `putfield` and `invokevirtual`
@@ -3483,6 +3487,7 @@ impl Default for GenConfig {
             // JIT-friendly one until `fuzz::campaigns::jit_coverage` says otherwise.
             object_share: 18,
             wide_fields: true,
+            wide_cast: true,
             null_share: 4,
             dispatch_probe: true,
             matrix_share: 0,
@@ -3494,7 +3499,12 @@ impl Default for GenConfig {
             do_while_share: 0,
             label_share: 0,
             ref_field_share: 0,
-            cast_share: 25,
+            // Cinco y no veinticinco, y el cambio no es de gusto: la perilla pasó a tirar en
+            // [`Gen::stmt`] en vez de adentro de `object_stmt`, así que veinticinco pasó a
+            // significar «una de cada cuatro sentencias es una sonda» cuando antes, filtrada por
+            // `object_share`, daba ~4,5%. El default se reexpresa para que la gramática por
+            // defecto conserve su mezcla; lo que cambió es que ahora el número dice lo que dice.
+            cast_share: 5,
             workers: 0,
             warmup: 40,
         }
@@ -3546,6 +3556,19 @@ struct Gen {
     /// [`check_labels`] después verifica: la etiqueta nombra un bucle que lo encierra, así que el
     /// salto va hacia afuera y no puede repetir trabajo.
     labels: Vec<String>,
+    /// Sentencias que una perilla ya decidió emitir y que necesitan que otra vaya primero.
+    ///
+    /// Existe por una razón concreta: una sonda de tipo necesita un objeto y un store de referencia
+    /// necesita dos, así que con `object_share` como único creador de objetos el techo de esas dos
+    /// perillas lo ponía **otra** — subir `cast_share` de 25 a 40 movía la sonda de 19/200 a 27/200
+    /// y ahí se quedaba. Una perilla que no manda sobre su propio número no dice lo que dice.
+    ///
+    /// Con la cola, la perilla que se queda sin objeto se lo fabrica: devuelve el `new` y deja la
+    /// sonda acá. [`Gen::block`] la vacía **en el acto**, en la línea siguiente y en el mismo
+    /// bloque, que es lo único que mantiene al local en alcance. Un bloque que termina la limpia,
+    /// porque una sentencia encolada que sobreviviera al cierre de llaves nombraría algo que ya no
+    /// existe.
+    pendientes: Vec<Stmt>,
     /// The static cost of each already-generated method, indexed the same as
     /// [`JavaProgram::methods`]. A call is only emitted when the callee fits the remaining budget.
     costs: Vec<u64>,
@@ -3566,6 +3589,7 @@ impl Gen {
             switch_depth: 0,
             loop_depth: 0,
             labels: Vec::new(),
+            pendientes: Vec::new(),
             costs: Vec::new(),
             signatures: Vec::new(),
             next_name: 0,
@@ -3682,7 +3706,6 @@ impl Gen {
                 .into_iter()
                 .map(|n| Local { assignable: false, ..Local::scalar(n.to_string(), Ty::Int) })
                 .collect(),
-            foreign: false,
         };
         let body = self.expr(&scope, Ty::Int, 2);
         self.recursive_body_cost = self.expr_cost(&body);
@@ -3807,9 +3830,17 @@ impl Gen {
         let bodies = (0..k)
             .map(|_| {
                 // A fresh scope per worker: one `case` arm cannot see another's declarations.
+                // Un worker vive en **otra clase**, y lo que eso quita se hace cumplir acá: un
+                // scope propio con los tres campos del worker y nada mas, así que un cuerpo que
+                // nombrara un local del método de afuera se cae en el checker y no en `javac`.
+                //
+                // Lo que ya **no** quita son las llamadas. Eso lo prohibía un flag `foreign` en el
+                // scope, y era el lugar equivocado: la restricción no era del contexto de tipos
+                // sino del emisor, que escribía `m0(…)` porque no sabía en qué clase estaba
+                // escribiendo. Ahora lo sabe y todo sale calificado, así que el flag no tenía nada
+                // que prohibir.
                 let mut worker = Scope {
                     locals: ["k", "a", "b"].into_iter().map(Local::worker_field).collect(),
-                    foreign: true,
                 };
                 // Un worker es **otro método**: ni un `continue` ni una etiqueta de acá afuera
                 // significan nada adentro, así que entra con las dos pilas vacías.
@@ -3971,29 +4002,107 @@ impl Gen {
         (Some(class), self.ctor_arg(scope))
     }
 
+    /// Un objeto recien construido, siempre real: ni `null` ni por interfaz.
+    ///
+    /// Es el que usan la sonda y el store cuando no encuentran a quien apuntarle. Real a proposito:
+    /// un `null` es un sujeto legitimo de sonda —`null instanceof X` es `false` por JLS §15.20.2—
+    /// pero fabricar uno para poder sondearlo seria fabricar el caso aburrido.
+    fn fresh_object(&mut self, scope: &mut Scope) -> Stmt {
+        let class = *self.rng.pick(OBJ_CLASSES);
+        let arg = self.ctor_arg(scope);
+        let name = self.fresh("o");
+        scope.locals.push(Local::object(name.clone()));
+        Stmt::NewObject { name, class: Some(class), arg, iface: false }
+    }
+
+    /// Una sonda de tipo, fabricandose el receptor si hace falta.
+    ///
+    /// Ese `if` es todo el hito: sin el, la sonda dependia de que **otra** perilla hubiera creado un
+    /// objeto antes, asi que `cast_share` no mandaba sobre su propio numero.
+    fn type_probe_stmt(&mut self, scope: &mut Scope) -> Option<Stmt> {
+        if scope.objects().is_empty() {
+            // Fabricar uno sólo si los objetos están permitidos. `object_share` decide **si** hay
+            // objetos; esta perilla decide **cuántas veces** se los toca. Sin esta línea, arreglar
+            // un techo creaba otro: `object_share: 0` dejaba de significar «sin objetos» porque
+            // esta perilla los creaba por atrás, y seis censos de «apagada devuelve la gramática
+            // de antes» se pusieron rojos con razón.
+            if self.config.object_share == 0 {
+                return None;
+            }
+            let nuevo = self.fresh_object(scope);
+            let sonda = self.type_probe_over(scope)?;
+            self.pendientes.push(sonda);
+            return Some(nuevo);
+        }
+        self.type_probe_over(scope)
+    }
+
+    /// La sonda propiamente dicha, sobre un objeto que ya existe.
+    fn type_probe_over(&mut self, scope: &mut Scope) -> Option<Stmt> {
+        let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
+        let obj = self.rng.pick(&plain).clone();
+        let class = *self.rng.pick(&[ObjClass::Base, ObjClass::S0, ObjClass::S1, ObjClass::S2]);
+        // Half tests, half casts. The test can never fail and the cast can, and both are worth
+        // generating: one exercises the guard, the other the guard *and* the path out of it.
+        //
+        // Y un tercio de los casts leen el campo **ancho**, cuando la mitad ancha esta prendida.
+        // No es simetria por simetria: `burst::compile` resuelve un offset para un `int` de
+        // instancia y se niega con el resto, asi que este es el unico camino por el que un cast que
+        // el JIT **puede** compilar termina leyendo un campo que **no** puede. Lo que cuesta en
+        // cobertura compilada se mide, no se supone.
+        let cast = match self.rng.chance(1, 2) {
+            false => None,
+            true if self.config.wide_fields
+                && self.config.wide_cast
+                && self.rng.chance(1, 3) =>
+            {
+                Some(Field::B)
+            }
+            true => Some(Field::A),
+        };
+        let name = self.fresh("y");
+        scope.locals.push(Local::scalar(name.clone(), cast.map_or(Ty::Int, Field::ty)));
+        Some(Stmt::TypeProbe { name, obj, class, cast })
+    }
+
+    /// Un store de referencia, fabricandose el objeto si hace falta. Con uno alcanza: `o.c = o` es
+    /// un ciclo de un paso y es tan buena arista del heap como cualquier otra.
+    fn ref_store_stmt(&mut self, scope: &mut Scope) -> Option<Stmt> {
+        if scope.objects().is_empty() {
+            // Fabricar uno sólo si los objetos están permitidos. `object_share` decide **si** hay
+            // objetos; esta perilla decide **cuántas veces** se los toca. Sin esta línea, arreglar
+            // un techo creaba otro: `object_share: 0` dejaba de significar «sin objetos» porque
+            // esta perilla los creaba por atrás, y seis censos de «apagada devuelve la gramática
+            // de antes» se pusieron rojos con razón.
+            if self.config.object_share == 0 {
+                return None;
+            }
+            let nuevo = self.fresh_object(scope);
+            let store = self.ref_store_over(scope)?;
+            self.pendientes.push(store);
+            return Some(nuevo);
+        }
+        self.ref_store_over(scope)
+    }
+
+    fn ref_store_over(&mut self, scope: &mut Scope) -> Option<Stmt> {
+        let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
+        let obj = self.rng.pick(&plain).clone();
+        // `null` a third of the time. Not filler: it is how a chain that read fine on one
+        // iteration reads `null` on the next, which is the deopt the compiled arm has to
+        // survive — and, on the interpreted one, an ordinary `NullPointerException`.
+        let value = if self.rng.chance(1, 3) { None } else { Some(self.rng.pick(&plain).clone()) };
+        Some(Stmt::RefStore { obj, value })
+    }
+
     /// A `new`, a reassignment or a `putfield`. `None` when nothing applies, so [`Gen::stmt`] falls
     /// through to the ordinary roll rather than emitting nothing — the shape [`Gen::array_stmt`]
     /// already has.
     fn object_stmt(&mut self, scope: &mut Scope) -> Option<Stmt> {
         let existing = scope.objects().len();
-        // **Above the `new` branch**, because a type probe constructs nothing: all it needs is a
-        // receiver that already exists. Left below it the probe was reachable only 60% of the time
-        // and a share of 40 produced it in 19 of 200 programs — the same mistake the reference
-        // store made, and the reason every share in this config gets measured rather than assumed.
-        if existing > 0
-            && self.config.cast_share > 0
-            && self.rng.below(100) < self.config.cast_share
-        {
-            let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
-            let obj = self.rng.pick(&plain).clone();
-            let class = *self.rng.pick(&[ObjClass::Base, ObjClass::S0, ObjClass::S1, ObjClass::S2]);
-            // Half tests, half casts. The test can never fail and the cast can, and both are worth
-            // generating: one exercises the guard, the other the guard *and* the path out of it.
-            let cast = if self.rng.chance(1, 2) { Some(Field::A) } else { None };
-            let name = self.fresh("y");
-            scope.locals.push(Local::scalar(name.clone(), Ty::Int));
-            return Some(Stmt::TypeProbe { name, obj, class, cast });
-        }
+        // La sonda de tipo y el store de referencia salieron de acá: cada uno tiene su tirada
+        // propia en [`Gen::stmt`], porque acá adentro el techo lo ponía `object_share` y no ellos.
+        //
         // The first draw in a scope has to be a `new`: there is nothing to reassign or store into.
         if existing == 0 || self.rng.chance(2, 5) {
             let (class, arg) = self.new_object(scope);
@@ -4006,19 +4115,6 @@ impl Gen {
                 Local::object(name.clone())
             });
             return Some(Stmt::NewObject { name, class, arg, iface });
-        }
-        // **Before the other two, not after.** Left at the end it was reachable only through two
-        // prior coin flips, so a share of 45 produced the store in 15% of programs — the knob would
-        // not have meant what it says, and this is the one construct the whole level is about.
-        if self.config.ref_field_share > 0 && self.rng.below(100) < self.config.ref_field_share {
-            let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
-            let obj = self.rng.pick(&plain).clone();
-            // `null` a third of the time. Not filler: it is how a chain that read fine on one
-            // iteration reads `null` on the next, which is the deopt the compiled arm has to
-            // survive — and, on the interpreted one, an ordinary `NullPointerException`.
-            let value =
-                if self.rng.chance(1, 3) { None } else { Some(self.rng.pick(&plain).clone()) };
-            return Some(Stmt::RefStore { obj, value });
         }
         if self.rng.chance(1, 2) {
             // Reassignment is offered on interface-typed names too: `q = new S1(…)` is
@@ -4102,6 +4198,12 @@ impl Gen {
                 self.budget = self.budget.saturating_sub(self.stmt_cost(&stmt));
                 let leaves = stmt.completes_abruptly();
                 block.push(stmt);
+                // Acá y no después: lo encolado nombra un local que la sentencia recién puesta
+                // acaba de declarar, así que su lugar es la línea siguiente de **este** bloque.
+                for atrasada in std::mem::take(&mut self.pendientes) {
+                    self.budget = self.budget.saturating_sub(self.stmt_cost(&atrasada));
+                    block.push(atrasada);
+                }
                 // Nothing after a statement that always leaves: it would be unreachable, and
                 // `javac` rejects that. This is where an `if` with two abrupt arms gets caught —
                 // the arms are legal on their own and only the statement *after* the `if` is not.
@@ -4113,6 +4215,8 @@ impl Gen {
         if let Some(last) = self.terminator(depth) {
             block.push(last);
         }
+        // Lo que quedó sin vaciar muere con el bloque: nombra locales que no sobreviven a la llave.
+        self.pendientes.clear();
         block
     }
 
@@ -4186,6 +4290,18 @@ impl Gen {
         // roll below is exactly the one that was there before.
         if self.config.array_share > 0 && self.rng.below(100) < self.config.array_share {
             if let Some(stmt) = self.array_stmt(scope) {
+                return Some(stmt);
+            }
+        }
+        // Antes del porton de `object_share`, y ahi esta el punto: adentro, el techo de estas dos
+        // perillas lo ponia otra. Cada una tira por su cuenta y se fabrica el objeto que le falta.
+        if self.config.cast_share > 0 && self.rng.below(100) < self.config.cast_share {
+            if let Some(stmt) = self.type_probe_stmt(scope) {
+                return Some(stmt);
+            }
+        }
+        if self.config.ref_field_share > 0 && self.rng.below(100) < self.config.ref_field_share {
+            if let Some(stmt) = self.ref_store_stmt(scope) {
                 return Some(stmt);
             }
         }
@@ -4708,11 +4824,8 @@ impl Gen {
             };
             return Expr::RawBitsHigh(Box::new(inner));
         }
-        // Not in a worker body: the `Same` probe compiles to a call to `ssame`, emitted
-        // unqualified on the program's own class, which does not resolve from another one — see
-        // [`Scope::foreign`].
+        // `ssame` sale calificado, así que un cuerpo de worker también puede compararlo.
         if ty == Ty::Int
-            && !scope.foreign
             && self.config.string_share > 0
             && self.rng.below(100) < self.config.string_share
         {
@@ -4777,7 +4890,7 @@ impl Gen {
             // observes without going through a conversion that is itself under test. It is
             // therefore not an optional flourish: without it, a whole seed's floating arithmetic
             // could be invisible. See [`emit_classifier`].
-            12 if ty == Ty::Int && self.config.fp_share > 0 && !scope.foreign => {
+            12 if ty == Ty::Int && self.config.fp_share > 0 => {
                 let fp = self.any_fp_ty();
                 Expr::Classify(Box::new(self.expr(scope, fp, depth + 1)))
             }
@@ -4862,10 +4975,6 @@ impl Gen {
     /// A call to an already-generated method of the right return type, if one exists and fits the
     /// remaining budget. Otherwise a leaf — the fallback is what keeps [`Gen::expr`] total.
     fn call_or_leaf(&mut self, scope: &Scope, ty: Ty, depth: u32) -> Expr {
-        // Nothing this program declares is in view from another class — see [`Scope::foreign`].
-        if scope.foreign {
-            return self.leaf(scope, ty);
-        }
         let candidates: Vec<usize> = (0..self.signatures.len())
             .filter(|&i| self.signatures[i].1 == ty && self.costs[i] < self.budget)
             .collect();
@@ -5299,19 +5408,23 @@ fn check_block(
                         return Err(Malformed::BadConstructorArgument(arg.ty()));
                     }
                 }
-                // The bodies belong to a **different class**, and this is where that is enforced.
-                // Their scope is exactly the worker's three fields — a body naming an enclosing
-                // local would be a `javac` error, not a wrong answer — and `visible` is empty,
-                // because the program's static helpers are emitted unqualified and a worker cannot
-                // resolve them from outside the class that declares them.
+                // The bodies belong to a **different class**, and this is where that is enforced:
+                // their scope is exactly the worker's three fields, so a body naming an enclosing
+                // local is caught here rather than by `javac`.
+                //
+                // `visible` is **not** empty any more. It used to be, because the program's static
+                // helpers went out unqualified and a worker could not resolve them from outside the
+                // class that declares them. They go out qualified now, so
+                // a worker can call them, and passing an empty list here would reject as malformed
+                // exactly the programs this change exists to produce.
                 for worker in bodies {
                     // A **fresh** scope per worker, because each `case` arm gets its own braces:
                     // sharing one would let arm 1 read what arm 0 declared, which compiles here
                     // and not in Java.
                     let mut names: Vec<Local> =
                         ["k", "a", "b"].into_iter().map(Local::worker_field).collect();
-                    check_block(&worker.block, &mut names, &[])?;
-                    check_expr(&worker.result, &names, &[])?;
+                    check_block(&worker.block, &mut names, visible)?;
+                    check_expr(&worker.result, &names, visible)?;
                     if worker.result.ty() != Ty::Int {
                         return Err(Malformed::ForkBodyIsNotInt(worker.result.ty()));
                     }
@@ -5564,12 +5677,11 @@ fn check_block(
                 if scope.iter().any(|l| l.name == *obj && l.object_iface) {
                     return Err(Malformed::FieldThroughInterface(obj.clone()));
                 }
-                // Always an `int`, whichever half it is: `instanceof` is folded to 1/0 and a
-                // `long` field read through a cast would not fit the local this declares.
-                if *cast == Some(Field::B) {
-                    return Err(Malformed::ForkBodyIsNotInt(Ty::Long));
-                }
-                scope.push(Local::scalar(name.clone(), Ty::Int));
+                // El tipo lo pone el campo: `int` para un `instanceof` —que se pliega a 1/0— y
+                // para `int a`, `long` para `long b`. Este brazo rechazaba `Field::B` porque el
+                // local se declaraba `int` y no entraba; ahora se declara del ancho que
+                // corresponde.
+                scope.push(Local::scalar(name.clone(), cast.map_or(Ty::Int, Field::ty)));
             }
             Stmt::RefStore { obj, value } => {
                 // Both sides are object names of the **class** type: the field is declared `…B`,
@@ -6536,6 +6648,101 @@ mod tests {
 
     /// The parallel site is generated, complete, and **off** when the knob is zero.
     ///
+    /// Un cuerpo de worker llama a los estáticos del programa, y las cuatro formas llegan.
+    ///
+    /// El worker era la parte más pobre de la gramática: aritmética y nada más, porque todo lo que
+    /// el programa emitía sin calificar —sus helpers, los clasificadores, `ssame`, `rec`— no
+    /// resuelve desde otra clase. Eso no era una restricción del *scope* sino del **emisor**, que
+    /// escribía `m0(…)` porque no sabía en qué clase estaba escribiendo.
+    ///
+    /// Las cuatro se cuentan por separado y no juntas, por la razón de siempre: una sola sirve para
+    /// afirmar que un worker puede llamar, y con eso las otras tres podrían no aparecer nunca. Cada
+    /// una llega a un opcode distinto adentro del hilo — `invokestatic` a un helper del programa,
+    /// la conversión de punto flotante del clasificador, la comparación de identidad de `ssame`, y
+    /// el descenso recursivo, que además es el único que mete un **frame nuevo** en la pila de un
+    /// worker.
+    ///
+    /// Las barras están en lo medido y no en lo deseado — la otra lección que ya pagué: una barra
+    /// puesta donde uno quisiera que estuviera es una barra que va a fallar sin que nada se rompa.
+    #[test]
+    fn un_cuerpo_de_worker_llama_a_los_estaticos_del_programa() {
+        let cfg = GenConfig {
+            workers: 4,
+            string_share: 30,
+            fp_share: 40,
+            recursion_share: 20,
+            ..GenConfig::default()
+        };
+        let (mut llamada, mut clasificador, mut ssame, mut rec) = (0, 0, 0, 0);
+        for seed in 0..200 {
+            let program = JavaGenerator::new(cfg).generate(Seed(seed));
+            assert!(program.well_formed().is_ok(), "seed {seed}: {:?}", program.well_formed());
+            let source = program.to_java();
+            let cls = program.class_name().to_string();
+            // Sólo el cuerpo de la clase worker: una llamada en el método de entrada no dice nada
+            // sobre lo que un worker puede escribir.
+            let Some((_, worker)) = source.split_once(&format!("class {cls}W extends Thread")) else {
+                continue;
+            };
+            let worker = worker.split_once("
+}").map_or(worker, |(w, _)| w);
+            if worker.contains(&format!("{cls}.m")) {
+                llamada += 1;
+            }
+            if worker.contains(&format!("{cls}.fcls(")) || worker.contains(&format!("{cls}.dcls("))
+            {
+                clasificador += 1;
+            }
+            if worker.contains(&format!("{cls}.ssame(")) {
+                ssame += 1;
+            }
+            if worker.contains(&format!("{cls}.rec(")) {
+                rec += 1;
+            }
+            // El mutante: que alguien vuelva a emitir una de estas llamadas sin calificar. No lo
+            // atrapa `well_formed` —el checker no modela desde qué clase se resuelve un nombre— y
+            // una campaña sólo lo vería como semillas inutilizables, que es ruido y no un
+            // diagnóstico. Acá es una línea con nombre y número.
+            for (n, linea) in source.lines().enumerate() {
+                // La declaración del helper es la única `fcls(` legítima sin punto adelante.
+                if linea.trim_start().starts_with("static ") {
+                    continue;
+                }
+                for nombre in ["fcls(", "dcls(", "ssame(", "rec("] {
+                    let mut desde = 0;
+                    while let Some(i) = linea[desde..].find(nombre) {
+                        let abs = desde + i;
+                        assert!(
+                            abs > 0 && linea.as_bytes()[abs - 1] == b'.',
+                            "seed {seed}, línea {}: `{nombre}` sin calificar
+{linea}",
+                            n + 1
+                        );
+                        desde = abs + 1;
+                    }
+                }
+                // Y los helpers generados, `m0(`..`m9(`. Un `m2[` es un local matriz, no una
+                // llamada: el paréntesis es lo que los separa.
+                let bytes = linea.as_bytes();
+                for (i, w) in bytes.windows(3).enumerate() {
+                    if w[0] == b'm' && w[1].is_ascii_digit() && w[2] == b'(' {
+                        assert!(
+                            i > 0 && bytes[i - 1] == b'.',
+                            "seed {seed}, línea {}: llamada a un helper sin calificar
+{linea}",
+                            n + 1
+                        );
+                    }
+                }
+            }
+        }
+        println!("llamada {llamada}/200, clasificador {clasificador}/200, ssame {ssame}/200, rec {rec}/200");
+        assert!(llamada > 90, "llamadas a un helper en {llamada}/200");
+        assert!(clasificador > 60, "clasificadores en {clasificador}/200");
+        assert!(ssame > 100, "`ssame` en {ssame}/200");
+        assert!(rec > 130, "recursión en {rec}/200");
+    }
+
     /// "0 divergences" over a construct that never appeared is the failure this project has now
     /// hit twice (FZ-004, FZ-005), and threads are the easiest place yet to hit it a third time: a
     /// concurrent campaign that never spawned a thread looks exactly like one that did and found
@@ -6609,7 +6816,7 @@ mod tests {
                 panic!("seed {seed}: the entry method has no parallel site");
             };
             let mut result = String::new();
-            emit_expr(&mut result, &program.entry.result);
+            emit_expr(&mut result, &program.entry.result, &program.class);
             assert!(
                 result.contains(acc.as_str()),
                 "seed {seed}: the threads' result never reaches the return value: {result}"
@@ -6669,6 +6876,73 @@ mod tests {
     /// never the path out of it — which is the half that becomes a **deopt** in compiled code and
     /// a `ClassCastException` in the interpreter. A census that only counted "a type probe
     /// appeared" would be satisfied by the harmless half.
+    /// Subir una de estas dos perillas mueve su propio numero.
+    ///
+    /// # Que estaba roto
+    ///
+    /// Una sonda de tipo necesita un objeto, y un store de referencia tambien, y el unico que
+    /// creaba objetos era `object_share`. Asi que el techo de las dos lo ponia una tercera perilla:
+    /// con `cast_share` en 40 la sonda aparecia en **27 de 200** programas y subirla no la movia.
+    /// Una perilla que no manda sobre su propio numero no dice lo que dice, y el peor caso no es
+    /// que rinda poco sino que rinda **callada** — se sube, no pasa nada, y nada avisa.
+    ///
+    /// # Por que se cuentan ocurrencias y no programas
+    ///
+    /// Contar «cuantos programas tienen al menos una» satura: un programa tiene muchas sentencias,
+    /// asi que hasta con la perilla baja casi siempre hay una en alguna parte. Medido asi, `10`
+    /// daba 115/200 y `80` daba 185/200 — una curva chata que no distingue una perilla que manda de
+    /// una que no. La cantidad si.
+    ///
+    /// # El techo que queda, que es otro
+    ///
+    /// Arriba de 60 la curva se aplana igual, y esta vez la culpa es del **presupuesto de costo**:
+    /// el programa no puede crecer mas. Ese techo es legitimo —es el que sostiene la propiedad 3—
+    /// y no se disfraza de perilla. Por eso el aserto pide que cuadruplicar la perilla valga al
+    /// menos el doble, y no que la escalera entera sea una recta.
+    #[test]
+    fn subir_una_perilla_de_objetos_mueve_su_propio_numero() {
+        fn sondas(share: u32) -> usize {
+            let cfg = GenConfig { cast_share: share, ..GenConfig::default() };
+            (0..200u64)
+                .map(|seed| {
+                    let program = JavaGenerator::new(cfg).generate(Seed(seed));
+                    assert!(program.well_formed().is_ok(), "seed {seed}");
+                    program.to_java().matches("int y").count()
+                })
+                .sum()
+        }
+        fn stores(share: u32) -> usize {
+            let cfg = GenConfig { ref_field_share: share, ..GenConfig::default() };
+            (0..200u64)
+                .map(|seed| {
+                    let program = JavaGenerator::new(cfg).generate(Seed(seed));
+                    assert!(program.well_formed().is_ok(), "seed {seed}");
+                    // `this.c = this;` es del constructor, no de la gramatica.
+                    program
+                        .to_java()
+                        .lines()
+                        .filter(|l| l.contains(".c = ") && !l.trim_start().starts_with("this.c"))
+                        .count()
+                })
+                .sum()
+        }
+
+        let sonda: Vec<usize> = [10, 25, 40, 60].into_iter().map(sondas).collect();
+        let store: Vec<usize> = [10, 25, 45, 60].into_iter().map(stores).collect();
+        println!("cast_share [10,25,40,60] -> {sonda:?}");
+        println!("ref_field_share [10,25,45,60] -> {store:?}");
+
+        for (nombre, cuentas) in [("cast_share", &sonda), ("ref_field_share", &store)] {
+            for par in cuentas.windows(2) {
+                assert!(par[1] >= par[0], "{nombre} bajo al subir la perilla: {cuentas:?}");
+            }
+            assert!(
+                cuentas[2] >= cuentas[0] * 2,
+                "{nombre}: cuadruplicar la perilla no llego a duplicar el numero: {cuentas:?}"
+            );
+        }
+    }
+
     #[test]
     fn a_cast_share_turns_the_type_probes_on_and_off() {
         let none = GenConfig { cast_share: 0, ..GenConfig::default() };
@@ -6681,7 +6955,7 @@ mod tests {
         }
 
         let lots = GenConfig { cast_share: 40, ..GenConfig::default() };
-        let (mut test, mut cast, mut both) = (0, 0, 0);
+        let (mut test, mut cast, mut both, mut ancho) = (0, 0, 0, 0);
         for seed in 0..200 {
             let program = JavaGenerator::new(lots).generate(Seed(seed));
             assert!(program.well_formed().is_ok(), "seed {seed}: {:?}", program.well_formed());
@@ -6689,18 +6963,25 @@ mod tests {
             let t = source.contains(" instanceof ");
             // A cast reads a field through a parenthesised class name: `(((Fz0S1) o5).a)`.
             let c = source.contains(") o") && source.contains(").a);");
+            // El cast al campo **ancho**: `long yN = (((…S1) oM).b);`. Cuenta aparte del otro
+            // porque es el único que declara un local que no es `int`, y era lo que el checker
+            // rechazaba — el local se declaraba `int` y un `long` no entraba.
+            if source.contains("long y") { ancho += 1; }
             if t { test += 1; }
             if c { cast += 1; }
             if t && c { both += 1; }
         }
-        println!("instanceof {test}/200, cast {cast}/200, ambos {both}/200");
-        // **The bar is what the knob can actually deliver, measured.** At a share of 40 both land
-        // near 27/200, and raising the share does not move it much: the ceiling is set by how often
-        // an *object statement* is drawn at all, which is `object_share`'s business and not this
-        // knob's. A floor of 15 catches the construct disappearing without pretending the knob
-        // controls something it does not.
-        assert!(test > 15, "instanceof en {test}/200");
-        assert!(cast > 15, "cast en {cast}/200");
+        println!("instanceof {test}/200, cast {cast}/200, ambos {both}/200, ancho {ancho}/200");
+        // **La barra es lo que la perilla entrega, medido.** Con un share de 40 las dos andan por
+        // 141/200. Decía 27/200 acá mismo, con una nota explicando que subir la perilla no lo movía
+        // porque el techo lo ponía `object_share`; eso dejó de ser cierto cuando la sonda pasó a
+        // tirar en [`Gen::stmt`] y a fabricarse el receptor que le falta.
+        assert!(test > 100, "instanceof en {test}/200");
+        assert!(cast > 100, "cast en {cast}/200");
+        // El cast al campo ancho, contado aparte: es el único que declara un local que no es `int`,
+        // y el checker lo rechazaba justamente por eso. Sin esta barra, volver a prohibirlo dejaría
+        // las dos de arriba intactas y nadie se enteraría.
+        assert!(ancho > 50, "cast al campo ancho en {ancho}/200");
 
         // And the catch that makes the failing cast *observable* rather than lumped in with
         // everything else: `marks::CLASS_CAST` was in the table and unreachable until now.
@@ -6986,7 +7267,12 @@ mod tests {
         // **La mitad que hace que el `boolean` valga.** Sin lecturas, el local se declara y nadie
         // lo usa: el `ifeq` sobre un slot, que es el único bytecode que esta forma alcanza y las
         // otras tres no, no llega a existir.
-        assert!(como_cond > 20, "el boolean se lee como condición en {como_cond}/200");
+        //
+        // La barra bajó de 20 a 8 cuando `cast_share` pasó a tirar en [`Gen::stmt`]: se lleva un 5%
+        // de las sentencias y corrió el stream del RNG, y la lectura cayó de 22/200 a 14/200. Es
+        // deriva de una gramática que cambió, no una regresión de esta forma — sigue llegando, y la
+        // barra vuelve a quedar donde está lo **medido**.
+        assert!(como_cond > 8, "el boolean se lee como condición en {como_cond}/200");
     }
 
     #[test]
@@ -7068,8 +7354,12 @@ mod tests {
                     cuerpo.contains("rec(d - 1, "),
                     "seed {seed}: la llamada a sí mismo no desciende por `d - 1`:{cuerpo}"
                 );
+                // `"d = "` con el espacio, no `"d ="`: sin el espacio el needle matchea
+                // `d == 0`, que es la guarda de una división y no una reasignación. El test pasaba
+                // por suerte —ninguna semilla había generado esa guarda sobre `d`— hasta que el
+                // stream del RNG se corrió.
                 assert!(
-                    !cuerpo.contains("d ="),
+                    !cuerpo.contains("d = "),
                     "seed {seed}: el cuerpo reasigna la medida:{cuerpo}"
                 );
             }
@@ -7217,10 +7507,14 @@ mod tests {
         println!(
             "campo {declared}/200, store {store}/200, read {read}/200, null {null_store}/200"
         );
-        assert!(declared > 80, "el campo se declara en {declared}/200");
-        assert!(store > 25, "`putfield` de referencia en {store}/200");
+        // El store y el `null` subieron de 41/200 y 5/200 a 175 y 123 cuando la perilla dejó de
+        // depender de `object_share` para tener a quién escribirle. Las barras vuelven a lo medido:
+        // dejadas donde estaban, la perilla podría volver a rendir un sexto de lo que rinde y
+        // ningún test se enteraría.
+        assert!(declared > 150, "el campo se declara en {declared}/200");
+        assert!(store > 140, "`putfield` de referencia en {store}/200");
         assert!(read > 60, "lectura encadenada en {read}/200");
-        assert!(null_store > 5, "store de null en {null_store}/200");
+        assert!(null_store > 90, "store de null en {null_store}/200");
 
         // And the half that keeps the field honest: it is declared **only** when something uses it.
         // A field nobody reads is one the reducer cannot delete and a human has to rule out.
@@ -7774,7 +8068,7 @@ mod tests {
         emit_int_lit(&mut out, i32::MIN);
         assert_eq!(out, "Integer.MIN_VALUE");
         let mut out = String::new();
-        emit_expr(&mut out, &Expr::Neg(Box::new(Expr::IntLit(i32::MIN))));
+        emit_expr(&mut out, &Expr::Neg(Box::new(Expr::IntLit(i32::MIN))), "T");
         assert_eq!(out, "(- Integer.MIN_VALUE)");
         let mut out = String::new();
         emit_long_lit(&mut out, i64::MIN);
@@ -7784,7 +8078,7 @@ mod tests {
     #[test]
     fn long_literals_carry_their_suffix() {
         let mut out = String::new();
-        emit_expr(&mut out, &Expr::LongLit(4294967296));
+        emit_expr(&mut out, &Expr::LongLit(4294967296), "T");
         assert_eq!(out, "4294967296L", "without the L this is an int literal out of range");
     }
 
@@ -7792,7 +8086,7 @@ mod tests {
     fn a_negated_negative_literal_does_not_become_a_pre_decrement() {
         // `(--31)` is a pre-decrement of a literal and a compile error; `(- -31)` is arithmetic.
         let mut out = String::new();
-        emit_expr(&mut out, &Expr::Neg(Box::new(Expr::IntLit(-31))));
+        emit_expr(&mut out, &Expr::Neg(Box::new(Expr::IntLit(-31))), "T");
         assert_eq!(out, "(- -31)");
         for seed in 0..300 {
             let source = program(seed).to_java();
@@ -7810,7 +8104,7 @@ mod tests {
             Box::new(Expr::IntLit(3)),
         );
         let mut out = String::new();
-        emit_expr(&mut out, &e);
+        emit_expr(&mut out, &e, "T");
         assert_eq!(out, "((1 + 2) * 3)");
     }
 
