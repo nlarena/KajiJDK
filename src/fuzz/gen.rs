@@ -145,11 +145,14 @@
 //! alone. That is enforced by absence, like the rest of property 2, and checked by
 //! `nothing_non_deterministic_can_be_expressed`.
 //!
-//! # What is out of scope in this version
+//! # What is not built yet
 //!
-//! Written down because an unstated scope is indistinguishable from an oversight:
+//! Written down because an unstated scope is indistinguishable from an oversight — and written as
+//! **not yet** rather than **out of scope**, which is a different claim and the one that is true.
+//! Each row is a milestone (`K5` in `docs/roadmap.md`) with what it would cost; none of them is a
+//! decision to never do it.
 //!
-//! | left out | why |
+//! | falta | qué costaría |
 //! |---|---|
 //! | multi-dimensional arrays | `multianewarray` is outside the JIT's subset "and not narrowly" (`burst::compile`); a one-dimensional array already reaches every guard worth reaching |
 //! | `null` **arrays** | the deopt path is covered by a `null` *receiver* ([`Stmt::NewObject`]), which reaches the same guard from a place the grammar can already express. An array variable that may be `null` needs a reference type in [`Ty`], and objects deliberately avoided that |
