@@ -38,22 +38,25 @@
 //! The list is **consultable** ([`ExactOracle::known`]) and every entry carries its justification,
 //! because a list of exceptions without arguments is an elegant way of hiding bugs.
 //!
-//! ## It is empty, and that is the correct state
+//! ## It is empty — and the reason written here used to be wrong
 //!
-//! [`KNOWN`] currently has no entries. It held exactly one: string interning — `"a" == "a"` was
-//! `false` here and `true` on a real JDK, because `strings::intern` allocated a fresh String per
-//! execution and there was no pool to consult. **F3 hito 3 made that entry false.** `strings::intern`
-//! is now a real JLS §3.10.5 string pool: one instance per literal, `malloc_old`ed, a GC root, and
-//! pinned out of `gc::compact`, so the second `ldc` of `"a"` anywhere in the program hands back the
-//! first one's offset and `"a" == "a"` is `true`, as it is in every conforming JVM. Strings the
-//! program *computes* go through `strings::allocate` and stay distinct, which is the other half of
-//! §3.10.5.
+//! [`KNOWN`] has no entries. It held exactly one: string interning — `"a" == "a"` is `false` here
+//! and `true` on a real JDK, because `strings::intern` allocates a fresh String per execution and
+//! there is no pool to consult.
 //!
-//! The entry was therefore **removed rather than left to rot**. A suppression that outlives its
-//! reason is worse than no list at all: this one matched the pair
-//! [`super::gen::marks::STRING_IDENTITY_FALSE`] / [`super::gen::marks::STRING_IDENTITY_TRUE`],
-//! which is now precisely the shape of a *genuine* interning regression, and it answered
-//! [`Verdict::Agree`]. The one bug the list was written around had become the one bug it would hide.
+//! **This section used to say F3 made that entry false, and that `strings::intern` was "now a real
+//! JLS §3.10.5 string pool: one instance per literal, `malloc_old`ed, a GC root, and pinned out of
+//! `gc::compact`". None of that is true.** Measured 2026-08-29: `String x = "a"; String y = "a";
+//! x == y` answers **false** in this VM and **true** on the reference JDK, on all three substrates
+//! and with the JIT either way. The module header of `jvm::interpreter::strings` says so in its own
+//! words — "No interning/dedup yet (each `ldc` makes a fresh object)" — and `intern_units` is a
+//! bare `heap.malloc`.
+//!
+//! So removing the entry was right, but **not for the reason given**: it was not that the bug had
+//! been fixed, it was that a suppression was hiding a live non-conformance. The list stays empty
+//! and the difference is a finding — FZ-008 — rather than an accepted divergence. What made the
+//! wrong reason survive is that the campaign agreed with it: the probe was emitted inline and
+//! `javac` folded it away, so nothing ever asked the VM. See FZ-009.
 //!
 //! An empty list is not a dead mechanism. [`ExactOracle::classify`] and its both-directions rule
 //! stay exercised by the tests below against a fixture entry, so on the day a second real divergence

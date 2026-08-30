@@ -180,7 +180,8 @@ impl Exec<'_> {
                     other => panic!("String.valueOf: expected a reference, found {other:?}"),
                 };
                 let text = self.text_of(object);
-                let offset = crate::jvm::interpreter::strings::intern(
+                // `String.valueOf` computes its result, so it is never the pooled instance.
+                let offset = crate::jvm::interpreter::strings::allocate(
                     &mut self.shared.metaspace,
                     &mut self.shared.heap,
                     &text,

@@ -58,6 +58,27 @@ impl Campaign {
         self
     }
 
+    /// The same program, `repeats` times, on **one** path — see
+    /// [`repetition_campaign`][crate::fuzz::repetition_campaign].
+    pub fn run_repeated(
+        &mut self,
+        path: Path,
+        repeats: usize,
+        seeds: u64,
+        stop_after: usize,
+    ) -> Report {
+        crate::fuzz::repetition_campaign(
+            &mut self.generator,
+            &mut self.runner,
+            &self.oracle,
+            &mut self.reducer,
+            path,
+            repeats,
+            (0..seeds).map(Seed),
+            stop_after,
+        )
+    }
+
     pub fn run(&mut self, paths: (Path, Path), seeds: u64, stop_after: usize) -> Report {
         campaign(
             &mut self.generator,
@@ -79,10 +100,12 @@ pub fn describe(report: &Report, paths: (Path, Path)) -> String {
     let _ = writeln!(out, "{} vs {}", paths.0, paths.1);
     let _ = writeln!(
         out,
-        "  {} seeds, {} usable ({:.0}%), {} divergences",
+        "  {} seeds, {} usable ({:.0}%), {} threw a marker ({:.0}%), {} divergences",
         report.seeds_run,
         report.seeds_run - report.unusable,
         report.usable_fraction() * 100.0,
+        report.marked,
+        report.marked_fraction() * 100.0,
         report.divergences.len()
     );
     for (why, count) in &report.unusable_reasons {
@@ -174,9 +197,14 @@ mod tests {
             .with_config(cfg);
         let report = it.run(paths, seed_count(80), 5);
         println!("{}", describe(&report, paths));
+        // **Expected to fail while FZ-008 is open**, and deliberately not suppressed. The last
+        // time this difference was made to go away it was by adding it to the oracle's
+        // known-divergence list, and the list then hid the live bug for as long as it stood. A red
+        // campaign naming its finding is the honest state; a green one would have to be bought
+        // with the thing that caused the problem.
         assert!(
             report.divergences.is_empty(),
-            "this VM disagrees with the reference implementation about strings:
+            "this VM disagrees with the reference implementation about strings. If the minimal              case is `ssame(\"x\", \"x\")`, this is **FZ-008** (literals are not interned, JLS              §3.10.5) and it is open — not a new finding:
 {}",
             describe(&report, paths)
         );
@@ -239,16 +267,209 @@ mod tests {
             (Path::Jit, Path::OsParallel),
         ];
         let mut findings = Vec::new();
+        let mut marked_rates = Vec::new();
         for paths in pairings {
             let mut it = Campaign::detect(workdir("long"), Duration::from_secs(30))
                 .with_config(wide);
             let report = it.run(paths, seeds, 5);
             println!("{}", describe(&report, paths));
+            marked_rates.push((report.marked, report.seeds_run, paths));
             if !report.divergences.is_empty() {
                 findings.push(describe(&report, paths));
             }
         }
         assert!(findings.is_empty(), "{}", findings.join("\n"));
+        // **And a campaign can fail on coverage, not only on divergences.** A seed that answers a
+        // bare marker threw on its first warm-up iteration and did nothing else; the oracle is
+        // right to call that agreement, and it is still not coverage. Before the wrapper caught per
+        // iteration this ran between 6% and 51% depending on the configuration and **nothing in the
+        // report showed it** — which is FZ-005's whole shape.
+        for (marked, seeds, paths) in marked_rates {
+            let share = marked as f64 / seeds as f64;
+            assert!(
+                share < 0.10,
+                "{} vs {}: {marked}/{seeds} seeds ({:.0}%) threw instead of computing — the clean \
+                 report above is over programs that mostly did nothing",
+                paths.0,
+                paths.1,
+                share * 100.0
+            );
+        }
+    }
+
+    /// **`os-parallel` against itself.** The one campaign shape that needs no reference: it does
+    /// not know the right answer and does not have to, because a program whose result is fixed by
+    /// construction answering two different things is a finding whichever answer was right.
+    ///
+    /// That is the shape of FZ-002 and of the stale-reference heisenbug behind it — a wrong answer
+    /// in roughly one run of ten, on a program nobody disputes. A *pairing* is blind to it: the
+    /// same coin is flipped on both sides, so the two agree most of the time and the finding is
+    /// diluted rather than detected. Repetition turns every extra run into another chance, at
+    /// linear cost.
+    ///
+    /// **Today it is expected to find nothing, and that is the point of running it now.** The
+    /// grammar has no threads, so every generated program is deterministic *by construction* —
+    /// which makes this the control that says the instrument is silent when it should be, before
+    /// there is anything for it to hear. The detector is built and validated first; the grammar
+    /// that can make it speak comes after.
+    ///
+    /// `cargo test --release --lib os_parallel_agrees_with_itself -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn os_parallel_agrees_with_itself_on_deterministic_programs() {
+        let seeds = seed_count(60);
+        let repeats = std::env::var("FUZZ_REPEATS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10);
+        let mut it = Campaign::detect(workdir("self"), Duration::from_secs(30));
+        let report = it.run_repeated(Path::OsParallel, repeats, seeds, 3);
+        println!(
+            "os-parallel vs itself: {} seeds x {repeats} runs, {} usable, {} divergences",
+            report.seeds_run,
+            report.seeds_run - report.unusable,
+            report.divergences.len()
+        );
+        for finding in &report.divergences {
+            println!("{finding}");
+        }
+        assert!(
+            report.divergences.is_empty(),
+            "a program the grammar makes deterministic answered two different things"
+        );
+        // The other half, and the one a clean report cannot be trusted without: a campaign whose
+        // programs never ran says nothing, and would say it just as quietly.
+        assert!(
+            report.usable_fraction() > 0.9,
+            "only {:.0}% of seeds were usable — the silence above is the generator's, not the VM's",
+            report.usable_fraction() * 100.0
+        );
+    }
+
+    /// **Reference fields against the reference JDK.**
+    ///
+    /// The pairing is the point, and it is the same argument `narrowing_share` makes in the other
+    /// direction. A `putfield` of a reference is answered `Ineligible` by `burst::compile`, and the
+    /// refusal is **per method**: against [`Path::Jit`] one of these anywhere in the entry method
+    /// makes both arms the interpreter, so the campaign would be comparing an engine with itself
+    /// and calling the result agreement — FZ-004 in a costume. Against a real JDK there is no such
+    /// problem, and what is being asked is whether this VM agrees about the two things the shape
+    /// generates: a reference field read back through a hop, and a chain whose middle is `null`.
+    ///
+    /// `cargo test --release --lib reference_fields_agree -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn reference_fields_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { ref_field_share: 60, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-refs"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
+    /// **Reference fields under a collector, compared with itself.**
+    ///
+    /// This is the pairing the construct exists for. A reference field is the only thing in the
+    /// grammar that builds an edge from one heap object to another, which is what the GC's write
+    /// barrier and remembered set are for — and an Old object holding a young pointer is the exact
+    /// shape of the field in FZ-002's report. Threads on as well, so the edges are built by several
+    /// OS threads while the collector runs.
+    ///
+    /// Worth running with the GC actually collecting, which is **not** the default:
+    /// `JVM_GC_AUTO=1 JVM_GC_OCCUPANCY=0.2 JVM_GC_TENURE=1 JVM_GC_VERIFY=1`.
+    #[test]
+    #[ignore]
+    fn reference_fields_agree_with_themselves_under_a_collector() {
+        let repeats =
+            std::env::var("FUZZ_REPEATS").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
+        let cfg = GenConfig { ref_field_share: 60, workers: 4, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("refs-self"), Duration::from_secs(40))
+            .with_config(cfg);
+        let report = it.run_repeated(Path::OsParallel, repeats, seed_count(40), 3);
+        println!(
+            "refs vs themselves: {} seeds x {repeats} runs, {} usable, {} divergences",
+            report.seeds_run,
+            report.seeds_run - report.unusable,
+            report.divergences.len()
+        );
+        for finding in &report.divergences {
+            println!("{finding}");
+        }
+        assert!(report.divergences.is_empty(), "a deterministic program answered two things");
+        assert!(report.usable_fraction() > 0.9, "solo {:.0}% usables", report.usable_fraction() * 100.0);
+    }
+
+    /// The grammar for [`GenConfig::workers`]: threads on, everything else as usual.
+    ///
+    /// Deliberately not the default configuration. A thread is the most expensive thing this
+    /// grammar can ask for, and the shape that makes one *usable* to a differential oracle is
+    /// rigid — so it earns its place in the campaigns that are about threads, and pays for itself
+    /// nowhere else.
+    fn concurrent() -> GenConfig {
+        GenConfig { workers: 4, ..GenConfig::default() }
+    }
+
+    /// **The threads level, against itself.** Concurrent programs, the same one run many times on
+    /// `os-parallel`, checked for agreement with itself.
+    ///
+    /// This is the pair the level was built for: a grammar that can *make* threads and an oracle
+    /// that needs no reference to judge them. What it looks for is not a wrong answer — it has no
+    /// idea what the right one is — but **two different answers from one program**, which for a
+    /// program the grammar makes deterministic is a finding whichever of the two was right.
+    ///
+    /// `FUZZ_SEEDS=200 FUZZ_REPEATS=20 cargo test --release --lib threads_agree_with_themselves -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn threads_agree_with_themselves_across_runs() {
+        let seeds = seed_count(40);
+        let repeats =
+            std::env::var("FUZZ_REPEATS").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
+        let mut it = Campaign::detect(workdir("threads-self"), Duration::from_secs(40))
+            .with_config(concurrent());
+        let report = it.run_repeated(Path::OsParallel, repeats, seeds, 3);
+        println!(
+            "threads vs themselves: {} seeds x {repeats} runs, {} usable, {} divergences",
+            report.seeds_run,
+            report.seeds_run - report.unusable,
+            report.divergences.len()
+        );
+        for (why, count) in &report.unusable_reasons {
+            println!("  unusable x{count}: {why}");
+        }
+        for finding in &report.divergences {
+            println!("{finding}");
+        }
+        assert!(
+            report.divergences.is_empty(),
+            "a concurrent program the grammar makes deterministic answered two different things"
+        );
+        assert!(
+            report.usable_fraction() > 0.9,
+            "only {:.0}% usable — the silence is the generator's, not the VM's",
+            report.usable_fraction() * 100.0
+        );
+    }
+
+    /// **The threads level, against a real JDK.** Agreeing with itself is not the same as being
+    /// right: a substrate that dropped every worker's result would be perfectly self-consistent.
+    ///
+    /// So the same programs go through the pairing oracle too, where the answer is decided by an
+    /// implementation nobody here wrote.
+    ///
+    /// `cargo test --release --lib threads_agree_with_the_reference_jdk -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn threads_agree_with_the_reference_jdk() {
+        let paths = (Path::OsParallel, Path::ReferenceJdk);
+        let mut it = Campaign::detect(workdir("threads-jdk"), Duration::from_secs(40))
+            .with_config(concurrent());
+        let report = it.run(paths, seed_count(60), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
     }
 
     /// Green threads against OS threads behind the GIL. The grammar has no threads in it yet, so
@@ -471,6 +692,18 @@ mod jit_coverage {
             ),
             ("objects, no planted probe", GenConfig { dispatch_probe: false, ..base }),
             ("objects, int fields only", GenConfig { wide_fields: false, ..base }),
+            // The row that says whether interface dispatch is free. `invokeinterface` (0xb9) is
+            // inside `burst::compile`'s scan — it shares every arm with `invokevirtual` and differs
+            // only in instruction length — so the prediction is that this row matches the default.
+            // A drop here would mean the compiled arm is quietly the interpreter on any program
+            // that dispatches through an interface, which is FZ-004 exactly.
+            ("objects, no interfaces", GenConfig { interface_share: 0, ..base }),
+            // The row that prices the reference field, rather than asserting what it costs. The
+            // prediction is that this one is **much worse** than the default: `burst::compile`
+            // answers `Ineligible` to a `putfield` of a reference and the refusal is per method,
+            // so every entry method carrying one runs interpreted on both arms. Measuring it is
+            // what turns "do not pair this against the JIT" from advice into a number.
+            ("objects + reference fields", GenConfig { ref_field_share: 60, ..base }),
             ("everything (the default)", base),
         ];
         let mut rows = Vec::new();
@@ -511,6 +744,74 @@ mod jit_coverage {
             "the integral grammar itself dropped to {integral}/{SEEDS} — FZ-004 again, and \
              floating point is not the cause"
         );
+    }
+
+    /// The **itable census**: does `javac` actually emit `invokeinterface` for what the generator
+    /// produces?
+    ///
+    /// A campaign reporting zero divergences over a construct it never generated is
+    /// indistinguishable from a campaign that works, which is the failure FZ-003 and FZ-005 both
+    /// were. For interface dispatch the gap is unusually easy to fall into: the generator never
+    /// names the opcode. It declares a local as `…I` instead of `…B` and lets `javac` choose, so
+    /// "we generate interface calls" is a claim about a *compiler*, not about our own code — and
+    /// the only honest way to hold it is to go and look in the class file.
+    ///
+    /// So this counts `invokeinterface` sites directly: opcode `0xb9`, whose operand must resolve
+    /// to a `CONSTANT_InterfaceMethodref` and which is the one call opcode carrying a trailing zero
+    /// byte (JVMS §6.5). Requiring all three makes a stray `0xb9` inside another instruction's
+    /// operands vanishingly unlikely to be miscounted.
+    ///
+    /// `cargo test --release --lib fuzz::campaigns::jit_coverage::interface_calls -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn interface_calls_actually_reach_the_class_file() {
+        let dir = std::env::temp_dir().join("kaji-itable-census");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut sites = 0usize;
+        let mut seeds_with_a_site = 0usize;
+        const SEEDS: u64 = 60;
+        let mut generator = JavaGenerator::new(GenConfig::default());
+
+        for seed in 0..SEEDS {
+            let program = generator.generate(Seed(seed));
+            let class_file = compile(&program, &dir);
+            let class = ClassFile::from_path(class_file.to_str().expect("utf-8 path")).expect("load");
+
+            let mut here = 0usize;
+            for method in &class.methods {
+                let Some(code) = class.member_code(method) else { continue };
+                let body = &code.code;
+                for i in 0..body.len().saturating_sub(4) {
+                    if body[i] != 0xb9 || body[i + 4] != 0 {
+                        continue;
+                    }
+                    let index = u16::from_be_bytes([body[i + 1], body[i + 2]]);
+                    if class.methodref_name_and_type(index).is_some() {
+                        here += 1;
+                    }
+                }
+            }
+            sites += here;
+            if here > 0 {
+                seeds_with_a_site += 1;
+            }
+        }
+
+        let share = 100 * seeds_with_a_site / SEEDS as usize;
+        println!(
+            "invokeinterface: {sites} sites across {seeds_with_a_site}/{SEEDS} seeds ({share}%)"
+        );
+        // A **floor**, not a target. Measured at the default `interface_share` of 50 it sits at
+        // roughly 35% of seeds and 40 sites; what this number has to catch is the construct
+        // silently going to zero — a knob defaulted back off, a `javac` change that picks
+        // `invokevirtual`, a scope rule that stops the locals being read — because that is the
+        // state in which a clean campaign report says nothing about itables and looks identical to
+        // one that says something.
+        assert!(
+            share >= 20,
+            "only {share}% of seeds carry an interface call ({sites} sites):              the campaigns are no longer covering itable dispatch"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The same differential the process-spawning campaign runs, but in this process and therefore

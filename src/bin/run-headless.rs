@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use jvm::jvm::class_file::ClassFile;
-use jvm::jvm::interpreter::bytecode_interpreter::execute;
+use jvm::jvm::interpreter::bytecode_interpreter::execute_reporting;
 use jvm::jvm::interpreter::frame::{Frame, Value};
 use jvm::jvm::interpreter::metaspace::MetaspaceService;
 
@@ -54,5 +54,21 @@ fn main() {
     let entry = ms.resolve_method(&name, method, &descriptor).expect("resolve method");
     let max_locals = ms.max_locals(entry);
     let frame = Frame::new(entry, max_locals, call_args);
-    println!("{path} {method}{descriptor} -> {:?}", execute(ms, frame));
+    let report = execute_reporting(ms, frame);
+    // The result line first, and byte for byte what it always was: the fuzzer's runner parses it,
+    // and a tool that changes its output format to fix a reporting bug has traded one for another.
+    println!("{path} {method}{descriptor} -> {:?}", report.value);
+    // FZ-001. What the program printed goes to **stderr**, so it cannot be mistaken for the result
+    // line by anything reading stdout. It carries the uncaught-exception report the VM has always
+    // built and never showed: class, detail message and the backtrace captured at throw time.
+    if !report.console.is_empty() {
+        eprint!("{}", report.console);
+    }
+    // A real `java` exits non-zero when the main thread dies with an exception escaping, and until
+    // now this exited 0 — so a caller could not distinguish "returned void" from "died". Exit 1,
+    // which is what `java` uses, and which the runner already reads as *the program threw* rather
+    // than *the VM crashed* (that one is a panic, and it is recognised by its own signature).
+    if report.uncaught.is_some() {
+        std::process::exit(1);
+    }
 }

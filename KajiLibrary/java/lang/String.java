@@ -285,7 +285,11 @@ public final class String implements Comparable<String>, CharSequence, ConstantD
         if (original == null) {
             throw new NullPointerException();
         }
-        String.publish(original);
+        // A **copy**, not the original. `publish` makes the constructor's result be the object
+        // handed to it, so publishing `original` would give `new String(s)` the identity of `s` —
+        // and with a literal that means `new String("a") == "a"` answers true, which JLS 3.10.5
+        // requires to be false. It is the half of interning that is about *not* sharing.
+        String.publish(String.valueOf(original.toCharArray(), 0, original.length()));
     }
 
     /**

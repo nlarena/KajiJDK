@@ -619,21 +619,23 @@
 //! `ldc` of a **class literal** rides the same resolver: `Foo.class` is that pinned mirror offset,
 //! materialised as an immediate. It is the only `ldc` of a reference this tier does.
 //!
-//! ## `ldc` of a `String` is **out**, and the reason is a fact about this VM
+//! ## `ldc` of a `String` is **out**, and the reason it was out has just gone away
 //!
-//! It looks like the twin of the class literal and it is not. `strings::intern` — despite the name
-//! — keeps **no interning table at all**: it `heap.malloc`s a fresh `String` object, in **Eden**,
-//! on every single execution, and `strings.rs` says so in as many words. Two consequences, and
-//! either one alone is disqualifying:
+//! It looks like the twin of the class literal, and until 2026-08-29 it was not: `strings::intern`
+//! — despite the name — kept **no interning table at all**, `heap.malloc`ing a fresh `String` in
+//! **Eden** on every execution. Two consequences, and either alone was disqualifying: there was no
+//! permanent offset to bake (a young object is evacuated by the next minor), and baking one would
+//! have *changed the program's meaning*, because with no dedup `"a" == "a"` was **false** here — a
+//! compiled `ldc` handing back the same offset twice would have made the two tiers disagree about a
+//! result, which is worse than a method that does not compile.
 //!
-//!  - **There is no offset to bake.** An interned String is not a permanent object here; it is a
-//!    young one that the next minor collection evacuates. Baking its offset in as an immediate is
-//!    the corruption this section's `checkcast` argument was careful to avoid — a pinned mirror is
-//!    safe, an Eden object is not.
-//!  - **Baking one would change the program's meaning.** Because there is no dedup, `"a" == "a"` is
-//!    *false* in this VM today. A compiled `ldc` that handed back the same offset twice would make
-//!    it true — so the two tiers would disagree about a program's result, which is worse than a
-//!    method that does not compile.
+//! **Both are now false.** FZ-008 gave the pool its three properties — one instance per literal,
+//! allocated in **Old**, a GC root and in `gc::compact`'s `pinned` set — which is exactly the list
+//! this section used to name as "the way in". A literal is now a permanent object at a stable
+//! address, and `"a" == "a"` answers `true` as JLS §3.10.5 requires.
+//!
+//! So `ldc` of a `String` is out **only because nobody has taught the compiler to bake it yet**,
+//! and that is a different sentence from the one that used to be here. It is worth ~46 methods.
 //!
 //! The way in is to make interning real: a table, allocation in **Old**, and the interned set added
 //! to `gc::compact`'s `pinned` — the same move the array-class mirrors made when
@@ -1529,6 +1531,23 @@ pub struct Environment<'a> {
     /// first active use. A `checkcast` is not, so requiring it here would refuse methods for a
     /// reason the JVMS does not have.
     pub class_mirror: &'a dyn Fn(Unit, u16) -> Option<u32>,
+    /// `ldc` of a `String`: the **pooled** literal's offset, or `None`.
+    ///
+    /// Read-only, like [`class_mirror`][Environment::class_mirror], and refusing for the same
+    /// reason in the same words: interning a literal the interpreter has never reached
+    /// **allocates**, and a compilation that can allocate is a compilation that can collect. So a
+    /// literal missing from the pool refuses the method instead of adding it — free, because a
+    /// method reaches this tier only after running, and a literal on a path that ran is in the pool
+    /// by then. A literal on a path that never ran is not worth compiling for.
+    ///
+    /// **What makes baking the offset legal at all is FZ-008.** Until the string pool landed this
+    /// resolver could not have existed: `strings::intern` allocated a *fresh* `String` in Eden per
+    /// `ldc`, so there was no permanent offset to bake — and baking one would have made
+    /// `"a" == "a"` answer `true` in compiled code and `false` in the interpreter, which is worse
+    /// than a method that does not compile. The pool is one instance per literal, in **Old**, a GC
+    /// root and in `gc::compact`'s pinned set, which is exactly the three properties an immediate
+    /// needs.
+    pub string_literal: &'a dyn Fn(Unit, u16) -> Option<u32>,
     /// Resolves the **invoke** at `(unit, pc, index)` to the callee this tier may inline there, or
     /// `None` for every call it may not.
     ///
@@ -2650,9 +2669,11 @@ fn transfer(
                 0x12 => u16::from(code[pc + 1]),
                 _ => u16::from_be_bytes([code[pc + 1], code[pc + 2]]),
             };
-            // The same three resolvers in the same order [`decode`] asked them in — an `int`, a
-            // `float`, and (group 2) a **class literal**, which is a reference to a `Class<…>`
-            // mirror and must be typed as one or a deopt would spill it as an `int`.
+            // The same resolvers in the same order [`decode`] asked them in — an `int`, a
+            // `float`, and then the two reference-shaped ones: a **class literal** (a `Class<…>`
+            // mirror) and a **`String` literal** (a pooled instance). Both must be typed as
+            // references or a deopt would spill an offset into a frame slot marked `Int`, and the
+            // collector would then walk past a live object it cannot see.
             if (env.int_const)(method.unit, index).is_some() {
                 state.stack.push(Int);
             } else if (env.float_const)(method.unit, index).is_some() {
@@ -3385,12 +3406,10 @@ fn decode(
                     (3u16, u16::from_be_bytes([code[pc + 1], code[pc + 2]]))
                 }
             };
-            // An `Integer`, a `Float`, or — group 2 — a **class literal**, whose value is the
-            // target's pinned mirror offset. A `String` is the one thing left that refuses the
-            // method, and deliberately: this VM allocates a *fresh* `String` in Eden for every
-            // `ldc` (there is no interning table at all), so there is no permanent offset to bake
-            // and baking one would make `"a" == "a"` true here where the interpreter says false.
-            // See the module docs.
+            // An `Integer`, a `Float`, a **class literal** (its target's pinned mirror offset) or
+            // — since FZ-008 — a **`String` literal**, whose value is the pooled instance's offset.
+            // All four are permanent addresses or plain bits, which is the only property an
+            // immediate needs.
             //
             // The resolvers are asked in order rather than by inspecting a tag, because `burst`
             // deliberately knows nothing about constant pools — a resolver that will not answer is
@@ -3399,10 +3418,13 @@ fn decode(
                 Some(v) => i64::from(v),
                 None => match (env.float_const)(method.unit, index) {
                     Some(bits) => i64::from(bits),
-                    None => i64::from(
-                        (env.class_mirror)(method.unit, index)
-                            .ok_or(Ineligible::NonIntegerConstant { pc, index })?,
-                    ),
+                    None => match (env.class_mirror)(method.unit, index) {
+                        Some(mirror) => i64::from(mirror),
+                        None => i64::from(
+                            (env.string_literal)(method.unit, index)
+                                .ok_or(Ineligible::NonIntegerConstant { pc, index })?,
+                        ),
+                    },
                 },
             };
             return Ok((simple(len, 0, 1), Some(value)));
@@ -6522,6 +6544,7 @@ mod tests {
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 heap: Heap::default(),
                 poll_word: &TEST_POLL as *const _ as usize,
             },

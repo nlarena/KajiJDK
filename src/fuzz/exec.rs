@@ -26,15 +26,21 @@
 //!
 //! | path | invocation | on success | on an uncaught exception |
 //! |---|---|---|---|
-//! | this VM | `run-headless Foo.class run` | `…Foo.class run()I -> Some(Int(42))` | `… -> None`, exit 0 |
+//! | this VM | `run-headless Foo.class run` | `…Foo.class run()I -> Some(Int(42))` | `… -> None` on stdout, `Exception in thread "main" java.lang.ArithmeticException` on stderr, exit 1 |
 //! | real JDK | `java -cp dir Foo` | `42` (printed by the program's own `main`) | `Exception in thread "main" java.lang.ArithmeticException: …` on stderr |
 //!
-//! The asymmetry is real and worth stating: **this VM does not surface the exception's class**
-//! through `run-headless`. The uncaught-exception report the VM builds goes to its console buffer,
-//! which that binary never flushes, so all we learn is "it did not return".
+//! **The asymmetry closed in FZ-001 (2026-08-29).** It used to be that this VM printed `-> None`
+//! and exited 0, so all we learned was "it did not return" — not because the VM did not know
+//! which exception it was, but because the report it built went to a console buffer the binary
+//! never flushed. The information existed and was lost in the last metre. Both sides now name the
+//! class on stderr in the same shape and exit non-zero, so [`uncaught_class`] reads both.
 //!
-//! The fix belongs to the **generator**, not here: a generated program must be *total* — it catches
-//! everything itself and encodes the outcome in the `int` it returns, e.g.
+//! One difference survives and is **not** a bug of this parser: our report carries no `\tat …`
+//! backtrace, because `backtrace` is a field the VM offers to fill and our `java.lang.Throwable`
+//! does not declare. See `docs/fuzzer_findings/FZ-001-excepcion-sin-clase.md`.
+//!
+//! None of which retires the **generator's** answer, and it should not: a generated program is
+//! *total* — it catches everything itself and encodes the outcome in the `int` it returns, e.g.
 //!
 //! ```text
 //! static int run() {
@@ -46,8 +52,9 @@
 //!
 //! Then both sides return an integer, the comparison is exact, and the oracle never has to reason
 //! about exception *messages* — which differ between implementations for perfectly legal reasons.
-//! [`Outcome::Threw`] stays in the vocabulary for the programs that escape anyway; it just cannot
-//! carry a class name from this VM.
+//! That is a stronger property than "we can read the class", and it is why the wrapper stays:
+//! comparing integers cannot be fooled by a report format. [`Outcome::Threw`] is the fallback for
+//! the programs that escape anyway, and it now carries a class from both sides.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -81,7 +88,11 @@ fn headless_path() -> PathBuf {
     let root = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("target"));
-    root.join("release").join("run-headless")
+    // With the platform's executable suffix, so the path names the file that is actually there.
+    // `Command::new` would resolve it either way on Windows, which is exactly what hid this: any
+    // code that *inspects* the path instead of spawning it — FZ-007's staleness gate — was looking
+    // for a file that does not exist under that name.
+    root.join("release").join(format!("run-headless{}", std::env::consts::EXE_SUFFIX))
 }
 
 impl Toolchain {
@@ -297,10 +308,17 @@ pub(crate) fn interpret(path: Path, status: ExitStatus, stdout: &str, stderr: &s
             }
         }
         // `run-headless` prints `<path> run()I -> Some(Int(42))`, or `-> None` when the entry
-        // thread died without returning. `None` is all this VM can tell us — see the module docs.
+        // thread died without returning — and, since FZ-001, the class on stderr in the same
+        // shape the reference JDK uses, which is why the *same* reader serves both sides.
+        //
+        // An empty class is still reachable and still means something: a `-> None` with no report
+        // is an entry method that returned `void`. The generator's entry is `()I`, so it does not
+        // happen there; keeping the case distinguishes "returned nothing" from "died".
         _ => match parse_headless(stdout) {
             Some(value) => Outcome::Returned(value),
-            None if stdout.contains("-> None") => Outcome::Threw(String::new()),
+            None if stdout.contains("-> None") => {
+                Outcome::Threw(uncaught_class(stderr).unwrap_or_default())
+            }
             None if !status.success() => Outcome::Crashed(format!("run-headless exited with {status}")),
             None => Outcome::Crashed("run-headless printed nothing parseable".to_string()),
         },
@@ -353,6 +371,37 @@ mod tests {
         }
     }
 
+    /// The exit status `run-headless` and `java` both use for "the entry thread died". Built the
+    /// same way as [`ok_status`], for the same reason.
+    fn failed_status() -> ExitStatus {
+        Command::new(if cfg!(windows) { "cmd" } else { "false" })
+            .args(if cfg!(windows) { vec!["/C", "exit 1"] } else { vec![] })
+            .status()
+            .expect("spawn")
+    }
+
+    /// Refuses to run when `run-headless` is older than its source. **FZ-007**: `cargo test --lib`
+    /// does not rebuild binaries, so a test that spawns one is testing whatever was there last —
+    /// and a green result then says nothing about the code in the tree. This was not theoretical:
+    /// two deliberate sabotages of that binary both passed, and only failed once a `cargo build`
+    /// was put between them.
+    ///
+    /// A stale artifact is the same genre of tool bug as FZ-003 and FZ-004 — a measurement that
+    /// looks like it is testing something and is not — so it gets a gate rather than a note.
+    fn assert_headless_is_current() {
+        let binary = headless_path();
+        let source = PathBuf::from("src/bin/run-headless.rs");
+        let (Ok(b), Ok(t)) = (std::fs::metadata(&binary), std::fs::metadata(&source)) else {
+            panic!("no encuentro {binary:?} — falta `cargo build --release`");
+        };
+        let (Ok(b), Ok(t)) = (b.modified(), t.modified()) else { return };
+        assert!(
+            b >= t,
+            "{binary:?} es mas viejo que su fuente: corre `cargo build --release` primero, o este \
+             test pasa contra un binario que ya no existe en el arbol"
+        );
+    }
+
     /// Builds an `ExitStatus` without spawning anything real. There is no public constructor, so
     /// the cheapest honest way is to run a process that is guaranteed to exist and succeed.
     fn ok_status() -> ExitStatus {
@@ -377,11 +426,35 @@ mod tests {
     }
 
     #[test]
-    fn a_headless_none_is_read_as_a_throw_without_a_class_name() {
-        // This VM cannot tell us *which* exception — the whole reason generated programs must
-        // catch their own and return a marker instead.
+    fn a_headless_none_with_no_report_is_a_throw_without_a_class_name() {
+        // `-> None` and an empty stderr is an entry method that returned `void`, not a death. The
+        // generator's entry is `()I`, so this is the shape a hand-written fixture can produce.
         let seen = interpret(Path::Jit, ok_status(), "Fz.class run()I -> None\n", "");
         assert_eq!(seen.outcome, Outcome::Threw(String::new()));
+    }
+
+    /// **FZ-001, as a regression test.** Our side used to print `-> None` and stop there, so every
+    /// program that threw collapsed into one indistinguishable outcome. It now names the class in
+    /// the same shape the reference JDK does, and the point of this test is that *the same reader*
+    /// serves both — the two sides are compared, so a format that only one of them can be read
+    /// out of is worth nothing.
+    #[test]
+    fn a_headless_throw_now_carries_the_class_like_the_reference_jdk_does() {
+        let stderr = "Exception in thread \"main\" java.lang.ArithmeticException: / by zero\n";
+        let ours = interpret(Path::Jit, ok_status(), "Fz.class run()I -> None\n", stderr);
+        let theirs = interpret(Path::ReferenceJdk, ok_status(), "", stderr);
+        assert_eq!(ours.outcome, Outcome::Threw("java.lang.ArithmeticException".to_string()));
+        assert_eq!(ours.outcome, theirs.outcome, "the two sides must land on the same outcome");
+    }
+
+    /// A non-zero exit on our side must stay a **throw**, not become a crash. `run-headless` now
+    /// exits 1 when the entry thread dies, exactly as `java` does, and reading that as a VM crash
+    /// would turn every exception into a false finding.
+    #[test]
+    fn a_non_zero_exit_with_a_report_is_a_throw_and_not_a_crash() {
+        let stderr = "Exception in thread \"main\" java.lang.NullPointerException\n";
+        let seen = interpret(Path::Jit, failed_status(), "Fz.class run()I -> None\n", stderr);
+        assert_eq!(seen.outcome, Outcome::Threw("java.lang.NullPointerException".to_string()));
     }
 
     #[test]
@@ -428,6 +501,51 @@ mod tests {
         let theirs = runner.run(&program, Path::ReferenceJdk);
         assert_eq!(ours.outcome, Outcome::Returned(42), "our VM: {ours:?}");
         assert_eq!(theirs.outcome, Outcome::Returned(42), "reference: {theirs:?}");
+    }
+
+    /// **FZ-001 end to end**, which is the half a parser test cannot reach: the tests above pin
+    /// how a report is *read*, and would keep passing if `run-headless` stopped emitting one. This
+    /// runs the real binary on a program that really throws and asks for the three things the
+    /// finding was about — the class on stderr, a non-zero exit, and the result line unchanged,
+    /// because the runner parses it and a fix that moved it would have traded one bug for another.
+    ///
+    /// `cargo build --release && cargo test --release --lib a_program_whose_exception -- --ignored`
+    #[test]
+    #[ignore]
+    fn a_program_whose_exception_escapes_names_the_class_and_exits_non_zero() {
+        assert_headless_is_current();
+        let workdir = std::env::temp_dir().join("kaji-fuzz-exec");
+        let mut runner =
+            ProcessRunner::new(Toolchain::detect(), &workdir, Duration::from_secs(20));
+        // No wrapper, so the exception really escapes the entry thread.
+        let program = Fixed { name: "FzUncaught", body: "int z = 0; return 7 / z;" };
+
+        let ours = runner.run(&program, Path::Jit);
+        let theirs = runner.run(&program, Path::ReferenceJdk);
+        assert_eq!(
+            ours.outcome,
+            Outcome::Threw("java.lang.ArithmeticException".to_string()),
+            "our VM: {ours:?}"
+        );
+        assert_eq!(ours.outcome, theirs.outcome, "reference: {theirs:?}");
+        assert!(ours.stdout.contains("-> None"), "the result line moved: {}", ours.stdout);
+
+        // And the exit code, directly. It has to be asserted here rather than through the runner,
+        // because `interpret` classifies on the result line *before* it consults the status — so a
+        // `run-headless` that went back to exiting 0 would leave every outcome above unchanged.
+        // The code is not decoration: it is what makes the binary usable from a shell, and it is
+        // half of what FZ-001 said was wrong.
+        let class_file = workdir.join("FzUncaught.class");
+        let status = Command::new(headless_path())
+            .arg(&class_file)
+            .arg("run")
+            .status()
+            .expect("spawn run-headless");
+        assert_eq!(
+            status.code(),
+            Some(1),
+            "a program whose exception escapes must exit 1, as `java` does"
+        );
     }
 
     /// The property the whole tool rests on: a program that never ends is reported as a timeout

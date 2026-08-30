@@ -15,8 +15,26 @@
 //! already decodes modified UTF-8 (surrogate pairs included) into real scalar values, so the
 //! text arriving here is correct; only the storage was lossy.
 //!
-//! No interning/dedup yet (each `ldc` makes a fresh object), so `"a" == "a"` would be
-//! false here — fine for printing, a refinement for later.
+//! # Interning (JLS §3.10.5)
+//!
+//! A literal is a reference to a **pooled** instance: two literals with the same contents, in the
+//! same class or in different ones, are the *same* reference, so `"a" == "a"` is `true`. What the
+//! program **computes** — a runtime concatenation, a `new String(…)`, `String.valueOf` — is a
+//! distinct object, and that is not a detail of the same rule but the other half of it: a pool that
+//! swallowed computed strings would make `new String("a") == "a"` answer `true`, which is just as
+//! wrong in the other direction.
+//!
+//! Hence two entry points that look alike and must not be confused: [`intern`] for a literal,
+//! [`allocate`] for everything else. There are exactly three callers of the first — `ldc` of a
+//! `String` constant, the `ConstantValue` of a static `String` field (JVMS §5.4.2) and a `String`
+//! static argument of a bootstrap method — because those are the three places a *constant pool
+//! entry* becomes an object.
+//!
+//! **The pool is allocated in Old, is a GC root and is pinned in `gc::compact`.** All three are
+//! required and for different reasons: between two `ldc`s of the same literal nothing else refers
+//! to it, so without the root the first collection frees it; and a literal that moved would leave
+//! every reference to it dangling, with no second copy of the identity to restore. This was FZ-008,
+//! and it was open for a long time behind a probe the compiler folded away (FZ-009).
 
 use super::bytecode_interpreter::class_operations;
 use super::bytecode_interpreter::objects_operations::HEADER_SIZE;
@@ -33,9 +51,10 @@ const UNIT_SIZE: usize = 2;
 /// Object header (8) + the array's length word (4).
 const ARRAY_HEADER: usize = HEADER_SIZE + 4;
 
-/// Allocates a `java.lang.String` on the heap holding `text`, and returns its offset.
-/// Loads `String`'s mirror first so the header's `class_id` points at it (an `ldc`
-/// of a string literal does exactly this — materialise a String for the constant).
+/// The **pooled** `String` for `text` — the same object every time (JLS §3.10.5).
+///
+/// For a *literal* only. A computed String goes through [`allocate`]; see the module docs for why
+/// the distinction is the rule rather than an optimisation.
 pub fn intern(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &str) -> usize {
     // `encode_utf16` is the whole conversion: a scalar above U+FFFF becomes its surrogate pair,
     // which is exactly how Java counts it.
@@ -43,28 +62,75 @@ pub fn intern(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &s
     intern_units(metaspace, heap, &units)
 }
 
-/// Allocates a `java.lang.String` holding these UTF-16 code units verbatim.
-///
-/// The one to call when the units come from Java rather than from Rust. `intern` cannot serve
-/// that case: its argument is a Rust `String`, and a Rust `String` is well-formed UTF-8 by
-/// construction, so an **unpaired surrogate** cannot survive the trip through it. Java's are not
-/// so restricted -- a `char[]` may hold a lone `0xD800` and `String.valueOf` must keep it -- so
-/// the units are written straight through here, with no encoding step to lose them in.
+/// [`intern`] for units that come from Java rather than from Rust — see [`allocate_units`] for why
+/// the pair exists.
 pub fn intern_units(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
     units: &[u16],
 ) -> usize {
+    if let Some(offset) = metaspace.interned_string(units) {
+        return offset;
+    }
+    // **Old, not Eden.** A literal outlives every collection by definition, so putting it in the
+    // young generation would mean copying it on every minor for the lifetime of the program — and
+    // it has to be pinned anyway, which the young generation has no notion of.
+    let offset = allocate_in(metaspace, heap, units, Generation::Old);
+    metaspace.set_interned_string(units.to_vec(), offset);
+    offset
+}
+
+/// A **fresh** `java.lang.String` holding `text` — never pooled.
+///
+/// Everything the program computes lands here. Sharing one of these with a literal would make
+/// `new String("a") == "a"` answer `true`.
+pub fn allocate(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &str) -> usize {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    allocate_units(metaspace, heap, &units)
+}
+
+/// Where a `String` object is built, for both entry points.
+fn allocate_in(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    units: &[u16],
+    generation: Generation,
+) -> usize {
     class_operations::load_class(metaspace, heap, "java/lang/String");
     let uuid = metaspace.class_id("java/lang/String").to_string();
     let mirror = metaspace.class_object(&uuid).unwrap_or(0);
-    let offset = heap.malloc(STRING_HEADER + units.len() * UNIT_SIZE);
+    let size = STRING_HEADER + units.len() * UNIT_SIZE;
+    let offset = match generation {
+        Generation::Young => heap.malloc(size),
+        Generation::Old => heap.malloc_old(size),
+    };
     heap.write_u32(offset, mirror as u32);
     heap.write_u32(offset + LENGTH_OFFSET, units.len() as u32);
     for (i, &unit) in units.iter().enumerate() {
         heap.write_u16(offset + STRING_HEADER + i * UNIT_SIZE, unit);
     }
     offset
+}
+
+/// Which half of the heap a new `String` goes in.
+enum Generation {
+    Young,
+    Old,
+}
+
+/// A fresh `java.lang.String` holding these UTF-16 code units verbatim.
+///
+/// The one to call when the units come from Java rather than from Rust. [`allocate`] cannot serve
+/// that case: its argument is a Rust `String`, and a Rust `String` is well-formed UTF-8 by
+/// construction, so an **unpaired surrogate** cannot survive the trip through it. Java's are not
+/// so restricted -- a `char[]` may hold a lone `0xD800` and `String.valueOf` must keep it -- so
+/// the units are written straight through here, with no encoding step to lose them in.
+pub fn allocate_units(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    units: &[u16],
+) -> usize {
+    allocate_in(metaspace, heap, units, Generation::Young)
 }
 
 /// Reads the text of the `String` object at `offset` back out of the heap. A lone surrogate is

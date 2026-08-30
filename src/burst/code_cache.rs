@@ -996,6 +996,7 @@ mod tests {
                 invoke: &|_, _, _| None,
                 heap: Heap::default(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: c.poll_address(),
             },
         )
@@ -1422,6 +1423,7 @@ mod tests {
                 invoke: &|_, _, _| None,
                 heap: eden.heap(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: c.poll_address(),
             },
         )

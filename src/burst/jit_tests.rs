@@ -591,6 +591,43 @@ fn the_env_var_is_the_user_facing_switch() {
 // Step 4: the opcodes that widened the subset, through the whole VM.
 // =============================================================================================
 
+/// **`ldc` of a `String` literal**, which the compiler refused until the string pool landed.
+///
+/// The reason it refused was about the VM and not the compiler: `strings::intern` allocated a fresh
+/// `String` in Eden on every `ldc`, so there was no permanent offset to bake — and baking one would
+/// have made `"a" == "a"` answer `true` in compiled code and `false` in the interpreter, which is
+/// worse than a method that does not compile. FZ-008 gave the pool its three properties (one
+/// instance per literal, in Old, a GC root, pinned out of `gc::compact`), which is exactly what an
+/// immediate needs.
+///
+/// So what this asks is the thing that used to be impossible: that the two arms agree two `ldc`s of
+/// one literal are **the same object**, and that a different literal is a different one. The
+/// comparisons go through locals because `javac` folds `("a" == "a")` written inline and the VM
+/// would never see it — the mistake that hid FZ-008 for as long as it did.
+///
+/// **What this cannot catch, and why it does not have to.** A Java program can only observe a
+/// literal's *identity relation*, never its address, so a resolver that shifted every offset by a
+/// constant would pass here — verified by trying it. That failure is unreachable rather than
+/// untested: the resolver reads the very map `strings::intern` writes, so the compiled arm and the
+/// interpreter cannot name different objects for one literal without the pool itself being wrong,
+/// which its own tests cover. What *is* observable is the relation, and collapsing two literals
+/// onto one offset does fail this test.
+///
+/// Nothing else about `String` is probed, and that is deliberate: this harness boots from `boot/`
+/// rather than from `KajiLibrary`, so a probe touching `new String(…)` would be measuring which of
+/// the two class libraries is on the path instead of what the compiler did with an `ldc`. Found by
+/// writing the richer version first and watching it disagree with the same fixture run through
+/// `run-headless`, which boots the other way.
+#[test]
+fn an_ldc_of_a_string_literal_agrees_with_the_interpreter() {
+    // 19003336 is what `java LdcStr` prints.
+    let stats = differential("java/LdcStr.class", 19_003_336);
+    assert!(
+        stats.compiled > 0,
+        "nothing compiled, so this proved only that the interpreter agrees with itself"
+    );
+}
+
 #[test]
 fn the_wide_prefix_agrees_with_the_interpreter() {
     // `WdWide.bump` is a `wide iinc` in both directions and at both extremes of a signed 16-bit
@@ -1164,7 +1201,7 @@ fn subset_census() {
             // table and allocates a fresh Eden `String` per execution, so there is no permanent
             // offset to bake — and baking one would make `"a" == "a"` true where the interpreter
             // says false. See the module docs.
-            "String" => "no interning table in this VM: a fresh Eden String per execution",
+            "String" => "the pool exists (FZ-008) but the compiler does not bake a literal yet",
             "MethodHandle" | "MethodType" | "Dynamic" => "nothing in this tier can materialise one",
             _ => "no resolver in the subset answers for it",
         }
@@ -1501,11 +1538,19 @@ fn subset_census() {
                 heap: CENSUS_HEAP,
                 // The `checkcast`/`instanceof`/`ldc Foo.class` stub: **any `CONSTANT_Class`**
                 // resolves, to a plausible mirror offset no code here compares against. Asking
-                // `class_name` rather than answering unconditionally is load-bearing — it is what
-                // keeps an `ldc` of a **`String`** refused, which it must be (see the module docs).
-                // A running VM additionally requires the mirror to exist already, which this cannot
-                // know: upper bound, exactly like the `new` and `newarray` stubs above.
+                // `class_name` rather than answering unconditionally is what keeps the two `ldc`
+                // stubs apart, so each is counted against its own pool tag. A running VM
+                // additionally requires the mirror to exist already, which this cannot know: upper
+                // bound, exactly like the `new` and `newarray` stubs above.
                 class_mirror: &|unit, index| class_of(&classes, &units, unit).class_name(index).map(|_| 1),
+                // The `ldc "…"` stub, and an upper bound for the same reason: **any
+                // `CONSTANT_String`** resolves, where a running VM would additionally require the
+                // literal to be in the pool already. What it can be at all is FZ-008's doing — the
+                // pool is one instance per literal, in Old, a GC root and pinned, so a literal has
+                // a permanent address to bake.
+                string_literal: &|unit, index| {
+                    class_of(&classes, &units, unit).string_constant(index).map(|_| 1)
+                },
                 poll_word: poll,
             },
         );
@@ -2127,6 +2172,7 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
                 int_element: 4,
             },
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &JIT_GC_POLL as *const _ as usize,
         },
     )
@@ -2361,6 +2407,7 @@ fn compile_newarray(
                 int_element: array_operations::array_element_width("[I") as u32,
             },
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &JIT_GC_POLL as *const _ as usize,
         },
     )

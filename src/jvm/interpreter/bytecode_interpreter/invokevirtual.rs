@@ -500,8 +500,12 @@ impl Exec<'_> {
         class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, mh);
         let handle = objects_operations::allocate_old(&mut self.shared.metaspace, &mut self.shared.heap, mh);
 
-        let name_ref = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, name);
-        let desc_ref = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, descriptor);
+        // Synthesised for a reflective object, not read out of a constant pool. Pooling them
+        // would make `m.getName() == m.getName()` answer `true` here and `false` on a real JDK —
+        // a difference in the wrong direction, invented by an optimisation nobody asked for.
+        let name_ref = strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, name);
+        let desc_ref =
+            strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, descriptor);
         let owner_off = objects_operations::field_offset(&mut self.shared.metaspace, mh, "owner");
         let name_off = objects_operations::field_offset(&mut self.shared.metaspace, mh, "name");
         let desc_off = objects_operations::field_offset(&mut self.shared.metaspace, mh, "descriptor");
@@ -520,7 +524,9 @@ impl Exec<'_> {
         let mt = "java/lang/invoke/MethodType";
         class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, mt);
         let object = objects_operations::allocate_old(&mut self.shared.metaspace, &mut self.shared.heap, mt);
-        let desc_ref = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, descriptor);
+        // Synthesised, not read out of a constant pool — see the `MethodHandle` case above.
+        let desc_ref =
+            strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, descriptor);
         let desc_off = objects_operations::field_offset(&mut self.shared.metaspace, mt, "descriptor");
         self.shared.heap.store_reference(object, object + desc_off, desc_ref);
         object

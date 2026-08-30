@@ -357,6 +357,18 @@ pub struct MetaspaceService {
     /// belongs to the class's id. HotSpot keeps a class's statics in its mirror on
     /// the heap; this map locates that mirror so `getstatic`/`putstatic` (and the
     /// GC) can reach the statics. Filled during Preparation when the class loads.
+    /// **The string pool** (JLS §3.10.5): one `java.lang.String` instance per distinct literal,
+    /// keyed by its UTF-16 code units.
+    ///
+    /// It lives here rather than in the heap because the heap is a byte arena with no notion of
+    /// what a String is, and because the collector already reaches the metaspace to walk the class
+    /// mirrors — so the pool gets to be a GC root and a pinned block by the same route the mirrors
+    /// use, instead of inventing a third one.
+    ///
+    /// **Only literals go in.** A String the program *computes* — a runtime concatenation, a
+    /// `new String(…)`, `String.valueOf` — must stay a distinct object, which is the other half of
+    /// §3.10.5 and the reason `strings::allocate` exists beside `strings::intern`.
+    interned: HashMap<Vec<u16>, usize>,
     class_objects: HashMap<String, usize>,
     /// The reverse of [`Self::class_objects`], composed with [`Self::names_by_id`]: **mirror
     /// heap offset → binary name**. Every object's header carries its class's *mirror offset*
@@ -464,6 +476,7 @@ impl MetaspaceService {
             methods: Vec::new(),
             resolved: HashMap::new(),
             resolved_calls: HashMap::new(),
+            interned: HashMap::new(),
             class_objects: HashMap::new(),
             mirror_names: HashMap::new(),
             class_ids: HashMap::new(),
@@ -796,6 +809,27 @@ impl MetaspaceService {
     /// The whole mirror index as `(Class ID, class name, offset)` rows, sorted by
     /// offset. The map is keyed by Class ID; each id is resolved back to its name
     /// (via the reverse index) for display. For tooling labelling the heap.
+    /// The pooled `String` for these code units, if it has been created.
+    pub fn interned_string(&self, units: &[u16]) -> Option<usize> {
+        self.interned.get(units).copied()
+    }
+
+    /// Records the pooled `String` for these code units. Called once per distinct literal.
+    pub fn set_interned_string(&mut self, units: Vec<u16>, offset: usize) {
+        self.interned.insert(units, offset);
+    }
+
+    /// Every pooled `String`, for the collector.
+    ///
+    /// Two things depend on this and they are different: the pool must be a **root** (a literal is
+    /// reachable from nowhere else between two `ldc`s of it, so without this the first collection
+    /// frees it and the next `ldc` hands back a dead offset) and it must be **pinned** (a moved
+    /// literal would leave every reference to it dangling, and unlike an ordinary object there is
+    /// no second copy of the identity to restore).
+    pub fn interned_offsets(&self) -> Vec<usize> {
+        self.interned.values().copied().collect()
+    }
+
     pub fn class_object_offsets(&self) -> Vec<(&str, &str, usize)> {
         let mut rows: Vec<(&str, &str, usize)> = self
             .class_objects

@@ -1120,11 +1120,15 @@ pub fn dispatch(
             let count = int(&args[2]) as usize;
             let units: Vec<u16> =
                 (0..count).map(|i| heap.read_u16(array + ARRAY_HEADER + (start + i) * 2)).collect();
-            // Interned as UNITS, not through a Rust `String`. Going through one would be lossy in
-            // a way Java can observe: `from_utf16_lossy` turns an unpaired surrogate into U+FFFD,
-            // and a `char[]` is allowed to hold one. `new String(chars).charAt(0)` must answer
-            // 0xD800 when that is what was put in.
-            Some(Value::Reference(strings::intern_units(metaspace, heap, &units)))
+            // **Allocated, not pooled**: this is a String the program *computes* out of a
+            // `char[]`, so it is a distinct object even when its contents equal a literal — which
+            // is what makes `new String("a") == "a"` false, as JLS 3.10.5 requires.
+            //
+            // By UNITS, not through a Rust `String`. Going through one would be lossy in a way
+            // Java can observe: `from_utf16_lossy` turns an unpaired surrogate into U+FFFD, and a
+            // `char[]` is allowed to hold one. `new String(chars).charAt(0)` must answer 0xD800
+            // when that is what was put in.
+            Some(Value::Reference(strings::allocate_units(metaspace, heap, &units)))
         }
 
         // The CAS primitive (H5) — the atomic root of every lock-free counter. Compare the

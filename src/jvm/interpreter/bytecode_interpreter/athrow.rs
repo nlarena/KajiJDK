@@ -181,6 +181,13 @@ impl Exec<'_> {
         use std::fmt::Write;
         let thread_name = self.current_thread_name();
         let dotted = exc_class.replace('/', ".");
+        // FZ-001. Slot 0 is the entry thread — `run_os_threaded` and `run_os_parallel` both move
+        // its frames there before handing the state off — and its death is the one that decides
+        // the program's exit status. `is_none()` keeps the **first** class: the exception that
+        // killed the thread, not whatever a later one reports.
+        if self.running.current == 0 && self.shared.uncaught_entry.is_none() {
+            self.shared.uncaught_entry = Some(dotted.clone());
+        }
         // Both fields are read by a name the VM chose, so both are optional: the report degrades
         // to just the class name rather than taking the VM down with it.
         let msg_off =
@@ -332,12 +339,20 @@ impl Exec<'_> {
         };
         let trace = self.render_backtrace();
         self.top().push(Value::Reference(exception));
-        let interned = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &trace);
+        // Rendered here, so a fresh object rather than a pooled one — two exceptions thrown from
+        // the same place must not share a backtrace String.
+        let interned = strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, &trace);
         let exception = match self.top().pop() {
             Value::Reference(offset) => offset,
             _ => exception,
         };
-        self.shared.heap.write_u32(exception + off, interned as u32);
+        // Through the gateway, not `write_u32`. This is a **reference** store, and
+        // [`HeapService::store_reference`] is documented as the one place they all go so the write
+        // barrier cannot be forgotten. Today the barrier would not fire here — `strings::intern`
+        // allocates in Old, so there is no Old→young edge to remember — but that is a fact about
+        // where the interning table happens to live, not about this line, and an invariant that
+        // holds by coincidence is one that breaks the day the coincidence does.
+        self.shared.heap.store_reference(exception, exception + off, interned);
         exception
     }
 

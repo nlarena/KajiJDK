@@ -77,6 +77,7 @@ fn compile_shaped(
             invoke: &|_, _, _| None,
             heap,
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word,
         },
     )
@@ -267,6 +268,7 @@ fn compile_long(
             invoke: &|_, _, _| None,
             heap: Heap::default(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -1138,6 +1140,7 @@ fn getstatic_reads_the_live_four_bytes_at_the_address_it_was_given() {
             invoke: &|_, _, _| None,
             heap: Heap::default(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -1333,6 +1336,7 @@ fn compile_instance(
             invoke: &|_, _, _| None,
             heap,
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -1636,6 +1640,7 @@ fn a_body_with_exception_handlers_refuses_a_conflict_rather_than_carrying_one() 
                 invoke: &|_, _, _| None,
                 heap: heap.bases(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
         )
@@ -1751,6 +1756,7 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
                 },
                 heap: heap.bases(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
         )
@@ -1903,6 +1909,7 @@ fn a_method_with_exception_handlers_still_compiles_but_is_never_entered_on_stack
                 invoke: &|_, _, _| None,
                 heap: Heap::default(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
         )
@@ -1960,6 +1967,7 @@ fn compile_static(
             invoke: &|_, _, _| None,
             heap,
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -2213,6 +2221,7 @@ fn compile_alloc(
             invoke: &|_, _, _| None,
             heap,
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -2403,6 +2412,7 @@ fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
             invoke: &|_, _, _| None,
             heap: heap.bases(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     );
@@ -2467,6 +2477,7 @@ fn compile_at(
             invoke: &|_, _, _| None,
             heap: Heap::default(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
         regs,
@@ -2656,6 +2667,7 @@ fn a_guard_never_writes_a_home_register_before_it_can_still_fire() {
                 invoke: &|_, _, _| None,
                 heap: heap.bases(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
             regs,
@@ -2729,6 +2741,7 @@ fn every_heap_opcode_agrees_at_every_cache_size_and_every_depth() {
                     invoke: &|_, _, _| None,
                     heap: bases,
                     class_mirror: &|_, _| None,
+                    string_literal: &|_, _| None,
                     poll_word: &POLL as *const _ as usize,
                 },
                 regs,
@@ -2903,6 +2916,7 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
                 }),
                 heap: heap.bases(),
                 class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
             },
             regs,
@@ -3262,6 +3276,7 @@ fn a_long_crossing_a_safepoint_poll_is_the_locals_buffer_and_nothing_else() {
             invoke: &|_, _, _| None,
             heap: Heap::default(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &WORD as *const _ as usize,
         },
     )
@@ -3368,6 +3383,7 @@ fn compile_long_heap(
             invoke: &|_, _, _| None,
             heap,
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -3490,6 +3506,7 @@ fn the_resolver_decides_the_width_and_a_kind_mismatch_is_refused() {
             invoke: &|_, _, _| None,
             heap: heap.bases(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     );
@@ -3564,6 +3581,7 @@ fn compile_fp(
             invoke: &|_, _, _| None,
             heap: Heap::default(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -3848,6 +3866,7 @@ fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
             invoke: &|_, _, _| None,
             heap: heap.bases(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -3872,6 +3891,7 @@ fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
             invoke: &|_, _, _| None,
             heap: heap.bases(),
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -3932,6 +3952,7 @@ fn compile_array(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) -
             invoke: &|_, _, _| None,
             heap,
             class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
@@ -4186,6 +4207,7 @@ fn compile_group2(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             class_mirror: &|_, _| mirror,
+            string_literal: &|_, _| None,
             heap,
             poll_word: &POLL as *const _ as usize,
         },
@@ -4429,6 +4451,7 @@ fn instanceof_agrees_at_every_cache_size_and_every_depth() {
                     invoke: &|_, _, _| None,
                     heap: bases,
                     class_mirror: &|_, _| Some(MIRROR),
+                    string_literal: &|_, _| None,
                     poll_word: &POLL as *const _ as usize,
                 },
                 regs,

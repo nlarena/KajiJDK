@@ -40,7 +40,12 @@
 //!
 //! Three rules, all structural:
 //!
-//! - the only loop is `for (int i = 0; i < K; i++)` with **K a literal**, never an expression;
+//! - the only *counted* loop is `for (int i = 0; i < K; i++)` with **K a literal**, never an
+//!   expression. A `while` is allowed too, but only carrying a **guard counter**:
+//!   `while (g++ < K && cond)`, with `K` a literal and the increment in the condition itself. The
+//!   guard is tested **first**, so it runs at most `K` times whatever `cond` does — and because
+//!   `continue` re-tests the condition, it increments the guard too. That is what keeps `while`
+//!   inside the same structural argument as `for` instead of trading it for a timeout;
 //! - the loop variable is added to the scope as **readable but not assignable**, so a body cannot
 //!   reset the counter and run forever. This is the rule that is easy to forget and fatal to omit;
 //! - method `k` may only call methods `0..k`, so the call graph is a DAG and recursion is
@@ -104,9 +109,12 @@
 //!
 //! # Objects, and the one thing that is actually being tested
 //!
-//! `new`, `getfield`, `putfield` and `invokevirtual` are in the grammar, over a **fixed four-class
-//! hierarchy** ([`ObjClass`]) the program carries with it. All four instructions are inside the
-//! JIT's subset, which makes this the first stage that costs no coverage by construction rather
+//! `new`, `getfield`, `putfield`, `invokevirtual`, `invokeinterface`, `checkcast` and `instanceof`
+//! are in the grammar, over a **fixed hierarchy** ([`ObjClass`]) the program carries with it: four
+//! classes under one interface, with an `int`, a `long` and a **reference** field.
+//! A local declared as the interface reaches the last of those — same inline cache, but resolved by
+//! searching an itable instead of indexing a vtable slot. All five instructions are inside the JIT's
+//! subset, which makes this the first stage that costs no coverage by construction rather
 //! than by measurement — though it is measured anyway, in
 //! `fuzz::campaigns::jit_coverage::what_each_grammar_setting_costs_in_jit_coverage`.
 //!
@@ -143,18 +151,13 @@
 //!
 //! | left out | why |
 //! |---|---|
-//! | interface dispatch | `invokeinterface` shares the JIT's inline-cache path with `invokevirtual` but resolves through an itable rather than a vtable, so it is a genuinely different lookup. It needs an interface-typed local, which is a second static type in [`Scope`]; the next step, not this one |
-//! | reference **fields** | a `putfield` of a reference needs the GC's write barrier, which this JIT tier answers `Ineligible` for. Every method touching one would leave the compiled arm — FZ-004 wearing the write barrier's hat. The first thing to add when the barrier lands |
 //! | multi-dimensional arrays | `multianewarray` is outside the JIT's subset "and not narrowly" (`burst::compile`); a one-dimensional array already reaches every guard worth reaching |
-//! | `null` **arrays** | the deopt path is now covered by a `null` *receiver* ([`Stmt::NewObject`]), which reaches the same guard from a place the grammar can already express. An array variable that may be `null` needs a reference type in [`Ty`], and objects deliberately avoided that — see below |
-//! | strings | `jvm::interpreter::strings` is being given its interning table **right now**, so the expected answer to a string comparison is the thing in flux. Generating them today would manufacture divergences nobody could classify. The first thing to add once that lands |
+//! | `null` **arrays** | the deopt path is covered by a `null` *receiver* ([`Stmt::NewObject`]), which reaches the same guard from a place the grammar can already express. An array variable that may be `null` needs a reference type in [`Ty`], and objects deliberately avoided that |
 //! | NaN **payloads** | the one corner of IEEE that Java leaves implementation-defined; [`emit_classifier`] collapses every NaN to one code deliberately |
-//! | `char`, `byte`, `short`, `boolean` locals | narrowing conversions are a real bug source, but they multiply the type context before it has earned it |
-//! | `while`, `do`, `break`, `continue`, labels | none of them can be bounded structurally the way a counted `for` can |
+//! | locals of type `char`, `byte`, `short`, `boolean` | the narrowing *conversions* are generated ([`NarrowTy`]), which is where the truncation bugs are; declaring locals of those types multiplies the type context without adding a failure mode |
+//! | `do`/`while`, labelled `break`/`continue` | the loop forms that are generated carry a structural termination argument ([`Stmt::While`]); a label lets control leave a loop the argument was written about |
 //! | recursion | see property 3 |
-//! | `switch`, ternary chains on non-`int` conditions, `instanceof` | grammar breadth, no new failure mode |
-//! | explicit `throw` | the total wrapper already exercises every path a real exception takes |
-//! | threads | the whole reason FZ-002 wants a fuzzer, and a level of its own |
+//! | **races** a deterministic program cannot have | threads themselves are generated ([`Stmt::Fork`]), but the shape is rigid on purpose so the answer stays fixed, and a shape that is deterministic can only expose a race that **breaks** determinism. That is the right class for a VM bug (a stale reference under GC gives a different answer) and not for a program-level interleaving, which the grammar declines to express |
 
 use std::fmt::Write as _;
 
@@ -212,10 +215,14 @@ pub mod marks {
 
     /// A program whose only observable was `"a" == "a"`, and it was `false` — **a bug**.
     ///
-    /// Reserved for the day strings enter the grammar. Since F3 hito 3, `strings::intern` is a real
-    /// JLS §3.10.5 pool (one instance per literal, `malloc_old`ed, a GC root, pinned out of
-    /// `gc::compact`), so a conforming answer here is [`STRING_IDENTITY_TRUE`] and this marker means
-    /// the pool was bypassed or the literal moved. It used to be the *expected* answer on this VM,
+    /// Since **FZ-008** (2026-08-29) `strings::intern` is a real JLS §3.10.5 pool — one instance
+    /// per literal, `malloc_old`ed, a GC root and pinned out of `gc::compact` — so a conforming
+    /// answer here is [`STRING_IDENTITY_TRUE`], and this marker now means the pool was bypassed or
+    /// the literal moved. **The same sentence was written here once before and was not true**: the
+    /// pool had not landed, and the probe that should have said so was being folded away by `javac`
+    /// (FZ-009). It is true now, and the tests that hold it are
+    /// `jvm::interpreter::gc::tests::a_pooled_literal_*`. It used to be the *expected* answer on
+    /// this VM,
     /// suppressed by an entry in the oracle's known-divergence list; that entry is gone, and the
     /// pair is now reported like any other divergence — see [`super::super::oracle`].
     ///
@@ -638,6 +645,17 @@ pub enum Field {
 }
 
 impl Field {
+    /// The field of this type, if the hierarchy has one — `int a`, or `long b` when the wide half
+    /// is enabled. `None` for the floating types: the hierarchy has no floating half, and inventing
+    /// one to satisfy a read would widen the stage past what it is for.
+    fn of_ty(ty: Ty, wide: bool) -> Option<Field> {
+        match ty {
+            Ty::Int => Some(Field::A),
+            Ty::Long if wide => Some(Field::B),
+            _ => None,
+        }
+    }
+
     fn name(self) -> &'static str {
         match self {
             Field::A => "a",
@@ -684,6 +702,30 @@ impl VMethod {
 ///
 /// Every variant carries enough to answer [`Expr::ty`] without a symbol table, which is what lets
 /// the reducer rewrite a subtree and immediately know whether the result still type-checks.
+/// The exception an explicit `throw` raises.
+///
+/// Only classes the total wrapper already catches by name, so a `throw` lands on a **mark** the
+/// two engines can compare. Throwing something the wrapper only caught as `Throwable` would still
+/// terminate, but it would collapse four distinguishable outcomes into one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ThrownExc {
+    Arithmetic,
+    Bounds,
+    NegativeSize,
+    NullPointer,
+}
+
+impl ThrownExc {
+    fn class(self) -> &'static str {
+        match self {
+            ThrownExc::Arithmetic => "ArithmeticException",
+            ThrownExc::Bounds => "ArrayIndexOutOfBoundsException",
+            ThrownExc::NegativeSize => "NegativeArraySizeException",
+            ThrownExc::NullPointer => "NullPointerException",
+        }
+    }
+}
+
 /// The width an `int` can be truncated to and read back from: `i2b`, `i2s` and `i2c`.
 ///
 /// These are **not** new [`Ty`]s, and that is the whole design. Java's binary numeric promotion
@@ -760,10 +802,17 @@ pub enum StrProbe {
     Identity(Box<StrExpr>),
     /// `a == b ? 1 : 0` — equality by **reference**.
     ///
-    /// This is the probe that earns the stage. `"a" == "a"` spent time on the oracle's
-    /// known-divergence list as an accepted difference, and turned out to be a non-conformance with
-    /// JLS §3.10.5: literals must be interned. The interning table landed; a suppressed check is
-    /// exactly how that regression would come back without anyone noticing.
+    /// This is the probe that earns the stage, and it took two tries to make it earn anything.
+    /// `"a" == "a"` spent time on the oracle's known-divergence list as an accepted difference and
+    /// turned out to be a non-conformance with JLS §3.10.5: literals must be interned. The
+    /// suppression was removed **on the strength of a claim that the interning table had landed**,
+    /// and it had not — `strings::intern` still `malloc`s a fresh object per `ldc`, which its own
+    /// module header says plainly.
+    ///
+    /// The campaign did not catch that, because this probe used to be emitted **inline** and
+    /// `javac` folds `("a" == "a")` to `true` before the VM sees a single `ldc`. So the check ran
+    /// against the compiler's constant folder and reported agreement. It goes through `ssame` now
+    /// — see [`emit_str_probe`] — and finds it: FZ-008.
     Same(Box<StrExpr>),
 }
 
@@ -822,6 +871,19 @@ pub enum Expr {
     /// `o.a` — a `getfield` on the object local named here. Throws a `NullPointerException` when
     /// the receiver is `null`, which in compiled code is a **deopt**, not a throw.
     Field(String, Field),
+    /// `o.c.a` / `o.c.b` — a read **through** the reference field: a `getfield` of a reference,
+    /// then a `getfield` of a primitive on whatever it landed on.
+    ///
+    /// Depth one and no deeper: a second hop exercises the same two opcodes.
+    ///
+    /// **The constructor initialises `c` to `this`**, so a chain on a fresh object reads fine. That
+    /// was not the first design — leaving the field `null` made the null receiver free, which is a
+    /// deopt on the compiled arm and looked like a bonus. It was measured instead of assumed:
+    /// **41 of 80 seeds died on an exception marker** against 9 for the default grammar, because
+    /// every chain threw on warm-up iteration 1. That is FZ-005 exactly, so the receiver is live by
+    /// default and `null` is reached the way everything else in this grammar is reached — by a
+    /// statement that puts it there ([`Stmt::RefStore`] with `None`).
+    ThroughRef(String, Field),
     /// `o.v()` — an `invokevirtual` on the object local named here.
     ///
     /// **The point of this whole stage.** The JIT gives every dispatched call site an inline cache:
@@ -847,6 +909,9 @@ impl Expr {
             Expr::Cast(to, _) => *to,
             Expr::Ternary(_, then, _) => then.ty(),
             Expr::Call(_, _, ty) => *ty,
+            // The same type as the field it ends on: the reference hop is plumbing, the read is
+            // what produces the value.
+            Expr::ThroughRef(_, field) => field.ty(),
             Expr::Classify(_)
             | Expr::ArrayLength(_)
             | Expr::Str(_, _)
@@ -880,6 +945,7 @@ impl Expr {
             | Expr::DoubleLit(_)
             | Expr::ArrayLength(_)
             | Expr::Field(_, _)
+            | Expr::ThroughRef(_, _)
             | Expr::Virtual(_, _)
             | Expr::Var(_, _) => 1,
             Expr::Neg(inner)
@@ -914,6 +980,7 @@ impl Expr {
             | Expr::DoubleLit(_)
             | Expr::ArrayLength(_)
             | Expr::Field(_, _)
+            | Expr::ThroughRef(_, _)
             | Expr::Virtual(_, _)
             | Expr::Var(_, _) => false,
             Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) | Expr::ArrayLoad(_, _, a) => {
@@ -989,6 +1056,19 @@ pub enum Stmt {
     /// *adds* compiled coverage instead of costing it — the exact opposite of the narrowing that
     /// shares its milestone.
     Switch { selector: Expr, arms: Vec<SwitchArm>, default: Option<Block> },
+    /// `int g = 0; while (g++ < limit && cond) { … }`.
+    ///
+    /// The guard is not decoration: it is what lets an **arbitrary** condition into the grammar
+    /// without giving up termination. `limit` is a literal and `guard` goes into the body's scope
+    /// **not assignable**, the same two rules that make the counted `for` safe.
+    While { guard: String, limit: i32, cond: Cond, body: Block },
+    /// `break;` — only ever generated inside a loop body.
+    Break,
+    /// `continue;` — likewise. It re-tests the condition, which is where the guard increments, so
+    /// it cannot be used to spin forever.
+    Continue,
+    /// `throw new X();` — the one way out of a method that is not a `return`.
+    Throw(ThrownExc),
     /// `for (int <var> = 0; <var> < <bound>; <var>++)`. `bound` is a literal, never an expression,
     /// and `var` is never assignable inside `body` — the two rules that make termination structural.
     For { var: String, bound: i32, body: Block },
@@ -1019,7 +1099,67 @@ pub enum Stmt {
     /// `putfield` and `invokevirtual` on `null` all **deopt** out of compiled code rather than
     /// throwing in it. It is drawn rarely — see [`GenConfig::null_share`] and FZ-005 for what
     /// happens to a campaign when programs die before the JIT has looked at them.
-    NewObject { name: String, class: Option<ObjClass>, arg: Expr },
+    /// `iface` decides the **declared** type of the new local: the interface or the base class.
+    /// The value is the same either way; what changes is which opcode a call on it becomes.
+    NewObject { name: String, class: Option<ObjClass>, arg: Expr, iface: bool },
+    /// `int t = (o instanceof …S1) ? 1 : 0;` or `int v = (((…S1) o).a);` — the **type test** and
+    /// the **cast**, the same question asked the two ways the JVM asks it.
+    ///
+    /// `instanceof` never throws — `null instanceof X` is `false` by JLS §15.20.2, not a
+    /// `NullPointerException` — while a `checkcast` to the wrong class throws
+    /// `ClassCastException`, which is the one code in [`marks`] that was written down and
+    /// unreachable until this node existed. In compiled code the failing cast is a **deopt** rather
+    /// than a throw, so the two arms reach the same answer by different routes.
+    ///
+    /// **A statement rather than an expression**, and for a reason that is about the emitter and
+    /// not about Java: naming the target class needs the program's prefix, which `emit_stmt` has
+    /// and `emit_expr` does not — threading it through 33 call sites to save a local would have
+    /// been a wide change for no coverage. The result lands in an ordinary local, so the rest of
+    /// the grammar reads it with the machinery that already exists.
+    TypeProbe { name: String, obj: String, class: ObjClass, cast: Option<Field> },
+    /// `o.c = p;` or `o.c = null;` — a **`putfield` of a reference**.
+    ///
+    /// The only statement in this grammar that builds an edge from one heap object to another, and
+    /// the reason it is worth its own knob: an Old object holding a young pointer is exactly what
+    /// the GC's **write barrier** and remembered set exist for, and it is the shape of the field in
+    /// FZ-002's report. Nothing else the generator emits can construct one.
+    ///
+    /// `None` writes `null`, which is not a filler case: it is how a chain that read fine on one
+    /// iteration reads `null` on the next.
+    RefStore { obj: String, value: Option<String> },
+    /// **The parallel site.** `K` worker threads, each computing one `int` into **its own** slot of
+    /// a shared array, joined, and reduced in a fixed order into [`Fork::acc`].
+    ///
+    /// The shape is rigid, and it has to be: property 2 says a generated program is deterministic,
+    /// and concurrency is the one thing in this grammar that could break it. Three independent
+    /// reasons keep it:
+    ///
+    /// 1. every worker writes **only** its own slot, so there is no write race to have an order;
+    /// 2. every `join` happens before **any** read of the array, so nothing is read in flight;
+    /// 3. the final reduction walks the array in index order, so **which thread finished first
+    ///    cannot be observed**.
+    ///
+    /// A fourth rule keeps it comparable rather than merely deterministic: each worker catches its
+    /// own exceptions into a marker in its slot. An exception escaping a worker thread is legal and
+    /// deterministic, but it prints an uncaught report that the two sides classify differently —
+    /// the reference JDK reads its own stderr and would answer `Threw` where we answer `Returned`.
+    /// That is a divergence manufactured by the harness, not found by it.
+    Fork {
+        /// The `int[]`, one slot per worker.
+        slots: String,
+        /// The `…W[]` holding the threads.
+        threads: String,
+        /// The loop variable. One name for all three loops: each `for` scopes its own.
+        counter: String,
+        /// Where the joined slots reduce to. An ordinary `int` local afterwards.
+        acc: String,
+        /// The two `int`s handed to every worker **at construction**, so they are read in the
+        /// enclosing scope before any thread starts.
+        args: (Expr, Expr),
+        /// One body per worker, over `k`, `a`, `b` and what it declares itself — never over the
+        /// enclosing method's locals, which the worker object cannot see.
+        bodies: Vec<ForkBody>,
+    },
     /// `<name> = new <class><cls>(<arg>);` — the same, on a name that already exists.
     ///
     /// Separate from [`Stmt::NewObject`] because only this one can appear **inside a loop over a
@@ -1031,21 +1171,67 @@ pub enum Stmt {
 }
 
 impl Stmt {
+    /// Whether this statement always leaves its block — `break`, `continue`, `throw`, or an `if`
+    /// or `switch` whose every path does.
+    ///
+    /// Java rejects a statement that cannot be reached (JLS 14.21), so anything after one of these
+    /// is a compile error rather than a program. This is a **conservative approximation** of that
+    /// rule, not an implementation of it: the real one is famously fiddly, and getting it wrong in
+    /// the cautious direction costs a slightly smaller program, while getting it wrong in the other
+    /// direction costs an unusable seed. Both are visible; only one is silent.
+    fn completes_abruptly(&self) -> bool {
+        match self {
+            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => true,
+            // Both arms, and an `else` that exists: with no `else`, the `if` can always fall
+            // through by taking the empty branch.
+            Stmt::If { then, otherwise, .. } => {
+                !otherwise.is_empty()
+                    && then.last().is_some_and(Stmt::completes_abruptly)
+                    && otherwise.last().is_some_and(Stmt::completes_abruptly)
+            }
+            // A `break` inside an arm leaves the **switch**, not the block, so it does not count
+            // here; only a `continue` or a `throw` does. And without a `default` the whole
+            // statement can be skipped.
+            Stmt::Switch { arms, default, .. } => {
+                let leaves = |b: &Block| {
+                    matches!(b.last(), Some(Stmt::Continue | Stmt::Throw(_)))
+                        || b.last().is_some_and(|s| {
+                            !matches!(s, Stmt::Break) && s.completes_abruptly()
+                        })
+                };
+                default.as_ref().is_some_and(leaves) && arms.iter().all(|a| leaves(&a.body))
+            }
+            _ => false,
+        }
+    }
+
     pub fn size(&self) -> usize {
         match self {
             Stmt::Declare { init, .. } => 1 + init.size(),
             Stmt::Assign { expr, .. } => 1 + expr.size(),
             Stmt::If { cond, then, otherwise } => 1 + cond.size() + then.size() + otherwise.size(),
+            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => 1,
+            Stmt::While { cond, body, .. } => 1 + cond.size() + body.size(),
             Stmt::Switch { selector, arms, default } => {
                 1 + selector.size()
                     + arms.iter().map(|a| a.body.size()).sum::<usize>()
                     + default.as_ref().map_or(0, Block::size)
             }
             Stmt::For { body, .. } => 1 + body.size(),
-            Stmt::NewArray { .. } => 1,
+            Stmt::NewArray { .. } | Stmt::RefStore { .. } | Stmt::TypeProbe { .. } => 1,
             Stmt::ArrayStore { index, value, .. } => 1 + index.size() + value.size(),
             Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => 1 + arg.size(),
             Stmt::FieldStore { value, .. } => 1 + value.size(),
+            Stmt::Fork { args, bodies, .. } => {
+                1 + args.0.size()
+                    + args.1.size()
+                    + bodies
+                        .iter()
+                        .map(|w| {
+                            w.result.size() + w.block.iter().map(Stmt::size).sum::<usize>()
+                        })
+                        .sum::<usize>()
+            }
         }
     }
 
@@ -1058,18 +1244,29 @@ impl Stmt {
                     || then.iter().any(|s| s.classifies(ty))
                     || otherwise.iter().any(|s| s.classifies(ty))
             }
+            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => false,
+            Stmt::While { cond, body, .. } => {
+                cond.classifies(ty) || body.iter().any(|s| s.classifies(ty))
+            }
             Stmt::Switch { selector, arms, default } => {
                 selector.classifies(ty)
                     || arms.iter().any(|a| a.body.iter().any(|s| s.classifies(ty)))
                     || default.iter().flatten().any(|s| s.classifies(ty))
             }
             Stmt::For { body, .. } => body.iter().any(|s| s.classifies(ty)),
-            Stmt::NewArray { .. } => false,
+            Stmt::NewArray { .. } | Stmt::RefStore { .. } | Stmt::TypeProbe { .. } => false,
             Stmt::ArrayStore { index, value, .. } => {
                 index.classifies(ty) || value.classifies(ty)
             }
             Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => arg.classifies(ty),
             Stmt::FieldStore { value, .. } => value.classifies(ty),
+            Stmt::Fork { args, bodies, .. } => {
+                args.0.classifies(ty)
+                    || args.1.classifies(ty)
+                    || bodies.iter().any(|w| {
+                        w.result.classifies(ty) || w.block.iter().any(|s| s.classifies(ty))
+                    })
+            }
         }
     }
 }
@@ -1129,6 +1326,94 @@ pub struct JavaProgram {
 }
 
 impl JavaProgram {
+    /// Whether any [`StrProbe::Same`] survives, i.e. whether `ssame` has to be emitted.
+    ///
+    /// Emitted on demand for the same reason the classifiers are: a helper nobody calls is a
+    /// method the reducer cannot drop and a reader has to rule out.
+    fn compares_strings(&self) -> bool {
+        fn in_expr(e: &Expr) -> bool {
+            match e {
+                Expr::Str(StrProbe::Same(_), _) => true,
+                Expr::Str(_, _) => false,
+                Expr::Neg(a)
+                | Expr::Not(a)
+                | Expr::Cast(_, a)
+                | Expr::Narrow(_, a)
+                | Expr::Classify(a)
+                | Expr::ArrayLoad(_, _, a) => in_expr(a),
+                Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => in_expr(a) || in_expr(b),
+                Expr::Ternary(c, a, b) => in_cond(c) || in_expr(a) || in_expr(b),
+                Expr::Call(_, args, _) => args.iter().any(in_expr),
+                _ => false,
+            }
+        }
+        fn in_cond(c: &Cond) -> bool {
+            match c {
+                Cond::Cmp(_, a, b) => in_expr(a) || in_expr(b),
+                Cond::And(a, b) | Cond::Or(a, b) => in_cond(a) || in_cond(b),
+                Cond::Not(a) => in_cond(a),
+            }
+        }
+        fn in_block(b: &Block) -> bool {
+            b.iter().any(|s| match s {
+                Stmt::Declare { init, .. } => in_expr(init),
+                Stmt::Assign { expr, .. } => in_expr(expr),
+                Stmt::If { cond, then, otherwise } => {
+                    in_cond(cond) || in_block(then) || in_block(otherwise)
+                }
+                Stmt::While { cond, body, .. } => in_cond(cond) || in_block(body),
+                Stmt::For { body, .. } => in_block(body),
+                Stmt::Switch { selector, arms, default } => {
+                    in_expr(selector)
+                        || arms.iter().any(|a| in_block(&a.body))
+                        || default.as_ref().is_some_and(|d| in_block(d))
+                }
+                Stmt::ArrayStore { index, value, .. } => in_expr(index) || in_expr(value),
+                Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => in_expr(arg),
+                Stmt::FieldStore { value, .. } => in_expr(value),
+                // A worker body cannot contain one — `Scope::foreign` forbids it, because `ssame`
+                // is emitted unqualified and does not resolve from another class.
+                Stmt::Fork { args, .. } => in_expr(&args.0) || in_expr(&args.1),
+                Stmt::NewArray { .. }
+                | Stmt::RefStore { .. }
+                | Stmt::TypeProbe { .. }
+                | Stmt::Break
+                | Stmt::Continue
+                | Stmt::Throw(_) => false,
+            })
+        }
+        let methods = self.methods.iter().chain(std::iter::once(&self.entry));
+        methods.into_iter().any(|m| in_block(&m.body) || in_expr(&m.result))
+    }
+
+    /// The bodies of the program's [`Stmt::Fork`], if it has one.
+    ///
+    /// Found by walking rather than stored, and there is **at most one** — the site is planted
+    /// once, like the dispatch probes. That is not a limitation waiting to be lifted: the worker
+    /// class carries the bodies in a `switch` over `k`, so two forks would need two classes, and
+    /// the reason to want a second one (more shapes) is served by more workers in the one there is.
+    fn fork_bodies(&self) -> Option<&[ForkBody]> {
+        fn find(block: &Block) -> Option<&[ForkBody]> {
+            for stmt in block {
+                let found = match stmt {
+                    Stmt::Fork { bodies, .. } => return Some(bodies),
+                    Stmt::If { then, otherwise, .. } => find(then).or_else(|| find(otherwise)),
+                    Stmt::For { body, .. } | Stmt::While { body, .. } => find(body),
+                    Stmt::Switch { arms, default, .. } => arms
+                        .iter()
+                        .find_map(|a| find(&a.body))
+                        .or_else(|| default.as_ref().and_then(|b| find(b))),
+                    _ => None,
+                };
+                if found.is_some() {
+                    return found;
+                }
+            }
+            None
+        }
+        find(&self.entry.body).or_else(|| self.methods.iter().find_map(|m| find(&m.body)))
+    }
+
     /// Total AST nodes. The number a reduction test watches go down.
     pub fn size(&self) -> usize {
         self.entry.size() + self.methods.iter().map(Method::size).sum::<usize>()
@@ -1183,10 +1468,32 @@ struct ObjUse {
     any: bool,
     /// A `long` field or the `long`-returning virtual, i.e. whether `b` and `w()` exist.
     wide: bool,
+    /// Whether the reference field [`REF_FIELD`] is used, and therefore emitted.
+    ///
+    /// On the same principle as `wide`: a field nobody reads is one the reducer cannot delete and a
+    /// human reading a minimal case has to rule out. It costs more than `b` does, besides — a
+    /// `putfield` of a reference takes its method out of the JIT's compiled subset entirely.
+    refs: bool,
 }
+
+/// The **reference** field of the hierarchy: `…B c`.
+///
+/// A constant rather than a third [`Field`] variant, and that is deliberate: every consumer of
+/// `Field` asks it for a [`Ty`], and `Ty` has no reference type — objects live in this grammar
+/// without their identity ever being observable, which is what keeps property 2 (determinism) true
+/// by absence rather than by rule. A `Field::C` would have made `Field::ty` a lie in one case and
+/// the compiler would not have caught it.
+const REF_FIELD: &str = "c";
 
 fn scan_stmt(stmt: &Stmt, used: &mut ObjUse) {
     match stmt {
+        Stmt::Break | Stmt::Continue | Stmt::Throw(_) => {}
+        Stmt::While { cond, body, .. } => {
+            scan_cond(cond, used);
+            for st in body {
+                scan_stmt(st, used);
+            }
+        }
         Stmt::Switch { selector, arms, default } => {
             scan_expr(selector, used);
             for st in arms.iter().flat_map(|a| a.body.iter()).chain(default.iter().flatten()) {
@@ -1201,6 +1508,19 @@ fn scan_stmt(stmt: &Stmt, used: &mut ObjUse) {
         }
         Stmt::For { body, .. } => body.iter().for_each(|s| scan_stmt(s, used)),
         Stmt::NewArray { .. } => {}
+        // Names two object locals and writes the reference field, so the hierarchy is used and `c`
+        // has to be emitted.
+        Stmt::RefStore { .. } => {
+            used.any = true;
+            used.refs = true;
+        }
+        Stmt::TypeProbe { class, cast, .. } => {
+            used.any = true;
+            // Naming a subclass in a cast or a test is a use of the hierarchy even when nothing is
+            // constructed, and a `long` field read through the cast pulls the wide half in.
+            let _ = class;
+            used.wide |= *cast == Some(Field::B);
+        }
         Stmt::ArrayStore { index, value, .. } => {
             scan_expr(index, used);
             scan_expr(value, used);
@@ -1213,6 +1533,18 @@ fn scan_stmt(stmt: &Stmt, used: &mut ObjUse) {
             used.any = true;
             used.wide |= *field == Field::B;
             scan_expr(value, used);
+        }
+        // The bodies **are** scanned, and getting this wrong would be silent: the hierarchy is
+        // emitted only when something uses it, so a worker that allocates a `…B` while this arm
+        // looked only at the constructor arguments would produce a program naming a class the file
+        // does not declare — on the threaded seeds alone.
+        Stmt::Fork { args, bodies, .. } => {
+            scan_expr(&args.0, used);
+            scan_expr(&args.1, used);
+            for worker in bodies {
+                worker.block.iter().for_each(|s| scan_stmt(s, used));
+                scan_expr(&worker.result, used);
+            }
         }
     }
 }
@@ -1243,6 +1575,11 @@ fn scan_expr(expr: &Expr, used: &mut ObjUse) {
             used.any = true;
             used.wide |= *field == Field::B;
         }
+        Expr::ThroughRef(_, field) => {
+            used.any = true;
+            used.refs = true;
+            used.wide |= *field == Field::B;
+        }
         Expr::Virtual(_, method) => {
             used.any = true;
             used.wide |= *method == VMethod::W;
@@ -1270,6 +1607,28 @@ impl Program for JavaProgram {
         &self.class
     }
 
+    /// A value is a marker when it is one of [`marks`]'s codes. They are deliberately far from
+    /// anything arithmetic produces by accident (`0x5AFE_000n`), so this is an exact test and not
+    /// a heuristic.
+    ///
+    /// With the wrapper catching **per iteration**, a marker in the returned value is now the
+    /// accumulator of *some* iteration having thrown rather than the whole program having stopped
+    /// — so this is checked against the accumulator's own seed value too: a program whose every
+    /// iteration threw returns `31·…·MARK`, not `MARK`. What it still catches exactly is the
+    /// warm-up of one, which is the shape of the seeds that do no work.
+    fn is_marker(&self, value: i32) -> bool {
+        [
+            marks::ARITHMETIC,
+            marks::BOUNDS,
+            marks::NULL,
+            marks::CLASS_CAST,
+            marks::STACK_OVERFLOW,
+            marks::NEGATIVE_SIZE,
+            marks::OTHER,
+        ]
+        .contains(&value)
+    }
+
     fn to_java(&self) -> String {
         let mut out = String::new();
         let _ = writeln!(out, "public class {} {{", self.class);
@@ -1278,6 +1637,9 @@ impl Program for JavaProgram {
         }
         if self.classifies(Ty::Double) {
             emit_classifier(&mut out, Ty::Double);
+        }
+        if self.compares_strings() {
+            emit_same_helper(&mut out);
         }
         for method in &self.methods {
             emit_method(&mut out, method, &self.class);
@@ -1290,34 +1652,55 @@ impl Program for JavaProgram {
         // accumulator, rather than simply keeping the last result, is so that a wrong answer on
         // *any* iteration reaches the return value: with a deopt in play, the iteration that runs
         // native and the iteration that runs last need not be the same one.
+        // **The catch is inside the loop, and that is the difference between a program that runs
+        // and one that stops on its first bad iteration.**
+        //
+        // Wrapped around the whole loop — which is how this was written until 2026-08-29 — one
+        // throw on warm-up iteration 1 ends the program, and what comes back is a bare marker. The
+        // rest of the iterations never happen, so the JIT never crosses its threshold and the
+        // entry method's arithmetic is never exercised. That is FZ-005's shape, and it was
+        // measured rather than suspected: with reference fields on, **41 of 80 seeds** died that
+        // way. Per iteration, a throw becomes a *value* in the accumulator and the loop keeps
+        // going, so a program that throws every time still returns something that depends on every
+        // iteration — and one that throws once is barely dented.
+        //
+        // Property 4 (totality) is unchanged: every path out of the loop body is caught, and the
+        // markers are the same ones.
         let _ = writeln!(out, "    static int run() {{");
-        let _ = writeln!(out, "        try {{");
-        let _ = writeln!(out, "            int acc = 0;");
+        let _ = writeln!(out, "        int acc = 0;");
+        let _ = writeln!(out, "        for (int w = 0; w < {}; w++) {{", self.warmup);
+        let _ = writeln!(out, "            int r;");
+        let _ = writeln!(out, "            try {{ r = {}(); }}", self.entry.name);
         let _ = writeln!(
             out,
-            "            for (int w = 0; w < {}; w++) {{ acc = ((acc * 31) + {}()); }}",
-            self.warmup, self.entry.name
-        );
-        let _ = writeln!(out, "            return acc;");
-        let _ = writeln!(out, "        }}");
-        let _ = writeln!(
-            out,
-            "        catch (ArithmeticException e) {{ return {}; }}",
+            "            catch (ArithmeticException e) {{ r = {}; }}",
             marks::ARITHMETIC
         );
         let _ = writeln!(
             out,
-            "        catch (ArrayIndexOutOfBoundsException e) {{ return {}; }}",
+            "            catch (ArrayIndexOutOfBoundsException e) {{ r = {}; }}",
             marks::BOUNDS
         );
         let _ = writeln!(
             out,
-            "        catch (NegativeArraySizeException e) {{ return {}; }}",
+            "            catch (NegativeArraySizeException e) {{ r = {}; }}",
             marks::NEGATIVE_SIZE
         );
         let _ =
-            writeln!(out, "        catch (NullPointerException e) {{ return {}; }}", marks::NULL);
-        let _ = writeln!(out, "        catch (Throwable t) {{ return {}; }}", marks::OTHER);
+            writeln!(out, "            catch (NullPointerException e) {{ r = {}; }}", marks::NULL);
+        // `marks::CLASS_CAST` was written down long before anything could produce it: no node in
+        // the grammar could fail a cast. `Stmt::TypeProbe` can, so the code stops being decoration
+        // — and without this catch it would arrive as `OTHER`, which is the same answer a bug in
+        // any other construct gives.
+        let _ = writeln!(
+            out,
+            "            catch (ClassCastException e) {{ r = {}; }}",
+            marks::CLASS_CAST
+        );
+        let _ = writeln!(out, "            catch (Throwable t) {{ r = {}; }}", marks::OTHER);
+        let _ = writeln!(out, "            acc = ((acc * 31) + r);");
+        let _ = writeln!(out, "        }}");
+        let _ = writeln!(out, "        return acc;");
         let _ = writeln!(out, "    }}");
         // `main` exists because the two sides are invoked differently: `run-headless` calls `run`
         // directly, a real `java` needs an entry point that prints what it got.
@@ -1331,10 +1714,82 @@ impl Program for JavaProgram {
         // engines find them the same way.
         let used = self.obj_use();
         if used.any {
-            emit_hierarchy(&mut out, &self.class, used.wide);
+            emit_hierarchy(&mut out, &self.class, used.wide, used.refs);
+        }
+        if let Some(bodies) = self.fork_bodies() {
+            emit_worker_class(&mut out, &self.class, bodies);
         }
         out
     }
+}
+
+/// The worker class of [`Stmt::Fork`], as Java: a `Thread` subclass whose `run` computes one
+/// `int` into its own slot.
+///
+/// **A named subclass rather than a lambda**, and that is a decision rather than a habit: a lambda
+/// compiles to `invokedynamic` plus a bootstrap through `LambdaMetafactory`, which would make every
+/// concurrent program depend on that machinery being right. This level is about threads; mixing in
+/// the one part of the class file with the most moving parts would make any finding ambiguous
+/// between the two.
+///
+/// **One class per program, with a `switch` over `k`**, because the workers differ only in what
+/// they compute. The `default` arm is not decoration: `javac` requires the local to be definitely
+/// assigned on every path, and a `switch` over `int` has no exhaustiveness to lean on.
+fn emit_worker_class(out: &mut String, prefix: &str, bodies: &[ForkBody]) {
+    let _ = writeln!(out, "class {prefix}W extends Thread {{");
+    let _ = writeln!(out, "    int[] s;");
+    let _ = writeln!(out, "    int k;");
+    let _ = writeln!(out, "    int a;");
+    let _ = writeln!(out, "    int b;");
+    let _ = writeln!(out, "    {prefix}W(int[] s, int k, int a, int b) {{");
+    let _ = writeln!(out, "        this.s = s; this.k = k; this.a = a; this.b = b;");
+    let _ = writeln!(out, "    }}");
+    let _ = writeln!(out, "    public void run() {{");
+    let _ = writeln!(out, "        int v;");
+    // The per-worker total wrapper. Without it an exception escaping a worker is still
+    // deterministic, but it reaches the two sides differently — a real `java` prints its own
+    // uncaught report and the runner reads the class off stderr, where ours returns a value — and
+    // the campaign would report a divergence it manufactured itself.
+    let _ = writeln!(out, "        try {{");
+    let _ = writeln!(out, "            switch (k) {{");
+    for (i, worker) in bodies.iter().enumerate() {
+        // Braces around every arm, always. A `switch` arm is not a scope of its own, so two arms
+        // that each declare a local would collide — and the collision would depend on what the
+        // generator happened to name things, which is the worst kind of intermittent.
+        let _ = writeln!(out, "                case {i}: {{");
+        for stmt in &worker.block {
+            emit_stmt(out, stmt, 5, prefix);
+        }
+        let mut e = String::new();
+        emit_expr(&mut e, &worker.result);
+        let _ = writeln!(out, "                    v = {e};");
+        let _ = writeln!(out, "                }} break;");
+    }
+    let _ = writeln!(out, "                default: v = 0; break;");
+    let _ = writeln!(out, "            }}");
+    let _ = writeln!(out, "        }} catch (Throwable t) {{ v = {}; }}", marks::OTHER);
+    let _ = writeln!(out, "        s[k] = v;");
+    let _ = writeln!(out, "    }}");
+    let _ = writeln!(out, "}}");
+}
+
+/// One worker's body: a block, then the `int` it leaves in its slot.
+///
+/// **A block and not just an expression**, and the difference is the whole point of the level. An
+/// expression of `int` arithmetic allocates nothing, so K threads of it put *no* pressure on the
+/// heap — and the bug this level exists to hunt (FZ-002: a stale reference under a collection with
+/// real parallelism) needs threads that allocate while other threads hold references. A block
+/// brings `new`, arrays, the object hierarchy and loops inside the worker, which is the difference
+/// between running K threads and running K threads that make the collector work.
+///
+/// The hierarchy is reachable from here precisely because it is emitted **beside** the public class
+/// rather than nested in it: `…B` is a top-level name, so a worker resolves it the same way the
+/// entry method does. What it still cannot reach are the program's own statics, which are emitted
+/// unqualified — see [`Scope::foreign`].
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ForkBody {
+    pub block: Block,
+    pub result: Expr,
 }
 
 /// The four classes of [`ObjClass`], as Java.
@@ -1346,16 +1801,37 @@ impl Program for JavaProgram {
 /// `wide` is [`ObjUse::wide`]: with it off there is no `long` anywhere in the hierarchy, including
 /// in the constructor, which is what keeps a `new` from taking its **caller** out of the JIT's
 /// subset along with it.
-fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool) {
-    let _ = writeln!(out, "class {prefix}B {{");
+fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool, refs: bool) {
+    // The interface exists for one opcode. `invokeinterface` walks the same inline cache as
+    // `invokevirtual` but resolves differently: a virtual call takes a slot fixed at the call site
+    // and indexes the receiver's vtable, while an interface call has no stable slot — each
+    // interface numbers its own methods — so it searches by signature. Declaring only `v()` is
+    // deliberate: an interface-typed local can then *only* dispatch, which is exactly the shape
+    // that isolates the itable lookup.
+    let _ = writeln!(out, "interface {prefix}I {{ int v(); }}");
+    let _ = writeln!(out, "class {prefix}B implements {prefix}I {{");
     let _ = writeln!(out, "    int a;");
+    if refs {
+        let _ = writeln!(out, "    {prefix}B {REF_FIELD};");
+    }
     if wide {
         let _ = writeln!(out, "    long b;");
-        let _ = writeln!(out, "    {prefix}B(int s) {{ this.a = s; this.b = (s * 1000003L); }}");
+        let _ = writeln!(
+            out,
+            "    {prefix}B(int s) {{ this.a = s; this.b = (s * 1000003L);{} }}",
+            if refs { " this.c = this;" } else { "" }
+        );
     } else {
-        let _ = writeln!(out, "    {prefix}B(int s) {{ this.a = s; }}");
+        let _ = writeln!(
+            out,
+            "    {prefix}B(int s) {{ this.a = s;{} }}",
+            if refs { " this.c = this;" } else { "" }
+        );
     }
-    let _ = writeln!(out, "    int v() {{ return (a + 1); }}");
+    // `public` because the interface declares it: an interface method is implicitly public, and an
+    // implementation may not reduce its visibility (JLS §8.4.8.3). `w()` is not in the interface
+    // and stays package-private.
+    let _ = writeln!(out, "    public int v() {{ return (a + 1); }}");
     if wide {
         let _ = writeln!(out, "    long w() {{ return (b - 1L); }}");
     }
@@ -1363,12 +1839,12 @@ fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool) {
 
     let _ = writeln!(out, "class {prefix}S0 extends {prefix}B {{");
     let _ = writeln!(out, "    {prefix}S0(int s) {{ super(s); }}");
-    let _ = writeln!(out, "    int v() {{ return (a * 3); }}");
+    let _ = writeln!(out, "    public int v() {{ return (a * 3); }}");
     let _ = writeln!(out, "}}");
 
     let _ = writeln!(out, "class {prefix}S1 extends {prefix}B {{");
     let _ = writeln!(out, "    {prefix}S1(int s) {{ super(s); }}");
-    let _ = writeln!(out, "    int v() {{ return (a - 7); }}");
+    let _ = writeln!(out, "    public int v() {{ return (a - 7); }}");
     if wide {
         let _ = writeln!(out, "    long w() {{ return (b * 2L); }}");
     }
@@ -1446,6 +1922,15 @@ fn classifier_name(ty: Ty) -> &'static str {
 ///    resolves the integer part of a result to the last bit;
 /// 3. floating comparisons appear in `if` and `?:` conditions on their own, where the pool's
 ///    constants are the probes and `fcmpl`/`fcmpg` is what is really being asked.
+/// `ssame` — reference equality of two `String`s, behind a call.
+///
+/// The call is the whole point. See [`emit_str_probe`]: `javac` constant-folds a `==` between two
+/// literals, so the only way to ask the **VM** whether it interns them is to hand both sides over
+/// as parameters, where the folder cannot reach.
+fn emit_same_helper(out: &mut String) {
+    let _ = writeln!(out, "    static int ssame(String p, String q) {{ return (p == q) ? 1 : 0; }}");
+}
+
 fn emit_classifier(out: &mut String, ty: Ty) {
     let name = classifier_name(ty);
     let kw = ty.keyword();
@@ -1513,6 +1998,44 @@ fn indent(out: &mut String, depth: usize) {
 fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
     indent(out, depth);
     match stmt {
+        Stmt::Fork { slots, threads, counter, acc, args, bodies } => {
+            let k = bodies.len();
+            let (mut a, mut b) = (String::new(), String::new());
+            emit_expr(&mut a, &args.0);
+            emit_expr(&mut b, &args.1);
+            // The arguments are evaluated **here**, in the enclosing scope, and handed over at
+            // construction: nothing a worker runs can read a local that is still changing.
+            let _ = writeln!(out, "int[] {slots} = new int[{k}];");
+            indent(out, depth);
+            let _ = writeln!(out, "{prefix}W[] {threads} = new {prefix}W[{k}];");
+            indent(out, depth);
+            let _ = writeln!(
+                out,
+                "for (int {counter} = 0; {counter} < {k}; {counter}++) {{ \
+                 {threads}[{counter}] = new {prefix}W({slots}, {counter}, {a}, {b}); \
+                 {threads}[{counter}].start(); }}"
+            );
+            indent(out, depth);
+            // Every join before any read. `InterruptedException` is caught and ignored rather than
+            // declared: nothing here interrupts, and a `throws` would have to be threaded through
+            // the entry method and the wrapper for a case that cannot arise.
+            let _ = writeln!(
+                out,
+                "try {{ for (int {counter} = 0; {counter} < {k}; {counter}++) {{ \
+                 {threads}[{counter}].join(); }} }} catch (InterruptedException e) {{ }}"
+            );
+            indent(out, depth);
+            let _ = writeln!(out, "int {acc} = 0;");
+            indent(out, depth);
+            // Index order, so which thread finished first is not observable. `31 *` and not `+`:
+            // addition is commutative, and two slots that swapped values would sum the same — the
+            // reduction has to be able to *tell*, or it is not evidence of anything.
+            let _ = writeln!(
+                out,
+                "for (int {counter} = 0; {counter} < {k}; {counter}++) {{ \
+                 {acc} = (({acc} * 31) + {slots}[{counter}]); }}"
+            );
+        }
         Stmt::Declare { name, ty, init } => {
             let mut e = String::new();
             emit_expr(&mut e, init);
@@ -1541,6 +2064,24 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
                 indent(out, depth);
                 let _ = writeln!(out, "}}");
             }
+        }
+        Stmt::Break => out.push_str("break;\n"),
+        Stmt::Continue => out.push_str("continue;\n"),
+        Stmt::Throw(exc) => {
+            let _ = writeln!(out, "throw new {}();", exc.class());
+        }
+        Stmt::While { guard, limit, cond, body } => {
+            let mut c = String::new();
+            emit_cond(&mut c, cond);
+            let _ = writeln!(out, "int {guard} = 0;");
+            indent(out, depth);
+            // The guard first, so short-circuiting cannot skip the increment.
+            let _ = writeln!(out, "while ({guard}++ < {limit} && ({c})) {{");
+            for st in body {
+                emit_stmt(out, st, depth + 1, prefix);
+            }
+            indent(out, depth);
+            let _ = writeln!(out, "}}");
         }
         Stmt::Switch { selector, arms, default } => {
             let mut sel = String::new();
@@ -1593,17 +2134,23 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
         // Declared at the **base** type whatever is constructed — see [`Stmt::NewObject`]. The
         // argument of a `null` is not emitted, and the generator makes it a literal zero so that
         // nothing the reducer could shrink is invisible in the source.
-        Stmt::NewObject { name, class, arg } => match class {
-            Some(cls) => {
-                let mut e = String::new();
-                emit_expr(&mut e, arg);
-                let _ =
-                    writeln!(out, "{prefix}B {name} = new {prefix}{}({e});", cls.suffix());
+        Stmt::NewObject { name, class, arg, iface } => {
+            let declared = if *iface { "I" } else { "B" };
+            match class {
+                Some(cls) => {
+                    let mut e = String::new();
+                    emit_expr(&mut e, arg);
+                    let _ = writeln!(
+                        out,
+                        "{prefix}{declared} {name} = new {prefix}{}({e});",
+                        cls.suffix()
+                    );
+                }
+                None => {
+                    let _ = writeln!(out, "{prefix}{declared} {name} = null;");
+                }
             }
-            None => {
-                let _ = writeln!(out, "{prefix}B {name} = null;");
-            }
-        },
+        }
         Stmt::SetObject { name, class, arg } => match class {
             Some(cls) => {
                 let mut e = String::new();
@@ -1618,6 +2165,23 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
             let mut v = String::new();
             emit_expr(&mut v, value);
             let _ = writeln!(out, "{obj}.{} = {v};", field.name());
+        }
+        Stmt::TypeProbe { name, obj, class, cast } => {
+            let target = format!("{prefix}{}", class.suffix());
+            let _ = match cast {
+                // The cast, which can fail: `ClassCastException` when `obj` is not a `target`.
+                Some(field) => {
+                    writeln!(out, "int {name} = ((({target}) {obj}).{});", field.name())
+                }
+                // The test, which cannot: `false` covers both "wrong class" and `null`.
+                None => writeln!(out, "int {name} = ({obj} instanceof {target}) ? 1 : 0;"),
+            };
+        }
+        Stmt::RefStore { obj, value } => {
+            let _ = match value {
+                Some(name) => writeln!(out, "{obj}.{REF_FIELD} = {name};"),
+                None => writeln!(out, "{obj}.{REF_FIELD} = null;"),
+            };
         }
     }
 }
@@ -1719,12 +2283,18 @@ fn emit_str_probe(out: &mut String, probe: &StrProbe, value: &StrExpr) {
             emit_str(out, other);
             out.push_str(") ? 1 : 0)");
         }
+        // **Through a helper, not inline.** Written as `("a" == "a")` the comparison never
+        // reaches the VM: `javac` folds it to `true` at compile time and emits no `ldc` at all
+        // (checked with `javap`: the whole `if` becomes an `iinc`). The probe that documents
+        // itself as the one earning this stage was measuring the **compiler's constant folder**,
+        // and the campaign reported agreement over a check the VM never ran. Passing both sides as
+        // **parameters** is what the folder cannot see through.
         StrProbe::Same(other) => {
-            out.push_str("((");
+            out.push_str("ssame(");
             emit_str(out, value);
-            out.push_str(" == ");
+            out.push_str(", ");
             emit_str(out, other);
-            out.push_str(") ? 1 : 0)");
+            out.push(')');
         }
     }
 }
@@ -1839,6 +2409,9 @@ fn emit_expr(out: &mut String, expr: &Expr) {
         Expr::Field(name, field) => {
             let _ = write!(out, "{name}.{}", field.name());
         }
+        Expr::ThroughRef(name, field) => {
+            let _ = write!(out, "{name}.{REF_FIELD}.{}", field.name());
+        }
         Expr::Virtual(name, method) => {
             let _ = write!(out, "{name}.{}()", method.name());
         }
@@ -1904,6 +2477,13 @@ struct Local {
     /// **first** warm-up iteration never reaches `JitCache::THRESHOLD`, so the JIT never sees it at
     /// all. Measured: 46% of seeds died that way and JIT coverage halved.
     array_len: i32,
+    /// `true` when the local's **declared** type is the interface rather than the base class.
+    ///
+    /// The value is the same object either way; what changes is what the *call site* can do with
+    /// it. Through the interface only `v()` is reachable — no field, and no `w()`, because an
+    /// interface declares neither — and that restriction is enforced by keeping these names out of
+    /// [`Scope::objects`] entirely, so every existing use stays correct without a guard.
+    object_iface: bool,
     /// `true` when this name is an **object** — static type `<class>B`, whatever class the value
     /// currently is.
     ///
@@ -1918,13 +2498,51 @@ struct Local {
 
 impl Local {
     fn scalar(name: String, ty: Ty) -> Local {
-        Local { name, ty, assignable: true, array_of: None, array_len: 0, object: false }
+        Local {
+            name,
+            ty,
+            assignable: true,
+            array_of: None,
+            array_len: 0,
+            object: false,
+            object_iface: false,
+        }
+    }
+
+    /// A worker's field: readable, **never assignable**.
+    ///
+    /// This is load-bearing, and the campaign proved it within minutes of the bodies becoming
+    /// blocks. `k` is the worker's slot index, and the last thing the worker does is `s[k] = v`.
+    /// Let a body assign to `k` and two of the three reasons [`Stmt::Fork`] is deterministic stop
+    /// being true at once: two workers can land on the same slot (a write race with an order), and
+    /// an index outside the array throws **out of the try**, escaping the thread — which the
+    /// reference JDK reports as an uncaught exception and this VM does not, a divergence the
+    /// harness manufactured rather than found.
+    ///
+    /// `a` and `b` are frozen for a smaller reason of the same kind: they are the only channel from
+    /// the enclosing scope, and a body that rewrote them would be describing a different program
+    /// than the one the constructor arguments say it is.
+    fn worker_field(name: &str) -> Local {
+        Local { assignable: false, ..Local::scalar(name.to_string(), Ty::Int) }
     }
 
     /// An object local. `ty` is a placeholder that nothing may read: every consumer of a scalar
     /// type filters `object` out first, and [`Scope::objects`] hands back names only.
     fn object(name: String) -> Local {
-        Local { name, ty: Ty::Int, assignable: true, array_of: None, array_len: 0, object: true }
+        Local {
+            name,
+            ty: Ty::Int,
+            assignable: true,
+            array_of: None,
+            array_len: 0,
+            object: true,
+            object_iface: false,
+        }
+    }
+
+    /// An object local **declared as the interface**. Same value, narrower call site: only `v()`.
+    fn object_via_interface(name: String) -> Local {
+        Local { object_iface: true, ..Local::object(name) }
     }
 }
 
@@ -1932,6 +2550,18 @@ impl Local {
 #[derive(Clone, Debug, Default)]
 pub struct Scope {
     locals: Vec<Local>,
+    /// `true` when this scope lives inside **another class** — today, a [`Stmt::Fork`] worker body.
+    ///
+    /// What it forbids is everything the program emits **unqualified**: a call to one of its static
+    /// helpers ([`Expr::Call`]) and a call to a classifier ([`Expr::Classify`], emitted as
+    /// `fcls`/`dcls`). Both are perfectly good expressions in the class that declares them and
+    /// neither resolves from outside it, so this is a `javac` error rather than a wrong answer —
+    /// and one that would only ever appear on the seeds that generate threads, which is the worst
+    /// kind of intermittent.
+    ///
+    /// A property of the *scope* and not a flag on the generator, so it cannot be left switched on
+    /// after the worker bodies are done.
+    foreign: bool,
 }
 
 impl Scope {
@@ -1964,7 +2594,24 @@ impl Scope {
     /// The object locals in scope, by name. Their static type is always the base class, so there
     /// is nothing else to carry.
     fn objects(&self) -> Vec<&str> {
-        self.locals.iter().filter(|l| l.object).map(|l| l.name.as_str()).collect()
+        // Interface-typed names are **not** here, and that is the whole enforcement mechanism: an
+        // interface declares no field and no `w()`, so every consumer of this list — field reads,
+        // field stores, the wide call — stays correct without learning about the distinction.
+        self.locals
+            .iter()
+            .filter(|l| l.object && !l.object_iface)
+            .map(|l| l.name.as_str())
+            .collect()
+    }
+
+    /// The object names whose **declared** type is the interface. Only one thing may be done with
+    /// them, and it is the point: call `v()`, which compiles to `invokeinterface`.
+    fn iface_objects(&self) -> Vec<&str> {
+        self.locals
+            .iter()
+            .filter(|l| l.object_iface)
+            .map(|l| l.name.as_str())
+            .collect()
     }
 
     /// The arrays whose elements are of `elem` — for the places that need a value of a known type
@@ -2027,6 +2674,33 @@ pub struct GenConfig {
     /// Hence the knob, and hence `fuzz::campaigns::jit_coverage` measuring both settings rather
     /// than assuming either.
     pub fp_narrowing: bool,
+    /// Out of 100, how often a new object local is declared as the **interface** instead of the
+    /// base class.
+    ///
+    /// The one construct that reaches `invokeinterface`, which resolves by **itable** — a search by
+    /// signature — where `invokevirtual` indexes a vtable slot fixed at the call site. Same inline
+    /// cache, genuinely different lookup.
+    pub interface_share: u32,
+    /// Out of 100, how often a loop is a `while` instead of a counted `for`.
+    ///
+    /// Safe to leave on: the guard counter keeps the structural termination argument intact (see
+    /// the module header), so a `while` costs a bounded number of trips exactly like a `for`. What
+    /// it buys is a loop whose condition is an **arbitrary expression** re-evaluated every trip,
+    /// which a counted `for` cannot express.
+    pub while_share: u32,
+    /// Out of 100, how often a statement *inside a loop* is a `break` or a `continue`.
+    ///
+    /// Both only ever cut iterations short, so neither can defeat the guard — and `continue` in
+    /// particular re-tests the condition, which is where the guard increments.
+    pub jump_share: u32,
+    /// Out of 100, how often a statement is an explicit `throw`.
+    ///
+    /// Zero by default, and the reason is measurable rather than cautious: `athrow` is in
+    /// `burst::compile`, but as a **deopt** — the compiled code jumps out to the interpreter when
+    /// it fires. So a program that throws on most runs is a program whose interesting half is
+    /// interpreted on both sides of the JIT pairing, which is FZ-004's shape. Against the reference
+    /// JDK it costs nothing and exercises the handler search.
+    pub throw_share: u32,
     /// Out of 100, how often a statement is a `switch`.
     ///
     /// Unlike the other two knobs of this milestone, turning this one up **helps** the JIT pairing:
@@ -2141,6 +2815,37 @@ pub struct GenConfig {
     /// by measuring rather than by reasoning. Planting the shape is that lesson applied before the
     /// fact, and the knob exists so the coverage campaign can still measure what it costs.
     pub dispatch_probe: bool,
+    /// Out of 100, how often a statement is a **reference-field store** and an object read goes
+    /// **through** the reference field.
+    ///
+    /// **Off by default, and it pulls in opposite directions on the two pairings** — the same shape
+    /// as [`GenConfig::narrowing_share`], for the same kind of reason. A `putfield` of a reference
+    /// is answered `Ineligible` by `burst::compile`, and the refusal is **per method**: one of
+    /// these anywhere in the entry method and the whole thing runs interpreted on *both* arms of an
+    /// interpreter-versus-JIT campaign, which is FZ-004 wearing the write barrier's hat.
+    ///
+    /// Against the reference JDK and against `os-parallel` compared with itself it is the opposite:
+    /// the edge it creates is the one the collector's barrier is written for, and no other
+    /// construct in the grammar can make one.
+    pub ref_field_share: u32,
+    /// Out of 100, how often an object statement is a **type probe** — `instanceof` or a cast.
+    ///
+    /// **On by default**, unlike the other two object knobs of this level, and the reason is the
+    /// one that decides every share in this config: `checkcast` and `instanceof` are **inside**
+    /// `burst::compile`'s subset — answered against one exact class, with a deopt for anything else
+    /// — so they add coverage instead of costing it. The same argument that keeps `switch_share` on
+    /// and `narrowing_share` off.
+    pub cast_share: u32,
+    /// How many worker threads the planted parallel site spawns. `0` turns the site off.
+    ///
+    /// **Off by default**, and the reason is the one this whole level had to solve first: a
+    /// concurrent program is only usable to a *differential* oracle if its answer is fixed, and
+    /// [`Stmt::Fork`] buys that with a shape rigid enough that most of the interesting interleaving
+    /// is unobservable on purpose. It is worth running deliberately —
+    /// `fuzz::campaigns::os_parallel_agrees_with_itself_on_deterministic_programs` is where it
+    /// earns its keep — and it is not worth paying for on every seed of every other campaign,
+    /// where a thread is by far the most expensive thing the grammar can ask for.
+    pub workers: usize,
     /// How many times `run()` calls the entry method before returning.
     ///
     /// # Why this is not 1
@@ -2180,6 +2885,10 @@ impl Default for GenConfig {
             // On by default, and low: it is the one addition of this milestone that costs the
             // compiled arm nothing, so there is no reason to hide it behind a flag.
             switch_share: 12,
+            interface_share: 50,
+            while_share: 30,
+            jump_share: 15,
+            throw_share: 0,
             // Zero for the same reason `string_share` is: it costs JIT coverage, and the pairing
             // that gains from it is not the one the standing campaigns run.
             narrowing_share: 0,
@@ -2197,6 +2906,9 @@ impl Default for GenConfig {
             wide_fields: true,
             null_share: 4,
             dispatch_probe: true,
+            ref_field_share: 0,
+            cast_share: 25,
+            workers: 0,
             warmup: 40,
         }
     }
@@ -2227,6 +2939,17 @@ impl super::Generator for JavaGenerator {
 struct Gen {
     config: GenConfig,
     rng: Rng,
+    /// How many `switch` arms enclose the statement being generated.
+    ///
+    /// Needed because `break` binds to the innermost enclosing **loop or switch**: inside an arm it
+    /// leaves the `switch`, not the loop. Emitting one there would make [`SwitchArm::breaks`] lie
+    /// about its own arm, so inside an arm only `continue` is drawn — which binds to the loop
+    /// whatever is in between.
+    switch_depth: u32,
+    /// How many loops enclose the statement being generated. `break` and `continue` are only legal
+    /// inside one, and this is the cheapest way to know — the scope tracks *names*, not control
+    /// flow, so it cannot answer the question.
+    loop_depth: u32,
     /// The static cost of each already-generated method, indexed the same as
     /// [`JavaProgram::methods`]. A call is only emitted when the callee fits the remaining budget.
     costs: Vec<u64>,
@@ -2244,6 +2967,8 @@ impl Gen {
         Gen {
             config,
             rng: Rng::from_seed(seed),
+            switch_depth: 0,
+            loop_depth: 0,
             costs: Vec::new(),
             signatures: Vec::new(),
             next_name: 0,
@@ -2333,8 +3058,15 @@ impl Gen {
         plant: bool,
     ) -> Method {
         let planting = plant && self.config.object_share > 0 && self.config.dispatch_probe;
-        let (mut body, accumulators) =
+        let (mut body, mut accumulators) =
             if planting { self.dispatch_shape(&mut scope) } else { (Vec::new(), Vec::new()) };
+        // The parallel site goes in the **entry** method only (`plant`), and once: the worker class
+        // carries the bodies in a `switch` over `k`, so a second site would need a second class.
+        if plant && self.config.workers > 0 {
+            let (stmts, acc) = self.parallel_site(&mut scope);
+            body.extend(stmts);
+            accumulators.push(acc);
+        }
         self.budget = self.budget.saturating_sub(self.block_cost(&body));
         body.extend(self.block(&mut scope, 0));
 
@@ -2389,6 +3121,44 @@ impl Gen {
         (stmts, accs)
     }
 
+    /// **The parallel site.** `K` workers over disjoint slots, joined, reduced in index order.
+    ///
+    /// Returns the statement and the accumulator, which [`Gen::finish_method`] folds into the
+    /// method's result for the same reason the dispatch probes' accumulators are folded: a site
+    /// whose value never reaches the observable is coverage that cannot fail, which is FZ-004's
+    /// mistake in miniature.
+    fn parallel_site(&mut self, scope: &mut Scope) -> (Vec<Stmt>, (String, Ty)) {
+        let k = self.config.workers;
+        let slots = self.fresh("s");
+        let threads = self.fresh("t");
+        let counter = self.fresh("i");
+        let acc = self.fresh("p");
+
+        // Evaluated in the enclosing scope, before anything starts.
+        let args = (self.expr(scope, Ty::Int, 1), self.expr(scope, Ty::Int, 1));
+
+        // The bodies see the worker's three fields and nothing else — a separate scope, which is
+        // what makes "a worker cannot read the enclosing method" true by construction rather than
+        // by remembering.
+        let bodies = (0..k)
+            .map(|_| {
+                // A fresh scope per worker: one `case` arm cannot see another's declarations.
+                let mut worker = Scope {
+                    locals: ["k", "a", "b"].into_iter().map(Local::worker_field).collect(),
+                    foreign: true,
+                };
+                let block = self.block(&mut worker, 0);
+                self.budget = self.budget.saturating_sub(self.block_cost(&block));
+                let result = self.expr(&worker, Ty::Int, 1);
+                ForkBody { block, result }
+            })
+            .collect();
+
+        scope.locals.push(Local::scalar(acc.clone(), Ty::Int));
+        let stmt = Stmt::Fork { slots, threads, counter, acc: acc.clone(), args, bodies };
+        (vec![stmt], (acc, Ty::Int))
+    }
+
     /// A call site whose receiver never changes: the inline cache is filled on the first execution
     /// and its guard holds for every one after, so native code is never left.
     fn monomorphic_site(&mut self, scope: &mut Scope) -> (Vec<Stmt>, (String, Ty)) {
@@ -2414,7 +3184,9 @@ impl Gen {
             ),
         };
         let stmts = vec![
-            Stmt::NewObject { name: obj, class: Some(class), arg },
+            // La sonda plantada se declara por la clase base a proposito: su medicion ya
+            // existe y cambiarle el tipo declarado le cambiaria el significado.
+            Stmt::NewObject { name: obj, class: Some(class), arg, iface: false },
             Stmt::Declare { name: acc.clone(), ty, init: Expr::zero(ty) },
             Stmt::For { var: counter, bound, body: vec![site] },
         ];
@@ -2430,17 +3202,29 @@ impl Gen {
     /// about to contradict.
     fn polymorphic_site(&mut self, scope: &mut Scope) -> (Vec<Stmt>, (String, Ty)) {
         let (first, second) = self.two_classes();
-        let method = self.virtual_method();
+        // Through the interface the same probe becomes an **itable** site, and a far more
+        // interesting one: this is the only place where a receiver is guaranteed to change class
+        // on every iteration of a loop hot enough to be compiled, so the inline cache's guard
+        // fails every time instead of settling. Ordinary generation reassigns an interface-typed
+        // name in about 2% of programs, which is indistinguishable from never.
+        let iface = self.config.interface_share > 0
+            && self.rng.below(100) < self.config.interface_share;
+        // The interface declares `v()` and nothing else, so the wide half is not on offer here.
+        let method = if iface { VMethod::V } else { self.virtual_method() };
         let ty = method.ty();
         let bound = 2 + self.rng.below(3) as i32;
         let initial = self.ctor_arg(scope);
         let left = self.ctor_arg(scope);
         let right = self.ctor_arg(scope);
 
-        let obj = self.fresh("o");
+        let obj = self.fresh(if iface { "q" } else { "o" });
         let acc = self.fresh("v");
         let counter = self.fresh("i");
-        scope.locals.push(Local::object(obj.clone()));
+        scope.locals.push(if iface {
+            Local::object_via_interface(obj.clone())
+        } else {
+            Local::object(obj.clone())
+        });
         scope.locals.push(Local::scalar(acc.clone(), ty));
 
         // `(i & 1) == 0` — the receiver alternates, so the guard fails on every iteration after the
@@ -2468,7 +3252,7 @@ impl Gen {
             ),
         };
         let stmts = vec![
-            Stmt::NewObject { name: obj, class: Some(ObjClass::Base), arg: initial },
+            Stmt::NewObject { name: obj, class: Some(ObjClass::Base), arg: initial, iface },
             Stmt::Declare { name: acc.clone(), ty, init: Expr::zero(ty) },
             Stmt::For { var: counter, bound, body: vec![rotate, site] },
         ];
@@ -2522,19 +3306,68 @@ impl Gen {
     /// already has.
     fn object_stmt(&mut self, scope: &mut Scope) -> Option<Stmt> {
         let existing = scope.objects().len();
+        // **Above the `new` branch**, because a type probe constructs nothing: all it needs is a
+        // receiver that already exists. Left below it the probe was reachable only 60% of the time
+        // and a share of 40 produced it in 19 of 200 programs — the same mistake the reference
+        // store made, and the reason every share in this config gets measured rather than assumed.
+        if existing > 0
+            && self.config.cast_share > 0
+            && self.rng.below(100) < self.config.cast_share
+        {
+            let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
+            let obj = self.rng.pick(&plain).clone();
+            let class = *self.rng.pick(&[ObjClass::Base, ObjClass::S0, ObjClass::S1, ObjClass::S2]);
+            // Half tests, half casts. The test can never fail and the cast can, and both are worth
+            // generating: one exercises the guard, the other the guard *and* the path out of it.
+            let cast = if self.rng.chance(1, 2) { Some(Field::A) } else { None };
+            let name = self.fresh("y");
+            scope.locals.push(Local::scalar(name.clone(), Ty::Int));
+            return Some(Stmt::TypeProbe { name, obj, class, cast });
+        }
         // The first draw in a scope has to be a `new`: there is nothing to reassign or store into.
         if existing == 0 || self.rng.chance(2, 5) {
             let (class, arg) = self.new_object(scope);
-            let name = self.fresh("o");
-            scope.locals.push(Local::object(name.clone()));
-            return Some(Stmt::NewObject { name, class, arg });
+            let iface = self.config.interface_share > 0
+                && self.rng.below(100) < self.config.interface_share;
+            let name = self.fresh(if iface { "q" } else { "o" });
+            scope.locals.push(if iface {
+                Local::object_via_interface(name.clone())
+            } else {
+                Local::object(name.clone())
+            });
+            return Some(Stmt::NewObject { name, class, arg, iface });
         }
-        let names: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
-        let obj = self.rng.pick(&names).clone();
+        // **Before the other two, not after.** Left at the end it was reachable only through two
+        // prior coin flips, so a share of 45 produced the store in 15% of programs — the knob would
+        // not have meant what it says, and this is the one construct the whole level is about.
+        if self.config.ref_field_share > 0 && self.rng.below(100) < self.config.ref_field_share {
+            let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
+            let obj = self.rng.pick(&plain).clone();
+            // `null` a third of the time. Not filler: it is how a chain that read fine on one
+            // iteration reads `null` on the next, which is the deopt the compiled arm has to
+            // survive — and, on the interpreted one, an ordinary `NullPointerException`.
+            let value =
+                if self.rng.chance(1, 3) { None } else { Some(self.rng.pick(&plain).clone()) };
+            return Some(Stmt::RefStore { obj, value });
+        }
         if self.rng.chance(1, 2) {
+            // Reassignment is offered on interface-typed names too: `q = new S1(…)` is
+            // type-correct, and a receiver whose class changes is exactly what makes the inline
+            // cache's guard fire instead of hitting.
+            let names: Vec<String> = scope
+                .objects()
+                .into_iter()
+                .chain(scope.iface_objects())
+                .map(str::to_string)
+                .collect();
+            let name = self.rng.pick(&names).clone();
             let (class, arg) = self.new_object(scope);
-            return Some(Stmt::SetObject { name: obj, class, arg });
+            return Some(Stmt::SetObject { name, class, arg });
         }
+        // A field store needs a declared type that *has* the field, so only the plain names — and
+        // `existing > 0` above already proved there is one.
+        let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
+        let obj = self.rng.pick(&plain).clone();
         let field = self.any_field();
         let value = self.expr(scope, field.ty(), 1);
         Some(Stmt::FieldStore { obj, field, value })
@@ -2545,9 +3378,28 @@ impl Gen {
     /// `None` for `float` and `double`: the hierarchy has no floating half, and inventing one would
     /// buy nothing the arithmetic grammar does not already cover far better.
     fn object_read(&mut self, scope: &Scope, ty: Ty) -> Option<Expr> {
+        // Through an interface only `v()` exists, so this is the only shape offered — and it is
+        // the one that compiles to `invokeinterface`.
+        if ty == Ty::Int {
+            let via_iface = scope.iface_objects();
+            if !via_iface.is_empty() && self.rng.chance(2, 3) {
+                let name = (*self.rng.pick(&via_iface)).to_string();
+                return Some(Expr::Virtual(name, VMethod::V));
+            }
+        }
         let names = scope.objects();
         if names.is_empty() {
             return None;
+        }
+        // The chained read. Offered before the plain one so the knob's share is the share of
+        // *object reads that hop*, which is what the census measures.
+        if self.config.ref_field_share > 0
+            && self.rng.below(100) < self.config.ref_field_share
+        {
+            if let Some(field) = Field::of_ty(ty, self.config.wide_fields) {
+                let name = (*self.rng.pick(&names)).to_string();
+                return Some(Expr::ThroughRef(name, field));
+            }
         }
         let (field, method) = match ty {
             Ty::Int => (Field::A, VMethod::V),
@@ -2578,10 +3430,56 @@ impl Gen {
             }
             if let Some(stmt) = self.stmt(scope, depth) {
                 self.budget = self.budget.saturating_sub(self.stmt_cost(&stmt));
+                let leaves = stmt.completes_abruptly();
                 block.push(stmt);
+                // Nothing after a statement that always leaves: it would be unreachable, and
+                // `javac` rejects that. This is where an `if` with two abrupt arms gets caught —
+                // the arms are legal on their own and only the statement *after* the `if` is not.
+                if leaves {
+                    return block;
+                }
             }
         }
+        if let Some(last) = self.terminator(depth) {
+            block.push(last);
+        }
         block
+    }
+
+    /// A statement that ends a block: `break`, `continue` or `throw`.
+    ///
+    /// **Only ever last, and never at depth 0.** Java rejects an unreachable statement, so one of
+    /// these anywhere but the end of its block is a compile error — which is exactly what happened
+    /// when they were drawn like ordinary statements: usable seeds fell from 100% to 78%, every
+    /// loss reading `error: unreachable statement`. And depth 0 is a *method body*, whose emitted
+    /// form ends in `return <result>;`: a terminator there would make the `return` unreachable
+    /// instead.
+    fn terminator(&mut self, depth: u32) -> Option<Stmt> {
+        if depth == 0 {
+            return None;
+        }
+        if self.loop_depth > 0
+            && self.config.jump_share > 0
+            && self.rng.below(100) < self.config.jump_share
+        {
+            // Inside a `switch` arm only `continue` is safe; see [`Gen::switch_depth`].
+            let can_break = self.switch_depth == 0;
+            return Some(if can_break && self.rng.chance(1, 2) {
+                Stmt::Break
+            } else {
+                Stmt::Continue
+            });
+        }
+        if self.config.throw_share > 0 && self.rng.below(100) < self.config.throw_share {
+            let exc = *self.rng.pick(&[
+                ThrownExc::Arithmetic,
+                ThrownExc::Bounds,
+                ThrownExc::NegativeSize,
+                ThrownExc::NullPointer,
+            ]);
+            return Some(Stmt::Throw(exc));
+        }
+        None
     }
 
     fn stmt(&mut self, scope: &mut Scope, depth: u32) -> Option<Stmt> {
@@ -2645,12 +3543,16 @@ impl Gen {
             _ => {
                 let bound = 1 + self.rng.below(self.config.max_loop_bound as u32) as i32;
                 // The budget is what stops `for` inside `for` inside a call from turning into a
-                // benchmark. Dividing it here is the whole mechanism.
+                // benchmark. Dividing it here is the whole mechanism, and a `while` divides by its
+                // guard limit for exactly the same reason.
                 let outer = self.budget;
                 self.budget = (self.budget / bound.max(1) as u64).max(1);
-                let var = self.fresh("i");
+                let counted = self.config.while_share == 0
+                    || self.rng.below(100) >= self.config.while_share;
+                let var = self.fresh(if counted { "i" } else { "g" });
                 let mut body_scope = scope.clone();
-                // Readable, *not* assignable. See [`Local::assignable`].
+                // Readable, *not* assignable. See [`Local::assignable`]. The `while` guard carries
+                // the same rule: a body that could reset it would be a body that never has to stop.
                 body_scope.locals.push(Local {
                     name: var.clone(),
                     ty: Ty::Int,
@@ -2658,10 +3560,18 @@ impl Gen {
                     array_of: None,
                     array_len: 0,
                     object: false,
+                    object_iface: false,
                 });
+                self.loop_depth += 1;
                 let body = self.block(&mut body_scope, depth + 1);
+                self.loop_depth -= 1;
                 self.budget = outer;
-                Some(Stmt::For { var, bound, body })
+                if counted {
+                    return Some(Stmt::For { var, bound, body });
+                }
+                let cond_ty = self.any_ty();
+                let cond = self.cond(scope, cond_ty, 0);
+                Some(Stmt::While { guard: var, limit: bound, cond, body })
             }
         }
     }
@@ -2685,6 +3595,7 @@ impl Gen {
                 array_of: Some(elem),
                 array_len: len,
                 object: false,
+                object_iface: false,
             });
             return Some(Stmt::NewArray { name, elem, len });
         }
@@ -2732,12 +3643,22 @@ impl Gen {
             .into_iter()
             .map(|label| {
                 let mut arm_scope = scope.clone();
+                self.switch_depth += 1;
+                let body = self.block(&mut arm_scope, depth + 1);
+                self.switch_depth -= 1;
+                // An arm whose body already leaves — `continue`, or a `throw` — neither breaks nor
+                // falls through, and the `break` after it would be **unreachable**, which `javac`
+                // rejects. So the flag is not drawn in that case, it is forced.
+                let leaves = matches!(
+                    body.last(),
+                    Some(Stmt::Break | Stmt::Continue | Stmt::Throw(_))
+                );
                 SwitchArm {
                     label,
-                    body: self.block(&mut arm_scope, depth + 1),
+                    body,
                     // Fall-through a third of the time. Rare enough that a `switch` still usually
                     // reads like one, common enough that a campaign of any size meets it.
-                    breaks: !self.rng.chance(1, 3),
+                    breaks: !leaves && !self.rng.chance(1, 3),
                 }
             })
             .collect();
@@ -2892,7 +3813,11 @@ impl Gen {
         // Same treatment, same reason. A string question only answers `int`, so the share is spent
         // only where it can be honoured — otherwise a high share would silently do nothing on a
         // `long` subtree and the knob would not mean what it says.
+        // Not in a worker body: the `Same` probe compiles to a call to `ssame`, emitted
+        // unqualified on the program's own class, which does not resolve from another one — see
+        // [`Scope::foreign`].
         if ty == Ty::Int
+            && !scope.foreign
             && self.config.string_share > 0
             && self.rng.below(100) < self.config.string_share
         {
@@ -2957,7 +3882,7 @@ impl Gen {
             // observes without going through a conversion that is itself under test. It is
             // therefore not an optional flourish: without it, a whole seed's floating arithmetic
             // could be invisible. See [`emit_classifier`].
-            12 if ty == Ty::Int && self.config.fp_share > 0 => {
+            12 if ty == Ty::Int && self.config.fp_share > 0 && !scope.foreign => {
                 let fp = self.any_fp_ty();
                 Expr::Classify(Box::new(self.expr(scope, fp, depth + 1)))
             }
@@ -3020,6 +3945,10 @@ impl Gen {
     /// A call to an already-generated method of the right return type, if one exists and fits the
     /// remaining budget. Otherwise a leaf — the fallback is what keeps [`Gen::expr`] total.
     fn call_or_leaf(&mut self, scope: &Scope, ty: Ty, depth: u32) -> Expr {
+        // Nothing this program declares is in view from another class — see [`Scope::foreign`].
+        if scope.foreign {
+            return self.leaf(scope, ty);
+        }
         let candidates: Vec<usize> = (0..self.signatures.len())
             .filter(|&i| self.signatures[i].1 == ty && self.costs[i] < self.budget)
             .collect();
@@ -3059,6 +3988,12 @@ impl Gen {
 
     fn stmt_cost(&self, stmt: &Stmt) -> u64 {
         match stmt {
+            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => 1,
+            // Charged like a `for` of the same bound: the guard is what makes `limit` an honest
+            // upper bound on the trip count.
+            Stmt::While { limit, cond, body, .. } => {
+                1 + cond.size() as u64 + (*limit).max(1) as u64 * self.block_cost(body)
+            }
             // **Every** arm is charged, not the average one. Fall-through means a single entry can
             // run several of them, and a budget that assumed one would be wrong exactly on the
             // shapes this construct exists to generate.
@@ -3081,6 +4016,20 @@ impl Gen {
             // length is the cost. Charging only `1` here is how a loop nest full of allocations
             // would slip past a budget that thought it had bounded everything.
             Stmt::NewArray { len, .. } => 1 + (*len).max(0) as u64,
+            // Two allocations per worker (the thread object and its OS thread), the body, and
+            // three loops over the workers. Priced generously and on purpose: a thread is the most
+            // expensive thing this grammar can ask for, and property 3 bounds *work*, not
+            // statements.
+            Stmt::Fork { args, bodies, .. } => {
+                let k = bodies.len() as u64;
+                1 + self.expr_cost(&args.0)
+                    + self.expr_cost(&args.1)
+                    + 3 * k
+                    + bodies
+                        .iter()
+                        .map(|w| 8 + self.block_cost(&w.block) + self.expr_cost(&w.result))
+                        .sum::<u64>()
+            }
             Stmt::ArrayStore { index, value, .. } => {
                 1 + self.expr_cost(index) + self.expr_cost(value)
             }
@@ -3091,6 +4040,9 @@ impl Gen {
                 3 + self.expr_cost(arg)
             }
             Stmt::FieldStore { value, .. } => 1 + self.expr_cost(value),
+            Stmt::RefStore { .. } => 1,
+            // A `checkcast`/`instanceof` plus, for the cast, a `getfield`.
+            Stmt::TypeProbe { cast, .. } => 1 + usize::from(cast.is_some()) as u64,
         }
     }
 
@@ -3116,7 +4068,9 @@ impl Gen {
             Expr::Narrow(_, a) => 1 + self.expr_cost(a),
             Expr::ArrayLength(_) => 1,
             Expr::ArrayLoad(_, _, index) => 1 + self.expr_cost(index),
+            // Two `getfield`s instead of one, and priced as such.
             Expr::Field(_, _) => 1,
+            Expr::ThroughRef(_, _) => 2,
             // The dispatch plus the callee's one-expression body.
             Expr::Virtual(_, _) => 2,
             Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) => 1 + self.expr_cost(a),
@@ -3190,6 +4144,16 @@ const OBJ_CLASSES: &[ObjClass] =
 /// get subtly wrong.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Malformed {
+    /// A worker body that does not produce an `int`. The slot array is `int[]`, so nothing else
+    /// can be stored, and a `long` would take the whole worker out of the JIT's subset besides.
+    ForkBodyIsNotInt(Ty),
+    /// A parallel site with no workers. It would still compile and still be deterministic — and it
+    /// would spawn no threads at all, which is the one thing the construct exists to do.
+    ForkWithoutWorkers,
+    /// A field read, a field store or a `w()` through a name whose declared type is the interface.
+    /// An interface declares neither, so this is a `javac` error rather than a wrong answer — and
+    /// catching it here keeps a reducer candidate from being spent on it.
+    FieldThroughInterface(String),
     /// A `switch` selector that is not an `int`. Java allows `String` and `enum` too; this
     /// grammar does not generate either, so anything else is a generator bug.
     SwitchOnNonInt(Ty),
@@ -3307,6 +4271,39 @@ fn check_block(
 ) -> Result<(), Malformed> {
     for stmt in block {
         match stmt {
+            Stmt::Fork { acc, args, bodies, .. } => {
+                // The constructor arguments belong to the **enclosing** scope and are ordinary
+                // expressions there.
+                for arg in [&args.0, &args.1] {
+                    check_expr(arg, scope, visible)?;
+                    if arg.ty() != Ty::Int {
+                        return Err(Malformed::BadConstructorArgument(arg.ty()));
+                    }
+                }
+                // The bodies belong to a **different class**, and this is where that is enforced.
+                // Their scope is exactly the worker's three fields — a body naming an enclosing
+                // local would be a `javac` error, not a wrong answer — and `visible` is empty,
+                // because the program's static helpers are emitted unqualified and a worker cannot
+                // resolve them from outside the class that declares them.
+                for worker in bodies {
+                    // A **fresh** scope per worker, because each `case` arm gets its own braces:
+                    // sharing one would let arm 1 read what arm 0 declared, which compiles here
+                    // and not in Java.
+                    let mut names: Vec<Local> =
+                        ["k", "a", "b"].into_iter().map(Local::worker_field).collect();
+                    check_block(&worker.block, &mut names, &[])?;
+                    check_expr(&worker.result, &names, &[])?;
+                    if worker.result.ty() != Ty::Int {
+                        return Err(Malformed::ForkBodyIsNotInt(worker.result.ty()));
+                    }
+                }
+                if bodies.is_empty() {
+                    return Err(Malformed::ForkWithoutWorkers);
+                }
+                // Only the accumulator survives into the enclosing scope; the array, the thread
+                // array and the loop variable are the shape's own plumbing.
+                scope.push(Local::scalar(acc.clone(), Ty::Int));
+            }
             Stmt::Declare { name, ty, init } => {
                 check_expr(init, scope, visible)?;
                 if init.ty() != *ty {
@@ -3355,6 +4352,28 @@ fn check_block(
                 let mut inner = scope.clone();
                 check_block(otherwise, &mut inner, visible)?;
             }
+            // `break`/`continue` outside a loop is a `javac` error, so a generator bug shows up as
+            // an unusable seed rather than as a wrong answer. Nothing to check here.
+            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => {}
+            Stmt::While { guard, limit, cond, body } => {
+                if *limit <= 0 {
+                    return Err(Malformed::BadLoopBound(*limit));
+                }
+                check_cond(cond, scope, visible)?;
+                let mut inner = scope.clone();
+                inner.push(Local {
+                    name: guard.clone(),
+                    ty: Ty::Int,
+                    // Not assignable, for the same reason the `for` counter is not: a body that
+                    // could reset it would be a body that never has to stop.
+                    assignable: false,
+                    array_of: None,
+                    array_len: 0,
+                    object: false,
+                    object_iface: false,
+                });
+                check_block(body, &mut inner, visible)?;
+            }
             Stmt::Switch { selector, arms, default } => {
                 check_expr(selector, scope, visible)?;
                 if selector.ty() != Ty::Int {
@@ -3383,6 +4402,7 @@ fn check_block(
                     array_of: None,
                     array_len: 0,
                     object: false,
+                    object_iface: false,
                 });
                 check_block(body, &mut inner, visible)?;
             }
@@ -3396,6 +4416,7 @@ fn check_block(
                     array_of: Some(*elem),
                     array_len: 0,
                     object: false,
+                    object_iface: false,
                 });
             }
             Stmt::ArrayStore { array, elem, index, value } => {
@@ -3413,18 +4434,50 @@ fn check_block(
                 }
                 check_expr(value, scope, visible)?;
             }
-            Stmt::NewObject { name, arg, .. } => {
+            Stmt::NewObject { name, arg, iface, .. } => {
                 check_expr(arg, scope, visible)?;
                 if arg.ty() != Ty::Int {
                     return Err(Malformed::BadConstructorArgument(arg.ty()));
                 }
-                scope.push(Local::object(name.clone()));
+                // Carrying `iface` into the scope is what makes the restriction checkable at all.
+                // Forget it here and `q.a` type-checks, which would let a reducer candidate be
+                // counted as valid and then be rejected by `javac` — a spent process spawn
+                // reported as a healthy candidate.
+                scope.push(if *iface {
+                    Local::object_via_interface(name.clone())
+                } else {
+                    Local::object(name.clone())
+                });
             }
             Stmt::SetObject { name, arg, .. } => {
                 object_local(scope, name)?;
                 check_expr(arg, scope, visible)?;
                 if arg.ty() != Ty::Int {
                     return Err(Malformed::BadConstructorArgument(arg.ty()));
+                }
+            }
+            Stmt::TypeProbe { name, obj, cast, .. } => {
+                // The receiver has to be a name whose declared type is the class: an interface can
+                // be tested but the cast reads a field, and the two share this arm.
+                object_local(scope, obj)?;
+                if scope.iter().any(|l| l.name == *obj && l.object_iface) {
+                    return Err(Malformed::FieldThroughInterface(obj.clone()));
+                }
+                // Always an `int`, whichever half it is: `instanceof` is folded to 1/0 and a
+                // `long` field read through a cast would not fit the local this declares.
+                if *cast == Some(Field::B) {
+                    return Err(Malformed::ForkBodyIsNotInt(Ty::Long));
+                }
+                scope.push(Local::scalar(name.clone(), Ty::Int));
+            }
+            Stmt::RefStore { obj, value } => {
+                // Both sides are object names of the **class** type: the field is declared `…B`,
+                // and an interface-typed name could neither hold it nor be assigned into it.
+                for name in std::iter::once(obj).chain(value.as_ref()) {
+                    object_local(scope, name)?;
+                    if scope.iter().any(|l| l.name == *name && l.object_iface) {
+                        return Err(Malformed::FieldThroughInterface(name.clone()));
+                    }
                 }
             }
             Stmt::FieldStore { obj, field, value } => {
@@ -3547,7 +4600,26 @@ fn check_expr(expr: &Expr, scope: &[Local], visible: &[Method]) -> Result<(), Ma
             Ok(())
         }
         Expr::ArrayLength(name) => array_element(scope, name).map(|_| ()),
-        Expr::Field(name, _) | Expr::Virtual(name, _) => object_local(scope, name),
+        // A field read needs a name whose *declared* type has fields, which an interface does not.
+        // Both read a field, so both need a name whose *declared* type has one — which an
+        // interface does not.
+        Expr::Field(name, _) | Expr::ThroughRef(name, _) => {
+            object_local(scope, name)?;
+            match scope.iter().find(|l| l.name == *name) {
+                Some(l) if l.object_iface => Err(Malformed::FieldThroughInterface(name.clone())),
+                _ => Ok(()),
+            }
+        }
+        Expr::Virtual(name, method) => {
+            object_local(scope, name)?;
+            match scope.iter().find(|l| l.name == *name) {
+                // The interface declares `v()` and nothing else.
+                Some(l) if l.object_iface && *method != VMethod::V => {
+                    Err(Malformed::FieldThroughInterface(name.clone()))
+                }
+                _ => Ok(()),
+            }
+        }
         Expr::Bin(op, a, b) => {
             check_expr(a, scope, visible)?;
             check_expr(b, scope, visible)?;
@@ -4014,6 +5086,88 @@ mod tests {
 
     // -- arrays (stage 2) ----------------------------------------------------------------------
 
+    /// Stage 5, and the property that matters is not that the constructs appear but that
+    /// **`break`/`continue` only ever appear inside a loop** — outside one they are a `javac`
+    /// error, so a generator bug there would show up as a wave of unusable seeds rather than as a
+    /// finding. The rest is the usual on/off contract.
+    #[test]
+    fn stage_five_generates_loops_jumps_and_throws_where_they_are_legal() {
+        fn scan(
+            block: &Block,
+            depth: u32,
+            whiles: &mut usize,
+            jumps: &mut usize,
+            throws: &mut usize,
+            stray: &mut usize,
+        ) {
+            for stmt in block {
+                match stmt {
+                    Stmt::While { body, .. } => {
+                        *whiles += 1;
+                        scan(body, depth + 1, whiles, jumps, throws, stray);
+                    }
+                    Stmt::For { body, .. } => scan(body, depth + 1, whiles, jumps, throws, stray),
+                    Stmt::Break | Stmt::Continue => {
+                        *jumps += 1;
+                        if depth == 0 {
+                            *stray += 1;
+                        }
+                    }
+                    Stmt::Throw(_) => *throws += 1,
+                    Stmt::If { then, otherwise, .. } => {
+                        scan(then, depth, whiles, jumps, throws, stray);
+                        scan(otherwise, depth, whiles, jumps, throws, stray);
+                    }
+                    Stmt::Switch { arms, default, .. } => {
+                        for arm in arms {
+                            scan(&arm.body, depth, whiles, jumps, throws, stray);
+                        }
+                        if let Some(b) = default {
+                            scan(b, depth, whiles, jumps, throws, stray);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // El `switch` tambien apagado, y no para que pase el test: un brazo que corta emite su
+        // propio `break;`, asi que con switches encendidos esa aguja deja de ser la firma de los
+        // saltos. Apagar un eje para poder afirmar algo del otro es lo que mantiene la afirmacion.
+        let off = GenConfig {
+            while_share: 0,
+            jump_share: 0,
+            throw_share: 0,
+            switch_share: 0,
+            ..GenConfig::default()
+        };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(off).generate(Seed(seed)).to_java();
+            for needle in ["while (", "break;", "continue;", "throw new"] {
+                assert!(!source.contains(needle), "seed {seed} emitio {needle} con las perillas en 0");
+            }
+        }
+
+        let on = GenConfig {
+            while_share: 40,
+            jump_share: 25,
+            throw_share: 20,
+            ..GenConfig::default()
+        };
+        let (mut whiles, mut jumps, mut throws, mut stray) = (0, 0, 0, 0);
+        for seed in 0..300 {
+            let program = JavaGenerator::new(on).generate(Seed(seed));
+            scan(&program.entry.body, 0, &mut whiles, &mut jumps, &mut throws, &mut stray);
+            for m in &program.methods {
+                scan(&m.body, 0, &mut whiles, &mut jumps, &mut throws, &mut stray);
+            }
+        }
+        assert!(whiles > 10, "while en {whiles} lugares");
+        assert!(jumps > 10, "break/continue en {jumps} lugares");
+        assert!(throws > 10, "throw en {throws} lugares");
+        assert_eq!(stray, 0, "{stray} break/continue fuera de un bucle");
+    }
+
     /// A `switch` has three properties worth pinning, and none of them is "it appears".
     ///
     /// **Dense and scattered both**, because the label layout is what decides whether `javac` emits
@@ -4142,6 +5296,303 @@ mod tests {
         assert!(same > 10, "identidad en {same}/300");
     }
 
+    /// `interface_share` both fires and stays off — and, when it fires, produces the *call*, not
+    /// just the declaration.
+    ///
+    /// The declaration alone would be worthless: the whole point is a call site whose receiver's
+    /// **declared** type is the interface, because that is the only thing that decides whether
+    /// `javac` writes `invokevirtual` or `invokeinterface`. The class-file side of the same claim
+    /// is `fuzz::campaigns::jit_coverage::interface_calls_actually_reach_the_class_file`; this half
+    /// is the one that runs without a toolchain.
+    #[test]
+    fn an_interface_share_turns_interface_dispatch_on_and_off() {
+        // Off: no interface-typed declaration anywhere. The interface *type* is still emitted with
+        // the hierarchy — it costs nothing and keeps the shape of the source stable — so what is
+        // asserted is that nothing is ever declared with it.
+        let none = GenConfig { interface_share: 0, ..GenConfig::default() };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(none).generate(Seed(seed)).to_java();
+            let prefix = source
+                .split_once("interface ")
+                .map(|(_, rest)| rest.split_once('I').expect("hierarchy prefix").0.to_string())
+                .expect("the hierarchy always declares the interface");
+            assert!(
+                !source.contains(&format!("{prefix}I q")),
+                "seed {seed} declared an interface-typed local at share 0"
+            );
+        }
+
+        // On: declared, called, and reassigned — the third one is what makes an inline cache miss
+        // instead of settling, so it is worth knowing it happens rather than hoping.
+        // Interface locals are the `q`-prefixed names, but the counter behind [`Gen::fresh`] is
+        // shared across every prefix, so they are `q7`/`q13` and not `q0`/`q1`. Reading them out of
+        // the source is what keeps this test measuring the calls rather than the numbering.
+        fn names(source: &str) -> Vec<String> {
+            source
+                .match_indices("I q")
+                .map(|(i, _)| {
+                    let rest = &source[i + 2..];
+                    let end = rest.find(|c: char| !c.is_ascii_digit() && c != 'q').unwrap_or(1);
+                    rest[..end].to_string()
+                })
+                .collect()
+        }
+
+        let lots = GenConfig { interface_share: 60, ..GenConfig::default() };
+        let (mut declared, mut called, mut reassigned) = (0, 0, 0);
+        for seed in 0..300 {
+            let source = JavaGenerator::new(lots).generate(Seed(seed)).to_java();
+            if source.contains("I q") {
+                declared += 1;
+            }
+            if names(&source).iter().any(|n| source.contains(&format!("{n}.v()"))) {
+                called += 1;
+            }
+            // `> 1` and not `>= 1`: the declaration itself reads `…I q7 = new …`, so one
+            // occurrence is the declaration and only a second one is a reassignment.
+            if names(&source)
+                .iter()
+                .any(|n| source.matches(&format!("{n} = new ")).count() > 1)
+            {
+                reassigned += 1;
+            }
+        }
+        println!("declarados {declared}/300, llamados {called}/300, reasignados {reassigned}/300");
+        assert!(declared > 100, "locales de interfaz en {declared}/300 seeds");
+        assert!(called > 30, "llamadas por interfaz en {called}/300 seeds");
+        assert!(reassigned > 5, "reasignaciones de un local de interfaz en {reassigned}/300");
+    }
+
+    /// The parallel site is generated, complete, and **off** when the knob is zero.
+    ///
+    /// "0 divergences" over a construct that never appeared is the failure this project has now
+    /// hit twice (FZ-004, FZ-005), and threads are the easiest place yet to hit it a third time: a
+    /// concurrent campaign that never spawned a thread looks exactly like one that did and found
+    /// nothing. So every piece of the shape is asserted separately — a `start()` without a `join()`
+    /// would be a race rather than a probe, and a `join()` without a reduction would be a thread
+    /// whose answer nobody reads.
+    #[test]
+    fn the_parallel_site_is_whole_when_it_is_on_and_absent_when_it_is_off() {
+        const K: usize = 4;
+
+        // Off: not a thread anywhere. `Thread` alone would be too weak a needle — it is a word —
+        // so the pieces that only this construct emits are checked too.
+        let none = GenConfig { workers: 0, ..GenConfig::default() };
+        for seed in 0..120 {
+            let source = JavaGenerator::new(none).generate(Seed(seed)).to_java();
+            for needle in ["extends Thread", ".start()", ".join()", "W(int[] s"] {
+                assert!(!source.contains(needle), "seed {seed} emitted {needle:?} at workers 0");
+            }
+        }
+
+        // On: every piece, on every seed. Not "most" — the site is *planted*, not rolled, so a
+        // seed without it is a bug and an assertion that tolerated one would hide it.
+        let lots = GenConfig { workers: K, ..GenConfig::default() };
+        for seed in 0..120 {
+            let program = JavaGenerator::new(lots).generate(Seed(seed));
+            assert!(program.well_formed().is_ok(), "seed {seed}: {:?}", program.well_formed());
+            let source = program.to_java();
+            for needle in [
+                "extends Thread",
+                ".start();",
+                ".join();",
+                "catch (InterruptedException e) { }",
+                &format!("new int[{K}]"),
+                &format!("case {}: {{", K - 1),
+                "s[k] = v;",
+            ] {
+                assert!(source.contains(needle), "seed {seed} is missing {needle:?}");
+            }
+        }
+
+        // **The number this level actually turns on.** A worker that only does `int` arithmetic
+        // allocates nothing, so K threads of it put no pressure at all on the collector — and the
+        // bug the level exists to hunt (FZ-002: a stale reference under a collection with real
+        // parallelism) cannot happen without threads that allocate while others hold references.
+        // Counted over seeds rather than required on each, because allocation is share-driven.
+        let mut allocating = 0;
+        for seed in 0..120 {
+            let source = JavaGenerator::new(lots).generate(Seed(seed)).to_java();
+            let Some((_, worker)) = source.split_once("extends Thread {") else {
+                panic!("seed {seed}: no worker class");
+            };
+            if worker.contains("new ") {
+                allocating += 1;
+            }
+        }
+        assert!(
+            allocating > 60,
+            "only {allocating}/120 seeds allocate inside a worker — K threads of pure arithmetic \
+             make the collector do nothing, which is the one thing this level is for"
+        );
+
+        // And the half that decides whether any of it means anything: the reduced value has to
+        // reach the number the executor observes. A site whose result is computed and dropped is
+        // coverage that cannot fail — FZ-004's mistake, and the reason `finish_method` folds the
+        // accumulator into the result rather than hoping the generator reads it.
+        for seed in 0..40 {
+            let program = JavaGenerator::new(lots).generate(Seed(seed));
+            let Some(Stmt::Fork { acc, .. }) =
+                program.entry.body.iter().find(|s| matches!(s, Stmt::Fork { .. }))
+            else {
+                panic!("seed {seed}: the entry method has no parallel site");
+            };
+            let mut result = String::new();
+            emit_expr(&mut result, &program.entry.result);
+            assert!(
+                result.contains(acc.as_str()),
+                "seed {seed}: the threads' result never reaches the return value: {result}"
+            );
+        }
+    }
+
+    /// The total wrapper catches **per iteration**, not around the whole warm-up loop.
+    ///
+    /// This is one line of emission and it was worth 5 to 41 seeds out of 80. Around the loop, one
+    /// throw on iteration 1 ends the program: the remaining iterations never run, the JIT never
+    /// crosses its threshold, and the campaign compares two engines on a program that did nothing.
+    /// Measured across the whole census, moving the catch inside took every configuration to
+    /// 78–80 of 80 entering native code, from 58–75.
+    ///
+    /// Pinned structurally rather than by the count, because the count is the *consequence*: what
+    /// has to hold is that the `try` is inside the `for` and that the caught value reaches the
+    /// accumulator. A wrapper that caught per iteration and then discarded `r` would score the same
+    /// on coverage and observe nothing.
+    #[test]
+    fn the_total_wrapper_catches_once_per_iteration_and_keeps_going() {
+        let source = JavaGenerator::default().generate(Seed(4)).to_java();
+        let run = source
+            .split_once("static int run() {")
+            .expect("the entry wrapper")
+            .1
+            .split_once("\n    }")
+            .expect("its closing brace")
+            .0;
+
+        let for_at = run.find("for (int w = 0;").expect("the warm-up loop");
+        let try_at = run.find("try {").expect("the try");
+        assert!(
+            for_at < try_at,
+            "the `try` is outside the loop again, so one throw ends the program:\n{run}"
+        );
+        assert!(
+            run.contains("acc = ((acc * 31) + r);"),
+            "the caught value never reaches the accumulator, so a throw is unobservable:\n{run}"
+        );
+        // And the marks are still all of them: totality (property 4) is what makes the executor's
+        // single `int` enough, and a catch that missed one would let an exception escape instead.
+        for needle in [
+            "catch (ArithmeticException e)",
+            "catch (ArrayIndexOutOfBoundsException e)",
+            "catch (NegativeArraySizeException e)",
+            "catch (NullPointerException e)",
+            "catch (Throwable t)",
+        ] {
+            assert!(run.contains(needle), "the wrapper lost {needle:?}:\n{run}");
+        }
+    }
+
+    /// `cast_share` turns the type probes on and off, and when on both shapes appear.
+    ///
+    /// Both, separately: `instanceof` can never fail, so on its own it exercises the guard and
+    /// never the path out of it — which is the half that becomes a **deopt** in compiled code and
+    /// a `ClassCastException` in the interpreter. A census that only counted "a type probe
+    /// appeared" would be satisfied by the harmless half.
+    #[test]
+    fn a_cast_share_turns_the_type_probes_on_and_off() {
+        let none = GenConfig { cast_share: 0, ..GenConfig::default() };
+        for seed in 0..150 {
+            let source = JavaGenerator::new(none).generate(Seed(seed)).to_java();
+            for needle in [" instanceof ", ") o", "int y"] {
+                let _ = needle;
+            }
+            assert!(!source.contains(" instanceof "), "seed {seed} emitted instanceof at share 0");
+        }
+
+        let lots = GenConfig { cast_share: 40, ..GenConfig::default() };
+        let (mut test, mut cast, mut both) = (0, 0, 0);
+        for seed in 0..200 {
+            let program = JavaGenerator::new(lots).generate(Seed(seed));
+            assert!(program.well_formed().is_ok(), "seed {seed}: {:?}", program.well_formed());
+            let source = program.to_java();
+            let t = source.contains(" instanceof ");
+            // A cast reads a field through a parenthesised class name: `(((Fz0S1) o5).a)`.
+            let c = source.contains(") o") && source.contains(").a);");
+            if t { test += 1; }
+            if c { cast += 1; }
+            if t && c { both += 1; }
+        }
+        println!("instanceof {test}/200, cast {cast}/200, ambos {both}/200");
+        // **The bar is what the knob can actually deliver, measured.** At a share of 40 both land
+        // near 27/200, and raising the share does not move it much: the ceiling is set by how often
+        // an *object statement* is drawn at all, which is `object_share`'s business and not this
+        // knob's. A floor of 15 catches the construct disappearing without pretending the knob
+        // controls something it does not.
+        assert!(test > 15, "instanceof en {test}/200");
+        assert!(cast > 15, "cast en {cast}/200");
+
+        // And the catch that makes the failing cast *observable* rather than lumped in with
+        // everything else: `marks::CLASS_CAST` was in the table and unreachable until now.
+        let source = JavaGenerator::new(lots).generate(Seed(0)).to_java();
+        assert!(
+            source.contains(&format!("catch (ClassCastException e) {{ r = {}; }}", marks::CLASS_CAST)),
+            "a failing cast would arrive as OTHER, indistinguishable from any other bug"
+        );
+    }
+
+    /// `ref_field_share` turns the reference field on and off, and when it is on all three shapes
+    /// appear — the store, the chained read, and the `null` store.
+    ///
+    /// The three are asserted separately because they fail separately. A **store** with no read is
+    /// an edge nobody observes; a **read** with no store is a chain that is always `null`, which
+    /// tests the deopt and nothing else; and without the **`null` store** the receiver of a chained
+    /// read is only ever null on a fresh object, so the transition live-then-null never happens.
+    #[test]
+    fn a_ref_field_share_turns_the_reference_field_on_and_off() {
+        // Off: the field is not even declared, so nothing can name it.
+        let none = GenConfig { ref_field_share: 0, ..GenConfig::default() };
+        for seed in 0..200 {
+            let source = JavaGenerator::new(none).generate(Seed(seed)).to_java();
+            for needle in ["B c;", ".c = ", ".c."] {
+                assert!(!source.contains(needle), "seed {seed} emitted {needle:?} at share 0");
+            }
+        }
+
+        let lots = GenConfig { ref_field_share: 45, ..GenConfig::default() };
+        let (mut store, mut read, mut declared, mut null_store) = (0, 0, 0, 0);
+        for seed in 0..200 {
+            let program = JavaGenerator::new(lots).generate(Seed(seed));
+            assert!(program.well_formed().is_ok(), "seed {seed}: {:?}", program.well_formed());
+            // The constructor's own `this.c = this;` is removed first. Counting it would have made
+            // this number 116/200 the moment the initialiser landed, which is the same measurement
+            // bug as counting a declaration as a reassignment.
+            let source = program.to_java().replace("this.c = this;", "");
+            if source.contains("B c;") { declared += 1; }
+            if source.contains(".c = ") { store += 1; }
+            if source.contains(".c.") { read += 1; }
+            if source.contains(".c = null;") { null_store += 1; }
+        }
+        println!(
+            "campo {declared}/200, store {store}/200, read {read}/200, null {null_store}/200"
+        );
+        assert!(declared > 80, "el campo se declara en {declared}/200");
+        assert!(store > 25, "`putfield` de referencia en {store}/200");
+        assert!(read > 60, "lectura encadenada en {read}/200");
+        assert!(null_store > 5, "store de null en {null_store}/200");
+
+        // And the half that keeps the field honest: it is declared **only** when something uses it.
+        // A field nobody reads is one the reducer cannot delete and a human has to rule out.
+        for seed in 0..200 {
+            let source = JavaGenerator::new(lots).generate(Seed(seed)).to_java();
+            if source.contains("B c;") {
+                assert!(
+                    source.replace("this.c = this;", "").contains(".c"),
+                    "seed {seed} declares the field and never touches it"
+                );
+            }
+        }
+    }
+
     #[test]
     fn an_array_share_of_zero_gives_the_grammar_without_arrays_back() {
         // Objects off as well, and not to make the test pass: `new ` and a bracket are the
@@ -4235,11 +5686,21 @@ mod tests {
                             + arms.iter().map(|x| in_block(&x.body)).sum::<usize>()
                             + default.as_ref().map_or(0, in_block)
                     }
+                    Stmt::While { body, .. } => in_block(body),
+                    Stmt::Break | Stmt::Continue | Stmt::Throw(_) => 0,
                     Stmt::For { body, .. } => in_block(body),
                     Stmt::ArrayStore { index, value, .. } => in_expr(index) + in_expr(value),
                     Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => in_expr(arg),
                     Stmt::FieldStore { value, .. } => in_expr(value),
-                    Stmt::NewArray { .. } => 0,
+                    Stmt::Fork { args, bodies, .. } => {
+                        in_expr(&args.0)
+                            + in_expr(&args.1)
+                            + bodies
+                                .iter()
+                                .map(|w| in_expr(&w.result) + in_block(&w.block))
+                                .sum::<usize>()
+                    }
+                    Stmt::NewArray { .. } | Stmt::RefStore { .. } | Stmt::TypeProbe { .. } => 0,
                 })
                 .sum()
         }
@@ -4390,6 +5851,21 @@ mod tests {
                         assert!(*bound > 0, "a bound of {bound} is not a loop that ends");
                         walk(body);
                     }
+                    // The guard makes the argument for a `while` the same as for a `for`, so the
+                    // check has to be the same too. Leaving it out would quietly stop testing
+                    // property 3 for the only loop whose condition is arbitrary.
+                    Stmt::While { limit, body, .. } => {
+                        assert!(*limit > 0, "a guard limit of {limit} is not a loop that ends");
+                        walk(body);
+                    }
+                    Stmt::Switch { arms, default, .. } => {
+                        for arm in arms {
+                            walk(&arm.body);
+                        }
+                        if let Some(b) = default {
+                            walk(b);
+                        }
+                    }
                     Stmt::If { then, otherwise, .. } => {
                         walk(then);
                         walk(otherwise);
@@ -4479,6 +5955,12 @@ mod tests {
                             in_block(body, out);
                         }
                     }
+                    Stmt::While { cond, body, .. } => {
+                        in_cond(cond, out);
+                        in_block(body, out);
+                    }
+                    Stmt::Break | Stmt::Continue | Stmt::Throw(_) => {}
+                    Stmt::RefStore { .. } | Stmt::TypeProbe { .. } => {}
                     Stmt::For { body, .. } => in_block(body, out),
                     Stmt::ArrayStore { index, value, .. } => {
                         in_expr(index, out);
@@ -4488,6 +5970,13 @@ mod tests {
                         in_expr(arg, out)
                     }
                     Stmt::FieldStore { value, .. } => in_expr(value, out),
+                    // Only the constructor arguments: a worker body cannot contain a call at all,
+                    // because it is emitted inside another class where an unqualified static name
+                    // does not resolve — `check_block` enforces it with an empty `visible` list.
+                    Stmt::Fork { args, .. } => {
+                        in_expr(&args.0, out);
+                        in_expr(&args.1, out);
+                    }
                     Stmt::NewArray { .. } => {}
                 }
             }
@@ -4538,7 +6027,7 @@ mod tests {
             );
             assert!(
                 source.contains(&format!(
-                    "catch (ArithmeticException e) {{ return {}; }}",
+                    "catch (ArithmeticException e) {{ r = {}; }}",
                     marks::ARITHMETIC
                 )),
                 "seed {seed}"
@@ -4548,20 +6037,20 @@ mod tests {
             // which is exactly the disagreement worth catching between two engines.
             assert!(
                 source.contains(&format!(
-                    "catch (ArrayIndexOutOfBoundsException e) {{ return {}; }}",
+                    "catch (ArrayIndexOutOfBoundsException e) {{ r = {}; }}",
                     marks::BOUNDS
                 )),
                 "seed {seed}"
             );
             assert!(
                 source.contains(&format!(
-                    "catch (NegativeArraySizeException e) {{ return {}; }}",
+                    "catch (NegativeArraySizeException e) {{ r = {}; }}",
                     marks::NEGATIVE_SIZE
                 )),
                 "seed {seed}"
             );
             assert!(
-                source.contains(&format!("catch (Throwable t) {{ return {}; }}", marks::OTHER)),
+                source.contains(&format!("catch (Throwable t) {{ r = {}; }}", marks::OTHER)),
                 "seed {seed} must have a last-resort catch or an escaping throw is unobservable"
             );
         }

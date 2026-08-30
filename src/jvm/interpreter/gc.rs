@@ -649,11 +649,25 @@ pub struct CompactReport {
 /// `class_id` points at its mirror, so keeping them put avoids rewriting class
 /// headers and the metaspace mirror map. Only instances relocate.
 ///
-/// ⚠️ Like the rest of the GC, this is only fully correct once [`reference_slots`]
-/// is implemented: today it rewrites the precise **frame roots** (so locals/operands
-/// follow moved objects), but *inter-object* references (a field pointing at a moved
-/// object) are left until the slot walk exists. Safe for object graphs without such
-/// references (e.g. the demos).
+/// **The warning that used to be here was stale, and it was worse than no warning.** It said
+/// inter-object references were "left until the slot walk exists" and that this was therefore
+/// "safe for object graphs without such references (e.g. the demos)". [`reference_slots`] has
+/// existed for a long time and step 3(b) below walks every object's reference words with it, young
+/// and old alike. A caveat that has outlived its cause does not merely fail to inform: it invites
+/// a reader chasing a stale-pointer bug to write this path off as known-broken and go look
+/// somewhere else, which is the opposite of what a warning is for.
+///
+/// What the pass actually rewrites before moving a byte, and each because something would dangle
+/// otherwise: the **frame roots** of every thread (precise — `Value` is tagged), the caller's
+/// **condy** roots, a parked thread's `wait_reacquire` monitor and its `Thread` object, and then
+/// **every reference slot of every object**. The object-monitor map is keyed by offset and is not
+/// the GC's to touch, so it comes back in [`CompactReport::relocations`] for the caller to remap.
+///
+/// The one thing that is genuinely conditional is [`reference_slots`] itself: an object whose
+/// header does not resolve to a known mirror yields **no** slots, so its references would be
+/// invisible here. That is unreachable if the class-id invariant holds — but it fails *silently*
+/// and towards "this object has no references", which is the wrong direction for a collector to
+/// be wrong in.
 pub fn compact(
     metaspace: &MetaspaceService,
     heap: &mut HeapService,
@@ -665,9 +679,19 @@ pub fn compact(
     mark(metaspace, heap, &*threads, condy_roots);
     process_weak_references(metaspace, heap);
 
-    // Pinned set: the mirror offsets (they stay put).
-    let pinned: HashSet<usize> =
-        metaspace.class_object_offsets().iter().map(|&(_, _, off)| off).collect();
+    // Pinned set: the mirror offsets and the **string pool** (both stay put).
+    //
+    // A literal has to be pinned for a reason the mirrors do not share. Step 3(b) below rewrites
+    // every reference slot, so an ordinary moved object is fine — but a literal's whole contract is
+    // its **identity**, and the pool is keyed by content, not by offset. Move one and the map still
+    // names the old address: the next `ldc` of that literal hands back a pointer into whatever now
+    // occupies it, and `"a" == "a"` starts answering about someone else's object.
+    let pinned: HashSet<usize> = metaspace
+        .class_object_offsets()
+        .iter()
+        .map(|&(_, _, off)| off)
+        .chain(metaspace.interned_offsets())
+        .collect();
     let before = heap.used();
 
     // 2. Forwarding addresses for the **Old** generation only (young is copy-collected
@@ -782,6 +806,12 @@ fn roots(
             }
         }
     }
+
+    // The **string pool** is a root (JLS §3.10.5, FZ-008). Between two `ldc`s of the same
+    // literal nothing else refers to it — that is exactly what a pool is for — so without this the
+    // first collection frees it and the next `ldc` hands back a dead offset. Nothing is traced
+    // *from* a pooled String: this VM lays the text inline, so it has no reference slots.
+    roots.extend(metaspace.interned_offsets());
 
     // The mirrors are roots: a loaded class's statics outlive any object, so the
     // mirror (and, transitively, what its statics point at) is always reachable.
@@ -1197,6 +1227,107 @@ mod tests {
     /// It is asserted as a *contrast*: an ordinary Old object of the same size, allocated right
     /// behind the mirror, must slide down into the hole in front of it. Without that half the test
     /// would pass on a compactor that simply moved nothing.
+
+    /// **FZ-008, as a regression test.** The string pool is a GC root: without it the first
+    /// collection frees a literal nothing else refers to — which is every literal, between two
+    /// `ldc`s of it — and the next `ldc` hands back a dead offset.
+    ///
+    /// Verified by sabotage: dropping `metaspace.interned_offsets()` from [`roots`] makes this
+    /// fail, and it is the only test that notices.
+    #[test]
+    fn a_pooled_literal_survives_a_collection_nothing_else_references() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        let literal = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kaji");
+        // Not on any stack, not in any field, not in a mirror's static: the pool is its only
+        // referrer, which is exactly the situation a literal is in between two uses of it.
+        let report = sweep(&metaspace, &mut heap, &[], &[]);
+
+        assert!(
+            !report.garbage.contains(&literal),
+            "the pooled literal at {literal} was collected — the next `ldc` of it would hand back \
+             a dead offset, and `\"kaji\" == \"kaji\"` would start answering about whatever \
+             took its place"
+        );
+        assert_eq!(
+            metaspace.interned_string(&"kaji".encode_utf16().collect::<Vec<_>>()),
+            Some(literal),
+            "and the pool still names it"
+        );
+    }
+
+    /// The other half of FZ-008: a pooled literal is **pinned**, so a compaction cannot move it.
+    ///
+    /// The mirrors are pinned for a reason literals do not share — every object's header points at
+    /// its mirror. A literal is pinned for its own: the pool is keyed by **content**, so a moved
+    /// literal leaves the map naming an address something else now occupies, and identity is the
+    /// whole contract of a literal.
+    #[test]
+    fn a_pooled_literal_does_not_move_when_the_heap_compacts() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        // **The order is the test.** A first `intern` is done only to force `java/lang/String`
+        // and its mirror into Old, because a mirror is pinned too — leave it in front of the hole
+        // and it plugs it, everything behind stays where it is, and the test passes whether the
+        // literal is pinned or not. That is not a hypothetical: the first version of this test was
+        // written that way and **the sabotage did not fail it**.
+        let earlier = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "antes");
+        let hole = heap.malloc_old(128);
+        let literal = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kaji");
+        heap.free(hole);
+        assert!(literal > hole, "the literal has to sit *behind* the hole to have anywhere to go");
+
+        let report = compact(&metaspace, &mut heap, &mut [], &mut []);
+        assert!(
+            !report.relocations.contains_key(&earlier),
+            "the earlier literal moved as well, so this test is measuring the wrong thing"
+        );
+
+        assert!(
+            !report.relocations.contains_key(&literal),
+            "the literal at {literal} moved to {:?} — the pool still names the old address",
+            report.relocations.get(&literal)
+        );
+        assert_eq!(
+            metaspace.interned_string(&"kaji".encode_utf16().collect::<Vec<_>>()),
+            Some(literal),
+            "and the pool agrees with where it actually is"
+        );
+    }
+
+    /// The half of JLS §3.10.5 that is about **not** sharing: a String the program computes is a
+    /// distinct object even when its contents equal a literal.
+    ///
+    /// Worth its own test because the two are one edit apart — `allocate` and `intern` differ by a
+    /// map lookup — and getting it backwards makes `new String("a") == "a"` answer `true`, which is
+    /// as wrong as the bug this pool was added to fix. It happened once already, in the first cut
+    /// of this fix: `String.rawValueOf` was left calling the pooled entry point.
+    #[test]
+    fn a_computed_string_is_never_the_pooled_instance() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        let literal = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kaji");
+        let again = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kaji");
+        let computed = crate::jvm::interpreter::strings::allocate(&mut metaspace, &mut heap, "kaji");
+
+        assert_eq!(literal, again, "two `ldc`s of one literal are the same object (JLS 3.10.5)");
+        assert_ne!(computed, literal, "a computed String is a distinct object");
+        assert_eq!(
+            crate::jvm::interpreter::strings::read(&heap, computed),
+            "kaji",
+            "distinct, and still the same text"
+        );
+    }
+
     #[test]
     fn a_class_mirror_is_pinned_across_a_compaction() {
         use std::path::PathBuf;

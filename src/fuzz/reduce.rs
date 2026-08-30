@@ -66,6 +66,8 @@ use super::Reducer;
 pub enum Pass {
     DeleteStatement,
     CollapseIf,
+    CollapseSwitch,
+    PromoteOperand,
     UnrollLoop,
     ShrinkArray,
     ShrinkWarmup,
@@ -79,6 +81,8 @@ pub enum Pass {
 pub const PASSES: &[Pass] = &[
     Pass::DeleteStatement,
     Pass::CollapseIf,
+    Pass::CollapseSwitch,
+    Pass::PromoteOperand,
     Pass::UnrollLoop,
     Pass::ShrinkArray,
     Pass::ShrinkWarmup,
@@ -90,14 +94,39 @@ pub const PASSES: &[Pass] = &[
 
 /// How small a program is, for the purpose of deciding that a cut was an improvement.
 ///
-/// Two components, compared in order:
+/// Three components, compared in order:
 ///
 /// 1. **node count** — the thing a human notices;
 /// 2. **literal magnitude** — so that shrinking `2147483647` to `1` counts as progress even though
 ///    the tree is exactly the same shape. Without this, [`Pass::ShrinkLiteral`] could never accept
 ///    anything and a finding would keep its enormous accidental constants forever.
-pub fn weight(program: &JavaProgram) -> (usize, u128) {
-    (program.size(), literal_mass(program))
+/// 3. **references** — how many leaves *name* something (a local, a field, a dispatched call, an
+///    array's length) rather than being a constant.
+///
+/// The third one is not cosmetic, and it was found by a reducer that could not finish. A leaf like
+/// `o.v()` has the same node count and the same literal magnitude as `0`, so under the first two
+/// components alone [`Pass::ExprToConstant`] can never replace it — and while the reference stands,
+/// the declaration it reads is not droppable either. One irreducible call pins an object, its
+/// constructor argument and its whole hierarchy into every finding forever. Counting references
+/// makes constant-for-reference a strictly decreasing step, and the order stays well founded
+/// because all three components are bounded below by zero.
+pub fn weight(program: &JavaProgram) -> (usize, u128, usize) {
+    (program.size(), literal_mass(program), references(program))
+}
+
+/// How many expression leaves name something rather than being a constant.
+fn references(program: &JavaProgram) -> usize {
+    let mut total = 0;
+    let mut copy = program.clone();
+    visit_exprs_mut(&mut copy, &mut |e| {
+        if matches!(
+            e,
+            Expr::Var(_, _) | Expr::Field(_, _) | Expr::Virtual(_, _) | Expr::ArrayLength(_)
+        ) {
+            total += 1;
+        }
+    });
+    total
 }
 
 /// A floating literal's contribution to the mass: its **bit pattern with the sign cleared**.
@@ -224,11 +253,37 @@ pub fn candidates(program: &JavaProgram, pass: Pass) -> Vec<JavaProgram> {
             true
         }),
         Pass::CollapseIf => collapse_ifs(program),
+        Pass::CollapseSwitch => collapse_switches(program),
         Pass::UnrollLoop => unroll_loops(program),
         Pass::ShrinkArray => shrink_arrays(program),
         Pass::ShrinkWarmup => shrink_warmup(program),
         Pass::DropMethod => drop_methods(program),
         Pass::DropParameter => drop_parameters(program),
+        // Replace an expression by **one of its own operands**, when the types agree.
+        //
+        // The expression-level counterpart of [`collapse_ifs`], and the pass that decides whether a
+        // bug buried inside a ternary can be minimised at all. Without it the reducer can only turn
+        // a subtree into a *constant*, which is useless when the interesting part is the subtree:
+        // a planted division inside `(c ? 0 : (0 / p))` inside a `!` inside another ternary
+        // survived every other pass and left a case nobody would want to read. Constants shrink
+        // the leaves; this shrinks the shape.
+        Pass::PromoteOperand => expr_edits(program, &|e| {
+            let ty = e.ty();
+            let operands: Vec<Expr> = match e {
+                Expr::Neg(a) | Expr::Not(a) | Expr::Cast(_, a) | Expr::Narrow(_, a) => {
+                    vec![(**a).clone()]
+                }
+                Expr::Bin(_, a, b) | Expr::Shift(_, a, b) | Expr::Ternary(_, a, b) => {
+                    vec![(**a).clone(), (**b).clone()]
+                }
+                _ => Vec::new(),
+            };
+            // The type filter is what makes this safe without a single special case: a `Cast`
+            // whose operand is a different type, or the `int` shift amount of a `long` shift, are
+            // simply not offered.
+            let same: Vec<Expr> = operands.into_iter().filter(|k| k.ty() == ty).collect();
+            (!same.is_empty()).then_some(same)
+        }),
         Pass::ExprToConstant => expr_edits(program, &|e| {
             let zero = Expr::zero(e.ty());
             (*e != zero).then_some(vec![zero])
@@ -361,8 +416,13 @@ fn collapse_ifs(program: &JavaProgram) -> Vec<JavaProgram> {
 /// [`JavaProgram::well_formed`] rejects the candidate, which is the whole argument of this module.
 fn unroll_loops(program: &JavaProgram) -> Vec<JavaProgram> {
     let mut out = statement_edits(program, &|stmt, block, at| {
-        let Stmt::For { body, .. } = stmt else {
-            return false;
+        // A `while` flattens exactly like a `for`, and for the same reason: what is interesting is
+        // usually in the body, not in the looping. A body that read the guard — or that carried a
+        // `break` now stranded outside any loop — makes the candidate invalid, and
+        // `JavaProgram::well_formed` is what rejects it, not a check here.
+        let body = match stmt {
+            Stmt::For { body, .. } | Stmt::While { body, .. } => body,
+            _ => return false,
         };
         block.remove(at);
         for (offset, s) in body.iter().enumerate() {
@@ -379,6 +439,54 @@ fn unroll_loops(program: &JavaProgram) -> Vec<JavaProgram> {
                 return false;
             }
             block[at] = Stmt::For { var: var.clone(), bound: target, body: body.clone() };
+            true
+        }));
+        out.extend(statement_edits(program, &|stmt, block, at| {
+            let Stmt::While { guard, limit, cond, body } = stmt else {
+                return false;
+            };
+            if *limit <= target {
+                return false;
+            }
+            block[at] = Stmt::While {
+                guard: guard.clone(),
+                limit: target,
+                cond: cond.clone(),
+                body: body.clone(),
+            };
+            true
+        }));
+    }
+    out
+}
+
+/// A `switch` collapses to **one** of its arms, or to its `default`.
+///
+/// Without this a `switch` could only be deleted whole, which is the wrong granularity: the finding
+/// usually lives in one arm, and deleting the statement takes the finding with it. The same
+/// argument as [`collapse_ifs`], and the same safety net — a collapse that strands a `break` is
+/// rejected by `well_formed` rather than predicted here.
+fn collapse_switches(program: &JavaProgram) -> Vec<JavaProgram> {
+    let mut out = Vec::new();
+    for which in 0..4usize {
+        out.extend(statement_edits(program, &|stmt, block, at| {
+            let Stmt::Switch { arms, default, .. } = stmt else {
+                return false;
+            };
+            let chosen: Option<Block> = if which < arms.len() {
+                Some(arms[which].body.clone())
+            } else if which == arms.len() {
+                default.clone()
+            } else {
+                None
+            };
+            let Some(body) = chosen else {
+                return false;
+            };
+            block.remove(at);
+            for (offset, s) in body.iter().enumerate() {
+                block.insert(at + offset, s.clone());
+            }
             true
         }));
     }
@@ -626,8 +734,20 @@ fn visit_exprs_mut(program: &mut JavaProgram, f: &mut dyn FnMut(&mut Expr)) {
 fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
     for stmt in block.iter_mut() {
         match stmt {
+            // Neither holds an expression: they name locals and nothing else.
+            Stmt::RefStore { .. } | Stmt::TypeProbe { .. } => {}
             Stmt::Declare { init, .. } => visit_expr(init, f),
             Stmt::Assign { expr, .. } => visit_expr(expr, f),
+            // Constructor arguments first, then the bodies, so the numbering the counting pass and
+            // the editing pass share stays the order a reader would guess.
+            Stmt::Fork { args, bodies, .. } => {
+                visit_expr(&mut args.0, f);
+                visit_expr(&mut args.1, f);
+                for worker in bodies.iter_mut() {
+                    visit_block_exprs(&mut worker.block, f);
+                    visit_expr(&mut worker.result, f);
+                }
+            }
             Stmt::If { cond, then, otherwise } => {
                 visit_cond(cond, f);
                 visit_block_exprs(then, f);
@@ -642,6 +762,11 @@ fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
                     visit_block_exprs(body, f);
                 }
             }
+            Stmt::While { cond, body, .. } => {
+                visit_cond(cond, f);
+                visit_block_exprs(body, f);
+            }
+            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => {}
             Stmt::For { body, .. } => visit_block_exprs(body, f),
             Stmt::NewArray { .. } => {}
             Stmt::ArrayStore { index, value, .. } => {
@@ -666,6 +791,7 @@ fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
         | Expr::DoubleLit(_)
         | Expr::ArrayLength(_)
         | Expr::Field(_, _)
+        | Expr::ThroughRef(_, _)
         | Expr::Virtual(_, _)
         // Un subarbol de strings no contiene `Expr`: sus hojas son literales del pool.
         | Expr::Str(_, _)
@@ -875,7 +1001,14 @@ mod tests {
         let mut reducer = StructuralReducer::new(10_000);
         let reduced = reducer.reduce(program(11), &mut |_| true);
         assert!(reduced.methods.is_empty(), "every helper was droppable");
-        assert!(reduced.entry.body.is_empty(), "every statement was droppable");
+        assert!(
+            reduced.entry.body.is_empty(),
+            "every statement was droppable, but this survived after {} steps / {} candidates:
+{}",
+            reducer.steps,
+            reducer.candidates_tried,
+            reduced.to_java()
+        );
         assert_eq!(reduced.entry.result, Expr::IntLit(0));
         assert!(reduced.well_formed().is_ok());
         let source = reduced.to_java();
@@ -962,12 +1095,20 @@ mod tests {
         // Why the loop cannot cycle: every accepted candidate is strictly smaller in this order,
         // and the order is bounded below.
         let p = program(6);
-        let (nodes, mass) = weight(&p);
+        let (nodes, mass, refs) = weight(&p);
         assert!(nodes > 0);
         let smaller = candidates(&p, Pass::DeleteStatement);
         for candidate in smaller {
-            assert!(weight(&candidate) < (nodes, mass), "deletion must always shrink");
+            assert!(weight(&candidate) < (nodes, mass, refs), "deletion must always shrink");
         }
+
+        // The third component earns its place: a call replaced by a constant is the same shape and
+        // the same literal magnitude, so it is *only* the reference count that makes it a step.
+        let pinned = candidates(&p, Pass::ExprToConstant)
+            .into_iter()
+            .filter(|c| c.size() == nodes && literal_mass(c) == mass)
+            .count();
+        assert!(pinned > 0, "seed 6 has no reference leaf to constantise");
     }
 
     #[test]

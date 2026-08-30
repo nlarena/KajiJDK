@@ -403,6 +403,19 @@ struct SharedVm {
     /// `PrintStream.println`). Buffered here so tooling can show it persistently —
     /// the step visualizer clears the screen each frame, which would wipe raw stdout.
     console: String,
+    /// The class of the exception that killed the **entry** thread, if one did.
+    ///
+    /// `execute` answers `None` both for a `void` method that finished and for a thread that died
+    /// with an exception escaping, and a caller outside this module cannot tell the two apart —
+    /// which is FZ-001: `run-headless` printed `-> None` and exited 0 where a real `java` names
+    /// the class and exits non-zero. Recording the class here is the structural answer; the
+    /// alternative, grepping the console for `Exception in thread`, would be fooled by a program
+    /// that prints that string itself.
+    ///
+    /// Only the entry thread (slot 0), because that is the one whose death is the *program's*
+    /// exit status. A worker dying uncaught is reported on the console and leaves the exit status
+    /// alone, exactly as a real JVM does.
+    uncaught_entry: Option<String>,
     /// The GC's policy (fragmentation knobs + automatic-trigger settings), read from
     /// the environment once at startup. Tunable per run via the `JVM_GC_*` variables.
     gc_policy: gc::GcPolicy,
@@ -529,6 +542,7 @@ impl JVM {
                 condy_in_progress: std::collections::HashSet::new(),
                 heap: HeapService::new(),
                 console: String::new(),
+                uncaught_entry: None,
                 gc_policy: gc::GcPolicy::from_env(),
                 steps: 0,
                 last_gc_step: 0,
@@ -1432,7 +1446,9 @@ impl Exec<'_> {
         // never `new`ed), then stamp the two fields `<init>` would have set.
         class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, "java/lang/Thread");
         let obj = objects_operations::allocate(&mut self.shared.metaspace, &mut self.shared.heap, "java/lang/Thread");
-        let name = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, "main");
+        // The thread's name is an object the VM builds, not a literal of the program, and a real
+        // JDK does not hand back the pooled `"main"` either.
+        let name = strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, "main");
         let name_at = obj + objects_operations::field_offset(&mut self.shared.metaspace, "java/lang/Thread", "name");
         self.shared.heap.store_reference(obj, name_at, name);
         // `tid` (a long) is left 0 by `allocate`'s zeroing — main is thread 0.
@@ -2052,6 +2068,17 @@ impl Exec<'_> {
                     // compiling may not.
                     class_mirror: &|unit, index| {
                         class_operations::jit_class_mirror(metaspace, metaspace.class_of(unit), index)
+                    },
+                    // `ldc "…"`: the **pooled** literal's offset, read-only. `None` when the
+                    // interpreter has never reached that `ldc`, which refuses the method —
+                    // interning allocates, and compiling may not. Legal to bake at all only
+                    // because the pool is one instance per literal, in Old, a GC root and pinned
+                    // out of `gc::compact` (FZ-008).
+                    string_literal: &|unit, index| {
+                        let caller = metaspace.class_of(unit);
+                        let text = metaspace.get(caller)?.string_constant(index)?;
+                        let units: Vec<u16> = text.encode_utf16().collect();
+                        metaspace.interned_string(&units).map(|off| off as u32)
                     },
                     poll_word: poll,
                 },
@@ -4014,6 +4041,60 @@ pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
     }
 }
 
+/// What a headless run needs and [`execute`] alone cannot answer: the value, everything the
+/// program printed, and the class of the exception that killed the entry thread if one did.
+#[derive(Debug, Default)]
+pub struct RunReport {
+    /// What the entry method returned — `None` for a `void` method **and** for a thread that died.
+    pub value: Option<Value>,
+    /// Everything the program printed, including the uncaught-exception report and its backtrace.
+    pub console: String,
+    /// The dotted class name of the exception that killed the entry thread, if one did.
+    pub uncaught: Option<String>,
+}
+
+/// [`execute`], plus the two things it drops on the floor.
+///
+/// This exists for FZ-001. The VM has always *known* which exception killed a thread —
+/// `report_uncaught` builds the same header a real `java` prints, backtrace included — but it
+/// wrote it to the console buffer, which `execute` drops when the `JVM` goes out of scope. The
+/// information existed and was lost in the last metre.
+pub fn execute_reporting(metaspace: MetaspaceService, entry: Frame) -> RunReport {
+    match ThreadMode::from_env() {
+        ThreadMode::Green => {
+            let mut interp = JVM::new(metaspace, entry);
+            let value = loop {
+                if let Step::Return(value) = interp.exec().step() {
+                    break value;
+                }
+            };
+            RunReport {
+                value,
+                console: std::mem::take(&mut interp.shared.console),
+                uncaught: interp.shared.uncaught_entry.take(),
+            }
+        }
+        ThreadMode::OsGil => {
+            let (value, shared) = run_os_threaded_reporting(metaspace, entry, ThreadMode::OsGil);
+            let mut g = shared.lock().unwrap();
+            RunReport {
+                value,
+                console: std::mem::take(&mut g.console),
+                uncaught: g.uncaught_entry.take(),
+            }
+        }
+        ThreadMode::OsParallel => {
+            let (value, shared) = run_os_parallel_reporting(metaspace, entry);
+            let mut g = shared.write().unwrap();
+            RunReport {
+                value,
+                console: std::mem::take(&mut g.console),
+                uncaught: g.uncaught_entry.take(),
+            }
+        }
+    }
+}
+
 /// Like [`execute`] but on the **green** engine unconditionally (ignoring `JVM_THREADS`), and
 /// hands back the **opcode count** alongside the result: `self.shared.steps`, the logical clock
 /// `run_one` ticks once per instruction, read after the program returns.
@@ -4121,6 +4202,17 @@ pub(crate) fn execute_os_parallel(metaspace: MetaspaceService, entry: Frame) -> 
 /// [`Exec`]. Still one lock per opcode (serialised, oracle-green) — 1d releases it for the
 /// frame-local opcodes that touch only the thread-local context.
 fn run_os_threaded(metaspace: MetaspaceService, entry: Frame, mode: ThreadMode) -> Option<Value> {
+    run_os_threaded_reporting(metaspace, entry, mode).0
+}
+
+/// [`run_os_threaded`] handing back the shared state as well, so a caller can read what the
+/// program printed and how the entry thread ended. The state is behind the same `Arc` the worker
+/// threads used, and by the time this returns they have all been joined.
+fn run_os_threaded_reporting(
+    metaspace: MetaspaceService,
+    entry: Frame,
+    mode: ThreadMode,
+) -> (Option<Value>, Arc<Mutex<SharedVm>>) {
     debug_assert!(mode.uses_os_threads(), "run_os_threaded needs an OS-threaded mode");
     let mut jvm = JVM::new(metaspace, entry);
     jvm.shared.mode = mode; // force the OS substrate regardless of the env (e.g. in tests)
@@ -4133,7 +4225,8 @@ fn run_os_threaded(metaspace: MetaspaceService, entry: Frame, mode: ThreadMode) 
     // into slot 0 before handing the *shared* state off to the threads (the owner is dropped).
     std::mem::swap(&mut jvm.running.frames, &mut jvm.shared.threads[0].frames);
     let shared = Arc::new(Mutex::new(jvm.shared));
-    os_thread_loop(&shared, 0)
+    let value = os_thread_loop(&shared, 0);
+    (value, shared)
 }
 
 /// What an OS thread does after one turn under the GIL — decided while holding the lock,
@@ -4701,6 +4794,15 @@ fn run_read_shared(shared: &SharedVm, ctx: &mut RunningCtx) -> Option<Step> {
 /// `os` parallel substrate entry: set up the shared state (main's frame in slot 0), flip
 /// `gc_by_driver` so `safepoint` defers to us, and run the parallel loop on this OS thread.
 pub(crate) fn run_os_parallel(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
+    run_os_parallel_reporting(metaspace, entry).0
+}
+
+/// [`run_os_parallel`] handing back the shared state as well. See
+/// [`run_os_threaded_reporting`].
+fn run_os_parallel_reporting(
+    metaspace: MetaspaceService,
+    entry: Frame,
+) -> (Option<Value>, Arc<RwLock<SharedVm>>) {
     let mut jvm = JVM::new(metaspace, entry);
     jvm.shared.mode = ThreadMode::OsParallel;
     jvm.shared.gc_by_driver = true; // GC goes through `coordinate_gc`, not inline `safepoint`
@@ -4708,7 +4810,8 @@ pub(crate) fn run_os_parallel(metaspace: MetaspaceService, entry: Frame) -> Opti
     std::mem::swap(&mut jvm.running.frames, &mut jvm.shared.threads[0].frames);
     let shared = Arc::new(RwLock::new(jvm.shared));
     let gc_pending = Arc::new(AtomicBool::new(false));
-    os_parallel_loop(&shared, &gc_pending, 0)
+    let value = os_parallel_loop(&shared, &gc_pending, 0);
+    (value, shared)
 }
 
 /// One thread's parallel run loop. Runs frame-local opcodes lock-free on its own `RunningCtx`;

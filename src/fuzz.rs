@@ -147,6 +147,21 @@ pub trait Program: Clone {
     fn to_java(&self) -> String;
     /// The class whose entry method the runner invokes.
     fn class_name(&self) -> &str;
+
+    /// Whether `value` is an **exception marker** rather than a computed result.
+    ///
+    /// A program that answers a marker did not compute anything: it threw, and what came back is
+    /// the wrapper's code for *which* exception. That is a legitimate outcome — the two sides can
+    /// agree on it, and agreeing on a thrown class is worth something — but it is **not** the same
+    /// as agreeing on arithmetic, and a campaign whose seeds mostly answer markers is testing far
+    /// less than its seed count suggests.
+    ///
+    /// It lives on the trait rather than in the campaign loop because only the generator knows what
+    /// its markers are, and it defaults to `false` so a `Program` that has no notion of them —
+    /// every hand-written fixture in the tests — needs to say nothing.
+    fn is_marker(&self, _value: i32) -> bool {
+        false
+    }
 }
 
 /// Turns a seed into a program. Most of the difficulty of this whole tool lives behind this one
@@ -170,10 +185,12 @@ pub trait Runner<P: Program> {
 /// something nobody reads.
 ///
 /// The list is currently **empty**, and staying that way is part of the job. Its one entry — string
-/// interning, `"a" == "a"` false here and true on a real JDK — was retired when F3 hito 3 gave
-/// `strings::intern` a real JLS §3.10.5 pool, because a suppression that outlives its reason hides
-/// exactly the bug it was written around. See [`oracle`] for the argument and for the fixture that
-/// keeps the mechanism proven while there is nothing real in it.
+/// interning, `"a" == "a"` false here and true on a real JDK — was retired on the claim that the
+/// pool had landed. **It had not**, and the suppression's removal was right for the wrong reason:
+/// what it was hiding was a live non-conformance (FZ-008), fixed on 2026-08-29. That is the whole
+/// argument for keeping the list empty — a suppression that outlives its reason hides exactly the
+/// bug it was written around, and this one nearly did. See [`oracle`] for the fixture that keeps
+/// the mechanism proven while there is nothing real in it.
 pub trait Oracle {
     fn verdict(&self, left: &Observation, right: &Observation) -> Verdict;
 }
@@ -239,6 +256,14 @@ pub struct Report {
     pub unusable: u64,
     /// The same, broken down by reason, so the number above is actionable.
     pub unusable_reasons: std::collections::BTreeMap<String, u64>,
+    /// Seeds whose answer was an **exception marker** rather than a computed value.
+    ///
+    /// A different measurement from [`Report::unusable`] and the reason it is counted apart: an
+    /// unusable seed never ran, a marked one ran and **threw**, which the oracle is right to accept
+    /// as agreement. What it is not is coverage. This number exists because FZ-005 was exactly this
+    /// failure — 46% of seeds dying before the JIT ever looked at them, invisible in a report that
+    /// only counted usable seeds and divergences.
+    pub marked: u64,
 }
 
 impl Report {
@@ -249,6 +274,15 @@ impl Report {
             return 0.0;
         }
         1.0 - (self.unusable as f64) / (self.seeds_run as f64)
+    }
+
+    /// The share of seeds that **threw** instead of computing something. The companion to
+    /// [`Report::usable_fraction`], and the one that says how much of a clean report is real.
+    pub fn marked_fraction(&self) -> f64 {
+        if self.seeds_run == 0 {
+            return 0.0;
+        }
+        (self.marked as f64) / (self.seeds_run as f64)
     }
 }
 
@@ -280,6 +314,11 @@ where
 
         let left = runner.run(&program, left_path);
         let right = runner.run(&program, right_path);
+        if let Outcome::Returned(v) = left.outcome {
+            if program.is_marker(v) {
+                report.marked += 1;
+            }
+        }
         let reason = match oracle.verdict(&left, &right) {
             Verdict::Differ(reason) => reason,
             Verdict::Agree => continue,
@@ -305,6 +344,118 @@ where
             left: (left_path, left),
             right: (right_path, right),
             reason,
+        });
+        if report.divergences.len() >= stop_after {
+            break;
+        }
+    }
+    report
+}
+
+/// **The self-comparison loop.** Generate, run the *same* program `repeats` times on **one** path,
+/// and check that every run landed in the same place.
+///
+/// # Why this exists when three pairings already do
+///
+/// Every other campaign asks "do two engines agree?", and to ask that it has to have two engines.
+/// This one asks "does **one** engine agree with itself?", and that is a different question with a
+/// property the others do not have: **it needs no reference at all**. It cannot tell you the right
+/// answer, and it does not have to — a program whose result is fixed by construction that answers
+/// two different things is a finding no matter which answer was right.
+///
+/// That is exactly the shape of FZ-002, and of the `os-parallel` stale-reference bug behind it: a
+/// heisenbug that appears in roughly one run of ten, on a program whose correct output nobody
+/// disputes. Against a *pairing*, such a bug is a coin flip on both sides at once; against
+/// repetition, every extra run is another chance to catch it and the cost is linear.
+///
+/// # The reducer, and why its predicate is deliberately more sensitive than the campaign's
+///
+/// A greedy shrinker over a **flaky** predicate is unsound in a specific, silent way: a candidate
+/// that happens not to reproduce this time is judged "no longer failing", so the reducer keeps the
+/// cut — and the thing it just deleted may be precisely what made the program race. Left alone,
+/// the minimal case is a program that does not reproduce anything.
+///
+/// There is no way to make that sound without a deterministic predicate, which is the one thing
+/// this campaign does not have. What can be done is to stop the reducer from being *less* likely to
+/// see the bug than the detector was, which is the failure that turns a real finding into a
+/// mystery: `reduce_repeats` is `repeats * 2`. It buys probability, not certainty, and the shrink
+/// is best-effort by construction — stated here rather than discovered later.
+pub fn repetition_campaign<G, R, O, D>(
+    generator: &mut G,
+    runner: &mut R,
+    oracle: &O,
+    reducer: &mut D,
+    path: Path,
+    repeats: usize,
+    seeds: impl IntoIterator<Item = Seed>,
+    stop_after: usize,
+) -> Report
+where
+    G: Generator,
+    R: Runner<G::Program>,
+    O: Oracle,
+    D: Reducer<G::Program>,
+{
+    assert!(repeats >= 2, "one run cannot disagree with itself");
+    let reduce_repeats = repeats * 2;
+    let mut report = Report::default();
+
+    for seed in seeds {
+        report.seeds_run += 1;
+        let program = generator.generate(seed);
+
+        // The first run is the baseline every later one is compared against. Comparing each run
+        // with its predecessor instead would let a value drift A, B, B and be called agreement
+        // twice out of three.
+        let first = runner.run(&program, path);
+        if let Outcome::Returned(v) = first.outcome {
+            if program.is_marker(v) {
+                report.marked += 1;
+            }
+        }
+        let mut found: Option<(usize, Observation, String)> = None;
+        let mut unusable: Option<String> = None;
+
+        for repeat in 1..repeats {
+            let again = runner.run(&program, path);
+            match oracle.verdict(&first, &again) {
+                Verdict::Agree => continue,
+                Verdict::Differ(reason) => {
+                    found = Some((repeat, again, reason));
+                    break;
+                }
+                // Unusable is a property of the *program*, not of this run, so one is enough to
+                // disqualify the seed — and it must not be left to look like agreement.
+                Verdict::Unusable(why) => {
+                    unusable = Some(why);
+                    break;
+                }
+            }
+        }
+
+        let Some((repeat, again, reason)) = found else {
+            if let Some(why) = unusable {
+                report.unusable += 1;
+                *report.unusable_reasons.entry(why).or_default() += 1;
+            }
+            continue;
+        };
+
+        let mut still_fails = |candidate: &G::Program| {
+            let baseline = runner.run(candidate, path);
+            (1..reduce_repeats).any(|_| {
+                let again = runner.run(candidate, path);
+                matches!(oracle.verdict(&baseline, &again), Verdict::Differ(_))
+            })
+        };
+        let minimal = reducer.reduce(program, &mut still_fails);
+
+        report.divergences.push(Divergence {
+            seed,
+            source: minimal.to_java(),
+            left: (path, first),
+            right: (path, again),
+            reason: format!("run 1 vs run {}: {reason}", repeat + 1),
         });
         if report.divergences.len() >= stop_after {
             break;
@@ -401,6 +552,29 @@ mod tests {
         }
     }
 
+    /// A runner that answers the truth except on every `flake_every`-th call, where it is off by
+    /// one — a **non-deterministic** engine, which is the thing no pairing can see because both
+    /// sides of a pairing get the same coin.
+    ///
+    /// The counter is per runner and not per program on purpose: what is being modelled is an
+    /// engine that misbehaves once in a while, not a program that is wrong.
+    struct Flaky {
+        flake_every: usize,
+        calls: usize,
+    }
+    impl Runner<Toy> for Flaky {
+        fn run(&mut self, program: &Toy, _path: Path) -> Observation {
+            self.calls += 1;
+            let value =
+                if self.flake_every > 0 && self.calls % self.flake_every == 0 {
+                    program.0 + 1
+                } else {
+                    program.0
+                };
+            Observation { outcome: Outcome::Returned(value), stdout: String::new() }
+        }
+    }
+
     fn seeds(range: std::ops::Range<u64>) -> Vec<Seed> {
         range.map(Seed).collect()
     }
@@ -474,5 +648,138 @@ mod tests {
             found.source
         );
         assert!(runner.runs > 2, "a real predicate re-runs both paths for every candidate");
+    }
+
+    /// The control, and the one that matters most: an engine that is deterministic must produce
+    /// **no** finding, however many times it is asked. A repetition campaign that reported
+    /// something here would report something forever, on every seed, and be worthless.
+    #[test]
+    fn a_deterministic_engine_never_disagrees_with_itself() {
+        let report = repetition_campaign(
+            &mut FromSeed,
+            &mut Flaky { flake_every: 0, calls: 0 },
+            &Exact,
+            &mut NoReduction,
+            Path::OsParallel,
+            5,
+            seeds(1..30),
+            1,
+        );
+        assert_eq!(report.seeds_run, 29);
+        assert!(report.divergences.is_empty(), "nothing flaked, so nothing may be reported");
+        assert_eq!(report.unusable, 0);
+    }
+
+    /// And the other half: a flake **is** caught, with no reference implementation anywhere in the
+    /// picture. This is the property the whole campaign shape exists for — it does not know the
+    /// right answer and does not need to.
+    #[test]
+    fn a_flaky_engine_is_caught_without_any_reference_to_compare_against() {
+        // Every 3rd call is wrong, so within 5 runs of the first seed there is certainly one.
+        let report = repetition_campaign(
+            &mut FromSeed,
+            &mut Flaky { flake_every: 3, calls: 0 },
+            &Exact,
+            &mut NoReduction,
+            Path::OsParallel,
+            5,
+            seeds(1..5),
+            1,
+        );
+        assert_eq!(report.divergences.len(), 1, "a flake must be a finding");
+        let found = &report.divergences[0];
+        assert_eq!(found.left.0, Path::OsParallel, "both sides are the same path, by construction");
+        assert_eq!(found.right.0, Path::OsParallel);
+        assert!(
+            found.reason.starts_with("run 1 vs run "),
+            "the report must say *which* run disagreed: {}",
+            found.reason
+        );
+    }
+
+    /// A flake rarer than the campaign's own repeat count is missed, and that is not a defect to
+    /// hide: it is the shape of the instrument. Detection is probabilistic, `repeats` is the knob,
+    /// and writing the limit down is what stops a clean report from being read as proof.
+    #[test]
+    fn a_flake_rarer_than_the_repeat_count_is_missed_which_is_the_instruments_shape() {
+        let report = repetition_campaign(
+            &mut FromSeed,
+            &mut Flaky { flake_every: 50, calls: 0 },
+            &Exact,
+            &mut NoReduction,
+            Path::OsParallel,
+            3,
+            seeds(1..5),
+            1,
+        );
+        assert!(
+            report.divergences.is_empty(),
+            "3 runs per seed cannot see a 1-in-50 flake, and pretending otherwise would be worse"
+        );
+    }
+
+    /// The reducer must be **more** sensitive than the detector, not less. A shrinker whose
+    /// predicate gets fewer chances than the campaign did will call a candidate fixed because it
+    /// got lucky, keep the cut, and hand back a minimal case that reproduces nothing.
+    ///
+    /// What is counted is the number that decides that: **how many runs a candidate gets before it
+    /// is declared clean**. The predicate stops at the first disagreement, so a *failing* candidate
+    /// is cheap; the one that has to be paid for is the candidate that looks fine, and the contract
+    /// is that it looks fine only after `repeats * 2` tries.
+    #[test]
+    fn a_candidate_is_only_declared_clean_after_twice_the_detectors_runs() {
+        thread_local! {
+            /// Every call ever, which is what drives the flake. Kept apart from the measurement
+            /// below on purpose: one counter for both would let the reducer's reset re-arm the
+            /// flake, and the candidate would never look clean.
+            static CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+            /// Runs since the reducer started asking.
+            static MEASURED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        }
+        /// Wrong on its **second** call and honest ever after: enough for the detector to find
+        /// something, and then nothing for the reducer to find — which is the case being measured.
+        struct FlakyOnce;
+        impl Runner<Toy> for FlakyOnce {
+            fn run(&mut self, program: &Toy, _path: Path) -> Observation {
+                let n = CALLS.with(|c| {
+                    c.set(c.get() + 1);
+                    c.get()
+                });
+                MEASURED.with(|c| c.set(c.get() + 1));
+                let value = if n == 2 { program.0 + 1 } else { program.0 };
+                Observation { outcome: Outcome::Returned(value), stdout: String::new() }
+            }
+        }
+        struct CountingReducer {
+            runs_to_declare_clean: usize,
+        }
+        impl Reducer<Toy> for CountingReducer {
+            fn reduce(&mut self, program: Toy, still_fails: &mut dyn FnMut(&Toy) -> bool) -> Toy {
+                MEASURED.with(|c| c.set(0));
+                assert!(!still_fails(&program), "the candidate must look clean here");
+                self.runs_to_declare_clean = MEASURED.with(|c| c.get());
+                program
+            }
+        }
+
+        const REPEATS: usize = 4;
+        let mut reducer = CountingReducer { runs_to_declare_clean: 0 };
+        let report = repetition_campaign(
+            &mut FromSeed,
+            &mut FlakyOnce,
+            &Exact,
+            &mut reducer,
+            Path::OsParallel,
+            REPEATS,
+            seeds(1..2),
+            1,
+        );
+        assert_eq!(report.divergences.len(), 1, "the flake on run 2 must be found");
+        assert_eq!(
+            reducer.runs_to_declare_clean,
+            REPEATS * 2,
+            "a candidate declared clean on fewer runs than the detector had is how a flaky \
+             shrink deletes the cause and reports a minimal case that reproduces nothing"
+        );
     }
 }

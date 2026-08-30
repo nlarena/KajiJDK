@@ -238,6 +238,11 @@ pub fn putstatic(metaspace: &mut MetaspaceService, heap: &mut HeapService, frame
         Value::Double(v) => heap.write_u64(at, v.to_bits()),
         Value::Float(v) => heap.write_u32(at, v.to_bits()),
         Value::Int(v) => heap.write_u32(at, v as u32),
+        // The one reference store that legitimately skips [`HeapService::store_reference`], and
+        // the reason is that the barrier would have nothing to record: `at` is a slot of a **class
+        // mirror**, and `gc::minor` scans every mirror's statics as an Old→young root
+        // *unconditionally*, before it ever consults the remembered set. Adding the holder would
+        // be recording a root that is already permanent.
         Value::Reference(r) => heap.write_u32(at, r as u32),
     }
 }

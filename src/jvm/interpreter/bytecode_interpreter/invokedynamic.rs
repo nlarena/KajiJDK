@@ -245,7 +245,11 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
                     .map(|(value, descriptor)| render(&self.shared.heap, value, descriptor))
                     .collect(),
             };
-            let offset = strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
+            // **Computed, so not pooled.** A concatenation's result is a new object even when it
+            // happens to equal a literal — JLS §3.10.5 only interns constants, and `("a" + b) == "a"`
+            // must be `false` when `b` is `""` at runtime.
+            let offset =
+                strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, &text);
             self.top().push(Value::Reference(offset));
         }
         Bootstrap::TypeSwitch { labels } => {
@@ -331,8 +335,9 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
                 "toString" => {
                     let text = record_to_string(self, record_class, components, &args);
                     if !self.threw() {
+                        // Computed by `Record.toString`, so a fresh object.
                         let offset =
-                            strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text);
+                            strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, &text);
                         self.top().push(Value::Reference(offset));
                     }
                 }
@@ -396,6 +401,8 @@ pub(super) fn static_argument(&mut self, owner: &str, index: u16) -> Value {
     };
 
     match shape {
+        // A **literal**: a static argument of a bootstrap method is a `CONSTANT_String` of the
+        // constant pool, so it is the same object an `ldc` of it would hand back.
         Shape::Text(text) => {
             Value::Reference(strings::intern(&mut self.shared.metaspace, &mut self.shared.heap, &text))
         }
@@ -931,9 +938,17 @@ fn concat_with_recipe(
 /// last-digit tie-break and in the denormals.
 ///
 /// Object arguments beyond `String` would need a real `toString()` call (a virtual
-/// dispatch back into the interpreter); for now a non-null reference is read as a
-/// `String`. `javac` never sends anything else — it inserts `String.valueOf(Object)`
-/// *before* the call site — but another compiler could, ours included.
+/// dispatch back into the interpreter), which this function has no way to make: it holds
+/// a `&HeapService`, not the interpreter. So a reference whose descriptor is not
+/// `Ljava/lang/String;` is a **hard error** rather than something to guess at.
+///
+/// That guess is what finding #282 was. This used to read *any* non-null reference as a
+/// `String` — the object's fields interpreted as a `char[]` — on the assumption, written
+/// right here, that "javac never sends anything else". Ours did: `lower_concat` emitted the
+/// call site with the raw reference type and no `String.valueOf`. The result was a garbage
+/// string with one operand and a read past the end of the heap with two. Both sides are
+/// fixed now (`concat_needs_value_of` in the emitter), and this panic is the guard that
+/// keeps the assumption honest instead of silent.
 fn render(heap: &HeapService, value: &Value, descriptor: &str) -> String {
     match (descriptor.as_bytes().first(), value) {
         (Some(b'Z'), Value::Int(n)) => if *n != 0 { "true" } else { "false" }.to_string(),
@@ -945,7 +960,16 @@ fn render(heap: &HeapService, value: &Value, descriptor: &str) -> String {
         (_, Value::Float(f)) => float_to_decimal::java_float(*f),
         (_, Value::Double(d)) => float_to_decimal::java_double(*d),
         (_, Value::Reference(0)) => "null".to_string(),
-        (_, Value::Reference(offset)) => strings::read(heap, *offset),
+        (_, Value::Reference(offset)) => {
+            assert!(
+                descriptor == "Ljava/lang/String;",
+                "concatenacion: el operando llego como '{descriptor}' y no como \
+                 'Ljava/lang/String;'. StringConcatFactory no convierte: el emisor tiene que \
+                 insertar String.valueOf(Object) antes del call site (finding #282). Leer esta \
+                 referencia como un String daria basura, o una lectura fuera del heap."
+            );
+            strings::read(heap, *offset)
+        }
     }
 }
 
