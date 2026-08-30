@@ -19,6 +19,50 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
         this.day = day;
     }
 
+    /** El dia y mes de hoy, en la zona por defecto. */
+    public static MonthDay now() {
+        LocalDate d = LocalDate.now();
+        return MonthDay.of(d.getMonthValue(), d.getDayOfMonth());
+    }
+
+    /** El que marca `clock`. La forma testeable de `now()`. */
+    public static MonthDay now(java.time.Clock clock) {
+        if (clock == null) {
+            throw new NullPointerException("clock");
+        }
+        LocalDate d = LocalDate.now(clock);
+        return MonthDay.of(d.getMonthValue(), d.getDayOfMonth());
+    }
+
+    /** El de esa zona, ahora. */
+    public static MonthDay now(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        LocalDate d = LocalDate.now(zone);
+        return MonthDay.of(d.getMonthValue(), d.getDayOfMonth());
+    }
+
+    /** El dia y mes que `temporal` tiene. */
+    public static MonthDay from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof MonthDay) {
+            return (MonthDay) temporal;
+        }
+        return MonthDay.of(temporal.get(ChronoField.MONTH_OF_YEAR),
+                temporal.get(ChronoField.DAY_OF_MONTH));
+    }
+
+    /** Con el mes como enum. */
+    public static MonthDay of(Month month, int dayOfMonth) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return MonthDay.of(month.getValue(), dayOfMonth);
+    }
+
     public static MonthDay of(int month, int dayOfMonth) {
         return new MonthDay(month, dayOfMonth);
     }
@@ -33,6 +77,53 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
 
     public int getDayOfMonth() {
         return this.day;
+    }
+
+    /**
+     * Si este dia-y-mes existe en ese año.
+     *
+     * <p>Solo el 29 de febrero puede no existir, y es justamente el caso por el que `MonthDay`
+     * guarda 1..29 para febrero y no 1..28: un 29 de febrero es un dia-y-mes valido, y en que años
+     * cae es otra pregunta.
+     */
+    public boolean isValidYear(int year) {
+        return !(this.getDayOfMonth() == 29 && this.getMonthValue() == 2
+                && !Year.isLeap((long) year));
+    }
+
+    /** Este dia-y-mes con otro mes; si el dia no existe en el nuevo mes, se recorta al ultimo. */
+    public MonthDay withMonth(int month) {
+        return this.with(Month.of(month));
+    }
+
+    public MonthDay with(Month month) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        if (month.getValue() == this.getMonthValue()) {
+            return this;
+        }
+        // Se recorta, no se rechaza: el 31 de enero con el mes puesto en abril es el 30 de abril.
+        // Es lo que hace el JDK, y la alternativa --tirar-- volveria inusable `with` sobre cualquier
+        // dia mayor a 28.
+        int dia = Math.min(this.getDayOfMonth(), month.maxLength());
+        return MonthDay.of(month.getValue(), dia);
+    }
+
+    /** Con otro dia del mes. */
+    public MonthDay withDayOfMonth(int dayOfMonth) {
+        if (dayOfMonth == this.getDayOfMonth()) {
+            return this;
+        }
+        return MonthDay.of(this.getMonthValue(), dayOfMonth);
+    }
+
+    /** Formateado. */
+    public String format(java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        return formatter.format(this);
     }
 
     public LocalDate atYear(int year) {

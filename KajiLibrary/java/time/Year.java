@@ -18,6 +18,39 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
         this.year = year;
     }
 
+    /** El año mas temprano representable. */
+    public static final int MIN_VALUE = -999999999;
+
+    /** El mas tardio. */
+    public static final int MAX_VALUE = 999999999;
+
+    /** El año que `temporal` tiene. */
+    public static Year from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof Year) {
+            return (Year) temporal;
+        }
+        return Year.of(temporal.get(ChronoField.YEAR));
+    }
+
+    /** El año que marca `clock`. La forma testeable de `now()`. */
+    public static Year now(java.time.Clock clock) {
+        if (clock == null) {
+            throw new NullPointerException("clock");
+        }
+        return Year.of(LocalDate.now(clock).getYear());
+    }
+
+    /** El año en esa zona, ahora. */
+    public static Year now(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        return Year.of(LocalDate.now(zone).getYear());
+    }
+
     public static Year of(int isoYear) {
         return new Year(isoYear);
     }
@@ -40,6 +73,111 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
 
     public int length() {
         return this.isLeap() ? 366 : 365;
+    }
+
+    /**
+     * Si ese dia-y-mes existe en este año.
+     *
+     * <p>El unico caso en que no es el 29 de febrero de un año comun -- y es exactamente para eso
+     * que el metodo existe.
+     */
+    public boolean isValidMonthDay(MonthDay monthDay) {
+        return monthDay != null && monthDay.isValidYear(this.getValue());
+    }
+
+    /**
+     * El dia numero `dayOfYear` de este año.
+     *
+     * @throws java.time.DateTimeException si el dia no existe -- el 366 en un año comun
+     */
+    public LocalDate atDay(int dayOfYear) {
+        return LocalDate.ofYearDay(this.getValue(), dayOfYear);
+    }
+
+    /** Este año con ese dia-y-mes. */
+    public LocalDate atMonthDay(MonthDay monthDay) {
+        if (monthDay == null) {
+            throw new NullPointerException("monthDay");
+        }
+        return monthDay.atYear(this.getValue());
+    }
+
+    /** Este año con ese mes. */
+    public YearMonth atMonth(int month) {
+        return YearMonth.of(this.getValue(), month);
+    }
+
+    public YearMonth atMonth(Month month) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return YearMonth.of(this.getValue(), month.getValue());
+    }
+
+    /**
+     * Este año formateado.
+     *
+     * @throws java.time.DateTimeException si no se puede formatear
+     */
+    public String format(java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        return formatter.format(this);
+    }
+
+    /**
+     * Este año mas `amountToAdd` unidades.
+     *
+     * @throws java.time.DateTimeException si la unidad no es de año
+     */
+    public Year plus(long amountToAdd, java.time.temporal.TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (unit == ChronoUnit.YEARS) {
+            return this.plusYears(amountToAdd);
+        }
+        if (unit == ChronoUnit.DECADES) {
+            return this.plusYears(amountToAdd * 10L);
+        }
+        if (unit == ChronoUnit.CENTURIES) {
+            return this.plusYears(amountToAdd * 100L);
+        }
+        if (unit == ChronoUnit.MILLENNIA) {
+            return this.plusYears(amountToAdd * 1000L);
+        }
+        if (unit == ChronoUnit.ERAS) {
+            // Una era ISO son todos los años de un signo: sumar una lleva del año `y` al `1-y`.
+            long era = this.getLong(ChronoField.ERA);
+            return (Year) this.with(ChronoField.ERA, era + amountToAdd);
+        }
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+    }
+
+    public Year minus(long amountToSubtract, java.time.temporal.TemporalUnit unit) {
+        return this.plus(-amountToSubtract, unit);
+    }
+
+    /** Este año con `field` puesto en `newValue`. */
+    public Year with(java.time.temporal.TemporalField field, long newValue) {
+        if (field == null) {
+            throw new NullPointerException("field");
+        }
+        if (field == ChronoField.YEAR) {
+            return Year.of((int) ChronoField.YEAR.checkValidValue(newValue));
+        }
+        if (field == ChronoField.YEAR_OF_ERA) {
+            ChronoField.YEAR_OF_ERA.checkValidValue(newValue);
+            return Year.of(this.getValue() < 1 ? (int) (1L - newValue) : (int) newValue);
+        }
+        if (field == ChronoField.ERA) {
+            ChronoField.ERA.checkValidValue(newValue);
+            // Cambiar de era refleja el año sobre el 1: el año 5 de la era anterior es el -4.
+            long yoe = this.getLong(ChronoField.YEAR_OF_ERA);
+            return Year.of(newValue == 0L ? (int) (1L - yoe) : (int) yoe);
+        }
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public Year plusYears(long yearsToAdd) {

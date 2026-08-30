@@ -20,6 +20,44 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
         this.month = month;
     }
 
+    /** El año y mes que `temporal` tiene. */
+    public static YearMonth from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof YearMonth) {
+            return (YearMonth) temporal;
+        }
+        return YearMonth.of(temporal.get(ChronoField.YEAR),
+                temporal.get(ChronoField.MONTH_OF_YEAR));
+    }
+
+    /** El que marca `clock`. La forma testeable de `now()`. */
+    public static YearMonth now(java.time.Clock clock) {
+        if (clock == null) {
+            throw new NullPointerException("clock");
+        }
+        LocalDate d = LocalDate.now(clock);
+        return YearMonth.of(d.getYear(), d.getMonthValue());
+    }
+
+    /** El de esa zona, ahora. */
+    public static YearMonth now(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        LocalDate d = LocalDate.now(zone);
+        return YearMonth.of(d.getYear(), d.getMonthValue());
+    }
+
+    /** Con el mes como enum. */
+    public static YearMonth of(int year, Month month) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return YearMonth.of(year, month.getValue());
+    }
+
     public static YearMonth of(int year, int month) {
         return new YearMonth(year, month);
     }
@@ -51,6 +89,84 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
 
     public int lengthOfYear() {
         return this.isLeapYear() ? 366 : 365;
+    }
+
+    /**
+     * Si ese dia del mes existe en este año y mes.
+     *
+     * <p>Distingue el 29 de febrero de un año bisiesto del de uno comun, que es para lo que sirve.
+     */
+    public boolean isValidDay(int dayOfMonth) {
+        return dayOfMonth >= 1 && dayOfMonth <= this.lengthOfMonth();
+    }
+
+    /** Este año y mes con otro año; el mes queda igual. */
+    public YearMonth withYear(int year) {
+        ChronoField.YEAR.checkValidValue((long) year);
+        return YearMonth.of(year, this.getMonthValue());
+    }
+
+    /** Con otro mes; el año queda igual. */
+    public YearMonth withMonth(int month) {
+        ChronoField.MONTH_OF_YEAR.checkValidValue((long) month);
+        return YearMonth.of(this.getYear(), month);
+    }
+
+    /** Formateado. */
+    public String format(java.time.format.DateTimeFormatter formatter) {
+        if (formatter == null) {
+            throw new NullPointerException("formatter");
+        }
+        return formatter.format(this);
+    }
+
+    /**
+     * Este año y mes mas `amountToAdd` unidades.
+     *
+     * @throws java.time.DateTimeException si la unidad no es de mes o de año
+     */
+    public YearMonth plus(long amountToAdd, java.time.temporal.TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (unit == ChronoUnit.MONTHS) {
+            return this.plusMonths(amountToAdd);
+        }
+        if (unit == ChronoUnit.YEARS) {
+            return this.plusYears(amountToAdd);
+        }
+        if (unit == ChronoUnit.DECADES) {
+            return this.plusYears(amountToAdd * 10L);
+        }
+        if (unit == ChronoUnit.CENTURIES) {
+            return this.plusYears(amountToAdd * 100L);
+        }
+        if (unit == ChronoUnit.MILLENNIA) {
+            return this.plusYears(amountToAdd * 1000L);
+        }
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+    }
+
+    public YearMonth minus(long amountToSubtract, java.time.temporal.TemporalUnit unit) {
+        return this.plus(-amountToSubtract, unit);
+    }
+
+    /** Con `field` puesto en `newValue`. */
+    public YearMonth with(java.time.temporal.TemporalField field, long newValue) {
+        if (field == null) {
+            throw new NullPointerException("field");
+        }
+        if (field == ChronoField.YEAR) {
+            return this.withYear((int) ChronoField.YEAR.checkValidValue(newValue));
+        }
+        if (field == ChronoField.MONTH_OF_YEAR) {
+            return this.withMonth((int) ChronoField.MONTH_OF_YEAR.checkValidValue(newValue));
+        }
+        if (field == ChronoField.PROLEPTIC_MONTH) {
+            long delta = newValue - (this.getYear() * 12L + this.getMonthValue() - 1);
+            return this.plusMonths(delta);
+        }
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
 
     public YearMonth plusMonths(long monthsToAdd) {

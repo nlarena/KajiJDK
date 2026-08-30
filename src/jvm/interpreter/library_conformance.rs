@@ -544,6 +544,136 @@ mod tests {
         }
     }
 
+    /// The `java.nio` buffers expose their backing array through the covariant `array()` (the last
+    /// gap that closed the whole buffer family to 100%). The probe checks a `ByteBuffer` hands back
+    /// the *same* array object it wrapped (1) and shares it for writes (2), that `IntBuffer` (4) and
+    /// `CharBuffer` (8) do the same with their element types, and that `hasArray`/`arrayOffset` agree
+    /// (16) → 31. `array()` now returns `byte[]`/`int[]`/`char[]` (not `Object`), with the JDK's
+    /// bridge — the frozen javac accepts the covariant array return since the compiler round that
+    /// fixed covariant bridges.
+    #[test]
+    fn nio_buffers_backing_array() {
+        let src = r#"
+            import java.nio.ByteBuffer;
+            import java.nio.IntBuffer;
+            import java.nio.CharBuffer;
+
+            public class BufProbe {
+                public int run() {
+                    int acc = 0;
+
+                    byte[] ba = {10, 20, 30};
+                    ByteBuffer bb = ByteBuffer.wrap(ba);
+                    if (bb.array() == ba && bb.array().length == 3 && bb.array()[1] == 20) { acc += 1; }
+                    bb.put(0, (byte) 99);
+                    if (ba[0] == 99) { acc += 2; }
+
+                    int[] ia = {1, 2, 3, 4};
+                    IntBuffer ib = IntBuffer.wrap(ia);
+                    if (ib.array() == ia && ib.array()[3] == 4) { acc += 4; }
+
+                    char[] ca = {'x', 'y'};
+                    CharBuffer cb = CharBuffer.wrap(ca);
+                    if (cb.array() == ca && cb.array()[0] == 'x') { acc += 8; }
+
+                    if (bb.hasArray() && bb.arrayOffset() == 0) { acc += 16; }
+
+                    return acc;
+                }
+            }
+        "#;
+        let cp = vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")];
+        let per_unit = crate::javac::compile_units_cp(&[src], &cp).expect("el probe compila");
+        let mut metaspace = MetaspaceService::new(cp, Vec::new());
+        for classes in &per_unit {
+            for (internal, bytes) in classes {
+                let cf = ClassFile::from_bytes(bytes).expect("la clase del probe parsea");
+                metaspace.add(internal.clone(), cf);
+            }
+        }
+        let entry = metaspace.resolve_method("BufProbe", "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        let frame = Frame::new(entry, max_locals, Vec::new());
+        match execute(metaspace, frame) {
+            Some(Value::Int(v)) => assert_eq!(v, 31, "los buffers de java.nio no cuadran"),
+            other => panic!("se esperaba un int, salió {other:?}"),
+        }
+    }
+
+    /// `java.math` closed to 100% (BigInteger 64/64, BigDecimal 90/90). The probe exercises the new
+    /// surface behaviourally: BigInteger two's-complement bit ops (1) and `toByteArray` round-trip
+    /// (2), `sqrt` floor (4), `modPow`/`modInverse` (8), Miller-Rabin primality (16); and BigDecimal
+    /// legacy int rounding (32), `MathContext` divide/multiply (64), exact conversions with the
+    /// `ArithmeticException` on a fraction (128), `remainder`/`divideToIntegralValue` (256), and
+    /// `sqrt(2)` to 10 digits (512) → 1023.
+    #[test]
+    fn java_math_bigint_and_bigdecimal() {
+        let src = r#"
+            import java.math.BigInteger;
+            import java.math.BigDecimal;
+            import java.math.MathContext;
+
+            public class MathProbe {
+                static BigInteger b(long v) { return BigInteger.valueOf(v); }
+                static BigDecimal d(String s) { return new BigDecimal(s); }
+
+                public int run() {
+                    int acc = 0;
+
+                    if (b(12).and(b(10)).intValue() == 8 && b(12).or(b(10)).intValue() == 14
+                            && b(5).not().intValue() == -6 && b(-16).bitCount() == 4) { acc += 1; }
+                    if (new BigInteger(new BigInteger("-1180591620717411303424").toByteArray())
+                            .equals(new BigInteger("-1180591620717411303424"))) { acc += 2; }
+                    if (b(145).sqrt().intValue() == 12
+                            && new BigInteger("100000000000000000000").sqrt()
+                                    .equals(BigInteger.valueOf(10000000000L))) { acc += 4; }
+                    if (b(3).modPow(b(13), b(7)).intValue() == 3
+                            && b(3).modInverse(b(11)).intValue() == 4) { acc += 8; }
+                    if (b(97).isProbablePrime(20) && !b(91).isProbablePrime(20)
+                            && b(90).nextProbablePrime().intValue() == 97) { acc += 16; }
+
+                    if (d("1").divide(d("3"), 5, BigDecimal.ROUND_HALF_UP).toString().equals("0.33333")) {
+                        acc += 32;
+                    }
+                    if (d("1").divide(d("3"), new MathContext(5)).toPlainString().equals("0.33333")
+                            && d("2").multiply(d("3.14159"), new MathContext(3)).toString().equals("6.28")) {
+                        acc += 64;
+                    }
+                    if (d("42.00").intValueExact() == 42) {
+                        try {
+                            d("42.5").intValueExact();
+                        } catch (ArithmeticException e) {
+                            acc += 128;
+                        }
+                    }
+                    if (d("7").remainder(d("3")).intValue() == 1
+                            && d("7").divideToIntegralValue(d("3")).intValue() == 2) { acc += 256; }
+                    if (d("2").sqrt(new MathContext(10)).toPlainString().startsWith("1.414213562")) {
+                        acc += 512;
+                    }
+
+                    return acc;
+                }
+            }
+        "#;
+        let cp = vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")];
+        let per_unit = crate::javac::compile_units_cp(&[src], &cp).expect("el probe compila");
+        let mut metaspace = MetaspaceService::new(cp, Vec::new());
+        for classes in &per_unit {
+            for (internal, bytes) in classes {
+                let cf = ClassFile::from_bytes(bytes).expect("la clase del probe parsea");
+                metaspace.add(internal.clone(), cf);
+            }
+        }
+        let entry = metaspace.resolve_method("MathProbe", "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        let frame = Frame::new(entry, max_locals, Vec::new());
+        match execute(metaspace, frame) {
+            Some(Value::Int(v)) => assert_eq!(v, 1023, "java.math no cuadra"),
+            other => panic!("se esperaba un int, salió {other:?}"),
+        }
+    }
+
     /// Las cuatro clases nuevas de `java.lang` (`Process`/`ProcessHandle` públicas, `CharacterData`/
     /// `BaseVirtualThread` internas) **cargan** en el VM. Son superficie inerte —KajiJDK no tiene
     /// subsistema de procesos ni virtual threads, así que nada las instancia y ningún otro test las

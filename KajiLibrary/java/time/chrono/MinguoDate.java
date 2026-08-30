@@ -81,6 +81,24 @@ public final class MinguoDate implements ChronoLocalDate {
         return this.isoDate.until(end.isoDate, unit);
     }
 
+    /**
+     * El periodo entre esta fecha y `endDateExclusive`, en **este** calendario.
+     *
+     * <p>Se calcula sobre las fechas ISO equivalentes y se devuelve como `ChronoPeriod` de este
+     * calendario. La cuenta es la misma --los tres calendarios de esta biblioteca solo renumeran los
+     * años, no cambian la longitud de los meses--, y por eso alcanza con delegar; un calendario con
+     * meses de otra longitud necesitaria su propia cuenta.
+     */
+    public ChronoPeriod until(ChronoLocalDate endDateExclusive) {
+        if (endDateExclusive == null) {
+            throw new NullPointerException("endDateExclusive");
+        }
+        java.time.LocalDate fin = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
+        java.time.Period p = java.time.Period.between(
+                java.time.LocalDate.ofEpochDay(this.toEpochDay()), fin);
+        return new ChronoPeriodImpl(this.getChronology(), p.getYears(), p.getMonths(), p.getDays());
+    }
+
     public long toEpochDay() {
         return this.isoDate.toEpochDay();
     }

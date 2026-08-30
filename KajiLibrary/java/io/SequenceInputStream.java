@@ -2,6 +2,7 @@ package java.io;
 
 // Same-package import works around the frozen javac's finder (finding #4).
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Enumeration;
 
 // KajiLibrary's java.io.SequenceInputStream — several streams read as if they were one.
@@ -96,6 +97,20 @@ public class SequenceInputStream extends InputStream {
             this.nextStream();
         }
         this.e = null;
+    }
+
+    public long transferTo(OutputStream out) throws IOException {
+        long total = 0;
+        byte[] chunk = new byte[8192];
+        while (true) {
+            int n = read(chunk, 0, chunk.length);
+            if (n <= 0) {
+                break;
+            }
+            out.write(chunk, 0, n);
+            total = total + n;
+        }
+        return total;
     }
 }
 

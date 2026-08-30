@@ -14,7 +14,7 @@ public interface BinaryOperator<T> extends BiFunction<T, T, T> {
 
     // The operator that keeps whichever of its two arguments the comparator ranks lower.
     // `<= 0` keeps the FIRST argument on a tie, which is what makes a reduction stable.
-    public static <T> BinaryOperator<T> minBy(Comparator<? super T> comparator) {
+    static <T> BinaryOperator<T> minBy(Comparator<? super T> comparator) {
         Objects.requireNonNull(comparator);
         return (T a, T b) -> {
             if (comparator.compare(a, b) <= 0) {
@@ -25,7 +25,7 @@ public interface BinaryOperator<T> extends BiFunction<T, T, T> {
     }
 
     // The operator that keeps whichever of its two arguments the comparator ranks higher.
-    public static <T> BinaryOperator<T> maxBy(Comparator<? super T> comparator) {
+    static <T> BinaryOperator<T> maxBy(Comparator<? super T> comparator) {
         Objects.requireNonNull(comparator);
         return (T a, T b) -> {
             if (comparator.compare(a, b) >= 0) {

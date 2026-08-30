@@ -191,6 +191,41 @@ public final class HijrahDate implements ChronoLocalDate {
         return months;
     }
 
+    /**
+     * El periodo entre esta fecha y `endDateExclusive`, en el calendario Hijri.
+     *
+     * <p>A diferencia de los otros tres calendarios de la biblioteca, este **no** es el ISO
+     * renumerado: sus meses son lunares y duran 29 o 30 dias. Asi que la cuenta no se puede delegar
+     * en `java.time.Period` -- se hace sobre los campos Hijri, tomando primero los meses completos y
+     * despues los dias que sobran, que es lo que hace valer
+     * `inicio.plus(until(inicio, fin)).equals(fin)`.
+     */
+    public ChronoPeriod until(ChronoLocalDate endDateExclusive) {
+        if (endDateExclusive == null) {
+            throw new NullPointerException("endDateExclusive");
+        }
+        HijrahDate fin = HijrahChronology.INSTANCE.date(
+                (int) endDateExclusive.getLong(ChronoField.YEAR),
+                (int) endDateExclusive.getLong(ChronoField.MONTH_OF_YEAR),
+                (int) endDateExclusive.getLong(ChronoField.DAY_OF_MONTH));
+        long mesesTotales = (fin.getLong(ChronoField.YEAR) * 12L
+                + fin.getLong(ChronoField.MONTH_OF_YEAR) - 1L)
+                - (this.getLong(ChronoField.YEAR) * 12L
+                        + this.getLong(ChronoField.MONTH_OF_YEAR) - 1L);
+        int dias = (int) (fin.getLong(ChronoField.DAY_OF_MONTH)
+                - this.getLong(ChronoField.DAY_OF_MONTH));
+        if (mesesTotales > 0 && dias < 0) {
+            mesesTotales = mesesTotales - 1;
+            HijrahDate avanzada = (HijrahDate) this.plus(mesesTotales, ChronoUnit.MONTHS);
+            dias = (int) (fin.toEpochDay() - avanzada.toEpochDay());
+        } else if (mesesTotales < 0 && dias > 0) {
+            mesesTotales = mesesTotales + 1;
+            dias = dias - fin.lengthOfMonth();
+        }
+        return new ChronoPeriodImpl(this.getChronology(), (int) (mesesTotales / 12L),
+                (int) (mesesTotales % 12L), dias);
+    }
+
     public long toEpochDay() {
         return this.epochDay;
     }

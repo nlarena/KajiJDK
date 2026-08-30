@@ -1,5 +1,7 @@
 package java.math;
 
+import java.util.Random;
+
 // KajiLibrary's java.math.BigInteger — integers with no upper bound, which is what you need the
 // moment a result stops fitting in 64 bits.
 //
@@ -24,7 +26,7 @@ package java.math;
 // nextProbablePrime), the bitwise operations (and/or/xor/not), and the byte[] constructors are
 // omitted. `Comparable` is not implemented — `compareTo(BigInteger)` is declared directly, which
 // gives the same descriptor without needing a bridge.
-public final class BigInteger extends Number {
+public final class BigInteger extends Number implements Comparable<BigInteger> {
 
     public static final BigInteger ZERO = new BigInteger(0, new int[0]);
 
@@ -486,7 +488,21 @@ public final class BigInteger extends Number {
     }
 
     public int bitLength() {
-        return BigInteger.bitLengthMag(this.mag);
+        int len = BigInteger.bitLengthMag(this.mag);
+        if (this.signum < 0) {
+            // A negative value that is an exact power of two occupies one bit less in the
+            // minimal two's-complement form (e.g. -128 is 0x80, seven bits after the sign).
+            int ones = 0;
+            int i = 0;
+            while (i < this.mag.length) {
+                ones = ones + Integer.bitCount(this.mag[i]);
+                i = i + 1;
+            }
+            if (ones == 1) {
+                len = len - 1;
+            }
+        }
+        return len;
     }
 
     public boolean testBit(int n) {
@@ -628,5 +644,616 @@ public final class BigInteger extends Number {
             return -d;
         }
         return d;
+    }
+
+    // ---- exact narrowing conversions ----
+
+    /** @throws ArithmeticException if this will not fit in a {@code long}. */
+    public long longValueExact() {
+        long l = this.longValue();
+        if (valueOf(l).equals(this)) {
+            return l;
+        }
+        throw new ArithmeticException("BigInteger out of long range");
+    }
+
+    /** @throws ArithmeticException if this will not fit in an {@code int}. */
+    public int intValueExact() {
+        int v = this.intValue();
+        if (valueOf(v).equals(this)) {
+            return v;
+        }
+        throw new ArithmeticException("BigInteger out of int range");
+    }
+
+    /** @throws ArithmeticException if this will not fit in a {@code short}. */
+    public short shortValueExact() {
+        int v = this.intValueExact();
+        if ((short) v == v) {
+            return (short) v;
+        }
+        throw new ArithmeticException("BigInteger out of short range");
+    }
+
+    /** @throws ArithmeticException if this will not fit in a {@code byte}. */
+    public byte byteValueExact() {
+        int v = this.intValueExact();
+        if ((byte) v == v) {
+            return (byte) v;
+        }
+        throw new ArithmeticException("BigInteger out of byte range");
+    }
+
+    // ---- bulk division / multiply ----
+
+    /** {@return {this / val, this % val}}. */
+    public BigInteger[] divideAndRemainder(BigInteger val) {
+        return new BigInteger[] {this.divide(val), this.remainder(val)};
+    }
+
+    /** As {@link #multiply(BigInteger)} — KajiJDK does the work sequentially. */
+    public BigInteger parallelMultiply(BigInteger val) {
+        return this.multiply(val);
+    }
+
+    // ---- radix string ----
+
+    /** This value as a string in the given radix (2..36; anything else falls back to 10). */
+    public String toString(int radix) {
+        if (radix < 2 || radix > 36) {
+            radix = 10;
+        }
+        if (radix == 10) {
+            return this.toString();
+        }
+        if (this.signum == 0) {
+            return "0";
+        }
+        String d = "0123456789abcdefghijklmnopqrstuvwxyz";
+        StringBuilder sb = new StringBuilder();
+        BigInteger r = valueOf(radix);
+        BigInteger n = this.abs();
+        while (n.signum != 0) {
+            BigInteger[] qr = n.divideAndRemainder(r);
+            sb.append(d.charAt(qr[1].intValue()));
+            n = qr[0];
+        }
+        if (this.signum < 0) {
+            sb.append('-');
+        }
+        StringBuilder rev = new StringBuilder();
+        int i = sb.length() - 1;
+        while (i >= 0) {
+            rev.append(sb.charAt(i));
+            i = i - 1;
+        }
+        return rev.toString();
+    }
+
+    // ---- two's-complement byte views ----
+
+    // The n-th 32-bit int of the two's-complement magnitude, LSB-first (JDK's getInt).
+    private int getInt(int n) {
+        if (n < 0) {
+            return 0;
+        }
+        if (n >= this.mag.length) {
+            return this.signum < 0 ? -1 : 0;
+        }
+        int magInt = this.mag[this.mag.length - n - 1];
+        if (this.signum >= 0) {
+            return magInt;
+        }
+        // Negative: below the first non-zero word it's the two's complement (-magInt); above, ~magInt.
+        if (n <= this.firstNonzeroIntNum()) {
+            return -magInt;
+        }
+        return ~magInt;
+    }
+
+    // Index (LSB-first) of the first non-zero int of the magnitude.
+    private int firstNonzeroIntNum() {
+        int i = this.mag.length - 1;
+        while (i >= 0 && this.mag[i] == 0) {
+            i = i - 1;
+        }
+        return this.mag.length - i - 1;
+    }
+
+    /** This value as a big-endian two's-complement byte array (minimal length, at least one byte). */
+    public byte[] toByteArray() {
+        int byteLen = this.bitLength() / 8 + 1;
+        byte[] result = new byte[byteLen];
+        int i = byteLen - 1;
+        int bytesCopied = 4;
+        int nextInt = 0;
+        int intIndex = 0;
+        while (i >= 0) {
+            if (bytesCopied == 4) {
+                nextInt = this.getInt(intIndex);
+                intIndex = intIndex + 1;
+                bytesCopied = 1;
+            } else {
+                nextInt = nextInt >>> 8;
+                bytesCopied = bytesCopied + 1;
+            }
+            result[i] = (byte) nextInt;
+            i = i - 1;
+        }
+        return result;
+    }
+
+    // ---- byte-array constructors ----
+
+    /** A number from its big-endian two's-complement bytes. */
+    public BigInteger(byte[] val) {
+        this(val, 0, val.length);
+    }
+
+    /** A number from a big-endian two's-complement byte range. */
+    public BigInteger(byte[] val, int off, int len) {
+        if (len == 0) {
+            throw new NumberFormatException("Zero length BigInteger");
+        }
+        if (val[off] < 0) {
+            this.mag = makePositive(val, off, len);
+            this.signum = -1;
+        } else {
+            int[] m = stripLeadingZeroBytes(val, off, len);
+            this.mag = m;
+            this.signum = (m.length == 0) ? 0 : 1;
+        }
+    }
+
+    /** A number from a sign and its big-endian unsigned magnitude bytes. */
+    public BigInteger(int signum, byte[] magnitude) {
+        this(signum, magnitude, 0, magnitude.length);
+    }
+
+    /** A number from a sign and a big-endian unsigned magnitude byte range. */
+    public BigInteger(int signum, byte[] magnitude, int off, int len) {
+        if (signum < -1 || signum > 1) {
+            throw new NumberFormatException("Invalid signum value");
+        }
+        int[] m = stripLeadingZeroBytes(magnitude, off, len);
+        if (m.length == 0) {
+            this.signum = 0;
+            this.mag = m;
+        } else {
+            if (signum == 0) {
+                throw new NumberFormatException("signum-magnitude mismatch");
+            }
+            this.signum = signum;
+            this.mag = m;
+        }
+    }
+
+    // big-endian unsigned bytes -> stripped int[] magnitude
+    private static int[] stripLeadingZeroBytes(byte[] a, int off, int len) {
+        int keep = off;
+        while (keep < off + len && a[keep] == 0) {
+            keep = keep + 1;
+        }
+        int nbytes = off + len - keep;
+        if (nbytes == 0) {
+            return new int[0];
+        }
+        int intLength = (nbytes + 3) / 4;
+        int[] result = new int[intLength];
+        int b = off + len - 1;
+        int wi = intLength - 1;
+        while (wi >= 0) {
+            int word = 0;
+            int shift = 0;
+            int k = 0;
+            while (k < 4 && b >= keep) {
+                word = word | ((a[b] & 0xFF) << shift);
+                shift = shift + 8;
+                b = b - 1;
+                k = k + 1;
+            }
+            result[wi] = word;
+            wi = wi - 1;
+        }
+        return result;
+    }
+
+    // big-endian NEGATIVE two's-complement bytes -> magnitude of the absolute value
+    private static int[] makePositive(byte[] a, int off, int len) {
+        // Number of leading 0xFF bytes (the sign extension), then leading zero bytes after negating.
+        int keep = off;
+        while (keep < off + len && a[keep] == -1) {
+            keep = keep + 1;
+        }
+        // Build the two's-complement magnitude by: value = (~bytes) + 1 over the significant part.
+        int j = keep;
+        while (j < off + len && a[j] == 0) {
+            j = j + 1;
+        }
+        int extraByte = (j == off + len) ? 1 : 0;
+        int nbytes = off + len - keep + extraByte;
+        int intLength = (nbytes + 3) / 4;
+        int[] result = new int[intLength];
+        // Assemble ~bytes into result (big-endian words), sign-extended, then add 1.
+        int b = off + len - 1;
+        int wi = intLength - 1;
+        while (wi >= 0) {
+            int word = 0;
+            int shift = 0;
+            int k = 0;
+            while (k < 4) {
+                int bv;
+                if (b >= keep) {
+                    bv = a[b] & 0xFF;
+                } else {
+                    bv = 0xFF; // sign extension of a negative number
+                }
+                word = word | ((bv ^ 0xFF) << shift);
+                shift = shift + 8;
+                b = b - 1;
+                k = k + 1;
+            }
+            result[wi] = word;
+            wi = wi - 1;
+        }
+        // add 1 (two's complement)
+        int idx = intLength - 1;
+        boolean carry = true;
+        while (idx >= 0 && carry) {
+            long sum = (result[idx] & 0xFFFFFFFFL) + 1L;
+            result[idx] = (int) sum;
+            carry = (sum >>> 32) != 0;
+            idx = idx - 1;
+        }
+        return strip(result);
+    }
+
+    // ---- bit operations (two's-complement semantics) ----
+
+    // Number of 32-bit words in the minimal two's-complement form.
+    private int intLength() {
+        return this.bitLength() / 32 + 1;
+    }
+
+    // Build a BigInteger from a little-endian (LSB word first) two's-complement word array.
+    private static BigInteger fromTwosCompLE(int[] le) {
+        int len = le.length;
+        boolean neg = len > 0 && le[len - 1] < 0;
+        if (!neg) {
+            int[] be = new int[len];
+            int i = 0;
+            while (i < len) {
+                be[i] = le[len - 1 - i];
+                i = i + 1;
+            }
+            return make(1, be);
+        }
+        // magnitude = -(le) = (~le) + 1, computed over the words
+        int[] m = new int[len];
+        long carry = 1L;
+        int i = 0;
+        while (i < len) {
+            long v = ((~le[i]) & 0xFFFFFFFFL) + carry;
+            m[i] = (int) v;
+            carry = v >>> 32;
+            i = i + 1;
+        }
+        int[] be = new int[len];
+        i = 0;
+        while (i < len) {
+            be[i] = m[len - 1 - i];
+            i = i + 1;
+        }
+        return make(-1, be);
+    }
+
+    private BigInteger bitwise(BigInteger val, int op) {
+        int len = Math.max(this.intLength(), val.intLength());
+        int[] le = new int[len];
+        int i = 0;
+        while (i < len) {
+            int a = this.getInt(i);
+            int b = val.getInt(i);
+            if (op == 0) {
+                le[i] = a & b;
+            } else if (op == 1) {
+                le[i] = a | b;
+            } else if (op == 2) {
+                le[i] = a ^ b;
+            } else {
+                le[i] = a & ~b;
+            }
+            i = i + 1;
+        }
+        return fromTwosCompLE(le);
+    }
+
+    public BigInteger and(BigInteger val) {
+        return this.bitwise(val, 0);
+    }
+
+    public BigInteger or(BigInteger val) {
+        return this.bitwise(val, 1);
+    }
+
+    public BigInteger xor(BigInteger val) {
+        return this.bitwise(val, 2);
+    }
+
+    public BigInteger andNot(BigInteger val) {
+        return this.bitwise(val, 3);
+    }
+
+    public BigInteger not() {
+        int len = this.intLength();
+        int[] le = new int[len];
+        int i = 0;
+        while (i < len) {
+            le[i] = ~this.getInt(i);
+            i = i + 1;
+        }
+        return fromTwosCompLE(le);
+    }
+
+    public BigInteger setBit(int n) {
+        if (n < 0) {
+            throw new ArithmeticException("Negative bit address");
+        }
+        return this.or(ONE.shiftLeft(n));
+    }
+
+    public BigInteger clearBit(int n) {
+        if (n < 0) {
+            throw new ArithmeticException("Negative bit address");
+        }
+        return this.andNot(ONE.shiftLeft(n));
+    }
+
+    public BigInteger flipBit(int n) {
+        if (n < 0) {
+            throw new ArithmeticException("Negative bit address");
+        }
+        return this.xor(ONE.shiftLeft(n));
+    }
+
+    /** The index of the rightmost (lowest-order) set bit, or −1 if this is zero. */
+    public int getLowestSetBit() {
+        if (this.signum == 0) {
+            return -1;
+        }
+        // Sign-independent: the lowest set bit position of the magnitude.
+        int j = this.mag.length - 1;
+        while (this.mag[j] == 0) {
+            j = j - 1;
+        }
+        int word = this.mag[j];
+        int b = 0;
+        while ((word & 1) == 0) {
+            word = word >>> 1;
+            b = b + 1;
+        }
+        return (this.mag.length - 1 - j) * 32 + b;
+    }
+
+    /** The number of bits in the two's-complement form that differ from the sign bit. */
+    public int bitCount() {
+        if (this.signum >= 0) {
+            int bc = 0;
+            int i = 0;
+            while (i < this.mag.length) {
+                bc = bc + Integer.bitCount(this.mag[i]);
+                i = i + 1;
+            }
+            return bc;
+        }
+        // For negative x, the bits differing from the sign (1) are the 1-bits of ~x = -x-1 (>= 0).
+        BigInteger nx = this.not();
+        int bc = 0;
+        int i = 0;
+        while (i < nx.mag.length) {
+            bc = bc + Integer.bitCount(nx.mag[i]);
+            i = i + 1;
+        }
+        return bc;
+    }
+
+    // ---- roots ----
+
+    /** The integer square root: the largest {@code s} with {@code s*s <= this}. */
+    public BigInteger sqrt() {
+        if (this.signum < 0) {
+            throw new ArithmeticException("negative BigInteger");
+        }
+        if (this.signum == 0) {
+            return ZERO;
+        }
+        // Newton's method for the floor square root.
+        BigInteger x = ONE.shiftLeft((this.bitLength() + 1) / 2);
+        while (true) {
+            BigInteger y = x.add(this.divide(x)).shiftRight(1);
+            if (y.compareTo(x) >= 0) {
+                return x;
+            }
+            x = y;
+        }
+    }
+
+    /** {@return {sqrt(), this - sqrt()^2}}. */
+    public BigInteger[] sqrtAndRemainder() {
+        BigInteger s = this.sqrt();
+        return new BigInteger[] {s, this.subtract(s.multiply(s))};
+    }
+
+    // ---- modular arithmetic ----
+
+    /** {@code this^exp mod m} (with {@code exp < 0} using the modular inverse). */
+    public BigInteger modPow(BigInteger exp, BigInteger m) {
+        if (m.signum <= 0) {
+            throw new ArithmeticException("BigInteger: modulus not positive");
+        }
+        if (m.equals(ONE)) {
+            return ZERO;
+        }
+        BigInteger base;
+        BigInteger e = exp;
+        if (exp.signum < 0) {
+            base = this.modInverse(m);
+            e = exp.negate();
+        } else {
+            base = this.mod(m);
+        }
+        BigInteger result = ONE;
+        BigInteger b = base;
+        while (e.signum > 0) {
+            if (e.testBit(0)) {
+                result = result.multiply(b).mod(m);
+            }
+            e = e.shiftRight(1);
+            if (e.signum > 0) {
+                b = b.multiply(b).mod(m);
+            }
+        }
+        return result;
+    }
+
+    /** The modular multiplicative inverse: {@code x} with {@code this*x ≡ 1 (mod m)}. */
+    public BigInteger modInverse(BigInteger m) {
+        if (m.signum <= 0) {
+            throw new ArithmeticException("BigInteger: modulus not positive");
+        }
+        if (m.equals(ONE)) {
+            return ZERO;
+        }
+        BigInteger g0 = m;
+        BigInteger g1 = this.mod(m);
+        BigInteger x0 = ZERO;
+        BigInteger x1 = ONE;
+        while (g1.signum != 0) {
+            BigInteger[] qr = g0.divideAndRemainder(g1);
+            BigInteger x2 = x0.subtract(qr[0].multiply(x1));
+            g0 = g1;
+            g1 = qr[1];
+            x0 = x1;
+            x1 = x2;
+        }
+        if (!g0.equals(ONE)) {
+            throw new ArithmeticException("BigInteger not invertible.");
+        }
+        return x0.mod(m);
+    }
+
+    // ---- primality ----
+
+    /** Whether this is probably prime, with the failure probability under 2^-certainty. */
+    public boolean isProbablePrime(int certainty) {
+        if (certainty <= 0) {
+            return true;
+        }
+        BigInteger w = this.abs();
+        if (w.equals(TWO)) {
+            return true;
+        }
+        if (w.signum == 0 || w.equals(ONE) || !w.testBit(0)) {
+            return false;
+        }
+        int rounds = (certainty + 1) / 2;
+        return w.millerRabin(rounds, new Random());
+    }
+
+    private boolean millerRabin(int rounds, Random rnd) {
+        BigInteger nm1 = this.subtract(ONE);
+        int a = nm1.getLowestSetBit();
+        BigInteger m = nm1.shiftRight(a);
+        int bits = this.bitLength();
+        int i = 0;
+        while (i < rounds) {
+            BigInteger b;
+            do {
+                b = new BigInteger(bits, rnd);
+            } while (b.compareTo(TWO) < 0 || b.compareTo(nm1) >= 0);
+            BigInteger z = b.modPow(m, this);
+            if (!z.equals(ONE) && !z.equals(nm1)) {
+                int j = 1;
+                boolean composite = true;
+                while (j < a) {
+                    z = z.multiply(z).mod(this);
+                    if (z.equals(nm1)) {
+                        composite = false;
+                        break;
+                    }
+                    if (z.equals(ONE)) {
+                        break;
+                    }
+                    j = j + 1;
+                }
+                if (composite) {
+                    return false;
+                }
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    /** The smallest probable prime strictly greater than this. */
+    public BigInteger nextProbablePrime() {
+        if (this.signum < 0) {
+            throw new ArithmeticException("start < 0: " + this.toString());
+        }
+        BigInteger p = this.add(ONE);
+        if (p.compareTo(TWO) <= 0) {
+            return TWO;
+        }
+        if (!p.testBit(0)) {
+            p = p.add(ONE);
+        }
+        while (!p.isProbablePrime(100)) {
+            p = p.add(TWO);
+        }
+        return p;
+    }
+
+    /** A random probable prime of exactly {@code bitLength} bits. */
+    public static BigInteger probablePrime(int bitLength, Random rnd) {
+        if (bitLength < 2) {
+            throw new ArithmeticException("bitLength < 2");
+        }
+        return new BigInteger(bitLength, 100, rnd);
+    }
+
+    // ---- random constructors ----
+
+    /** A uniformly random non-negative number with at most {@code numBits} bits. */
+    public BigInteger(int numBits, Random rnd) {
+        if (numBits < 0) {
+            throw new IllegalArgumentException("numBits must be non-negative");
+        }
+        int numWords = (numBits + 31) / 32;
+        int[] words = new int[numWords];
+        int i = 0;
+        while (i < numWords) {
+            words[i] = rnd.nextInt();
+            i = i + 1;
+        }
+        int excessBits = numWords * 32 - numBits;
+        if (numWords > 0 && excessBits > 0) {
+            words[0] = words[0] & (int) (0xFFFFFFFFL >>> excessBits);
+        }
+        int[] m = strip(words);
+        this.mag = m;
+        this.signum = (m.length == 0) ? 0 : 1;
+    }
+
+    /** A random probable prime of exactly {@code bitLength} bits (failure prob. under 2^-certainty). */
+    public BigInteger(int bitLength, int certainty, Random rnd) {
+        if (bitLength < 2) {
+            throw new ArithmeticException("bitLength < 2");
+        }
+        BigInteger p;
+        do {
+            p = new BigInteger(bitLength, rnd).setBit(bitLength - 1).setBit(0);
+        } while (p.bitLength() != bitLength || !p.isProbablePrime(certainty));
+        this.signum = p.signum;
+        this.mag = p.mag;
     }
 }

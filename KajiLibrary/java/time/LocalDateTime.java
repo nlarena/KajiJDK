@@ -26,6 +26,97 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         this.time = time;
     }
 
+    /** La fecha y hora mas temprana representable. */
+    public static final LocalDateTime MIN = LocalDateTime.of(LocalDate.MIN, LocalTime.MIN);
+
+    /** La mas tardia. */
+    public static final LocalDateTime MAX = LocalDateTime.of(LocalDate.MAX, LocalTime.MAX);
+
+    /** La fecha y hora que `temporal` tiene. */
+    public static LocalDateTime from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof LocalDateTime) {
+            return (LocalDateTime) temporal;
+        }
+        return LocalDateTime.of(LocalDate.from(temporal), LocalTime.from(temporal));
+    }
+
+    /** La que marca `clock`. La forma testeable de `now()`. */
+    public static LocalDateTime now(java.time.Clock clock) {
+        if (clock == null) {
+            throw new NullPointerException("clock");
+        }
+        return LocalDateTime.ofInstant(clock.instant(), clock.getZone());
+    }
+
+    /** La de esa zona, ahora. */
+    public static LocalDateTime now(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        return LocalDateTime.ofInstant(Instant.now(), zone);
+    }
+
+    /**
+     * La fecha y hora local de ese instante en esa zona.
+     *
+     * <p>Pierde el desplazamiento a proposito: un `LocalDateTime` es "las 15:30 del martes" sin
+     * decir dónde, y por eso dos instantes distintos pueden dar el mismo -- uno de cada lado del
+     * cambio de horario de verano.
+     */
+    public static LocalDateTime ofInstant(Instant instant, ZoneId zone) {
+        if (instant == null || zone == null) {
+            throw new NullPointerException();
+        }
+        ZoneOffset offset = zone.getRules().getOffset(instant);
+        return LocalDateTime.ofEpochSecond(instant.getEpochSecond(), instant.getNano(), offset);
+    }
+
+    /**
+     * La fecha y hora local de ese segundo de epoca con ese desplazamiento.
+     *
+     * @throws java.time.DateTimeException si `nanoOfSecond` cae fuera de [0, 999999999]
+     */
+    public static LocalDateTime ofEpochSecond(long epochSecond, int nanoOfSecond, ZoneOffset offset) {
+        if (offset == null) {
+            throw new NullPointerException("offset");
+        }
+        ChronoField.NANO_OF_SECOND.checkValidValue((long) nanoOfSecond);
+        long segsLocales = epochSecond + offset.getTotalSeconds();
+        long dia = Math.floorDiv(segsLocales, 86400L);
+        int segsDelDia = (int) Math.floorMod(segsLocales, 86400L);
+        return LocalDateTime.of(LocalDate.ofEpochDay(dia),
+                LocalTime.of(segsDelDia / 3600, (segsDelDia / 60) % 60, segsDelDia % 60,
+                        nanoOfSecond));
+    }
+
+    /** Con el mes como enum. */
+    public static LocalDateTime of(int year, Month month, int dayOfMonth, int hour, int minute) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return LocalDateTime.of(year, month.getValue(), dayOfMonth, hour, minute);
+    }
+
+    public static LocalDateTime of(int year, Month month, int dayOfMonth, int hour, int minute,
+            int second) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return LocalDateTime.of(year, month.getValue(), dayOfMonth, hour, minute, second);
+    }
+
+    public static LocalDateTime of(int year, Month month, int dayOfMonth, int hour, int minute,
+            int second, int nanoOfSecond) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return LocalDateTime.of(year, month.getValue(), dayOfMonth, hour, minute, second,
+                nanoOfSecond);
+    }
+
     public static LocalDateTime of(LocalDate date, LocalTime time) {
         return new LocalDateTime(date, time);
     }
@@ -100,6 +191,155 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
     }
 
     // --- date arithmetic (delegates to the date, keeps the time) ---
+
+    /** El dia del año, de 1 a 365 o 366. */
+    public int getDayOfYear() {
+        return this.date.getDayOfYear();
+    }
+
+    // ---- los `with*`, campo a campo -------------------------------------------------------------
+    //
+    // Los siete delegan en la mitad que corresponde y rearman el par. Un `LocalDateTime` es
+    // exactamente una fecha mas una hora, y esa separacion es lo que hace que no haya nada mas.
+
+    public LocalDateTime withYear(int year) {
+        return LocalDateTime.of(this.date.withYear(year), this.time);
+    }
+
+    public LocalDateTime withMonth(int month) {
+        return LocalDateTime.of(this.date.withMonth(month), this.time);
+    }
+
+    public LocalDateTime withDayOfMonth(int dayOfMonth) {
+        return LocalDateTime.of(this.date.withDayOfMonth(dayOfMonth), this.time);
+    }
+
+    public LocalDateTime withDayOfYear(int dayOfYear) {
+        return LocalDateTime.of(LocalDate.ofYearDay(this.date.getYear(), dayOfYear), this.time);
+    }
+
+    public LocalDateTime withHour(int hour) {
+        return LocalDateTime.of(this.date, this.time.withHour(hour));
+    }
+
+    public LocalDateTime withMinute(int minute) {
+        return LocalDateTime.of(this.date, this.time.withMinute(minute));
+    }
+
+    public LocalDateTime withSecond(int second) {
+        return LocalDateTime.of(this.date, this.time.withSecond(second));
+    }
+
+    public LocalDateTime withNano(int nanoOfSecond) {
+        return LocalDateTime.of(this.date, this.time.withNano(nanoOfSecond));
+    }
+
+    /**
+     * Truncada a un multiplo de `unit`, contando desde la medianoche.
+     *
+     * <p>La fecha no se toca: truncar a horas deja el mismo dia con la hora redondeada hacia abajo.
+     */
+    public LocalDateTime truncatedTo(java.time.temporal.TemporalUnit unit) {
+        return LocalDateTime.of(this.date, this.time.truncatedTo(unit));
+    }
+
+    public LocalDateTime minusNanos(long nanos) {
+        return this.plusNanos(-nanos);
+    }
+
+    public LocalDateTime minusWeeks(long weeks) {
+        return this.plusWeeks(-weeks);
+    }
+
+    /** Esta fecha y hora con ese desplazamiento. */
+    public java.time.OffsetDateTime atOffset(ZoneOffset offset) {
+        if (offset == null) {
+            throw new NullPointerException("offset");
+        }
+        return java.time.OffsetDateTime.of(this, offset);
+    }
+
+    /** Esta fecha y hora en esa zona. */
+    public ZonedDateTime atZone(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        return ZonedDateTime.of(this, zone);
+    }
+
+    /**
+     * Esta fecha y hora mas `amountToAdd` unidades.
+     *
+     * <p>Las unidades de tiempo van a la hora --y arrastran el dia si desbordan-- y las de fecha a
+     * la fecha. Es la separacion que la clase tiene por dentro, expuesta.
+     */
+    public LocalDateTime plus(long amountToAdd, java.time.temporal.TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (unit == ChronoUnit.NANOS) {
+            return this.plusNanos(amountToAdd);
+        }
+        if (unit == ChronoUnit.MICROS) {
+            return this.plusNanos(amountToAdd * 1000L);
+        }
+        if (unit == ChronoUnit.MILLIS) {
+            return this.plusNanos(amountToAdd * 1000000L);
+        }
+        if (unit == ChronoUnit.SECONDS) {
+            return this.plusSeconds(amountToAdd);
+        }
+        if (unit == ChronoUnit.MINUTES) {
+            return this.plusMinutes(amountToAdd);
+        }
+        if (unit == ChronoUnit.HOURS) {
+            return this.plusHours(amountToAdd);
+        }
+        if (unit == ChronoUnit.HALF_DAYS) {
+            return this.plusHours(amountToAdd * 12L);
+        }
+        if (unit == ChronoUnit.DAYS) {
+            return this.plusDays(amountToAdd);
+        }
+        if (unit == ChronoUnit.WEEKS) {
+            return this.plusWeeks(amountToAdd);
+        }
+        if (unit == ChronoUnit.MONTHS) {
+            return this.plusMonths(amountToAdd);
+        }
+        if (unit == ChronoUnit.YEARS) {
+            return this.plusYears(amountToAdd);
+        }
+        if (unit == ChronoUnit.DECADES) {
+            return this.plusYears(amountToAdd * 10L);
+        }
+        if (unit == ChronoUnit.CENTURIES) {
+            return this.plusYears(amountToAdd * 100L);
+        }
+        if (unit == ChronoUnit.MILLENNIA) {
+            return this.plusYears(amountToAdd * 1000L);
+        }
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+    }
+
+    public LocalDateTime minus(long amountToSubtract, java.time.temporal.TemporalUnit unit) {
+        return this.plus(-amountToSubtract, unit);
+    }
+
+    /** Con `field` puesto en `newValue`: los de hora van a la hora, los de fecha a la fecha. */
+    public LocalDateTime with(java.time.temporal.TemporalField field, long newValue) {
+        if (field == null) {
+            throw new NullPointerException("field");
+        }
+        if (field instanceof ChronoField) {
+            ChronoField cf = (ChronoField) field;
+            if (cf.isTimeBased()) {
+                return LocalDateTime.of(this.date, this.time.with(field, newValue));
+            }
+            return LocalDateTime.of(this.date.with(field, newValue), this.time);
+        }
+        return (LocalDateTime) field.adjustInto(this, newValue);
+    }
 
     public LocalDateTime plusDays(long days) {
         return new LocalDateTime(this.date.plusDays(days), this.time);

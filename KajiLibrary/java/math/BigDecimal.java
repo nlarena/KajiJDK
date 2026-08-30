@@ -19,13 +19,40 @@ package java.math;
 // A KajiLibrary subset: the MathContext overloads (arithmetic bounded to N significant digits),
 // remainder/divideAndRemainder, the scientific-notation string constructors with exponents, and
 // toEngineeringString are omitted; MathContext itself exists for the API that takes it.
-public final class BigDecimal extends Number {
+public final class BigDecimal extends Number implements Comparable<BigDecimal> {
 
     public static final BigDecimal ZERO = new BigDecimal(BigInteger.valueOf(0L), 0);
 
     public static final BigDecimal ONE = new BigDecimal(BigInteger.valueOf(1L), 0);
 
+    public static final BigDecimal TWO = new BigDecimal(BigInteger.valueOf(2L), 0);
+
     public static final BigDecimal TEN = new BigDecimal(BigInteger.valueOf(10L), 0);
+
+    /** @deprecated legacy rounding-mode constants; use {@link RoundingMode}. */
+    @Deprecated
+    public static final int ROUND_UP = 0;
+    /** @deprecated use {@link RoundingMode#DOWN}. */
+    @Deprecated
+    public static final int ROUND_DOWN = 1;
+    /** @deprecated use {@link RoundingMode#CEILING}. */
+    @Deprecated
+    public static final int ROUND_CEILING = 2;
+    /** @deprecated use {@link RoundingMode#FLOOR}. */
+    @Deprecated
+    public static final int ROUND_FLOOR = 3;
+    /** @deprecated use {@link RoundingMode#HALF_UP}. */
+    @Deprecated
+    public static final int ROUND_HALF_UP = 4;
+    /** @deprecated use {@link RoundingMode#HALF_DOWN}. */
+    @Deprecated
+    public static final int ROUND_HALF_DOWN = 5;
+    /** @deprecated use {@link RoundingMode#HALF_EVEN}. */
+    @Deprecated
+    public static final int ROUND_HALF_EVEN = 6;
+    /** @deprecated use {@link RoundingMode#UNNECESSARY}. */
+    @Deprecated
+    public static final int ROUND_UNNECESSARY = 7;
 
     private final BigInteger unscaled;
     private final int scale;
@@ -532,5 +559,281 @@ public final class BigDecimal extends Number {
             s = s + 1;
         }
         return u;
+    }
+
+    // ---- legacy int-rounding overloads ----
+
+    public BigDecimal divide(BigDecimal divisor, int roundingMode) {
+        return this.divide(divisor, this.scale, RoundingMode.valueOf(roundingMode));
+    }
+
+    public BigDecimal divide(BigDecimal divisor, int scale, int roundingMode) {
+        return this.divide(divisor, scale, RoundingMode.valueOf(roundingMode));
+    }
+
+    public BigDecimal setScale(int newScale, int roundingMode) {
+        return this.setScale(newScale, RoundingMode.valueOf(roundingMode));
+    }
+
+    // ---- exact narrowing ----
+
+    /** @throws ArithmeticException if this has a nonzero fractional part. */
+    public BigInteger toBigIntegerExact() {
+        return this.setScale(0, RoundingMode.UNNECESSARY).toBigInteger();
+    }
+
+    public long longValueExact() {
+        return this.toBigIntegerExact().longValueExact();
+    }
+
+    public int intValueExact() {
+        return this.toBigIntegerExact().intValueExact();
+    }
+
+    public short shortValueExact() {
+        return this.toBigIntegerExact().shortValueExact();
+    }
+
+    public byte byteValueExact() {
+        return this.toBigIntegerExact().byteValueExact();
+    }
+
+    // ---- integer division / remainder ----
+
+    /** The integer part of {@code this / divisor}, truncated toward zero. */
+    public BigDecimal divideToIntegralValue(BigDecimal divisor) {
+        return this.divide(divisor, 0, RoundingMode.DOWN);
+    }
+
+    /** {@code this - divideToIntegralValue(divisor) * divisor}. */
+    public BigDecimal remainder(BigDecimal divisor) {
+        return this.subtract(this.divideToIntegralValue(divisor).multiply(divisor));
+    }
+
+    /** {@return {divideToIntegralValue(divisor), remainder(divisor)}}. */
+    public BigDecimal[] divideAndRemainder(BigDecimal divisor) {
+        BigDecimal q = this.divideToIntegralValue(divisor);
+        return new BigDecimal[] {q, this.subtract(q.multiply(divisor))};
+    }
+
+    // ---- sign / scale conveniences ----
+
+    /** {@return this} — the unary plus. */
+    public BigDecimal plus() {
+        return this;
+    }
+
+    /** This value with its scale reduced by {@code n} (i.e. multiplied by 10^n). */
+    public BigDecimal scaleByPowerOfTen(int n) {
+        return new BigDecimal(this.unscaled, this.scale - n);
+    }
+
+    /** The size of an ulp of this: {@code 1} at this value's scale (10^-scale). */
+    public BigDecimal ulp() {
+        return new BigDecimal(BigInteger.valueOf(1L), this.scale);
+    }
+
+    // ---- MathContext-aware operations ----
+
+    /** Rounds this to {@code mc}'s precision (a no-op when precision is 0). */
+    public BigDecimal round(MathContext mc) {
+        int p = mc.getPrecision();
+        if (p == 0) {
+            return this;
+        }
+        int drop = this.precision() - p;
+        if (drop <= 0) {
+            return this;
+        }
+        return this.setScale(this.scale - drop, mc.getRoundingMode());
+    }
+
+    public BigDecimal add(BigDecimal augend, MathContext mc) {
+        return this.add(augend).round(mc);
+    }
+
+    public BigDecimal subtract(BigDecimal subtrahend, MathContext mc) {
+        return this.subtract(subtrahend).round(mc);
+    }
+
+    public BigDecimal multiply(BigDecimal multiplicand, MathContext mc) {
+        return this.multiply(multiplicand).round(mc);
+    }
+
+    public BigDecimal negate(MathContext mc) {
+        return this.negate().round(mc);
+    }
+
+    public BigDecimal abs(MathContext mc) {
+        return this.abs().round(mc);
+    }
+
+    public BigDecimal plus(MathContext mc) {
+        return this.round(mc);
+    }
+
+    public BigDecimal pow(int n, MathContext mc) {
+        return this.pow(n).round(mc);
+    }
+
+    /** Division rounded to {@code mc}'s precision (exact division when precision is 0). */
+    public BigDecimal divide(BigDecimal divisor, MathContext mc) {
+        int p = mc.getPrecision();
+        if (p == 0) {
+            return this.divide(divisor);
+        }
+        // A generous working scale keeps far more than p significant digits (truncating, which is
+        // exact for the digits kept), then round back to p with mc's mode.
+        int interScale = p + divisor.precision() + 8;
+        BigDecimal q = this.divide(divisor, interScale, RoundingMode.DOWN);
+        return q.round(mc);
+    }
+
+    public BigDecimal divideToIntegralValue(BigDecimal divisor, MathContext mc) {
+        BigDecimal q = this.divideToIntegralValue(divisor);
+        if (mc.getPrecision() != 0 && q.precision() > mc.getPrecision()) {
+            throw new ArithmeticException("Division impossible");
+        }
+        return q;
+    }
+
+    public BigDecimal remainder(BigDecimal divisor, MathContext mc) {
+        return this.subtract(this.divideToIntegralValue(divisor, mc).multiply(divisor));
+    }
+
+    public BigDecimal[] divideAndRemainder(BigDecimal divisor, MathContext mc) {
+        BigDecimal q = this.divideToIntegralValue(divisor, mc);
+        return new BigDecimal[] {q, this.subtract(q.multiply(divisor))};
+    }
+
+    /** The square root of this, rounded to {@code mc}'s precision. */
+    public BigDecimal sqrt(MathContext mc) {
+        if (this.signum() < 0) {
+            throw new ArithmeticException("Attempted square root of negative BigDecimal");
+        }
+        if (this.signum() == 0) {
+            return this;
+        }
+        int p = mc.getPrecision();
+        if (p == 0) {
+            p = this.precision() + 1;
+        }
+        int workScale = p + 6;
+        // Newton's method at a fixed working scale: x <- (x + this/x) / 2.
+        BigDecimal two = new BigDecimal(BigInteger.valueOf(2L), 0);
+        BigDecimal x = new BigDecimal(this.doubleValue());
+        if (x.signum() == 0) {
+            x = ONE;
+        }
+        int iters = 0;
+        BigDecimal prev = null;
+        while (iters < 200) {
+            BigDecimal q = this.divide(x, workScale, RoundingMode.HALF_EVEN);
+            BigDecimal next = x.add(q).divide(two, workScale, RoundingMode.HALF_EVEN);
+            if (prev != null && next.compareTo(x) == 0) {
+                break;
+            }
+            prev = x;
+            x = next;
+            iters = iters + 1;
+        }
+        MathContext out = (mc.getPrecision() == 0) ? new MathContext(this.precision() + 1) : mc;
+        return x.round(out);
+    }
+
+    /** This value in engineering notation (exponents are multiples of three). */
+    public String toEngineeringString() {
+        if (this.signum() == 0) {
+            return "0";
+        }
+        String digits = this.unscaled.abs().toString();
+        String sign = this.signum() < 0 ? "-" : "";
+        // adjusted exponent of the most significant digit
+        int adj = (digits.length() - 1) - this.scale;
+        if (this.scale >= 0 && adj >= -6) {
+            // plain form
+            return this.toPlainString();
+        }
+        // engineering: integer part has 1..3 digits, exponent a multiple of 3
+        int mod = adj % 3;
+        if (mod < 0) {
+            mod = mod + 3;
+        }
+        int intDigits = mod + 1;
+        int exp = adj - mod;
+        StringBuilder sb = new StringBuilder(sign);
+        if (digits.length() <= intDigits) {
+            sb.append(digits);
+            int pad = intDigits - digits.length();
+            int i = 0;
+            while (i < pad) {
+                sb.append('0');
+                i = i + 1;
+            }
+        } else {
+            sb.append(digits.substring(0, intDigits));
+            sb.append('.');
+            sb.append(digits.substring(intDigits));
+        }
+        if (exp != 0) {
+            sb.append('E');
+            if (exp > 0) {
+                sb.append('+');
+            }
+            sb.append(Integer.toString(exp));
+        }
+        return sb.toString();
+    }
+
+    // ---- char[] and MathContext constructors ----
+
+    public BigDecimal(char[] in) {
+        this(new String(in));
+    }
+
+    public BigDecimal(char[] in, int offset, int len) {
+        this(new String(in, offset, len));
+    }
+
+    public BigDecimal(char[] in, MathContext mc) {
+        this(new String(in), mc);
+    }
+
+    public BigDecimal(char[] in, int offset, int len, MathContext mc) {
+        this(new String(in, offset, len), mc);
+    }
+
+    public BigDecimal(String val, MathContext mc) {
+        this(round0(new BigDecimal(val), mc));
+    }
+
+    public BigDecimal(double val, MathContext mc) {
+        this(round0(new BigDecimal(val), mc));
+    }
+
+    public BigDecimal(int val, MathContext mc) {
+        this(round0(new BigDecimal(val), mc));
+    }
+
+    public BigDecimal(long val, MathContext mc) {
+        this(round0(new BigDecimal(val), mc));
+    }
+
+    public BigDecimal(BigInteger val, MathContext mc) {
+        this(round0(new BigDecimal(val), mc));
+    }
+
+    public BigDecimal(BigInteger unscaledVal, int scaleVal, MathContext mc) {
+        this(round0(new BigDecimal(unscaledVal, scaleVal), mc));
+    }
+
+    // Copy constructor + a rounding helper, so the MathContext ctors can delegate through this(...).
+    private BigDecimal(BigDecimal other) {
+        this.unscaled = other.unscaled;
+        this.scale = other.scale;
+    }
+
+    private static BigDecimal round0(BigDecimal v, MathContext mc) {
+        return v.round(mc);
     }
 }

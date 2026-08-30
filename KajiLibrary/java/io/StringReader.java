@@ -10,11 +10,22 @@ public class StringReader extends Reader {
     private String str;
     private int length;
     private int next;
+    private int mark;
 
     public StringReader(String s) {
         this.str = s;
         this.length = s.length();
         this.next = 0;
+        this.mark = 0;
+    }
+
+    public int read() {
+        if (this.next >= this.length) {
+            return -1;
+        }
+        char c = this.str.charAt(this.next);
+        this.next = this.next + 1;
+        return c;
     }
 
     public int read(char[] cbuf, int off, int len) {
@@ -30,6 +41,36 @@ public class StringReader extends Reader {
         }
         this.next = this.next + n;
         return n;
+    }
+
+    public long skip(long n) {
+        if (this.next >= this.length) {
+            return 0;
+        }
+        long avail = this.length - this.next;
+        long k = n < avail ? n : avail;
+        if (k < 0) {
+            long back = this.next;
+            k = k < -back ? -back : k;
+        }
+        this.next = this.next + (int) k;
+        return k;
+    }
+
+    public boolean ready() {
+        return true;
+    }
+
+    public boolean markSupported() {
+        return true;
+    }
+
+    public void mark(int readAheadLimit) {
+        this.mark = this.next;
+    }
+
+    public void reset() {
+        this.next = this.mark;
     }
 
     public void close() {

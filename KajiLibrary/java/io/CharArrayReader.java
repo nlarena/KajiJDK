@@ -2,6 +2,7 @@ package java.io;
 
 // Same-package import works around the frozen javac's finder (finding #4).
 import java.io.Reader;
+import java.nio.CharBuffer;
 
 // KajiLibrary's java.io.CharArrayReader — a Reader whose source is a char[].
 //
@@ -105,5 +106,15 @@ public class CharArrayReader extends Reader {
         this.buf = null;
         this.pos = 0;
         this.count = 0;
+    }
+
+    public int read(CharBuffer target) {
+        int len = target.remaining();
+        char[] cbuf = new char[len];
+        int n = read(cbuf, 0, len);
+        if (n > 0) {
+            target.put(cbuf, 0, n);
+        }
+        return n;
     }
 }

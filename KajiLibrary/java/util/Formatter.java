@@ -75,6 +75,22 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     /**
+     * Un `Formatter` que escribe a un `PrintStream`.
+     *
+     * <p>Existe aparte de la forma con `OutputStream` --de la que un `PrintStream` **es** un caso--
+     * porque el JDK la declara, y porque el charset que se usa es el del stream y no el por defecto:
+     * un `PrintStream` ya eligio el suyo al construirse, y pisarlo aca daria bytes distintos de los
+     * que ese mismo stream produce con `print`.
+     */
+    public Formatter(java.io.PrintStream ps) {
+        if (ps == null) {
+            throw new NullPointerException();
+        }
+        this.out = ps;
+        this.locale = Locale.getDefault();
+    }
+
+    /**
      * Ídem, nombrando el charset.
      *
      * <p>Declara `UnsupportedEncodingException` --chequeada-- y no la `UnsupportedCharsetException`

@@ -25,4 +25,20 @@ public interface Predicate<T> {
         Objects.requireNonNull(other);
         return (T t) -> this.test(t) || other.test(t);
     }
+
+    // A predicate testing whether two arguments are equal by Objects.equals. Declared `static`
+    // WITHOUT an explicit `public` on purpose: the frozen javac drops `public static` interface
+    // methods but emits bare `static` ones (which are public by JLS all the same).
+    static <T> Predicate<T> isEqual(Object targetRef) {
+        if (targetRef == null) {
+            return t -> t == null;
+        }
+        return t -> targetRef.equals(t);
+    }
+
+    // The negation of the supplied predicate.
+    static <T> Predicate<T> not(Predicate<? super T> target) {
+        Objects.requireNonNull(target);
+        return (Predicate<T>) target.negate();
+    }
 }

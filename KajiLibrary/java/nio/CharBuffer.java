@@ -468,24 +468,18 @@ public abstract class CharBuffer extends Buffer
     /**
      * Returns the backing array.
      *
-     * <p><strong>Declared {@code Object} rather than {@code char[]}</strong>, unlike the JDK: our
-     * javac rejects an override that narrows {@code Object} to an array type ("byte[] no es un
-     * subtipo de Object"), so the covariant form does not compile. The JDK's own bridge method
-     * has exactly this signature, so callers that were compiled against {@code Buffer} see no
-     * difference; callers that want the array must cast.
-     *
      * @return the array this buffer reads and writes
      * @throws ReadOnlyBufferException if this buffer is read-only
      * @throws UnsupportedOperationException if this buffer is a view and owns no array
      */
-    public Object array() {
+    public final char[] array() {
         if (hb == null) {
             throw new UnsupportedOperationException("view buffer has no backing array");
         }
         if (isReadOnly) {
             throw new ReadOnlyBufferException();
         }
-        return (Object) hb;
+        return hb;
     }
 
     /**
@@ -829,7 +823,7 @@ public abstract class CharBuffer extends Buffer
      * @return the backing array, or {@code null}
      */
     Object base() {
-        return (Object) hb;
+        return hb;
     }
 
     /**

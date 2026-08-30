@@ -4,14 +4,18 @@ package java.io;
 import java.io.Writer;
 
 // KajiLibrary's java.io.StringWriter — a Writer that accumulates everything written into a
-// StringBuilder, retrievable via toString(). Pure Java, and a nice dogfood: it drives our
-// own StringBuilder (append/toString).
+// StringBuffer, retrievable via toString() or the live buffer via getBuffer(). Pure Java, and a
+// nice dogfood: it drives our own StringBuffer (append/toString).
 public class StringWriter extends Writer {
 
-    private StringBuilder buf;
+    private final StringBuffer buf;
 
     public StringWriter() {
-        this.buf = new StringBuilder();
+        this.buf = new StringBuffer();
+    }
+
+    public StringWriter(int initialSize) {
+        this.buf = new StringBuffer(initialSize);
     }
 
     public void write(int c) {
@@ -19,13 +23,40 @@ public class StringWriter extends Writer {
     }
 
     public void write(char[] cbuf, int off, int len) {
-        for (int i = 0; i < len; i++) {
+        int i = 0;
+        while (i < len) {
             this.buf.append(cbuf[off + i]);
+            i = i + 1;
         }
     }
 
     public void write(String str) {
         this.buf.append(str);
+    }
+
+    public void write(String str, int off, int len) {
+        this.buf.append(str.substring(off, off + len));
+    }
+
+    public StringWriter append(CharSequence csq) {
+        write(csq == null ? "null" : csq.toString());
+        return this;
+    }
+
+    public StringWriter append(CharSequence csq, int start, int end) {
+        CharSequence cs = csq == null ? "null" : csq;
+        write(cs.subSequence(start, end).toString());
+        return this;
+    }
+
+    public StringWriter append(char c) {
+        write(c);
+        return this;
+    }
+
+    /** The live buffer these writes accumulate into. */
+    public StringBuffer getBuffer() {
+        return this.buf;
     }
 
     public void flush() {
