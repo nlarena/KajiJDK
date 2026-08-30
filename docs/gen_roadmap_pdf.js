@@ -690,7 +690,7 @@ const FASE_K = [
       { hz: "A", txt: "**Que las semillas dejen de morir temprano** \u2014 el envoltorio total atrapaba **alrededor** del bucle de calentamiento, asi que una excepcion en la iteracion 1 terminaba el programa y el JIT nunca cruzaba su umbral. Atrapando **por iteracion**, las semillas que entran a codigo nativo pasan de **58-75 a 78-80 de 80** en las once configuraciones del censo, y las muertas en marcador de 5-41 a **0 en todas**." },
       { hz: "A", txt: "**`instanceof` y casts** \u2014 la misma pregunta hecha de las dos formas en que la hace la JVM: la que nunca falla y la que si. Estan **dentro** del subconjunto del JIT, asi que no cuestan cobertura (79/80 semillas, 398 metodos). Hacen alcanzable el marcador `CLASS_CAST`, que estaba escrito desde el principio y ningun nodo podia producir." },
     ] },
-  { id: "K5", name: "Los constructos que la gramatica todavia no emite", hz: "A",
+  { id: "K5", name: "Las construcciones que la gramatica todavia no emite", hz: "A",
     exito: "**siete**, y estaban anotados en la tabla de alcance del generador como decisiones tomadas. **No lo son**: son cosas sin hacer, cada una con lo que costaria. Un alcance declarado es honesto; declararlo cerrado cuando no lo esta, no.",
     items: [
       { hz: "A", txt: "**Arrays multidimensionales \u2014 hecho (2026-08-29)** \u2014 `multianewarray` con su allocation rectangular, el store de dos indices, el load de dos niveles (**dos chequeos de cota sobre dos arrays distintos**) y `m[i].length`, que es un `aaload` seguido de un `arraylength`. Perilla propia apagada por defecto: el opcode y el `aaload` que toda lectura necesita estan fuera del subconjunto del JIT, asi que el pareo es contra el JDK real. **80 semillas, 100% usables, 0 divergencias**." },
@@ -1037,7 +1037,7 @@ ${FASE_F.map(hito).join('\n')}
 <!-- Fase G -->
 <div class="section-break">
 <h1>Fase G — <code>plain_data</code> / value types (modelo de datos)</h1>
-<blockquote>Los <strong>&ldquo;huérfanos de Object&rdquo;</strong>: tipos planos sin header, sin identidad, sin monitor, <em>flatteables</em>. Viable porque tenemos compilador propio (Fase B) que puede emitir el constructo y una VM que lo trata especial. Es, en chiquito, el principio de representación de un <strong>tensor</strong> — puente directo a sistemas de ML. Inspiración: <em>value classes</em> de Valhalla, <code>struct</code> de .NET.</blockquote>
+<blockquote>Los <strong>&ldquo;huérfanos de Object&rdquo;</strong>: tipos planos sin header, sin identidad, sin monitor, <em>flatteables</em>. Viable porque tenemos compilador propio (Fase B) que puede emitir la construcción y una VM que lo trata especial. Es, en chiquito, el principio de representación de un <strong>tensor</strong> — puente directo a sistemas de ML. Inspiración: <em>value classes</em> de Valhalla, <code>struct</code> de .NET.</blockquote>
 ${FASE_G.map(hito).join('\n')}
 </div>
 

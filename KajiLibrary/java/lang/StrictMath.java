@@ -45,7 +45,6 @@ public final class StrictMath {
     /** The ratio of a circle's circumference to its radius -- two PI. */
     public static final double TAU = 6.283185307179586d;
 
-
     // ---- magnitude, extremes and clamping ----
 
     /**
@@ -210,7 +209,6 @@ public final class StrictMath {
         return Math.clamp(value, min, max);
     }
 
-
     // ---- division that rounds where you asked ----
 
     // C-style division truncates toward zero, which is the wrong rounding for anything
@@ -325,7 +323,6 @@ public final class StrictMath {
     public static int ceilMod(long x, int y) {
         return Math.ceilMod(x, y);
     }
-
 
     // ---- arithmetic that refuses to wrap ----
 
@@ -575,7 +572,6 @@ public final class StrictMath {
         return Math.unsignedPowExact(b, e);
     }
 
-
     // ---- the whole product ----
 
     // A product of two longs has 128 bits and a long holds 64. These give the half that
@@ -608,7 +604,6 @@ public final class StrictMath {
     public static long unsignedMultiplyHigh(long x, long y) {
         return Math.unsignedMultiplyHigh(x, y);
     }
-
 
     // ---- rounding ----
 
@@ -661,7 +656,6 @@ public final class StrictMath {
         return Math.rint(a);
     }
 
-
     // ---- angles ----
 
     /**
@@ -681,7 +675,6 @@ public final class StrictMath {
     public static double toDegrees(double angrad) {
         return Math.toDegrees(angrad);
     }
-
 
     // ---- reading the representation ----
 
@@ -833,7 +826,6 @@ public final class StrictMath {
         return Math.scalb(f, scaleFactor);
     }
 
-
     // ---- the correctly rounded operations ----
 
     // Operations IEEE-754 puts in the same class as +, -, * and /: the answer is the
@@ -847,19 +839,6 @@ public final class StrictMath {
      */
     public static double sqrt(double a) {
         return Math.sqrt(a);
-    }
-
-    /**
-     * El logaritmo natural, con el algoritmo de fdlibm.
-     *
-     * <p>Delega en {@link Math#log(double)}, que **es** fdlibm: no hay dos versiones. La distincion
-     * entre las dos clases existe para las funciones donde `Math` puede usar un intrinseco de la
-     * maquina y `StrictMath` no; aca no hay tal intrinseco, asi que las dos dan el mismo bit.
-     *
-     * @see Math#log(double)
-     */
-    public static double log(double a) {
-        return Math.log(a);
     }
 
     /**
@@ -985,7 +964,6 @@ public final class StrictMath {
     public static double pow(double x, double y) {
         return Math.pow(x, y);
     }
-
 
     // ---- a random number ----
 

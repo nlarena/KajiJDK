@@ -162,6 +162,21 @@ pub trait Program: Clone {
     fn is_marker(&self, _value: i32) -> bool {
         false
     }
+
+    /// The results this program is allowed to produce, when it has **more than one**.
+    ///
+    /// `None` means the ordinary case: the program is deterministic and the only admissible answer
+    /// is whatever it produced, so equality is the right test. `Some(set)` means the program
+    /// contains a genuine race whose outcome is bounded **by construction** — and there the two
+    /// existing oracles are both wrong. A pairing would report the two engines choosing differently
+    /// as a divergence, and repetition would report the same run-to-run; but the JLS permits every
+    /// member of the set, so reporting one is reporting the specification.
+    ///
+    /// What replaces equality is **membership**, which is a weaker claim and the strongest one
+    /// available: a result outside the set is a bug on any engine, and no result inside it is.
+    fn admissible(&self) -> Option<Vec<i32>> {
+        None
+    }
 }
 
 /// Turns a seed into a program. Most of the difficulty of this whole tool lives behind this one
@@ -264,6 +279,29 @@ pub struct Report {
     /// failure — 46% of seeds dying before the JIT ever looked at them, invisible in a report that
     /// only counted usable seeds and divergences.
     pub marked: u64,
+    /// Por cada semilla con conjunto admisible: cuántos valores **distintos** se llegaron a
+    /// observar, y de qué tamaño era el conjunto.
+    ///
+    /// Es la única medida de este reporte que habla del **instrumento** y no del sujeto, y por eso
+    /// vive aparte de todo lo demás. Un motor que siempre elige la misma respuesta admisible es
+    /// correcto —lo dice la JLS— así que una cobertura baja no es un hallazgo sobre la VM: es un
+    /// hallazgo sobre la campaña, que estuvo mirando un solo camino de los K que declaró.
+    ///
+    /// Y no es cosmético. Pertenencia chequea el valor que salió, no los que podrían haber salido,
+    /// así que cobertura `1/4` quiere decir que se probó **un** store y los otros tres cero veces.
+    /// Es el mismo argumento que mutation testing con el conjunto admisible haciendo de mutantes.
+    pub coverage: Vec<(usize, usize)>,
+    /// Cuántas veces ganó cada **posición** del conjunto admisible, sumando todas las corridas.
+    ///
+    /// Por posición y no por valor a propósito: cada semilla sortea sus propias constantes, así que
+    /// los valores no se pueden comparar entre semillas pero los índices sí — la posición `i` es
+    /// siempre el worker `i`.
+    ///
+    /// Es la capa de diagnóstico. La cobertura dice *cuánto* se visitó; esto dice **por qué** no se
+    /// visitó más, que es la diferencia entre «falta presupuesto» y «el scheduler está sesgado».
+    /// Con la segunda, subir `repeats` no compra nada y lo que hay que cambiar es la forma del
+    /// programa.
+    pub wins: std::collections::BTreeMap<usize, u64>,
 }
 
 impl Report {
@@ -464,6 +502,158 @@ where
     report
 }
 
+/// **The membership loop.** Run each program `repeats` times on one path and check every answer
+/// is one the program is *allowed* to give.
+///
+/// # Why a third shape rather than a third comparison
+///
+/// The other two campaigns both decide by **equality** — two paths agree, or one path agrees with
+/// itself — and equality is the right test only while the program has a single correct answer.
+/// [`Stmt::Fork`][crate::fuzz::gen::Stmt::Fork] buys that by being rigid: disjoint slots, joins
+/// before reads, a fixed reduction order. Everything a *real* concurrent program does that the JLS
+/// leaves open was excluded to keep the oracle usable.
+///
+/// This is the campaign for what was excluded. The program declares, by construction, the set of
+/// results the memory model permits; the oracle checks membership. A result outside the set is a
+/// bug on any engine and in any run — and, unlike a divergence, it does not need a second engine to
+/// be recognised as one.
+///
+/// **What it gives up, stated plainly.** Membership is weaker than equality: an engine that always
+/// picks the same admissible answer and an engine that picks a different one every time both pass.
+/// That is not a gap in the check, it is what the specification says — but a campaign reporting
+/// zero here proves less per seed than one of the others, and `repeats` is what buys some of it
+/// back.
+impl Report {
+    /// La fracción del conjunto admisible que la campaña visitó, promediada sobre las semillas.
+    ///
+    /// `None` cuando ninguna semilla declaró conjunto, que es el caso de toda campaña de pareo.
+    pub fn coverage_fraction(&self) -> Option<f64> {
+        if self.coverage.is_empty() {
+            return None;
+        }
+        let total: f64 = self
+            .coverage
+            .iter()
+            .map(|(vistos, de)| *vistos as f64 / (*de).max(1) as f64)
+            .sum();
+        Some(total / self.coverage.len() as f64)
+    }
+
+    /// La fracción de victorias de la posición **menos** visitada del conjunto.
+    ///
+    /// El histograma en un número, y el que expresa el objetivo: que el store de cada worker se
+    /// llegue a observar. Una posición cerca de cero es un worker cuyo store no se está probando —
+    /// pertenencia chequea el valor que salió, no los que podrían haber salido, así que un bug ahí
+    /// es inalcanzable por más semillas que se corran.
+    ///
+    /// Con K posiciones el reparto parejo da `1/K`. No se exige eso: se exige que ninguna quede
+    /// tan abajo que haga falta un orden de magnitud más de corridas para verla una vez.
+    pub fn least_visited_share(&self) -> Option<f64> {
+        let total: u64 = self.wins.values().sum();
+        if total == 0 || self.wins.is_empty() {
+            return None;
+        }
+        let menor = *self.wins.values().min()?;
+        Some(menor as f64 / total as f64)
+    }
+
+    /// El piso: ¿alguna semilla llegó a ver **más de un** valor?
+    ///
+    /// Un bit, y el que más importa. Si es `false`, la campaña corrió entera sin observar una sola
+    /// diferencia de interleaving — o sea que de todo lo que declaró estar probando, probó un
+    /// camino. No es un aserto sobre el motor: en una máquina de un core `false` es perfectamente
+    /// legítimo. Es un aserto sobre si esta corrida midió algo.
+    pub fn saw_more_than_one(&self) -> bool {
+        self.coverage.iter().any(|(vistos, _)| *vistos > 1)
+    }
+}
+
+pub fn membership_campaign<G, R, D>(
+    generator: &mut G,
+    runner: &mut R,
+    reducer: &mut D,
+    path: Path,
+    repeats: usize,
+    seeds: impl IntoIterator<Item = Seed>,
+    stop_after: usize,
+) -> Report
+where
+    G: Generator,
+    R: Runner<G::Program>,
+    D: Reducer<G::Program>,
+{
+    let mut report = Report::default();
+
+    for seed in seeds {
+        report.seeds_run += 1;
+        let program = generator.generate(seed);
+        // A program with no declared set has one correct answer, and this campaign has nothing to
+        // say about it. Counted as unusable rather than as agreement: it is the generator not
+        // producing what the campaign is for, which is exactly what that counter measures.
+        let Some(allowed) = program.admissible() else {
+            report.unusable += 1;
+            *report
+                .unusable_reasons
+                .entry("the program declares no admissible set".to_string())
+                .or_default() += 1;
+            continue;
+        };
+
+        let mut found = None;
+        // Los valores admisibles que esta semilla llegó a mostrar. Antes se descartaban: la rama
+        // de acierto era un `continue` pelado, y con eso el reporte no podía distinguir una
+        // campaña que vio las K respuestas de una que vio la misma K veces.
+        let mut vistos = std::collections::BTreeSet::new();
+        for _ in 0..repeats.max(1) {
+            let seen = runner.run(&program, path);
+            match &seen.outcome {
+                Outcome::Returned(v) if allowed.contains(v) => {
+                    vistos.insert(*v);
+                    if let Some(i) = allowed.iter().position(|a| a == v) {
+                        *report.wins.entry(i).or_default() += 1;
+                    }
+                    continue;
+                }
+                Outcome::Returned(v) => {
+                    found = Some((seen.clone(), format!("{v} is not one of {allowed:?}")));
+                    break;
+                }
+                // A crash or a hang is a finding here for the same reason it is everywhere else:
+                // no set of admissible *values* contains a panic.
+                other => {
+                    found = Some((seen.clone(), format!("{other:?}")));
+                    break;
+                }
+            }
+        }
+
+        report.coverage.push((vistos.len(), allowed.len()));
+
+        let Some((observed, reason)) = found else { continue };
+
+        let mut still_fails = |candidate: &G::Program| {
+            let Some(allowed) = candidate.admissible() else { return false };
+            (0..repeats.max(1)).any(|_| {
+                !matches!(runner.run(candidate, path).outcome,
+                          Outcome::Returned(v) if allowed.contains(&v))
+            })
+        };
+        let minimal = reducer.reduce(program, &mut still_fails);
+
+        report.divergences.push(Divergence {
+            seed,
+            source: minimal.to_java(),
+            left: (path, observed.clone()),
+            right: (path, observed),
+            reason,
+        });
+        if report.divergences.len() >= stop_after {
+            break;
+        }
+    }
+    report
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -479,6 +669,91 @@ mod tests {
         fn class_name(&self) -> &str {
             "Toy"
         }
+    }
+
+    /// Un programa con **conjunto admisible**: cuatro respuestas, todas correctas.
+    #[derive(Clone)]
+    struct Ruleta;
+
+    impl Program for Ruleta {
+        fn to_java(&self) -> String {
+            "class Ruleta {}".to_string()
+        }
+        fn class_name(&self) -> &str {
+            "Ruleta"
+        }
+        fn admissible(&self) -> Option<Vec<i32>> {
+            Some(vec![10, 20, 30, 40])
+        }
+    }
+
+    struct SiempreRuleta;
+    impl Generator for SiempreRuleta {
+        type Program = Ruleta;
+        fn generate(&mut self, _seed: Seed) -> Ruleta {
+            Ruleta
+        }
+    }
+
+    struct NadaQueReducir;
+    impl Reducer<Ruleta> for NadaQueReducir {
+        fn reduce(&mut self, program: Ruleta, _: &mut dyn FnMut(&Ruleta) -> bool) -> Ruleta {
+            program
+        }
+    }
+
+    /// Elige siempre la misma respuesta admisible. **Correcto** — la JLS lo permite — y por eso el
+    /// oráculo de pertenencia no tiene nada que decirle.
+    struct Amarrete;
+    impl Runner<Ruleta> for Amarrete {
+        fn run(&mut self, _program: &Ruleta, _path: Path) -> Observation {
+            Observation { outcome: Outcome::Returned(10), stdout: String::new() }
+        }
+    }
+
+    /// Recorre las cuatro. Igual de correcto, y **mucho** más útil como sujeto de prueba.
+    struct Rotativo(usize);
+    impl Runner<Ruleta> for Rotativo {
+        fn run(&mut self, _program: &Ruleta, _path: Path) -> Observation {
+            let v = [10, 20, 30, 40][self.0 % 4];
+            self.0 += 1;
+            Observation { outcome: Outcome::Returned(v), stdout: String::new() }
+        }
+    }
+
+    /// La medida de cobertura distingue dos motores que el oráculo de pertenencia no distingue.
+    ///
+    /// Ese es exactamente el hueco que la medida existe para tapar, y por qué se mide el
+    /// **instrumento** y no el sujeto: los dos motores de este test pasan la campaña con cero
+    /// hallazgos, porque los dos son correctos. Lo que los separa no es la corrección sino cuánto
+    /// deja probar cada uno: contra el amarrete, tres de las cuatro respuestas no se ejercitan
+    /// nunca, y un bug en cualquiera de ellas es inalcanzable.
+    ///
+    /// Es también el mutante de la medida: si `coverage` se llenara con el tamaño del conjunto en
+    /// vez de con lo observado —o si la rama de acierto siguiera descartando el valor, que es lo
+    /// que hacía antes— los dos casos darían 100% y este test moriría en el primer aserto.
+    #[test]
+    fn la_cobertura_separa_un_motor_amarrete_de_uno_que_recorre_el_conjunto() {
+        fn corrida<R: Runner<Ruleta>>(runner: &mut R) -> Report {
+            let mut g = SiempreRuleta;
+            let mut r = NadaQueReducir;
+            membership_campaign(&mut g, runner, &mut r, Path::OsParallel, 8, seeds(0..4), 1)
+        }
+
+        let amarrete = corrida(&mut Amarrete);
+        assert!(amarrete.divergences.is_empty(), "el amarrete es correcto: no hay nada que reportar");
+        assert_eq!(amarrete.coverage_fraction(), Some(0.25), "vio una de cuatro");
+        assert!(!amarrete.saw_more_than_one(), "nunca vio dos valores distintos");
+
+        let rotativo = corrida(&mut Rotativo(0));
+        assert!(rotativo.divergences.is_empty(), "el rotativo también es correcto");
+        assert_eq!(rotativo.coverage_fraction(), Some(1.0), "vio las cuatro");
+        assert!(rotativo.saw_more_than_one());
+
+        // Y el histograma, que es lo que separa «falta presupuesto» de «está sesgado»: con el
+        // amarrete todas las victorias caen en la misma posición.
+        assert_eq!(amarrete.wins.len(), 1, "el sesgo tiene que ser visible: {:?}", amarrete.wins);
+        assert_eq!(rotativo.wins.len(), 4, "{:?}", rotativo.wins);
     }
 
     struct FromSeed;

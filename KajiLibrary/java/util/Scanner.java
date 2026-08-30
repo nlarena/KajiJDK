@@ -104,6 +104,62 @@ public final class Scanner implements Iterator<String>, Closeable {
         this.sourceClosed = true;
     }
 
+    public Scanner(java.nio.channels.ReadableByteChannel source) {
+        this(source, Charset.defaultCharset());
+    }
+
+    public Scanner(java.nio.channels.ReadableByteChannel source, String charsetName) {
+        this(source, Charset.forName(charsetName));
+    }
+
+    /**
+     * Un `Scanner` sobre un canal.
+     *
+     * <p>Esta forma **si** se puede implementar de verdad en KajiJDK, a diferencia de las de `File`
+     * y `Path`: la fuente la aporta quien llama, ya abierta, asi que no hace falta que la biblioteca
+     * sepa tocar el sistema de archivos.
+     *
+     * <p>Como las de `InputStream`, lee el canal **entero** de una y despues decodifica. Ojo con el
+     * `0`: en un canal es un resultado legitimo --el buffer estaba lleno, o uno no bloqueante no
+     * tenia nada listo-- y **no** es fin de flujo, que es `-1`. Tratarlo como fin cortaria la
+     * lectura antes de tiempo; por eso el bucle solo termina con el negativo.
+     */
+    public Scanner(java.nio.channels.ReadableByteChannel source, Charset charset) {
+        if (source == null || charset == null) {
+            throw new NullPointerException();
+        }
+        this.sourceClosed = true;
+        byte[] todo = new byte[0];
+        int usados = 0;
+        java.nio.ByteBuffer trozo = java.nio.ByteBuffer.allocate(8192);
+        try {
+            int n = source.read(trozo);
+            while (n >= 0) {
+                if (n > 0) {
+                    if (usados + n > todo.length) {
+                        int nuevo = todo.length * 2;
+                        if (nuevo < usados + n) {
+                            nuevo = usados + n;
+                        }
+                        byte[] mas = new byte[nuevo];
+                        System.arraycopy(todo, 0, mas, 0, usados);
+                        todo = mas;
+                    }
+                    trozo.flip();
+                    trozo.get(todo, usados, n);
+                    usados = usados + n;
+                    trozo.clear();
+                }
+                n = source.read(trozo);
+            }
+        } catch (java.io.IOException e) {
+            // Lo leido hasta aca es lo que hay: un `Scanner` no puede propagar una excepcion
+            // chequeada desde su constructor sin declararla, y el JDK tampoco la declara para esta
+            // forma.
+        }
+        this.buf.append(new String(todo, 0, usados, charset));
+    }
+
     public Scanner(InputStream source) {
         this(source, Charset.defaultCharset());
     }

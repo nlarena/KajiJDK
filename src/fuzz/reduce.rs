@@ -432,17 +432,18 @@ fn unroll_loops(program: &JavaProgram) -> Vec<JavaProgram> {
     });
     for target in [1i32, 2] {
         out.extend(statement_edits(program, &|stmt, block, at| {
-            let Stmt::For { var, bound, body } = stmt else {
+            let Stmt::For { var, bound, body, label } = stmt else {
                 return false;
             };
             if *bound <= target {
                 return false;
             }
-            block[at] = Stmt::For { var: var.clone(), bound: target, body: body.clone() };
+            block[at] =
+                Stmt::For { var: var.clone(), bound: target, body: body.clone(), label: label.clone() };
             true
         }));
         out.extend(statement_edits(program, &|stmt, block, at| {
-            let Stmt::While { guard, limit, cond, body } = stmt else {
+            let Stmt::While { guard, limit, cond, body, label, post } = stmt else {
                 return false;
             };
             if *limit <= target {
@@ -453,6 +454,8 @@ fn unroll_loops(program: &JavaProgram) -> Vec<JavaProgram> {
                 limit: target,
                 cond: cond.clone(),
                 body: body.clone(),
+                label: label.clone(),
+                post: *post,
             };
             true
         }));
@@ -735,7 +738,18 @@ fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
     for stmt in block.iter_mut() {
         match stmt {
             // Neither holds an expression: they name locals and nothing else.
-            Stmt::RefStore { .. } | Stmt::TypeProbe { .. } => {}
+            Stmt::RefStore { .. }
+            | Stmt::TypeProbe { .. }
+            | Stmt::NewMatrix { .. }
+            | Stmt::ArrayNull { .. } => {}
+            Stmt::MatrixRowNull { row, .. } => visit_expr(row, f),
+            Stmt::NarrowLocal { value, .. } => visit_expr(value, f),
+            Stmt::BoolLocal { cond, .. } => visit_cond(cond, f),
+            Stmt::MatrixStore { row, col, value, .. } => {
+                visit_expr(row, f);
+                visit_expr(col, f);
+                visit_expr(value, f);
+            }
             Stmt::Declare { init, .. } => visit_expr(init, f),
             Stmt::Assign { expr, .. } => visit_expr(expr, f),
             // Constructor arguments first, then the bodies, so the numbering the counting pass and
@@ -766,7 +780,7 @@ fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
                 visit_cond(cond, f);
                 visit_block_exprs(body, f);
             }
-            Stmt::Break | Stmt::Continue | Stmt::Throw(_) => {}
+            Stmt::Break(_) | Stmt::Continue(_) | Stmt::Throw(_) => {}
             Stmt::For { body, .. } => visit_block_exprs(body, f),
             Stmt::NewArray { .. } => {}
             Stmt::ArrayStore { index, value, .. } => {
@@ -801,7 +815,15 @@ fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
         | Expr::Cast(_, a)
         | Expr::Narrow(_, a)
         | Expr::Classify(a)
-        | Expr::ArrayLoad(_, _, a) => visit_expr(a, f),
+        | Expr::ArrayLoad(_, _, a)
+        | Expr::MatrixRowLength(_, a)
+        | Expr::RawBitsHigh(a)
+        | Expr::Recurse(_, a) => visit_expr(a, f),
+        Expr::NanLit(_) => {}
+        Expr::MatrixLoad(_, _, row, col) => {
+            visit_expr(row, f);
+            visit_expr(col, f);
+        }
         Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => {
             visit_expr(a, f);
             visit_expr(b, f);
@@ -821,6 +843,7 @@ fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
 
 fn visit_cond(cond: &mut Cond, f: &mut dyn FnMut(&mut Expr)) {
     match cond {
+        Cond::BoolVar(_) => {}
         Cond::Cmp(_, a, b) => {
             visit_expr(a, f);
             visit_expr(b, f);

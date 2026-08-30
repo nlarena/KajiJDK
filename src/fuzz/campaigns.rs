@@ -60,6 +60,31 @@ impl Campaign {
 
     /// The same program, `repeats` times, on **one** path — see
     /// [`repetition_campaign`][crate::fuzz::repetition_campaign].
+    /// El lazo de **pertenencia** — ver
+    /// [`membership_campaign`][crate::fuzz::membership_campaign].
+    ///
+    /// Sin reductor, y no por pereza: el conjunto admisible es una propiedad de la **forma** del
+    /// programa, y un reductor que borrara la carrera dejaría el conjunto viejo colgado de un
+    /// programa que ya no lo produce. Minimizar acá exige recalcular el conjunto, que es trabajo
+    /// del generador y no del reductor.
+    pub fn run_membership(
+        &mut self,
+        path: Path,
+        repeats: usize,
+        seeds: u64,
+        stop_after: usize,
+    ) -> Report {
+        crate::fuzz::membership_campaign(
+            &mut self.generator,
+            &mut self.runner,
+            &mut crate::fuzz::NoReduction,
+            path,
+            repeats,
+            (0..seeds).map(Seed),
+            stop_after,
+        )
+    }
+
     pub fn run_repeated(
         &mut self,
         path: Path,
@@ -108,6 +133,22 @@ pub fn describe(report: &Report, paths: (Path, Path)) -> String {
         report.marked_fraction() * 100.0,
         report.divergences.len()
     );
+    // Sólo las campañas de pertenencia tienen conjunto que cubrir, así que en las de pareo esta
+    // línea no aparece en vez de aparecer en cero — un cero acá se leería como un problema.
+    if let Some(frac) = report.coverage_fraction() {
+        let ganadores: Vec<String> =
+            report.wins.iter().map(|(i, n)| format!("#{i}x{n}")).collect();
+        let _ = writeln!(
+            out,
+            "  {:.0}% del conjunto admisible visitado, {} ({})",
+            frac * 100.0,
+            match report.saw_more_than_one() {
+                true => "alguna semilla vio más de un valor",
+                false => "NINGUNA semilla vio más de un valor",
+            },
+            ganadores.join(" ")
+        );
+    }
     for (why, count) in &report.unusable_reasons {
         let _ = writeln!(out, "  unusable x{count}: {why}");
     }
@@ -344,6 +385,187 @@ mod tests {
             "only {:.0}% of seeds were usable — the silence above is the generator's, not the VM's",
             report.usable_fraction() * 100.0
         );
+    }
+
+    /// **Una carrera de verdad, juzgada por pertenencia.**
+    ///
+    /// La única campaña cuyo oráculo no es la igualdad. `Stmt::Fork` compró determinismo siendo
+    /// rígido —slots disjuntos, joins antes de leer, reducción en orden fijo— y con eso dejó afuera
+    /// todo lo que un programa concurrente real hace y la JLS deja abierto. Ésta es la campaña de
+    /// lo que quedó afuera: K hilos escriben constantes **distintas** al **mismo** slot sin
+    /// sincronizarse, y después de joinear a todos el lector ve *alguna* de ellas.
+    ///
+    /// Que sea una y no otra es lo que el modelo de memoria deja libre, así que un pareo reportaría
+    /// como divergencia dos motores eligiendo distinto, y la repetición lo mismo entre corridas. Lo
+    /// que sí es un bug en cualquier motor es un resultado **fuera** del conjunto.
+    ///
+    /// `cargo test --release --lib a_real_race -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn a_real_race_stays_inside_the_results_the_memory_model_allows() {
+        let repeats =
+            std::env::var("FUZZ_REPEATS").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
+        let cfg = GenConfig { race_threads: 4, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-race"), Duration::from_secs(30))
+            .with_config(cfg);
+        let report = it.run_membership(Path::OsParallel, repeats, seed_count(40), 3);
+        println!(
+            "carrera: {} semillas x {repeats} corridas, {} con conjunto declarado, {} fuera",
+            report.seeds_run,
+            report.seeds_run - report.unusable,
+            report.divergences.len()
+        );
+        println!("{}", describe(&report, (Path::OsParallel, Path::OsParallel)));
+        for finding in &report.divergences {
+            println!("{finding}");
+        }
+        assert!(
+            report.divergences.is_empty(),
+            "un resultado fuera del conjunto que el modelo de memoria permite"
+        );
+        // El piso, y es un aserto sobre **esta corrida**, no sobre el motor: un motor que siempre
+        // elige la misma respuesta admisible es correcto. Lo que no es aceptable es que la campaña
+        // termine sin haber observado una sola diferencia de interleaving, porque entonces de las K
+        // respuestas que declaró probar probó una. En una máquina de un solo core esto puede fallar
+        // legítimamente, y el mensaje lo dice para que no se lea como un bug de la VM.
+        assert!(
+            report.saw_more_than_one(),
+            "ninguna semilla vio más de un valor admisible: la campaña no midió interleaving              (legítimo en una máquina de un core; en cualquier otra, la forma de la carrera no              está compitiendo)"
+        );
+        // Y el piso por posición, que es el objetivo de la barrera: que el store de **cada** worker
+        // se llegue a observar. Con 4 workers el reparto parejo da 25%; el umbral está cinco veces
+        // más abajo a propósito, para que falle sólo cuando el sesgo volvió, no cuando el scheduler
+        // tuvo un día raro. Sin barrera esto medía 0,25%.
+        let piso = report.least_visited_share().unwrap_or(0.0);
+        assert!(
+            piso > 0.05,
+            "la posición menos visitada del conjunto ganó el {:.1}% de las corridas: el store de              ese worker no se está probando ({:?})",
+            piso * 100.0,
+            report.wins
+        );
+        assert!(report.usable_fraction() > 0.9, "{:.0}% con conjunto", report.usable_fraction() * 100.0);
+    }
+
+    /// **Locales angostos contra el JDK de referencia.**
+    ///
+    /// `byte`, `short` y `char` son `int` en el bytecode, así que lo que se pregunta no es el
+    /// truncado —eso ya lo cubren las conversiones— sino que la conversión ocurra **en la
+    /// asignación**: una VM que perdiera el `i2b` antes del `istore` daría el valor equivocado en
+    /// una lectura posterior. Y `boolean`, que es el único cuya lectura es una condición.
+    ///
+    /// `cargo test --release --lib narrow_locals_agree -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn narrow_locals_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { narrow_local_share: 30, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-narrow"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
+    /// **`do`/`while` y saltos etiquetados contra el JDK de referencia.**
+    ///
+    /// Las dos formas van juntas porque las dos preguntan lo mismo: **cuándo** se evalúa la guarda.
+    /// Un `do` la evalúa después del cuerpo, y un salto etiquetado la saltea entera hacia un bucle
+    /// de más afuera. Una VM que emitiera el salto al revés —o que tratara un `break L;` como un
+    /// `break;`— corre un número distinto de vueltas, y como el acumulador va multiplicando por 31
+    /// en cada una, una sola vuelta de diferencia cambia el resultado.
+    ///
+    /// Un `Timeout` acá sería la propiedad 3 rota: querría decir que una etiqueta dejó salir de un
+    /// bucle a un lugar desde donde se vuelve a entrar. El oráculo lo reporta como divergencia, que
+    /// es exactamente lo que corresponde.
+    ///
+    /// `cargo test --release --lib labelled_loops_agree -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn labelled_loops_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig {
+            do_while_share: 50,
+            label_share: 45,
+            while_share: 60,
+            jump_share: 45,
+            switch_share: 25,
+            ..GenConfig::default()
+        };
+        let mut it = Campaign::detect(workdir("campaign-labelled"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
+    /// **Recursión contra el JDK de referencia.**
+    ///
+    /// Lo que se pone a prueba no es el opcode —una llamada estática es una llamada estática— sino
+    /// que el argumento de terminación se sostenga en programas generados: que el descenso llegue
+    /// al caso base y devuelva lo mismo de los dos lados. Un `Timeout` acá sería la propiedad 3
+    /// rota, y el oráculo lo reporta como divergencia, que es lo correcto.
+    ///
+    /// `cargo test --release --lib recursion_agrees -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn recursion_agrees_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { recursion_share: 30, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-recursion"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
+    /// **Payloads de NaN contra el JDK de referencia.**
+    ///
+    /// Lo que se pregunta es lo único que la JLS **no** deja libre en esta esquina: un patrón de
+    /// bits que entra por `longBitsToDouble` tiene que salir igual por `doubleToRawLongBits`,
+    /// incluso después de pasar por un local. Qué NaN devuelve una *operación* sí es definido por
+    /// la implementación (§4.2.3), y por eso el generador nunca sondea uno calculado.
+    ///
+    /// `cargo test --release --lib nan_payloads_agree -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn nan_payloads_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        let cfg = GenConfig { nan_share: 35, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-nan"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
+    /// **Matrices against the reference JDK.**
+    ///
+    /// El pareo es el punto, y es el mismo argumento que hacen `narrowing_share` y los campos de
+    /// referencia: `multianewarray` está fuera del subconjunto de `burst::compile`, y también lo
+    /// está el `aaload` que necesita toda lectura de una matriz, así que contra [`Path::Jit`] los
+    /// dos brazos serían el intérprete. Contra un JDK real no hay tal problema, y lo que se
+    /// pregunta es si esta VM coincide sobre las tres cosas que la forma genera: la allocation
+    /// rectangular, dos chequeos de cota sobre **dos arrays distintos**, y `m[i].length`.
+    ///
+    /// `cargo test --release --lib matrices_agree -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn matrices_agree_with_the_reference_jdk() {
+        let paths = (Path::Interpreter, Path::ReferenceJdk);
+        // Las dos perillas juntas: la matriz es lo que hace que `m[i] = null` tenga dónde ir, y
+        // anular una fila es lo único que produce una matriz **dentada** en esta gramática.
+        let cfg =
+            GenConfig { matrix_share: 50, null_array_share: 40, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-matrices"), Duration::from_secs(25))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
     }
 
     /// **Reference fields against the reference JDK.**
@@ -632,6 +854,8 @@ mod jit_coverage {
                 result: Expr::ArrayLoad("a0".into(), Ty::Int, Box::new(Expr::IntLit(index))),
                 cost: 4,
             },
+            recursive_body: None,
+            admissible: Vec::new(),
             warmup: GenConfig::default().warmup,
         };
         let dir = std::env::temp_dir().join("kaji-fuzz-fz005");

@@ -67,6 +67,32 @@ public final class ServiceLoader<S> implements Iterable<S> {
         return new ServiceLoader<S>(service, loader);
     }
 
+    /**
+     * Los proveedores de las **modulos de esa capa** y sus ancestros.
+     *
+     * <p>Esta forma tiene una regla que sorprende y que se respeta tal cual: busca **solo** en los
+     * modulos de la capa. Un proveedor del classpath **no** aparece, aunque `load(service)` si lo
+     * encuentre. No es una limitacion, es el punto del metodo -- sirve para preguntar "que da esta
+     * capa", y contestar con lo de afuera seria contestar otra pregunta.
+     *
+     * <p>En esta biblioteca **no hay modulos con nombre**: todo vive en el modulo sin nombre, y una
+     * `ModuleLayer` nunca contiene ninguno. Asi que el resultado esta siempre vacio, y eso **es** la
+     * respuesta correcta bajo la regla de arriba, no un stub: preguntar por los proveedores de una
+     * capa sin modulos tiene que dar cero. Si algun dia hay modulos de verdad, el bucle de abajo los
+     * recorre sin cambios.
+     */
+    public static <S> ServiceLoader<S> load(ModuleLayer layer, Class<S> service) {
+        if (layer == null || service == null) {
+            throw new NullPointerException();
+        }
+        ClassLoader loader = null;
+        Iterator<Module> it = layer.modules().iterator();
+        if (it.hasNext()) {
+            loader = it.next().getClassLoader();
+        }
+        return new ServiceLoader<S>(service, loader);
+    }
+
     // Solo los proveedores **instalados**: los de la plataforma, no los de la aplicacion.
     //
     // La distincion es real y no cosmetica -- es la que evita que un jar cualquiera del classpath

@@ -104,6 +104,26 @@ public abstract class ResourceBundle {
         return doGetBundle(baseName, locale, loader(), control);
     }
 
+    /**
+     * El bundle de `baseName`, buscado a traves del **modulo** dado.
+     *
+     * <p>Se resuelve por el cargador del modulo, que es lo que el modulo *es* a los efectos de
+     * encontrar un recurso: `Module.getClassLoader()` devuelve el cargador real que lo posee, asi
+     * que esto encuentra exactamente lo mismo que `getBundle(baseName, locale, cargador)`.
+     */
+    public static ResourceBundle getBundle(String baseName, Module module) {
+        return ResourceBundle.getBundle(baseName, Locale.getDefault(), module);
+    }
+
+    /** El bundle de `baseName` en `locale`, buscado a traves del modulo dado. */
+    public static ResourceBundle getBundle(String baseName, Locale locale, Module module) {
+        if (baseName == null || locale == null || module == null) {
+            throw new NullPointerException();
+        }
+        return doGetBundle(baseName, locale, module.getClassLoader(),
+                Control.getControl(Control.FORMAT_DEFAULT));
+    }
+
     // The bundle for `baseName` in `locale`, loaded through `loader`.
     public static ResourceBundle getBundle(String baseName, Locale locale, ClassLoader loader) {
         return doGetBundle(baseName, locale, loader, Control.getControl(Control.FORMAT_DEFAULT));
