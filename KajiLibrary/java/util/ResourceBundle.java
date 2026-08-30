@@ -120,8 +120,15 @@ public abstract class ResourceBundle {
         if (baseName == null || locale == null || module == null) {
             throw new NullPointerException();
         }
-        return doGetBundle(baseName, locale, module.getClassLoader(),
-                Control.getControl(Control.FORMAT_DEFAULT));
+        // Un cargador `null` significa el **bootstrap**, que en el JDK no es un objeto. Para buscar
+        // un recurso hay que caer al del sistema, que es lo mismo que hacen las formas sin modulo
+        // (ver `loader()` mas abajo). `Class.getModule()` devuelve un modulo con cargador nulo para
+        // las clases del arranque, asi que este caso no es raro: es el comun.
+        ClassLoader cl = module.getClassLoader();
+        if (cl == null) {
+            cl = loader();
+        }
+        return doGetBundle(baseName, locale, cl, Control.getControl(Control.FORMAT_DEFAULT));
     }
 
     // The bundle for `baseName` in `locale`, loaded through `loader`.

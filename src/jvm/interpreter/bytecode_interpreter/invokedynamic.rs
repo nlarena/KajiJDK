@@ -318,11 +318,30 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             widths.extend(MetaspaceService::param_slot_widths(&ctor_descriptor));
             let mut ctor_args = vec![Value::Reference(object)];
             ctor_args.extend(args.iter().cloned());
+            // La referencia se empuja **antes** de correr el constructor, no despues (#311).
+            //
+            // `object` es un offset crudo dentro del heap, y el constructor es codigo real que puede
+            // asignar y por lo tanto **disparar una colecta**. El recolector de esta VM mueve los
+            // objetos vivos, y actualiza las raices — la pila de operandos entre ellas — pero no
+            // puede saber nada de una variable local de Rust. Sostener `object` a traves de
+            // `call_java` y empujarlo despues empuja la direccion **vieja**.
+            //
+            // Lo que producia: un `NullPointerException` en el que llama, porque la referencia
+            // apuntaba a memoria reciclada. Aparecia solo cuando la colecta caia justo ahi, asi que
+            // dependia de la presion de asignacion: el mismo metodo con ocho call sites andaba y con
+            // nueve fallaba, y con el eden agrandado volvia a andar. Un `.class` nuestro corriendo
+            // en `java` real siempre estuvo bien, que es lo que lo ubica en la VM y no en el emisor.
+            //
+            // Empujarla antes la vuelve una raiz, y entonces el recolector la reubica junto con el
+            // objeto. Es, exactamente, para lo que el `new`/`dup`/`invokespecial` de javac tiene el
+            // `dup`: la copia en la pila no es una comodidad, es lo que mantiene viva y al dia la
+            // referencia mientras corre el constructor.
+            self.top().push(Value::Reference(object));
             self.call_java(ctor, ctor_args, &widths);
             // The constructor is real code and can throw; a parked exception means there is no
             // object to push (the `0xba` handler delivers it instead of stepping over the call).
-            if !self.threw() {
-                self.top().push(Value::Reference(object));
+            if self.threw() {
+                self.top().pop();
             }
         }
         Bootstrap::ObjectMethods { method, record_class, components } => {

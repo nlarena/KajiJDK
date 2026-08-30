@@ -1631,9 +1631,13 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     if let Some(id) = env.table.resolve_type(env.class_scope, name) {
         return (RType::Class(id), Some(Binding::Class(id)));
     }
-    // Ídem, para el nombre en posición de **expresión** (`StrictMath.log(x)`): la clase del round
-    // que el `import java.lang.*` implícito hace visible.
+    // Ídem, para el nombre en posición de **expresión** (`StrictMath.log(x)`, `Tipo.uno()`): la
+    // clase de este round que la unidad nombra corto. Es la posición donde faltaba, y por eso el
+    // síntoma era "no se encuentra el símbolo: **variable** Tipo" — en posición de tipo resolvía.
     if let Some(id) = env.table.java_lang_source(name) {
+        return (RType::Class(id), Some(Binding::Class(id)));
+    }
+    if let Some(id) = env.table.source_alias(name) {
         return (RType::Class(id), Some(Binding::Class(id)));
     }
     if let Some(id) = env.table.external(name) {
@@ -2228,6 +2232,23 @@ pub(crate) fn candidates(table: &SymbolTable, class: SymbolId, name: &str) -> Ve
         }
         let mut supers: Vec<SymbolId> = table.interfaces(c);
         supers.extend(table.super_class(c));
+        // Una **interfaz** declara implícitamente los métodos públicos de `Object` (§9.2), y no tiene
+        // superclase por donde llegar a ellos. Sin esta rama, `this.toString()` dentro de un `default`
+        // no resolvía —"no se encuentra el método: toString, ubicación: clase Base"— aunque es código
+        // legal que `javac` acepta (#313).
+        //
+        // Es la misma familia que #292, del otro lado: aquél era la **medición** ignorando los
+        // miembros de `Object`; éste es la **resolución** no llegando a ellos.
+        if table.super_class(c).is_none()
+            && matches!(
+                &table.symbol(c).kind,
+                SymbolKind::Class { kind: crate::javac::ast::TypeKind::Interface, .. }
+            )
+        {
+            if let Some(obj) = table.external("Object") {
+                supers.push(obj);
+            }
+        }
         for sup in supers {
             if !visited.contains(&sup) {
                 visited.push(sup);
@@ -2580,6 +2601,9 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         RType::Class(id)
     } else if let Some(id) = table.java_lang_source(name) {
         // El `import java.lang.*` implícito sobre los tipos del fuente de este round (§7.3).
+        RType::Class(id)
+    } else if let Some(id) = table.source_alias(name) {
+        // Un hermano de este round que la unidad nombra corto (su paquete o un `import`).
         RType::Class(id)
     } else if let Some(id) = table.external(name) {
         RType::Class(id)

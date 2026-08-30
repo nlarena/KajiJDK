@@ -5880,3 +5880,186 @@ Repro: `finding_309.java` (once formas, da **2068615891** como `java` real).
   por nombre** y no por conteo.
 - El único `++` en posición de valor sobre un no-local que queda en la biblioteca es el de la familia
   atómica, ya arreglado: se barrió la fuente entera buscando la forma.
+
+## Tanda: el merge de `java.lang`, `java.util` al 99,3 %, y `java.time`
+
+Cuatro findings, todos salidos de escribir biblioteca. Dos de ellos —#311 y #313— son de la clase
+que solo aparece corriendo el código, y uno de esos es el peor de la sesión.
+
+### Lo que se cerró
+
+| paquete | antes | ahora |
+|---|---|---|
+| `java.util` | 1944/2097 (92,7 %) | **2082/2097 (99,3 %)**, 107 de 109 clases al 100 % |
+| `java.time.temporal` | 131/173 (75,7 %) | **173/173**, las 16 clases al 100 % |
+| `java.time` | 458/892 | 545/892, con `Duration` 62/62 y `Period` 43/43 |
+
+De `java.util` quedan **15 miembros**, todos de `Scanner` y `Formatter`, y todos esperando lo mismo:
+que la VM sepa leer y escribir archivos. El `java.io.File` que llegó con el merge es manipulación de
+rutas nada más —`exists()` devuelve `false` siempre y no hay nativos de filesystem—, así que escribir
+`new Scanner(archivo)` daría un miembro que **miente sobre el mundo**: reporta que un archivo que
+existe no existe. Se dejan afuera y se dice por qué.
+
+### El merge, y las dos cosas que git no podía ver
+
+Nueve conflictos de fuente sobre 277 archivos. `Math`/`StrictMath` los auto-mergeó dejando **dos
+`log`** —la de ellos vía `FdLibm` y la que yo había escrito la tanda anterior—; quedó la suya, que
+viene con las dieciocho trascendentes. En `Iterable` quedó su cuerpo (tiene el chequeo de null que el
+JDK hace) con mi javadoc. Las otras cinco se resolvieron con mis versiones, verificando firma por
+firma que nada existiera solo del lado suyo.
+
+Lo interesante es lo que el auto-merge dejó **roto y limpio a la vez**:
+
+- `NoSuchElementException` quedó con **constructores duplicados**: los dos lados habían agregado el
+  mismo par, y un merge textual los concatena sin protestar.
+- Su `Thread.sleep` ahora declara `throws InterruptedException` —correctamente; el nuestro era
+  `native` sin `throws`— y eso destapó **tres llamadas nuestras** que no la manejaban, en
+  `CompletableFuture` y `ScheduledThreadPoolExecutor`. Ahora restauran la marca de interrumpido y
+  cancelan, que es lo que significa una interrupción ahí.
+
+Ninguna de las dos las ve git. Las vio el compilador, en la recompilación de la biblioteca entera.
+
+### Finding #310 — un primitivo pasado a un `Object...` no se boxeaba
+
+```java
+String.format("%d", 42)   // "expected a reference, found Int(42)"
+```
+
+El `42` entraba **crudo** al `Object[]` del varargs. Una de las líneas más comunes que tiene Java.
+
+La causa estaba escrita en un comentario, y decía lo contrario de lo que hacía falta:
+
+```rust
+// Con varargs los argumentos de cola aún no se empaquetaron en un array (eso lo hace el
+// desugar, después): se convierten solo los del prefijo fijo.
+```
+
+De "el array se arma después" se concluía "no hay nada que convertir", y no: **el elemento** ya es un
+target válido. Los de cola se convierten ahora contra el tipo elemento del array, y eso cubre las
+cuatro formas de una sola vez — un `int` contra `Object` boxea, un `Integer` contra `int...`
+desboxea, un `String` contra `Object` no hace nada, y el paso directo del array tampoco, porque
+`coerce` no tiene arm para `(Array, _)`. No hay que distinguirlos a mano.
+
+Repro: `finding_310.java` (da 212112, como `java` real).
+
+### Finding #311 — la referencia de una lambda quedaba stale si el GC corría durante su constructor
+
+El más serio de la sesión.
+
+```rust
+let object = allocate(...);                    // un offset crudo dentro del heap
+self.call_java(ctor, ...);                     // código real: puede asignar, puede colectar
+self.top().push(Value::Reference(object));     // <- la dirección VIEJA
+```
+
+El recolector mueve los objetos vivos y actualiza las raíces —la pila de operandos entre ellas— pero
+no puede saber nada de una variable local de Rust. Si la colecta caía durante el `<init>`, lo que se
+empujaba era una referencia a memoria ya reciclada, y quien llamaba veía un `NullPointerException`
+que no tenía nada que ver con su código.
+
+**Cómo se acorraló, que es la parte que vale.** El síntoma dependía de la presión de asignación, y esa
+dependencia es lo que lo volvió localizable:
+
+- con **ocho** call sites en el método andaba, con **nueve** fallaba, y con **diez** volvía a andar —
+  con diez, el noveno es un `Consumer` que un `Optional` vacío nunca invoca, así que el caso roto no
+  se ejercitaba;
+- con `JVM_GC_EDEN_SIZE` agrandado —o sea, sin colectas— andaba siempre;
+- y el `.class` que emite **nuestro** javac corre bien en `java` real.
+
+Lo último es lo que lo ubica: el class file está bien, el defecto es de la VM. Sin esa comprobación
+el sospechoso natural habría sido el emisor, y la búsqueda habría empezado en el lugar equivocado.
+
+**Arreglado** empujando la referencia **antes** de correr el constructor, con lo que pasa a ser una
+raíz y el recolector la reubica junto con el objeto. Es, exactamente, para lo que el
+`new`/`dup`/`invokespecial` de javac tiene el `dup`: la copia en la pila no es una comodidad, es lo
+que mantiene viva y al día la referencia mientras corre el constructor.
+
+Repro: `finding_311.java` (da 11, como `java` real).
+
+### Finding #312 — un `import` explícito del mismo round no resolvía en posición de expresión
+
+```
+javac --emit pp/Tipo.java qq/Uso.java   ->  "no se encuentra el símbolo: variable Tipo"
+```
+
+Hermano del #303: aquél era el `import java.lang.*` implícito, éste es un `import` escrito. Y el
+diagnóstico decía **variable**, no tipo, porque en posición de **tipo** sí resolvía — faltaba solo en
+posición de expresión, que es donde `Tipo.uno()` pone el nombre.
+
+La causa es la misma guardia *source-shadows-classpath*: `try_load` ve que el tipo ya existe en el
+fuente, no carga nada del classpath —correcto— y sale **sin anotar que ese nombre corto lo designa**.
+
+El arreglo generaliza el del #303: un mapa `source_aliases` —nombre simple → tipo del fuente— que se
+llena solo para los nombres que la unidad puede escribir cortos (su paquete, un `import` de un solo
+tipo, `java.lang`). Un homónimo que nadie nombró no se vuelve visible por estar en el round.
+
+Va **aparte** de `externals`, y esa separación es la misma decisión del #303: `check.rs` define
+"externo" como *estar en aquel mapa*, y a los externos les afloja los chequeos de miembros.
+
+Repro: `repros/zz312/`.
+
+### Finding #313 — `this.toString()` dentro de un `default` de interfaz no resolvía
+
+```java
+interface Base {
+    default String nombre() { return this.toString(); }
+}
+// error: no se encuentra el símbolo: toString / ubicación: clase Base
+```
+
+Y es código legal: una interfaz **declara implícitamente** un método abstracto por cada método
+público de `Object` (§9.2), justamente para que esto se pueda escribir.
+
+La búsqueda de miembros sube por `super_class` y por las superinterfaces, y una interfaz **no tiene
+superclase** — así que a `Object` no se llegaba nunca. El arreglo agrega `Object` al cierre cuando el
+tipo es una interfaz sin superclase, que es exactamente lo que dice la regla.
+
+Es la misma familia que el **#292**, del otro lado: aquél era la **medición** ignorando los miembros
+de `Object`; éste es la **resolución** no llegando a ellos. Dos formas distintas del mismo punto
+ciego, encontradas con meses de diferencia.
+
+Lo destapó escribir `TemporalField.getDisplayName`, que devuelve `this.toString()`.
+
+Repro: `finding_313.java` (da 4102, como `java` real).
+
+### Lo que completar una interfaz destapó
+
+`TemporalField` estaba en 5/12. Al completarlo —`getBaseUnit`, `getRangeUnit`, `range`,
+`rangeRefinedBy`, `adjustInto`— **tres implementadores dejaron de compilar**: `IsoFields.IsoField`,
+`JulianFields.JulianField` y `WeekFields.ComputedField`. Los tres estaban incompletos y nada lo
+notaba, porque la interfaz que debían cumplir también lo estaba.
+
+Es un efecto que conviene esperar y no lamentar: completar un tipo base es lo que vuelve visibles a
+los que se apoyaban en que estuviera incompleto. Los tres se cerraron, y `ChronoUnit` ganó de paso el
+`getDuration`/`addTo` que le faltaba.
+
+### Dos expectativas mías que la prueba corrigió, no yo
+
+**`Duration.truncatedTo` trunca hacia cero, no hacia abajo.** `-1.5s` a segundos es `-1s`, y `-90s` a
+minutos es `-60s`. Yo lo escribí con la corrección del resto negativo —o sea, `floor`— porque
+"truncar" suena a eso, y para los negativos es la dirección opuesta. Lo dijo `DurTest` corrido contra
+`java` real, antes de que se fuera al árbol.
+
+**`nextGaussian(mean, NaN)` no tira.** Había escrito la guarda negada (`!(stddev >= 0)`) para que el
+`NaN` cayera en el `IllegalArgumentException`. Parece mejor y es un apartamiento del contrato, que
+dice "si `stddev` es negativo" — y `NaN` no es negativo. `java` real devuelve `NaN`.
+
+Las dos son del mismo tipo: una regla que parece más prolija que la del contrato, y que por eso
+mismo está mal. Las dos quedaron fijadas con una comprobación explícita y un comentario que dice qué
+pasó.
+
+### Verificación
+
+- La biblioteca recompila **1083/1085**. Los dos que fallan son `SymElement` y `StructuredTaskScope`,
+  los dos de siempre.
+- **1439 tests de Rust pasan**; los 20 que fallan son los 18 de `javac::` de siempre más `JcIc` y
+  `WdWide`, que son las dos discrepancias conocidas del arnés ahora también encodadas como tests.
+  Se comparó la lista completa, no el conteo.
+- De las **47** pruebas comparables, **45** dan el mismo entero que `java` real. Las nuevas de esta
+  tanda —`SeqTest`, `IoBridgeTest`, `RgTest`, `AtomTest`, `DurTest`, `PerTest`— dan todas -1.
+- Los cuatro repros nuevos dan lo mismo que `java` real: `finding_310` → 212112, `finding_311` → 11,
+  `finding_313` → 4102, y `zz312/` compila junto.
+- **Nota sobre el árbol overlay**: los 27 tests de `library_conformance` que trajo el merge fallaban
+  por una razón que vale anotar — el `KajiLibrary` de la copia limpia era el de **antes** del merge,
+  así que probaban una biblioteca vieja contra un compilador nuevo. No era un bug: era una fecha. Es
+  la misma lección que `bin/FROZEN.md` documenta para los `.exe`, un nivel más adentro.

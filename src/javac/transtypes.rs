@@ -336,9 +336,28 @@ impl Trans<'_> {
         let Some(Resolved::Method { params, varargs, .. }) = self.table.resolved(mid) else { return };
         let params = params.clone();
         let varargs = *varargs;
-        // Con varargs los argumentos de cola aún no se empaquetaron en un array (eso lo hace el
-        // desugar, después): se convierten solo los del prefijo fijo.
         let fixed = if varargs { params.len().saturating_sub(1) } else { params.len() };
+        // Con varargs, los argumentos de **cola** se convierten contra el tipo **elemento** del
+        // array, no contra el array. Antes no se convertían en absoluto —el comentario decía que el
+        // desugar los empaqueta después, y de ahí se concluía que no había nada que hacer— y eso
+        // dejaba un primitivo sin boxear adentro de un `Object[]` (#310).
+        //
+        // Lo que producía: `String.format("%d", 42)` metía el `int` crudo en el arreglo de
+        // referencias y la VM cortaba con "expected a reference, found Int(42)". Una de las líneas
+        // más comunes que tiene Java.
+        //
+        // El elemento es el target correcto para las cuatro formas, y por eso alcanza con esto:
+        // un `int` contra `Object` boxea; un `Integer` contra `int...` desboxea; un `String` contra
+        // `Object` no hace nada; y el paso directo del array (`f(arr)`) tampoco, porque `coerce` no
+        // tiene arm para `(Array, _)` — no hay que distinguirlo a mano.
+        let elem_varargs = if varargs {
+            match params.last() {
+                Some(RType::Array(elem)) => Some(elem.as_ref().clone()),
+                _ => None,
+            }
+        } else {
+            None
+        };
         let args = match &mut e.kind {
             ExprKind::Call { args, .. } | ExprKind::NewObject { args, .. } => args,
             _ => return,
@@ -348,6 +367,8 @@ impl Trans<'_> {
                 if let Some(pt) = params.get(i) {
                     self.coerce(a, pt);
                 }
+            } else if let Some(elem) = &elem_varargs {
+                self.coerce(a, elem);
             }
         }
     }

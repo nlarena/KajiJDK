@@ -512,6 +512,164 @@ public class BitSet {
         return copy;
     }
 
+    /**
+     * Los bits como bytes, **little-endian**: el bit 0 es el bit menos significativo del byte 0.
+     *
+     * <p>El orden importa y es facil de invertir. Es el mismo que usa `toLongArray`, un nivel mas
+     * abajo, y el que hace que `BitSet.valueOf(x.toByteArray())` devuelva un conjunto igual a `x`.
+     */
+    public byte[] toByteArray() {
+        int n = wordsInUse;
+        if (n == 0) {
+            return new byte[0];
+        }
+        // El ultimo word puede aportar menos de 8 bytes: solo los que llegan hasta el bit mas alto.
+        int len = 8 * (n - 1) + (64 - leadingZeros(words[n - 1]) + 7) / 8;
+        byte[] out = new byte[len];
+        int i = 0;
+        int b = 0;
+        while (i < n - 1) {
+            int k = 0;
+            while (k < 8) {
+                out[b] = (byte) ((words[i] >>> (8 * k)) & 0xffL);
+                b = b + 1;
+                k = k + 1;
+            }
+            i = i + 1;
+        }
+        long ultimo = words[n - 1];
+        while (b < len) {
+            out[b] = (byte) ((ultimo >>> (8 * (b % 8))) & 0xffL);
+            b = b + 1;
+        }
+        return out;
+    }
+
+    /**
+     * El indice del ultimo bit **en cero** en `[0, fromIndex]`, o -1.
+     *
+     * <p>Nunca devuelve -1 para un `fromIndex` valido, a diferencia de `previousSetBit`: mas alla de
+     * `length()` todo esta en cero, asi que siempre hay un cero que encontrar. El -1 solo aparece si
+     * los bits 0..fromIndex estan todos en uno.
+     *
+     * @throws IndexOutOfBoundsException si `fromIndex` es menor que -1
+     */
+    public int previousClearBit(int fromIndex) {
+        if (fromIndex < 0) {
+            if (fromIndex != -1) {
+                throw new IndexOutOfBoundsException("fromIndex < -1");
+            }
+            return -1;
+        }
+        int u = wordIndex(fromIndex);
+        if (u >= wordsInUse) {
+            return fromIndex;   // pasado el final no hay nada seteado
+        }
+        // Se busca sobre el complemento: un cero de `words` es un uno de `~words`.
+        long word = ~words[u] & (-1L >>> -(fromIndex + 1));
+        int found = -1;
+        while (found < 0 && u >= 0) {
+            if (word != 0L) {
+                found = u * 64 + 63 - leadingZeros(word);
+            } else {
+                u = u - 1;
+                if (u >= 0) {
+                    word = ~words[u];
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Un `BitSet` nuevo con los bits de `[fromIndex, toIndex)`, **recorridos a la posicion 0**.
+     *
+     * <p>El desplazamiento es lo que lo distingue de un `and` con una mascara: `get(64, 66)` de un
+     * conjunto con el bit 64 puesto devuelve un conjunto con el bit **0** puesto, no el 64.
+     *
+     * @throws IndexOutOfBoundsException si algun indice es negativo, o `fromIndex > toIndex`
+     */
+    public BitSet get(int fromIndex, int toIndex) {
+        checkRange(fromIndex, toIndex);
+        BitSet out = new BitSet();
+        int len = length();
+        if (fromIndex >= len || fromIndex == toIndex) {
+            return out;
+        }
+        int hasta = toIndex;
+        if (hasta > len) {
+            hasta = len;
+        }
+        int i = fromIndex;
+        while (i < hasta) {
+            if (get(i)) {
+                out.set(i - fromIndex);
+            }
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /** Los indices de los bits en uno, en orden creciente. */
+    public java.util.stream.IntStream stream() {
+        int n = cardinality();
+        int[] idx = new int[n];
+        int k = 0;
+        int i = nextSetBit(0);
+        while (i >= 0) {
+            idx[k] = i;
+            k = k + 1;
+            i = nextSetBit(i + 1);
+        }
+        return java.util.stream.IntStream.of(idx);
+    }
+
+    /**
+     * Un `BitSet` con los bits de `bytes`, en el mismo orden little-endian que `toByteArray`.
+     */
+    public static BitSet valueOf(byte[] bytes) {
+        int n = bytes.length;
+        while (n > 0 && bytes[n - 1] == 0) {
+            n = n - 1;
+        }
+        long[] words = new long[(n + 7) / 8];
+        int i = 0;
+        while (i < n) {
+            words[i / 8] = words[i / 8] | ((bytes[i] & 0xffL) << (8 * (i % 8)));
+            i = i + 1;
+        }
+        return BitSet.valueOf(words);
+    }
+
+    /**
+     * Idem, leyendo desde la **posicion actual** del buffer hasta su limite.
+     *
+     * <p>El buffer no se toca: ni su posicion ni su limite cambian. Es lo que promete el JDK, y lo
+     * que hace que se lo pueda seguir usando despues de esta llamada.
+     */
+    public static BitSet valueOf(java.nio.ByteBuffer bb) {
+        int n = bb.remaining();
+        byte[] copia = new byte[n];
+        int i = 0;
+        while (i < n) {
+            copia[i] = bb.get(bb.position() + i);
+            i = i + 1;
+        }
+        return BitSet.valueOf(copia);
+    }
+
+    /** Idem, desde un buffer de `long`. */
+    public static BitSet valueOf(java.nio.LongBuffer lb) {
+        int n = lb.remaining();
+        long[] copia = new long[n];
+        int i = 0;
+        while (i < n) {
+            copia[i] = lb.get(lb.position() + i);
+            i = i + 1;
+        }
+        return BitSet.valueOf(copia);
+    }
+
     public static BitSet valueOf(long[] longs) {
         int n = longs.length;
         while (n > 0 && longs[n - 1] == 0L) {

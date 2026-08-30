@@ -153,6 +153,68 @@ final class ComputedField implements TemporalField {
         return result;
     }
 
+    // Las cuatro descripciones que `TemporalField` pide. Los cinco campos localizados cuentan dias o
+    // semanas, dentro de la unidad que su nombre dice.
+
+    public TemporalUnit getBaseUnit() {
+        if (this.kind == 0) {
+            return ChronoUnit.DAYS;
+        }
+        if (this.kind == 4) {
+            return IsoFields.WEEK_BASED_YEARS;
+        }
+        return ChronoUnit.WEEKS;
+    }
+
+    public TemporalUnit getRangeUnit() {
+        if (this.kind == 0) {
+            return ChronoUnit.WEEKS;
+        }
+        if (this.kind == 1) {
+            return ChronoUnit.MONTHS;
+        }
+        if (this.kind == 2) {
+            return ChronoUnit.YEARS;
+        }
+        if (this.kind == 3) {
+            return IsoFields.WEEK_BASED_YEARS;
+        }
+        return ChronoUnit.FOREVER;
+    }
+
+    public ValueRange range() {
+        if (this.kind == 0) {
+            return ValueRange.of(1L, 7L);
+        }
+        if (this.kind == 1) {
+            // La semana 0 existe: los dias iniciales que no llegan al minimo caen en ella.
+            return ValueRange.of(0L, 1L, 4L, 6L);
+        }
+        if (this.kind == 2) {
+            return ValueRange.of(0L, 1L, 52L, 54L);
+        }
+        if (this.kind == 3) {
+            return ValueRange.of(1L, 52L, 53L);
+        }
+        return ChronoField.YEAR.range();
+    }
+
+    public ValueRange rangeRefinedBy(TemporalAccessor temporal) {
+        if (!this.isSupportedBy(temporal)) {
+            throw new UnsupportedTemporalTypeException("Unsupported field: " + this.name);
+        }
+        return this.range();
+    }
+
+    public <R extends Temporal> R adjustInto(R temporal, long newValue) {
+        // Por diferencia, como los campos ISO: se calcula cuanto hay que moverse en la unidad base.
+        // Poner el campo directamente pediria reconstruir la fecha desde el calendario localizado de
+        // semanas, que depende del primer dia y del minimo de dias -- una cuenta aparte.
+        long actual = this.getFrom(temporal);
+        this.range().checkValidValue(newValue, this);
+        return (R) temporal.plus(newValue - actual, this.getBaseUnit());
+    }
+
     // The day of the week counted from this locale's first day: 1 = firstDayOfWeek.
     private int localizedDayOfWeek(TemporalAccessor temporal) {
         int iso = temporal.get(ChronoField.DAY_OF_WEEK);

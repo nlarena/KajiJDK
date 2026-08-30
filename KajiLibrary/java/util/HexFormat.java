@@ -125,6 +125,52 @@ public final class HexFormat {
         return formatHex(bytes, 0, bytes.length);
     }
 
+    /**
+     * Formatea a un `Appendable` en vez de a un `String`.
+     *
+     * <p>Existe para no construir la cadena intermedia cuando el destino ya es un buffer: formatear
+     * un megabyte a un `StringBuilder` con la version de `String` haria una copia entera de mas.
+     *
+     * <p>Devuelve **el mismo** `out` que recibio, para poder encadenarlo.
+     */
+    public <A extends Appendable> A formatHex(A out, byte[] bytes) {
+        return formatHex(out, bytes, 0, bytes.length);
+    }
+
+    /** Idem, sobre un tramo. */
+    public <A extends Appendable> A formatHex(A out, byte[] bytes, int fromIndex, int toIndex) {
+        if (out == null) {
+            throw new NullPointerException();
+        }
+        checkRange(fromIndex, toIndex, bytes.length);
+        for (int i = fromIndex; i < toIndex; i++) {
+            if (i > fromIndex) {
+                out.append(this.delimiter);
+            }
+            out.append(this.prefix);
+            out.append(toHighHexDigit(bytes[i]));
+            out.append(toLowHexDigit(bytes[i]));
+            out.append(this.suffix);
+        }
+        return out;
+    }
+
+    /**
+     * Los dos digitos de `value` a un `Appendable`.
+     *
+     * <p>Ojo: **no** lleva prefijo, sufijo ni delimitador. `toHexDigits` es la conversion cruda y
+     * `formatHex` la que aplica el formato -- la diferencia esta en los dos nombres y es facil de
+     * pasar por alto.
+     */
+    public <A extends Appendable> A toHexDigits(A out, byte value) {
+        if (out == null) {
+            throw new NullPointerException();
+        }
+        out.append(toHighHexDigit(value));
+        out.append(toLowHexDigit(value));
+        return out;
+    }
+
     public String formatHex(byte[] bytes, int fromIndex, int toIndex) {
         checkRange(fromIndex, toIndex, bytes.length);
         StringBuilder sb = new StringBuilder();
@@ -144,6 +190,21 @@ public final class HexFormat {
 
     public byte[] parseHex(CharSequence string) {
         return parseHex(string, 0, string.length());
+    }
+
+    /**
+     * Parsea desde un `char[]`.
+     *
+     * <p>Se copia el tramo a un `String` y se delega. Copiar parece un desperdicio y es lo correcto:
+     * el arreglo es **mutable** y de quien llama, asi que leerlo perezosamente dejaria al parser
+     * expuesto a que se lo cambien en el medio. El JDK hace lo mismo por la misma razon.
+     */
+    public byte[] parseHex(char[] chars, int fromIndex, int toIndex) {
+        if (chars == null) {
+            throw new NullPointerException();
+        }
+        checkRange(fromIndex, toIndex, chars.length);
+        return parseHex(String.valueOf(chars, fromIndex, toIndex - fromIndex));
     }
 
     // The inverse of formatHex, and it insists on the exact shape this format produces: the
@@ -304,6 +365,35 @@ public final class HexFormat {
             value = (value << 4) + fromHexDigit(string.charAt(i));
         }
         return value;
+    }
+
+    /**
+     * Los digitos de `[fromIndex, toIndex)` como `int`.
+     *
+     * @throws IllegalArgumentException si el tramo tiene mas de 8 digitos, o alguno no es hexadecimal
+     * @throws IndexOutOfBoundsException si el tramo no cae dentro de `string`
+     */
+    public static int fromHexDigits(CharSequence string, int fromIndex, int toIndex) {
+        if (string == null) {
+            throw new NullPointerException();
+        }
+        if (fromIndex < 0 || toIndex > string.length() || fromIndex > toIndex) {
+            throw new IndexOutOfBoundsException("Range [" + fromIndex + ", " + toIndex
+                    + ") out of bounds for length " + string.length());
+        }
+        return fromHexDigits(string.subSequence(fromIndex, toIndex));
+    }
+
+    /** Idem, hasta 16 digitos, como `long`. */
+    public static long fromHexDigitsToLong(CharSequence string, int fromIndex, int toIndex) {
+        if (string == null) {
+            throw new NullPointerException();
+        }
+        if (fromIndex < 0 || toIndex > string.length() || fromIndex > toIndex) {
+            throw new IndexOutOfBoundsException("Range [" + fromIndex + ", " + toIndex
+                    + ") out of bounds for length " + string.length());
+        }
+        return fromHexDigitsToLong(string.subSequence(fromIndex, toIndex));
     }
 
     // Up to 16 digits as a long. Same story one width up.

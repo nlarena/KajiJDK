@@ -37,6 +37,77 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         return new LocalDate(year, month, day);
     }
 
+    /** 1970-01-01, el dia cero. */
+    public static final LocalDate EPOCH = LocalDate.ofEpochDay(0L);
+
+    /** La fecha mas temprana representable, -999999999-01-01. */
+    public static final LocalDate MIN = LocalDate.of(-999999999, 1, 1);
+
+    /** La mas tardia, +999999999-12-31. */
+    public static final LocalDate MAX = LocalDate.of(999999999, 12, 31);
+
+    /** La fecha que marca `clock`. La forma testeable de `now()`. */
+    public static LocalDate now(java.time.Clock clock) {
+        if (clock == null) {
+            throw new NullPointerException("clock");
+        }
+        return LocalDate.ofInstant(clock.instant(), clock.getZone());
+    }
+
+    /** La fecha en esa zona, ahora. */
+    public static LocalDate now(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        return LocalDate.ofInstant(Instant.now(), zone);
+    }
+
+    /**
+     * La fecha local que ese instante marca en esa zona.
+     *
+     * <p>El mismo instante es un dia distinto segun donde se lo mire: por eso hace falta la zona y
+     * no alcanza con el instante.
+     */
+    public static LocalDate ofInstant(Instant instant, ZoneId zone) {
+        if (instant == null || zone == null) {
+            throw new NullPointerException();
+        }
+        ZoneOffset offset = zone.getRules().getOffset(instant);
+        long segsLocales = instant.getEpochSecond() + offset.getTotalSeconds();
+        return LocalDate.ofEpochDay(Math.floorDiv(segsLocales, 86400L));
+    }
+
+    /** La fecha con ese año y ese mes. */
+    public static LocalDate of(int year, Month month, int dayOfMonth) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        return LocalDate.of(year, month.getValue(), dayOfMonth);
+    }
+
+    /**
+     * La fecha del dia `dayOfYear` de `year`.
+     *
+     * @throws java.time.DateTimeException si el dia no existe en ese año -- el 366 en uno comun
+     */
+    public static LocalDate ofYearDay(int year, int dayOfYear) {
+        ChronoField.YEAR.checkValidValue((long) year);
+        ChronoField.DAY_OF_YEAR.checkValidValue((long) dayOfYear);
+        boolean bisiesto = java.time.chrono.IsoChronology.INSTANCE.isLeapYear((long) year);
+        if (dayOfYear == 366 && !bisiesto) {
+            throw new java.time.DateTimeException(
+                    "Invalid date 'DayOfYear 366' as '" + year + "' is not a leap year");
+        }
+        Month mes = Month.of((dayOfYear - 1) / 31 + 1);
+        // El calculo de arriba puede quedarse corto por un mes: se avanza si hace falta.
+        int finDelMes = mes.firstDayOfYear(bisiesto) + mes.length(bisiesto) - 1;
+        if (dayOfYear > finDelMes) {
+            mes = mes.plus(1L);
+        }
+        int dia = dayOfYear - mes.firstDayOfYear(bisiesto) + 1;
+        return LocalDate.of(year, mes.getValue(), dia);
+    }
+
     public static LocalDate now() {
         return LocalDate.ofEpochDay(System.currentTimeMillis() / 86400000L);
     }
@@ -68,6 +139,30 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
             }
         }
         return total - DAYS_0000_TO_1970;
+    }
+
+    /**
+     * La fecha que `temporal` tiene.
+     *
+     * <p>Se lee por `EPOCH_DAY`, que es el campo que **todo** temporal con fecha sabe dar --sea un
+     * `LocalDate`, un `LocalDateTime` o un `ZonedDateTime`--. Leer año/mes/dia por separado tambien
+     * andaria y seria peor: tres campos que pueden venir de calendarios distintos, contra uno que ya
+     * es absoluto.
+     *
+     * @throws java.time.DateTimeException si `temporal` no tiene fecha
+     */
+    public static LocalDate from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof LocalDate) {
+            return (LocalDate) temporal;
+        }
+        if (!temporal.isSupported(ChronoField.EPOCH_DAY)) {
+            throw new java.time.DateTimeException(
+                    "Unable to obtain LocalDate from TemporalAccessor: " + temporal);
+        }
+        return LocalDate.ofEpochDay(temporal.getLong(ChronoField.EPOCH_DAY));
     }
 
     public static LocalDate ofEpochDay(long epochDay) {
@@ -215,6 +310,127 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         return chrono.getId().compareTo(otherChrono.getId());
     }
 
+    /**
+     * Si esta fecha es anterior a `other`, que puede ser de **otro calendario**.
+     *
+     * <p>Compara por dia epoch y no por año/mes/dia: es la unica forma de que la comparacion entre
+     * calendarios distintos signifique algo. Un 1 de enero japones y uno ISO son el mismo dia si
+     * caen en el mismo punto de la linea, sin importar como cada uno lo numere.
+     */
+    public boolean isBefore(java.time.chrono.ChronoLocalDate other) {
+        return this.toEpochDay() < other.toEpochDay();
+    }
+
+    public boolean isAfter(java.time.chrono.ChronoLocalDate other) {
+        return this.toEpochDay() > other.toEpochDay();
+    }
+
+    /**
+     * Si designan el **mismo dia**, aunque sean de calendarios distintos.
+     *
+     * <p>Distinto de `equals`, que exige ademas el mismo calendario. Es la diferencia entre "es el
+     * mismo dia" y "es la misma fecha".
+     */
+    public boolean isEqual(java.time.chrono.ChronoLocalDate other) {
+        return this.toEpochDay() == other.toEpochDay();
+    }
+
+    /** La era ISO: `CE` para los años positivos, `BCE` para el resto. */
+    public java.time.chrono.IsoEra getEra() {
+        return this.getYear() >= 1 ? java.time.chrono.IsoEra.CE : java.time.chrono.IsoEra.BCE;
+    }
+
+    /** Esta fecha a la medianoche. */
+    public LocalDateTime atStartOfDay() {
+        return LocalDateTime.of(this, LocalTime.MIDNIGHT);
+    }
+
+    /**
+     * Esta fecha al comienzo del dia en esa zona.
+     *
+     * <p>**No siempre es la medianoche**: en los dias en que empieza el horario de verano puede no
+     * existir la 00:00, y el comienzo del dia es la primera hora que si existe. Por eso este metodo
+     * no es `atStartOfDay().atZone(zone)`.
+     */
+    public ZonedDateTime atStartOfDay(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        return ZonedDateTime.of(this.atStartOfDay(), zone);
+    }
+
+    /** Esta fecha con esa hora y ese desplazamiento. */
+    public java.time.OffsetDateTime atTime(java.time.OffsetTime time) {
+        if (time == null) {
+            throw new NullPointerException("time");
+        }
+        return java.time.OffsetDateTime.of(LocalDateTime.of(this, time.toLocalTime()),
+                time.getOffset());
+    }
+
+    /** El periodo entre esta fecha y `endDateExclusive`, en años, meses y dias. */
+    public Period until(java.time.chrono.ChronoLocalDate endDateExclusive) {
+        if (endDateExclusive == null) {
+            throw new NullPointerException("endDateExclusive");
+        }
+        return Period.between(this, LocalDate.ofEpochDay(endDateExclusive.toEpochDay()));
+    }
+
+    /** Los segundos desde la epoca de esta fecha a esa hora y con ese desplazamiento. */
+    public long toEpochSecond(LocalTime time, ZoneOffset offset) {
+        if (time == null || offset == null) {
+            throw new NullPointerException();
+        }
+        return this.toEpochDay() * 86400L + time.toSecondOfDay() - offset.getTotalSeconds();
+    }
+
+    /**
+     * Las fechas desde esta (inclusive) hasta `endExclusive`, de a un dia.
+     *
+     * <p>El flujo es **ansioso** en esta biblioteca --se materializa entero--, asi que un rango
+     * enorme cuesta memoria. Con el rango vacio o invertido devuelve un flujo vacio, que es lo que
+     * hace el JDK.
+     */
+    public java.util.stream.Stream<LocalDate> datesUntil(LocalDate endExclusive) {
+        return this.datesUntil(endExclusive, Period.ofDays(1));
+    }
+
+    /**
+     * Idem, avanzando de a `step`.
+     *
+     * @throws IllegalArgumentException si el paso es cero, o su signo no lleva hacia el final
+     */
+    public java.util.stream.Stream<LocalDate> datesUntil(LocalDate endExclusive, Period step) {
+        if (endExclusive == null || step == null) {
+            throw new NullPointerException();
+        }
+        if (step.isZero()) {
+            throw new IllegalArgumentException("step is zero");
+        }
+        boolean haciaAdelante = !step.isNegative();
+        java.util.List<LocalDate> out = new java.util.ArrayList<LocalDate>();
+        LocalDate actual = this;
+        // El signo del paso tiene que llevar hacia el final; si no, el bucle no terminaria.
+        if (haciaAdelante && this.toEpochDay() < endExclusive.toEpochDay()) {
+            while (actual.toEpochDay() < endExclusive.toEpochDay()) {
+                out.add(actual);
+                actual = actual.plus(step);
+            }
+        } else if (!haciaAdelante && this.toEpochDay() > endExclusive.toEpochDay()) {
+            while (actual.toEpochDay() > endExclusive.toEpochDay()) {
+                out.add(actual);
+                actual = actual.plus(step);
+            }
+        }
+        Object[] a = new Object[out.size()];
+        int i = 0;
+        while (i < out.size()) {
+            a[i] = out.get(i);
+            i = i + 1;
+        }
+        return (java.util.stream.Stream<LocalDate>) java.util.stream.Stream.of(a);
+    }
+
     public boolean isBefore(LocalDate other) {
         return this.compareTo(other) < 0;
     }
@@ -258,7 +474,8 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
             || unit == ChronoUnit.MONTHS || unit == ChronoUnit.YEARS;
     }
 
-    public Temporal with(TemporalField field, long newValue) {
+    // Retorno estrechado a `LocalDate`, como en el JDK (override covariante, §8.4.8.3).
+    public LocalDate with(TemporalField field, long newValue) {
         if (field == ChronoField.DAY_OF_MONTH) {
             return new LocalDate(this.year, this.month, (int) newValue);
         }
@@ -274,7 +491,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         throw new IllegalArgumentException();
     }
 
-    public Temporal plus(long amountToAdd, TemporalUnit unit) {
+    public LocalDate plus(long amountToAdd, TemporalUnit unit) {
         if (unit == ChronoUnit.DAYS) {
             return this.plusDays(amountToAdd);
         }
@@ -290,7 +507,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         throw new IllegalArgumentException();
     }
 
-    public Temporal minus(long amountToSubtract, TemporalUnit unit) {
+    public LocalDate minus(long amountToSubtract, TemporalUnit unit) {
         return this.plus(-amountToSubtract, unit);
     }
 

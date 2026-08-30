@@ -44,6 +44,37 @@ final class JulianField implements TemporalField {
         return temporal.isSupported(ChronoField.EPOCH_DAY);
     }
 
+    // Los tres campos julianos son el dia epoch corrido por una constante, asi que las cuatro
+    // descripciones salen de `EPOCH_DAY`: cuentan dias, dentro de "para siempre", con el mismo rango
+    // desplazado, y se ajustan poniendo el dia epoch que corresponde.
+
+    public TemporalUnit getBaseUnit() {
+        return ChronoUnit.DAYS;
+    }
+
+    public TemporalUnit getRangeUnit() {
+        return ChronoUnit.FOREVER;
+    }
+
+    public ValueRange range() {
+        ValueRange dias = ChronoField.EPOCH_DAY.range();
+        return ValueRange.of(dias.getMinimum() + this.offset, dias.getMaximum() + this.offset);
+    }
+
+    public ValueRange rangeRefinedBy(TemporalAccessor temporal) {
+        if (!this.isSupportedBy(temporal)) {
+            throw new UnsupportedTemporalTypeException("Unsupported field: " + this.name);
+        }
+        return this.range();
+    }
+
+    public <R extends Temporal> R adjustInto(R temporal, long newValue) {
+        if (!this.range().isValidValue(newValue)) {
+            throw new java.time.DateTimeException("Invalid value for " + this.name + ": " + newValue);
+        }
+        return (R) temporal.with(ChronoField.EPOCH_DAY, newValue - this.offset);
+    }
+
     public boolean isDateBased() {
         return true;
     }

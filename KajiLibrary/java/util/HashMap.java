@@ -21,6 +21,64 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
         this.size = 0;
     }
 
+    /**
+     * Un mapa vacio con lugar para `initialCapacity` cubetas.
+     *
+     * <p>Sirve para lo de siempre: si se sabe cuantos pares van a entrar, dimensionar de entrada
+     * evita las rehashes del crecimiento. Ojo con el nombre --y es el mismo malentendido que en el
+     * JDK--: `initialCapacity` es la cantidad de **cubetas**, no de pares. Con el factor de carga de
+     * esta implementacion (~50 %) entran aproximadamente la mitad antes de la primera rehash. El que
+     * quiere pensar en pares tiene `newHashMap`.
+     *
+     * @throws IllegalArgumentException si la capacidad es negativa
+     */
+    public HashMap(int initialCapacity) {
+        this(initialCapacity, 0.75f);
+    }
+
+    /**
+     * Idem, con factor de carga.
+     *
+     * <p>El `loadFactor` se **valida y se ignora**, y conviene decirlo de frente: esta tabla usa
+     * direccionamiento abierto con sondeo lineal y duplica pasado ~50 %, un umbral que es parte de
+     * como esta escrita y no un parametro. Aceptar el valor y no usarlo seria mentir; rechazarlo
+     * seria romper codigo que compila contra el JDK y solo pasa el 0.75 de siempre. Se valida
+     * --un factor no positivo o NaN es un error, igual que en el JDK-- y despues se descarta, que es
+     * la unica de las tres opciones que no le miente a nadie.
+     *
+     * @throws IllegalArgumentException si la capacidad es negativa o el factor no es positivo
+     */
+    public HashMap(int initialCapacity, float loadFactor) {
+        if (initialCapacity < 0) {
+            throw new IllegalArgumentException("Illegal initial capacity: " + initialCapacity);
+        }
+        if (!(loadFactor > 0)) {   // negado, para que NaN caiga aca
+            throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
+        }
+        int cap = 16;
+        while (cap < initialCapacity) {
+            cap = cap * 2;
+        }
+        this.keys = new Object[cap];
+        this.values = new Object[cap];
+        this.size = 0;
+    }
+
+    /**
+     * Un mapa dimensionado para `numMappings` **pares**, sin rehashes.
+     *
+     * <p>Es el que la gente queria cuando escribia `new HashMap<>(n)`: aquel toma cubetas y este
+     * toma pares. Java 19 lo agrego justamente porque el otro se usaba mal.
+     *
+     * @throws IllegalArgumentException si `numMappings` es negativo
+     */
+    public static <K, V> HashMap<K, V> newHashMap(int numMappings) {
+        if (numMappings < 0) {
+            throw new IllegalArgumentException("Negative number of mappings: " + numMappings);
+        }
+        return new HashMap<K, V>(numMappings * 2 + 1);
+    }
+
     // Copia los pares de otro mapa. El de siempre para quedarse con una foto de un mapa ajeno.
     public HashMap(Map<? extends K, ? extends V> m) {
         this.keys = new Object[16];

@@ -611,10 +611,31 @@ fn try_load(
     // (`p.Outer.Inner`), así que el candidato hay que volverlo a puntear **entero** — `/` y `$` —.
     // Con solo el `/`, un candidato anidado (`p/Outer$Inner`) no matcheaba su propio fuente y se
     // cargaba del classpath una copia externa que después ganaba la clave por nombre simple.
-    if candidates
-        .iter()
-        .any(|c| table.class(&c.replace('/', ".").replace('$', ".")).is_some())
-    {
+    // Y **antes** de salir se registra el alias: el tipo del fuente que este nombre simple designa
+    // queda anotado, para que otra unidad que lo escriba corto lo encuentre (#303/#312).
+    //
+    // Solo para los candidatos que la unidad puede escribir cortos —su paquete, un `import` de un
+    // solo tipo, o `java.lang`—, que es exactamente la lista de precedencia más el implícito. Un
+    // homónimo que nadie nombró no se vuelve visible por estar en el round.
+    let mut hay_fuente = false;
+    let mut nombrable: Option<SymbolId> = None;
+    for c in &candidates {
+        let Some(id) = table.class(&c.replace('/', ".").replace('$', ".")) else { continue };
+        hay_fuente = true;
+        // ¿Puede la unidad escribir este nombre **corto**? Solo si el candidato vino de su paquete,
+        // de un `import` de un solo tipo, o de `java.lang`. Un homónimo que nadie nombró no se
+        // vuelve visible por el solo hecho de estar en el round.
+        let corto = con_precedencia.contains(c) || *c == format!("java/lang/{simple}");
+        if corto && nombrable.is_none() {
+            nombrable = Some(id);
+        }
+    }
+    if hay_fuente {
+        if let Some(id) = nombrable {
+            if !name.contains('.') {
+                table.alias_source(simple, id);
+            }
+        }
         return;
     }
     for internal in candidates {
@@ -1368,6 +1389,9 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
     // (§7.3). Va antes que el externo por el shadowing del #5: si esta compilación declara
     // `java.lang.X`, ese gana sobre el `.class` homónimo del classpath.
     if let Some(id) = table.java_lang_source(name) {
+        return Some((id, false));
+    }
+    if let Some(id) = table.source_alias(name) {
         return Some((id, false));
     }
     table.external(name).map(|id| (id, false))

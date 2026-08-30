@@ -12,7 +12,8 @@ import java.time.format.DateTimeFormatter;
 // KajiLibrary's java.time.LocalDateTime — a date-and-time without a zone, composed of a LocalDate
 // and a LocalTime. Immutable. Time arithmetic that crosses midnight carries into the date. A
 // KajiLibrary subset (toString/parse and some conversions deferred).
-public final class LocalDateTime implements Temporal, TemporalAdjuster, Comparable<LocalDateTime> {
+public final class LocalDateTime implements Temporal, TemporalAdjuster,
+        Comparable<LocalDateTime>, java.time.chrono.ChronoLocalDateTime {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
     private static final long NANOS_PER_DAY = 86400L * NANOS_PER_SECOND;

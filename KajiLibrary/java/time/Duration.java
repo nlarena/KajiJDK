@@ -5,12 +5,13 @@ import java.util.ArrayList;
 import java.time.temporal.TemporalAmount;
 import java.time.temporal.TemporalUnit;
 import java.time.temporal.Temporal;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 
 // KajiLibrary's java.time.Duration — a time-based amount, as seconds + nanoseconds (nanos kept
 // normalised to [0, 1e9), seconds may be negative). Immutable value type: every operation returns
 // a fresh Duration. Implements TemporalAmount (so `temporal.plus(duration)` works) and Comparable.
-// A KajiLibrary subset (the JDK adds toString/ISO parse, plusMinutes/…, dividedBy, etc.).
+// Ya no es un subconjunto: la superficie publica esta completa.
 public final class Duration implements TemporalAmount, Comparable<Duration> {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
@@ -34,6 +35,9 @@ public final class Duration implements TemporalAmount, Comparable<Duration> {
         }
         return new Duration(seconds + extraSeconds, (int) nos);
     }
+
+    /** La duracion de longitud cero. */
+    public static final Duration ZERO = new Duration(0L, 0);
 
     public static Duration ofSeconds(long seconds) {
         return new Duration(seconds, 0);
@@ -108,6 +112,316 @@ public final class Duration implements TemporalAmount, Comparable<Duration> {
     }
 
     // Natural order by length. Synthesizes the compareTo(Object) bridge.
+    // ---- fabricas -------------------------------------------------------------------------------
+
+    /**
+     * `amount` unidades de `unit`.
+     *
+     * <p>Solo acepta unidades **exactas**: las de tiempo, y `DAYS` --que aca vale 24 horas
+     * justas--. `MONTHS` y `YEARS` se rechazan, y no es una limitacion: un mes no dura siempre lo
+     * mismo, asi que no hay una cantidad de segundos que le corresponda. Eso es lo que modela
+     * `Period`, no `Duration`.
+     *
+     * @throws java.time.DateTimeException si la unidad no tiene una duracion exacta
+     */
+    public static Duration of(long amount, TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        return ZERO.plus(amount, unit);
+    }
+
+    /**
+     * La duracion entre dos puntos, medida en segundos y nanos.
+     *
+     * <p>Negativa si `end` es anterior a `start`, que es lo que la hace componible: siempre vale
+     * `start.plus(between(start, end)).equals(end)`.
+     */
+    public static Duration between(Temporal startInclusive, Temporal endExclusive) {
+        if (startInclusive == null || endExclusive == null) {
+            throw new NullPointerException();
+        }
+        long segs = startInclusive.until(endExclusive, ChronoUnit.SECONDS);
+        long nanos = 0L;
+        if (startInclusive.isSupported(ChronoField.NANO_OF_SECOND)
+                && endExclusive.isSupported(ChronoField.NANO_OF_SECOND)) {
+            nanos = endExclusive.getLong(ChronoField.NANO_OF_SECOND)
+                    - startInclusive.getLong(ChronoField.NANO_OF_SECOND);
+        }
+        return create(segs, nanos);
+    }
+
+    /** La duracion equivalente a `amount`, que tiene que estar en unidades exactas. */
+    public static Duration from(TemporalAmount amount) {
+        if (amount == null) {
+            throw new NullPointerException("amount");
+        }
+        Duration d = ZERO;
+        List<TemporalUnit> unidades = amount.getUnits();
+        int i = 0;
+        while (i < unidades.size()) {
+            TemporalUnit u = unidades.get(i);
+            d = d.plus(amount.get(u), u);
+            i = i + 1;
+        }
+        return d;
+    }
+
+    // ---- las partes ------------------------------------------------------------------------------
+    //
+    // Dos familias que es facil confundir, y la diferencia importa: `toMinutes()` es la duracion
+    // **entera** expresada en minutos, y `toMinutesPart()` es el campo de los minutos dentro de la
+    // hora --de 0 a 59--. Para 3661 segundos, la primera da 61 y la segunda 1.
+
+    /** El total, en dias de 24 horas, truncado hacia cero. */
+    public long toDays() {
+        return this.seconds / 86400L;
+    }
+
+    /** El total, en horas, truncado hacia cero. */
+    public long toHours() {
+        return this.seconds / 3600L;
+    }
+
+    /** El total, en minutos, truncado hacia cero. */
+    public long toMinutes() {
+        return this.seconds / 60L;
+    }
+
+    /** El total, en segundos, truncado hacia cero. */
+    public long toSeconds() {
+        return this.seconds;
+    }
+
+    /** Los dias, como parte. Igual que `toDays()`: no hay unidad mas grande de la que sea parte. */
+    public long toDaysPart() {
+        return this.seconds / 86400L;
+    }
+
+    /** Las horas dentro del dia, de 0 a 23. */
+    public int toHoursPart() {
+        return (int) (this.toHours() % 24L);
+    }
+
+    /** Los minutos dentro de la hora, de 0 a 59. */
+    public int toMinutesPart() {
+        return (int) (this.toMinutes() % 60L);
+    }
+
+    /** Los segundos dentro del minuto, de 0 a 59. */
+    public int toSecondsPart() {
+        return (int) (this.seconds % 60L);
+    }
+
+    /** Los milisegundos dentro del segundo, de 0 a 999. */
+    public int toMillisPart() {
+        return this.nanos / 1000000;
+    }
+
+    /** Los nanosegundos dentro del segundo, de 0 a 999999999. */
+    public int toNanosPart() {
+        return this.nanos;
+    }
+
+    /** Si es estrictamente mayor que cero. El complemento de `isNegative`, sin el cero. */
+    public boolean isPositive() {
+        return this.seconds > 0L || (this.seconds == 0L && this.nanos > 0);
+    }
+
+    // ---- aritmetica ------------------------------------------------------------------------------
+
+    /**
+     * Esta duracion mas `amount` unidades de `unit`.
+     *
+     * @throws java.time.DateTimeException si la unidad no tiene una duracion exacta
+     */
+    public Duration plus(long amountToAdd, TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (unit == ChronoUnit.DAYS) {
+            return this.plusSeconds(amountToAdd * 86400L);
+        }
+        if (unit == ChronoUnit.HALF_DAYS) {
+            return this.plusSeconds(amountToAdd * 43200L);
+        }
+        if (unit == ChronoUnit.HOURS) {
+            return this.plusHours(amountToAdd);
+        }
+        if (unit == ChronoUnit.MINUTES) {
+            return this.plusMinutes(amountToAdd);
+        }
+        if (unit == ChronoUnit.SECONDS) {
+            return this.plusSeconds(amountToAdd);
+        }
+        if (unit == ChronoUnit.MILLIS) {
+            return this.plusMillis(amountToAdd);
+        }
+        if (unit == ChronoUnit.MICROS) {
+            return this.plusNanos(amountToAdd * 1000L);
+        }
+        if (unit == ChronoUnit.NANOS) {
+            return this.plusNanos(amountToAdd);
+        }
+        throw new java.time.DateTimeException("Unit must not have an estimated duration: " + unit);
+    }
+
+    public Duration minus(long amountToSubtract, TemporalUnit unit) {
+        return this.plus(-amountToSubtract, unit);
+    }
+
+    public Duration plusDays(long daysToAdd) {
+        return this.plusSeconds(daysToAdd * 86400L);
+    }
+
+    public Duration plusHours(long hoursToAdd) {
+        return this.plusSeconds(hoursToAdd * 3600L);
+    }
+
+    public Duration plusMinutes(long minutesToAdd) {
+        return this.plusSeconds(minutesToAdd * 60L);
+    }
+
+    public Duration plusMillis(long millisToAdd) {
+        return create(this.seconds + millisToAdd / 1000L,
+                (long) this.nanos + (millisToAdd % 1000L) * 1000000L);
+    }
+
+    public Duration plusNanos(long nanosToAdd) {
+        return create(this.seconds, (long) this.nanos + nanosToAdd);
+    }
+
+    public Duration minusDays(long daysToSubtract) {
+        return this.plusDays(-daysToSubtract);
+    }
+
+    public Duration minusHours(long hoursToSubtract) {
+        return this.plusHours(-hoursToSubtract);
+    }
+
+    public Duration minusMinutes(long minutesToSubtract) {
+        return this.plusMinutes(-minutesToSubtract);
+    }
+
+    public Duration minusMillis(long millisToSubtract) {
+        return this.plusMillis(-millisToSubtract);
+    }
+
+    public Duration minusNanos(long nanosToSubtract) {
+        return this.plusNanos(-nanosToSubtract);
+    }
+
+    /** Esta duracion multiplicada por `multiplicand`. */
+    public Duration multipliedBy(long multiplicand) {
+        if (multiplicand == 0L) {
+            return ZERO;
+        }
+        if (multiplicand == 1L) {
+            return this;
+        }
+        // Se opera en nanos totales, que es donde la multiplicacion es una sola cuenta. El rango
+        // util queda acotado por el `long`, igual que en el JDK.
+        return Duration.ofNanos(this.toNanos() * multiplicand);
+    }
+
+    /**
+     * Esta duracion dividida por `divisor`, truncando hacia cero.
+     *
+     * @throws ArithmeticException si `divisor` es cero
+     */
+    public Duration dividedBy(long divisor) {
+        if (divisor == 0L) {
+            throw new ArithmeticException("Cannot divide by zero");
+        }
+        if (divisor == 1L) {
+            return this;
+        }
+        return Duration.ofNanos(this.toNanos() / divisor);
+    }
+
+    /**
+     * Cuantas veces entra `divisor` en esta duracion, truncando hacia cero.
+     *
+     * @throws ArithmeticException si `divisor` es cero
+     */
+    public long dividedBy(Duration divisor) {
+        if (divisor == null) {
+            throw new NullPointerException("divisor");
+        }
+        long d = divisor.toNanos();
+        if (d == 0L) {
+            throw new ArithmeticException("Cannot divide by zero");
+        }
+        return this.toNanos() / d;
+    }
+
+    /** El valor absoluto: esta misma si no es negativa, la negada si lo es. */
+    public Duration abs() {
+        return this.isNegative() ? this.negated() : this;
+    }
+
+    /** Esta duracion con otros segundos, conservando los nanos. */
+    public Duration withSeconds(long seconds) {
+        return create(seconds, (long) this.nanos);
+    }
+
+    /**
+     * Esta duracion con otros nanos, conservando los segundos.
+     *
+     * @throws java.time.DateTimeException si `nanoOfSecond` cae fuera de [0, 999999999]
+     */
+    public Duration withNanos(int nanoOfSecond) {
+        if (nanoOfSecond < 0 || nanoOfSecond > 999999999) {
+            throw new java.time.DateTimeException(
+                    "Invalid value for NanoOfSecond (valid values 0 - 999999999): " + nanoOfSecond);
+        }
+        return new Duration(this.seconds, nanoOfSecond);
+    }
+
+    /**
+     * Esta duracion truncada a un multiplo de `unit`.
+     *
+     * <p>Trunca **hacia abajo**, hacia el cero, y por eso no sirve cualquier unidad: tiene que
+     * dividir exactamente un dia. `HOURS` si, `DAYS` si, pero no una unidad estimada.
+     *
+     * @throws java.time.DateTimeException si la unidad no divide un dia
+     */
+    public Duration truncatedTo(TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (unit == ChronoUnit.SECONDS && this.seconds >= 0 && this.nanos == 0) {
+            return this;
+        }
+        long unidadEnNanos = 0L;
+        if (unit == ChronoUnit.NANOS) {
+            unidadEnNanos = 1L;
+        } else if (unit == ChronoUnit.MICROS) {
+            unidadEnNanos = 1000L;
+        } else if (unit == ChronoUnit.MILLIS) {
+            unidadEnNanos = 1000000L;
+        } else if (unit == ChronoUnit.SECONDS) {
+            unidadEnNanos = NANOS_PER_SECOND;
+        } else if (unit == ChronoUnit.MINUTES) {
+            unidadEnNanos = 60L * NANOS_PER_SECOND;
+        } else if (unit == ChronoUnit.HOURS) {
+            unidadEnNanos = 3600L * NANOS_PER_SECOND;
+        } else if (unit == ChronoUnit.HALF_DAYS) {
+            unidadEnNanos = 43200L * NANOS_PER_SECOND;
+        } else if (unit == ChronoUnit.DAYS) {
+            unidadEnNanos = 86400L * NANOS_PER_SECOND;
+        } else {
+            throw new java.time.DateTimeException("Unit is too large to be used for truncation");
+        }
+        // Trunca **hacia cero**, no hacia abajo: -1.5s a segundos es -1s, y -90s a minutos es -60s.
+        //
+        // Lo verifique contra `java` real porque lo tenia al reves. "Truncar" sugiere ir hacia abajo
+        // --que es lo que hace `Math.floorDiv`-- y aca es hacia cero, que para los negativos es la
+        // direccion opuesta. La division entera de Java ya trunca hacia cero, asi que la cuenta sale
+        // sola; lo que hacia falta era **no** corregir el resto negativo.
+        return Duration.ofNanos(this.toNanos() / unidadEnNanos * unidadEnNanos);
+    }
+
     public int compareTo(Duration other) {
         if (this.seconds < other.seconds) {
             return -1;

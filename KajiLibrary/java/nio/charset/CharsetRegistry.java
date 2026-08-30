@@ -362,8 +362,14 @@ final class CharsetNameMap implements SortedMap<String, Charset> {
         return this.names[this.names.length - 1];
     }
 
-    /** The same entries in the opposite order. */
-    public SequencedMap<String, Charset> reversed() {
+    /**
+     * The same entries in the opposite order.
+     *
+     * <p>El retorno se estrecha a `SortedMap` porque `SortedMap.reversed()` ahora lo declara asi
+     * (§8.4.8.3: un override puede estrechar el retorno, no ensancharlo). Antes decia
+     * `SequencedMap`, que era el retorno del abuelo y dejo de alcanzar.
+     */
+    public SortedMap<String, Charset> reversed() {
         int n = this.names.length;
         String[] flippedNames = new String[n];
         Charset[] flippedValues = new Charset[n];

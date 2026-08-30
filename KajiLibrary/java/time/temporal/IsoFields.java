@@ -57,6 +57,67 @@ final class IsoField implements TemporalField {
         return result;
     }
 
+    // Las cuatro cosas que `TemporalField` pide para describir el campo: que cuenta, dentro de que,
+    // que valores admite, y como se lo ajusta. Los cuatro campos ISO se derivan de la fecha, asi que
+    // sus unidades salen de `ChronoUnit` y de las dos que este mismo archivo define.
+
+    public TemporalUnit getBaseUnit() {
+        if (this.kind == 0) {
+            return ChronoUnit.DAYS;                      // dia del trimestre
+        }
+        if (this.kind == 1) {
+            return IsoFields.QUARTER_YEARS;              // trimestre del año
+        }
+        if (this.kind == 2) {
+            return ChronoUnit.WEEKS;                     // semana del año-de-semanas
+        }
+        return IsoFields.WEEK_BASED_YEARS;               // año-de-semanas
+    }
+
+    public TemporalUnit getRangeUnit() {
+        if (this.kind == 0) {
+            return IsoFields.QUARTER_YEARS;
+        }
+        if (this.kind == 1) {
+            return ChronoUnit.YEARS;
+        }
+        if (this.kind == 2) {
+            return IsoFields.WEEK_BASED_YEARS;
+        }
+        return ChronoUnit.FOREVER;
+    }
+
+    public ValueRange range() {
+        if (this.kind == 0) {
+            // Un trimestre tiene entre 90 y 92 dias: el primero del año bisiesto tiene 91.
+            return ValueRange.of(1L, 90L, 92L);
+        }
+        if (this.kind == 1) {
+            return ValueRange.of(1L, 4L);
+        }
+        if (this.kind == 2) {
+            // Un año ISO tiene 52 semanas, y 53 los años largos.
+            return ValueRange.of(1L, 52L, 53L);
+        }
+        return ChronoField.YEAR.range();
+    }
+
+    public ValueRange rangeRefinedBy(TemporalAccessor temporal) {
+        if (!this.isSupportedBy(temporal)) {
+            throw new UnsupportedTemporalTypeException("Unsupported field: " + this.name);
+        }
+        return this.range();
+    }
+
+    public <R extends Temporal> R adjustInto(R temporal, long newValue) {
+        // Se ajusta **por diferencia**: se calcula cuanto hay que moverse en la unidad base y se
+        // suma. Poner el campo directamente pediria reconstruir la fecha desde el calendario ISO de
+        // semanas, que es una cuenta aparte; moverse la cantidad justa da el mismo resultado.
+        long actual = this.getFrom(temporal);
+        this.range().checkValidValue(newValue, this);
+        return (R) temporal.plus(newValue - actual, this.getBaseUnit());
+    }
+
     public boolean isSupportedBy(TemporalAccessor temporal) {
         // Every one of the four is derived from the calendar date, so the date fields it is
         // computed from are exactly what has to be there.
@@ -91,6 +152,31 @@ final class IsoUnit implements TemporalUnit {
     IsoUnit(int kind, String name) {
         this.kind = kind;
         this.name = name;
+    }
+
+    /**
+     * Cuanto dura, **estimado**: un año-de-semanas es el año medio, un trimestre su cuarta parte.
+     *
+     * <p>Las dos son estimaciones y `isDurationEstimated` lo dice: un año ISO tiene 52 o 53 semanas
+     * segun cual sea, y los trimestres tienen 90, 91 o 92 dias.
+     */
+    public java.time.Duration getDuration() {
+        if (this.kind == 0) {
+            return java.time.Duration.ofSeconds(31556952L);        // año-de-semanas
+        }
+        return java.time.Duration.ofSeconds(31556952L / 4L);       // trimestre
+    }
+
+    /** Devuelve `temporal` mas `amount` de esta unidad. */
+    public <R extends Temporal> R addTo(R temporal, long amount) {
+        if (this.kind == 0) {
+            // Sumar años-de-semanas: se mueve el campo del año-de-semanas, que es lo unico que
+            // conserva la semana y el dia de la semana. Sumar 52 semanas no sirve -- se desfasa en
+            // los años de 53.
+            long actual = IsoFields.WEEK_BASED_YEAR.getFrom(temporal);
+            return (R) IsoFields.WEEK_BASED_YEAR.adjustInto(temporal, actual + amount);
+        }
+        return (R) temporal.plus(amount * 3L, ChronoUnit.MONTHS);   // un trimestre son tres meses
     }
 
     public long between(Temporal temporal1Inclusive, Temporal temporal2Exclusive) {

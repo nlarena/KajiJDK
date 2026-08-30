@@ -157,6 +157,112 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
     }
 
     // Copying another EnumSet is a mask copy — no iteration, no hashing, no comparisons.
+    /**
+     * El universo entero de `elementType`.
+     *
+     * <p>**Esto no se podia escribir hasta ahora**, y vale contar por que: pide la lista completa de
+     * constantes por adelantado, y `Class.getEnumConstants()` no existia. Las fabricas de arriba se
+     * las arreglan sin ella --aprenden cada constante a medida que la ven--, pero `allOf` tiene que
+     * conocer las que nadie le paso. Con `getEnumConstants` ya disponible, sale directo.
+     *
+     * @throws NullPointerException si `elementType` es null
+     */
+    public static <E extends Enum> EnumSet<E> allOf(Class<E> elementType) {
+        if (elementType == null) {
+            throw new NullPointerException();
+        }
+        EnumSet<E> set = new RegularEnumSet<E>(elementType);
+        E[] todas = elementType.getEnumConstants();
+        if (todas != null) {
+            int i = 0;
+            while (i < todas.length) {
+                set.add(todas[i]);
+                i = i + 1;
+            }
+        }
+        return set;
+    }
+
+    /**
+     * Las constantes entre `from` y `to`, **inclusive**, por orden de declaracion.
+     *
+     * @throws IllegalArgumentException si `from` viene despues de `to`
+     */
+    public static <E extends Enum> EnumSet<E> range(E from, E to) {
+        Object a = from;
+        Object b = to;
+        if (a == null || b == null) {
+            throw new NullPointerException();
+        }
+        if (from.ordinal() > to.ordinal()) {
+            throw new IllegalArgumentException(from + " > " + to);
+        }
+        Class<E> type = (Class<E>) a.getClass();
+        EnumSet<E> set = new RegularEnumSet<E>(type);
+        E[] todas = type.getEnumConstants();
+        if (todas == null) {
+            // Una constante con cuerpo compila a una subclase anonima, que no es un tipo enum y
+            // responde null. Se cae a agregar solo los dos extremos, que es lo unico conocido.
+            set.add(from);
+            set.add(to);
+            return set;
+        }
+        int i = from.ordinal();
+        while (i <= to.ordinal()) {
+            set.add(todas[i]);
+            i = i + 1;
+        }
+        return set;
+    }
+
+    /**
+     * El **complemento** de `s`: las constantes de su tipo que no estan en el.
+     *
+     * @throws IllegalArgumentException si `s` esta vacio -- no hay de donde sacar el tipo
+     */
+    public static <E extends Enum> EnumSet<E> complementOf(EnumSet<E> s) {
+        if (s == null) {
+            throw new NullPointerException();
+        }
+        if (s.elementType == null) {
+            throw new IllegalArgumentException("Collection is empty");
+        }
+        EnumSet<E> out = new RegularEnumSet<E>(s.elementType);
+        E[] todas = s.elementType.getEnumConstants();
+        if (todas != null) {
+            int i = 0;
+            while (i < todas.length) {
+                if (!s.contains(todas[i])) {
+                    out.add(todas[i]);
+                }
+                i = i + 1;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Un conjunto con esas constantes. La forma **varargs**, para mas de cinco.
+     *
+     * <p>El primer elemento va aparte en la firma para que `of()` sin argumentos no compile: sin un
+     * elemento no hay de donde leer el tipo. Es la misma razon por la que el JDK la escribe asi.
+     */
+    public static <E extends Enum> EnumSet<E> of(E first, E... rest) {
+        EnumSet<E> set = emptyLike(first);
+        set.add(first);
+        int i = 0;
+        while (i < rest.length) {
+            set.add(rest[i]);
+            i = i + 1;
+        }
+        return set;
+    }
+
+    /** Una copia independiente de este conjunto. */
+    public EnumSet<E> clone() {
+        return EnumSet.copyOf(this);
+    }
+
     public static <E extends Enum> EnumSet<E> copyOf(EnumSet<E> s) {
         RegularEnumSet<E> copy = new RegularEnumSet<E>(s.elementType);
         for (int i = 0; i < s.universe.length; i++) {

@@ -177,6 +177,17 @@ pub struct SymbolTable {
     /// Tipos **externos** modelados (el *class finder*): nombre simple → símbolo sintético.
     /// No cuelgan de ningún paquete, así que no aparecen en el volcado.
     externals: HashMap<String, SymbolId>,
+    /// Nombre **simple** → tipo del **fuente** de este mismo round que ese nombre designa.
+    ///
+    /// Es el mapa que hace visible por su nombre corto a un hermano que se está compilando al lado:
+    /// el `import pp.Tipo;` de otra unidad, o el `import java.lang.*` implícito. Sin él, `Tipo.uno()`
+    /// no resolvía —el nombre solo existía cualificado— y había que compilar los dos archivos por
+    /// separado para que el segundo encontrara al primero por su `.class` (#303/#312).
+    ///
+    /// Va **aparte** de `externals`, y esa separación es el punto: `check.rs` define "externo" como
+    /// *estar en aquel mapa*, y a los externos les afloja los chequeos de miembros. Meter acá los
+    /// tipos del fuente los volvería incontrolables.
+    source_aliases: HashMap<String, SymbolId>,
     /// Los mismos externos, pero por **nombre completo** (`jakarta.persistence.criteria.TemporalField`).
     ///
     /// El mapa de arriba está indexado por nombre **simple**, así que dos clases homónimas de
@@ -238,6 +249,7 @@ impl SymbolTable {
             classes: HashMap::new(),
             packages: HashMap::new(),
             externals: HashMap::new(),
+            source_aliases: HashMap::new(),
             externals_fqn: HashMap::new(),
             positions: HashMap::new(),
             static_single: HashMap::new(),
@@ -398,6 +410,20 @@ impl SymbolTable {
     /// exacta: no la afecta que otro homónimo se haya cargado antes.
     pub fn external_fqn(&self, fqn: &str) -> Option<SymbolId> {
         self.externals_fqn.get(fqn).copied()
+    }
+
+    /// Registra que el nombre simple `simple` designa al tipo **del fuente** `id`.
+    ///
+    /// Solo lo llama la carga de tipos, y solo para los nombres que la unidad puede escribir cortos:
+    /// su propio paquete, un `import` de un solo tipo, y `java.lang`. Los demás no entran — un nombre
+    /// que nadie importó no se vuelve visible por estar en el round.
+    pub fn alias_source(&mut self, simple: &str, id: SymbolId) {
+        self.source_aliases.entry(simple.to_string()).or_insert(id);
+    }
+
+    /// El tipo del fuente que ese nombre simple designa, si alguno lo hace.
+    pub fn source_alias(&self, simple: &str) -> Option<SymbolId> {
+        self.source_aliases.get(simple).copied()
     }
 
     /// El tipo de **este mismo round** que el `import java.lang.*` implícito hace visible (§7.3).

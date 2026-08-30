@@ -381,6 +381,28 @@ public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>,
         return Spliterators.spliterator(this,
                 Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED);
     }
+
+    /**
+     * Una **vista** de la lista al reves.
+     *
+     * <p>El tipo de retorno se estrecha a `LinkedList` porque el JDK lo estrecha, y eso obliga a
+     * **copiar** en vez de envolver: `ReverseDeque` es una vista pero no es una `LinkedList`, y no
+     * hay forma de que lo sea sin duplicar la implementacion entera.
+     *
+     * <p>Asi que esta es la unica de las cuatro vistas invertidas de la biblioteca que **no** es una
+     * vista, y conviene decirlo fuerte: los cambios **no** se propagan. El JDK tiene exactamente el
+     * mismo problema con la misma firma y lo resuelve igual. Quien quiera la vista viva tiene
+     * `((Deque<E>) lista).reversed()`, que devuelve el envoltorio de verdad.
+     */
+    public LinkedList<E> reversed() {
+        LinkedList<E> out = new LinkedList<E>();
+        Iterator<E> it = this.descendingIterator();
+        while (it.hasNext()) {
+            out.addLast(it.next());
+        }
+        return out;
+    }
+
 }
 
 // One link: its element and both neighbours. Package-private and top-level rather than

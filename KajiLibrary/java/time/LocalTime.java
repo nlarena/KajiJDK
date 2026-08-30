@@ -29,6 +29,66 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         this.nano = nano;
     }
 
+    /** La medianoche, 00:00. */
+    public static final LocalTime MIN = new LocalTime(0, 0, 0, 0);
+
+    /** El ultimo instante representable del dia, 23:59:59.999999999. */
+    public static final LocalTime MAX = new LocalTime(23, 59, 59, 999999999);
+
+    /** Sinonimo de `MIN`, con el nombre que se lee mejor en una fecha. */
+    public static final LocalTime MIDNIGHT = new LocalTime(0, 0, 0, 0);
+
+    /** El mediodia, 12:00. */
+    public static final LocalTime NOON = new LocalTime(12, 0, 0, 0);
+
+    /** La hora que `temporal` tiene. */
+    public static LocalTime from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof LocalTime) {
+            return (LocalTime) temporal;
+        }
+        if (!temporal.isSupported(ChronoField.NANO_OF_DAY)) {
+            throw new java.time.DateTimeException(
+                    "Unable to obtain LocalTime from TemporalAccessor: " + temporal);
+        }
+        return LocalTime.ofNanoOfDay(temporal.getLong(ChronoField.NANO_OF_DAY));
+    }
+
+    /** La hora que marca `clock`. La forma testeable de `now()`. */
+    public static LocalTime now(java.time.Clock clock) {
+        if (clock == null) {
+            throw new NullPointerException("clock");
+        }
+        return LocalTime.ofInstant(clock.instant(), clock.getZone());
+    }
+
+    /** La hora en esa zona, ahora. */
+    public static LocalTime now(ZoneId zone) {
+        if (zone == null) {
+            throw new NullPointerException("zone");
+        }
+        return LocalTime.ofInstant(Instant.now(), zone);
+    }
+
+    /**
+     * La hora local que ese instante marca en esa zona.
+     *
+     * <p>Se pierde la fecha a proposito: el mismo instante es la misma hora del reloj en toda la
+     * zona, y `LocalTime` es exactamente eso -- una hora sin dia.
+     */
+    public static LocalTime ofInstant(Instant instant, ZoneId zone) {
+        if (instant == null || zone == null) {
+            throw new NullPointerException();
+        }
+        ZoneOffset offset = zone.getRules().getOffset(instant);
+        long segsLocales = instant.getEpochSecond() + offset.getTotalSeconds();
+        int segsDelDia = (int) Math.floorMod(segsLocales, 86400L);
+        return new LocalTime(segsDelDia / 3600, (segsDelDia / 60) % 60, segsDelDia % 60,
+                instant.getNano());
+    }
+
     public static LocalTime of(int hour, int minute) {
         return new LocalTime(hour, minute, 0, 0);
     }
@@ -175,7 +235,99 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
             || unit == ChronoUnit.MINUTES || unit == ChronoUnit.HOURS;
     }
 
-    public Temporal with(TemporalField field, long newValue) {
+    /** Esta hora con otra hora del dia; el resto queda igual. */
+    public LocalTime withHour(int hour) {
+        if (this.hour == hour) {
+            return this;
+        }
+        ChronoField.HOUR_OF_DAY.checkValidValue((long) hour);
+        return new LocalTime(hour, this.minute, this.second, this.nano);
+    }
+
+    public LocalTime withMinute(int minute) {
+        if (this.minute == minute) {
+            return this;
+        }
+        ChronoField.MINUTE_OF_HOUR.checkValidValue((long) minute);
+        return new LocalTime(this.hour, minute, this.second, this.nano);
+    }
+
+    public LocalTime withSecond(int second) {
+        if (this.second == second) {
+            return this;
+        }
+        ChronoField.SECOND_OF_MINUTE.checkValidValue((long) second);
+        return new LocalTime(this.hour, this.minute, second, this.nano);
+    }
+
+    public LocalTime withNano(int nanoOfSecond) {
+        if (this.nano == nanoOfSecond) {
+            return this;
+        }
+        ChronoField.NANO_OF_SECOND.checkValidValue((long) nanoOfSecond);
+        return new LocalTime(this.hour, this.minute, this.second, nanoOfSecond);
+    }
+
+    /**
+     * Esta hora truncada a un multiplo de `unit`, contando desde la medianoche.
+     *
+     * @throws java.time.DateTimeException si la unidad no divide un dia
+     */
+    public LocalTime truncatedTo(TemporalUnit unit) {
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (unit == ChronoUnit.NANOS) {
+            return this;
+        }
+        long unidadNanos = unit.getDuration().toNanos();
+        if (unidadNanos > 86400000000000L) {
+            throw new java.time.temporal.UnsupportedTemporalTypeException(
+                    "Unit is too large to be used for truncation");
+        }
+        if (86400000000000L % unidadNanos != 0L) {
+            throw new java.time.temporal.UnsupportedTemporalTypeException(
+                    "Unit must divide into a standard day without remainder");
+        }
+        // Una hora del dia nunca es negativa, asi que la division entera alcanza -- no hace falta el
+        // `floorMod` que si necesita `Instant`, donde los segundos pueden ser anteriores a la epoca.
+        long nanos = this.toNanoOfDay();
+        return LocalTime.ofNanoOfDay((nanos / unidadNanos) * unidadNanos);
+    }
+
+    /** Esta hora en esa fecha. */
+    public LocalDateTime atDate(LocalDate date) {
+        if (date == null) {
+            throw new NullPointerException("date");
+        }
+        return LocalDateTime.of(date, this);
+    }
+
+    /** Esta hora con ese desplazamiento. */
+    public java.time.OffsetTime atOffset(ZoneOffset offset) {
+        if (offset == null) {
+            throw new NullPointerException("offset");
+        }
+        return java.time.OffsetTime.of(this, offset);
+    }
+
+    /**
+     * Los segundos desde la epoca de esta hora en esa fecha y con ese desplazamiento.
+     *
+     * <p>Hacen falta las tres cosas y no menos: una hora sola no ubica un punto en la linea de
+     * tiempo, y una fecha y hora sin desplazamiento tampoco.
+     */
+    public long toEpochSecond(LocalDate date, ZoneOffset offset) {
+        if (date == null || offset == null) {
+            throw new NullPointerException();
+        }
+        return date.toEpochDay() * 86400L + this.toSecondOfDay() - offset.getTotalSeconds();
+    }
+
+    // El retorno se estrecha a `LocalTime`, como en el JDK (override covariante, §8.4.8.3), y se
+    // cubren los campos y unidades que faltaban -- antes solo cuatro campos, y la excepcion era la
+    // equivocada: el contrato pide `UnsupportedTemporalTypeException`, no `IllegalArgumentException`.
+    public LocalTime with(TemporalField field, long newValue) {
         if (field == ChronoField.HOUR_OF_DAY) {
             return new LocalTime((int) newValue, this.minute, this.second, this.nano);
         }
@@ -191,7 +343,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         throw new IllegalArgumentException();
     }
 
-    public Temporal plus(long amountToAdd, TemporalUnit unit) {
+    public LocalTime plus(long amountToAdd, TemporalUnit unit) {
         if (unit == ChronoUnit.NANOS) {
             return this.plusNanos(amountToAdd);
         }
@@ -207,7 +359,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         throw new IllegalArgumentException();
     }
 
-    public Temporal minus(long amountToSubtract, TemporalUnit unit) {
+    public LocalTime minus(long amountToSubtract, TemporalUnit unit) {
         return this.plus(-amountToSubtract, unit);
     }
 

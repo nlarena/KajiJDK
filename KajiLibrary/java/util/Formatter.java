@@ -1,6 +1,7 @@
 package java.util;
 
 import java.io.Closeable;
+import java.nio.charset.Charset;
 import java.io.Flushable;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.ChronoField;
@@ -29,6 +30,10 @@ public final class Formatter implements Closeable, Flushable {
 
     private Appendable out;
     private Locale locale;
+    // La ultima IOException que tiro el destino, si el destino es un OutputStream. `ioException()`
+    // la devuelve; con un `Appendable` comun queda siempre null, porque el `append` de esta
+    // biblioteca no declara IOException y entonces no hay ninguna que reportar.
+    private java.io.IOException ultimaIo;
 
     public Formatter() {
         this.out = new StringBuilder();
@@ -50,6 +55,74 @@ public final class Formatter implements Closeable, Flushable {
         this.locale = l;
     }
 
+    /**
+     * Un `Formatter` que escribe a un stream de bytes, codificando con `charset`.
+     *
+     * <p>Esta forma **si** se puede implementar de verdad, a diferencia de las de `File` y de nombre
+     * de archivo: el stream lo aporta quien llama, ya abierto, asi que no hace falta que la
+     * biblioteca sepa tocar el sistema de archivos.
+     */
+    public Formatter(java.io.OutputStream os, Charset charset, Locale l) {
+        if (os == null || charset == null) {
+            throw new NullPointerException();
+        }
+        this.out = new SalidaCodificada(this, os, charset);
+        this.locale = l;
+    }
+
+    public Formatter(java.io.OutputStream os) {
+        this(os, Charset.defaultCharset(), Locale.getDefault());
+    }
+
+    /**
+     * Ídem, nombrando el charset.
+     *
+     * <p>Declara `UnsupportedEncodingException` --chequeada-- y no la `UnsupportedCharsetException`
+     * que tira `Charset.forName`, porque es lo que declara el JDK y **el `throws` es parte del
+     * contrato**: el que llama esta obligado a atajarla, y cambiarla por una no chequeada le sacaria
+     * esa obligacion sin avisar.
+     *
+     * <p>Vale anotarlo: `apidiff` **no** habria visto esta diferencia --normaliza sacando la
+     * clausula `throws`--. La encontro compilar la prueba con el `javac` real, que se nego.
+     */
+    public Formatter(java.io.OutputStream os, String charsetName)
+            throws java.io.UnsupportedEncodingException {
+        this(os, cargarCharset(charsetName), Locale.getDefault());
+    }
+
+    public Formatter(java.io.OutputStream os, String charsetName, Locale l)
+            throws java.io.UnsupportedEncodingException {
+        this(os, cargarCharset(charsetName), l);
+    }
+
+    // `Charset.forName` tira `UnsupportedCharsetException`, que no es la que el contrato pide.
+    private static Charset cargarCharset(String nombre) throws java.io.UnsupportedEncodingException {
+        if (nombre == null) {
+            throw new NullPointerException();
+        }
+        try {
+            return Charset.forName(nombre);
+        } catch (RuntimeException e) {
+            throw new java.io.UnsupportedEncodingException(nombre);
+        }
+    }
+
+    /**
+     * La ultima `IOException` que tiro el destino, o `null` si no hubo.
+     *
+     * <p>Es la razon por la que `Formatter` **no propaga** los errores de escritura: sus metodos
+     * `format` devuelven `this` para poder encadenarse, y una excepcion chequeada lo rompe. Se
+     * guarda y se pregunta despues.
+     */
+    public java.io.IOException ioException() {
+        return this.ultimaIo;
+    }
+
+    // Lo llama `SalidaCodificada` cuando el stream falla. Package-private: no es API.
+    void registrarIo(java.io.IOException e) {
+        this.ultimaIo = e;
+    }
+
     public Appendable out() {
         return this.out;
     }
@@ -63,9 +136,16 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     public void flush() {
+        if (this.out instanceof SalidaCodificada) {
+            ((SalidaCodificada) this.out).vaciar();
+        }
     }
 
     public void close() {
+        this.flush();
+        if (this.out instanceof SalidaCodificada) {
+            ((SalidaCodificada) this.out).cerrar();
+        }
     }
 
     // Formats using `l` for this call only (JDK's format(Locale, ...) overload).
@@ -877,5 +957,75 @@ public final class Formatter implements Closeable, Flushable {
             return v + repeat(' ', n);
         }
         return repeat(' ', n) + v;
+    }
+}
+
+// El `Appendable` que hay detras de `new Formatter(OutputStream, ...)`: acumula caracteres y los
+// escribe codificados al stream.
+//
+// Acumula en vez de codificar caracter por caracter porque un caracter no es una unidad de
+// codificacion: un par suplente (un emoji, por ejemplo) son dos `char` que juntos dan cuatro bytes en
+// UTF-8, y codificar cada mitad por separado daria basura. Se vacia en `flush`/`close`, y tambien
+// cuando el buffer crece, cortando **solo** en un limite seguro.
+final class SalidaCodificada implements Appendable {
+
+    private final Formatter duenio;
+    private final java.io.OutputStream destino;
+    private final Charset charset;
+    private final StringBuilder pendiente = new StringBuilder();
+
+    SalidaCodificada(Formatter duenio, java.io.OutputStream destino, Charset charset) {
+        this.duenio = duenio;
+        this.destino = destino;
+        this.charset = charset;
+    }
+
+    public Appendable append(CharSequence csq) {
+        this.pendiente.append(csq == null ? "null" : csq);
+        return this;
+    }
+
+    public Appendable append(CharSequence csq, int start, int end) {
+        this.pendiente.append(csq == null ? "null" : csq, start, end);
+        return this;
+    }
+
+    public Appendable append(char c) {
+        this.pendiente.append(c);
+        return this;
+    }
+
+    void vaciar() {
+        if (this.pendiente.length() == 0) {
+            return;
+        }
+        // Si el ultimo char es la mitad alta de un par suplente, se lo deja para la proxima: su
+        // compañero todavia no llego, y codificarlo solo daria el reemplazo.
+        int fin = this.pendiente.length();
+        if (Character.isHighSurrogate(this.pendiente.charAt(fin - 1))) {
+            fin = fin - 1;
+        }
+        if (fin == 0) {
+            return;
+        }
+        byte[] bytes = this.pendiente.substring(0, fin).getBytes(this.charset);
+        this.pendiente.delete(0, fin);
+        try {
+            this.destino.write(bytes, 0, bytes.length);
+        } catch (java.io.IOException e) {
+            this.duenio.registrarIo(e);
+        }
+    }
+
+    void cerrar() {
+        try {
+            this.destino.close();
+        } catch (java.io.IOException e) {
+            this.duenio.registrarIo(e);
+        }
+    }
+
+    public String toString() {
+        return this.pendiente.toString();
     }
 }

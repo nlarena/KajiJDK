@@ -4,7 +4,9 @@ package java.time;
 // type. A KajiLibrary subset: it does NOT extend ZoneId (which would pull in ZoneRules and the
 // timezone database) and omits the Temporal accessors; it is a Comparable offset with its
 // factory methods, getTotalSeconds/getId, and value semantics.
-public final class ZoneOffset extends ZoneId implements Comparable<ZoneOffset> {
+public final class ZoneOffset extends ZoneId
+        implements Comparable<ZoneOffset>, java.time.temporal.TemporalAccessor,
+        java.time.temporal.TemporalAdjuster {
 
     public static final ZoneOffset UTC = ZoneOffset.ofTotalSeconds(0);
     public static final ZoneOffset MIN = ZoneOffset.ofTotalSeconds(-18 * 3600);
@@ -36,6 +38,86 @@ public final class ZoneOffset extends ZoneId implements Comparable<ZoneOffset> {
 
     public static ZoneOffset of(String offsetId) {
         return ofTotalSeconds(parseOffset(offsetId));
+    }
+
+    /**
+     * Las reglas de esta zona: un desplazamiento **fijo**, el suyo.
+     *
+     * <p>Un `ZoneOffset` es la unica clase de zona que no tiene horario de verano por definicion:
+     * es el desplazamiento, no un lugar donde el desplazamiento cambia.
+     */
+    public java.time.zone.ZoneRules getRules() {
+        return java.time.zone.ZoneRules.of(this);
+    }
+
+    /** Un desplazamiento ya esta normalizado: es el mismo. */
+    public ZoneId normalized() {
+        return this;
+    }
+
+    /** El desplazamiento que `temporal` tiene. */
+    public static ZoneOffset from(java.time.temporal.TemporalAccessor temporal) {
+        if (temporal == null) {
+            throw new NullPointerException("temporal");
+        }
+        if (temporal instanceof ZoneOffset) {
+            return (ZoneOffset) temporal;
+        }
+        if (!temporal.isSupported(java.time.temporal.ChronoField.OFFSET_SECONDS)) {
+            throw new java.time.DateTimeException(
+                    "Unable to obtain ZoneOffset from TemporalAccessor: " + temporal);
+        }
+        return ZoneOffset.ofTotalSeconds(
+                (int) temporal.getLong(java.time.temporal.ChronoField.OFFSET_SECONDS));
+    }
+
+    // ---- TemporalAccessor -----------------------------------------------------------------------
+    //
+    // Un desplazamiento sabe **un solo** campo, `OFFSET_SECONDS`. Decir que sabe otros --devolviendo
+    // cero-- convertiria un error del que llama en un dato equivocado que sigue viaje.
+
+    public boolean isSupported(java.time.temporal.TemporalField field) {
+        return field == java.time.temporal.ChronoField.OFFSET_SECONDS;
+    }
+
+    public long getLong(java.time.temporal.TemporalField field) {
+        if (field == java.time.temporal.ChronoField.OFFSET_SECONDS) {
+            return this.getTotalSeconds();
+        }
+        if (field instanceof java.time.temporal.ChronoField) {
+            throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
+        }
+        return field.getFrom(this);
+    }
+
+    public int get(java.time.temporal.TemporalField field) {
+        if (field == java.time.temporal.ChronoField.OFFSET_SECONDS) {
+            return this.getTotalSeconds();
+        }
+        return (int) this.getLong(field);
+    }
+
+    public java.time.temporal.ValueRange range(java.time.temporal.TemporalField field) {
+        if (field == java.time.temporal.ChronoField.OFFSET_SECONDS) {
+            return java.time.temporal.ChronoField.OFFSET_SECONDS.range();
+        }
+        if (field instanceof java.time.temporal.ChronoField) {
+            throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
+        }
+        return field.rangeRefinedBy(this);
+    }
+
+    public <R> R query(java.time.temporal.TemporalQuery<R> query) {
+        if (query == java.time.temporal.TemporalQueries.offset()
+                || query == java.time.temporal.TemporalQueries.zone()) {
+            return (R) this;
+        }
+        return query.queryFrom(this);
+    }
+
+    /** Devuelve `temporal` con este desplazamiento puesto. */
+    public java.time.temporal.Temporal adjustInto(java.time.temporal.Temporal temporal) {
+        return temporal.with(java.time.temporal.ChronoField.OFFSET_SECONDS, this.getTotalSeconds());
     }
 
     public int getTotalSeconds() {

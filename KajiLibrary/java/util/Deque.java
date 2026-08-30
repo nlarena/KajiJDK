@@ -12,7 +12,7 @@ package java.util;
 //
 // Subset: the JDK's Deque also extends SequencedCollection (Java 21) and declares addAll /
 // reversed; those are omitted.
-public interface Deque<E> extends Queue<E> {
+public interface Deque<E> extends Queue<E>, SequencedCollection<E> {
 
     // --- head/tail insertion ---
 
@@ -79,4 +79,15 @@ public interface Deque<E> extends Queue<E> {
 
     // Walks the deque from tail to head.
     Iterator<E> descendingIterator();
+
+    /**
+     * Una **vista** de esta cola doble con las dos puntas intercambiadas.
+     *
+     * <p>Es la mas barata de las tres vistas invertidas de la biblioteca: un `Deque` ya sabe
+     * recorrerse al reves (`descendingIterator`) y ya tiene las dos puntas, asi que invertir es
+     * cruzar los nombres.
+     */
+    default Deque<E> reversed() {
+        return new ReverseDeque<E>(this);
+    }
 }

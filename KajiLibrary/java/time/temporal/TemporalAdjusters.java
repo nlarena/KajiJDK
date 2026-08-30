@@ -4,12 +4,29 @@ import java.time.DayOfWeek;
 
 // KajiLibrary's java.time.temporal.TemporalAdjusters — static factories for the common date
 // adjusters (first/last day of month/year, and day-of-week relative moves). Each returns a
-// TemporalAdjuster backed by one of the package-private strategy classes below. A KajiLibrary subset:
-// ofDateAdjuster(UnaryOperator) is omitted (it needs LocalDate.from). The month/year adjusters avoid
-// TemporalAccessor.range() (unimplemented here) by walking with with()/plus()/minus() instead.
+// TemporalAdjuster backed by one of the package-private strategy classes below. Los ajustadores de
+// mes/año caminan con with()/plus()/minus() en vez de apoyarse en `range()`.
 public final class TemporalAdjusters {
 
     private TemporalAdjusters() {
+    }
+
+    /**
+     * Un ajustador armado a partir de una funcion sobre `LocalDate`.
+     *
+     * <p>Es la puerta para los ajustes que la biblioteca no trae: se escribe la regla como una
+     * funcion de fecha a fecha y esto la envuelve en un `TemporalAdjuster` que `with()` acepta.
+     *
+     * <p>El envoltorio convierte el `Temporal` que recibe a `LocalDate`, aplica la funcion, y
+     * devuelve el temporal original **ajustado** al resultado --no la fecha suelta--, para que
+     * ajustar un `LocalDateTime` conserve su hora.
+     */
+    public static TemporalAdjuster ofDateAdjuster(
+            java.util.function.UnaryOperator<java.time.LocalDate> dateBasedAdjuster) {
+        if (dateBasedAdjuster == null) {
+            throw new NullPointerException("dateBasedAdjuster");
+        }
+        return new DateAdjuster(dateBasedAdjuster);
     }
 
     public static TemporalAdjuster firstDayOfMonth() {
@@ -157,5 +174,24 @@ final class RelativeDowAdjuster implements TemporalAdjuster {
             d = 7;
         }
         return temporal.minus(d, ChronoUnit.DAYS);
+    }
+}
+
+// El ajustador que devuelve `ofDateAdjuster`: lleva la funcion y la aplica sobre la fecha del
+// temporal, devolviendo el temporal ajustado a la fecha nueva.
+final class DateAdjuster implements TemporalAdjuster {
+
+    private final java.util.function.UnaryOperator<java.time.LocalDate> f;
+
+    DateAdjuster(java.util.function.UnaryOperator<java.time.LocalDate> f) {
+        this.f = f;
+    }
+
+    public Temporal adjustInto(Temporal temporal) {
+        java.time.LocalDate actual = java.time.LocalDate.from(temporal);
+        java.time.LocalDate nueva = this.f.apply(actual);
+        // Se ajusta el temporal recibido en vez de devolver la fecha: asi un `LocalDateTime`
+        // conserva su hora, que es lo que el contrato de `with` promete.
+        return temporal.with(ChronoField.EPOCH_DAY, nueva.toEpochDay());
     }
 }

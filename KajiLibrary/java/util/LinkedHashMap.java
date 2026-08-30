@@ -39,7 +39,8 @@ import java.util.Map;
 // size/isEmpty/containsKey/put/remove are declared here rather than inherited, because the JDK's
 // LinkedHashMap gets them from HashMap and ours cannot extend KajiLibrary's HashMap: overriding
 // `put` would have to call `super.put`, and our javac's bytecode generator has no `super` call.
-public class LinkedHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
+public class LinkedHashMap<K, V> extends AbstractMap<K, V>
+        implements Map<K, V>, SequencedMap<K, V> {
 
     // The buckets: each holds a chain of entries linked by `next`.
     private LhmEntry<K, V>[] table;
@@ -141,6 +142,18 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> 
             tail.after = e;
         }
         tail = e;
+    }
+
+    // El gemelo de `linkAtTail`, para `putFirst`.
+    private void linkAtHead(LhmEntry<K, V> e) {
+        e.after = head;
+        e.before = null;
+        if (head == null) {
+            tail = e;
+        } else {
+            head.before = e;
+        }
+        head = e;
     }
 
     private void unlinkFromOrder(LhmEntry<K, V> e) {
@@ -343,12 +356,18 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> 
     // the entries themselves rather than a copy is what keeps the walk O(1) per step and
     // allocation-free.
 
-    LhmEntry<K, V> firstEntry() {
+    LhmEntry<K, V> primeraEntrada() {
         return head;
     }
 
-    LhmEntry<K, V> lastEntry() {
+    LhmEntry<K, V> ultimaEntrada() {
         return tail;
+    }
+
+    // La costura hacia atras, que es lo que hace posibles las vistas invertidas sin copiar: la
+    // lista ya es doblemente enlazada, asi que recorrerla al reves cuesta lo mismo que al derecho.
+    LhmEntry<K, V> beforeEntry(LhmEntry<K, V> e) {
+        return e.before;
     }
 
     LhmEntry<K, V> afterEntry(LhmEntry<K, V> e) {
@@ -391,6 +410,118 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> 
             out.add(new FixedEntry<K, V>(k, this.get(k)));
         }
         return out;
+    }
+
+    // Los dos publicos de `SequencedMap`. La costura de arriba se llama distinto a proposito:
+    // devuelve `LhmEntry` --el nodo, con sus punteros-- y estos devuelven `Map.Entry`, que es lo que
+    // el contrato promete. Compartir el nombre obligaria a que la costura fuera publica y expondria
+    // el nodo interno.
+    public Map.Entry<K, V> firstEntry() {
+        return this.primeraEntrada();
+    }
+
+    public Map.Entry<K, V> lastEntry() {
+        return this.ultimaEntrada();
+    }
+
+    public Map.Entry<K, V> pollFirstEntry() {
+        LhmEntry<K, V> e = this.primeraEntrada();
+        if (e == null) {
+            return null;
+        }
+        this.remove(e.getKey());
+        return e;
+    }
+
+    public Map.Entry<K, V> pollLastEntry() {
+        LhmEntry<K, V> e = this.ultimaEntrada();
+        if (e == null) {
+            return null;
+        }
+        this.remove(e.getKey());
+        return e;
+    }
+
+    // ---- SequencedMap ---------------------------------------------------------------------------
+
+    /**
+     * Pone el par y lo lleva al **principio** del orden.
+     *
+     * <p>Si la clave ya estaba, se **mueve**: `putFirst` cambia la posicion, no solo el valor. Esa
+     * es toda la diferencia con `put`, y es la razon de existir del metodo.
+     *
+     * @return el valor anterior, o null
+     */
+    public V putFirst(K key, V value) {
+        V previo = this.put(key, value);
+        LhmEntry<K, V> e = this.entryFor(key);
+        if (e != null && e != head) {
+            unlinkFromOrder(e);
+            linkAtHead(e);
+        }
+        return previo;
+    }
+
+    /** Idem, al final. */
+    public V putLast(K key, V value) {
+        V previo = this.put(key, value);
+        LhmEntry<K, V> e = this.entryFor(key);
+        if (e != null && e != tail) {
+            unlinkFromOrder(e);
+            linkAtTail(e);
+        }
+        return previo;
+    }
+
+    /**
+     * Una **vista** del mapa en orden inverso.
+     *
+     * <p>Vista y no copia: las dos comparten los mismos objetos entrada, asi que un cambio de un
+     * lado se ve del otro. Copiar seria mas corto de escribir y mentiria en el unico punto en el que
+     * a alguien le importa -- `m.reversed().put(k, v)` tiene que verse en `m`.
+     */
+    public SequencedMap<K, V> reversed() {
+        return new LhmReversed<K, V>(this);
+    }
+
+    public SequencedSet<K> sequencedKeySet() {
+        return new LhmKeySet<K, V>(this, false);
+    }
+
+    public SequencedCollection<V> sequencedValues() {
+        return new LhmValues<K, V>(this, false);
+    }
+
+    public SequencedSet<Map.Entry<K, V>> sequencedEntrySet() {
+        return new LhmEntrySet<K, V>(this, false);
+    }
+
+    /**
+     * Un mapa con los pares de `m`, en el orden en que `m` los itera.
+     *
+     * @throws NullPointerException si `m` es null
+     */
+    public LinkedHashMap(Map<? extends K, ? extends V> m) {
+        this();
+        if (m == null) {
+            throw new NullPointerException();
+        }
+        this.putAll(m);
+    }
+
+    /**
+     * Un mapa dimensionado para `numMappings` **pares**.
+     *
+     * <p>Como en `HashMap.newHashMap`: el constructor con `int` toma **cubetas** y este toma pares.
+     * Java 19 agrego los dos justamente porque el otro se usaba mal.
+     *
+     * @throws IllegalArgumentException si `numMappings` es negativo
+     */
+    public static <K, V> LinkedHashMap<K, V> newLinkedHashMap(int numMappings) {
+        if (numMappings < 0) {
+            throw new IllegalArgumentException("Negative number of mappings: " + numMappings);
+        }
+        return new LinkedHashMap<K, V>(numMappings * 2 + 1, 0.75f);
     }
 }
 
