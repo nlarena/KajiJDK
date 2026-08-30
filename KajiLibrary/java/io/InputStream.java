@@ -1,7 +1,10 @@
 package java.io;
 
-// Same-package import works around the frozen javac's finder (finding #4).
+// Same-package imports work around the frozen javac's finder (finding #4).
 import java.io.Closeable;
+import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 
 // KajiLibrary's java.io.InputStream — the abstract superclass of all byte-source streams.
 // Subclasses supply the single primitive `read()` (the next byte as 0..255, or -1 at end of
@@ -71,5 +74,86 @@ public abstract class InputStream implements Closeable {
     }
 
     public void close() {
+    }
+
+    // --- bulk consumption (Java 9+/11+ conveniences) ---
+
+    public byte[] readAllBytes() {
+        return readNBytes(Integer.MAX_VALUE);
+    }
+
+    public byte[] readNBytes(int len) {
+        if (len < 0) {
+            throw new IllegalArgumentException("len < 0");
+        }
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] chunk = new byte[len < 8192 ? len : 8192];
+        int remaining = len;
+        while (remaining > 0) {
+            int want = remaining < chunk.length ? remaining : chunk.length;
+            int n = read(chunk, 0, want);
+            if (n <= 0) {
+                break;
+            }
+            bos.write(chunk, 0, n);
+            remaining = remaining - n;
+        }
+        return bos.toByteArray();
+    }
+
+    public int readNBytes(byte[] b, int off, int len) {
+        int total = 0;
+        while (total < len) {
+            int n = read(b, off + total, len - total);
+            if (n <= 0) {
+                break;
+            }
+            total = total + n;
+        }
+        return total;
+    }
+
+    public long transferTo(OutputStream out) throws IOException {
+        long total = 0;
+        byte[] chunk = new byte[8192];
+        while (true) {
+            int n = read(chunk, 0, chunk.length);
+            if (n <= 0) {
+                break;
+            }
+            out.write(chunk, 0, n);
+            total = total + n;
+        }
+        return total;
+    }
+
+    public void skipNBytes(long n) throws IOException {
+        long remaining = n;
+        while (remaining > 0) {
+            long skipped = skip(remaining);
+            if (skipped == 0) {
+                if (read() < 0) {
+                    throw new EOFException();
+                }
+                remaining = remaining - 1;
+            } else {
+                remaining = remaining - skipped;
+            }
+        }
+    }
+
+    /** A stream that is always at end of stream. */
+    public static InputStream nullInputStream() {
+        return new NullInputStream();
+    }
+
+    private static final class NullInputStream extends InputStream {
+        public int read() {
+            return -1;
+        }
+
+        public int read(byte[] b, int off, int len) {
+            return len == 0 ? 0 : -1;
+        }
     }
 }

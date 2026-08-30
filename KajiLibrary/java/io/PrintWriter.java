@@ -2,6 +2,14 @@ package java.io;
 
 // Same-package import works around the frozen javac's finder (finding #4).
 import java.io.Writer;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+import java.util.Locale;
 
 // KajiLibrary's java.io.PrintWriter — the decorator that makes a Writer convenient.
 //
@@ -47,6 +55,47 @@ public class PrintWriter extends Writer {
         this.out = out;
         this.autoFlush = autoFlush;
         this.trouble = false;
+    }
+
+    // Over a byte stream: encode through an OutputStreamWriter, buffer it, and print through that.
+    public PrintWriter(OutputStream out) {
+        this(new BufferedWriter(new OutputStreamWriter(out)), false);
+    }
+
+    public PrintWriter(OutputStream out, boolean autoFlush) {
+        this(new BufferedWriter(new OutputStreamWriter(out)), autoFlush);
+    }
+
+    public PrintWriter(OutputStream out, boolean autoFlush, Charset charset) {
+        this(new BufferedWriter(new OutputStreamWriter(out, charset)), autoFlush);
+    }
+
+    // Over a named file: KajiJDK has no filesystem to open, so these fail honestly. The implicit
+    // super() runs before the throw; the half-built object is discarded.
+    public PrintWriter(String fileName) throws FileNotFoundException {
+        throw new FileNotFoundException("KajiJDK has no filesystem to write: " + fileName);
+    }
+
+    public PrintWriter(String fileName, String csn)
+            throws FileNotFoundException, UnsupportedEncodingException {
+        throw new FileNotFoundException("KajiJDK has no filesystem to write: " + fileName);
+    }
+
+    public PrintWriter(String fileName, Charset charset) throws IOException {
+        throw new FileNotFoundException("KajiJDK has no filesystem to write: " + fileName);
+    }
+
+    public PrintWriter(File file) throws FileNotFoundException {
+        throw new FileNotFoundException("KajiJDK has no filesystem to write");
+    }
+
+    public PrintWriter(File file, String csn)
+            throws FileNotFoundException, UnsupportedEncodingException {
+        throw new FileNotFoundException("KajiJDK has no filesystem to write");
+    }
+
+    public PrintWriter(File file, Charset charset) throws IOException {
+        throw new FileNotFoundException("KajiJDK has no filesystem to write");
     }
 
     // The single place a failure is turned into a flag instead of an exception. Every
@@ -262,6 +311,40 @@ public class PrintWriter extends Writer {
         if (this.autoFlush) {
             this.flush();
         }
+        return this;
+    }
+
+    public PrintWriter printf(Locale l, String format, Object... args) {
+        return this.format(l, format, args);
+    }
+
+    public PrintWriter format(Locale l, String format, Object... args) {
+        String s = String.format(l, format, args);
+        this.write(s);
+        if (this.autoFlush) {
+            this.flush();
+        }
+        return this;
+    }
+
+    // --- appendable ---
+    //
+    // Returns `this` (a PrintWriter), covariantly narrowing Writer/Appendable — the compiler
+    // synthesises those bridges. A null CharSequence prints as "null", per the contract.
+
+    public PrintWriter append(CharSequence csq) {
+        this.write(csq == null ? "null" : csq.toString());
+        return this;
+    }
+
+    public PrintWriter append(CharSequence csq, int start, int end) {
+        CharSequence cs = csq == null ? "null" : csq;
+        this.write(cs.subSequence(start, end).toString());
+        return this;
+    }
+
+    public PrintWriter append(char c) {
+        this.write(c);
         return this;
     }
 }

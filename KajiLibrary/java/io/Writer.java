@@ -73,4 +73,20 @@ public abstract class Writer implements Closeable, Flushable, Appendable {
         }
         return this;
     }
+
+    /** A writer that discards everything written to it. */
+    public static Writer nullWriter() {
+        return new NullWriter();
+    }
+
+    private static final class NullWriter extends Writer {
+        public void write(char[] cbuf, int off, int len) {
+        }
+
+        public void flush() {
+        }
+
+        public void close() {
+        }
+    }
 }

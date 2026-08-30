@@ -157,13 +157,22 @@ costo media sesion aprender del otro lado: **un `.class` del arbol tambien puede
 
 | | |
 |---|---|
-| Commit | `67ac198` |
-| Construido desde | copia limpia de HEAD (`git archive HEAD`) **+ los 16 archivos del compilador y la VM**. Los 3 de `src/fuzz/`, de otra sesión, quedaron afuera a propósito |
-| Toolchain | `rustc 1.98.0 (88d9e12ae 2026-08-18)`, host `x86_64-pc-windows-gnu` |
+| Commit | `099b348` |
+| Construido desde | el working tree, **verificado limpio para las fuentes Rust** (`git status --porcelain \| grep '\.rs$'` = 0 modificados y 0 sin seguir), así que es idéntico a `git archive HEAD`. Lo único sin commitear eran `.java`/`.class` de biblioteca (`java.util.function`), que no entran al binario |
+| Toolchain | `rustc 1.96.0 (ac68faa20 2026-05-25)`, host `x86_64-pc-windows-msvc` |
 | Perfil | `cargo build --release` |
-| Fecha | 2026-08-30 (tanda s) |
+| Fecha | 2026-08-30 (regeneración: `bin/` había quedado con sólo este `.md`) |
 | Herramientas | **11** |
-| Peso | 61 MB — el toolchain es `gnu`, no `msvc`; ver la nota de arriba sobre por qué el peso no es el argumento |
+| Peso | 14 MB — toolchain `msvc` (el refresco anterior era `gnu`/61 MB); ver la nota de arriba sobre por qué el peso no es el argumento |
+
+> **Regeneración 2026-08-30.** `bin/` se encontró vacío (sólo este `FROZEN.md`). Se reconstruyeron
+> las **11** herramientas con `cargo build --release` sobre el working tree —verificado limpio para
+> `*.rs`, o sea equivalente a la copia limpia de `099b348`— y se copiaron a `bin/`. **AppControl
+> bloquea 4 por hash nuevo** (`jvm`, `run-headless`, `jdi-attach`, `jimage`): vienen de `099b348`
+> (no del `67ac198` que estaba allowlisted), así que necesitan aprobarse en la política de la
+> máquina antes de correr. Las otras 7 (`javac`, `jvm-step`, `javac-step`, `jdb`, `jvm-jdwp`,
+> `jlink`, `javadoc`) pasan. Mientras tanto: `javap` del JDK (`.jdk25_tmp`) para desensamblar/medir
+> y `target/debug/*.exe` (hash distinto, ya allowlisted) para correr.
 
 **Por qué se refrescó**: cinco findings más, y dos de ellos hacen falta para compilar la biblioteca
 tal como está — **#303** (sin él no se puede compilar `StrictMath` junto con `Random`) y **#305**

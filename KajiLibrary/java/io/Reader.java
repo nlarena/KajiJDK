@@ -1,7 +1,11 @@
 package java.io;
 
-// Same-package import works around the frozen javac's finder (finding #4).
+// Same-package imports work around the frozen javac's finder (finding #4).
 import java.io.Closeable;
+import java.io.Writer;
+import java.nio.CharBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 // KajiLibrary's java.io.Reader — the abstract superclass of character-input streams. A
 // subclass supplies the bulk primitive `read(char[], off, len)` and `close`; the single-char
@@ -69,5 +73,86 @@ public abstract class Reader implements Closeable {
 
     public void reset() {
         throw new UnsupportedOperationException("reset not supported");
+    }
+
+    // --- bulk consumption ---
+
+    public int read(CharBuffer target) throws IOException {
+        int len = target.remaining();
+        char[] cbuf = new char[len];
+        int n = this.read(cbuf, 0, len);
+        if (n > 0) {
+            target.put(cbuf, 0, n);
+        }
+        return n;
+    }
+
+    public long transferTo(Writer out) throws IOException {
+        long total = 0;
+        char[] chunk = new char[8192];
+        while (true) {
+            int n = this.read(chunk, 0, chunk.length);
+            if (n < 0) {
+                break;
+            }
+            out.write(chunk, 0, n);
+            total = total + n;
+        }
+        return total;
+    }
+
+    public String readAllAsString() throws IOException {
+        StringBuilder sb = new StringBuilder();
+        char[] chunk = new char[8192];
+        while (true) {
+            int n = this.read(chunk, 0, chunk.length);
+            if (n < 0) {
+                break;
+            }
+            sb.append(chunk, 0, n);
+        }
+        return sb.toString();
+    }
+
+    public List<String> readAllLines() throws IOException {
+        String all = readAllAsString();
+        List<String> lines = new ArrayList<String>();
+        int i = 0;
+        int start = 0;
+        int n = all.length();
+        while (i < n) {
+            char c = all.charAt(i);
+            if (c == '\n' || c == '\r') {
+                lines.add(all.substring(start, i));
+                if (c == '\r' && i + 1 < n && all.charAt(i + 1) == '\n') {
+                    i = i + 1;
+                }
+                start = i + 1;
+            }
+            i = i + 1;
+        }
+        if (start < n) {
+            lines.add(all.substring(start, n));
+        }
+        return lines;
+    }
+
+    /** A reader that is always at end of stream. */
+    public static Reader nullReader() {
+        return new NullReader();
+    }
+
+    /** A reader over the characters of {@code cs}. */
+    public static Reader of(CharSequence cs) {
+        return new StringReader(cs.toString());
+    }
+
+    private static final class NullReader extends Reader {
+        public int read(char[] cbuf, int off, int len) {
+            return len == 0 ? 0 : -1;
+        }
+
+        public void close() {
+        }
     }
 }

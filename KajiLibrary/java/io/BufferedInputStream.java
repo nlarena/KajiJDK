@@ -3,6 +3,7 @@ package java.io;
 // Same-package imports work around the frozen javac's finder (finding #4).
 import java.io.FilterInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 // KajiLibrary's java.io.BufferedInputStream — the decorator that turns many small reads
 // into few large ones.
@@ -54,7 +55,7 @@ public class BufferedInputStream extends FilterInputStream {
         this.marklimit = 0;
     }
 
-    public int read() {
+    public synchronized int read() {
         if (this.pos >= this.count) {
             this.fill();
             if (this.pos >= this.count) {
@@ -66,7 +67,7 @@ public class BufferedInputStream extends FilterInputStream {
         return b;
     }
 
-    public int read(byte[] b, int off, int len) {
+    public synchronized int read(byte[] b, int off, int len) {
         if (len <= 0) {
             return 0;
         }
@@ -151,7 +152,7 @@ public class BufferedInputStream extends FilterInputStream {
         }
     }
 
-    public long skip(long n) {
+    public synchronized long skip(long n) {
         if (n <= 0L) {
             return 0L;
         }
@@ -178,11 +179,11 @@ public class BufferedInputStream extends FilterInputStream {
 
     // What can be read without blocking: what we are holding, plus whatever the source
     // says it has ready.
-    public int available() {
+    public synchronized int available() {
         return (this.count - this.pos) + this.in.available();
     }
 
-    public void mark(int readlimit) {
+    public synchronized void mark(int readlimit) {
         this.marklimit = readlimit;
         this.markpos = this.pos;
     }
@@ -190,7 +191,7 @@ public class BufferedInputStream extends FilterInputStream {
     // Unchecked, like the rest of this package's mark/reset (see InputStream). A failed
     // reset is a programming error — the caller either never marked or broke its own
     // readlimit promise — not an I/O condition.
-    public void reset() {
+    public synchronized void reset() {
         if (this.markpos < 0) {
             throw new IllegalStateException("resetting to invalid mark");
         }
@@ -205,5 +206,11 @@ public class BufferedInputStream extends FilterInputStream {
     public void close() {
         this.buf = null;
         this.in.close();
+    }
+
+    // Drains the buffer, then the source, under this stream's lock — the reference declares the
+    // override so the transfer is atomic against concurrent reads.
+    public synchronized long transferTo(OutputStream out) throws IOException {
+        return super.transferTo(out);
     }
 }

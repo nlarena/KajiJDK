@@ -28,4 +28,17 @@ public abstract class OutputStream implements Closeable, Flushable {
 
     public void close() {
     }
+
+    /** A sink that discards every byte. */
+    public static OutputStream nullOutputStream() {
+        return new NullOutputStream();
+    }
+
+    private static final class NullOutputStream extends OutputStream {
+        public void write(int b) {
+        }
+
+        public void write(byte[] b, int off, int len) {
+        }
+    }
 }

@@ -91,6 +91,24 @@ public class CharArrayWriter extends Writer {
     public void close() {
     }
 
+    public CharArrayWriter append(CharSequence csq) {
+        String s = csq == null ? "null" : csq.toString();
+        write(s, 0, s.length());
+        return this;
+    }
+
+    public CharArrayWriter append(CharSequence csq, int start, int end) {
+        CharSequence cs = csq == null ? "null" : csq;
+        String s = cs.subSequence(start, end).toString();
+        write(s, 0, s.length());
+        return this;
+    }
+
+    public CharArrayWriter append(char c) {
+        write(c);
+        return this;
+    }
+
     private void ensureCapacity(int min) {
         if (min > this.buf.length) {
             int newCap = this.buf.length * 2;

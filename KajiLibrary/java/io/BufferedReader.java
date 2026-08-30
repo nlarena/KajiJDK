@@ -2,6 +2,9 @@ package java.io;
 
 // Same-package import works around the frozen javac's finder (finding #4).
 import java.io.Reader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 // KajiLibrary's java.io.BufferedReader — wraps another Reader and adds line-oriented input.
 // (The JDK version also buffers in a char[] for throughput; ours reads through to the
@@ -11,6 +14,15 @@ public class BufferedReader extends Reader {
     private Reader in;
 
     public BufferedReader(Reader in) {
+        this.in = in;
+    }
+
+    // The buffer size is accepted for source compatibility; this reader reads through to the
+    // underlying Reader rather than keeping its own char buffer.
+    public BufferedReader(Reader in, int sz) {
+        if (sz <= 0) {
+            throw new IllegalArgumentException("Buffer size <= 0");
+        }
         this.in = in;
     }
 
@@ -43,6 +55,40 @@ public class BufferedReader extends Reader {
                 count = count + 1;
             }
         }
+    }
+
+    public long skip(long n) {
+        return this.in.skip(n);
+    }
+
+    public boolean ready() {
+        return this.in.ready();
+    }
+
+    public boolean markSupported() {
+        return this.in.markSupported();
+    }
+
+    public void mark(int readAheadLimit) {
+        this.in.mark(readAheadLimit);
+    }
+
+    public void reset() {
+        this.in.reset();
+    }
+
+    /** The lines of this reader, read eagerly, as a stream. */
+    public Stream<String> lines() {
+        List<String> all = new ArrayList<String>();
+        while (true) {
+            String line = readLine();
+            if (line == null) {
+                break;
+            }
+            all.add(line);
+        }
+        String[] arr = all.toArray(new String[0]);
+        return Stream.of(arr);
     }
 
     public void close() {

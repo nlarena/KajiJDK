@@ -3,6 +3,7 @@ package java.lang;
 import java.io.Console;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.channels.Channel;
 import java.util.HashMap;
@@ -54,8 +55,12 @@ public final class System {
     private System() {}
 
     static {
-        out = new PrintStream();
-        err = new PrintStream();
+        // Autoflushing console streams. The underlying OutputStream is null: a console PrintStream
+        // writes through the VM's text seam, not through a wrapped stream (there is no console file
+        // descriptor to wrap). err is a distinct object writing to the same console, as specified.
+        OutputStream sink = null;
+        out = new PrintStream(sink, true);
+        err = new PrintStream(sink, true);
         in = new NullInputStream();
         props = initProperties(new Properties());
         lineSeparator = props.getProperty("line.separator");

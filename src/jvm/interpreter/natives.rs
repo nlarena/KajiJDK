@@ -120,6 +120,13 @@ pub fn dispatch(
             let _ = writeln!(out, "{}", strings::read(heap, reference(&args[1])));
             None
         }
+        // print(String) — the same channel as println but WITHOUT the trailing newline. It is the
+        // single text seam the whole of PrintStream (print/println()/printf/format/append and the
+        // byte writes) funnels through.
+        ("java/io/PrintStream", "writeString", "(Ljava/lang/String;)V") => {
+            let _ = write!(out, "{}", strings::read(heap, reference(&args[1])));
+            None
+        }
         // APT (fase 2): salida de un processor durante el round loop, vía este native estático — el
         // mínimo `Messager` delegando a Rust. `args[0]` es la referencia al String (método estático:
         // sin receptor). (Nota histórica: se agregó cuando `System.out.println` no compilaba en este
