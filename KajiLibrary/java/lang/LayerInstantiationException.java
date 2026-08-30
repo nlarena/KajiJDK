@@ -1,24 +1,21 @@
 package java.lang;
 
-/**
- * KajiLibrary's java.lang.LayerInstantiationException — a module layer could not be created,
- * because the configuration it was asked for is impossible: a module that would be defined
- * twice to the same loader, a package split across two modules, a missing parent.
- */
+// KajiLibrary's java.lang.LayerInstantiationException -- thrown when a module layer cannot be
+// created. KajiJDK creates none, so this is surface only.
 public class LayerInstantiationException extends RuntimeException {
 
     public LayerInstantiationException() {
     }
 
-    public LayerInstantiationException(String message) {
-        super(message);
+    public LayerInstantiationException(String msg) {
+        super(msg);
     }
 
     public LayerInstantiationException(Throwable cause) {
         super(cause);
     }
 
-    public LayerInstantiationException(String message, Throwable cause) {
-        super(message, cause);
+    public LayerInstantiationException(String msg, Throwable cause) {
+        super(msg, cause);
     }
 }

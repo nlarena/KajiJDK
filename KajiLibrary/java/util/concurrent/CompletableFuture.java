@@ -1089,7 +1089,17 @@ final class CfDelayedTask extends Thread {
     }
 
     public void run() {
-        Thread.sleep(millis);
+        // `Thread.sleep` declara `InterruptedException` y `Runnable.run` no puede propagarla, asi que
+        // hay que decidir aca que significa una interrupcion. Significa **cancelacion**: se restaura
+        // la marca de interrumpido --que es lo que espera quien interrumpio, y `sleep` la borra al
+        // lanzar-- y no se ejecuta el cuerpo. Correr la tarea igual seria ignorar la cancelacion; y
+        // tragarse la marca dejaria al hilo sin saber que lo interrumpieron.
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
         target.execute(body);
     }
 }
@@ -1115,7 +1125,15 @@ final class CfTimeout extends Thread {
     }
 
     public void run() {
-        Thread.sleep(millis);
+        // Ver la nota de `CfDelayedTask.run`: una interrupcion es cancelacion. Aca ademas el
+        // temporizador **pierde limpiamente** si lo interrumpen: no se resuelve el futuro, que es lo
+        // correcto -- `orTimeout` promete fallar *si se cumple el plazo*, y el plazo no se cumplio.
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
         if (withValue) {
             target.settle(CompletableFuture.boxValue(value));
         } else {

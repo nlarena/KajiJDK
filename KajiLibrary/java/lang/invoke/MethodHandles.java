@@ -182,7 +182,7 @@ public final class MethodHandles {
     // Result takes `valueTypes` extra arguments at `pos` and throws them away. The direction that
     // confuses everyone: this makes the handle accept MORE than the target, because the dropped
     // arguments are the ones the caller supplies and the target never sees.
-    public static MethodHandle dropArguments(MethodHandle target, int pos, Class<?>[] valueTypes) {
+    public static MethodHandle dropArguments(MethodHandle target, int pos, Class<?>... valueTypes) {
         throw new UnsupportedOperationException("no method handle factory without VM support");
     }
 
@@ -199,7 +199,7 @@ public final class MethodHandles {
 
     // The mirror of `dropArguments`: the values are supplied NOW, so the result takes fewer
     // arguments than the target. This is currying.
-    public static MethodHandle insertArguments(MethodHandle target, int pos, Object[] values) {
+    public static MethodHandle insertArguments(MethodHandle target, int pos, Object... values) {
         throw new UnsupportedOperationException("no method handle factory without VM support");
     }
 
@@ -207,13 +207,13 @@ public final class MethodHandles {
     // list, of the value the target's parameter `i` receives — so the array is read as a mapping
     // from target position to caller position, which also lets one caller argument feed several
     // target parameters, and lets one be left unused.
-    public static MethodHandle permuteArguments(MethodHandle target, MethodType newType, int[] reorder) {
+    public static MethodHandle permuteArguments(MethodHandle target, MethodType newType, int... reorder) {
         throw new UnsupportedOperationException("no method handle factory without VM support");
     }
 
     // Preprocesses arguments `pos…pos+filters.length` one by one. Each filter is unary; a `null`
     // entry leaves that argument alone.
-    public static MethodHandle filterArguments(MethodHandle target, int pos, MethodHandle[] filters) {
+    public static MethodHandle filterArguments(MethodHandle target, int pos, MethodHandle... filters) {
         throw new UnsupportedOperationException("no method handle factory without VM support");
     }
 
@@ -274,7 +274,7 @@ public final class MethodHandles {
 
     // A `tableswitch` as a value: the leading `int` argument selects a case, out-of-range falls
     // to `fallback`. All the cases and the fallback must already share one type.
-    public static MethodHandle tableSwitch(MethodHandle fallback, MethodHandle[] targets) {
+    public static MethodHandle tableSwitch(MethodHandle fallback, MethodHandle... targets) {
         throw new UnsupportedOperationException("no method handle factory without VM support");
     }
 
@@ -285,7 +285,7 @@ public final class MethodHandles {
     // the first `pred` that fails ends the loop, and the matching `fini` produces the result. A
     // shorter clause array is padded with nulls, which is why the four convenience forms below
     // can all be expressed as one or two clauses.
-    public static MethodHandle loop(MethodHandle[][] clauses) {
+    public static MethodHandle loop(MethodHandle[]... clauses) {
         throw new UnsupportedOperationException("no method handle factory without VM support");
     }
 
@@ -324,16 +324,16 @@ public final class MethodHandles {
         throw new UnsupportedOperationException("no VarHandle factory without VM support");
     }
 
-    public static VarHandle filterCoordinates(VarHandle target, int pos, MethodHandle[] filters) {
+    public static VarHandle filterCoordinates(VarHandle target, int pos, MethodHandle... filters) {
         throw new UnsupportedOperationException("no VarHandle factory without VM support");
     }
 
-    public static VarHandle insertCoordinates(VarHandle target, int pos, Object[] values) {
+    public static VarHandle insertCoordinates(VarHandle target, int pos, Object... values) {
         throw new UnsupportedOperationException("no VarHandle factory without VM support");
     }
 
     public static VarHandle permuteCoordinates(VarHandle target, List<Class<?>> newCoordinates,
-            int[] reorder) {
+            int... reorder) {
         throw new UnsupportedOperationException("no VarHandle factory without VM support");
     }
 
@@ -341,7 +341,7 @@ public final class MethodHandles {
         throw new UnsupportedOperationException("no VarHandle factory without VM support");
     }
 
-    public static VarHandle dropCoordinates(VarHandle target, int pos, Class<?>[] valueTypes) {
+    public static VarHandle dropCoordinates(VarHandle target, int pos, Class<?>... valueTypes) {
         throw new UnsupportedOperationException("no VarHandle factory without VM support");
     }
 

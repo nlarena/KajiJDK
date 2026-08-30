@@ -1,6 +1,7 @@
 package java.lang.reflect;
 
 import java.lang.annotation.Annotation;
+import java.util.Set;
 
 /**
  * The shared supertype of {@link Method} and {@link Constructor} — everything reflection can say
@@ -70,10 +71,8 @@ public abstract class Executable extends AccessibleObject implements Member, Gen
      */
     public abstract int getModifiers();
 
-    // getTypeParameters() is inherited abstract from GenericDeclaration. The JDK redeclares it here;
-    // we cannot, for the same reason getAnnotations() is not redeclared -- see the class comment.
-    // Note the compiler defect is not limited to imported types: TypeVariable is in this very
-    // package and re-declaring `TypeVariable<?>[] getTypeParameters()` still fails.
+    /** This executable's type parameters, in declaration order (empty if it is not generic). */
+    public abstract TypeVariable<?>[] getTypeParameters();
 
     /**
      * Returns this executable's parameter types, in declaration order.
@@ -224,23 +223,57 @@ public abstract class Executable extends AccessibleObject implements Member, Gen
      *
      * @return the annotated receiver type, or {@code null}
      */
-    public native AnnotatedType getAnnotatedReceiverType();
+    // The annotated-type views carry no type annotations (KajiLibrary does not model
+    // RuntimeVisibleTypeAnnotations): each is its plain type wrapped in an AnnotatedType.
 
-    /**
-     * Returns the annotated uses of this executable's parameter types.
-     *
-     * <p>Backed by the VM: needs {@code RuntimeVisibleTypeAnnotations} parsing.
-     *
-     * @return the annotated parameter types, in declaration order
-     */
-    public native AnnotatedType[] getAnnotatedParameterTypes();
+    public AnnotatedType getAnnotatedReceiverType() {
+        if (Modifier.isStatic(this.getModifiers())) {
+            return null;
+        }
+        return new AnnotatedTypeImpl(this.getDeclaringClass());
+    }
 
-    /**
-     * Returns the annotated uses of this executable's declared exception types.
-     *
-     * <p>Backed by the VM: needs {@code RuntimeVisibleTypeAnnotations} parsing.
-     *
-     * @return the annotated exception types
-     */
-    public native AnnotatedType[] getAnnotatedExceptionTypes();
+    public AnnotatedType[] getAnnotatedParameterTypes() {
+        Class<?>[] types = this.getParameterTypes();
+        AnnotatedType[] out = new AnnotatedType[types.length];
+        int i = 0;
+        while (i < types.length) {
+            out[i] = new AnnotatedTypeImpl(types[i]);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    public AnnotatedType[] getAnnotatedExceptionTypes() {
+        Class<?>[] types = this.getExceptionTypes();
+        AnnotatedType[] out = new AnnotatedType[types.length];
+        int i = 0;
+        while (i < types.length) {
+            out[i] = new AnnotatedTypeImpl(types[i]);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /** This executable's access flags, resolved at the {@code METHOD} location. */
+    public Set<AccessFlag> accessFlags() {
+        return AccessFlag.maskToAccessFlags(this.getModifiers(), AccessFlag.Location.METHOD);
+    }
+
+    // ---- annotations (re-declared at this level to match the JDK; member-level is empty) ----
+
+    public Annotation[] getDeclaredAnnotations() {
+        return new Annotation[0];
+    }
+
+    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
+        if (annotationClass == null) {
+            throw new NullPointerException();
+        }
+        return null;
+    }
+
+    public <T extends Annotation> T[] getAnnotationsByType(Class<T> annotationClass) {
+        return (T[]) Array.newInstance(annotationClass, 0);
+    }
 }

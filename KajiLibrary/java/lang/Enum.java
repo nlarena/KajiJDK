@@ -1,17 +1,28 @@
 package java.lang;
 
+import java.io.Serializable;
 import java.lang.constant.ClassDesc;
 import java.lang.reflect.Field;
+import java.util.Optional;
 
 // KajiLibrary's java.lang.Enum — the common superclass every `enum` compiles to (§8.9).
 // It keeps the state that makes an enum an enum: the constant's `name` and its `ordinal`,
 // both set once by the constructor and never changed — which is exactly what lets `==`
 // be the right comparison for enum constants.
 //
+// It is **generic** (`Enum<E extends Enum<E>>`), matching what the compiler already emits for every
+// enum's supertype (`extends Enum<Self>`, with a `Signature`); that self-bound is what types
+// `compareTo` and `getDeclaringClass` to the enum's own type.
+//
 // `valueOf(Class, String)` is here because the compiler needs it: every enum's synthesized
 // `valueOf(String)` is one line, `(E) Enum.valueOf(E.class, name)`, exactly as the JDK does it.
 // Without this method NO enum compiles at all.
-public abstract class Enum {
+//
+// It does NOT implement `Constable` (the JDK does): that override returns an `EnumDesc`, and the
+// JDK's `EnumDesc` is a `DynamicConstantDesc`, while ours is a plain descriptor the switch-condy
+// mechanism reads by field name — making it a `ConstantDesc` would tangle those two. `describeConstable`
+// is still here as a plain method (same signature, same result), just not the interface override.
+public abstract class Enum<E extends Enum<E>> implements Comparable<E>, Serializable {
 
     private final String name;
 
@@ -37,6 +48,35 @@ public abstract class Enum {
         return this.name;
     }
 
+    // Enum equality is identity: two constants are equal iff they are the same object. `final`
+    // because an enum must not be allowed to redefine it (there is exactly one instance per name).
+    public final boolean equals(Object other) {
+        return this == other;
+    }
+
+    // The identity hash, `final` for the same reason as {@link #equals}.
+    public final int hashCode() {
+        return super.hashCode();
+    }
+
+    // Order by declaration position, within the same enum type (which the type system guarantees:
+    // the parameter is `E`, this enum's own type).
+    public final int compareTo(E o) {
+        return this.ordinal - o.ordinal();
+    }
+
+    /**
+     * The {@code Class} of this constant's enum type.
+     *
+     * <p>Not simply {@code getClass()}: a constant with a body (`RED { ... }`) is an anonymous
+     * subclass, so its {@code getClass()} is that subclass, and the enum type is its superclass.
+     */
+    public final Class<E> getDeclaringClass() {
+        Class<?> clazz = getClass();
+        Class<?> zuper = clazz.getSuperclass();
+        return (Class<E>) (zuper == Enum.class ? clazz : zuper);
+    }
+
     /**
      * The constant of {@code enumType} named {@code name}.
      *
@@ -51,7 +91,7 @@ public abstract class Enum {
      *
      * @throws IllegalArgumentException if the type has no constant of that name
      */
-    public static Enum valueOf(Class<?> enumType, String name) {
+    public static <T extends Enum<T>> T valueOf(Class<T> enumType, String name) {
         if (enumType == null || name == null) {
             throw new NullPointerException();
         }
@@ -66,12 +106,24 @@ public abstract class Enum {
             if (field.getName().equals(name)) {
                 Object value = field.get(null);
                 if (value instanceof Enum) {
-                    return (Enum) value;
+                    return (T) value;
                 }
             }
             i = i + 1;
         }
         throw new IllegalArgumentException("No enum constant " + name);
+    }
+
+    /**
+     * A nominal descriptor for this constant, if its enum type has one. Same result as the JDK's
+     * {@code Constable} override (this class does not implement {@code Constable}; see the header).
+     */
+    public final Optional<EnumDesc> describeConstable() {
+        Optional<ClassDesc> type = this.getDeclaringClass().describeConstable();
+        if (type.isPresent()) {
+            return Optional.of(EnumDesc.of(type.get(), this.name()));
+        }
+        return Optional.empty();
     }
 
     // A *nominal* descriptor for one enum constant: which enum type, and which constant of it.

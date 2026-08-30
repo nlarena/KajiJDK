@@ -52,9 +52,14 @@ public interface TypeDescriptor {
 
         // The same parameters as `parameterArray`, as a list. Both exist because an array can be
         // handed out only by copying — it is mutable — while a list can be handed out shared, and
-        // callers that only read want the cheap one. Safe to add here: nothing in KajiLibrary
-        // implements `OfMethod` yet, so a new abstract method breaks no implementor.
-        List<OfField> parameterList();
+        // callers that only read want the cheap one.
+        //
+        // RAW `List` on purpose. The JDK writes `List<F> parameterList()` where `F` is the
+        // self-bound field-descriptor variable; an implementor (`MethodTypeDesc`) then returns
+        // `List<ClassDesc>`. Modelled raw here, `F` becomes the concrete `OfField`, and
+        // `List<ClassDesc>` is not a `List<OfField>` (generic invariance) — so the override would
+        // be rejected. The raw type erases to the same `()Ljava/util/List;` the JDK emits.
+        List parameterList();
 
         OfMethod changeReturnType(OfField newReturn);
 

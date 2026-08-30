@@ -1,5 +1,8 @@
 package java.lang.reflect;
 
+import java.lang.annotation.Annotation;
+import java.util.Set;
+
 /**
  * One parameter of a {@link Method} or {@link Constructor}.
  *
@@ -50,7 +53,7 @@ package java.lang.reflect;
  * {@code native}, and the VM implements none of them. The defect is reported to the compiler session
  * with a repro; when it is fixed, the clause and the three methods go back in together.
  */
-public final class Parameter {
+public final class Parameter implements AnnotatedElement {
 
     private final String name;
     private final int modifiers;
@@ -186,9 +189,42 @@ public final class Parameter {
         return this.executable.isVarArgs() && this.index == this.executable.getParameterCount() - 1;
     }
 
-    // ------------------------------------------------------------------------------------------
-    // AnnotatedElement is deliberately NOT implemented here -- see the class comment. When the
-    // compiler defect is fixed, `implements AnnotatedElement` goes back on the declaration above and
-    // getAnnotation / getAnnotations / getDeclaredAnnotations come back as natives, right here.
-    // ------------------------------------------------------------------------------------------
+    /** This parameter's type as an {@link AnnotatedType} (no type annotations modelled). */
+    public AnnotatedType getAnnotatedType() {
+        return new AnnotatedTypeImpl(this.getType());
+    }
+
+    /** This parameter's access flags, at the {@code METHOD_PARAMETER} location. */
+    public Set<AccessFlag> accessFlags() {
+        return AccessFlag.maskToAccessFlags(this.getModifiers(), AccessFlag.Location.METHOD_PARAMETER);
+    }
+
+    // ---- AnnotatedElement (parameter-level runtime annotations not modelled: "none") ----
+
+    public Annotation[] getAnnotations() {
+        return new Annotation[0];
+    }
+
+    public Annotation[] getDeclaredAnnotations() {
+        return new Annotation[0];
+    }
+
+    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
+        if (annotationClass == null) {
+            throw new NullPointerException();
+        }
+        return null;
+    }
+
+    public <T extends Annotation> T getDeclaredAnnotation(Class<T> annotationClass) {
+        return this.getAnnotation(annotationClass);
+    }
+
+    public <T extends Annotation> T[] getAnnotationsByType(Class<T> annotationClass) {
+        return (T[]) Array.newInstance(annotationClass, 0);
+    }
+
+    public <T extends Annotation> T[] getDeclaredAnnotationsByType(Class<T> annotationClass) {
+        return this.getAnnotationsByType(annotationClass);
+    }
 }

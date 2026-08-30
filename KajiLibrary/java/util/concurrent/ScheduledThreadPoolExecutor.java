@@ -522,7 +522,15 @@ final class SchedTimer extends Thread {
         while (running) {
             long wait = next - System.currentTimeMillis();
             if (wait > 0L) {
-                Thread.sleep(wait);
+                // Ver la nota de `CfDelayedTask.run`: una interrupcion es cancelacion. Se restaura
+                // la marca y se corta el bucle en vez de seguir esperando, que es lo que hace un
+                // `ScheduledThreadPoolExecutor` real cuando le apagan el hilo.
+                try {
+                    Thread.sleep(wait);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
             if (task.isCancelled() || !owner.acceptsRun(task)) {
                 running = false;

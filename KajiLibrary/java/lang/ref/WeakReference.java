@@ -9,13 +9,13 @@ import java.lang.ref.ReferenceQueue;
 // KajiLibrary's java.lang.ref.WeakReference — a reference the GC clears as soon as its
 // referent is no longer strongly reachable. The canonical "cache that doesn't keep its
 // entries alive" reference.
-public class WeakReference extends Reference {
+public class WeakReference<T> extends Reference<T> {
 
-    public WeakReference(Object referent) {
+    public WeakReference(T referent) {
         super(referent, null);
     }
 
-    public WeakReference(Object referent, ReferenceQueue queue) {
+    public WeakReference(T referent, ReferenceQueue<? super T> queue) {
         super(referent, queue);
     }
 }

@@ -54,7 +54,7 @@ public interface InvocationHandler {
      * @return the result of the default implementation
      * @throws Throwable whatever the default implementation throws
      */
-    static Object invokeDefault(Object proxy, Method method, Object[] args) throws Throwable {
+    static Object invokeDefault(Object proxy, Method method, Object... args) throws Throwable {
         throw new UnsupportedOperationException("invokeDefault requires java.lang.reflect.Proxy");
     }
 }

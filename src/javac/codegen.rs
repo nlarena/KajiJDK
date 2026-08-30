@@ -600,6 +600,12 @@ fn gen_class(
         cf.methods.push(br);
     }
 
+    // #268: accesores sintéticos para los métodos públicos heredados de una superclase
+    // package-private (que un caller externo no podría invocar por no poder nombrar la super).
+    for fw in accessor_forwarders(&mut cf.pool, table, class, cid) {
+        cf.methods.push(fw);
+    }
+
     cf.bootstrap_methods = bootstraps;
     cf.to_bytes()
 }
@@ -950,6 +956,141 @@ fn emit_bridge(
         parameters: Vec::new(),
         thrown_exceptions: Vec::new(), // un puente no declara `throws`
         line_numbers: Vec::new(),      // sintético: sin líneas de fuente
+        local_vars: Vec::new(),
+        type_annotations: None,
+        code_type_annotations: None,
+        parameter_annotations: None,
+        annotation_default: None,
+    }
+}
+
+/// Los **accesores sintéticos** que exige la forma "clase pública sobre superclase package-private"
+/// (finding #268). Cuando una clase **pública** `C` hereda un método **público** de una superclase
+/// **package-private** `P` y no lo sobrescribe, un llamador de otro paquete no puede **nombrar** `P`,
+/// así que la llamada resuelta fallaría el chequeo de acceso (JVMS 5.4.4) → `IllegalAccessError`.
+/// `javac` lo evita sintetizando en `C` un **forwarder** (`ACC_PUBLIC|ACC_BRIDGE|ACC_SYNTHETIC`) que
+/// reenvía al método real con `invokespecial P.m` (mismo descriptor, sin covarianza).
+///
+/// Es la familia hermana de [`bridge_methods`]: aquellos cubren los métodos que `C` **sí** sobrescribe
+/// (retorno covariante / genérico borrado); éstos, los que `C` **hereda tal cual**. Por eso se saltea
+/// todo `(nombre, params-borrados)` que `C` declara: de ése ya se ocupa el puente. Sólo aplica a una
+/// clase pública con al menos una superclase package-private (el caso `StringBuilder`/`StringBuffer`
+/// sobre `AbstractStringBuilder`); para cualquier otra clase, el bucle no encuentra nada y es no-op.
+fn accessor_forwarders(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    class: &ClassDecl,
+    cid: SymbolId,
+) -> Vec<MethodInfo> {
+    // El problema sólo existe si `C` es **pública** (una clase no-pública ya comparte la
+    // inaccesibilidad de su super, así que no hay nada que exponer).
+    if !class.modifiers.contains(&Modifier::Public) {
+        return Vec::new();
+    }
+    // Lo que `C` declara, por `(nombre, params borrados)`: si está acá, `C` lo sobrescribe y su
+    // puente (o el método mismo) ya lo cubre — no va forwarder.
+    let mut declared: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    for id in table.members_of(cid) {
+        if let Some((ps, _)) = method_sig(table, id) {
+            let pdesc: String =
+                ps.iter().map(|p| rtype_desc(table, &types::erasure(table, p))).collect();
+            declared.insert((table.symbol(id).name.clone(), pdesc));
+        }
+    }
+    let mut out = Vec::new();
+    let mut emitted: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    for sup in types::supertypes_of(table, &RType::Class(cid)) {
+        let Some(pid) = types::erased_id(&sup) else { continue };
+        if pid == cid {
+            continue;
+        }
+        let ps = table.symbol(pid);
+        // Sólo una **clase** (no interfaz/anotación) **package-private** dispara el problema.
+        let is_pkg_priv_class = matches!(&ps.kind, SymbolKind::Class { kind: TypeKind::Class, .. })
+            && !ps.modifiers.contains(&Modifier::Public);
+        if !is_pkg_priv_class {
+            continue;
+        }
+        let p_internal = internal_name(table, pid);
+        for sm in table.members_of(pid) {
+            let m = table.symbol(sm);
+            if !matches!(m.kind, SymbolKind::Method { is_constructor: false, .. }) {
+                continue;
+            }
+            // Público, de instancia y con cuerpo: un `static` no está en la vtable y un `abstract` no
+            // tiene a qué reenviar.
+            if !m.modifiers.contains(&Modifier::Public)
+                || m.modifiers.contains(&Modifier::Static)
+                || m.modifiers.contains(&Modifier::Abstract)
+            {
+                continue;
+            }
+            let name = m.name.clone();
+            let Some((params, ret)) = method_sig(table, sm) else { continue };
+            let eparams: Vec<RType> = params.iter().map(|p| types::erasure(table, p)).collect();
+            let eret = types::erasure(table, &ret);
+            let pdesc: String = eparams.iter().map(|p| rtype_desc(table, p)).collect();
+            if declared.contains(&(name.clone(), pdesc.clone())) {
+                continue; // `C` lo sobrescribe → lo cubre el puente (#233), no un forwarder
+            }
+            let desc = sig_desc(table, &eparams, &eret);
+            if !emitted.insert((name.clone(), desc.clone())) {
+                continue; // ya reenviado desde una super más cercana
+            }
+            out.push(emit_forwarder(pool, table, &p_internal, &name, &eparams, &eret, &desc));
+        }
+    }
+    out
+}
+
+/// Emite un forwarder de #268: `this` + argumentos + `invokespecial P.m` (mismo descriptor) + el
+/// `return` correspondiente. Sin covarianza ⇒ sin `checkcast`; sin saltos ⇒ sin `StackMapTable`.
+fn emit_forwarder(
+    pool: &mut ConstantPool,
+    _table: &SymbolTable,
+    super_internal: &str,
+    name: &str,
+    params: &[RType],
+    ret: &RType,
+    desc: &str,
+) -> MethodInfo {
+    let name_index = pool.utf8(name);
+    let descriptor_index = pool.utf8(desc);
+
+    let mut code = vec![ALOAD_0];
+    let mut slot = 1u16;
+    let mut on_stack = 1u16;
+    for p in params {
+        code.push(ILOAD + cat_offset(p));
+        code.push(slot as u8);
+        slot += cat_width(p);
+        on_stack += cat_width(p);
+    }
+    let max_stack = on_stack.max(cat_width(ret));
+    let target = pool.methodref(super_internal, name, desc);
+    code.push(INVOKESPECIAL);
+    code.push((target >> 8) as u8);
+    code.push(target as u8);
+    if matches!(ret, RType::Void) {
+        code.push(RETURN);
+    } else {
+        code.push(IRETURN + cat_offset(ret));
+    }
+
+    MethodInfo {
+        access_flags: ACC_PUBLIC | ACC_BRIDGE | ACC_SYNTHETIC,
+        name_index,
+        descriptor_index,
+        max_stack,
+        max_locals: slot,
+        code,
+        stack_map: None,
+        exceptions: Vec::new(),
+        annotations: None,
+        signature: None,
+        parameters: Vec::new(),
+        thrown_exceptions: Vec::new(),
+        line_numbers: Vec::new(),
         local_vars: Vec::new(),
         type_annotations: None,
         code_type_annotations: None,
@@ -9812,6 +9953,46 @@ mod tests {
             "falta el puente `Object get()`",
         );
         assert!(has_method(&b, "get", "()Ljava/lang/String;", 0), "falta el `get` real");
+    }
+
+    #[test]
+    fn a_generic_method_infers_its_type_var_through_the_target_with_a_lambda_arg() {
+        // §18.5.2: `make(() -> "x")` sobre `<U> Box<U> make(Sup<U>)` con *target* `Box<String>`.
+        // `U` se fija por el target; el argumento **lambda** —re-atribuido con `Sup<U>` crudo— no debe
+        // aportar un `U = U` espurio que choque con `U = String` (era el falso "restricciones
+        // incompatibles"). Y la lambda tiene que **bajar**: su tipo funcional se instancia a
+        // `Sup<String>` con la `U` ya inferida, si no el emisor no puede resolverla.
+        // Que compile ya ejercita los dos arreglos: la inferencia resuelve `U = String` (sin el falso
+        // conflicto) y el emisor baja la lambda con `Sup<String>` (sin el "no puede resolver `U`"). Si
+        // cualquiera fallara, `compile_units_cp` devolvería `Err`.
+        let src = "interface Sup<U> { U get(); } class Box<U> { } \
+                   class T { static <U> Box<U> make(Sup<U> s) { return null; } \
+                             static Box<String> go() { return make(() -> \"x\"); } }";
+        crate::javac::compile_units_cp(&[src], &[]).expect("compila con la inferencia §18");
+    }
+
+    #[test]
+    fn a_public_class_forwards_public_methods_of_a_package_private_super() {
+        // #268: `Sub3` (**pública**) hereda `len()` de `Base3` (**package-private**) sin
+        // sobrescribirlo. Un llamador de otro paquete no puede nombrar `Base3`, así que la llamada
+        // resuelta fallaría el chequeo de acceso (JVMS 5.4.4). javac sintetiza en `Sub3` un
+        // **forwarder** `len()` (`ACC_BRIDGE ACC_SYNTHETIC`) que reenvía con `invokespecial
+        // Base3.len`. El override covariante `self()` va por el puente de #233, no por acá.
+        let src = "abstract class Base3 { public int len() { return 1; } \
+                   public Base3 self() { return this; } } \
+                   public final class Sub3 extends Base3 { public Sub3 self() { return this; } }";
+        let sub = compiled_class(src, "Sub3");
+        assert!(
+            has_method(&sub, "len", "()I", ACC_BRIDGE | ACC_SYNTHETIC),
+            "falta el forwarder `len()` de #268",
+        );
+        // `self()` sigue teniendo su override real y su puente covariante (#233), no duplicado acá.
+        assert!(has_method(&sub, "self", "()LSub3;", 0), "falta el `self` real");
+        assert!(
+            has_method(&sub, "self", "()LBase3;", ACC_BRIDGE | ACC_SYNTHETIC),
+            "falta el puente covariante de `self`",
+        );
+        verify_all(src, "Sub3");
     }
 
     #[test]

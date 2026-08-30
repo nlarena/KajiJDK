@@ -49,6 +49,7 @@ pub mod jdwp;
 pub mod jvmti;
 
 /// Spins the implementing class a `LambdaMetafactory` call site produces (via the `.class` writer).
+pub mod annotation_factory;
 pub mod lambda_factory;
 
 /// The per-call-site resolution cache the four invoke modules below share (F0 quickening).
@@ -1376,6 +1377,9 @@ impl Exec<'_> {
             .collect();
         for w in joiners {
             self.shared.threads[w].joining_on = None;
+            // A timed `join(long)` joiner also carries a deadline; clear it so the now-runnable
+            // thread isn't re-processed by `wake_sleepers`.
+            self.shared.threads[w].sleep_until = None;
             self.make_runnable(w);
         }
     }
@@ -2492,6 +2496,34 @@ impl Exec<'_> {
         Step::Continue
     }
 
+    /// `Thread.join(long millis)`: like [`Self::thread_join`] but with a deadline. The joiner
+    /// carries **both** a `joining_on` (woken when the target terminates, in
+    /// [`Self::on_thread_terminated`]) and a `sleep_until` (woken when the deadline lapses, in
+    /// [`Self::wake_sleepers`]) — whichever fires first resumes it, and each wake path clears the
+    /// other's flag. `millis == 0` means "wait forever" (delegates to `thread_join`); a negative
+    /// timeout is illegal.
+    fn thread_join_timed(&mut self, target_obj: usize, millis: i64) -> Step {
+        if millis < 0 {
+            return self.throw_exception("java/lang/IllegalArgumentException");
+        }
+        if millis == 0 {
+            return self.thread_join(target_obj);
+        }
+        let current = self.running.current;
+        // Grab the call site *before* advancing, in case an interrupt has to throw from it.
+        self.shared.threads[current].block_call_pc = self.frame().pc();
+        self.advance_past_call(); // resume after join(long) (now, on termination, or at the deadline)
+        let target = self.shared.threads.iter().position(|t| t.thread_obj == target_obj && target_obj != 0);
+        if let Some(idx) = target {
+            if self.shared.threads[idx].status != ThreadStatus::Terminated {
+                self.block(current, ThreadStatus::TimedWaiting);
+                self.shared.threads[current].joining_on = Some(idx);
+                self.shared.threads[current].sleep_until = Some(self.shared.steps + millis as usize);
+            }
+        }
+        Step::Continue
+    }
+
     /// `Thread.getState()`: the scheduler's state for the thread whose `Thread` object is
     /// `thread_obj`, mapped to the matching `Thread.State` constant (returns its heap
     /// offset). The mapping is the whole point of the `ThreadStatus` enum carrying the
@@ -2579,6 +2611,8 @@ impl Exec<'_> {
     /// self-`notify`. (A plain `sleep` has no monitor and just becomes runnable.)
     fn expire_timed_block(&mut self, idx: usize) {
         self.shared.threads[idx].sleep_until = None;
+        // A timed `join(long)` that reaches its deadline stops waiting on its target.
+        self.shared.threads[idx].joining_on = None;
         if self.shared.threads[idx].status == ThreadStatus::Waiting {
             if let Some((obj, _)) = self.shared.threads[idx].wait_reacquire {
                 if let Some(mon) = self.shared.monitors.get_mut(&obj) {

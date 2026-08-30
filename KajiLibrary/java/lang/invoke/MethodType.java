@@ -2,6 +2,7 @@ package java.lang.invoke;
 
 import java.lang.constant.Constable;
 import java.lang.constant.MethodTypeDesc;
+import java.lang.invoke.TypeDescriptor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -21,29 +22,17 @@ import java.util.Optional;
 // an array, so the three cases fall out of the first character. That avoids needing
 // `isPrimitive`/`isArray`/`getComponentType`, none of which our `Class` has yet.
 //
-// OMITTED (subset), and both blocked OUTSIDE this package rather than by anything here:
+// `MethodType implements TypeDescriptor.OfMethod` — the loaded counterpart of the nominal
+// `MethodTypeDesc`, which implements the same interface. The `OfField`-returning views
+// (`returnType`, `parameterType`, `parameterArray`, `dropParameterTypes`) are covariant narrowings
+// to `Class`/`MethodType`, so the compiler synthesises their bridges; the three operations whose
+// parameter is `OfField` rather than `Class` are spelled out below as delegations (a `Class` is the
+// only `OfField` this library hands to a method type). This became possible once `java.lang.Class`
+// began implementing `TypeDescriptor.OfField` and `TypeDescriptor` was modelled raw — both true now.
 //
-//   - `fromMethodDescriptorString(String, ClassLoader)`. The reason is not the one an earlier
-//     revision of this note gave ("it must LOAD each named class"): that would only make the body
-//     a `throw`, which is what every other unimplementable method here already is. The real
-//     blocker is that `java.lang.ClassLoader` DOES NOT EXIST in KajiLibrary, so the parameter type
-//     cannot be spelled at all — `javac` answers *no se encuentra el símbolo: ClassLoader*. One
-//     declaration-only `java/lang/ClassLoader.java` unblocks it.
-//
-//   - the seven `TypeDescriptor.OfMethod` bridge methods. In the JDK this class is
-//     `MethodType implements TypeDescriptor.OfMethod<Class<?>, MethodType>`, and the bridges are
-//     what `javac` emits for that. Two things have to be true before we can emit them, and
-//     neither is: `java.lang.Class` must implement `TypeDescriptor.OfField` (it does not, and it
-//     is not this package's file), and `TypeDescriptor` must be generic — it is deliberately raw
-//     here, to work around #100, which is what makes `parameterType` return `OfField` rather than
-//     the `F` that a bridge would be generated against. They cannot be hand-written either: a
-//     bridge differs from the method it bridges ONLY in return type, which is legal in a class
-//     file and illegal in Java source. Our compiler does emit covariant bridges when the source
-//     is legal, so nothing here is a compiler hole — it is the raw-`TypeDescriptor` workaround
-//     paying its cost, and it comes out when #100 does.
 // `Constable` va por import y nombre simple: una referencia CALIFICADA a un tipo del classpath no
 // resuelve (finding #106a).
-public final class MethodType implements Constable {
+public final class MethodType implements Constable, TypeDescriptor.OfMethod {
 
     private final Class<?> rtype;
     private final Class<?>[] ptypes;
@@ -77,7 +66,7 @@ public final class MethodType implements Constable {
         return new MethodType(rtype, arr);
     }
 
-    public static MethodType methodType(Class<?> rtype, Class<?> ptype0, Class<?>[] ptypes) {
+    public static MethodType methodType(Class<?> rtype, Class<?> ptype0, Class<?>... ptypes) {
         Class<?>[] arr = new Class<?>[1 + ptypes.length];
         arr[0] = ptype0;
         int i = 0;
@@ -116,13 +105,98 @@ public final class MethodType implements Constable {
         return new MethodType(objectClass(), arr);
     }
 
+    /**
+     * Parses a method descriptor (e.g. {@code (ILjava/lang/String;)V}) into a method type,
+     * resolving each named class through {@code loader} (or the system loader when it is null).
+     *
+     * @throws IllegalArgumentException if the descriptor is malformed or a named class is absent
+     */
+    public static MethodType fromMethodDescriptorString(String descriptor, ClassLoader loader) {
+        int close = descriptor.lastIndexOf(')');
+        if (descriptor.length() < 2 || descriptor.charAt(0) != '(' || close < 0) {
+            throw new IllegalArgumentException("not a method descriptor: " + descriptor);
+        }
+        String params = descriptor.substring(1, close);
+        Class<?> rtype = classForDescriptor(descriptor.substring(close + 1), loader);
+        List<Class<?>> ptypes = new ArrayList<Class<?>>();
+        int i = 0;
+        while (i < params.length()) {
+            int start = i;
+            while (params.charAt(i) == '[') {
+                i = i + 1;
+            }
+            if (params.charAt(i) == 'L') {
+                while (params.charAt(i) != ';') {
+                    i = i + 1;
+                }
+            }
+            i = i + 1;
+            ptypes.add(classForDescriptor(params.substring(start, i), loader));
+        }
+        Class<?>[] arr = new Class<?>[ptypes.size()];
+        int j = 0;
+        while (j < arr.length) {
+            arr[j] = ptypes.get(j);
+            j = j + 1;
+        }
+        return new MethodType(rtype, arr);
+    }
+
+    // Resolves one field descriptor to its `Class`. Primitives come from the boxes' `TYPE` mirror
+    // (the only source-level handle on a primitive `Class` here); references and arrays load by
+    // name through the loader.
+    private static Class<?> classForDescriptor(String desc, ClassLoader loader) {
+        char c = desc.charAt(0);
+        if (c == 'L') {
+            return classByName(swap(desc.substring(1, desc.length() - 1), '/', '.'), loader);
+        }
+        if (c == '[') {
+            return classByName(swap(desc, '/', '.'), loader);
+        }
+        return primitiveClass(c);
+    }
+
+    private static Class<?> classByName(String binary, ClassLoader loader) {
+        try {
+            if (loader == null) {
+                return Class.forName(binary);
+            }
+            return loader.loadClass(binary);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException("cannot resolve " + binary);
+        }
+    }
+
+    private static Class<?> primitiveClass(char tag) {
+        if (tag == 'I') {
+            return Integer.TYPE;
+        } else if (tag == 'J') {
+            return Long.TYPE;
+        } else if (tag == 'D') {
+            return Double.TYPE;
+        } else if (tag == 'F') {
+            return Float.TYPE;
+        } else if (tag == 'S') {
+            return Short.TYPE;
+        } else if (tag == 'B') {
+            return Byte.TYPE;
+        } else if (tag == 'C') {
+            return Character.TYPE;
+        } else if (tag == 'Z') {
+            return Boolean.TYPE;
+        } else if (tag == 'V') {
+            return Void.TYPE;
+        }
+        throw new IllegalArgumentException("bad descriptor char: " + tag);
+    }
+
     public MethodType changeParameterType(int num, Class<?> nptype) {
         Class<?>[] arr = copy(ptypes);
         arr[num] = nptype;
         return new MethodType(rtype, arr);
     }
 
-    public MethodType insertParameterTypes(int num, Class<?>[] ptypesToInsert) {
+    public MethodType insertParameterTypes(int num, Class<?>... ptypesToInsert) {
         Class<?>[] arr = new Class<?>[ptypes.length + ptypesToInsert.length];
         int to = 0;
         int i = 0;
@@ -145,7 +219,7 @@ public final class MethodType implements Constable {
         return new MethodType(rtype, arr);
     }
 
-    public MethodType appendParameterTypes(Class<?>[] ptypesToInsert) {
+    public MethodType appendParameterTypes(Class<?>... ptypesToInsert) {
         return insertParameterTypes(ptypes.length, ptypesToInsert);
     }
 
@@ -179,6 +253,29 @@ public final class MethodType implements Constable {
 
     public MethodType changeReturnType(Class<?> nrtype) {
         return new MethodType(nrtype, copy(ptypes));
+    }
+
+    // ---- TypeDescriptor.OfMethod operations whose parameter is the interface `OfField` rather
+    // than `Class`. The covariant-return views (returnType, parameterType, parameterArray,
+    // dropParameterTypes) are bridged by the compiler; these three delegate, since the only
+    // `OfField` a method type ever receives here is a `Class`.
+
+    public TypeDescriptor.OfMethod changeReturnType(TypeDescriptor.OfField newReturn) {
+        return changeReturnType((Class<?>) newReturn);
+    }
+
+    public TypeDescriptor.OfMethod changeParameterType(int num, TypeDescriptor.OfField newType) {
+        return changeParameterType(num, (Class<?>) newType);
+    }
+
+    public TypeDescriptor.OfMethod insertParameterTypes(int num, TypeDescriptor.OfField[] typesToInsert) {
+        Class<?>[] arr = new Class<?>[typesToInsert.length];
+        int i = 0;
+        while (i < typesToInsert.length) {
+            arr[i] = (Class<?>) typesToInsert[i];
+            i = i + 1;
+        }
+        return insertParameterTypes(num, arr);
     }
 
     public boolean hasPrimitives() {

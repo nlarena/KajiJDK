@@ -152,6 +152,15 @@ public final class ConstantDescs {
     public static final DirectMethodHandleDesc BSM_CLASS_DATA_AT =
             ConstantDescs.ofConstantBootstrap(CD_MethodHandles, "classDataAt", CD_Object, CD_int);
 
+    /**
+     * A descriptor for {@code MethodHandle.asType(MethodType)} — the virtual method that adapts a
+     * handle to a new type. It rides along here because an {@code invokedynamic}'s bootstrap may
+     * need to name it to reshape the handle it produces.
+     */
+    static final DirectMethodHandleDesc MHD_METHODHANDLE_ASTYPE =
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.VIRTUAL, CD_MethodHandle, "asType",
+                    MethodTypeDesc.of(CD_MethodHandle, CD_MethodType));
+
     // The three constants built from the recipes above. Declared after them and not before, and
     // that is load-bearing rather than tidy: static initialisers run in TEXTUAL order, so a
     // forward reference here would read a null and store it forever.

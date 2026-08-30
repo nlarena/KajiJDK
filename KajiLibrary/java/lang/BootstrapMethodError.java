@@ -15,4 +15,8 @@ public class BootstrapMethodError extends LinkageError {
     public BootstrapMethodError(String message, Throwable cause) {
         super(message, cause);
     }
+
+    public BootstrapMethodError(Throwable cause) {
+        super(cause == null ? null : cause.toString(), cause);
+    }
 }

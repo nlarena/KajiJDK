@@ -3,13 +3,19 @@ package java.lang;
 // Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
 // (finding #210).
 import java.lang.constant.ClassDesc;
+import java.lang.reflect.AccessFlag;
+import java.lang.reflect.AnnotatedType;
+import java.lang.reflect.AnnotatedTypeImpl;
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
+import java.security.ProtectionDomain;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * KajiLibrary's java.lang.Class -- the runtime mirror of a type.
@@ -37,7 +43,7 @@ import java.util.Optional;
  * every method that was native for convenience rather than necessity also differed from the
  * reference in its modifiers.
  */
-public final class Class<T> implements Type {
+public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfField {
 
     // Only the VM constructs mirrors -- as in the JDK, whose constructor is private and called
     // from native code. Private also suppresses the synthesized public default one.
@@ -128,6 +134,11 @@ public final class Class<T> implements Type {
 
     private native boolean annotationPresent0(Class<?> annotationClass);
 
+    // Materialises this class's directly-present RUNTIME annotations as objects. The VM spins one
+    // class per annotation implementing its @interface (element methods return the values written at
+    // the use site, or the @interface's defaults) and allocates an instance. No @Inherited walk.
+    private native java.lang.annotation.Annotation[] declaredAnnotations0();
+
     private static native Class<?> forName0(String name);
 
     // The mirror of a PRIMITIVE type, by its keyword. Package-private and native, exactly as the
@@ -140,6 +151,15 @@ public final class Class<T> implements Type {
     /** The Java language modifiers, as a bitmask for {@link java.lang.reflect.Modifier}. */
     public int getModifiers() {
         return this.modifiers0();
+    }
+
+    /**
+     * This class's access flags as a set of {@link AccessFlag}, resolved at the {@code CLASS}
+     * location — the symbolic form of the {@code access_flags} the {@link #getModifiers() modifier}
+     * bits encode.
+     */
+    public Set<AccessFlag> accessFlags() {
+        return AccessFlag.maskToAccessFlags(this.getModifiers(), AccessFlag.Location.CLASS);
     }
 
     /** Whether this type is an interface. An annotation type is one too. */
@@ -315,6 +335,35 @@ public final class Class<T> implements Type {
             return "";
         }
         return binary.substring(0, cut).replace('/', '.');
+    }
+
+    /**
+     * The {@link Package} this class belongs to. Built from {@link #getPackageName()}; carries no
+     * manifest attributes, because KajiJDK loads classes from directories, not versioned JARs.
+     */
+    public Package getPackage() {
+        return new Package(getPackageName());
+    }
+
+    /**
+     * The {@link Module} this class belongs to. KajiJDK has no module system, so every class is in
+     * its loader's single, permissive unnamed module.
+     */
+    public Module getModule() {
+        return new Module(getClassLoader());
+    }
+
+    // Package-private internal the reference exposes: the raw `RuntimeVisibleTypeAnnotations` bytes
+    // for a member. KajiLibrary does not model type annotations, so there are none to hand back.
+    static byte[] getExecutableTypeAnnotationBytes(java.lang.reflect.Executable ex) {
+        return null;
+    }
+
+    // Package-private internal: the bounds clause of a type variable, as `toGenericString` would
+    // render it. Reduced to the variable's name here — the bounds are erased in this library's
+    // generic model, so there is nothing beyond the name to print.
+    static String typeVarBounds(java.lang.reflect.TypeVariable<?> typeVar) {
+        return typeVar.getName();
     }
 
     /** {@code "class java.lang.String"}, {@code "interface java.lang.Runnable"}, {@code "int"}. */
@@ -504,6 +553,24 @@ public final class Class<T> implements Type {
     public static Class<?> forName(String name, boolean initialize, ClassLoader loader)
             throws ClassNotFoundException {
         return Class.forName(name);
+    }
+
+    /**
+     * The class {@code name} in {@code module}, or {@code null} if there is none — this overload
+     * reports absence with {@code null} rather than an exception. The module is ignored: with a
+     * single unnamed module over one class path, naming one cannot change which class is found.
+     *
+     * @param module the module to search (ignored)
+     * @param name the binary name, with dots
+     */
+    public static Class<?> forName(Module module, String name) {
+        Class<?> found;
+        try {
+            found = Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            found = null;
+        }
+        return found;
     }
 
     /**
@@ -949,6 +1016,39 @@ public final class Class<T> implements Type {
         return out;
     }
 
+    /**
+     * The annotated use of this class's superclass, or {@code null} when there is none (this class is
+     * {@code Object}, an interface, a primitive, {@code void} or an array). No type annotations are
+     * modelled, so it wraps the plain superclass.
+     */
+    public AnnotatedType getAnnotatedSuperclass() {
+        Type superclass = this.getGenericSuperclass();
+        if (superclass == null) {
+            return null;
+        }
+        return new AnnotatedTypeImpl(superclass);
+    }
+
+    /** The annotated uses of this class's directly-implemented interfaces. */
+    public AnnotatedType[] getAnnotatedInterfaces() {
+        Type[] ifaces = this.getGenericInterfaces();
+        AnnotatedType[] out = new AnnotatedType[ifaces.length];
+        int i = 0;
+        while (i < ifaces.length) {
+            out[i] = new AnnotatedTypeImpl(ifaces[i]);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /**
+     * This class's protection domain. KajiJDK does not enforce access control, so every class shares
+     * one domain keyed by its (bootstrap) class loader.
+     */
+    public java.security.ProtectionDomain getProtectionDomain() {
+        return new ProtectionDomain(this.getClassLoader());
+    }
+
     // ---- three that answer without a table ----
 
     /**
@@ -1001,6 +1101,71 @@ public final class Class<T> implements Type {
     public boolean isAnnotationPresent(Class<? extends java.lang.annotation.Annotation>
             annotationClass) {
         return this.annotationPresent0(annotationClass);
+    }
+
+    // ---- reading annotations as objects (JSR 175 reflection) ----
+    //
+    // `isAnnotationPresent` above answers presence; these hand the annotation back as an OBJECT of
+    // the @interface type. The VM does the materialisation (`declaredAnnotations0`, one spun class
+    // per annotation); the filtering by type is plain Java here. There is no @Inherited walk up the
+    // superclass chain, so the "declared" and the plain forms return the same set -- matching what
+    // `isAnnotationPresent` already reports. equals/hashCode/toString on the returned objects are
+    // Object's (identity), not the value-based equality the spec asks for: a documented limit of
+    // this subset. Element values that are themselves nested annotations come back as null.
+
+    /** This class's directly-present annotations, as objects; empty if none. */
+    public java.lang.annotation.Annotation[] getAnnotations() {
+        return this.declaredAnnotations0();
+    }
+
+    /** The same set as {@link #getAnnotations()} — no @Inherited walk distinguishes them here. */
+    public java.lang.annotation.Annotation[] getDeclaredAnnotations() {
+        return this.declaredAnnotations0();
+    }
+
+    /**
+     * This class's annotation of type {@code annotationClass}, or {@code null} if not present.
+     *
+     * @throws NullPointerException if {@code annotationClass} is null
+     */
+    public <A extends java.lang.annotation.Annotation> A getAnnotation(Class<A> annotationClass) {
+        if (annotationClass == null) {
+            throw new NullPointerException();
+        }
+        java.lang.annotation.Annotation[] all = this.declaredAnnotations0();
+        int i = 0;
+        while (i < all.length) {
+            if (all[i].annotationType() == annotationClass) {
+                return (A) all[i];
+            }
+            i = i + 1;
+        }
+        return null;
+    }
+
+    /** Directly-present only; the same as {@link #getAnnotation} here (no @Inherited walk). */
+    public <A extends java.lang.annotation.Annotation> A getDeclaredAnnotation(Class<A> annotationClass) {
+        return this.getAnnotation(annotationClass);
+    }
+
+    /**
+     * This class's annotations of type {@code annotationClass}. For a non-{@code @Repeatable}
+     * annotation this is the one present (or an empty array); container unwrapping for repeatable
+     * annotations is not modelled in this subset.
+     */
+    public <A extends java.lang.annotation.Annotation> A[] getAnnotationsByType(Class<A> annotationClass) {
+        A single = this.getAnnotation(annotationClass);
+        int n = single == null ? 0 : 1;
+        A[] array = (A[]) Array.newInstance(annotationClass, n);
+        if (single != null) {
+            array[0] = single;
+        }
+        return array;
+    }
+
+    /** Directly-present only; the same as {@link #getAnnotationsByType} here (no @Inherited walk). */
+    public <A extends java.lang.annotation.Annotation> A[] getDeclaredAnnotationsByType(Class<A> annotationClass) {
+        return this.getAnnotationsByType(annotationClass);
     }
 
     // ---- where this type was declared ----
@@ -1225,5 +1390,28 @@ public final class Class<T> implements Type {
      */
     public boolean desiredAssertionStatus() {
         return ClassLoader.getSystemClassLoader().assertionStatusOf(this.getName());
+    }
+
+    // ---- classpath resources ----
+    //
+    // El JDK busca el recurso por el classpath a traves del ClassLoader. KajiJDK no tiene carga de
+    // recursos (no hay un classpath de datos que recorrer), asi que la busqueda no encuentra nada y
+    // devuelve `null` -- que es exactamente el resultado que el contrato define para "no hallado".
+    // No es un placeholder: para toda entrada, el resultado honesto aqui es "no hay tal recurso".
+
+    /**
+     * Find the resource named {@code name} on the class path, as a {@link java.net.URL} — always
+     * {@code null} here: KajiJDK carries no class-path resources, so nothing is ever found.
+     */
+    public java.net.URL getResource(String name) {
+        return null;
+    }
+
+    /**
+     * Open the resource named {@code name} for reading — always {@code null} here, for the same
+     * reason as {@link #getResource(String)}: there are no class-path resources to open.
+     */
+    public java.io.InputStream getResourceAsStream(String name) {
+        return null;
     }
 }

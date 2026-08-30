@@ -33,7 +33,7 @@ public final class LambdaMetafactory {
     }
 
     public static CallSite altMetafactory(MethodHandles$Lookup caller, String interfaceMethodName,
-            MethodType factoryType, Object[] args) throws LambdaConversionException {
+            MethodType factoryType, Object... args) throws LambdaConversionException {
         throw new UnsupportedOperationException("lambda linkage is done by the VM, not the library");
     }
 }

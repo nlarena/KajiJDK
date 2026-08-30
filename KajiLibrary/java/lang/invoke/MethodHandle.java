@@ -35,14 +35,14 @@ public abstract class MethodHandle implements Constable {
 
     // Signature-polymorphic — see above. `invokeExact` requires the call site's descriptor to
     // match the handle's type EXACTLY; `invoke` allows the same conversions an assignment would.
-    public final native Object invokeExact(Object[] args) throws Throwable;
+    public final native Object invokeExact(Object... args) throws Throwable;
 
-    public final native Object invoke(Object[] args) throws Throwable;
+    public final native Object invoke(Object... args) throws Throwable;
 
     // The reflective escape hatch: ordinary arity, arguments boxed, conversions applied. Being a
     // normal method, it is the one form of invocation a library could implement — given a way to
     // execute the underlying member, which is the part that is missing.
-    public Object invokeWithArguments(Object[] args) throws Throwable {
+    public Object invokeWithArguments(Object... args) throws Throwable {
         throw new UnsupportedOperationException("no method handle execution without VM support");
     }
 

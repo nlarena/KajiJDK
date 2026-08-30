@@ -2,8 +2,14 @@ package java.lang;
 
 // Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
 // (finding #210).
+import java.io.InputStream;
+import java.io.IOException;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.security.ProtectionDomain;
+import java.util.Enumeration;
+import java.util.NoSuchElementException;
+import java.util.stream.Stream;
 
 /**
  * KajiLibrary's java.lang.ClassLoader.
@@ -19,13 +25,14 @@ import java.security.ProtectionDomain;
  * loaded type out, with no file anywhere. That is the only way a type enters the VM without
  * coming off the classpath, and it is what a bytecode generator needs.
  *
- * <p><strong>What is missing and why.</strong> Every resource method ({@code getResource},
- * {@code getResourceAsStream}, {@code getResources}, {@code resources} and their static twins) and
- * every package method ({@code getPackage}, {@code definePackage}, {@code getDefinedPackages})
- * needs machinery that does not exist yet -- reading a non-class file off the classpath, and
- * {@code java.lang.Package}. {@code getUnnamedModule} needs {@code java.lang.Module}. Those
- * members are absent rather than answering null, because a {@code getResource} that always missed
- * would be indistinguishable from a resource that is not there.
+ * <p><strong>Resources, packages, module.</strong> The resource methods ({@code getResource},
+ * {@code getResourceAsStream}, {@code getResources}, {@code resources} and their static twins)
+ * degrade honestly: KajiJDK serves classes, not co-located resource files, so every lookup misses
+ * -- a stream is null, an enumeration or stream of URLs is empty -- exactly as the real loader
+ * answers for a resource that is not present. The package methods ({@code getDefinedPackage},
+ * {@code getDefinedPackages}) find nothing because the single loader keeps no package registry;
+ * {@link Class#getPackage()} still mints a {@link Package} on demand. {@link #getUnnamedModule()}
+ * is real -- it returns the one {@link Module} every class this loader defines belongs to.
  */
 public class ClassLoader {
 
@@ -106,6 +113,87 @@ public class ClassLoader {
      */
     public static ClassLoader getPlatformClassLoader() {
         return ClassLoader.THE_LOADER;
+    }
+
+    // ---- module ----
+
+    // This loader's unnamed module, minted once. Every class this loader defines belongs to it,
+    // which is what {@link Class#getModule()} reports for a class with no named module.
+    private Module unnamedModule;
+
+    /** The unnamed {@link Module} of this loader — the module every class it defines belongs to. */
+    public final Module getUnnamedModule() {
+        if (this.unnamedModule == null) {
+            this.unnamedModule = new Module(this);
+        }
+        return this.unnamedModule;
+    }
+
+    // ---- packages ----
+    //
+    // KajiJDK does not track which packages a loader has defined (there is no `definePackage`
+    // bookkeeping behind the single loader), so a specific lookup finds nothing and the set is
+    // empty. `Class.getPackage()` still mints a `Package` on demand from a loaded class's name;
+    // these two answer the loader-centric question, which here has no state to answer from.
+
+    /**
+     * The {@link Package} of the given name defined by this loader, or {@code null}. None are
+     * tracked here, so this is always {@code null}.
+     *
+     * @param name the package name; the empty string for the default package
+     * @throws NullPointerException if {@code name} is null
+     */
+    public final Package getDefinedPackage(String name) {
+        if (name == null) {
+            throw new NullPointerException("name");
+        }
+        return null;
+    }
+
+    /** The packages defined by this loader — none are tracked, so this is empty. */
+    public final Package[] getDefinedPackages() {
+        return new Package[0];
+    }
+
+    // ---- resources ----
+    //
+    // KajiJDK serves classes off the class path, not co-located resource files, so every resource
+    // lookup honestly misses: a stream is {@code null}, an enumeration or stream of URLs is empty.
+    // This is the same answer the real loader gives for a resource that is simply not present.
+
+    /** The resource of this name, or {@code null} — no non-class resources are served. */
+    public URL getResource(String name) {
+        return null;
+    }
+
+    /** A stream for the resource of this name, or {@code null} — none are served. */
+    public InputStream getResourceAsStream(String name) {
+        return null;
+    }
+
+    /** Every resource of this name — an empty enumeration, as none are served. */
+    public Enumeration<URL> getResources(String name) throws IOException {
+        return new EmptyEnumeration();
+    }
+
+    /** Every resource of this name as a stream — empty, as none are served. */
+    public Stream<URL> resources(String name) {
+        return Stream.empty();
+    }
+
+    /** A system resource of this name, or {@code null} — none are served. */
+    public static URL getSystemResource(String name) {
+        return THE_LOADER.getResource(name);
+    }
+
+    /** A stream for a system resource of this name, or {@code null} — none are served. */
+    public static InputStream getSystemResourceAsStream(String name) {
+        return THE_LOADER.getResourceAsStream(name);
+    }
+
+    /** Every system resource of this name — an empty enumeration, as none are served. */
+    public static Enumeration<URL> getSystemResources(String name) throws IOException {
+        return THE_LOADER.getResources(name);
     }
 
     // ---- finding a type ----
@@ -437,11 +525,17 @@ public class ClassLoader {
         return bestValue;
     }
 
-    /** {@code "app"} or the loader's name, which is what the JDK prints. */
-    public String toString() {
-        if (this.name == null) {
-            return super.toString();
-        }
-        return this.name;
+}
+
+// The empty enumeration the resource lookups hand back. Package-private and with no JDK
+// counterpart, so it is part of no surface but this file's; raw to match the library's model.
+final class EmptyEnumeration implements Enumeration<URL> {
+
+    public boolean hasMoreElements() {
+        return false;
+    }
+
+    public URL nextElement() {
+        throw new NoSuchElementException();
     }
 }

@@ -12,4 +12,14 @@ public abstract class Record {
 
     protected Record() {
     }
+
+    // Re-declared abstract (they are already concrete on Object) so that a record MUST supply them —
+    // which its compiler-synthesized versions do. The declarations are the contract; the bodies live
+    // in each record class.
+
+    public abstract boolean equals(Object obj);
+
+    public abstract int hashCode();
+
+    public abstract String toString();
 }

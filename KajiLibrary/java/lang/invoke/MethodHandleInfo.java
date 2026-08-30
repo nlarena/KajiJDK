@@ -41,7 +41,7 @@ public interface MethodHandleInfo {
     // handle was made from. The `Lookup` parameter is not decoration — cracking a handle open
     // hands back a member that the caller may not be allowed to touch, so the access check that
     // making the handle required has to be paid again here.
-    Member reflectAs(Class<?> expected, MethodHandles$Lookup lookup);
+    <T extends Member> T reflectAs(Class<T> expected, MethodHandles$Lookup lookup);
 
     int getModifiers();
 

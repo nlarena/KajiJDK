@@ -53,6 +53,100 @@ pub fn type_descriptors(cf: &ClassFile, info: &[u8]) -> Vec<String> {
     parse(info).iter().filter_map(|a| cf.utf8(a.type_index).map(str::to_string)).collect()
 }
 
+// ---- resolved form, for runtime reflection (Class.getAnnotation & friends) ----
+//
+// `type_descriptors` above answers *presence*. To hand an annotation back as an OBJECT the VM has
+// to know every element's VALUE, with the constant-pool indices already dereferenced against the
+// class that carries the annotation. `resolve` produces exactly that: a plain tree the annotation
+// factory bakes into a synthetic class implementing the @interface. Only the elements written at
+// the use site appear here; the @interface's defaults are merged in by the caller (see
+// `resolve_default`).
+
+/// A fully-resolved annotation element value — every constant-pool index already dereferenced.
+#[derive(Clone)]
+pub enum ResolvedValue {
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    Short(i16),
+    Byte(i8),
+    Char(u16),
+    Bool(bool),
+    Str(String),
+    /// An enum constant: `type_descriptor` is `Lpkg/E;`, `const_name` the field.
+    Enum { type_descriptor: String, const_name: String },
+    /// A class literal, by field descriptor (`Lpkg/T;`, `[I`, `I`, …).
+    Class { descriptor: String },
+    Array(Vec<ResolvedValue>),
+    Nested(Box<ResolvedAnnotation>),
+}
+
+/// A resolved annotation: its type descriptor and the (element-name, value) pairs written at the
+/// use site, in file order.
+#[derive(Clone)]
+pub struct ResolvedAnnotation {
+    pub type_descriptor: String,
+    pub elements: Vec<(String, ResolvedValue)>,
+}
+
+/// Resolve every annotation in an annotations-attribute `info` body against `cf`'s constant pool.
+pub fn resolve(cf: &ClassFile, info: &[u8]) -> Vec<ResolvedAnnotation> {
+    parse(info).iter().filter_map(|a| resolve_annotation_value(cf, a)).collect()
+}
+
+/// The default value of one @interface element, from its `AnnotationDefault` attribute body (a
+/// single `element_value`), resolved against the @interface's own pool.
+pub fn resolve_default(cf: &ClassFile, info: &[u8]) -> Option<ResolvedValue> {
+    let mut r = ClassReader::new(info);
+    let v = parse_element_value(&mut r)?;
+    resolve_value_tree(cf, &v)
+}
+
+fn resolve_annotation_value(cf: &ClassFile, a: &Annotation) -> Option<ResolvedAnnotation> {
+    let type_descriptor = cf.utf8(a.type_index)?.to_string();
+    let mut elements = Vec::with_capacity(a.pairs.len());
+    for (name_idx, v) in &a.pairs {
+        let name = cf.utf8(*name_idx)?.to_string();
+        elements.push((name, resolve_value_tree(cf, v)?));
+    }
+    Some(ResolvedAnnotation { type_descriptor, elements })
+}
+
+fn resolve_value_tree(cf: &ClassFile, v: &ElementValue) -> Option<ResolvedValue> {
+    Some(match v {
+        ElementValue::Const { tag, index } => match tag {
+            b'I' => ResolvedValue::Int(cf.integer_constant(*index)?),
+            b'S' => ResolvedValue::Short(cf.integer_constant(*index)? as i16),
+            b'B' => ResolvedValue::Byte(cf.integer_constant(*index)? as i8),
+            b'C' => ResolvedValue::Char(cf.integer_constant(*index)? as u16),
+            b'Z' => ResolvedValue::Bool(cf.integer_constant(*index)? != 0),
+            b'J' => ResolvedValue::Long(cf.long_constant(*index)?),
+            b'F' => ResolvedValue::Float(cf.float_constant(*index)?),
+            b'D' => ResolvedValue::Double(cf.double_constant(*index)?),
+            b's' => ResolvedValue::Str(cf.utf8(*index)?.to_string()),
+            _ => return None,
+        },
+        ElementValue::Enum { type_name, const_name } => ResolvedValue::Enum {
+            type_descriptor: cf.utf8(*type_name)?.to_string(),
+            const_name: cf.utf8(*const_name)?.to_string(),
+        },
+        ElementValue::Class { index } => {
+            ResolvedValue::Class { descriptor: cf.utf8(*index)?.to_string() }
+        }
+        ElementValue::Array(vs) => {
+            let mut items = Vec::with_capacity(vs.len());
+            for e in vs {
+                items.push(resolve_value_tree(cf, e)?);
+            }
+            ResolvedValue::Array(items)
+        }
+        ElementValue::Nested(a) => {
+            ResolvedValue::Nested(Box::new(resolve_annotation_value(cf, a)?))
+        }
+    })
+}
+
 fn parse_annotation(r: &mut ClassReader) -> Option<Annotation> {
     let type_index = r.read_u16().ok()?;
     let n = r.read_u16().ok()?;
