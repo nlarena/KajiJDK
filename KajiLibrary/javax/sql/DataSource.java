@@ -1,25 +1,37 @@
 package javax.sql;
 
-// KajiLibrary's javax.sql.DataSource (finding #267).
-//
-// It exists because the API needs the TYPE: `jakarta.persistence.spi.PersistenceUnitInfo`
-// declares `getJtaDataSource()` and `getNonJtaDataSource()` returning one, and without the
-// interface the file does not compile. That is the honest scope of this interface today.
-//
-// It is EMPTY on purpose, and that is the interesting part. In the JDK a DataSource is a factory
-// for `java.sql.Connection`:
-//
-//     Connection getConnection() throws SQLException;
-//     Connection getConnection(String username, String password) throws SQLException;
-//
-// and it extends `CommonDataSource` (login timeout, log writer) and `Wrapper` (unwrap). None of
-// those types exist here -- there is no java.sql at all -- so every method would have to name a
-// type that is not there. Declaring them against invented stand-ins would be worse than not
-// declaring them: the signature is the contract, and a `getConnection()` that returned some other
-// Connection is not the method the caller compiled against.
-//
-// So this is a marker: enough to name the type in a signature, and nothing that pretends to work.
-// The day java.sql exists, the methods come with it. A missing member is a legal subset; a member
-// that lies is not.
-public interface DataSource {
+/**
+ * KajiLibrary's javax.sql.DataSource -- de donde salen las conexiones.
+ *
+ * <p>Es **la** manera de obtener una conexion en cualquier aplicacion que no sea un ejemplo: en vez
+ * de que el codigo sepa la URL, el usuario y la clave, sabe pedirle una conexion a un objeto que
+ * alguien mas configuro. Eso es lo que permite que la misma aplicacion hable con una base distinta
+ * sin recompilarse, y que las conexiones vengan de un pool sin que quien las usa se entere.
+ *
+ * <p>La nota que estaba aca decia que la interfaz quedaba **vacia** porque `java.sql` no existia, y
+ * que "el dia que exista, los metodos vienen con el". Existe -- un nucleo acotado, ver
+ * {@link java.sql.Connection} -- y los metodos vinieron.
+ *
+ * <p>Que se declare sin que haya ningun driver no es una promesa vacia: una interfaz es un contrato,
+ * y el contrato es exacto. Lo que no habria que hacer es dar una implementacion que finja conectarse.
+ */
+public interface DataSource extends CommonDataSource, java.sql.Wrapper {
+
+    /** Una conexion, con las credenciales que la fuente tenga configuradas. */
+    java.sql.Connection getConnection() throws java.sql.SQLException;
+
+    /** Una conexion con esas credenciales. */
+    java.sql.Connection getConnection(String username, String password)
+            throws java.sql.SQLException;
+
+    /**
+     * Un constructor de conexion, para pedir una con mas datos que usuario y clave.
+     *
+     * <p>Se niega por defecto en vez de devolver un constructor que despues no sirva: una fuente que
+     * no sabe de particiones no puede honrar un `shardingKey`, y descubrirlo al final es peor que al
+     * principio.
+     */
+    default java.sql.ConnectionBuilder createConnectionBuilder() throws java.sql.SQLException {
+        throw new UnsupportedOperationException("createConnectionBuilder no esta implementado");
+    }
 }
