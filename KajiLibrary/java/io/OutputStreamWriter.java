@@ -48,11 +48,11 @@ public class OutputStreamWriter extends Writer {
         return this.charset.name();
     }
 
-    public void write(int c) {
+    public void write(int c) throws IOException {
         this.out.write(c & 0xFF);
     }
 
-    public void write(char[] cbuf, int off, int len) {
+    public void write(char[] cbuf, int off, int len) throws IOException {
         int i = 0;
         while (i < len) {
             this.out.write(cbuf[off + i] & 0xFF);
@@ -60,7 +60,7 @@ public class OutputStreamWriter extends Writer {
         }
     }
 
-    public void write(String str, int off, int len) {
+    public void write(String str, int off, int len) throws IOException {
         int i = 0;
         while (i < len) {
             this.out.write(str.charAt(off + i) & 0xFF);
@@ -68,21 +68,21 @@ public class OutputStreamWriter extends Writer {
         }
     }
 
-    public void flush() {
+    public void flush() throws IOException {
         this.out.flush();
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.out.close();
     }
 
-    public Writer append(CharSequence csq) {
+    public Writer append(CharSequence csq) throws IOException {
         String s = csq == null ? "null" : csq.toString();
         write(s, 0, s.length());
         return this;
     }
 
-    public Writer append(CharSequence csq, int start, int end) {
+    public Writer append(CharSequence csq, int start, int end) throws IOException {
         CharSequence cs = csq == null ? "null" : csq;
         String s = cs.subSequence(start, end).toString();
         write(s, 0, s.length());

@@ -34,7 +34,7 @@ public class PushbackReader extends FilterReader {
         this.pos = 1;
     }
 
-    public int read() {
+    public int read() throws IOException {
         if (this.pos < this.buf.length) {
             char c = this.buf[this.pos];
             this.pos = this.pos + 1;
@@ -43,7 +43,7 @@ public class PushbackReader extends FilterReader {
         return this.in.read();
     }
 
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         if (len <= 0) {
             return 0;
         }
@@ -73,7 +73,7 @@ public class PushbackReader extends FilterReader {
     }
 
     // Unchecked rather than the JDK's IOException — see PushbackInputStream.unread.
-    public void unread(int c) {
+    public void unread(int c) throws IOException {
         if (this.pos == 0) {
             throw new IllegalStateException("pushback buffer overflow");
         }
@@ -81,7 +81,7 @@ public class PushbackReader extends FilterReader {
         this.buf[this.pos] = (char) c;
     }
 
-    public void unread(char[] cbuf, int off, int len) {
+    public void unread(char[] cbuf, int off, int len) throws IOException {
         if (len > this.pos) {
             throw new IllegalStateException("pushback buffer overflow");
         }
@@ -89,13 +89,13 @@ public class PushbackReader extends FilterReader {
         System.arraycopy(cbuf, off, this.buf, this.pos, len);
     }
 
-    public void unread(char[] cbuf) {
+    public void unread(char[] cbuf) throws IOException {
         this.unread(cbuf, 0, cbuf.length);
     }
 
     // Anything pushed back is by definition available without blocking; only when the
     // pushback area is empty does the question reach the wrapped Reader.
-    public boolean ready() {
+    public boolean ready() throws IOException {
         if (this.pos < this.buf.length) {
             return true;
         }
@@ -108,17 +108,17 @@ public class PushbackReader extends FilterReader {
         return false;
     }
 
-    public void mark(int readAheadLimit) {
+    public void mark(int readAheadLimit) throws IOException {
         throw new UnsupportedOperationException("mark/reset not supported");
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         throw new UnsupportedOperationException("mark/reset not supported");
     }
 
     // Routed through read() so that pushed-back characters are skipped before the source
     // is touched — skipping straight on `in` would leave them stranded in front.
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         long remaining = n;
         boolean atEnd = false;
         while (remaining > 0L && !atEnd) {
@@ -131,7 +131,7 @@ public class PushbackReader extends FilterReader {
         return n - remaining;
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.buf = null;
         this.in.close();
     }

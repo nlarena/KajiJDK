@@ -57,7 +57,7 @@ public class CharArrayWriter extends Writer {
     // Replay everything collected into another Writer. This is the composition point: it
     // takes a Writer, so the accumulated text can be poured into a buffered writer, a
     // print writer, or another CharArrayWriter without this class knowing which.
-    public void writeTo(Writer out) {
+    public void writeTo(Writer out) throws IOException {
         out.write(this.buf, 0, this.count);
     }
 

@@ -7,5 +7,5 @@ package java.io;
 // validation defers the check to the point where the graph is complete.
 public interface ObjectInputValidation {
 
-    void validateObject();
+    void validateObject() throws InvalidObjectException;
 }

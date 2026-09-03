@@ -62,7 +62,7 @@ public class StringWriter extends Writer {
     public void flush() {
     }
 
-    public void close() {
+    public void close() throws IOException {
     }
 
     public String toString() {

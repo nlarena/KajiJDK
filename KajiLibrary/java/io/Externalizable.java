@@ -11,7 +11,7 @@ import java.io.ObjectOutput;
 // and restore itself, and deserialization calls the public no-arg constructor first.
 public interface Externalizable extends Serializable {
 
-    void writeExternal(ObjectOutput out);
+    void writeExternal(ObjectOutput out) throws IOException;
 
-    void readExternal(ObjectInput in);
+    void readExternal(ObjectInput in) throws IOException, ClassNotFoundException;
 }

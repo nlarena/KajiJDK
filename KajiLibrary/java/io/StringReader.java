@@ -19,7 +19,7 @@ public class StringReader extends Reader {
         this.mark = 0;
     }
 
-    public int read() {
+    public int read() throws IOException {
         if (this.next >= this.length) {
             return -1;
         }
@@ -28,7 +28,7 @@ public class StringReader extends Reader {
         return c;
     }
 
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         if (this.next >= this.length) {
             return -1;
         }
@@ -43,7 +43,7 @@ public class StringReader extends Reader {
         return n;
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         if (this.next >= this.length) {
             return 0;
         }
@@ -57,7 +57,7 @@ public class StringReader extends Reader {
         return k;
     }
 
-    public boolean ready() {
+    public boolean ready() throws IOException {
         return true;
     }
 
@@ -65,11 +65,11 @@ public class StringReader extends Reader {
         return true;
     }
 
-    public void mark(int readAheadLimit) {
+    public void mark(int readAheadLimit) throws IOException {
         this.mark = this.next;
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         this.next = this.mark;
     }
 

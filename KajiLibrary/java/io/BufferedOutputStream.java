@@ -35,7 +35,7 @@ public class BufferedOutputStream extends FilterOutputStream {
         this.count = 0;
     }
 
-    public synchronized void write(int b) {
+    public synchronized void write(int b) throws IOException {
         if (this.count >= this.buf.length) {
             this.flushBuffer();
         }
@@ -43,7 +43,7 @@ public class BufferedOutputStream extends FilterOutputStream {
         this.count = this.count + 1;
     }
 
-    public synchronized void write(byte[] b, int off, int len) {
+    public synchronized void write(byte[] b, int off, int len) throws IOException {
         // A write at least as big as the buffer is passed straight through. Copying it in
         // would only mean copying it out again immediately, and — more subtly — it would
         // let one huge write evict a buffer that was usefully filling up.
@@ -61,12 +61,12 @@ public class BufferedOutputStream extends FilterOutputStream {
 
     // Empty our buffer AND ask the sink to flush: a flush has to travel the whole length
     // of the decorator chain, or an inner buffer would still be sitting on the bytes.
-    public synchronized void flush() {
+    public synchronized void flush() throws IOException {
         this.flushBuffer();
         this.out.flush();
     }
 
-    private void flushBuffer() {
+    private void flushBuffer() throws IOException {
         if (this.count > 0) {
             this.out.write(this.buf, 0, this.count);
             this.count = 0;

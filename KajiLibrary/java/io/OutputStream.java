@@ -10,23 +10,23 @@ import java.io.Flushable;
 public abstract class OutputStream implements Closeable, Flushable {
 
     // Write the low 8 bits of `b`. The one operation a concrete sink must provide.
-    public abstract void write(int b);
+    public abstract void write(int b) throws IOException;
 
-    public void write(byte[] b) {
+    public void write(byte[] b) throws IOException {
         this.write(b, 0, b.length);
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws IOException {
         for (int i = 0; i < len; i++) {
             this.write(b[off + i]);
         }
     }
 
     // No-ops by default; a buffered or resource-backed sink overrides them.
-    public void flush() {
+    public void flush() throws IOException {
     }
 
-    public void close() {
+    public void close() throws IOException {
     }
 
     /** A sink that discards every byte. */
@@ -35,10 +35,10 @@ public abstract class OutputStream implements Closeable, Flushable {
     }
 
     private static final class NullOutputStream extends OutputStream {
-        public void write(int b) {
+        public void write(int b) throws IOException {
         }
 
-        public void write(byte[] b, int off, int len) {
+        public void write(byte[] b, int off, int len) throws IOException {
         }
     }
 }

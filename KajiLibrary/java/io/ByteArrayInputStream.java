@@ -98,6 +98,6 @@ public class ByteArrayInputStream extends InputStream {
         this.pos = this.mark;
     }
 
-    public void close() {
+    public void close() throws IOException {
     }
 }

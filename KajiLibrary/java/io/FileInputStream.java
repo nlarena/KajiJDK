@@ -16,18 +16,32 @@ import jdk.internal.io.Fs;
 // no hay handles abiertos en esta VM. Cuando los haya, esta clase se reescribe sin que nada de lo
 // que la usa se entere -- `Scanner` y `Formatter` hablan con `InputStream`, no con esto.
 //
-// **Sin `throws IOException`**, y no por descuido: las bases de este paquete
-// (`InputStream`/`OutputStream`/`Closeable`) se escribieron sin declararlo, y un override no puede
-// ensanchar las excepciones chequeadas del metodo que sobreescribe (JLS 8.4.8.3). Ver la nota de
-// `IOException`. Lo que aca fallaria con una `IOException` en el JDK se señala con
-// `UncheckedIOException`, que la envuelve -- asi el motivo no se pierde y el codigo sigue
-// compilando contra estas bases.
+// **`getChannel()` devuelve un canal sobre esa misma foto**, y comparte la posicion con el flujo tal
+// como manda el contrato: leer de uno mueve al otro. Lee de la foto y no del disco a proposito --
+// compartir la posicion pero no el contenido seria peor que no compartir nada -- asi que lo que se
+// dijo arriba sobre lo que no se ve vale igual leyendo por el canal. El como esta en `Canales`.
+//
+// **Los errores salen como `IOException` chequeada**, igual que en el JDK. Hubo una epoca en que
+// no: las bases del paquete (`InputStream`/`OutputStream`/`Closeable`) no declaraban `throws
+// IOException`, un override no puede ensanchar las chequeadas de lo que sobreescribe (JLS 8.4.8.3),
+// y lo que aca fallaba salia envuelto en `UncheckedIOException`. Las bases ya lo declaran, asi que
+// el envoltorio se saco: un `catch (IOException e)` de quien llama tiene que agarrar esto, y con la
+// no chequeada le pasaba por al lado y le mataba el hilo.
 public class FileInputStream extends InputStream {
 
-    private final byte[] datos;
-    private int pos;
-    private int marca = -1;
-    private boolean cerrado = false;
+    // Package-private y no privados: `Canales.DeEntrada` **comparte** estos tres con este flujo,
+    // que es de lo que se trata `getChannel()`. Ver la cabecera de `Canales`.
+    final byte[] datos;
+    // `long` y no `int` aunque el contenido sea un `byte[]`: el canal puede posicionarse mas alla
+    // del final --es legal, y lo que sigue es que las lecturas dan -1-- y `position()` tiene que
+    // devolver lo que se le puso. Con un `int` habria que recortarlo y dejaria de ser el mismo
+    // numero. Los usos como indice van casteados, siempre despues de comprobar el final.
+    long pos;
+    private long marca = -1;
+    boolean cerrado = false;
+
+    /** El canal de este flujo, creado a pedido. Uno solo: el contrato dice "the unique object". */
+    private java.nio.channels.FileChannel canal;
 
     /**
      * Abre `name` para lectura.
@@ -69,17 +83,17 @@ public class FileInputStream extends InputStream {
         this.pos = 0;
     }
 
-    public int read() {
+    public int read() throws IOException {
         this.comprobarAbierto();
         if (this.pos >= this.datos.length) {
             return -1;
         }
-        int b = this.datos[this.pos] & 0xff;
+        int b = this.datos[(int) this.pos] & 0xff;
         this.pos = this.pos + 1;
         return b;
     }
 
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws IOException {
         this.comprobarAbierto();
         if (b == null) {
             throw new NullPointerException();
@@ -93,27 +107,27 @@ public class FileInputStream extends InputStream {
         if (this.pos >= this.datos.length) {
             return -1;                       // fin de flujo, y **no** cero: son cosas distintas
         }
-        int n = this.datos.length - this.pos;
+        int n = (int) (this.datos.length - this.pos);
         if (n > len) {
             n = len;
         }
-        System.arraycopy(this.datos, this.pos, b, off, n);
+        System.arraycopy(this.datos, (int) this.pos, b, off, n);
         this.pos = this.pos + n;
         return n;
     }
 
-    public int read(byte[] b) {
+    public int read(byte[] b) throws IOException {
         return this.read(b, 0, b.length);
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         this.comprobarAbierto();
         if (n <= 0L) {
             return 0L;
         }
         long disponible = this.datos.length - this.pos;
         long saltados = n < disponible ? n : disponible;
-        this.pos = this.pos + (int) saltados;
+        this.pos = this.pos + saltados;
         return saltados;
     }
 
@@ -123,9 +137,9 @@ public class FileInputStream extends InputStream {
      * <p>Aca es exacto --el archivo esta entero en memoria-- mientras que en el JDK es una
      * estimacion. Es una de las pocas cosas en que leer todo de una sale ganando.
      */
-    public int available() {
+    public int available() throws IOException {
         this.comprobarAbierto();
-        return this.datos.length - this.pos;
+        return (int) (this.datos.length - this.pos);
     }
 
     public boolean markSupported() {
@@ -136,26 +150,48 @@ public class FileInputStream extends InputStream {
         this.marca = this.pos;
     }
 
-    public synchronized void reset() {
+    public synchronized void reset() throws IOException {
         this.comprobarAbierto();
         if (this.marca < 0) {
-            throw new UncheckedIOException(new IOException("Resetting to invalid mark"));
+            throw new IOException("Resetting to invalid mark");
         }
         this.pos = this.marca;
     }
 
-    public void close() {
+    // (`getChannel` esta mas abajo, junto a `close`.)
+
+    public void close() throws IOException {
         this.cerrado = true;
+        // Cerrar el flujo cierra su canal: son la misma cosa vista de dos maneras.
+        if (this.canal != null && this.canal.isOpen()) {
+            this.canal.close();
+        }
+    }
+
+    /**
+     * El canal de este flujo, **con la misma posicion**: leer del flujo mueve el canal y mover el
+     * canal cambia desde donde lee el flujo. No es una copia sincronizada, es un solo numero; el
+     * porque esta en `Canales`.
+     *
+     * <p>Lee de la misma foto que el flujo --la que se saco al construirlo-- y no del disco, por lo
+     * mismo: compartir la posicion pero no el contenido seria peor que no compartir nada. Y es de
+     * solo lectura, como el del JDK.
+     */
+    public java.nio.channels.FileChannel getChannel() {
+        if (this.canal == null) {
+            this.canal = new Canales.DeEntrada(this);
+        }
+        return this.canal;
     }
 
     /** El descriptor. Esta biblioteca no los modela; ver la nota de la clase. */
-    public final FileDescriptor getFD() {
+    public final FileDescriptor getFD() throws IOException {
         return new FileDescriptor();
     }
 
-    private void comprobarAbierto() {
+    private void comprobarAbierto() throws IOException {
         if (this.cerrado) {
-            throw new UncheckedIOException(new IOException("Stream Closed"));
+            throw new IOException("Stream Closed");
         }
     }
 }

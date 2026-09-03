@@ -39,7 +39,7 @@ public class PushbackInputStream extends FilterInputStream {
         this.pos = 1;
     }
 
-    public int read() {
+    public int read() throws IOException {
         if (this.pos < this.buf.length) {
             int b = this.buf[this.pos] & 0xff;
             this.pos = this.pos + 1;
@@ -48,7 +48,7 @@ public class PushbackInputStream extends FilterInputStream {
         return this.in.read();
     }
 
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws IOException {
         if (len <= 0) {
             return 0;
         }
@@ -82,7 +82,7 @@ public class PushbackInputStream extends FilterInputStream {
     // Unchecked, unlike the JDK's IOException: this package is throws-free (see
     // IOException), and overrunning the pushback area is a programming error anyway —
     // the caller asked for a buffer of n bytes and pushed back more than n.
-    public void unread(int b) {
+    public void unread(int b) throws IOException {
         if (this.pos == 0) {
             throw new IllegalStateException("push back buffer is full");
         }
@@ -90,7 +90,7 @@ public class PushbackInputStream extends FilterInputStream {
         this.buf[this.pos] = (byte) b;
     }
 
-    public void unread(byte[] b, int off, int len) {
+    public void unread(byte[] b, int off, int len) throws IOException {
         if (len > this.pos) {
             throw new IllegalStateException("push back buffer is full");
         }
@@ -100,15 +100,15 @@ public class PushbackInputStream extends FilterInputStream {
         System.arraycopy(b, off, this.buf, this.pos, len);
     }
 
-    public void unread(byte[] b) {
+    public void unread(byte[] b) throws IOException {
         this.unread(b, 0, b.length);
     }
 
-    public int available() {
+    public int available() throws IOException {
         return (this.buf.length - this.pos) + this.in.available();
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         if (n <= 0L) {
             return 0L;
         }
@@ -138,11 +138,11 @@ public class PushbackInputStream extends FilterInputStream {
     public void mark(int readlimit) {
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         throw new UnsupportedOperationException("mark/reset not supported");
     }
 
-    public synchronized void close() {
+    public synchronized void close() throws IOException {
         this.buf = null;
         this.in.close();
     }

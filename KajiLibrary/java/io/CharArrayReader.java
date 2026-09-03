@@ -41,7 +41,7 @@ public class CharArrayReader extends Reader {
         this.markedPos = offset;
     }
 
-    public int read() {
+    public int read() throws IOException {
         if (this.pos >= this.count) {
             return -1;
         }
@@ -50,7 +50,7 @@ public class CharArrayReader extends Reader {
         return c;
     }
 
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         if (this.pos >= this.count) {
             return -1;
         }
@@ -68,7 +68,7 @@ public class CharArrayReader extends Reader {
 
     // An array source can skip by arithmetic — no reading and discarding, which is what
     // Reader.skip has to do when it cannot see where it is.
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         long avail = (long) (this.count - this.pos);
         long skipped = n;
         if (skipped > avail) {
@@ -82,7 +82,7 @@ public class CharArrayReader extends Reader {
     }
 
     // Always true: the characters are already in memory, so no read can ever block.
-    public boolean ready() {
+    public boolean ready() throws IOException {
         return true;
     }
 
@@ -92,11 +92,11 @@ public class CharArrayReader extends Reader {
 
     // The read-ahead limit is ignored on purpose: it exists so a buffering reader knows
     // how much to retain, and here the whole array is retained regardless.
-    public void mark(int readAheadLimit) {
+    public void mark(int readAheadLimit) throws IOException {
         this.markedPos = this.pos;
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         this.pos = this.markedPos;
     }
 
@@ -108,7 +108,7 @@ public class CharArrayReader extends Reader {
         this.count = 0;
     }
 
-    public int read(CharBuffer target) {
+    public int read(CharBuffer target) throws IOException {
         int len = target.remaining();
         char[] cbuf = new char[len];
         int n = read(cbuf, 0, len);

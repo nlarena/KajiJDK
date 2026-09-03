@@ -30,7 +30,7 @@ public class FilterInputStream extends InputStream {
         this.in = in;
     }
 
-    public int read() {
+    public int read() throws IOException {
         return this.in.read();
     }
 
@@ -38,23 +38,23 @@ public class FilterInputStream extends InputStream {
     // the virtual call lands on the subclass's bulk read, so a decorator that overrides
     // only read(byte[],int,int) still sees every full-array read pass through it. Routing
     // it to the wrapped stream instead would silently bypass the decoration.
-    public int read(byte[] b) {
+    public int read(byte[] b) throws IOException {
         return this.read(b, 0, b.length);
     }
 
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws IOException {
         return this.in.read(b, off, len);
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         return this.in.skip(n);
     }
 
-    public int available() {
+    public int available() throws IOException {
         return this.in.available();
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.in.close();
     }
 
@@ -64,7 +64,7 @@ public class FilterInputStream extends InputStream {
         this.in.mark(readlimit);
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         this.in.reset();
     }
 

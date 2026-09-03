@@ -16,22 +16,33 @@ import jdk.internal.io.Fs;
 //   - el archivo se **trunca al construir** (salvo en modo `append`), como el del JDK: abrir para
 //     escribir borra lo que habia, aunque despues no se escriba nada.
 //
-// **Sin `throws IOException`**, y no por descuido: las bases de este paquete
-// (`InputStream`/`OutputStream`/`Closeable`) se escribieron sin declararlo, y un override no puede
-// ensanchar las excepciones chequeadas del metodo que sobreescribe (JLS 8.4.8.3). Ver la nota de
-// `IOException`. Lo que aca fallaria con una `IOException` en el JDK se señala con
-// `UncheckedIOException`, que la envuelve -- asi el motivo no se pierde y el codigo sigue
-// compilando contra estas bases.
+// **`getChannel()` comparte la posicion con el flujo**, como manda el contrato: escribir por uno
+// mueve al otro, y mover el canal cambia donde escribe el flujo. Pedirlo tiene un precio, y por eso
+// no se paga hasta que alguien lo pide: a partir de ahi el volcado deja de ser un agregado al final
+// y pasa a escribir en la posicion del canal, que en esta VM cuesta reescribir el archivo entero.
+// Quien nunca llame a `getChannel()` escribe exactamente como antes. El como esta en `Canales`.
+//
+// **Los errores salen como `IOException` chequeada**, igual que en el JDK. Hubo una epoca en que
+// no: las bases del paquete (`InputStream`/`OutputStream`/`Closeable`) no declaraban `throws
+// IOException`, un override no puede ensanchar las chequeadas de lo que sobreescribe (JLS 8.4.8.3),
+// y lo que aca fallaba salia envuelto en `UncheckedIOException`. Las bases ya lo declaran, asi que
+// el envoltorio se saco: un `catch (IOException e)` de quien llama tiene que agarrar esto, y con la
+// no chequeada le pasaba por al lado y le mataba el hilo.
 public class FileOutputStream extends OutputStream {
 
     // Mas alla de esto se vuelca solo, para que escribir un archivo grande no lo tenga entero dos
     // veces en memoria. No cambia lo que se ve: el archivo queda igual.
     private static final int LIMITE = 1 << 16;
 
-    private final String ruta;
-    private byte[] buf = new byte[256];
-    private int usados = 0;
-    private boolean cerrado = false;
+    // Package-private y no privados: `Canales.DeSalida` **comparte** estos con este flujo, que es
+    // de lo que se trata `getChannel()`. Ver la cabecera de `Canales`.
+    final String ruta;
+    byte[] buf = new byte[256];
+    int usados = 0;
+    boolean cerrado = false;
+
+    /** El canal de este flujo, creado a pedido. Uno solo: el contrato dice "the unique object". */
+    private Canales.DeSalida canal;
     // Si lo que viene se agrega a lo ya volcado. Arranca en el modo pedido y pasa a `true` despues
     // del primer volcado: el segundo trozo tiene que agregarse aunque el stream no sea de append.
     private boolean anexar;
@@ -87,7 +98,7 @@ public class FileOutputStream extends OutputStream {
         this.anexar = true;
     }
 
-    public void write(int b) {
+    public void write(int b) throws IOException {
         this.comprobarAbierto();
         this.asegurar(1);
         this.buf[this.usados] = (byte) b;
@@ -97,7 +108,7 @@ public class FileOutputStream extends OutputStream {
         }
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws IOException {
         this.comprobarAbierto();
         if (b == null) {
             throw new NullPointerException();
@@ -113,33 +124,60 @@ public class FileOutputStream extends OutputStream {
         }
     }
 
-    public void write(byte[] b) {
+    public void write(byte[] b) throws IOException {
         this.write(b, 0, b.length);
     }
 
     /** Vuelca al disco lo que haya en el buffer. */
-    public void flush() {
+    public void flush() throws IOException {
         if (this.usados == 0 || this.ruta == null) {
+            return;
+        }
+        if (this.canal != null) {
+            // Ya hay canal: el que manda es **su** posicion y no el final del archivo, asi que el
+            // volcado tiene que pasar por el. Si no, un `position()` hacia atras seguido de un
+            // `write` del flujo agregaria al final en vez de escribir donde se pidio.
+            this.canal.vaciarPendiente();
             return;
         }
         byte[] trozo = new byte[this.usados];
         System.arraycopy(this.buf, 0, trozo, 0, this.usados);
         if (!Fs.writeAllBytes(this.ruta, trozo, this.anexar)) {
-            throw new UncheckedIOException(new IOException("Could not write to " + this.ruta));
+            throw new IOException("Could not write to " + this.ruta);
         }
         this.anexar = true;
         this.usados = 0;
     }
 
-    public void close() {
+    public void close() throws IOException {
         if (!this.cerrado) {
             this.flush();
             this.cerrado = true;
         }
+        // Cerrar el flujo cierra su canal: son la misma cosa vista de dos maneras.
+        if (this.canal != null && this.canal.isOpen()) {
+            this.canal.close();
+        }
+    }
+
+    /**
+     * El canal de este flujo, **con la misma posicion**: escribir por el flujo mueve el canal y
+     * mover el canal cambia donde escribe el flujo. El porque de que sea un solo numero, y el precio
+     * de pedirlo, estan en `Canales`.
+     *
+     * <p>Pedirlo cambia como vuelca este flujo: de agregar al final pasa a escribir en la posicion
+     * del canal, que en esta VM cuesta reescribir el archivo entero. Quien no lo pida escribe como
+     * antes.
+     */
+    public java.nio.channels.FileChannel getChannel() {
+        if (this.canal == null) {
+            this.canal = new Canales.DeSalida(this);
+        }
+        return this.canal;
     }
 
     /** El descriptor. Esta biblioteca no los modela; ver la nota de la clase. */
-    public final FileDescriptor getFD() {
+    public final FileDescriptor getFD() throws IOException {
         return new FileDescriptor();
     }
 
@@ -156,9 +194,9 @@ public class FileOutputStream extends OutputStream {
         this.buf = mas;
     }
 
-    private void comprobarAbierto() {
+    private void comprobarAbierto() throws IOException {
         if (this.cerrado) {
-            throw new UncheckedIOException(new IOException("Stream Closed"));
+            throw new IOException("Stream Closed");
         }
     }
 }

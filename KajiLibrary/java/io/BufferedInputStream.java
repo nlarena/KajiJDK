@@ -55,7 +55,7 @@ public class BufferedInputStream extends FilterInputStream {
         this.marklimit = 0;
     }
 
-    public synchronized int read() {
+    public synchronized int read() throws IOException {
         if (this.pos >= this.count) {
             this.fill();
             if (this.pos >= this.count) {
@@ -67,7 +67,7 @@ public class BufferedInputStream extends FilterInputStream {
         return b;
     }
 
-    public synchronized int read(byte[] b, int off, int len) {
+    public synchronized int read(byte[] b, int off, int len) throws IOException {
         if (len <= 0) {
             return 0;
         }
@@ -89,7 +89,7 @@ public class BufferedInputStream extends FilterInputStream {
         return n;
     }
 
-    private int read1(byte[] b, int off, int len) {
+    private int read1(byte[] b, int off, int len) throws IOException {
         int avail = this.count - this.pos;
         if (avail <= 0) {
             // A request at least as big as the buffer, with no mark to preserve, is read
@@ -118,7 +118,7 @@ public class BufferedInputStream extends FilterInputStream {
     // mark: without one the buffer is simply recycled from the top, with one the marked
     // bytes have to survive, by sliding them down, by growing, or — once the caller has
     // read past its own readlimit promise — by dropping the mark.
-    private void fill() {
+    private void fill() throws IOException {
         if (this.markpos < 0) {
             this.pos = 0;
         } else if (this.pos >= this.buf.length) {
@@ -152,7 +152,7 @@ public class BufferedInputStream extends FilterInputStream {
         }
     }
 
-    public synchronized long skip(long n) {
+    public synchronized long skip(long n) throws IOException {
         if (n <= 0L) {
             return 0L;
         }
@@ -179,7 +179,7 @@ public class BufferedInputStream extends FilterInputStream {
 
     // What can be read without blocking: what we are holding, plus whatever the source
     // says it has ready.
-    public synchronized int available() {
+    public synchronized int available() throws IOException {
         return (this.count - this.pos) + this.in.available();
     }
 
@@ -191,7 +191,7 @@ public class BufferedInputStream extends FilterInputStream {
     // Unchecked, like the rest of this package's mark/reset (see InputStream). A failed
     // reset is a programming error — the caller either never marked or broke its own
     // readlimit promise — not an I/O condition.
-    public synchronized void reset() {
+    public synchronized void reset() throws IOException {
         if (this.markpos < 0) {
             throw new IllegalStateException("resetting to invalid mark");
         }
@@ -203,7 +203,7 @@ public class BufferedInputStream extends FilterInputStream {
         return true;
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.buf = null;
         this.in.close();
     }

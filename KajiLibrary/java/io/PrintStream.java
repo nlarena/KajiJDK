@@ -93,20 +93,59 @@ public class PrintStream extends FilterOutputStream implements Appendable, Close
 
     // ---- lifecycle ----
 
+    /**
+     * Vacia lo pendiente.
+     *
+     * <p>No declara `throws IOException`, como en el JDK: un `PrintStream` **no tira** por fallas de
+     * E/S, las anota y se las cuenta a quien pregunte por {@link #checkError()}. Es toda la razon de
+     * ser de esta clase --que `System.out.println` no obligue a atrapar nada-- y por eso el `catch`
+     * de aca no es un descuido sino el contrato.
+     */
     public void flush() {
         if (out != null) {
-            out.flush();
+            try {
+                out.flush();
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 
+    /** Cierra. Sin `throws`, como el JDK: la falla se anota y se consulta con {@link #checkError()}. */
     public void close() {
         flush();
         if (out != null) {
-            out.close();
+            try {
+                out.close();
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 
     /** Whether an error has been seen on this stream. Never, here — the console does not fail. */
+    /**
+     * Marca que este flujo tuvo un problema.
+     *
+     * <p>Existe porque `PrintStream` **no tira**: los `print` tragan la `IOException` y encienden
+     * esta bandera, que es la unica forma de enterarse. Una subclase que haga su propia escritura
+     * necesita poder encenderla, o su fallo seria invisible.
+     */
+    protected void setError() {
+        this.trouble = true;
+    }
+
+    /**
+     * Apaga la bandera de error.
+     *
+     * <p>Es `protected` a proposito y el javadoc del JDK lo dice de frente: permite que un flujo se
+     * "recupere" de un error, y eso **oculta** el fallo a quien llame `checkError` despues. Solo
+     * tiene sentido para una subclase que sepa que el problema se resolvio de verdad.
+     */
+    protected void clearError() {
+        this.trouble = false;
+    }
+
     public boolean checkError() {
         return this.trouble;
     }
@@ -132,7 +171,7 @@ public class PrintStream extends FilterOutputStream implements Appendable, Close
         }
     }
 
-    public void write(byte[] buf) {
+    public void write(byte[] buf) throws IOException {
         write(buf, 0, buf.length);
     }
 

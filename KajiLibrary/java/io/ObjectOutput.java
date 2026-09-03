@@ -8,15 +8,15 @@ import java.io.DataOutput;
 // the interface readable as a standalone stream abstraction rather than a mixin.
 public interface ObjectOutput extends DataOutput, AutoCloseable {
 
-    void writeObject(Object obj);
+    void writeObject(Object obj) throws IOException;
 
-    void write(int b);
+    void write(int b) throws IOException;
 
-    void write(byte[] b);
+    void write(byte[] b) throws IOException;
 
-    void write(byte[] b, int off, int len);
+    void write(byte[] b, int off, int len) throws IOException;
 
-    void flush();
+    void flush() throws IOException;
 
-    void close();
+    void close() throws IOException;
 }

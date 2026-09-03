@@ -48,12 +48,12 @@ public class InputStreamReader extends Reader {
         return this.charset.name();
     }
 
-    public int read() {
+    public int read() throws IOException {
         int b = this.in.read();
         return b < 0 ? -1 : (char) b;
     }
 
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         int i = 0;
         while (i < len) {
             int b = this.in.read();
@@ -66,7 +66,7 @@ public class InputStreamReader extends Reader {
         return i;
     }
 
-    public int read(CharBuffer target) {
+    public int read(CharBuffer target) throws IOException {
         int len = target.remaining();
         char[] cbuf = new char[len];
         int n = read(cbuf, 0, len);
@@ -76,11 +76,11 @@ public class InputStreamReader extends Reader {
         return n;
     }
 
-    public boolean ready() {
+    public boolean ready() throws IOException {
         return this.in.available() > 0;
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.in.close();
     }
 }

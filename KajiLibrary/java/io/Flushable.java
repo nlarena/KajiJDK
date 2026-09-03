@@ -4,5 +4,5 @@ package java.io;
 // to its underlying target on demand.
 public interface Flushable {
 
-    void flush();
+    void flush() throws IOException;
 }

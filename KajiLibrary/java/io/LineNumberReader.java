@@ -72,7 +72,7 @@ public class LineNumberReader extends BufferedReader {
         this.lineNumber = lineNumber;
     }
 
-    public int read() {
+    public int read() throws IOException {
         int c = this.src.read();
         if (this.skipLF) {
             this.skipLF = false;
@@ -109,7 +109,7 @@ public class LineNumberReader extends BufferedReader {
 
     // A bulk read cannot just delegate and forget: the terminators are inside the block
     // the caller asked for, so we scan what we just handed over and count them there.
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         int n = this.src.read(cbuf, off, len);
         if (n < 0) {
             this.endOfInput();
@@ -140,7 +140,7 @@ public class LineNumberReader extends BufferedReader {
 
     // Reimplemented rather than inherited: BufferedReader.readLine() reads through its own
     // private handle on the source, so a line consumed there would never reach our counter.
-    public String readLine() {
+    public String readLine() throws IOException {
         StringBuilder sb = new StringBuilder();
         int count = 0;
         boolean atEnd = false;
@@ -180,7 +180,7 @@ public class LineNumberReader extends BufferedReader {
 
     // Deliberately character by character through read(): skipping on the source directly
     // would be faster and would silently lose every line ending inside the skipped range.
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         long remaining = n;
         boolean atEnd = false;
         while (remaining > 0L && !atEnd) {
@@ -195,14 +195,14 @@ public class LineNumberReader extends BufferedReader {
 
     // The mark has to carry the counter with it, or resetting would rewind the text and
     // leave the line number where it had got to.
-    public void mark(int readAheadLimit) {
+    public void mark(int readAheadLimit) throws IOException {
         this.src.mark(readAheadLimit);
         this.markedLineNumber = this.lineNumber;
         this.markedSkipLF = this.skipLF;
         this.markedPendingLine = this.pendingLine;
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         this.src.reset();
         this.lineNumber = this.markedLineNumber;
         this.skipLF = this.markedSkipLF;

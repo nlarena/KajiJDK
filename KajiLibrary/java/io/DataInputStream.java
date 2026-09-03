@@ -13,11 +13,11 @@ public class DataInputStream extends FilterInputStream implements DataInput {
         super(in);
     }
 
-    public final int read(byte[] b) {
+    public final int read(byte[] b) throws IOException {
         return this.in.read(b, 0, b.length);
     }
 
-    public final int read(byte[] b, int off, int len) {
+    public final int read(byte[] b, int off, int len) throws IOException {
         return this.in.read(b, off, len);
     }
 
@@ -36,7 +36,7 @@ public class DataInputStream extends FilterInputStream implements DataInput {
         }
     }
 
-    public final int skipBytes(int n) {
+    public final int skipBytes(int n) throws IOException {
         int total = 0;
         while (total < n) {
             long cur = this.in.skip((long) (n - total));

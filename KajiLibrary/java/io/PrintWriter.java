@@ -108,16 +108,31 @@ public class PrintWriter extends Writer {
         return true;
     }
 
+    /**
+     * Vacia lo pendiente.
+     *
+     * <p>Sin `throws IOException`, igual que en el JDK y por la misma razon que en `PrintStream`: la
+     * falla se anota y se consulta con {@link #checkError()}.
+     */
     public void flush() {
         if (this.open()) {
-            this.out.flush();
+            try {
+                this.out.flush();
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 
+    /** Cierra. Sin `throws`, como el JDK: la falla se anota y se consulta con {@link #checkError()}. */
     public void close() {
         if (this.out != null) {
-            this.out.flush();
-            this.out.close();
+            try {
+                this.out.flush();
+                this.out.close();
+            } catch (IOException e) {
+                this.setError();
+            }
             this.out = null;
         }
     }
@@ -142,16 +157,28 @@ public class PrintWriter extends Writer {
     }
 
     // --- the Writer contract, routed through the gate ---
+    //
+    // Ninguno declara `throws IOException`, y el JDK tampoco: un `PrintWriter` **no tira** por fallas
+    // de E/S. Las anota y las cuenta por `checkError()`. Ese es todo el punto de la clase --que
+    // escribir no obligue a atrapar-- asi que estos `catch` son el contrato, no un descuido.
 
     public void write(int c) {
         if (this.open()) {
-            this.out.write(c);
+            try {
+                this.out.write(c);
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 
     public void write(char[] buf, int off, int len) {
         if (this.open()) {
-            this.out.write(buf, off, len);
+            try {
+                this.out.write(buf, off, len);
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 
@@ -161,7 +188,11 @@ public class PrintWriter extends Writer {
 
     public void write(String s, int off, int len) {
         if (this.open()) {
-            this.out.write(s, off, len);
+            try {
+                this.out.write(s, off, len);
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 
@@ -169,7 +200,11 @@ public class PrintWriter extends Writer {
     // print writer's traffic is almost entirely Strings.
     public void write(String s) {
         if (this.open()) {
-            this.out.write(s);
+            try {
+                this.out.write(s);
+            } catch (IOException e) {
+                this.setError();
+            }
         }
     }
 

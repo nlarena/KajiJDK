@@ -5,5 +5,5 @@ package java.io;
 // close() is idempotent and declared to throw IOException; we don't model IOException yet).
 public interface Closeable extends AutoCloseable {
 
-    void close();
+    void close() throws IOException;
 }

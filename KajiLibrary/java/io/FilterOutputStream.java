@@ -19,7 +19,7 @@ public class FilterOutputStream extends OutputStream {
         this.out = out;
     }
 
-    public void write(int b) {
+    public void write(int b) throws IOException {
         this.out.write(b);
     }
 
@@ -27,23 +27,23 @@ public class FilterOutputStream extends OutputStream {
     // guarantees that a subclass which overrides only write(int) really sees every byte.
     // The cost is real — that is precisely why BufferedOutputStream overrides the bulk
     // form, and why wrapping an unbuffered filter in a buffer is the standard move.
-    public void write(byte[] b) {
+    public void write(byte[] b) throws IOException {
         this.write(b, 0, b.length);
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws IOException {
         for (int i = 0; i < len; i++) {
             this.write(b[off + i]);
         }
     }
 
-    public void flush() {
+    public void flush() throws IOException {
         this.out.flush();
     }
 
     // Flush before closing: a decorator further out may be holding bytes that would
     // otherwise be lost when the sink underneath goes away.
-    public void close() {
+    public void close() throws IOException {
         this.flush();
         this.out.close();
     }

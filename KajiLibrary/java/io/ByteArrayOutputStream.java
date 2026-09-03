@@ -85,7 +85,7 @@ public class ByteArrayOutputStream extends OutputStream {
     }
 
     /** No resources to release: the buffer is plain memory. */
-    public void close() {
+    public void close() throws IOException {
     }
 
     private void ensureCapacity(int min) {

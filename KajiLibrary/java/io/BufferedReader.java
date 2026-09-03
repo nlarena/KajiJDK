@@ -26,17 +26,17 @@ public class BufferedReader extends Reader {
         this.in = in;
     }
 
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         return this.in.read(cbuf, off, len);
     }
 
-    public int read() {
+    public int read() throws IOException {
         return this.in.read();
     }
 
     // The next line, without its terminator ('\n', '\r', or '\r\n' are all accepted), or
     // null at end of stream.
-    public String readLine() {
+    public String readLine() throws IOException {
         StringBuilder sb = new StringBuilder();
         int count = 0;
         while (true) {
@@ -57,11 +57,11 @@ public class BufferedReader extends Reader {
         }
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         return this.in.skip(n);
     }
 
-    public boolean ready() {
+    public boolean ready() throws IOException {
         return this.in.ready();
     }
 
@@ -69,19 +69,31 @@ public class BufferedReader extends Reader {
         return this.in.markSupported();
     }
 
-    public void mark(int readAheadLimit) {
+    public void mark(int readAheadLimit) throws IOException {
         this.in.mark(readAheadLimit);
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         this.in.reset();
     }
 
     /** The lines of this reader, read eagerly, as a stream. */
+    /**
+     * The lines of this reader, read eagerly, as a stream.
+     *
+     * <p>No declara `throws IOException` --el JDK tampoco-- porque un `Stream` se consume despues, y
+     * una excepcion chequeada no puede salir de donde se consume. La salida del JDK es envolverla en
+     * {@link UncheckedIOException}, y es la que se copia: el error no se pierde, cambia de forma.
+     */
     public Stream<String> lines() {
         List<String> all = new ArrayList<String>();
         while (true) {
-            String line = readLine();
+            String line;
+            try {
+                line = readLine();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
             if (line == null) {
                 break;
             }
@@ -91,7 +103,7 @@ public class BufferedReader extends Reader {
         return Stream.of(arr);
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.in.close();
     }
 }

@@ -16,46 +16,46 @@ public class DataOutputStream extends FilterOutputStream implements DataOutput {
         this.written = 0;
     }
 
-    public synchronized void write(int b) {
+    public synchronized void write(int b) throws IOException {
         this.out.write(b);
         this.written = this.written + 1;
     }
 
-    public synchronized void write(byte[] b, int off, int len) {
+    public synchronized void write(byte[] b, int off, int len) throws IOException {
         this.out.write(b, off, len);
         this.written = this.written + len;
     }
 
-    public void flush() {
+    public void flush() throws IOException {
         this.out.flush();
     }
 
-    public final void writeBoolean(boolean v) {
+    public final void writeBoolean(boolean v) throws IOException {
         write(v ? 1 : 0);
     }
 
-    public final void writeByte(int v) {
+    public final void writeByte(int v) throws IOException {
         write(v);
     }
 
-    public final void writeShort(int v) {
+    public final void writeShort(int v) throws IOException {
         write((v >>> 8) & 0xFF);
         write(v & 0xFF);
     }
 
-    public final void writeChar(int v) {
+    public final void writeChar(int v) throws IOException {
         write((v >>> 8) & 0xFF);
         write(v & 0xFF);
     }
 
-    public final void writeInt(int v) {
+    public final void writeInt(int v) throws IOException {
         write((v >>> 24) & 0xFF);
         write((v >>> 16) & 0xFF);
         write((v >>> 8) & 0xFF);
         write(v & 0xFF);
     }
 
-    public final void writeLong(long v) {
+    public final void writeLong(long v) throws IOException {
         write((int) (v >>> 56) & 0xFF);
         write((int) (v >>> 48) & 0xFF);
         write((int) (v >>> 40) & 0xFF);
@@ -66,15 +66,15 @@ public class DataOutputStream extends FilterOutputStream implements DataOutput {
         write((int) v & 0xFF);
     }
 
-    public final void writeFloat(float v) {
+    public final void writeFloat(float v) throws IOException {
         writeInt(Float.floatToIntBits(v));
     }
 
-    public final void writeDouble(double v) {
+    public final void writeDouble(double v) throws IOException {
         writeLong(Double.doubleToLongBits(v));
     }
 
-    public final void writeBytes(String s) {
+    public final void writeBytes(String s) throws IOException {
         int n = s.length();
         int i = 0;
         while (i < n) {
@@ -83,7 +83,7 @@ public class DataOutputStream extends FilterOutputStream implements DataOutput {
         }
     }
 
-    public final void writeChars(String s) {
+    public final void writeChars(String s) throws IOException {
         int n = s.length();
         int i = 0;
         while (i < n) {

@@ -40,7 +40,7 @@ public class BufferedWriter extends Writer {
         this.nextChar = 0;
     }
 
-    public void write(int c) {
+    public void write(int c) throws IOException {
         if (this.nextChar >= this.cb.length) {
             this.flushBuffer();
         }
@@ -48,7 +48,7 @@ public class BufferedWriter extends Writer {
         this.nextChar = this.nextChar + 1;
     }
 
-    public void write(char[] cbuf, int off, int len) {
+    public void write(char[] cbuf, int off, int len) throws IOException {
         // Same bargain as BufferedOutputStream: a chunk that would fill the buffer on its
         // own is handed straight to the sink instead of being copied twice.
         if (len >= this.cb.length) {
@@ -65,7 +65,7 @@ public class BufferedWriter extends Writer {
 
     // Overridden (Writer's version would cut a char[] copy of the slice first) so that a
     // String written through a buffer costs one copy, into the buffer, and no more.
-    public void write(String str, int off, int len) {
+    public void write(String str, int off, int len) throws IOException {
         for (int i = 0; i < len; i++) {
             this.write(str.charAt(off + i));
         }
@@ -74,23 +74,25 @@ public class BufferedWriter extends Writer {
     // The separator is written as '\n' rather than the platform's: KajiLibrary has no
     // System.lineSeparator() yet, and reading a `static final` String constant off another
     // class is not an option either (finding #110 compiles that to a getfield that traps).
-    public void newLine() {
+    public void newLine() throws IOException {
         this.write('\n');
     }
 
-    public void flush() {
+    public void flush() throws IOException {
         this.flushBuffer();
         this.out.flush();
     }
 
-    private void flushBuffer() {
+    // Declara `throws` porque `out.write` la declara. Todos sus llamadores --`flush`, `close`,
+    // `write`-- ya la declaran a su vez, asi que se propaga sin envolverla.
+    private void flushBuffer() throws IOException {
         if (this.nextChar > 0) {
             this.out.write(this.cb, 0, this.nextChar);
             this.nextChar = 0;
         }
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.flushBuffer();
         this.out.close();
     }

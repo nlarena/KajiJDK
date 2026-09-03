@@ -24,22 +24,38 @@ public class SequenceInputStream extends InputStream {
     // The one currently being read, or null once the whole sequence is exhausted.
     private InputStream in;
 
+    /**
+     * @param e los flujos, en orden
+     *
+     * <p>El constructor **no** declara `throws IOException` --el JDK tampoco-- y sin embargo
+     * `nextStream()` la puede tirar: abrir el primer flujo es E/S. Se envuelve en
+     * {@link UncheckedIOException}, que es la unica salida cuando el contrato del constructor dice
+     * que no falla.
+     */
     public SequenceInputStream(Enumeration<? extends InputStream> e) {
         this.e = e;
-        this.nextStream();
+        try {
+            this.nextStream();
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
     // The two-stream case is common enough to deserve its own constructor; it is the
     // general one with a two-element sequence behind it.
     public SequenceInputStream(InputStream s1, InputStream s2) {
         this.e = new TwoStreamEnumeration(s1, s2);
-        this.nextStream();
+        try {
+            this.nextStream();
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
     // Close the stream we are done with and pull the next one, or leave `in` null when
     // there is none. Closing here rather than in close() is what keeps the handle count at
     // one however long the sequence is.
-    private void nextStream() {
+    private void nextStream() throws IOException {
         if (this.in != null) {
             this.in.close();
             this.in = null;
@@ -53,7 +69,7 @@ public class SequenceInputStream extends InputStream {
     // End of one stream is NOT end of the sequence, so a -1 from the current stream means
     // "advance and try again"; only running out of streams is really the end. The loop is
     // needed rather than a single retry because a stream in the middle may well be empty.
-    public int read() {
+    public int read() throws IOException {
         while (this.in != null) {
             int c = this.in.read();
             if (c >= 0) {
@@ -67,7 +83,7 @@ public class SequenceInputStream extends InputStream {
     // A bulk read never spans a boundary: it returns what the current stream gave and lets
     // the caller come back. Stitching two streams into one array would be legal but would
     // hide a boundary the caller may care about, and a short read is always allowed.
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws IOException {
         if (len <= 0) {
             return 0;
         }
@@ -83,7 +99,7 @@ public class SequenceInputStream extends InputStream {
 
     // Only the current stream can answer: asking the ones not yet opened would mean
     // opening them, which is exactly what this class is arranged to avoid.
-    public int available() {
+    public int available() throws IOException {
         if (this.in == null) {
             return 0;
         }
@@ -92,7 +108,7 @@ public class SequenceInputStream extends InputStream {
 
     // Closing the sequence closes every stream left in it — the ones already passed were
     // closed by nextStream(), and abandoning the rest unclosed would leak them.
-    public void close() {
+    public void close() throws IOException {
         while (this.in != null) {
             this.nextStream();
         }

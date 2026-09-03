@@ -13,13 +13,13 @@ public abstract class InputStream implements Closeable {
 
     // The next byte of data (0..255), or -1 at end of stream. The one operation a concrete
     // source must provide.
-    public abstract int read();
+    public abstract int read() throws IOException;
 
-    public int read(byte[] b) {
+    public int read(byte[] b) throws IOException {
         return this.read(b, 0, b.length);
     }
 
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws IOException {
         int i = 0;
         while (i < len) {
             int c = this.read();
@@ -36,7 +36,7 @@ public abstract class InputStream implements Closeable {
     }
 
     // Discard up to `n` bytes, returning how many were actually skipped.
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         long remaining = n;
         while (remaining > 0) {
             if (this.read() < 0) {
@@ -47,7 +47,7 @@ public abstract class InputStream implements Closeable {
         return n;
     }
 
-    public int available() {
+    public int available() throws IOException {
         return 0;
     }
 
@@ -65,7 +65,7 @@ public abstract class InputStream implements Closeable {
     public void mark(int readlimit) {
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         throw new UnsupportedOperationException("mark/reset not supported");
     }
 
@@ -73,16 +73,16 @@ public abstract class InputStream implements Closeable {
         return false;
     }
 
-    public void close() {
+    public void close() throws IOException {
     }
 
     // --- bulk consumption (Java 9+/11+ conveniences) ---
 
-    public byte[] readAllBytes() {
+    public byte[] readAllBytes() throws IOException {
         return readNBytes(Integer.MAX_VALUE);
     }
 
-    public byte[] readNBytes(int len) {
+    public byte[] readNBytes(int len) throws IOException {
         if (len < 0) {
             throw new IllegalArgumentException("len < 0");
         }
@@ -101,7 +101,7 @@ public abstract class InputStream implements Closeable {
         return bos.toByteArray();
     }
 
-    public int readNBytes(byte[] b, int off, int len) {
+    public int readNBytes(byte[] b, int off, int len) throws IOException {
         int total = 0;
         while (total < len) {
             int n = read(b, off + total, len - total);
@@ -148,11 +148,11 @@ public abstract class InputStream implements Closeable {
     }
 
     private static final class NullInputStream extends InputStream {
-        public int read() {
+        public int read() throws IOException {
             return -1;
         }
 
-        public int read(byte[] b, int off, int len) {
+        public int read(byte[] b, int off, int len) throws IOException {
             return len == 0 ? 0 : -1;
         }
     }

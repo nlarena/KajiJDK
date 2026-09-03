@@ -20,19 +20,19 @@ public abstract class FilterReader extends Reader {
         this.in = in;
     }
 
-    public int read() {
+    public int read() throws IOException {
         return this.in.read();
     }
 
-    public int read(char[] cbuf, int off, int len) {
+    public int read(char[] cbuf, int off, int len) throws IOException {
         return this.in.read(cbuf, off, len);
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws IOException {
         return this.in.skip(n);
     }
 
-    public boolean ready() {
+    public boolean ready() throws IOException {
         return this.in.ready();
     }
 
@@ -40,15 +40,15 @@ public abstract class FilterReader extends Reader {
         return this.in.markSupported();
     }
 
-    public void mark(int readAheadLimit) {
+    public void mark(int readAheadLimit) throws IOException {
         this.in.mark(readAheadLimit);
     }
 
-    public void reset() {
+    public void reset() throws IOException {
         this.in.reset();
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.in.close();
     }
 }
