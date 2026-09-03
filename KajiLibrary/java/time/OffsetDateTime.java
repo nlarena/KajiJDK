@@ -394,9 +394,20 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
 
     // ---- TemporalAccessor / Temporal -------------------------------------------------------------
 
+    /**
+     * Los campos que una fecha y hora con desplazamiento tiene: **todos** los de `ChronoField`.
+     *
+     * <p>Y esa es la respuesta correcta, no una simplificacion: al tener fecha, hora y
+     * desplazamiento, hay con que contestar `INSTANT_SECONDS` --que es lo que un `LocalDateTime`
+     * solo no puede-- y tambien los de fecha y los de hora.
+     *
+     * <p>Lo que estaba escrito era `field != INSTANT_SECONDS || true`, que es siempre cierto: la
+     * primera mitad no hace nada. Daba la respuesta correcta por accidente, y el `|| true` escondia
+     * la intencion -- alguien que lo leyera se preguntaria que caso se quiso excluir.
+     */
     public boolean isSupported(TemporalField field) {
         if (field instanceof ChronoField) {
-            return field != ChronoField.INSTANT_SECONDS || true;
+            return true;
         }
         return field != null && field.isSupportedBy(this);
     }

@@ -203,12 +203,32 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> 
     // --- Temporal ---
 
     public boolean isSupported(TemporalField field) {
-        return field == ChronoField.YEAR;
+        if (field instanceof ChronoField) {
+            return field == ChronoField.YEAR || field == ChronoField.YEAR_OF_ERA
+                || field == ChronoField.ERA;
+        }
+        return field != null && field.isSupportedBy(this);
     }
 
+    /**
+     * El valor de ese campo.
+     *
+     * <p>`ERA` y `YEAR_OF_ERA` son el mismo anio dicho de otra forma --la era, y la cuenta dentro de
+     * ella-- asi que se deducen sin nada que decidir. Faltaban, y por eso un formateador con `G` o con
+     * `yyyy` en un calendario con eras se topaba con un rechazo donde habia informacion de sobra.
+     */
     public long getLong(TemporalField field) {
         if (field == ChronoField.YEAR) {
-            return this.year;
+            return (long) this.year;
+        }
+        if (field == ChronoField.YEAR_OF_ERA) {
+            return (long) (this.year >= 1 ? this.year : 1 - this.year);
+        }
+        if (field == ChronoField.ERA) {
+            return (long) (this.year >= 1 ? 1 : 0);
+        }
+        if (field != null && !(field instanceof ChronoField)) {
+            return field.getFrom(this);
         }
         throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }

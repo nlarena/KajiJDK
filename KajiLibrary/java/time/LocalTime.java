@@ -209,23 +209,83 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
 
     // --- Temporal ---
 
+    /**
+     * Los campos que una hora tiene.
+     *
+     * <p>La respuesta correcta es "todos los de tiempo", y por eso se pregunta por la categoria en vez
+     * de enumerar: una lista se desincroniza con `getLong` --paso, y `SECOND_OF_DAY` decia que no y
+     * despues se calculaba igual-- mientras que la categoria no puede.
+     */
     public boolean isSupported(TemporalField field) {
-        return field == ChronoField.HOUR_OF_DAY || field == ChronoField.MINUTE_OF_HOUR
-            || field == ChronoField.SECOND_OF_MINUTE || field == ChronoField.NANO_OF_SECOND;
+        if (field instanceof ChronoField) {
+            return ((ChronoField) field).isTimeBased();
+        }
+        return field != null && field.isSupportedBy(this);
     }
 
+    /**
+     * El valor de ese campo.
+     *
+     * <p>Los cuatro primeros son el estado; los otros nueve **se deducen**, y estan porque son
+     * funciones exactas de lo que hay -- no hay ninguna decision que tomar al calcularlos. Antes
+     * faltaban, y eso hacia que un formateador con `hh:mm a` o con `SSS` no pudiera leer la hora que
+     * tenia delante.
+     *
+     * <p>Los dos `CLOCK_HOUR_*` son los unicos con una vuelta: cuentan de 1 a 12 (o de 1 a 24) en vez
+     * de 0 a 11, asi que el cero se mapea al maximo. Es lo que hace que la medianoche se escriba
+     * `12:00 AM` y no `0:00 AM`.
+     */
     public long getLong(TemporalField field) {
         if (field == ChronoField.HOUR_OF_DAY) {
-            return this.hour;
+            return (long) this.hour;
         }
         if (field == ChronoField.MINUTE_OF_HOUR) {
-            return this.minute;
+            return (long) this.minute;
         }
         if (field == ChronoField.SECOND_OF_MINUTE) {
-            return this.second;
+            return (long) this.second;
         }
         if (field == ChronoField.NANO_OF_SECOND) {
-            return this.nano;
+            return (long) this.nano;
+        }
+        if (field == ChronoField.NANO_OF_DAY) {
+            return this.toNanoOfDay();
+        }
+        if (field == ChronoField.MICRO_OF_SECOND) {
+            return (long) (this.nano / 1000);
+        }
+        if (field == ChronoField.MICRO_OF_DAY) {
+            return this.toNanoOfDay() / 1000L;
+        }
+        if (field == ChronoField.MILLI_OF_SECOND) {
+            return (long) (this.nano / 1000000);
+        }
+        if (field == ChronoField.MILLI_OF_DAY) {
+            return this.toNanoOfDay() / 1000000L;
+        }
+        if (field == ChronoField.SECOND_OF_DAY) {
+            return (long) this.toSecondOfDay();
+        }
+        if (field == ChronoField.MINUTE_OF_DAY) {
+            return (long) (this.hour * 60 + this.minute);
+        }
+        if (field == ChronoField.HOUR_OF_AMPM) {
+            return (long) (this.hour % 12);
+        }
+        if (field == ChronoField.CLOCK_HOUR_OF_AMPM) {
+            int h = this.hour % 12;
+            return (long) (h == 0 ? 12 : h);
+        }
+        if (field == ChronoField.CLOCK_HOUR_OF_DAY) {
+            return (long) (this.hour == 0 ? 24 : this.hour);
+        }
+        if (field == ChronoField.AMPM_OF_DAY) {
+            return (long) (this.hour / 12);
+        }
+        if (field != null && !(field instanceof ChronoField)) {
+            // Un campo de terceros sabe leerse solo: se le pasa la pelota en vez de rechazarlo por no
+            // estar en la lista.
+            return field.getFrom(this);
         }
         throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }

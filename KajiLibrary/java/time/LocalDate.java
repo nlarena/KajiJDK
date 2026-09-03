@@ -33,9 +33,41 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         this.day = day;
     }
 
+    /**
+     * La fecha de ese anio, mes y dia.
+     *
+     * <p>**Valida el dia contra el largo del mes**, y eso no es una cortesia: sin la comprobacion,
+     * `LocalDate.of(2023, 2, 30)` devolvia un objeto que se imprimia `2023-02-30` --una fecha que no
+     * existe-- y cuyo `toEpochDay()` era el del 2 de marzo. O sea que la aritmetica y el texto
+     * decian cosas distintas, y ninguna de las dos avisaba.
+     *
+     * <p>El anio bisiesto entra en la cuenta: el 29 de febrero es valido en 2024 y no en 2023.
+     *
+     * @throws java.time.DateTimeException si el mes no esta en [1, 12], o si el dia no esta en
+     *     [1, largo del mes]
+     */
     public static LocalDate of(int year, int month, int day) {
+        if (month < 1 || month > 12) {
+            throw new java.time.DateTimeException("Invalid value for MonthOfYear: " + month);
+        }
+        if (day < 1 || day > 31) {
+            throw new java.time.DateTimeException("Invalid value for DayOfMonth: " + day);
+        }
+        int largo = Month.of(month).length(LocalDate.isLeapYear(year));
+        if (day > largo) {
+            // El mensaje distingue los dos casos como el JDK, porque mandan a mirar cosas distintas:
+            // un 29 de febrero de un anio no bisiesto suele ser un anio mal calculado, y un 31 de
+            // abril es un mes mal calculado.
+            if (day == 29 && month == 2) {
+                throw new java.time.DateTimeException(
+                        "Invalid date 'February 29' as '" + year + "' is not a leap year");
+            }
+            throw new java.time.DateTimeException(
+                    "Invalid date '" + Month.of(month).name() + " " + day + "'");
+        }
         return new LocalDate(year, month, day);
     }
+
 
     /** 1970-01-01, el dia cero. */
     public static final LocalDate EPOCH = LocalDate.ofEpochDay(0L);
@@ -441,30 +473,79 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
 
     // --- Temporal ---
 
+    /**
+     * Los campos que una fecha tiene: **todos** los de fecha.
+     *
+     * <p>Se pregunta por la categoria en vez de enumerar seis nombres. La lista se desincronizaba con
+     * `getLong` --y de hecho lo estaba: `ERA` y `PROLEPTIC_MONTH` decian que no-- mientras que la
+     * categoria no puede.
+     */
     public boolean isSupported(TemporalField field) {
-        return field == ChronoField.DAY_OF_MONTH || field == ChronoField.MONTH_OF_YEAR
-            || field == ChronoField.YEAR || field == ChronoField.EPOCH_DAY
-            || field == ChronoField.DAY_OF_WEEK || field == ChronoField.DAY_OF_YEAR;
+        if (field instanceof ChronoField) {
+            return ((ChronoField) field).isDateBased();
+        }
+        return field != null && field.isSupportedBy(this);
     }
 
+    /**
+     * El valor de ese campo.
+     *
+     * <p>Tres son el estado --anio, mes, dia-- y el resto **se deduce**. Estan porque son funciones
+     * exactas de esos tres, sin ninguna decision que tomar: un formateador con `G` o con `yyyy` en un
+     * calendario con eras necesita `ERA` y `YEAR_OF_ERA`, y antes se encontraba con un rechazo.
+     *
+     * <p>Los `ALIGNED_*` son la unica familia que pide explicacion. Alinean las semanas al **dia 1**
+     * del mes o del anio en vez de al lunes: el dia 1 empieza siempre la semana 1, el 8 la semana 2, y
+     * asi. Por eso son `(dia - 1) / 7 + 1` y `(dia - 1) % 7 + 1` y no dependen de en que dia de la
+     * semana cayo nada.
+     *
+     * <p>`ERA` es 1 para las fechas de anio positivo y 0 para el resto, y `YEAR_OF_ERA` cuenta hacia
+     * atras dentro de la era anterior --el anio 0 proleptico es el 1 antes de Cristo--, que es lo que
+     * hace que las dos juntas reconstruyan el anio.
+     */
     public long getLong(TemporalField field) {
         if (field == ChronoField.DAY_OF_MONTH) {
-            return this.day;
+            return (long) this.day;
         }
         if (field == ChronoField.MONTH_OF_YEAR) {
-            return this.month;
+            return (long) this.month;
         }
         if (field == ChronoField.YEAR) {
-            return this.year;
+            return (long) this.year;
         }
         if (field == ChronoField.EPOCH_DAY) {
             return this.toEpochDay();
         }
         if (field == ChronoField.DAY_OF_WEEK) {
-            return this.getDayOfWeek().getValue();
+            return (long) this.getDayOfWeek().getValue();
         }
         if (field == ChronoField.DAY_OF_YEAR) {
-            return this.getDayOfYear();
+            return (long) this.getDayOfYear();
+        }
+        if (field == ChronoField.ALIGNED_DAY_OF_WEEK_IN_MONTH) {
+            return (long) ((this.day - 1) % 7 + 1);
+        }
+        if (field == ChronoField.ALIGNED_DAY_OF_WEEK_IN_YEAR) {
+            return (long) ((this.getDayOfYear() - 1) % 7 + 1);
+        }
+        if (field == ChronoField.ALIGNED_WEEK_OF_MONTH) {
+            return (long) ((this.day - 1) / 7 + 1);
+        }
+        if (field == ChronoField.ALIGNED_WEEK_OF_YEAR) {
+            return (long) ((this.getDayOfYear() - 1) / 7 + 1);
+        }
+        if (field == ChronoField.PROLEPTIC_MONTH) {
+            return (long) this.year * 12L + (long) (this.month - 1);
+        }
+        if (field == ChronoField.YEAR_OF_ERA) {
+            return (long) (this.year >= 1 ? this.year : 1 - this.year);
+        }
+        if (field == ChronoField.ERA) {
+            return (long) (this.year >= 1 ? 1 : 0);
+        }
+        if (field != null && !(field instanceof ChronoField)) {
+            // Un campo de terceros sabe leerse solo.
+            return field.getFrom(this);
         }
         throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }

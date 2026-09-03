@@ -146,13 +146,34 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
 
     // --- Temporal ---
 
+    /**
+     * Los cuatro campos que un instante tiene.
+     *
+     * <p>`INSTANT_SECONDS` es el que **define** a la clase, y faltaba: sin el,
+     * `Instant.from(unInstante)` tiraba y `DateTimeFormatter.ISO_INSTANT.format(...)` no podia
+     * funcionar. Es la clase de hueco que la medicion por forma no ve -- el metodo estaba, y contestaba
+     * `false` sobre su propio campo.
+     *
+     * <p>Los otros tres son el nano en sus tres granularidades. Un instante **no** tiene fecha ni hora
+     * del dia: para eso hace falta una zona, y por eso `HOUR_OF_DAY` no esta.
+     */
     public boolean isSupported(TemporalField field) {
-        return field == ChronoField.NANO_OF_SECOND;
+        return field == ChronoField.INSTANT_SECONDS || field == ChronoField.NANO_OF_SECOND
+                || field == ChronoField.MICRO_OF_SECOND || field == ChronoField.MILLI_OF_SECOND;
     }
 
     public long getLong(TemporalField field) {
+        if (field == ChronoField.INSTANT_SECONDS) {
+            return this.seconds;
+        }
         if (field == ChronoField.NANO_OF_SECOND) {
-            return this.nanos;
+            return (long) this.nanos;
+        }
+        if (field == ChronoField.MICRO_OF_SECOND) {
+            return (long) (this.nanos / 1000);
+        }
+        if (field == ChronoField.MILLI_OF_SECOND) {
+            return (long) (this.nanos / 1000000);
         }
         throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
     }
