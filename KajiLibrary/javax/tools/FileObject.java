@@ -15,6 +15,15 @@ import java.io.IOException;
 // que el gate daria por buena. Ausencia antes que mentira.
 public interface FileObject {
 
+    /**
+     * El URI que **identifica** este objeto.
+     *
+     * <p>Es la identidad, no el nombre: dos `FileObject` con el mismo `getName()` --`Foo.java` en dos
+     * directorios-- tienen URIs distintos, y esa es justamente la pregunta que un compilador necesita
+     * responder para no compilar dos veces la misma fuente ni confundir dos fuentes homonimas.
+     */
+    java.net.URI toUri();
+
     String getName();
 
     InputStream openInputStream() throws IOException;

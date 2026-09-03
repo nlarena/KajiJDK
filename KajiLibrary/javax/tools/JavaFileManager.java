@@ -45,6 +45,65 @@ public interface JavaFileManager extends Closeable, Flushable, OptionChecker {
         }
     }
 
+    /**
+     * El cargador con el que correr las herramientas que viven en esa ubicacion.
+     *
+     * <p>Existe por los procesadores de anotaciones: son codigo del usuario que el compilador tiene
+     * que **ejecutar**, y hay que cargarlo de algun lado sin mezclarlo con el classpath de lo que se
+     * esta compilando.
+     *
+     * @return el cargador, o `null` si la ubicacion no lo admite
+     */
+    ClassLoader getClassLoader(Location location);
+
+    /**
+     * Todos los objetos de esa ubicacion y ese paquete, de las clases de archivo pedidas.
+     *
+     * <p>Es la operacion central del gestor: es como el compilador **descubre** que hay en un
+     * paquete sin que nadie se lo enumere.
+     *
+     * @param recurse si tambien mirar los subpaquetes
+     */
+    Iterable<JavaFileObject> list(Location location, String packageName,
+            Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException;
+
+    /** El objeto de **entrada** de esa clase binaria, o `null` si no esta. */
+    JavaFileObject getJavaFileForInput(Location location, String className,
+            JavaFileObject.Kind kind) throws IOException;
+
+    /**
+     * El objeto de **salida** para esa clase binaria.
+     *
+     * <p>`sibling` es una pista, no un dato: el gestor puede usarla para poner la salida al lado de
+     * la fuente que la origino. Puede ser `null`.
+     */
+    JavaFileObject getJavaFileForOutput(Location location, String className,
+            JavaFileObject.Kind kind, FileObject sibling) throws IOException;
+
+    /** Igual, con **todas** las fuentes que lo originan; la primera hace de `sibling`. */
+    default JavaFileObject getJavaFileForOutputForOriginatingFiles(Location location,
+            String className, JavaFileObject.Kind kind, FileObject... originatingFiles)
+            throws IOException {
+        FileObject sibling = null;
+        if (originatingFiles != null && originatingFiles.length > 0) {
+            sibling = originatingFiles[0];
+        }
+        return getJavaFileForOutput(location, className, kind, sibling);
+    }
+
+    /**
+     * Los servicios de ese tipo que hay en esa ubicacion.
+     *
+     * <p>Es como el compilador encuentra los procesadores de anotaciones declarados por
+     * `META-INF/services`. **Devuelve un cargador vacio**: esta biblioteca no lee ese directorio de
+     * servicios, y un cargador vacio es exactamente lo que el JDK devuelve para una ubicacion que no
+     * declara ninguno.
+     */
+    default <S> java.util.ServiceLoader<S> getServiceLoader(Location location, Class<S> service)
+            throws IOException {
+        return java.util.ServiceLoader.load(service, this.getClassLoader(location));
+    }
+
     String inferBinaryName(Location location, JavaFileObject file);
 
     boolean isSameFile(FileObject a, FileObject b);

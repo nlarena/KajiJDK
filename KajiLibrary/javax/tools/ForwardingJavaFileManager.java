@@ -27,13 +27,11 @@ import java.util.Objects;
 //    ("no es abstracta y no implementa `inferBinaryName` de `JavaFileManager`") — y ese chequeo
 //    si funciona para interfaces implementadas directamente. Las dos salidas eran marcar la
 //    clase `abstract` (que el JDK real NO hace: es `public class`) u omitir la superinterfaz.
-//    Se omite la superinterfaz: una ausencia es un subconjunto, un `abstract` inventado seria
-//    una declaracion falsa que el gate daria por buena. La relacion con JavaFileManager
-//    sobrevive igual en la cota del parametro, `M extends JavaFileManager`.
-//
-// Quedan los cinco metodos cuya firma no menciona ningun tipo anidado — mas el campo y el
-// constructor, que son la estructura misma de la clase.
-public class ForwardingJavaFileManager<M extends JavaFileManager> {
+// La superinterfaz **esta**, y con ella las ocho delegaciones que mencionan `Location`. La nota
+// anterior las omitia porque el javac no podia nombrar un tipo anidado de otra unidad, y prefería
+// una ausencia declarada a una superinterfaz fantasma -- lo cual era correcto entonces. Ya no hace
+// falta: se puede nombrar, y la clase hace lo que su nombre dice, reenviar todo.
+public class ForwardingJavaFileManager<M extends JavaFileManager> implements JavaFileManager {
 
     protected final M fileManager;
 
@@ -43,6 +41,67 @@ public class ForwardingJavaFileManager<M extends JavaFileManager> {
 
     public boolean isSameFile(FileObject a, FileObject b) {
         return this.fileManager.isSameFile(a, b);
+    }
+
+    // ---- las ocho que mencionan `Location` -------------------------------------------------------
+    //
+    // Todas reenvian sin mirar. Que sean tantas y tan tontas es el punto de la clase: existe para que
+    // alguien pueda cambiar **una** y heredar el resto, en vez de reimplementar el gestor entero.
+
+    public ClassLoader getClassLoader(JavaFileManager.Location location) {
+        return this.fileManager.getClassLoader(location);
+    }
+
+    public boolean hasLocation(JavaFileManager.Location location) {
+        return this.fileManager.hasLocation(location);
+    }
+
+    public Iterable<JavaFileObject> list(JavaFileManager.Location location, String packageName,
+            java.util.Set<JavaFileObject.Kind> kinds, boolean recurse) throws java.io.IOException {
+        return this.fileManager.list(location, packageName, kinds, recurse);
+    }
+
+    public String inferBinaryName(JavaFileManager.Location location, JavaFileObject file) {
+        return this.fileManager.inferBinaryName(location, file);
+    }
+
+    public JavaFileObject getJavaFileForInput(JavaFileManager.Location location, String className,
+            JavaFileObject.Kind kind) throws java.io.IOException {
+        return this.fileManager.getJavaFileForInput(location, className, kind);
+    }
+
+    public JavaFileObject getJavaFileForOutput(JavaFileManager.Location location, String className,
+            JavaFileObject.Kind kind, FileObject sibling) throws java.io.IOException {
+        return this.fileManager.getJavaFileForOutput(location, className, kind, sibling);
+    }
+
+    public FileObject getFileForInput(JavaFileManager.Location location, String packageName,
+            String relativeName) throws java.io.IOException {
+        return this.fileManager.getFileForInput(location, packageName, relativeName);
+    }
+
+    public FileObject getFileForOutput(JavaFileManager.Location location, String packageName,
+            String relativeName, FileObject sibling) throws java.io.IOException {
+        return this.fileManager.getFileForOutput(location, packageName, relativeName, sibling);
+    }
+
+    public String inferModuleName(JavaFileManager.Location location) throws java.io.IOException {
+        return this.fileManager.inferModuleName(location);
+    }
+
+    public Iterable<java.util.Set<JavaFileManager.Location>> listLocationsForModules(
+            JavaFileManager.Location location) throws java.io.IOException {
+        return this.fileManager.listLocationsForModules(location);
+    }
+
+    public boolean contains(JavaFileManager.Location location, FileObject fo)
+            throws java.io.IOException {
+        return this.fileManager.contains(location, fo);
+    }
+
+    public <S> java.util.ServiceLoader<S> getServiceLoader(JavaFileManager.Location location,
+            Class<S> service) throws java.io.IOException {
+        return this.fileManager.getServiceLoader(location, service);
     }
 
     public boolean handleOption(String current, Iterator<String> remaining) {

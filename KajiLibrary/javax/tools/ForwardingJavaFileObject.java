@@ -15,12 +15,28 @@ package javax.tools;
 // `getAccessLevel` -> Modifier, ninguno de los dos en javax.lang.model.element).
 //
 // Queda la clase igual, y no vacia: aporta su identidad de tipo, su parametro acotado
-// `F extends JavaFileObject`, la cadena `extends ForwardingFileObject<F> implements
-// JavaFileObject` con las nueve delegaciones heredadas, y el constructor protegido. El dia
-// que el compilador resuelva anidados, los dos metodos se agregan sin tocar nada mas.
+// La nota anterior decia que `getNestingKind`/`getAccessLevel` esperaban a que el compilador
+// resolviera tipos anidados de otra unidad, y que ese dia se agregaban sin tocar nada mas. Llego, y
+// fue asi.
 public class ForwardingJavaFileObject<F extends JavaFileObject> extends ForwardingFileObject<F> implements JavaFileObject {
 
     protected ForwardingJavaFileObject(F fileObject) {
         super(fileObject);
+    }
+
+    public JavaFileObject.Kind getKind() {
+        return this.fileObject.getKind();
+    }
+
+    public boolean isNameCompatible(String simpleName, JavaFileObject.Kind kind) {
+        return this.fileObject.isNameCompatible(simpleName, kind);
+    }
+
+    public javax.lang.model.element.NestingKind getNestingKind() {
+        return this.fileObject.getNestingKind();
+    }
+
+    public javax.lang.model.element.Modifier getAccessLevel() {
+        return this.fileObject.getAccessLevel();
     }
 }

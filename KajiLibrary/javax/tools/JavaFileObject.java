@@ -45,5 +45,22 @@ public interface JavaFileObject extends FileObject {
 
     Kind getKind();
 
+    /**
+     * El anidamiento de la clase principal de este objeto, o `null` si no se sabe.
+     *
+     * <p>`null` es la respuesta correcta y la mas comun: averiguarlo exige **leer** el archivo, y
+     * este metodo existe para las fuentes generadas, donde quien las genero ya lo sabe. Devolver un
+     * valor inventado seria peor que decir "no se".
+     */
+    javax.lang.model.element.NestingKind getNestingKind();
+
+    /**
+     * El nivel de acceso de la clase principal, o `null` si no se sabe.
+     *
+     * <p>Solo cuatro valores tienen sentido --`public`, `protected`, `private` y `null` para el de
+     * paquete-- y vale la misma nota que arriba: `null` no es un hueco.
+     */
+    javax.lang.model.element.Modifier getAccessLevel();
+
     boolean isNameCompatible(String simpleName, Kind kind);
 }

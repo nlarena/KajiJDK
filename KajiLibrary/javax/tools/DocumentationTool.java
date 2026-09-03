@@ -10,13 +10,21 @@ import java.util.concurrent.Callable;
 // doclet class to run, and its own output/doclet/taglet/snippet locations.
 //
 // OMITIDOS (salida (a), omitir el miembro):
-//   - `StandardJavaFileManager getStandardFileManager(DiagnosticListener<? super JavaFileObject>,
-//      Locale, Charset)` — sin java.nio.charset en KajiLibrary. Igual que en JavaCompiler.
-//   - En el anidado `Location`, la clausula `implements JavaFileManager.Location`: el javac
-//     congelado no puede nombrar un tipo anidado de otra unidad de compilacion, y con el import
-//     la clausula se descarta en silencio. Los dos metodos del contrato quedan con su firma
-//     exacta.
+// Las dos omisiones que la nota anterior listaba --`getStandardFileManager` por falta de
+// `java.nio.charset`, y la clausula `implements JavaFileManager.Location` del anidado por no poder
+// nombrar un tipo anidado de otra unidad-- ya no aplican: las dos cosas existen.
 public interface DocumentationTool extends Tool, OptionChecker {
+
+    /**
+     * El gestor de archivos estandar de esta herramienta.
+     *
+     * <p>Los tres argumentos son los tres canales por los que una herramienta habla con el mundo: a
+     * donde van los diagnosticos, en que idioma, y con que codificacion se leen las fuentes. `null`
+     * en cualquiera de ellos significa "lo que el sistema use por defecto".
+     */
+    StandardJavaFileManager getStandardFileManager(
+            DiagnosticListener<? super JavaFileObject> diagnosticListener, Locale locale,
+            java.nio.charset.Charset charset);
 
     DocumentationTask getTask(Writer out,
                               JavaFileManager fileManager,
@@ -36,7 +44,7 @@ public interface DocumentationTool extends Tool, OptionChecker {
     }
 
     // Las cuatro ubicaciones que solo tienen sentido documentando.
-    public enum Location {
+    public enum Location implements JavaFileManager.Location {
 
         DOCUMENTATION_OUTPUT,
         DOCLET_PATH,

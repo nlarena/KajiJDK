@@ -10,11 +10,8 @@ import javax.annotation.processing.Processor;
 // hands back a CompilationTask you configure and then call(), which is what makes annotation
 // processors and a custom file manager attachable before the first source is read.
 //
-// OMITIDO (salida (a), omitir el miembro):
-//   - `StandardJavaFileManager getStandardFileManager(DiagnosticListener<? super JavaFileObject>,
-//      Locale, Charset)` — java.nio.charset no existe en KajiLibrary (cero clases). Es el unico
-//      lugar del paquete donde hace falta Charset; sin el, el metodo no se puede declarar sin
-//      mentir sobre el tercer parametro.
+// `getStandardFileManager(...)` **esta**: la nota anterior lo omitia porque `java.nio.charset` no
+// existia, y ahora existe entero.
 public interface JavaCompiler extends Tool, OptionChecker {
 
     // El trabajo pendiente: ya sabe que compilar, todavia no empezo. Es Callable<Boolean>
@@ -30,6 +27,17 @@ public interface JavaCompiler extends Tool, OptionChecker {
 
         Boolean call();
     }
+
+    /**
+     * El gestor de archivos estandar de esta herramienta.
+     *
+     * <p>Los tres argumentos son los tres canales por los que una herramienta habla con el mundo: a
+     * donde van los diagnosticos, en que idioma, y con que codificacion se leen las fuentes. `null`
+     * en cualquiera de ellos significa "lo que el sistema use por defecto".
+     */
+    StandardJavaFileManager getStandardFileManager(
+            DiagnosticListener<? super JavaFileObject> diagnosticListener, Locale locale,
+            java.nio.charset.Charset charset);
 
     CompilationTask getTask(Writer out,
                             JavaFileManager fileManager,

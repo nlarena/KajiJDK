@@ -1,5 +1,6 @@
 package javax.tools;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
@@ -27,27 +28,31 @@ public class ForwardingFileObject<F extends FileObject> implements FileObject {
         this.fileObject = Objects.requireNonNull(fileObject);
     }
 
+    public java.net.URI toUri() {
+        return this.fileObject.toUri();
+    }
+
     public String getName() {
         return this.fileObject.getName();
     }
 
-    public InputStream openInputStream() {
+    public InputStream openInputStream() throws IOException {
         return this.fileObject.openInputStream();
     }
 
-    public OutputStream openOutputStream() {
+    public OutputStream openOutputStream() throws IOException {
         return this.fileObject.openOutputStream();
     }
 
-    public Reader openReader(boolean ignoreEncodingErrors) {
+    public Reader openReader(boolean ignoreEncodingErrors) throws IOException {
         return this.fileObject.openReader(ignoreEncodingErrors);
     }
 
-    public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+    public CharSequence getCharContent(boolean ignoreEncodingErrors) throws IOException {
         return this.fileObject.getCharContent(ignoreEncodingErrors);
     }
 
-    public Writer openWriter() {
+    public Writer openWriter() throws IOException {
         return this.fileObject.openWriter();
     }
 

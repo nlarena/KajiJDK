@@ -18,6 +18,18 @@ public class ToolProvider {
     private ToolProvider() {
     }
 
+    /**
+     * El cargador desde el que se cargaron las herramientas del sistema.
+     *
+     * <p>Devuelve el cargador unico. En el JDK esto podia ser un cargador **aparte** --las
+     * herramientas vivian en `tools.jar`, fuera del classpath de la aplicacion-- y por eso el metodo
+     * existe; desde que las herramientas son un modulo mas, el JDK devuelve `null`. Aca hay un solo
+     * cargador y devolverlo es lo mas informativo.
+     */
+    public static ClassLoader getSystemToolClassLoader() {
+        return ClassLoader.getSystemClassLoader();
+    }
+
     public static JavaCompiler getSystemJavaCompiler() {
         return null;
     }
