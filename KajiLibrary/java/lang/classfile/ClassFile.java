@@ -1,26 +1,28 @@
 package java.lang.classfile;
 
 import java.io.IOException;
+import java.lang.constant.ClassDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.function.Consumer;
 
-// La fábrica de la API: de acá salen los `ClassModel` y acá viven las constantes del formato.
+// La fábrica de la API: de acá salen los `ClassModel`, acá se escriben los `.class` nuevos, y acá
+// viven las constantes del formato.
 //
-// Lo que KajiLibrary implementa de esta interfaz es la **lectura**: `of`, `withOptions`, `parse` y
-// las constantes. Lo que NO está, y por qué:
+// ALCANCE, y conviene leerlo antes de usar `build`: lo que se escribe es **exactamente lo que se le
+// dijo**. El `Code` sale con su `max_stack` calculado --recorriendo el grafo de flujo, no sumando--,
+// su `max_locals`, su tabla de excepciones y sus atributos de depuración; lo que NO sale es un
+// `StackMapTable` sintetizado. Si el llamador agrega uno, se escribe; si no, el método queda sin él.
 //
-//   - `build`, `buildTo`, `buildModule`, `buildModuleTo` y `transformClass` — escriben un `.class`
-//     nuevo. Escribir exige el paquete `java.lang.classfile.instruction` entero (una clase por forma
-//     de instrucción) y la generación de `StackMapTable`; nada de eso está. Un `build` que devolviera
-//     bytes sin mapa de pila produciría clases que la JVM real rechaza con `VerifyError`, que es
-//     exactamente el tipo de mentira que este proyecto no admite.
-//   - `verify` — devuelve la lista de errores de verificación del bytecode. Nuestro parseo valida la
-//     ESTRUCTURA del archivo (§4.1 a §4.7) y falla al leer si está mal, pero no verifica el flujo de
-//     tipos de §4.10. Devolver una lista vacía sería afirmar que la clase verifica, y no lo sabemos.
-//   - `latestMajorVersion`/`latestMinorVersion` sí están: son datos, no comportamiento.
+// La consecuencia es concreta: una clase de versión 50 o mayor, con saltos y sin `StackMapTable`,
+// **no pasa el verificador de una JVM**. El JDK lo calcula solo. Calcularlo no es un detalle que
+// falte por descuido -- es una inferencia de tipos sobre todo el grafo, que necesita el supertipo
+// común de cada unión, que es justamente para lo que existe `ClassHierarchyResolver`. Mientras eso
+// no esté, esto lo dice acá en vez de devolver bytes que parecen buenos.
 //
-// Las opciones (`ClassFile.Option` y sus enums anidados) tampoco están, salvo la interfaz marcadora:
-// todas gobiernan al escritor.
+// Las opciones (`ClassFile.Option` y sus enums anidados) no están, salvo la interfaz marcadora:
+// gobiernan al escritor y ninguna tiene hoy un comportamiento que prender o apagar.
 public interface ClassFile {
 
     /** Una instancia con las opciones por omisión. */
@@ -56,6 +58,109 @@ public interface ClassFile {
     /** La versión menor más nueva que esta implementación conoce. */
     public static int latestMinorVersion() {
         return 0;
+    }
+
+    // ---- escritura ------------------------------------------------------------------------------
+
+    /**
+     * Escribe una clase con ese nombre, ese pool y lo que el `handler` le diga.
+     *
+     * <p>Ver la nota de alcance del encabezado: el `StackMapTable` no se sintetiza.
+     */
+    byte[] build(java.lang.classfile.constantpool.ClassEntry thisClassEntry,
+            java.lang.classfile.constantpool.ConstantPoolBuilder constantPool,
+            Consumer<ClassBuilder> handler);
+
+    /** Lo mismo, con un pool nuevo. */
+    default byte[] build(ClassDesc thisClassDesc, Consumer<ClassBuilder> handler) {
+        java.lang.classfile.constantpool.ConstantPoolBuilder cp =
+                java.lang.classfile.constantpool.ConstantPoolBuilder.of();
+        return build(cp.classEntry(thisClassDesc), cp, handler);
+    }
+
+    /** Escribe la clase en ese archivo. */
+    default void buildTo(Path path, ClassDesc thisClassDesc, Consumer<ClassBuilder> handler)
+            throws IOException {
+        Files.write(path, build(thisClassDesc, handler));
+    }
+
+    /** Escribe la clase en ese archivo. */
+    default void buildTo(Path path, java.lang.classfile.constantpool.ClassEntry thisClassEntry,
+            java.lang.classfile.constantpool.ConstantPoolBuilder constantPool,
+            Consumer<ClassBuilder> handler) throws IOException {
+        Files.write(path, build(thisClassEntry, constantPool, handler));
+    }
+
+    /**
+     * Escribe un `module-info.class` con ese atributo `Module`.
+     *
+     * <p>Un descriptor de módulo es una clase con una forma fija: se llama `module-info`, es
+     * `ACC_MODULE` y no tiene ni superclase ni miembros. Lo único propio es el atributo, y por eso
+     * es lo único que este método pide.
+     */
+    default byte[] buildModule(java.lang.classfile.attribute.ModuleAttribute moduleAttribute) {
+        return buildModule(moduleAttribute, new NoExtraModuleElements());
+    }
+
+    /** Lo mismo, más lo que el `handler` agregue (otros atributos del módulo). */
+    default byte[] buildModule(java.lang.classfile.attribute.ModuleAttribute moduleAttribute,
+            Consumer<ClassBuilder> handler) {
+        return build(ClassDesc.of("module-info"),
+                new ModuleClassHandler(moduleAttribute, handler));
+    }
+
+    /** Escribe el `module-info.class` en ese archivo. */
+    default void buildModuleTo(Path path,
+            java.lang.classfile.attribute.ModuleAttribute moduleAttribute) throws IOException {
+        Files.write(path, buildModule(moduleAttribute));
+    }
+
+    /** Escribe el `module-info.class` en ese archivo. */
+    default void buildModuleTo(Path path,
+            java.lang.classfile.attribute.ModuleAttribute moduleAttribute,
+            Consumer<ClassBuilder> handler) throws IOException {
+        Files.write(path, buildModule(moduleAttribute, handler));
+    }
+
+    /** Copia esa clase a través de esa transformación, con ese nombre y ese pool. */
+    byte[] transformClass(ClassModel model,
+            java.lang.classfile.constantpool.ClassEntry newClassName, ClassTransform transform);
+
+    /** Copia esa clase a través de esa transformación, conservando su nombre. */
+    default byte[] transformClass(ClassModel model, ClassTransform transform) {
+        return transformClass(model, model.thisClass(), transform);
+    }
+
+    /** Copia esa clase a través de esa transformación, con otro nombre. */
+    default byte[] transformClass(ClassModel model, ClassDesc newClassName,
+            ClassTransform transform) {
+        java.lang.classfile.constantpool.ConstantPoolBuilder cp =
+                java.lang.classfile.constantpool.ConstantPoolBuilder.of();
+        return transformClass(model, cp.classEntry(newClassName), transform);
+    }
+
+    // ---- verificación ---------------------------------------------------------------------------
+
+    /**
+     * Los errores que se le encuentran a esa clase.
+     *
+     * <p><strong>Comprueba la ESTRUCTURA, no el flujo de tipos.</strong> Eso hay que leerlo al
+     * derecho: una lista vacía significa "no se encontró ningún error estructural", **no** "esta
+     * clase pasa el verificador de la JVM". El verificador de §4.10 --el que comprueba que la pila
+     * tenga el tipo que cada instrucción espera-- es otra cosa y no está acá.
+     *
+     * <p>Lo que sí encuentra: un magic o una versión que no son, un pool inconsistente, un índice
+     * fuera de rango, un largo de atributo que no entra en el archivo, un descriptor mal formado.
+     * Es lo que el parseo ya valida; este método lo expone como lista en vez de como excepción.
+     */
+    List<VerifyError> verify(byte[] bytes);
+
+    /** Lo mismo sobre un modelo ya leído. */
+    List<VerifyError> verify(ClassModel model);
+
+    /** Lo mismo sobre el archivo de esa ruta. */
+    default List<VerifyError> verify(Path path) throws IOException {
+        return verify(Files.readAllBytes(path));
     }
 
     /**
@@ -169,4 +274,36 @@ public interface ClassFile {
 
     /** El `minor_version` que marca una clase de vista previa: `0xFFFF`. */
     public static final int PREVIEW_MINOR_VERSION = 0xFFFF;
+}
+
+// El `handler` que arma un `module-info`: el atributo del modulo, la bandera que el formato le
+// exige, y despues lo que el llamador quiera agregar.
+//
+// Con nombre y no lambda: ver la nota de `ClassBuilder` sobre por que estas interfaces no pueden
+// depender de `LambdaMetafactory`.
+final class ModuleClassHandler implements Consumer<ClassBuilder> {
+
+    private final java.lang.classfile.attribute.ModuleAttribute attr;
+    private final Consumer<ClassBuilder> extra;
+
+    ModuleClassHandler(java.lang.classfile.attribute.ModuleAttribute attr,
+            Consumer<ClassBuilder> extra) {
+        this.attr = attr;
+        this.extra = extra;
+    }
+
+    public void accept(ClassBuilder cb) {
+        // ACC_MODULE. Un `module-info` no es una clase que alguien pueda instanciar ni extender, y
+        // esta bandera es lo que se lo dice a la JVM.
+        cb.withFlags(0x8000);
+        cb.with(this.attr);
+        this.extra.accept(cb);
+    }
+}
+
+// El `handler` vacio de `buildModule(ModuleAttribute)`.
+final class NoExtraModuleElements implements Consumer<ClassBuilder> {
+
+    public void accept(ClassBuilder cb) {
+    }
 }
