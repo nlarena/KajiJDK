@@ -416,7 +416,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
         java.util.Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
             K k = it.next();
-            out.add(new FixedEntry<K, V>(k, this.get(k)));
+            out.add(new ViewEntry<K, V>(k, this.get(k)));
         }
         return out;
     }

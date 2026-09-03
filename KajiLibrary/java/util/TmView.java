@@ -280,7 +280,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         LinkedHashSet<Map.Entry<K, V>> out = new LinkedHashSet<Map.Entry<K, V>>();
         TmNode<K, V> p = this.walkFirst();
         while (p != null) {
-            out.add(new FixedEntry<K, V>(p.key, p.value));
+            out.add(new ViewEntry<K, V>(p.key, p.value));
             p = this.walkNext(p);
         }
         return out;

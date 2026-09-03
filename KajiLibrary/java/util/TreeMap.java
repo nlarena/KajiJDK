@@ -314,7 +314,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         if (p == null) {
             return null;
         }
-        return new FixedEntry<K, V>(p.key, p.value);
+        return new ViewEntry<K, V>(p.key, p.value);
     }
 
     // --- NavigableMap: entradas y claves vecinas ---
@@ -833,7 +833,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
             new java.util.LinkedHashSet<java.util.Map.Entry<K, V>>();
         TmNode<K, V> p = this.firstNode();
         while (p != null) {
-            out.add(new FixedEntry<K, V>(p.key, p.value));
+            out.add(new ViewEntry<K, V>(p.key, p.value));
             p = this.successor(p);
         }
         return out;
