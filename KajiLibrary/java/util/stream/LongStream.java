@@ -18,18 +18,28 @@ import java.util.function.Supplier;
 import java.util.function.BiConsumer;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.PrimitiveIterator;
+import java.util.LongSummaryStatistics;
+import java.util.function.LongSupplier;
 
 // KajiLibrary's java.util.stream.LongStream — the long-specialized primitive stream, the mirror
 // of IntStream over long values. EAGER (each intermediate op materialises a fresh long[]); a
 // KajiLibrary subset. Not generic, so `implements LongStream` sidesteps #9.
-// Absent on purpose: `summaryStatistics()` (no java.util.LongSummaryStatistics), the
-// PrimitiveIterator.OfLong `iterator()`/`spliterator()`, and `generate`/two-arg `iterate` (both
-// infinite). `builder()` is declared but not callable — see IntStream's header.
+// Nada de esto falta ya, y lo que cambio desde la pasada anterior es:
+//
+//   * `summaryStatistics()` esta: java.util.LongSummaryStatistics existe, y ya era un
+//     contenedor mutable con `accept`, que es justo lo que hace falta;
+//   * `iterator()` devuelve `PrimitiveIterator.OfLong` y `spliterator()` devuelve
+//     `Spliterator.OfLong` — sobreescrituras COVARIANTES de lo que promete BaseStream, igual que
+//     en el JDK. Las dos interfaces de java.util existen y el chequeo de sobreescritura las
+//     acepta;
+//   * `generate` y el `iterate` de dos argumentos estan DECLARADOS y se NIEGAN. Construyen flujos
+//     infinitos, que un modelo ansioso no puede representar; se elige la salida ruidosa, con un
+//     mensaje que dice con que reemplazarlos. Es el mismo criterio de `RandomGenerator.ints()` y
+//     de `Stream.generate`. El `iterate` de tres argumentos SI es finito y esta hecho.
 // Rooted in BaseStream<Long, LongStream>: iterator/isParallel/sequential/parallel/unordered/
 // onClose/close come from there. The four S-returning ops are redeclared below with
-// LongStream as the return type, exactly as the JDK does. `iterator()` hands out an
-// Iterator<Long> (boxed) rather than the JDK's PrimitiveIterator.OfLong, because
-// java.util.PrimitiveIterator does not exist in KajiLibrary.
+// LongStream as the return type, exactly as the JDK does.
 public interface LongStream extends BaseStream<Long, LongStream> {
 
     LongStream filter(LongPredicate predicate);
@@ -191,6 +201,31 @@ public interface LongStream extends BaseStream<Long, LongStream> {
     OptionalDouble average();
 
     // Bridge to the object stream: box each long into a Long.
+    /**
+     * Cuenta, suma, minimo, maximo y promedio, en una sola pasada.
+     *
+     * @return el resumen
+     */
+    LongSummaryStatistics summaryStatistics();
+
+    /**
+     * Un iterador sobre los elementos, sin embolsarlos.
+     *
+     * <p>Sobreescritura covariante de `BaseStream.iterator()`: donde aquel promete un
+     * `Iterator<Long>`, este devuelve el `PrimitiveIterator.OfLong`, que ademas ofrece `nextLong()`
+     * y ahorra una asignacion por elemento. Operacion terminal.
+     *
+     * @return el iterador
+     */
+    PrimitiveIterator.OfLong iterator();
+
+    /**
+     * Un spliterator sobre los elementos, sin embolsarlos. Operacion terminal.
+     *
+     * @return el spliterator
+     */
+    Spliterator.OfLong spliterator();
+
     Stream<Long> boxed();
 
     static LongStream of(long... values) {
@@ -248,6 +283,41 @@ public interface LongStream extends BaseStream<Long, LongStream> {
 
     static LongStream rangeClosed(long startInclusive, long endInclusive) {
         return LongStream.range(startInclusive, endInclusive + 1);
+    }
+
+    /**
+     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     *
+     * <p>Misma divergencia deliberada que `Stream.generate` y que `RandomGenerator.ints()`: un
+     * flujo infinito pide pereza, y los de esta biblioteca estan respaldados por un arreglo que se
+     * materializa entero al crearse. Devolver un prefijo largo y llamarlo infinito daria en
+     * silencio menos elementos de los pedidos en cuanto el `limit` fuera grande.
+     *
+     * @param s el proveedor de elementos
+     * @return no devuelve
+     * @throws UnsupportedOperationException siempre
+     */
+    static LongStream generate(LongSupplier s) {
+        // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
+        // disponible en nuestra VM (#226).
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use LongStream.range(0, n).map(...)");
+    }
+
+    /**
+     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     *
+     * <p>El reemplazo esta al lado y es exacto: el `iterate` de tres argumentos genera la misma
+     * sucesion y ademas dice donde termina.
+     *
+     * @param seed el primer elemento
+     * @param f como pasar de un elemento al siguiente
+     * @return no devuelve
+     * @throws UnsupportedOperationException siempre
+     */
+    static LongStream iterate(long seed, LongUnaryOperator f) {
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use iterate(seed, hasNext, next)");
     }
 
     // Concatenation: every element of `a`, then every element of `b`.
@@ -608,12 +678,21 @@ final class LongStreamImpl implements LongStream {
 
     // ---- BaseStream ------------------------------------------------------------------
 
-    public Iterator<Long> iterator() {
+    public PrimitiveIterator.OfLong iterator() {
         long[] copy = new long[this.size];
         for (int i = 0; i < this.size; i++) {
             copy[i] = this.data[i];
         }
         return new LongStreamItr(copy);
+    }
+
+    // El acumulador de java.util ya es el resumen: se le pasa cada elemento y listo.
+    public LongSummaryStatistics summaryStatistics() {
+        LongSummaryStatistics stats = new LongSummaryStatistics();
+        for (int i = 0; i < this.size; i++) {
+            stats.accept(this.data[i]);
+        }
+        return stats;
     }
 
     // Always sequential: we have no fork/join substrate.
@@ -653,14 +732,14 @@ final class LongStreamImpl implements LongStream {
      * index range, with no copying and no iterator in between. ORDERED because a stream has an
      * encounter order; SIZED and SUBSIZED come from the array-backed spliterator itself.
      */
-    public Spliterator<Long> spliterator() {
+    public Spliterator.OfLong spliterator() {
         return Spliterators.spliterator(this.data, 0, this.size, Spliterator.ORDERED);
     }
 
 }
 
 // The Iterator handed out by LongStreamImpl.iterator(): boxes each long on demand.
-final class LongStreamItr implements Iterator<Long> {
+final class LongStreamItr implements PrimitiveIterator.OfLong {
 
     private final long[] data;
     private int cursor;
@@ -674,10 +753,17 @@ final class LongStreamItr implements Iterator<Long> {
         return this.cursor < this.data.length;
     }
 
-    public Long next() {
+    public long nextLong() {
         long v = this.data[this.cursor];
         this.cursor = this.cursor + 1;
-        return Long.valueOf(v);
+        return v;
+    }
+
+    // Se escribe a mano en vez de heredar el `default` de PrimitiveIterator.OfLong, que hace lo
+    // mismo: asi la forma que embolsa y la que no comparten un unico avance del cursor y no hay
+    // dos caminos que mantener sincronizados.
+    public Long next() {
+        return Long.valueOf(this.nextLong());
     }
 }
 

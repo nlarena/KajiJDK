@@ -19,6 +19,9 @@ import java.util.function.Supplier;
 import java.util.function.BiConsumer;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.PrimitiveIterator;
+import java.util.IntSummaryStatistics;
+import java.util.function.IntSupplier;
 
 // KajiLibrary's java.util.stream.IntStream — a sequence of primitive ints supporting a
 // functional pipeline: intermediate ops (filter/map) return a new IntStream, terminal ops
@@ -28,19 +31,25 @@ import java.util.Spliterators;
 // EAGER: each intermediate op materialises a fresh backing int[] (see IntStreamImpl). Correct
 // for finite streams; the lazy Spliterator model is a later tier. A KajiLibrary subset.
 //
-// Absent on purpose: `summaryStatistics()` (java.util.IntSummaryStatistics does not exist in
-// KajiLibrary and lives outside this package), the PrimitiveIterator.OfInt `iterator()` and
-// `spliterator()` (idem), and `generate`/the two-arg `iterate`, which build INFINITE streams that
-// an eager model cannot represent. The finite three-arg `iterate` is implemented.
+// Nada de esto falta ya, y lo que cambio desde la pasada anterior es:
+//
+//   * `summaryStatistics()` esta: java.util.IntSummaryStatistics existe, y ya era un
+//     contenedor mutable con `accept`, que es justo lo que hace falta;
+//   * `iterator()` devuelve `PrimitiveIterator.OfInt` y `spliterator()` devuelve
+//     `Spliterator.OfInt` — sobreescrituras COVARIANTES de lo que promete BaseStream, igual que
+//     en el JDK. Las dos interfaces de java.util existen y el chequeo de sobreescritura las
+//     acepta;
+//   * `generate` y el `iterate` de dos argumentos estan DECLARADOS y se NIEGAN. Construyen flujos
+//     infinitos, que un modelo ansioso no puede representar; se elige la salida ruidosa, con un
+//     mensaje que dice con que reemplazarlos. Es el mismo criterio de `RandomGenerator.ints()` y
+//     de `Stream.generate`. El `iterate` de tres argumentos SI es finito y esta hecho.
 //
 // `builder()` and the nested `IntStream.Builder` are declared but not usable yet: every method
 // CALL on a nested interface loaded from the classpath is silently dropped by this javac (see
 // Stream's header and the defect notes). `mapMulti` works — its sink type is not generic.
 // Rooted in BaseStream<Integer, IntStream>: iterator/isParallel/sequential/parallel/unordered/
 // onClose/close come from there. The four S-returning ops are redeclared below with
-// IntStream as the return type, exactly as the JDK does. `iterator()` hands out an
-// Iterator<Integer> (boxed) rather than the JDK's PrimitiveIterator.OfInt, because
-// java.util.PrimitiveIterator does not exist in KajiLibrary.
+// IntStream as the return type, exactly as the JDK does.
 public interface IntStream extends BaseStream<Integer, IntStream> {
 
     IntStream filter(IntPredicate predicate);
@@ -206,6 +215,31 @@ public interface IntStream extends BaseStream<Integer, IntStream> {
     OptionalDouble average();
 
     // Bridge to the object stream: box each int into an Integer.
+    /**
+     * Cuenta, suma, minimo, maximo y promedio, en una sola pasada.
+     *
+     * @return el resumen
+     */
+    IntSummaryStatistics summaryStatistics();
+
+    /**
+     * Un iterador sobre los elementos, sin embolsarlos.
+     *
+     * <p>Sobreescritura covariante de `BaseStream.iterator()`: donde aquel promete un
+     * `Iterator<Integer>`, este devuelve el `PrimitiveIterator.OfInt`, que ademas ofrece `nextInt()`
+     * y ahorra una asignacion por elemento. Operacion terminal.
+     *
+     * @return el iterador
+     */
+    PrimitiveIterator.OfInt iterator();
+
+    /**
+     * Un spliterator sobre los elementos, sin embolsarlos. Operacion terminal.
+     *
+     * @return el spliterator
+     */
+    Spliterator.OfInt spliterator();
+
     Stream<Integer> boxed();
 
     // --- factories ---
@@ -267,6 +301,41 @@ public interface IntStream extends BaseStream<Integer, IntStream> {
 
     static IntStream rangeClosed(int startInclusive, int endInclusive) {
         return IntStream.range(startInclusive, endInclusive + 1);
+    }
+
+    /**
+     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     *
+     * <p>Misma divergencia deliberada que `Stream.generate` y que `RandomGenerator.ints()`: un
+     * flujo infinito pide pereza, y los de esta biblioteca estan respaldados por un arreglo que se
+     * materializa entero al crearse. Devolver un prefijo largo y llamarlo infinito daria en
+     * silencio menos elementos de los pedidos en cuanto el `limit` fuera grande.
+     *
+     * @param s el proveedor de elementos
+     * @return no devuelve
+     * @throws UnsupportedOperationException siempre
+     */
+    static IntStream generate(IntSupplier s) {
+        // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
+        // disponible en nuestra VM (#226).
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use IntStream.range(0, n).map(...)");
+    }
+
+    /**
+     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     *
+     * <p>El reemplazo esta al lado y es exacto: el `iterate` de tres argumentos genera la misma
+     * sucesion y ademas dice donde termina.
+     *
+     * @param seed el primer elemento
+     * @param f como pasar de un elemento al siguiente
+     * @return no devuelve
+     * @throws UnsupportedOperationException siempre
+     */
+    static IntStream iterate(int seed, IntUnaryOperator f) {
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use iterate(seed, hasNext, next)");
     }
 
     // Concatenation: every element of `a`, then every element of `b`.
@@ -642,12 +711,21 @@ final class IntStreamImpl implements IntStream {
 
     // ---- BaseStream ------------------------------------------------------------------
 
-    public Iterator<Integer> iterator() {
+    public PrimitiveIterator.OfInt iterator() {
         int[] copy = new int[this.size];
         for (int i = 0; i < this.size; i++) {
             copy[i] = this.data[i];
         }
         return new IntStreamItr(copy);
+    }
+
+    // El acumulador de java.util ya es el resumen: se le pasa cada elemento y listo.
+    public IntSummaryStatistics summaryStatistics() {
+        IntSummaryStatistics stats = new IntSummaryStatistics();
+        for (int i = 0; i < this.size; i++) {
+            stats.accept(this.data[i]);
+        }
+        return stats;
     }
 
     // Always sequential: we have no fork/join substrate.
@@ -687,14 +765,14 @@ final class IntStreamImpl implements IntStream {
      * index range, with no copying and no iterator in between. ORDERED because a stream has an
      * encounter order; SIZED and SUBSIZED come from the array-backed spliterator itself.
      */
-    public Spliterator<Integer> spliterator() {
+    public Spliterator.OfInt spliterator() {
         return Spliterators.spliterator(this.data, 0, this.size, Spliterator.ORDERED);
     }
 
 }
 
 // The Iterator handed out by IntStreamImpl.iterator(): boxes each int on demand.
-final class IntStreamItr implements Iterator<Integer> {
+final class IntStreamItr implements PrimitiveIterator.OfInt {
 
     private final int[] data;
     private int cursor;
@@ -708,10 +786,17 @@ final class IntStreamItr implements Iterator<Integer> {
         return this.cursor < this.data.length;
     }
 
-    public Integer next() {
+    public int nextInt() {
         int v = this.data[this.cursor];
         this.cursor = this.cursor + 1;
-        return Integer.valueOf(v);
+        return v;
+    }
+
+    // Se escribe a mano en vez de heredar el `default` de PrimitiveIterator.OfInt, que hace lo
+    // mismo: asi la forma que embolsa y la que no comparten un unico avance del cursor y no hay
+    // dos caminos que mantener sincronizados.
+    public Integer next() {
+        return Integer.valueOf(this.nextInt());
     }
 }
 

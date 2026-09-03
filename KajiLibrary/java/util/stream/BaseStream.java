@@ -11,14 +11,10 @@ import java.util.Iterator;
 // BaseStream<Integer, IntStream>, and so on. Each subinterface redeclares those four methods
 // with its own type as the return type; that is a plain covariant override, not a new method.
 //
-// Deliberately left out of this port:
+// `spliterator()` ya esta declarado abajo — java.util.Spliterator existe, y los tres flujos
+// primitivos lo sobreescriben covariantemente con `Spliterator.OfInt`/`OfLong`/`OfDouble`.
 //
-//   * `Spliterator<T> spliterator()` — java.util.Spliterator does not exist in KajiLibrary,
-//     and the brief for this package forbids creating it (it lives in java.util, not here).
-//     Every JDK caller of spliterator() is part of the lazy pipeline machinery, which our
-//     eager implementation does not have, so nothing here needs it yet. When java.util grows
-//     a Spliterator, adding the method to this interface is a one-line change plus one
-//     implementation per *StreamImpl.
+// Deliberately left out of this port:
 //
 //   * `close() throws Exception` is *narrowed* to `close()` with no throws clause, exactly as
 //     the JDK's BaseStream does — streams never throw a checked exception from close().

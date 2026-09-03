@@ -17,18 +17,28 @@ import java.util.function.Supplier;
 import java.util.function.BiConsumer;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.PrimitiveIterator;
+import java.util.DoubleSummaryStatistics;
+import java.util.function.DoubleSupplier;
 
 // KajiLibrary's java.util.stream.DoubleStream — the double-specialized primitive stream, the
 // mirror of IntStream/LongStream over double values. EAGER; a KajiLibrary subset. Unlike Int/Long
 // there is no range() (a double range isn't well-defined). Not generic, so no #9.
 // Rooted in BaseStream<Double, DoubleStream>: iterator/isParallel/sequential/parallel/unordered/
 // onClose/close come from there. The four S-returning ops are redeclared below with
-// DoubleStream as the return type, exactly as the JDK does. `iterator()` hands out an
-// Iterator<Double> (boxed) rather than the JDK's PrimitiveIterator.OfDouble, because
-// java.util.PrimitiveIterator does not exist in KajiLibrary.
-// Absent on purpose: `summaryStatistics()` (no java.util.DoubleSummaryStatistics), the
-// PrimitiveIterator.OfDouble `iterator()`/`spliterator()`, and `generate`/two-arg `iterate` (both
-// infinite). `builder()` is declared but not callable — see IntStream's header.
+// DoubleStream as the return type, exactly as the JDK does.
+// Nada de esto falta ya, y lo que cambio desde la pasada anterior es:
+//
+//   * `summaryStatistics()` esta: java.util.DoubleSummaryStatistics existe, y ya era un
+//     contenedor mutable con `accept`, que es justo lo que hace falta;
+//   * `iterator()` devuelve `PrimitiveIterator.OfDouble` y `spliterator()` devuelve
+//     `Spliterator.OfDouble` — sobreescrituras COVARIANTES de lo que promete BaseStream, igual que
+//     en el JDK. Las dos interfaces de java.util existen y el chequeo de sobreescritura las
+//     acepta;
+//   * `generate` y el `iterate` de dos argumentos estan DECLARADOS y se NIEGAN. Construyen flujos
+//     infinitos, que un modelo ansioso no puede representar; se elige la salida ruidosa, con un
+//     mensaje que dice con que reemplazarlos. Es el mismo criterio de `RandomGenerator.ints()` y
+//     de `Stream.generate`. El `iterate` de tres argumentos SI es finito y esta hecho.
 public interface DoubleStream extends BaseStream<Double, DoubleStream> {
 
     DoubleStream filter(DoublePredicate predicate);
@@ -187,6 +197,31 @@ public interface DoubleStream extends BaseStream<Double, DoubleStream> {
     OptionalDouble average();
 
     // Bridge to the object stream: box each double into a Double.
+    /**
+     * Cuenta, suma, minimo, maximo y promedio, en una sola pasada.
+     *
+     * @return el resumen
+     */
+    DoubleSummaryStatistics summaryStatistics();
+
+    /**
+     * Un iterador sobre los elementos, sin embolsarlos.
+     *
+     * <p>Sobreescritura covariante de `BaseStream.iterator()`: donde aquel promete un
+     * `Iterator<Double>`, este devuelve el `PrimitiveIterator.OfDouble`, que ademas ofrece `nextDouble()`
+     * y ahorra una asignacion por elemento. Operacion terminal.
+     *
+     * @return el iterador
+     */
+    PrimitiveIterator.OfDouble iterator();
+
+    /**
+     * Un spliterator sobre los elementos, sin embolsarlos. Operacion terminal.
+     *
+     * @return el spliterator
+     */
+    Spliterator.OfDouble spliterator();
+
     Stream<Double> boxed();
 
     static DoubleStream of(double... values) {
@@ -228,6 +263,41 @@ public interface DoubleStream extends BaseStream<Double, DoubleStream> {
             cur = next.applyAsDouble(cur);
         }
         return new DoubleStreamImpl(out, n);
+    }
+
+    /**
+     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     *
+     * <p>Misma divergencia deliberada que `Stream.generate` y que `RandomGenerator.ints()`: un
+     * flujo infinito pide pereza, y los de esta biblioteca estan respaldados por un arreglo que se
+     * materializa entero al crearse. Devolver un prefijo largo y llamarlo infinito daria en
+     * silencio menos elementos de los pedidos en cuanto el `limit` fuera grande.
+     *
+     * @param s el proveedor de elementos
+     * @return no devuelve
+     * @throws UnsupportedOperationException siempre
+     */
+    static DoubleStream generate(DoubleSupplier s) {
+        // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
+        // disponible en nuestra VM (#226).
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use IntStream.range(0, n).mapToDouble(...)");
+    }
+
+    /**
+     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     *
+     * <p>El reemplazo esta al lado y es exacto: el `iterate` de tres argumentos genera la misma
+     * sucesion y ademas dice donde termina.
+     *
+     * @param seed el primer elemento
+     * @param f como pasar de un elemento al siguiente
+     * @return no devuelve
+     * @throws UnsupportedOperationException siempre
+     */
+    static DoubleStream iterate(double seed, DoubleUnaryOperator f) {
+        throw new UnsupportedOperationException(
+                "los flujos de esta biblioteca son ansiosos: use iterate(seed, hasNext, next)");
     }
 
     // Concatenation: every element of `a`, then every element of `b`.
@@ -579,12 +649,21 @@ final class DoubleStreamImpl implements DoubleStream {
 
     // ---- BaseStream ------------------------------------------------------------------
 
-    public Iterator<Double> iterator() {
+    public PrimitiveIterator.OfDouble iterator() {
         double[] copy = new double[this.size];
         for (int i = 0; i < this.size; i++) {
             copy[i] = this.data[i];
         }
         return new DoubleStreamItr(copy);
+    }
+
+    // El acumulador de java.util ya es el resumen: se le pasa cada elemento y listo.
+    public DoubleSummaryStatistics summaryStatistics() {
+        DoubleSummaryStatistics stats = new DoubleSummaryStatistics();
+        for (int i = 0; i < this.size; i++) {
+            stats.accept(this.data[i]);
+        }
+        return stats;
     }
 
     // Always sequential: we have no fork/join substrate.
@@ -624,14 +703,14 @@ final class DoubleStreamImpl implements DoubleStream {
      * index range, with no copying and no iterator in between. ORDERED because a stream has an
      * encounter order; SIZED and SUBSIZED come from the array-backed spliterator itself.
      */
-    public Spliterator<Double> spliterator() {
+    public Spliterator.OfDouble spliterator() {
         return Spliterators.spliterator(this.data, 0, this.size, Spliterator.ORDERED);
     }
 
 }
 
 // The Iterator handed out by DoubleStreamImpl.iterator(): boxes each double on demand.
-final class DoubleStreamItr implements Iterator<Double> {
+final class DoubleStreamItr implements PrimitiveIterator.OfDouble {
 
     private final double[] data;
     private int cursor;
@@ -645,10 +724,17 @@ final class DoubleStreamItr implements Iterator<Double> {
         return this.cursor < this.data.length;
     }
 
-    public Double next() {
+    public double nextDouble() {
         double v = this.data[this.cursor];
         this.cursor = this.cursor + 1;
-        return Double.valueOf(v);
+        return v;
+    }
+
+    // Se escribe a mano en vez de heredar el `default` de PrimitiveIterator.OfDouble, que hace lo
+    // mismo: asi la forma que embolsa y la que no comparten un unico avance del cursor y no hay
+    // dos caminos que mantener sincronizados.
+    public Double next() {
+        return Double.valueOf(this.nextDouble());
     }
 }
 

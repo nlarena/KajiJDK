@@ -6,7 +6,13 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.Collection;
+import java.util.IntSummaryStatistics;
+import java.util.LongSummaryStatistics;
+import java.util.DoubleSummaryStatistics;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.StringJoiner;
@@ -46,14 +52,19 @@ import java.util.function.ToDoubleFunction;
 // `combiner` is a no-op merge — our eager sequential collect never calls it. Compiled with `-cp`
 // so `Collector`/`List`/`Set` bind to our own subset.
 //
-// Not here, and why:
+// Ya no falta ninguna fabrica publica. Las tres razones que la pasada anterior anoto se cayeron
+// solas: java.util.IntSummaryStatistics y sus hermanas existen, java.util.concurrent.ConcurrentMap
+// tambien, y `characteristics()` esta implementado (ver Collector.java). Sigue afuera, y a
+// proposito, la plomeria privada del JDK (`mapMerger`, `castingIdentity`, `CH_ID`, ...): es
+// maquinaria de un pipeline perezoso que este paquete no tiene.
 //
-//   * `summarizingInt/Long/Double` need java.util.IntSummaryStatistics & friends, which
-//     KajiLibrary does not have and which live outside this package;
-//   * `toConcurrentMap` / `groupingByConcurrent` need java.util.concurrent.ConcurrentMap, idem;
-//   * `Collector.of(...)` and `characteristics()` — see Collector.java;
-//   * the private JDK internals (`mapMerger`, `castingIdentity`, `CH_ID`, …) are HotSpot's own
-//     plumbing for a lazy pipeline we do not have.
+// Sobre `characteristics()`, que es lo unico que se lee distinto que en el JDK: una caracteristica
+// es un PERMISO para optimizar, y un conjunto vacio --"no habilito nada"-- siempre es correcto.
+// Se declara solo lo que se puede sostener mirando la implementacion de al lado: IDENTITY_FINISH
+// unicamente cuando el finalizador devuelve el mismo objeto que recibio, y CONCURRENT unicamente
+// en las seis fabricas concurrentes, cuyos acumuladores estan escritos sobre operaciones atomicas.
+// Los colectores que no pueden sostener ninguna devuelven el conjunto vacio en vez de copiar la
+// tabla del JDK de memoria.
 public final class Collectors {
 
     private Collectors() {}
@@ -62,21 +73,23 @@ public final class Collectors {
 
     // Accumulate the elements into a List (an ArrayList).
     public static <T> Collector<T, ?, List<T>> toList() {
+        // IDENTITY_FINISH es legitimo: `ListFinisher` devuelve el mismo ArrayList que recibio,
+        // asi que saltearse el finalizador y castear el acumulador da exactamente lo mismo.
         return new CollectorImpl<T, ArrayList<T>, List<T>>(new ListSupplier<T>(), new ListAccumulator<T>(),
-                new KeepFirst<ArrayList<T>>(), new ListFinisher<T>());
+                new KeepFirst<ArrayList<T>>(), new ListFinisher<T>(), Marcas.de(Collector.Characteristics.IDENTITY_FINISH));
     }
 
     // Accumulate the elements into a Set (a HashSet), dropping duplicates.
     public static <T> Collector<T, ?, Set<T>> toSet() {
         return new CollectorImpl<T, HashSet<T>, Set<T>>(new SetSupplier<T>(), new SetAccumulator<T>(),
-                new KeepFirst<HashSet<T>>(), new SetFinisher<T>());
+                new KeepFirst<HashSet<T>>(), new SetFinisher<T>(), Marcas.de(Collector.Characteristics.UNORDERED, Collector.Characteristics.IDENTITY_FINISH));
     }
 
     // Accumulate the elements into a caller-chosen Collection.
     public static <T, C extends Collection<T>> Collector<T, ?, C> toCollection(Supplier<C> collectionFactory) {
         Supplier<Collection<T>> sup = new CollSupplier<T, C>(collectionFactory);
         return new CollectorImpl<T, Collection<T>, C>(sup, new CollAccumulator<T>(),
-                new KeepFirst<Collection<T>>(), new CollFinisher<T, C>());
+                new KeepFirst<Collection<T>>(), new CollFinisher<T, C>(), Marcas.de(Collector.Characteristics.IDENTITY_FINISH));
     }
 
     // Accumulate into a List that really refuses mutation. java.util.Collections in KajiLibrary
@@ -90,8 +103,10 @@ public final class Collectors {
 
     // …and the Set equivalent.
     public static <T> Collector<T, ?, Set<T>> toUnmodifiableSet() {
+        // UNORDERED si, IDENTITY_FINISH no: el finalizador ENVUELVE el HashSet en una vista
+        // inmodificable, y saltearselo devolveria el conjunto mutable de adentro.
         return new CollectorImpl<T, HashSet<T>, Set<T>>(new SetSupplier<T>(), new SetAccumulator<T>(),
-                new KeepFirst<HashSet<T>>(), new FrozenSetFinisher<T>());
+                new KeepFirst<HashSet<T>>(), new FrozenSetFinisher<T>(), Marcas.de(Collector.Characteristics.UNORDERED));
     }
 
     // ---- joining ---------------------------------------------------------------------------
@@ -256,7 +271,7 @@ public final class Collectors {
                                                              BinaryOperator<V> mergeFunction) {
         return new CollectorImpl<T, Map<K, V>, Map<K, V>>(new HashMapSupplier<K, V>(),
                 new MapAccumulator<T, K, V>(keyMapper, valueMapper, mergeFunction),
-                new KeepFirst<Map<K, V>>(), new MapIdentityFinisher<K, V>());
+                new KeepFirst<Map<K, V>>(), new MapIdentityFinisher<K, V>(), Marcas.de(Collector.Characteristics.UNORDERED, Collector.Characteristics.IDENTITY_FINISH));
     }
 
     // …into a caller-chosen Map: `mapFactory` supplies the accumulator itself, so the pairs land
@@ -268,7 +283,7 @@ public final class Collectors {
         Supplier<Map<K, V>> sup = new MapFactorySupplier<K, V, M>(mapFactory);
         return new CollectorImpl<T, Map<K, V>, M>(sup,
                 new MapAccumulator<T, K, V>(keyMapper, valueMapper, mergeFunction),
-                new KeepFirst<Map<K, V>>(), new MapCastFinisher<K, V, M>());
+                new KeepFirst<Map<K, V>>(), new MapCastFinisher<K, V, M>(), Marcas.de(Collector.Characteristics.UNORDERED, Collector.Characteristics.IDENTITY_FINISH));
     }
 
     // Key/value pairs into a Map that refuses mutation. A duplicate key is an
@@ -285,7 +300,7 @@ public final class Collectors {
                                                                          BinaryOperator<V> mergeFunction) {
         return new CollectorImpl<T, Map<K, V>, Map<K, V>>(new HashMapSupplier<K, V>(),
                 new MapAccumulator<T, K, V>(keyMapper, valueMapper, mergeFunction),
-                new KeepFirst<Map<K, V>>(), new FrozenMapFinisher<K, V>());
+                new KeepFirst<Map<K, V>>(), new FrozenMapFinisher<K, V>(), Marcas.de(Collector.Characteristics.UNORDERED));
     }
 
     // ---- grouping and partitioning ------------------------------------------------------------
@@ -369,6 +384,198 @@ public final class Collectors {
         return new CollectorImpl<T, Object[], R>(new TeeSupplier<A1, A2>(sup1, sup2),
                 new TeeAccumulator<T, A1, A2>(acc1, acc2), new KeepFirst<Object[]>(),
                 new TeeFinisher<A1, R1, A2, R2, R>(fin1, fin2, merger));
+    }
+
+    // ---- resumenes estadisticos --------------------------------------------------------------
+
+    /**
+     * Cuenta, suma, minimo, maximo y promedio de los `int` que devuelva `mapper`, todo de una.
+     *
+     * <p>Una sola pasada donde cinco colectores separados harian cinco. `IDENTITY_FINISH` es
+     * legitimo aca: el acumulador ya es el resultado y el finalizador lo devuelve tal cual.
+     *
+     * @param mapper de que elemento sacar el `int`
+     * @param <T> el tipo de los elementos
+     * @return el colector
+     */
+    public static <T> Collector<T, ?, IntSummaryStatistics> summarizingInt(ToIntFunction<T> mapper) {
+        return new CollectorImpl<T, IntSummaryStatistics, IntSummaryStatistics>(new IntStatsSupplier(),
+                new IntStatsAccumulator<T>(mapper), new IntStatsCombiner(), new IntStatsFinisher(),
+                Marcas.de(Collector.Characteristics.IDENTITY_FINISH));
+    }
+
+    /**
+     * Idem para `long`.
+     *
+     * @param mapper de que elemento sacar el `long`
+     * @param <T> el tipo de los elementos
+     * @return el colector
+     */
+    public static <T> Collector<T, ?, LongSummaryStatistics> summarizingLong(ToLongFunction<T> mapper) {
+        return new CollectorImpl<T, LongSummaryStatistics, LongSummaryStatistics>(new LongStatsSupplier(),
+                new LongStatsAccumulator<T>(mapper), new LongStatsCombiner(), new LongStatsFinisher(),
+                Marcas.de(Collector.Characteristics.IDENTITY_FINISH));
+    }
+
+    /**
+     * Idem para `double`.
+     *
+     * @param mapper de que elemento sacar el `double`
+     * @param <T> el tipo de los elementos
+     * @return el colector
+     */
+    public static <T> Collector<T, ?, DoubleSummaryStatistics> summarizingDouble(ToDoubleFunction<T> mapper) {
+        return new CollectorImpl<T, DoubleSummaryStatistics, DoubleSummaryStatistics>(new DoubleStatsSupplier(),
+                new DoubleStatsAccumulator<T>(mapper), new DoubleStatsCombiner(), new DoubleStatsFinisher(),
+                Marcas.de(Collector.Characteristics.IDENTITY_FINISH));
+    }
+
+    // ---- las variantes concurrentes ------------------------------------------------------------
+    //
+    // Las seis de abajo son las unicas de este archivo que declaran `CONCURRENT`, y lo declaran
+    // porque es verdad: sus acumuladores estan escritos sobre las operaciones ATOMICAS de
+    // ConcurrentMap (`putIfAbsent`, `replace(k, viejo, nuevo)`) y sobre un `synchronized` por
+    // grupo, no sobre el `containsKey`/`get`/`put` en tres pasos que usa `toMap`. Es la diferencia
+    // entre "el resultado es un ConcurrentMap" y "el colector se puede alimentar desde varios
+    // hilos"; la caracteristica afirma lo segundo, y afirmarla sin cumplirlo seria justo la clase
+    // de mentira que este puerto no comete.
+    //
+    // Nuestro `collect` es secuencial y no las va a aprovechar. Las declara igual, porque un
+    // colector nuestro leido por codigo escrito contra el JDK real tiene que decir la verdad
+    // sobre si mismo.
+
+    /**
+     * Pares clave/valor en un `ConcurrentMap`. Una clave repetida es `IllegalStateException`.
+     *
+     * @param keyMapper de que elemento sacar la clave
+     * @param valueMapper de que elemento sacar el valor
+     * @param <T> el tipo de los elementos
+     * @param <K> el tipo de las claves
+     * @param <V> el tipo de los valores
+     * @return el colector
+     */
+    public static <T, K, V> Collector<T, ?, ConcurrentMap<K, V>> toConcurrentMap(Function<T, K> keyMapper,
+                                                                                 Function<T, V> valueMapper) {
+        BinaryOperator<V> merge = new ThrowingMerger<V>();
+        return Collectors.<T, K, V>toConcurrentMap(keyMapper, valueMapper, merge);
+    }
+
+    /**
+     * ...con `mergeFunction` resolviendo las claves repetidas.
+     *
+     * @param keyMapper de que elemento sacar la clave
+     * @param valueMapper de que elemento sacar el valor
+     * @param mergeFunction que hacer con dos valores de la misma clave
+     * @param <T> el tipo de los elementos
+     * @param <K> el tipo de las claves
+     * @param <V> el tipo de los valores
+     * @return el colector
+     */
+    public static <T, K, V> Collector<T, ?, ConcurrentMap<K, V>> toConcurrentMap(Function<T, K> keyMapper,
+                                                                                 Function<T, V> valueMapper,
+                                                                                 BinaryOperator<V> mergeFunction) {
+        return new CollectorImpl<T, ConcurrentMap<K, V>, ConcurrentMap<K, V>>(new ConcurrentMapSupplier<K, V>(),
+                new ConcurrentMapAccumulator<T, K, V>(keyMapper, valueMapper, mergeFunction),
+                new KeepFirst<ConcurrentMap<K, V>>(), new ConcurrentMapIdentityFinisher<K, V>(),
+                Marcas.de(Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED,
+                        Collector.Characteristics.IDENTITY_FINISH));
+    }
+
+    /**
+     * ...en el mapa que fabrique `mapFactory`.
+     *
+     * @param keyMapper de que elemento sacar la clave
+     * @param valueMapper de que elemento sacar el valor
+     * @param mergeFunction que hacer con dos valores de la misma clave
+     * @param mapFactory de donde sale el mapa destino
+     * @param <T> el tipo de los elementos
+     * @param <K> el tipo de las claves
+     * @param <V> el tipo de los valores
+     * @param <M> el tipo del mapa
+     * @return el colector
+     */
+    public static <T, K, V, M extends ConcurrentMap<K, V>> Collector<T, ?, M> toConcurrentMap(
+            Function<T, K> keyMapper, Function<T, V> valueMapper, BinaryOperator<V> mergeFunction,
+            Supplier<M> mapFactory) {
+        Supplier<ConcurrentMap<K, V>> sup = new ConcurrentMapFactorySupplier<K, V, M>(mapFactory);
+        return new CollectorImpl<T, ConcurrentMap<K, V>, M>(sup,
+                new ConcurrentMapAccumulator<T, K, V>(keyMapper, valueMapper, mergeFunction),
+                new KeepFirst<ConcurrentMap<K, V>>(), new ConcurrentMapCastFinisher<K, V, M>(),
+                Marcas.de(Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED,
+                        Collector.Characteristics.IDENTITY_FINISH));
+    }
+
+    /**
+     * Agrupa en un `ConcurrentMap` de clave a lista, segun `classifier`.
+     *
+     * @param classifier de que elemento sacar la clave del grupo
+     * @param <T> el tipo de los elementos
+     * @param <K> el tipo de las claves
+     * @return el colector
+     */
+    public static <T, K> Collector<T, ?, ConcurrentMap<K, List<T>>> groupingByConcurrent(
+            Function<T, K> classifier) {
+        Supplier<ArrayList<T>> sup = new ListSupplier<T>();
+        BiConsumer<ArrayList<T>, T> acc = new ListAccumulator<T>();
+        Function<ArrayList<T>, List<T>> fin = new ListFinisher<T>();
+        return new CollectorImpl<T, ConcurrentMap<K, Object>, ConcurrentMap<K, List<T>>>(
+                new ConcurrentMapSupplier<K, Object>(),
+                new ConcurrentGroupAccumulator<T, K, ArrayList<T>>(classifier, sup, acc),
+                new KeepFirst<ConcurrentMap<K, Object>>(),
+                new ConcurrentGroupFinisher<K, ArrayList<T>, List<T>, ConcurrentMap<K, List<T>>>(fin),
+                Marcas.de(Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED));
+    }
+
+    /**
+     * ...reduciendo cada grupo con `downstream`.
+     *
+     * @param classifier de que elemento sacar la clave del grupo
+     * @param downstream como reducir cada grupo
+     * @param <T> el tipo de los elementos
+     * @param <K> el tipo de las claves
+     * @param <A> el acumulador de `downstream`
+     * @param <D> el resultado de `downstream`
+     * @return el colector
+     */
+    public static <T, K, A, D> Collector<T, ?, ConcurrentMap<K, D>> groupingByConcurrent(
+            Function<T, K> classifier, Collector<T, A, D> downstream) {
+        Supplier<A> sup = downstream.supplier();
+        BiConsumer<A, T> acc = downstream.accumulator();
+        Function<A, D> fin = downstream.finisher();
+        return new CollectorImpl<T, ConcurrentMap<K, Object>, ConcurrentMap<K, D>>(
+                new ConcurrentMapSupplier<K, Object>(),
+                new ConcurrentGroupAccumulator<T, K, A>(classifier, sup, acc),
+                new KeepFirst<ConcurrentMap<K, Object>>(),
+                new ConcurrentGroupFinisher<K, A, D, ConcurrentMap<K, D>>(fin),
+                Marcas.de(Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED));
+    }
+
+    /**
+     * ...y con el mapa resultado saliendo de `mapFactory`.
+     *
+     * @param classifier de que elemento sacar la clave del grupo
+     * @param mapFactory de donde sale el mapa destino
+     * @param downstream como reducir cada grupo
+     * @param <T> el tipo de los elementos
+     * @param <K> el tipo de las claves
+     * @param <A> el acumulador de `downstream`
+     * @param <D> el resultado de `downstream`
+     * @param <M> el tipo del mapa
+     * @return el colector
+     */
+    public static <T, K, A, D, M extends ConcurrentMap<K, D>> Collector<T, ?, M> groupingByConcurrent(
+            Function<T, K> classifier, Supplier<M> mapFactory, Collector<T, A, D> downstream) {
+        Supplier<A> sup = downstream.supplier();
+        BiConsumer<A, T> acc = downstream.accumulator();
+        Function<A, D> fin = downstream.finisher();
+        // El mapa del que llama se usa como acumulador y no se copia al final: es lo mismo que
+        // hace `toMap(..., mapFactory)` mas arriba, y evita tener que copiar un mapa cualquiera.
+        Supplier<ConcurrentMap<K, Object>> mapSup = new ConcurrentGroupFactorySupplier<K, M>(mapFactory);
+        return new CollectorImpl<T, ConcurrentMap<K, Object>, M>(mapSup,
+                new ConcurrentGroupAccumulator<T, K, A>(classifier, sup, acc),
+                new KeepFirst<ConcurrentMap<K, Object>>(),
+                new ConcurrentGroupFinisher<K, A, D, M>(fin),
+                Marcas.de(Collector.Characteristics.CONCURRENT, Collector.Characteristics.UNORDERED));
     }
 }
 
@@ -1372,13 +1579,23 @@ final class CollectorImpl<T, A, R> implements Collector<T, A, R> {
     private final BiConsumer<A, T> accumulator;
     private final BinaryOperator<A> combiner;
     private final Function<A, R> finisher;
+    private final Set<Collector.Characteristics> characteristics;
 
+    // El constructor de cuatro piezas deja el conjunto de permisos VACIO, y eso es siempre
+    // correcto: una caracteristica es un permiso para optimizar, no una descripcion obligatoria.
+    // Los colectores que si pueden justificar alguna usan el de cinco.
     CollectorImpl(Supplier<A> supplier, BiConsumer<A, T> accumulator, BinaryOperator<A> combiner,
                   Function<A, R> finisher) {
+        this(supplier, accumulator, combiner, finisher, Marcas.ninguna());
+    }
+
+    CollectorImpl(Supplier<A> supplier, BiConsumer<A, T> accumulator, BinaryOperator<A> combiner,
+                  Function<A, R> finisher, Set<Collector.Characteristics> characteristics) {
         this.supplier = supplier;
         this.accumulator = accumulator;
         this.combiner = combiner;
         this.finisher = finisher;
+        this.characteristics = characteristics;
     }
 
     public Supplier<A> supplier() {
@@ -1395,5 +1612,314 @@ final class CollectorImpl<T, A, R> implements Collector<T, A, R> {
 
     public Function<A, R> finisher() {
         return this.finisher;
+    }
+
+    public Set<Collector.Characteristics> characteristics() {
+        return this.characteristics;
+    }
+}
+
+// ---- los resumenes estadisticos -----------------------------------------------------------------
+//
+// El acumulador ES el resultado: java.util.IntSummaryStatistics y sus dos hermanas ya son
+// contenedores mutables con `accept` y `combine`, que es exactamente la forma que pide un
+// Collector. Por eso el finalizador es la identidad y el combinador es de verdad (y no el
+// `KeepFirst` que usa el resto del archivo): combinar dos resumenes esta a mano.
+
+final class IntStatsSupplier implements Supplier<IntSummaryStatistics> {
+    public IntSummaryStatistics get() {
+        return new IntSummaryStatistics();
+    }
+}
+
+final class IntStatsAccumulator<T> implements BiConsumer<IntSummaryStatistics, T> {
+
+    private final ToIntFunction<T> mapper;
+
+    IntStatsAccumulator(ToIntFunction<T> mapper) {
+        this.mapper = mapper;
+    }
+
+    public void accept(IntSummaryStatistics stats, T item) {
+        stats.accept(this.mapper.applyAsInt(item));
+    }
+}
+
+final class IntStatsCombiner implements BinaryOperator<IntSummaryStatistics> {
+    public IntSummaryStatistics apply(IntSummaryStatistics a, IntSummaryStatistics b) {
+        a.combine(b);
+        return a;
+    }
+}
+
+final class IntStatsFinisher implements Function<IntSummaryStatistics, IntSummaryStatistics> {
+    public IntSummaryStatistics apply(IntSummaryStatistics stats) {
+        return stats;
+    }
+}
+
+final class LongStatsSupplier implements Supplier<LongSummaryStatistics> {
+    public LongSummaryStatistics get() {
+        return new LongSummaryStatistics();
+    }
+}
+
+final class LongStatsAccumulator<T> implements BiConsumer<LongSummaryStatistics, T> {
+
+    private final ToLongFunction<T> mapper;
+
+    LongStatsAccumulator(ToLongFunction<T> mapper) {
+        this.mapper = mapper;
+    }
+
+    public void accept(LongSummaryStatistics stats, T item) {
+        stats.accept(this.mapper.applyAsLong(item));
+    }
+}
+
+final class LongStatsCombiner implements BinaryOperator<LongSummaryStatistics> {
+    public LongSummaryStatistics apply(LongSummaryStatistics a, LongSummaryStatistics b) {
+        a.combine(b);
+        return a;
+    }
+}
+
+final class LongStatsFinisher implements Function<LongSummaryStatistics, LongSummaryStatistics> {
+    public LongSummaryStatistics apply(LongSummaryStatistics stats) {
+        return stats;
+    }
+}
+
+final class DoubleStatsSupplier implements Supplier<DoubleSummaryStatistics> {
+    public DoubleSummaryStatistics get() {
+        return new DoubleSummaryStatistics();
+    }
+}
+
+final class DoubleStatsAccumulator<T> implements BiConsumer<DoubleSummaryStatistics, T> {
+
+    private final ToDoubleFunction<T> mapper;
+
+    DoubleStatsAccumulator(ToDoubleFunction<T> mapper) {
+        this.mapper = mapper;
+    }
+
+    public void accept(DoubleSummaryStatistics stats, T item) {
+        stats.accept(this.mapper.applyAsDouble(item));
+    }
+}
+
+final class DoubleStatsCombiner implements BinaryOperator<DoubleSummaryStatistics> {
+    public DoubleSummaryStatistics apply(DoubleSummaryStatistics a, DoubleSummaryStatistics b) {
+        a.combine(b);
+        return a;
+    }
+}
+
+final class DoubleStatsFinisher implements Function<DoubleSummaryStatistics, DoubleSummaryStatistics> {
+    public DoubleSummaryStatistics apply(DoubleSummaryStatistics stats) {
+        return stats;
+    }
+}
+
+// ---- las piezas concurrentes ---------------------------------------------------------------------
+
+final class ConcurrentMapSupplier<K, V> implements Supplier<ConcurrentMap<K, V>> {
+    public ConcurrentMap<K, V> get() {
+        return new ConcurrentHashMap<K, V>();
+    }
+}
+
+final class ConcurrentMapFactorySupplier<K, V, M extends ConcurrentMap<K, V>>
+        implements Supplier<ConcurrentMap<K, V>> {
+
+    private final Supplier<M> factory;
+
+    ConcurrentMapFactorySupplier(Supplier<M> factory) {
+        this.factory = factory;
+    }
+
+    public ConcurrentMap<K, V> get() {
+        return this.factory.get();
+    }
+}
+
+// El acumulador de `toConcurrentMap`, y la razon por la que esos colectores pueden declarar
+// CONCURRENT sin mentir.
+//
+// `MapAccumulator` --el de `toMap`-- hace containsKey / get / put: tres operaciones, y entre la
+// primera y la tercera otro hilo puede meter la misma clave y perderse su valor. Este hace lo
+// mismo con las dos operaciones ATOMICAS que ConcurrentMap garantiza:
+//
+//   * `putIfAbsent` gana la carrera o devuelve el valor del que la gano;
+//   * `replace(clave, viejo, nuevo)` --el compare-and-set-- solo pisa si nadie toco el valor en
+//     el medio; si alguien lo toco, se vuelve a leer y se reintenta.
+//
+// El bucle termina porque cada vuelta o inserta o fusiona contra un valor que sigue estando.
+final class ConcurrentMapAccumulator<T, K, V> implements BiConsumer<ConcurrentMap<K, V>, T> {
+
+    private final Function<T, K> keyMapper;
+    private final Function<T, V> valueMapper;
+    private final BiFunction<V, V, V> merge;
+
+    ConcurrentMapAccumulator(Function<T, K> keyMapper, Function<T, V> valueMapper, BinaryOperator<V> merge) {
+        this.keyMapper = keyMapper;
+        this.valueMapper = valueMapper;
+        this.merge = merge;
+    }
+
+    public void accept(ConcurrentMap<K, V> map, T item) {
+        K key = this.keyMapper.apply(item);
+        V value = this.valueMapper.apply(item);
+        boolean listo = false;
+        while (!listo) {
+            V viejo = map.putIfAbsent(key, value);
+            if (viejo == null) {
+                listo = true;
+            } else {
+                V fusionado = this.merge.apply(viejo, value);
+                if (map.replace(key, viejo, fusionado)) {
+                    listo = true;
+                }
+            }
+        }
+    }
+}
+
+final class ConcurrentMapIdentityFinisher<K, V> implements Function<ConcurrentMap<K, V>, ConcurrentMap<K, V>> {
+    public ConcurrentMap<K, V> apply(ConcurrentMap<K, V> map) {
+        return map;
+    }
+}
+
+final class ConcurrentMapCastFinisher<K, V, M extends ConcurrentMap<K, V>>
+        implements Function<ConcurrentMap<K, V>, M> {
+    public M apply(ConcurrentMap<K, V> map) {
+        return (M) map;
+    }
+}
+
+// El mapa del que llama, visto como el ConcurrentMap<K, Object> que el acumulador de grupos usa.
+final class ConcurrentGroupFactorySupplier<K, M> implements Supplier<ConcurrentMap<K, Object>> {
+
+    private final Supplier<M> factory;
+
+    ConcurrentGroupFactorySupplier(Supplier<M> factory) {
+        this.factory = factory;
+    }
+
+    public ConcurrentMap<K, Object> get() {
+        Object m = this.factory.get();
+        return (ConcurrentMap<K, Object>) m;
+    }
+}
+
+// El acumulador de `groupingByConcurrent`. Dos pasos, y los dos seguros:
+//
+//   1. conseguir el contenedor del grupo. `putIfAbsent` decide quien crea: el que pierde la
+//      carrera se queda con el contenedor del que gano y tira el suyo. Un `get`+`put` en dos
+//      pasos, en cambio, perderia los elementos del que llegue segundo;
+//   2. acumular DENTRO de ese contenedor. El contenedor lo aporta `downstream` y no tiene por que
+//      ser seguro para varios hilos --un ArrayList no lo es--, asi que se serializa con su propio
+//      monitor. Es el mismo candado por grupo que usa el JDK, y no uno global: dos grupos
+//      distintos no se estorban.
+final class ConcurrentGroupAccumulator<T, K, A> implements BiConsumer<ConcurrentMap<K, Object>, T> {
+
+    private final Function<T, K> classifier;
+    private final Supplier<A> downstreamSupplier;
+    private final BiConsumer<A, T> downstreamAccumulator;
+
+    ConcurrentGroupAccumulator(Function<T, K> classifier, Supplier<A> downstreamSupplier,
+                               BiConsumer<A, T> downstreamAccumulator) {
+        this.classifier = classifier;
+        this.downstreamSupplier = downstreamSupplier;
+        this.downstreamAccumulator = downstreamAccumulator;
+    }
+
+    public void accept(ConcurrentMap<K, Object> map, T item) {
+        K key = this.classifier.apply(item);
+        Object contenedor = map.get(key);
+        if (contenedor == null) {
+            Object nuevo = this.downstreamSupplier.get();
+            Object gano = map.putIfAbsent(key, nuevo);
+            if (gano == null) {
+                contenedor = nuevo;
+            } else {
+                contenedor = gano;
+            }
+        }
+        A destino = (A) contenedor;
+        synchronized (contenedor) {
+            this.downstreamAccumulator.accept(destino, item);
+        }
+    }
+}
+
+// El finalizador de `groupingByConcurrent`: le pasa el finalizador de `downstream` a cada grupo,
+// EN EL LUGAR. El mapa que sale es el mismo objeto que entro, con los valores reemplazados; por
+// eso el resultado conserva el tipo concreto que pidio quien llamo (un ConcurrentSkipListMap
+// sigue siendo un ConcurrentSkipListMap).
+//
+// Las claves se copian a una lista antes de recorrerlas: `keySet()` puede ser una vista del mapa,
+// y reemplazar valores mientras se la recorre es pedirle problemas al iterador.
+final class ConcurrentGroupFinisher<K, A, D, M> implements Function<ConcurrentMap<K, Object>, M> {
+
+    private final Function<A, D> downstreamFinisher;
+
+    ConcurrentGroupFinisher(Function<A, D> downstreamFinisher) {
+        this.downstreamFinisher = downstreamFinisher;
+    }
+
+    public M apply(ConcurrentMap<K, Object> map) {
+        ArrayList<K> claves = new ArrayList<K>();
+        Iterator<K> it = map.keySet().iterator();
+        while (it.hasNext()) {
+            claves.add(it.next());
+        }
+        for (int i = 0; i < claves.size(); i++) {
+            K key = claves.get(i);
+            A contenedor = (A) map.get(key);
+            D resultado = this.downstreamFinisher.apply(contenedor);
+            map.put(key, resultado);
+        }
+        Object m = map;
+        return (M) m;
+    }
+}
+
+// ---- los conjuntos de permisos ------------------------------------------------------------------
+
+// Fabricas por aridad en vez de un variarg: el variarg obliga a escribir el arreglo en cada uso
+// (`new Collector.Characteristics[] {...}`), que es ruido en treinta y cinco lugares.
+final class Marcas {
+
+    private Marcas() {
+    }
+
+    static Set<Collector.Characteristics> ninguna() {
+        HashSet<Collector.Characteristics> s = new HashSet<Collector.Characteristics>();
+        return Collections.unmodifiableSet(s);
+    }
+
+    static Set<Collector.Characteristics> de(Collector.Characteristics a) {
+        HashSet<Collector.Characteristics> s = new HashSet<Collector.Characteristics>();
+        s.add(a);
+        return Collections.unmodifiableSet(s);
+    }
+
+    static Set<Collector.Characteristics> de(Collector.Characteristics a, Collector.Characteristics b) {
+        HashSet<Collector.Characteristics> s = new HashSet<Collector.Characteristics>();
+        s.add(a);
+        s.add(b);
+        return Collections.unmodifiableSet(s);
+    }
+
+    static Set<Collector.Characteristics> de(Collector.Characteristics a, Collector.Characteristics b,
+                                             Collector.Characteristics c) {
+        HashSet<Collector.Characteristics> s = new HashSet<Collector.Characteristics>();
+        s.add(a);
+        s.add(b);
+        s.add(c);
+        return Collections.unmodifiableSet(s);
     }
 }
