@@ -45,9 +45,16 @@ public enum ChronoField implements TemporalField {
     YEAR_OF_ERA(ChronoUnit.YEARS, ChronoUnit.FOREVER, 1L, 999999999L, 1000000000L, true, false),
     YEAR(ChronoUnit.YEARS, ChronoUnit.FOREVER, -999999999L, 999999999L, true, false),
     ERA(ChronoUnit.ERAS, ChronoUnit.FOREVER, 0L, 1L, true, false),
-    INSTANT_SECONDS(ChronoUnit.SECONDS, ChronoUnit.FOREVER, Long.MIN_VALUE, Long.MAX_VALUE, false, true),
+    // Los dos ultimos son los unicos que **no son ni de fecha ni de hora**, y por eso llevan `false`
+    // en las dos banderas. Se miden en segundos, lo cual invita a marcarlos como de hora --y asi
+    // estaban--, pero eso es lo que no son: un `LocalTime` no puede contestar ninguno de los dos. Uno
+    // necesita fecha, hora y zona a la vez; el otro es el desplazamiento mismo, que no es un instante
+    // dentro del dia. Marcarlos de hora hacia que `LocalTime.isSupported(OFFSET_SECONDS)` dijera que
+    // si y despues `getLong` tirara, que es exactamente la contradiccion que `isSupported` existe para
+    // evitar.
+    INSTANT_SECONDS(ChronoUnit.SECONDS, ChronoUnit.FOREVER, Long.MIN_VALUE, Long.MAX_VALUE, false, false),
     // +-18 horas: el maximo que la especificacion admite para un desplazamiento de zona.
-    OFFSET_SECONDS(ChronoUnit.SECONDS, ChronoUnit.FOREVER, -64800L, 64800L, false, true);
+    OFFSET_SECONDS(ChronoUnit.SECONDS, ChronoUnit.FOREVER, -64800L, 64800L, false, false);
 
     private final TemporalUnit baseUnit;
     private final TemporalUnit rangeUnit;
