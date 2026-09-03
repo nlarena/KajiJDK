@@ -338,6 +338,59 @@ public final class RandomGeneratorFactory {
         return this.create(seed);
     }
 
+    /**
+     * Un generador sembrado desde bytes.
+     *
+     * <p>La forma que existe para semillas que **no son un numero**: una clave, un hash, la salida
+     * de un generador criptografico. Los bytes se reparten en las palabras del estado del algoritmo
+     * y, si no alcanzan, el resto se rellena -- ver
+     * {@link jdk.internal.util.random.RandomSupport#convertSeedBytesToLongs}.
+     *
+     * @throws NullPointerException si `seed` es `null`
+     * @throws UnsupportedOperationException si el algoritmo no admite una semilla de bytes. Los dos
+     *     heredados --`Random` y `SplittableRandom`-- estan en ese caso: son anteriores a esta API y
+     *     su estado se define desde un `long`. Escribirles una conversion propia daria un generador
+     *     que **no es** el que el JDK arma con esos mismos bytes, y eso es peor que no ofrecerlo.
+     */
+    public RandomGenerator create(byte[] seed) {
+        if (seed == null) {
+            throw new NullPointerException("seed must not be null");
+        }
+        int i = this.index;
+        if (i == 0) {
+            return new L32X64MixRandom(seed);
+        }
+        if (i == 1) {
+            return new L64X128MixRandom(seed);
+        }
+        if (i == 2) {
+            return new L64X128StarStarRandom(seed);
+        }
+        if (i == 3) {
+            return new L64X256MixRandom(seed);
+        }
+        if (i == 4) {
+            return new L64X1024MixRandom(seed);
+        }
+        if (i == 5) {
+            return new L128X128MixRandom(seed);
+        }
+        if (i == 6) {
+            return new L128X256MixRandom(seed);
+        }
+        if (i == 7) {
+            return new L128X1024MixRandom(seed);
+        }
+        if (i == 8) {
+            return new Xoroshiro128PlusPlus(seed);
+        }
+        if (i == 9) {
+            return new Xoshiro256PlusPlus(seed);
+        }
+        throw new UnsupportedOperationException(
+                "el algoritmo " + this.name() + " no admite una semilla de bytes");
+    }
+
     public RandomGenerator create(long seed) {
         int i = this.index;
         if (i == 0) {

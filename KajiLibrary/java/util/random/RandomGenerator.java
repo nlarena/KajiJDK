@@ -440,6 +440,143 @@ public interface RandomGenerator {
         }
     }
 
+    /**
+     * Un generador que sabe **saltar**: avanzar de golpe una distancia enorme de su secuencia.
+     *
+     * <p>Resuelve el mismo problema que partir, por el otro camino. Un generador con un periodo
+     * gigantesco se puede repartir entre hilos dandole a cada uno un tramo **disjunto**: el hilo N
+     * arranca en la posicion N por la distancia de salto. La garantia no es estadistica sino
+     * aritmetica -- los tramos no se solapan porque la distancia es conocida.
+     *
+     * <p>La diferencia con partir: saltar necesita que el algoritmo tenga una forma cerrada de
+     * avanzar (una matriz de transicion elevada a una potencia), y no todos la tienen. Los LXM se
+     * parten; los xoshiro saltan.
+     */
+    interface JumpableGenerator extends RandomGenerator {
+
+        /** Una copia de este generador, en el mismo estado. */
+        JumpableGenerator copy();
+
+        /** Avanza este generador una distancia de salto. */
+        void jump();
+
+        /** Cuantos valores avanza {@link #jump()}. */
+        double jumpDistance();
+
+        /**
+         * Una copia en el estado actual, y **este** queda avanzado un salto.
+         *
+         * <p>El orden importa y es el que dice el nombre: se copia primero. Lo que se devuelve es el
+         * tramo que empieza donde estaba, y el que llama se queda con el siguiente.
+         */
+        default RandomGenerator copyAndJump() {
+            RandomGenerator copia = this.copy();
+            this.jump();
+            return copia;
+        }
+
+        /** `streamSize` generadores, cada uno un salto mas adelante que el anterior. */
+        default Stream<RandomGenerator> jumps(long streamSize) {
+            if (streamSize < 0L) {
+                throw new IllegalArgumentException("size must be non-negative");
+            }
+            java.util.List<RandomGenerator> salida = new java.util.ArrayList<RandomGenerator>();
+            long i = 0L;
+            while (i < streamSize) {
+                salida.add(this.copyAndJump());
+                i = i + 1L;
+            }
+            return salida.stream();
+        }
+
+        /** Igual que {@link #jumps(long)}: los flujos de esta biblioteca son ansiosos. */
+        default Stream<RandomGenerator> rngs(long streamSize) {
+            return this.jumps(streamSize);
+        }
+
+        // Las dos sin cantidad se niegan, por lo mismo que `ints()`/`longs()`/`doubles()`.
+        default Stream<RandomGenerator> jumps() {
+            throw new UnsupportedOperationException(
+                    "los flujos de esta biblioteca son ansiosos: use jumps(streamSize)");
+        }
+
+        default Stream<RandomGenerator> rngs() {
+            throw new UnsupportedOperationException(
+                    "los flujos de esta biblioteca son ansiosos: use rngs(streamSize)");
+        }
+
+        /**
+         * Un generador saltable del algoritmo que se nombra.
+         *
+         * @throws IllegalArgumentException si ese algoritmo no existe o no sabe saltar
+         */
+        static JumpableGenerator of(String name) {
+            RandomGenerator g = RandomGeneratorFactory.of(name).create();
+            if (!(g instanceof JumpableGenerator)) {
+                throw new IllegalArgumentException("el algoritmo " + name + " no sabe saltar");
+            }
+            return (JumpableGenerator) g;
+        }
+    }
+
+    /**
+     * Un generador que ademas sabe dar un **salto largo**.
+     *
+     * <p>Los dos niveles no son un capricho: el salto reparte tramos entre hilos, y el salto largo
+     * reparte **conjuntos de tramos** entre maquinas. Con un solo tamanio hay que elegir entre
+     * granularidad fina y alcance, y con dos no.
+     */
+    interface LeapableGenerator extends JumpableGenerator {
+
+        /** Una copia de este generador, en el mismo estado. */
+        LeapableGenerator copy();
+
+        /** Avanza este generador una distancia de salto largo. */
+        void leap();
+
+        /** Cuantos valores avanza {@link #leap()}. */
+        double leapDistance();
+
+        /** Una copia en el estado actual, y **este** queda avanzado un salto largo. */
+        default JumpableGenerator copyAndLeap() {
+            JumpableGenerator copia = this.copy();
+            this.leap();
+            return copia;
+        }
+
+        /** `streamSize` generadores, cada uno un salto largo mas adelante que el anterior. */
+        default Stream<JumpableGenerator> leaps(long streamSize) {
+            if (streamSize < 0L) {
+                throw new IllegalArgumentException("size must be non-negative");
+            }
+            java.util.List<JumpableGenerator> salida = new java.util.ArrayList<JumpableGenerator>();
+            long i = 0L;
+            while (i < streamSize) {
+                salida.add(this.copyAndLeap());
+                i = i + 1L;
+            }
+            return salida.stream();
+        }
+
+        default Stream<JumpableGenerator> leaps() {
+            throw new UnsupportedOperationException(
+                    "los flujos de esta biblioteca son ansiosos: use leaps(streamSize)");
+        }
+
+        /**
+         * Un generador de salto largo del algoritmo que se nombra.
+         *
+         * @throws IllegalArgumentException si ese algoritmo no existe o no sabe saltar largo
+         */
+        static LeapableGenerator of(String name) {
+            RandomGenerator g = RandomGeneratorFactory.of(name).create();
+            if (!(g instanceof LeapableGenerator)) {
+                throw new IllegalArgumentException("el algoritmo " + name + " no sabe saltar largo");
+            }
+            return (LeapableGenerator) g;
+        }
+    }
+
     // ---- los estaticos de fabrica ---------------------------------------------------------------
 
     /**
