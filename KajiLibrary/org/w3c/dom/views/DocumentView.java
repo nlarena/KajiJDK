@@ -1,13 +1,17 @@
 package org.w3c.dom.views;
 
 /**
- * Un documento que sabe cual es su vista por omision.
+ * KajiLibrary's org.w3c.dom.views.DocumentView -- un documento que sabe cual es su vista principal.
  *
- * <p>Es la contraparte de {@link AbstractView}: uno va del documento a la vista y el otro de la
- * vista al documento. Un documento puede tener muchas vistas y solo una por omision.
+ * <p>La implementa el {@code Document}. Es la mitad inversa de {@link AbstractView}: de la vista se
+ * llega al documento y del documento a su vista por omision.
+ *
+ * <p>"Por omision" quiere decir la que se usa cuando nadie dice cual: en un navegador, la ventana.
+ * Un documento puede tener muchas vistas y esta interfaz solo nombra una, porque es la unica que se
+ * puede elegir sin conocer el medio.
  */
 public interface DocumentView {
 
-    /** La vista por omision, o nulo si el documento no tiene ninguna. */
+    /** La vista por omision de este documento. */
     AbstractView getDefaultView();
 }
