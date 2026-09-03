@@ -16,8 +16,11 @@ public abstract class DynamicConstantDesc<T> implements ConstantDesc {
     private final ClassDesc constantType;
     private final ConstantDesc[] bootstrapArgs;
 
+    // `ConstantDesc...` y no `ConstantDesc[]`: el descriptor es el mismo, pero el flag `ACC_VARARGS`
+    // es lo que deja al que llama desplegar los argumentos en vez de armar el array a mano. Es la
+    // diferencia entre `new Sub(bsm, "x", t, a, b)` y `new Sub(bsm, "x", t, new ConstantDesc[]{a,b})`.
     protected DynamicConstantDesc(DirectMethodHandleDesc bootstrapMethod, String constantName,
-            ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
+            ClassDesc constantType, ConstantDesc... bootstrapArgs) {
         this.bootstrapMethod = bootstrapMethod;
         this.constantName = constantName;
         this.constantType = constantType;
