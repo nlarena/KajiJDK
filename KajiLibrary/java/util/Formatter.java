@@ -30,9 +30,12 @@ public final class Formatter implements Closeable, Flushable {
 
     private Appendable out;
     private Locale locale;
-    // La ultima IOException que tiro el destino, si el destino es un OutputStream. `ioException()`
-    // la devuelve; con un `Appendable` comun queda siempre null, porque el `append` de esta
-    // biblioteca no declara IOException y entonces no hay ninguna que reportar.
+    // La ultima IOException que tiro el destino, o null. `ioException()` la devuelve.
+    //
+    // Este campo existio un tiempo sin poder llenarse nunca, porque `Appendable.append` de esta
+    // biblioteca no declaraba IOException. Ahora si la declara, asi que el mecanismo funciona: un
+    // `Formatter` **no tira** por fallas de E/S --su contrato es que formatear no obliga a atrapar--
+    // las anota y las cuenta cuando se pregunta.
     private java.io.IOException ultimaIo;
 
     public Formatter() {
@@ -228,6 +231,17 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     public Formatter format(String format, Object... args) {
+        try {
+            return this.formatear(format, args);
+        } catch (java.io.IOException e) {
+            this.ultimaIo = e;
+            return this;
+        }
+    }
+
+    // El formateo de verdad. Declara la excepcion; el publico de arriba la atrapa y la anota, que es
+    // el contrato de `Formatter`.
+    private Formatter formatear(String format, Object... args) throws java.io.IOException {
         int argIndex = 0;
         int lastArgIndex = -1;
         int i = 0;

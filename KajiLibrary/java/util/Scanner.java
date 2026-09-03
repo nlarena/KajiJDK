@@ -235,9 +235,12 @@ public final class Scanner implements Iterator<String>, Closeable {
                 usados = usados + n;
                 n = source.read(trozo, 0, trozo.length);
             }
+        } catch (java.io.IOException e) {
+            // Se corta la lectura y lo leido hasta aca es lo que hay: un `Scanner` **no tira** por
+            // fallas de E/S, las anota y las cuenta por `ioException()`. Ese es su contrato.
+            this.lastException = e;
         } catch (RuntimeException e) {
-            // `InputStream.read` de esta biblioteca no declara IOException; si algo falla, se corta
-            // la lectura y lo leido hasta aca es lo que hay.
+            // Idem para una falla no chequeada del origen.
         }
         this.buf.append(new String(todo, 0, usados, charset));
     }
@@ -843,7 +846,15 @@ public final class Scanner implements Iterator<String>, Closeable {
         this.closed = true;
         this.sourceClosed = true;
         if (this.source instanceof Closeable) {
-            ((Closeable) this.source).close();
+            try {
+                ((Closeable) this.source).close();
+            } catch (java.io.IOException e) {
+                // `Scanner.close()` no declara `throws` en el JDK: la falla se anota y se cuenta por
+                // `ioException()`, como la de lectura. Cerrar es lo ultimo que pasa, y obligar a
+                // atrapar ahi seria pedirle al llamador que maneje un error que ya no puede cambiar
+                // nada.
+                this.lastException = e;
+            }
         }
         this.source = null;
     }

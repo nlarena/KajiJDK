@@ -126,4 +126,39 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
         }
         return h;
     }
+
+    /**
+     * El mapa como {@code {clave=valor, clave=valor}}, en el orden en que lo recorre su iterador.
+     *
+     * <p>Sin esto, cualquier mapa que no lo defina por su cuenta --HashMap incluido-- cae en el
+     * `toString` de Object y se imprime como `java.util.HashMap@3`. Es el tipo de agujero que no
+     * rompe nada hasta que alguien loguea un mapa y lee una direccion en vez de sus datos.
+     *
+     * <p>El auto-referencia se imprime como "(this Map)" y no se recurre, que es lo que hace el
+     * JDK: un mapa que se contiene a si mismo desbordaria la pila en la primera linea de log.
+     */
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        Iterator<K> it = this.keySet().iterator();
+        boolean primero = true;
+        while (it.hasNext()) {
+            K k = it.next();
+            V v = this.get(k);
+            if (!primero) {
+                sb.append(',').append(' ');
+            }
+            primero = false;
+            // Los `Object` intermedios no son decoracion: `String.valueOf(k)` con `k` de tipo
+            // variable elige la sobrecarga de `char[]` en este compilador (COMPILER_FINDINGS #341),
+            // y sale una cadena vacia. Con el tipo escrito a mano, elige la de `Object`.
+            Object ko = k;
+            Object vo = v;
+            sb.append(ko == this ? "(this Map)" : String.valueOf(ko));
+            sb.append('=');
+            sb.append(vo == this ? "(this Map)" : String.valueOf(vo));
+        }
+        sb.append('}');
+        return sb.toString();
+    }
 }

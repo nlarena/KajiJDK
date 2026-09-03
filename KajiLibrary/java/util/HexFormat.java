@@ -139,6 +139,17 @@ public final class HexFormat {
 
     /** Idem, sobre un tramo. */
     public <A extends Appendable> A formatHex(A out, byte[] bytes, int fromIndex, int toIndex) {
+        // El JDK no declara `throws IOException` y envuelve en `UncheckedIOException`: quien formatea
+        // hexadecimal a un `Appendable` no tiene por que atrapar E/S. El error no se pierde.
+        try {
+            return this.formatearHex(out, bytes, fromIndex, toIndex);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    private <A extends Appendable> A formatearHex(A out, byte[] bytes, int fromIndex, int toIndex)
+            throws java.io.IOException {
         if (out == null) {
             throw new NullPointerException();
         }
@@ -166,8 +177,12 @@ public final class HexFormat {
         if (out == null) {
             throw new NullPointerException();
         }
-        out.append(toHighHexDigit(value));
-        out.append(toLowHexDigit(value));
+        try {
+            out.append(toHighHexDigit(value));
+            out.append(toLowHexDigit(value));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
         return out;
     }
 

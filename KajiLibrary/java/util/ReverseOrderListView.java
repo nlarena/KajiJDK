@@ -23,9 +23,41 @@ import java.util.NoSuchElementException;
 final class ReverseOrderListView<E> extends AbstractList<E> implements List<E> {
 
     private final List<E> base;
+    // Si la vista deja escribir. Un `reversed()` sobre una lista inmutable tiene que dar una vista
+    // inmutable: sin este flag la vista seria mas permisiva que la lista que envuelve, y el rechazo
+    // llegaria --si llega-- desde la base, con un mensaje que habla de otra cosa.
+    private final boolean modifiable;
 
     ReverseOrderListView(List<E> base) {
+        this(base, true);
+    }
+
+    private ReverseOrderListView(List<E> base, boolean modifiable) {
         this.base = base;
+        this.modifiable = modifiable;
+    }
+
+    /**
+     * La vista invertida de `list`, modificable o no.
+     *
+     * <p>Es la entrada que usa `List.reversed()`. El JDK ademas elige aca entre dos clases segun la
+     * lista implemente `RandomAccess` o no --para que la vista herede esa propiedad--; aca hay una
+     * sola clase, asi que la vista de una lista de acceso aleatorio **no** se anuncia como tal. Es
+     * una diferencia conservadora: quien pregunte por `RandomAccess` va a elegir el algoritmo por
+     * cursor, que es correcto para las dos.
+     */
+    static <T> List<T> of(List<T> list, boolean modifiable) {
+        if (list == null) {
+            throw new NullPointerException("list");
+        }
+        return new ReverseOrderListView<T>(list, modifiable);
+    }
+
+    // Todo mutador pasa por aca antes de tocar la base.
+    private void chequearModificable() {
+        if (!this.modifiable) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     // Reversing a reverse view is the base list itself, not a third object stacked on top: the
@@ -41,14 +73,17 @@ final class ReverseOrderListView<E> extends AbstractList<E> implements List<E> {
     }
 
     public E set(int index, E element) {
+        this.chequearModificable();
         return this.base.set(this.base.size() - 1 - index, element);
     }
 
     public void add(int index, E element) {
+        this.chequearModificable();
         this.base.add(this.base.size() - index, element);
     }
 
     public E remove(int index) {
+        this.chequearModificable();
         return this.base.remove(this.base.size() - 1 - index);
     }
 
@@ -86,6 +121,7 @@ final class ReverseOrderListView<E> extends AbstractList<E> implements List<E> {
 
     // Appending to the view means prepending to the base.
     public boolean add(E e) {
+        this.chequearModificable();
         this.base.add(0, e);
         return true;
     }
@@ -93,6 +129,7 @@ final class ReverseOrderListView<E> extends AbstractList<E> implements List<E> {
     // Removes the *first* match in view order, which is the last one in the base — hence the
     // detour through indexOf instead of delegating to base.remove(Object).
     public boolean remove(Object o) {
+        this.chequearModificable();
         int i = this.indexOf(o);
         if (i < 0) {
             return false;
@@ -102,6 +139,7 @@ final class ReverseOrderListView<E> extends AbstractList<E> implements List<E> {
     }
 
     public void clear() {
+        this.chequearModificable();
         this.base.clear();
     }
 
