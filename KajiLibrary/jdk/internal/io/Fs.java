@@ -66,4 +66,46 @@ public final class Fs {
 
     /** Crea un directorio; `todos` decide si tambien los padres que falten. */
     public static native boolean mkdir(String path, boolean todos);
+
+    /**
+     * Los nombres **simples** de las entradas de un directorio, o `null` si no se pudo leer.
+     *
+     * <p>Es el nativo que faltaba para poder **recorrer** el disco y no solo tocar archivos sueltos.
+     * Con el entran los nueve metodos de `java.nio.file` que enumeran --`list`, `walk`, `find`,
+     * `walkFileTree`, los tres `newDirectoryStream`-- y los cinco `list`/`listFiles` de
+     * `java.io.File`, que hasta ahora devolvian `null` siempre.
+     *
+     * <p>Nombres simples y no rutas completas, como hace `File.list()`: quien quiera la ruta la arma
+     * con el directorio que ya tiene. Devolverla armada obligaria al nativo a elegir un separador y a
+     * decidir si normaliza, y esas dos son decisiones del lado Java.
+     *
+     * <p>`null` --y no un arreglo vacio-- cuando falla, para que se distinga de un directorio que
+     * existe y esta vacio. Es la misma distincion que `File.list()` hace, y perderla convertiria un
+     * error en un resultado.
+     *
+     * <p>El orden es el que da el sistema de archivos y **no se ordena**: el contrato dice
+     * explicitamente que no hay garantia de orden.
+     */
+    public static native String[] list(String ruta);
+
+    /**
+     * El camino **canonico** de esa ruta: absoluto, resuelto y sin enlaces; `null` si no existe.
+     *
+     * <p>Es lo unico que contesta si dos rutas distintas nombran el mismo archivo. Comparar las
+     * cadenas no alcanza: en Windows `C:\A.TXT` y `C:.txt` son el mismo archivo.
+     */
+    public static native String canonical(String ruta);
+
+    /**
+     * La fecha de ultima modificacion, en milisegundos desde la epoca; `Long.MIN_VALUE` si no se
+     * pudo leer.
+     *
+     * <p>El centinela no es cero a proposito: cero **es** una fecha valida --la epoca-- y era la que
+     * se devolvia cuando no habia con que leer la de verdad. Confundir "no se" con "1 de enero de
+     * 1970" es exactamente el error que este valor evita.
+     */
+    public static native long mtime(String ruta);
+
+    /** Fija la fecha de ultima modificacion, en milisegundos desde la epoca. */
+    public static native boolean setMtime(String ruta, long millis);
 }
