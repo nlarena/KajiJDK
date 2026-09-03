@@ -48,6 +48,34 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
         return this.toEpochDay() == other.toEpochDay();
     }
 
+    /**
+     * Responde las consultas estandar.
+     *
+     * <p>La que importa es `chronology()`: una fecha es lo unico que sabe de que calendario es, y sin
+     * este metodo `Chronology.from(minguoDate)` contestaba **ISO**. El motivo es el mismo del bug de
+     * `TemporalQueries`: las consultas marcadoras se reconocen **por identidad**, y si nadie las
+     * reconoce el `queryFrom` generico devuelve `null` -- que aca terminaba en el ISO por defecto.
+     *
+     * <p>Las tres que devuelven `null` a proposito tambien hacen falta: una fecha **no** tiene zona,
+     * ni desplazamiento, ni hora, y decir `null` es distinto de dejar que el `queryFrom` generico
+     * adivine.
+     */
+    default <R> R query(java.time.temporal.TemporalQuery<R> query) {
+        if (query == java.time.temporal.TemporalQueries.zoneId()
+                || query == java.time.temporal.TemporalQueries.zone()
+                || query == java.time.temporal.TemporalQueries.offset()
+                || query == java.time.temporal.TemporalQueries.localTime()) {
+            return null;
+        }
+        if (query == java.time.temporal.TemporalQueries.chronology()) {
+            return (R) this.getChronology();
+        }
+        if (query == java.time.temporal.TemporalQueries.precision()) {
+            return (R) ChronoUnit.DAYS;
+        }
+        return query.queryFrom(this);
+    }
+
     /** La era de esta fecha, segun su calendario. */
     default Era getEra() {
         return this.getChronology().eraOf(this.get(ChronoField.ERA));

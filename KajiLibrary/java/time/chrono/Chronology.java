@@ -23,10 +23,7 @@ import java.util.Set;
 // es, el **calendario** sabe como se cuentan los dias. Una `MinguoDate` no sabe cuantos meses tiene
 // un anio; le pregunta a su `MinguoChronology`.
 //
-// Queda afuera `getDisplayName(TextStyle, Locale)`: necesita los nombres traducidos de cada
-// calendario, que son datos --el CLDR-- y no codigo. Escribirlo devolviendo el id o un nombre en
-// ingles para cualquier locale seria un miembro que **miente sobre lo que le pidieron**, que es
-// peor que uno que falta. Misma razon por la que `Era.getDisplayName` tampoco esta.
+// Sobre `getDisplayName(TextStyle, Locale)`: esta, y devuelve el **id**. Ver su javadoc.
 public interface Chronology extends Comparable<Chronology> {
 
     String getId();
@@ -185,6 +182,29 @@ public interface Chronology extends Comparable<Chronology> {
      * alguien tiene que decidir que combinacion gana y que hacer con un 31 de febrero.
      */
     ChronoLocalDate resolveDate(Map<TemporalField, Long> fieldValues, java.time.format.ResolverStyle resolverStyle);
+
+    /**
+     * El nombre de este calendario para mostrarle a alguien.
+     *
+     * <p>Devuelve **el id**, que es a lo que el propio JDK recurre cuando no encuentra un nombre
+     * para el estilo y el locale pedidos --su implementacion termina en
+     * `Objects.requireNonNullElseGet(name, () -> chrono.getId())`--.
+     *
+     * <p>**Esta biblioteca no trae los datos de texto del CLDR**, asi que esa rama se toma
+     * **siempre**. Para el ISO coincide con el JDK (`"ISO"` en los dos); para los demas se queda
+     * corto de una palabra: `"Minguo"` aca, `"Minguo Calendar"` alla.
+     *
+     * @throws NullPointerException si `style` o `locale` son `null`
+     */
+    default String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
+        if (style == null) {
+            throw new NullPointerException("style");
+        }
+        if (locale == null) {
+            throw new NullPointerException("locale");
+        }
+        return this.getId();
+    }
 
     // ---- busqueda ---------------------------------------------------------------------------------
 

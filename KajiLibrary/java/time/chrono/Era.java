@@ -17,12 +17,40 @@ import java.time.temporal.ValueRange;
 // y eso es justo lo que la interfaz pide. Ser `TemporalAdjuster` sale de lo mismo: ajustar una fecha
 // con una era es poner ese campo.
 //
-// Queda afuera `getDisplayName(TextStyle, Locale)`: los nombres traducidos de las eras son datos del
-// CLDR, no codigo. Devolver "CE" para cualquier locale seria un miembro que miente sobre lo que le
-// pidieron -- misma razon por la que tampoco esta `Chronology.getDisplayName`.
+// Sobre `getDisplayName(TextStyle, Locale)`: esta, y devuelve el **valor numerico**. Ver su javadoc,
+// que explica por que eso no es una mentira sino la rama que el contrato define para cuando no hay
+// datos de texto.
 public interface Era extends TemporalAccessor, TemporalAdjuster {
 
     int getValue();
+
+    /**
+     * El nombre de esta era para mostrarle a alguien.
+     *
+     * <p>Devuelve **el valor numerico**, que es lo que el contrato manda cuando no hay un nombre
+     * para el estilo y el locale pedidos: <i>"If no textual mapping is found then the numeric value
+     * is returned"</i>.
+     *
+     * <p>**Esta biblioteca no trae los datos de texto del CLDR**, asi que esa rama se toma
+     * **siempre**, para cualquier locale. La diferencia con el JDK es concreta:
+     * `IsoEra.CE.getDisplayName(FULL, ENGLISH)` da `"1"` aca y `"AD"` en el JDK.
+     *
+     * <p>Que esto se pueda escribir --y que antes se hubiera dejado afuera-- es por un detalle que
+     * vale la pena anotar: el contrato **define** que hacer cuando no hay nombre. Lo que seria
+     * mentir es inventar uno. Y el numero **se anuncia solo**: nadie confunde `"1"` con un nombre
+     * traducido, mientras que un `"CE"` devuelto para un locale frances pasaria por bueno.
+     *
+     * @throws NullPointerException si `style` o `locale` son `null`
+     */
+    default String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
+        if (style == null) {
+            throw new NullPointerException("style");
+        }
+        if (locale == null) {
+            throw new NullPointerException("locale");
+        }
+        return Integer.toString(this.getValue());
+    }
 
     /** Una era **solo** sabe de `ERA`. */
     default boolean isSupported(TemporalField field) {
