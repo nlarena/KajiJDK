@@ -684,6 +684,19 @@ fn delegates_to_this(body: &Block) -> bool {
     )
 }
 
+/// ¿El cuerpo arranca con un `super(...)` **escrito**? (finding #342)
+///
+/// Importa para saber **dónde** meter los inicializadores de instancia: van después de esa llamada,
+/// no antes. Ponerlos antes los dejaba primeros en el cuerpo, el emisor ya no veía un `super()` al
+/// frente y le anteponía el implícito — con lo que la superclase se inicializaba **dos veces**, la
+/// primera por su constructor sin argumentos, que puede no existir o hacer algo muy distinto.
+fn delegates_to_super(body: &Block) -> bool {
+    matches!(
+        body.0.first().map(|s| &s.kind),
+        Some(StmtKind::Expr(e)) if matches!(&e.kind, ExprKind::Call { name, .. } if name == "super")
+    )
+}
+
 fn qualify(enclosing: &str, name: &str) -> String {
     if enclosing.is_empty() { name.to_string() } else { format!("{enclosing}.{name}") }
 }
@@ -917,7 +930,14 @@ impl Desugarer<'_> {
                 if delegates_to_this(body) {
                     continue;
                 }
-                let mut merged: Vec<Stmt> = inits.iter().flat_map(|b| b.0.clone()).collect();
+                // Van al frente, PERO detrás del `super(...)` explícito si lo hay (§12.5: el orden
+                // es superclase, inicializadores, cuerpo). Meterlos delante del `super(...)` hacía
+                // que el emisor no lo reconociera como primera sentencia y le antepusiera el
+                // `super()` implícito, con lo que la superclase se construía dos veces --- una con
+                // el constructor equivocado (finding #342).
+                let corte = if delegates_to_super(body) { 1 } else { 0 };
+                let mut merged: Vec<Stmt> = body.0.drain(..corte).collect();
+                merged.extend(inits.iter().flat_map(|b| b.0.clone()));
                 merged.append(&mut body.0);
                 body.0 = merged;
             }
@@ -952,7 +972,42 @@ impl Desugarer<'_> {
                     self.rewrite_enum_ctors(class, cid);
                 }
                 let synth = self.enum_members(class, cid, has_ctor);
-                class.members.extend(synth);
+                // El `<clinit>` sintetizado va **adelante** del que escribió el usuario (#317).
+                //
+                // JLS §12.4.2 manda construir las constantes del `enum` **primero** y recién después
+                // correr el resto del inicializador estático. Acá pasaba al revés y por una razón de
+                // orden de pasadas: `hoist_initializers` corre al entrar a la clase y deja el
+                // `StaticInit` del usuario en `members`; la síntesis del `enum` corre después y
+                // **agregaba** el suyo detrás. El emisor concatena en orden de miembro, así que las
+                // constantes se construían últimas.
+                //
+                // Lo que producía es de lo peor que puede pasar: nada falla. La clase carga, y un
+                // `static final X ALIAS = A;` queda en `null` porque `A` todavía no existía cuando se
+                // leyó. Salió en `AclEntryPermission`, donde tres constantes son alias de otras tres.
+                let (clinit_enum, resto): (Vec<Member>, Vec<Member>) =
+                    synth.into_iter().partition(|m| matches!(m, Member::StaticInit(_)));
+                class.members.extend(resto);
+                for m in clinit_enum {
+                    let Member::StaticInit(bloque) = m else { continue };
+                    // Se fusiona por delante del que ya haya, en vez de agregar un segundo bloque: el
+                    // emisor los concatenaría igual, pero un solo `<clinit>` es lo que el `.class`
+                    // tiene y dejarlo así hace que lo que se lee sea lo que se emite.
+                    let existente = class
+                        .members
+                        .iter_mut()
+                        .find_map(|m| match m {
+                            Member::StaticInit(b) => Some(b),
+                            _ => None,
+                        });
+                    match existente {
+                        Some(usuario) => {
+                            let mut juntos = bloque.0;
+                            juntos.append(&mut usuario.0);
+                            usuario.0 = juntos;
+                        }
+                        None => class.members.push(Member::StaticInit(bloque)),
+                    }
+                }
             }
         }
         if self.needs_assert_guard {
@@ -2554,6 +2609,12 @@ impl Desugarer<'_> {
                 // `new L(this, val$…, args)`.
                 self.add_local_captures_arg(e);
                 self.add_outer_arg(e);
+                // Y el varargs **al final**, no antes: los dos pasos de arriba anteponen argumentos
+                // sintéticos, y el símbolo del constructor de una interna ya lleva esos parámetros
+                // en su firma resuelta. Empaquetar primero contaría los fijos contra una lista de
+                // argumentos a la que todavía le faltan los sintéticos y partiría en el lugar
+                // equivocado (finding #328).
+                self.lower_varargs(e);
             }
             _ => {}
         }
@@ -2561,14 +2622,31 @@ impl Desugarer<'_> {
 
     /// `f(1, 2, 3)` con `f(int... xs)` → `f(new int[]{1, 2, 3})`. No toca la llamada si ya se pasó
     /// un array directamente (`f(arr)`).
+    ///
+    /// Vale igual para un `new X(1, 2, 3)` contra `X(int... xs)`: un constructor varargs se invoca
+    /// con las mismas reglas que un método (§15.9.3 delega en §15.12.2), y hasta #327 esta bajada
+    /// solo miraba `Call` — el `new` se emitía con los argumentos sueltos contra un descriptor que
+    /// esperaba el array.
     fn lower_varargs(&mut self, e: &mut Expr) {
         let Some(Binding::Method(m)) = e.binding else { return };
+        // Un método **polimórfico de firma** se declara `(Object...)` y no se llama como un varargs
+        // (JLS §15.12.3): sus argumentos van al sitio con su tipo estático, sin array y sin boxear.
+        // Empaquetarlos acá era lo que hacía que `vh.set(9)` emitiera
+        // `set:([Ljava/lang/Object;)V` en vez de `set:(I)V`, un sitio que la JVM real rechaza con
+        // `WrongMethodTypeException`.
+        if super::codegen::signature_polymorphic(self.table, m) {
+            return;
+        }
         let Some(Resolved::Method { params, varargs: true, .. }) = self.table.resolved(m) else {
             return;
         };
         let params = params.clone(); // suelta el préstamo de la tabla
         let fixed = params.len().saturating_sub(1);
-        let ExprKind::Call { args, .. } = &mut e.kind else { return };
+        let args = match &mut e.kind {
+            ExprKind::Call { args, .. } => args,
+            ExprKind::NewObject { args, .. } => args,
+            _ => return,
+        };
         if args.len() < fixed {
             return; // llamada mal formada: no la tocamos
         }
@@ -4609,7 +4687,12 @@ mod tests {
         let StmtKind::Return(Some(e)) = &body_of(&unit)[0].kind else { panic!() };
         let ExprKind::Indy { info, captures } = &e.kind else { panic!("{:?}", e.kind) };
         assert_eq!(captures.len(), 3, "un push por operando dinámico");
-        assert_eq!(info.descriptor, "(Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/String;");
+        // El operando `Object` figura en el descriptor como `String`, no como `Object`: el codegen
+        // le mete un `String.valueOf(Object)` antes del `invokedynamic` (#282), así que lo que
+        // llega al call site ya es un `String`. Esta afirmación decía `Ljava/lang/Object;` --de
+        // antes de #282-- y contradecía al javac real, que para
+        // `"a=" + o` emite `invokestatic String.valueOf` y un descriptor con `Ljava/lang/String;`.
+        assert_eq!(info.descriptor, "(Ljava/lang/String;ILjava/lang/String;)Ljava/lang/String;");
         assert_eq!(info.bootstrap_args, vec![BootstrapArg::Str("\u{1}\u{1}\u{1}".to_string())]);
     }
 
@@ -4709,6 +4792,36 @@ mod tests {
         let ExprKind::Call { args, .. } = &e.kind else { panic!() };
         assert_eq!(args.len(), 2, "el fijo `s` + el array de la cola");
         assert!(matches!(args[1].kind, ExprKind::NewArray { .. }));
+    }
+
+    #[test]
+    fn varargs_constructor_wraps_trailing_args_too() {
+        // Finding #328: la bajada solo miraba `Call`, así que un `new C(1, 2)` contra `C(int...)`
+        // llegaba al emisor con los argumentos sueltos y se emitía un `invokespecial` contra un
+        // descriptor `([I)V` que esperaba el array.
+        let unit = desugared("class C { C(int... xs) {} void m() { new C(1, 2); } }");
+        let StmtKind::Expr(e) = &body_named(&unit, "m")[0].kind else { panic!() };
+        let ExprKind::NewObject { args, .. } = &e.kind else { panic!("{:?}", e.kind) };
+        assert_eq!(args.len(), 1, "los 2 args se envuelven en un solo array");
+        let ExprKind::NewArray { init, .. } = &args[0].kind else { panic!("{:?}", args[0].kind) };
+        assert_eq!(init.as_ref().unwrap().len(), 2, "con los 2 elementos");
+    }
+
+    #[test]
+    fn varargs_constructor_with_fixed_params_wraps_only_the_tail() {
+        let unit = desugared("class C { C(String s, int... xs) {} void m() { new C(\"a\", 1, 2); } }");
+        let StmtKind::Expr(e) = &body_named(&unit, "m")[0].kind else { panic!() };
+        let ExprKind::NewObject { args, .. } = &e.kind else { panic!("{:?}", e.kind) };
+        assert_eq!(args.len(), 2, "el fijo `s` + el array de la cola");
+        assert!(matches!(args[1].kind, ExprKind::NewArray { .. }));
+    }
+
+    #[test]
+    fn passing_an_array_directly_to_a_varargs_constructor_is_not_rewrapped() {
+        let unit = desugared("class C { C(int... xs) {} void m(int[] a) { new C(a); } }");
+        let StmtKind::Expr(e) = &body_named(&unit, "m")[0].kind else { panic!() };
+        let ExprKind::NewObject { args, .. } = &e.kind else { panic!("{:?}", e.kind) };
+        assert!(matches!(args[0].kind, ExprKind::Name(_)), "el array se pasa tal cual: {:?}", args[0].kind);
     }
 
     #[test]

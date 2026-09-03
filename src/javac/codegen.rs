@@ -1107,6 +1107,39 @@ fn member_scope(table: &SymbolTable, cid: SymbolId) -> ScopeId {
 }
 
 /// El **nombre interno** de una clase (con `/`), a partir de su *binary name*.
+/// Si `mid` es **polimórfico de firma** (JLS §15.12.3).
+///
+/// Los cuatro requisitos del JLS, y cada uno descarta algo real: declarado en
+/// `java.lang.invoke.MethodHandle` o `java.lang.invoke.VarHandle` (ninguna otra clase puede serlo, ni
+/// siquiera una que copie la forma), `native` (el cuerpo lo pone la VM al ligar), aridad variable, y
+/// un único parámetro `Object[]`.
+///
+/// Lo que cambia si lo es: los argumentos **no** se empaquetan ni se boxean —el descriptor del sitio
+/// los lleva con su tipo estático— y el retorno sale del contexto. Ver `Emitter::sigpoly_ret`.
+pub(crate) fn signature_polymorphic(table: &SymbolTable, mid: SymbolId) -> bool {
+    let sym = table.symbol(mid);
+    if !sym.modifiers.contains(&Modifier::Native) {
+        return false;
+    }
+    let Some(owner) = sym.owner else { return false };
+    let owner_name = internal_name(table, owner);
+    if owner_name != "java/lang/invoke/MethodHandle" && owner_name != "java/lang/invoke/VarHandle" {
+        return false;
+    }
+    let Some(Resolved::Method { params, varargs: true, .. }) = table.resolved(mid) else {
+        return false;
+    };
+    // Un solo parámetro, y que sea `Object[]`. Sin esto entraría cualquier `native` varargs que esas
+    // dos clases declararan por otro motivo.
+    match params.as_slice() {
+        [RType::Array(elem)] => matches!(
+            elem.as_ref(),
+            RType::Class(id) if internal_name(table, *id) == "java/lang/Object"
+        ),
+        _ => false,
+    }
+}
+
 pub(crate) fn internal_name(table: &SymbolTable, class_id: SymbolId) -> String {
     let bin = match &table.symbol(class_id).kind {
         SymbolKind::Class { binary, .. } => binary.clone(),
@@ -1165,16 +1198,62 @@ fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<Sy
     if let Some(id) = table.class(name).or_else(|| table.class(&name.replace('$', "."))) {
         return Some(id);
     }
+    // La otra mitad del #314: el mismo tipo del fuente nombrado **corto**, por un `import` o por
+    // estar en el mismo paquete. Ahi la clave no es el nombre completo sino el **alias** que
+    // `try_load` registra cuando detecta el shadowing (#312), y el `java.lang` implícito (#303).
+    //
+    // Las dos mitades tienen la misma forma y salieron con un día de diferencia: primero un
+    // supertipo escrito entero (`java.time.chrono.ChronoZonedDateTime`), después un campo escrito
+    // corto (`Base`, importado). Lo que las une es que la pasada 1 sabe resolver las dos —
+    // `resolve_name_to_sym` consulta estos dos mapas— y el generador no consultaba ninguno.
+    if !name.contains('.') {
+        if let Some(id) = table.java_lang_source(name).or_else(|| table.source_alias(name)) {
+            return Some(id);
+        }
+    }
+    // Un externo nombrado **entero** (#325). Los externos se indexan por nombre **simple**, así que
+    // `java.sql.Date` no lo encuentra ni `external(name)` —la clave es `Date`— ni `class(name)`, que
+    // solo mira el fuente. Caía entonces en el `external(simple)` de abajo, que **tira el
+    // calificador**: si otro `Date` cualquiera ya estaba cargado, ganaba ese.
+    //
+    // Y en una compilación multi-unidad "ya estaba cargado" es lo normal: alcanza con que una unidad
+    // **anterior** del mismo lote haya mencionado un `java.util.Calendar`, cuyos miembros arrastran
+    // `java.util.Date`. Emitir `DatabaseMetaData.java` y `CallableStatement.java` juntos hacía que el
+    // `java.sql.Date getDate(int)` del segundo saliera con `java.util.Date` en el descriptor — un
+    // artefacto que compila, carga, y miente.
+    //
+    // Por qué nada lo veía: la pasada 1 **sí** consulta este índice (`enter.rs`, `resolve_name_to_sym`),
+    // así que el chequeo daba bien y el desacuerdo aparecía solo en el .class; y la biblioteca
+    // recompila de a un archivo, donde no hay unidad anterior que cargue al homónimo. Salió al medir
+    // `java.sql` y ver seis miembros faltando en `CallableStatement` que estaban escritos.
+    //
+    // Va antes del `external(simple)` y en el mismo orden que la pasada 1: exacto primero, simple
+    // como red. Lo simple sigue haciendo falta para el anidado escrito corto (`Map.Entry`), donde el
+    // nombre completo del externo es `java.util.Map$Entry` y no coincide con lo escrito.
+    if let Some(id) = table.external_fqn(name) {
+        return Some(id);
+    }
     // Cualificado / **anidado** (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`): por nombre simple
     // (externo registrado así) o, si no, resolviendo el `outer` y bajando a su miembro-tipo. Sin esto,
     // el descriptor de un `Map.Entry<..>` en firma se emitía borrado a `Object` y el `Signature` con el
     // nombre crudo `Map/Entry` en vez del binario `java/util/Map$Entry`.
     if let Some((outer, simple)) = name.rsplit_once('.') {
+        // La bajada al miembro-tipo va **antes** que el externo por nombre simple, que es el arreglo
+        // del #465: al revés, `Path2D.Float` tomaba `Float` y lo buscaba entre los externos, donde
+        // `java.lang.Float` contesta siempre. El generador se creía que la superclase de
+        // `GeneralPath` era `java.lang.Float` y no le encontraba el constructor -- mientras que
+        // `--check` pasaba, porque la pasada de tipos resolvía bien. Un archivo que parecía sano
+        // hasta que se lo intentaba emitir.
+        //
+        // El externo simple sigue abajo y sigue haciendo falta: un anidado escrito corto
+        // (`Map.Entry`) tiene nombre completo `java.util.Map$Entry`, que no coincide con lo escrito.
+        if let Some(oid) = resolve_type_id(table, scope, outer) {
+            if let Some(id) = super::attribute::nested_type_in(table, oid, simple) {
+                return Some(id);
+            }
+        }
         if let Some(id) = table.external(simple) {
             return Some(id);
-        }
-        if let Some(oid) = resolve_type_id(table, scope, outer) {
-            return super::attribute::nested_type_in(table, oid, simple);
         }
     }
     None
@@ -2813,6 +2892,13 @@ enum VType {
     Long,
     /// Una referencia, por su **nombre interno** (para un array, su descriptor: `[I`).
     Object(String),
+    /// El literal `null` (tag 5).
+    ///
+    /// Tiene tipo propio en el verificador y **no** alcanza con declararlo `Object`: `null` es
+    /// asignable a cualquier referencia, y `Object` no lo es a ninguna otra. La diferencia solo se
+    /// nota cuando el valor sobrevive a un salto --ahí hay que escribir un frame-- y por eso pasó
+    /// desapercibida: `f(null, x)` anda, `f(a ? null : b, x)` con un frame en el medio no.
+    Null,
     /// El `this` de un constructor antes de su `super()`.
     UninitThis,
     /// Un objeto **recién creado** y todavía sin constructor, identificado por el offset de su
@@ -2864,8 +2950,16 @@ fn merge_states(states: &[(Vec<VType>, Vec<VType>)]) -> Option<(Vec<VType>, Vec<
     for (other, _) in rest {
         locals.resize(locals.len().min(other.len()), VType::Top);
         for (i, t) in locals.iter_mut().enumerate() {
-            if *t != other[i] {
-                *t = VType::Top;
+            if *t == other[i] {
+                continue;
+            }
+            // `null` con una referencia da esa referencia: es asignable a todas, así que el merge no
+            // pierde nada al quedarse con la más específica. Degradarlo a `Top` sí perdería --el
+            // valor deja de poder usarse-- y es lo que pasaba antes.
+            match (&*t, &other[i]) {
+                (VType::Null, VType::Object(n)) => *t = VType::Object(n.clone()),
+                (VType::Object(_), VType::Null) => {}
+                _ => *t = VType::Top,
             }
         }
     }
@@ -2922,6 +3016,70 @@ pub(crate) type ConstFieldMap = std::collections::HashMap<SymbolId, ConstVal>;
 /// primitivos, y los binarios aritméticos, de bits y de shift con la **promoción numérica binaria**
 /// (§5.6.2). `None` si no es una constante plegable (una `final` referenciada, una división por cero,
 /// un operando booleano…): esos casos caen al `<clinit>` — correcto, solo no *inlineados*.
+/// El valor de una condición que se puede decidir **en compilación**, o `None` si depende del
+/// programa.
+///
+/// Existe por una razón concreta: [`Exec::bool_value`] materializa una condición emitiendo los dos
+/// caminos --uno empuja `1`, el otro `0`-- y cuando la condición es constante **uno de los dos queda
+/// sin nadie que llegue**. Emitirlo igual deja una instrucción inalcanzable, y §4.10.1 exige un marco
+/// del `StackMapTable` en toda instrucción que sigue a una transferencia incondicional: para código
+/// muerto no hay tipos con que armarlo. La JVM real rechazaba la clase con
+/// `VerifyError: Expecting a stack map frame` por un `boolean b = 2 == 2;`.
+///
+/// Se pliega lo que el javac de referencia pliega y nada más: literales booleanos, la negación, `&&`
+/// y `||` con los dos lados constantes, y las seis comparaciones entre operandos numéricos
+/// constantes. Un `&&` con el lado izquierdo constante y el derecho no **no** se pliega, porque el
+/// derecho puede tener efectos.
+fn const_bool(e: &Expr) -> Option<bool> {
+    match &e.kind {
+        ExprKind::BoolLit(b) => Some(*b),
+        ExprKind::Unary { op: UnOp::Not, expr, .. } => const_bool(expr).map(|v| !v),
+        ExprKind::Binary { op: BinOp::And, lhs, rhs } => {
+            Some(const_bool(lhs)? && const_bool(rhs)?)
+        }
+        ExprKind::Binary { op: BinOp::Or, lhs, rhs } => {
+            Some(const_bool(lhs)? || const_bool(rhs)?)
+        }
+        ExprKind::Binary { op, lhs, rhs }
+            if matches!(op, BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge) =>
+        {
+            // Los booleanos solo admiten `==` y `!=`; el resto pide numeros.
+            if let (Some(a), Some(b)) = (const_bool(lhs), const_bool(rhs)) {
+                return match op {
+                    BinOp::Eq => Some(a == b),
+                    BinOp::Ne => Some(a != b),
+                    _ => None,
+                };
+            }
+            let vacio = ConstFieldMap::new();
+            let a = const_eval_num(lhs, &vacio)?;
+            let b = const_eval_num(rhs, &vacio)?;
+            // Se comparan como `f64`: alcanza para decidir el resultado de una constante, y evita
+            // repetir la promocion numerica para cada par de anchos.
+            let (x, y) = (num_a_f64(a), num_a_f64(b));
+            Some(match op {
+                BinOp::Eq => x == y,
+                BinOp::Ne => x != y,
+                BinOp::Lt => x < y,
+                BinOp::Gt => x > y,
+                BinOp::Le => x <= y,
+                BinOp::Ge => x >= y,
+                _ => return None,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn num_a_f64(n: NumV) -> f64 {
+    match n {
+        NumV::Int(v) => f64::from(v),
+        NumV::Long(v) => v as f64,
+        NumV::Float(v) => f64::from(v),
+        NumV::Double(v) => v,
+    }
+}
+
 fn const_eval_num(e: &Expr, consts: &ConstFieldMap) -> Option<NumV> {
     Some(match &e.kind {
         ExprKind::IntLit(n) => NumV::Int(*n as i32),
@@ -3355,6 +3513,13 @@ fn stack_width(cat: u8) -> i32 {
 }
 
 struct Emitter<'a> {
+    /// El tipo de retorno que el **contexto** le impone a la próxima llamada polimórfica de firma.
+    ///
+    /// Es un canal de un solo uso entre quien conoce el contexto —`cast` y `discard`— y quien arma
+    /// el descriptor, que es `invoke`. No alcanzaba con mirar el `ty` de la expresión: para
+    /// `(int) vh.get(o, i)` el descriptor tiene que decir `I`, y el `ty` de la llamada es `Object`
+    /// porque eso es lo que la declaración dice. `None` = nadie impuso nada, o sea `Object`.
+    sigpoly_ret: Option<RType>,
     pool: &'a mut ConstantPool,
     table: &'a SymbolTable,
     /// El scope de la clase — para resolver los tipos sintácticos de un `catch`.
@@ -3504,6 +3669,7 @@ impl<'a> Emitter<'a> {
         tu: &'a TypeUseInfo,
     ) -> Self {
         Emitter {
+            sigpoly_ret: None,
             pool,
             table,
             scope,
@@ -3832,6 +3998,7 @@ impl<'a> Emitter<'a> {
             VType::Float => out.push(2),
             VType::Double => out.push(3),
             VType::Long => out.push(4),
+            VType::Null => out.push(5),
             VType::UninitThis => out.push(6),
             VType::Object(name) => {
                 out.push(7);
@@ -4098,7 +4265,19 @@ impl<'a> Emitter<'a> {
                 match els {
                     Some(e) => {
                         let end = self.new_label();
-                        self.jump(GOTO, end);
+                        // El `goto` que saltea el `else` **solo se emite si el `then` puede llegar
+                        // hasta acá**. Si terminó en `throw` o en `return`, ese salto es código
+                        // muerto, y el verificador de la JVM real exige un frame en toda instrucción
+                        // que sigue a una transferencia incondicional — no lo teníamos, así que
+                        // `try { if (c) throw A; else throw B; }` producía un `.class` que nuestra VM
+                        // corría y la JVM real rechazaba con
+                        // `VerifyError: Expecting a stack map frame`.
+                        //
+                        // El javac real tampoco lo emite; no es una optimización sino la forma
+                        // correcta. Repro en `scratchpad/zz339/V3.java`.
+                        if self.reachable {
+                            self.jump(GOTO, end);
+                        }
                         self.reachable = false;
                         self.bind(otherwise);
                         self.stmt(e);
@@ -4115,7 +4294,14 @@ impl<'a> Emitter<'a> {
                 self.blocks.push(Breakable { label: lbl, brk: end, cont: Some(top), finally_depth: self.finally_stack.len() });
                 self.stmt(body);
                 self.blocks.pop();
-                self.jump(GOTO, top);
+                // El salto de vuelta solo si al final del cuerpo se **llega**. Un cuerpo que
+                // termina en `continue`, `break`, `return` o `throw` corta el flujo, y emitir la
+                // arista igual deja una instrucción a la que no llega nadie justo después de una
+                // transferencia incondicional -- §4.10.1 exige un frame ahí y para código muerto no
+                // hay frame que armar. Nuestra VM no lo verifica; una JVM real rechaza la clase.
+                if self.reachable {
+                    self.jump(GOTO, top);
+                }
                 self.reachable = false;
                 self.bind(end);
             }
@@ -4152,27 +4338,39 @@ impl<'a> Emitter<'a> {
                 for u in update {
                     self.discard(u);
                 }
-                self.jump(GOTO, top);
+                // Igual que en el `while`: ver la nota de allá.
+                if self.reachable {
+                    self.jump(GOTO, top);
+                }
                 self.reachable = false;
                 self.bind(end);
                 self.close_scope(); // cierra el scope de la variable del `for`
             }
             StmtKind::Break(label) => match self.break_target(label.as_deref()) {
                 Some((t, depth)) => {
-                    // §14.20.2: correr los `finally` que el salto cruza (reubicados en el next-free vivo).
-                    let starts = self.run_finallys_down_to(depth, self.next_free);
-                    self.jump(GOTO, t);
-                    self.reachable = false;
-                    self.close_gaps(starts);
+                    // Un `break` al que no se llega --escrito después de un `continue`, de un
+                    // `return` o de un `throw`-- no emite nada: su `goto` sería la instrucción
+                    // muerta que §4.10.1 no deja pasar. Ver la nota del `while`.
+                    if self.reachable {
+                        // §14.20.2: correr los `finally` que el salto cruza (reubicados en el
+                        // next-free vivo).
+                        let starts = self.run_finallys_down_to(depth, self.next_free);
+                        self.jump(GOTO, t);
+                        self.reachable = false;
+                        self.close_gaps(starts);
+                    }
                 }
                 None => self.unsupported(s.pos, "un `break` sin destino (¿lo dejó pasar el flujo?)"),
             },
             StmtKind::Continue(label) => match self.continue_target(label.as_deref()) {
                 Some((t, depth)) => {
-                    let starts = self.run_finallys_down_to(depth, self.next_free);
-                    self.jump(GOTO, t);
-                    self.reachable = false;
-                    self.close_gaps(starts);
+                    // Ver el `break` de arriba: mismo caso.
+                    if self.reachable {
+                        let starts = self.run_finallys_down_to(depth, self.next_free);
+                        self.jump(GOTO, t);
+                        self.reachable = false;
+                        self.close_gaps(starts);
+                    }
                 }
                 None => {
                     self.unsupported(s.pos, "un `continue` sin destino (¿lo dejó pasar el flujo?)")
@@ -4803,6 +5001,17 @@ impl<'a> Emitter<'a> {
             self.incdec(target, *op == UnOp::Inc, *prefix, false);
             return;
         }
+        // Una llamada polimórfica de firma **como sentencia** tiene retorno `void` (JLS §15.12.3):
+        // `vh.get();` emite `get:()V`. No hay nada que descartar porque no se empujó nada.
+        if let ExprKind::Call { .. } = &e.kind {
+            if let Some(Binding::Method(mid)) = e.binding {
+                if signature_polymorphic(self.table, mid) {
+                    self.sigpoly_ret = Some(RType::Void);
+                    self.expr(e);
+                    return;
+                }
+            }
+        }
         let ty = self.ty_of(e);
         self.expr(e);
         if !matches!(ty, RType::Void) {
@@ -4831,9 +5040,10 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Null => {
                 self.op(ACONST_NULL);
-                // `null` es asignable a cualquier referencia; el verificador tiene su propio tipo
-                // para eso, pero declararlo `Object` alcanza mientras no se mezcle en un merge.
-                self.push(VType::Object("java/lang/Object".to_string()));
+                // Con su tipo propio del verificador (tag 5), no como `Object`. Ver la nota de
+                // `VType::Null`: `Object` funciona hasta que el `null` sobrevive a un salto, y ahí
+                // el frame dice `Object` donde el llamado pide otra cosa.
+                self.push(VType::Null);
             }
             ExprKind::This => self.load_this(),
             // `Outer.this` lo baja el desugar a la cadena de `this$0` (`this.this$0…`); si llega
@@ -5059,8 +5269,15 @@ impl<'a> Emitter<'a> {
                 self.jump(GOTO, end);
                 self.reachable = false;
                 self.bind(otherwise);
-                // Las dos ramas empujan **el mismo** valor, no uno cada una.
-                self.pop(1);
+                // Aca NO va un `pop`, y antes iba (#478). `bind` ya restauro el estado que se
+                // anoto en el salto, o sea el de **antes** de la rama verdadera: descontar uno mas
+                // deja la altura simulada una por debajo de la real.
+                //
+                // No se notaba con el ternario solo, donde la altura previa es cero y el `pop`
+                // satura; se notaba cuando el ternario tiene algo debajo --el `this` de una
+                // asignacion a campo-- y la rama falsa es la mas alta del metodo: ahi el
+                // `max_stack` sale uno corto y la JVM real rechaza el metodo con
+                // "Operand stack overflow". Nuestra VM no comprueba `max_stack`, asi que corria.
                 self.expr(els);
                 self.convert(category(&self.ty_of(els)), cat);
                 self.pop(1);
@@ -5091,6 +5308,15 @@ impl<'a> Emitter<'a> {
                         );
                         self.op(INVOKESTATIC);
                         self.u16(mref);
+                        // La pila **simulada** tambien cambia, y olvidarlo era el bug: el operando
+                        // entro como `Object` y sale como `String`. Si no se dice aca, el frame que
+                        // el `StackMapTable` declara para un salto posterior sigue diciendo `Object`,
+                        // y el verificador --que usa el frame declarado, no el que el mismo
+                        // calculo-- rechaza el `invokedynamic`, cuyo descriptor pide `String`.
+                        // Nuestra VM no verifica frames, asi que esto solo se ve corriendo el
+                        // `.class` en una JVM real.
+                        self.pop(1);
+                        self.push(VType::Object("java/lang/String".to_string()));
                     }
                 }
                 // El *bootstrap method* (siempre `REF_invokeStatic`) y sus argumentos estáticos, cada
@@ -5184,8 +5410,40 @@ impl<'a> Emitter<'a> {
             Some(Resolved::Method { params, ret, .. }) => (params.clone(), ret.clone()),
             _ => (Vec::new(), RType::Void),
         };
-        let ps: String = params.iter().map(|t| rtype_desc(self.table, t)).collect();
-        let desc = format!("({ps}){}", rtype_desc(self.table, &ret));
+        // Un método **polimórfico de firma** (JLS §15.12.3) no usa su declaración para armar el
+        // sitio: el descriptor lo dictan los **argumentos reales**, con su tipo estático y sin
+        // boxear, y el retorno lo dicta el contexto. La declaración `(Object...)Object` existe solo
+        // para que el nombre resuelva; ligar contra ella es trabajo de la VM.
+        //
+        // El retorno tiene tres fuentes, en este orden: si la declaración dice `void` gana `void`
+        // —`VarHandle.set` es `void` y ningún contexto lo cambia—; si no, lo que haya dejado el
+        // contexto en `sigpoly_ret` (un cast, o `void` si la llamada es una sentencia); y si no hay
+        // nada, `Object`.
+        let sigpoly = signature_polymorphic(self.table, mid);
+        let contexto = self.sigpoly_ret.take();
+        // El retorno que de verdad va al descriptor. Para todo lo demás es el declarado; para un
+        // polimórfico de firma lo fija el contexto, y la **pila** tiene que contar ése y no el
+        // declarado: `vh.get();` como sentencia emite `()V` y no empuja nada, aunque la declaración
+        // diga `Object`. Contarlo mal dejaba un valor fantasma en el frame.
+        let mut ret_emitido = ret.clone();
+        let desc = if sigpoly {
+            let ps: String =
+                args.iter().map(|a| rtype_desc(self.table, &self.ty_of(a))).collect();
+            let r = if matches!(ret, RType::Void) {
+                RType::Void
+            } else {
+                contexto.unwrap_or(RType::Class(
+                    self.table.class("java.lang.Object").unwrap_or_else(|| {
+                        super::types::erased_id(&ret).expect("el retorno declarado es una clase")
+                    }),
+                ))
+            };
+            ret_emitido = r.clone();
+            format!("({ps}){}", rtype_desc(self.table, &r))
+        } else {
+            let ps: String = params.iter().map(|t| rtype_desc(self.table, t)).collect();
+            format!("({ps}){}", rtype_desc(self.table, &ret))
+        };
         let owner_is_interface = matches!(
             &self.table.symbol(owner).kind,
             SymbolKind::Class { kind: TypeKind::Interface, .. }
@@ -5203,20 +5461,56 @@ impl<'a> Emitter<'a> {
         // con `xs : List` emite `List.add`, aunque `add` se herede de `Collection`. Solo se calcula para
         // un receptor **explícito** que no sea `this`/`super`; el implícito/`this`/`super` conserva el
         // owner del caso de abajo.
-        let explicit_recv_owner: Option<String> = match &call.kind {
+        let explicit_recv_id: Option<SymbolId> = match &call.kind {
             ExprKind::Call { target: Some(t), .. }
                 if !matches!(t.kind, ExprKind::This | ExprKind::Super) =>
             {
-                super::types::erased_id(&self.ty_of(t)).map(|id| internal_name(self.table, id))
+                super::types::erased_id(&self.ty_of(t))
             }
             _ => None,
+        };
+        let explicit_recv_owner: Option<String> =
+            explicit_recv_id.map(|id| internal_name(self.table, id));
+
+        // Qué instrucción va la decide **el owner que se escribe en el pool**, que es el tipo
+        // estático del receptor, y no la clase que *declara* el método. Los dos coinciden casi
+        // siempre, y cuando no coinciden el `.class` que sale es inválido:
+        //
+        //   interface Base { default int val() { return 1; } }
+        //   final class Impl implements Base {}
+        //   Impl i = ...;  i.val();      // declara una INTERFAZ, el receptor es una CLASE
+        //   Base b = ...;  b.equals(x);  // declara Object (CLASE), el receptor es una INTERFAZ
+        //
+        // Mirando al declarante, la primera salía `invokeinterface Impl.val` y la segunda
+        // `invokevirtual Base.equals`. Nuestra VM las aceptaba —no chequea que la etiqueta del
+        // `Methodref`/`InterfaceMethodref` concuerde con lo que la clase es—, pero §5.4.3.3/§5.4.3.4
+        // exigen que concuerden, y la JVM real tira `IncompatibleClassChangeError` al cargar. Un
+        // `.class` que nuestra VM corre y la de verdad rechaza es peor que un error de compilación,
+        // porque no se nota hasta que alguien intenta llevarse el resultado a otro lado.
+        let ref_owner_is_interface = match explicit_recv_id {
+            Some(id) => matches!(
+                &self.table.symbol(id).kind,
+                SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
+            ),
+            // Sin receptor explícito el owner es la clase actual o la declarante, y en los dos casos
+            // la pregunta por el declarante da lo mismo.
+            None => owner_is_interface,
         };
 
         // `invokestatic` sin receptor; `invokespecial` para un constructor o un método `private` de
         // instancia; `invokeinterface` si el método pertenece a una **interfaz** (§6.5, con
         // `count` = slots del receptor + argumentos); si no, despacho virtual.
         if is_static {
-            let mref = self.pool.methodref(&class_internal, &mname, &desc);
+            // `invokestatic` no tiene receptor, asi que el owner es la clase que declara -- pero la
+            // **etiqueta** sigue teniendo que concordar con lo que esa clase es. Un metodo estatico
+            // de interfaz (`List.of`, `Path.of`, `Stream.of`, `MemoryLayout.paddingLayout`) va con
+            // `InterfaceMethodref`; con `Methodref` la JVM real tira `IncompatibleClassChangeError`
+            // al resolver. Es la misma regla del #323 en la otra rama.
+            let mref = if owner_is_interface {
+                self.pool.interface_methodref(&class_internal, &mname, &desc)
+            } else {
+                self.pool.methodref(&class_internal, &mname, &desc)
+            };
             self.op(INVOKESTATIC);
             self.u16(mref);
         } else if via_super {
@@ -5236,7 +5530,7 @@ impl<'a> Emitter<'a> {
             let mref = self.pool.methodref(&class_internal, &mname, &desc);
             self.op(INVOKESPECIAL);
             self.u16(mref);
-        } else if owner_is_interface {
+        } else if ref_owner_is_interface {
             let iowner = explicit_recv_owner.clone().unwrap_or_else(|| class_internal.clone());
             let imref = self.pool.interface_methodref(&iowner, &mname, &desc);
             self.op(INVOKEINTERFACE);
@@ -5268,10 +5562,15 @@ impl<'a> Emitter<'a> {
         }
         // Consume los argumentos (y el receptor, si lo hubo) y deja el retorno si no es `void`.
         self.pop(args.len() + usize::from(!is_static));
-        if !matches!(ret, RType::Void) {
-            let t = vtype_of(self.table, &ret);
+        if !matches!(ret_emitido, RType::Void) {
+            let t = vtype_of(self.table, &ret_emitido);
             self.push(t);
-            self.synthetic_cast(call, &ret);
+            // El cast sintético repara un retorno **borrado** (`E` que el descriptor dice `Object`).
+            // Un polimórfico de firma no borra nada: su descriptor ya dice el tipo exacto, así que
+            // un `checkcast` detrás sería a la vez redundante e incorrecto para un primitivo.
+            if !sigpoly {
+                self.synthetic_cast(call, &ret_emitido);
+            }
         }
     }
 
@@ -5457,6 +5756,20 @@ impl<'a> Emitter<'a> {
         // al camino que empuja `0`, y la caída (condición verdadera) empuja `1`. El orden importa para
         // la fidelidad byte-a-byte: p. ej. `!x` sale como `ifne …; iconst_1; goto …; iconst_0` (no como
         // `ifeq …; iconst_0; …; iconst_1`), que es lo que emite el compilador de referencia.
+        // Una condición que se decide en compilación se emite como **la constante**, sin los dos
+        // caminos. Emitir el par dejaría uno de los dos sin nadie que llegue, y una instrucción
+        // inalcanzable después de una transferencia incondicional necesita un marco del
+        // `StackMapTable` que para código muerto no se puede armar (§4.10.1): la JVM real rechazaba
+        // la clase con `VerifyError: Expecting a stack map frame` por un `boolean b = 2 == 2;`.
+        //
+        // **Nuestra VM no verifica marcos**, así que esta familia de errores le es invisible por
+        // construcción — se ve sólo cruzando a la JVM de verdad. Misma raíz que el #328, en otro
+        // emisor. Ver `const_bool`.
+        if let Some(v) = const_bool(cond) {
+            self.push_int(i32::from(v));
+            return;
+        }
+
         let f = self.new_label();
         let end = self.new_label();
         self.branch_if(cond, f, false); // salto al `0` cuando la condición es falsa
@@ -5630,9 +5943,34 @@ impl<'a> Emitter<'a> {
                     }
                     self.expr(value);
                     self.widen_cat(cat);
-                    self.op(PUTFIELD);
-                    self.u16(fref);
-                    self.pop(2); // el receptor y el valor
+                    if leave {
+                        // Usada como **expresión** (`p = q = v`, `f(this.x = v)`): hay que dejar el
+                        // valor en la pila, y no alcanza con un `dup` — la pila es
+                        // `(objectref, valor)` y `putfield` consume los dos. `dup_x1` mete la copia
+                        // **por debajo** del receptor, así sobrevive al `putfield` (#460).
+                        //
+                        // Esta rama ignoraba `leave` por completo, y el efecto era peor que un valor
+                        // de más o de menos: `p = q = null` sobre dos campos emitía un `putfield`
+                        // externo sin su valor, o sea un **underflow de pila**. El `.class` pasaba
+                        // el verificador de esta VM y reventaba al correr, con el error a tres
+                        // saltos del sitio que lo causó. Lo destapó `NamingException`, que hace
+                        // exactamente eso en sus dos constructores -- y con eso las veinticinco
+                        // excepciones de `javax.naming` eran imposibles de instanciar.
+                        //
+                        // El pico de `max_stack` se modela a mano: la copia es transitoria, igual
+                        // que en la rama del arreglo de más arriba.
+                        let vt = self.stack.last().cloned().unwrap_or(VType::Top);
+                        self.op(if stack_width(cat) == 2 { DUP2_X1 } else { DUP_X1 });
+                        self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+                        self.op(PUTFIELD);
+                        self.u16(fref);
+                        self.pop(2); // el receptor y el valor (queda la copia duplicada)
+                        self.push(vt);
+                    } else {
+                        self.op(PUTFIELD);
+                        self.u16(fref);
+                        self.pop(2); // el receptor y el valor
+                    }
                 }
             }
             _ => {}
@@ -5790,11 +6128,47 @@ impl<'a> Emitter<'a> {
     /// Un cast: entre numéricos es una conversión (con el estrechamiento a `byte`/`char`/`short`
     /// que no tiene opcode propio y va tras un `int`); entre referencias, un `checkcast`.
     fn cast(&mut self, e: &Expr, inner: &Expr) {
+        // `(int) vh.get(o, i)` y `(String) vh.get()`: el cast sobre una llamada polimórfica de firma
+        // **no se emite**, se realiza en el descriptor. El javac del JDK 25 emite
+        // `VarHandle.get:(Ljava/lang/Object;J)I` y ni un `checkcast` ni un `intValue` detrás.
+        //
+        // Por eso el defecto que estaba anotado aparte —que `(int) vh.get(...)` no emitía el
+        // unboxing— no era un segundo defecto: era éste. No había unboxing que emitir.
+        if let ExprKind::Call { .. } = &inner.kind {
+            if let Some(Binding::Method(mid)) = inner.binding {
+                if signature_polymorphic(self.table, mid) {
+                    self.sigpoly_ret = Some(self.ty_of(e));
+                    self.expr(inner);
+                    return;
+                }
+            }
+        }
         self.expr(inner);
         let to = self.ty_of(e);
         let from_cat = category(&self.ty_of(inner));
         let to_cat = category(&to);
         if to_cat == 4 {
+            // Un cast a un tipo **arreglo** tambien lleva `checkcast`, y hasta el arreglo de #465
+            // no lo llevaba: el `if let` de abajo solo reconocia `Class` y `Parameterized`, asi que
+            // `(Object[]) o` no emitia nada. El sintoma tipico era un `VerifyError` en el
+            // `arraylength` siguiente, pero lo grave es lo otro: sin el `checkcast`, un cast que
+            // tenia que fallar **no fallaba**, y se leia el largo de un `String` como si fuera el
+            // de un arreglo. `checkcast_name` ya sabia dar el descriptor de un arreglo.
+            if matches!(to, RType::Array(_)) {
+                let cls = checkcast_name(self.table, &to);
+                let cidx = self.pool.class(&cls);
+                let off = self.bytes.len() as u16;
+                self.op(CHECKCAST);
+                self.u16(cidx);
+                self.pop(1);
+                self.push(VType::Object(cls));
+                if !e.type_annos.is_empty() {
+                    let mut ti = off.to_be_bytes().to_vec();
+                    ti.push(0);
+                    self.code_type_annos(0x47, &ti, &e.type_annos);
+                }
+                return;
+            }
             if let RType::Class(id) | RType::Parameterized { base: id, .. } = &to {
                 let cls = internal_name(self.table, *id);
                 let cidx = self.pool.class(&cls);
@@ -6165,6 +6539,16 @@ impl<'a> Emitter<'a> {
 
     /// Emite los argumentos de una llamada, cada uno **ampliado** al tipo de su parámetro.
     fn emit_args(&mut self, call: &Expr, args: &[Expr]) {
+        // Polimórfico de firma: cada argumento va **como es**. Ensancharlo al `Object[]` declarado
+        // sería justamente la conversión que este mecanismo existe para evitar.
+        if let Some(Binding::Method(mid)) = call.binding {
+            if signature_polymorphic(self.table, mid) {
+                for a in args {
+                    self.expr(a);
+                }
+                return;
+            }
+        }
         let ptys = self.param_types(call);
         for (i, a) in args.iter().enumerate() {
             self.expr(a);
@@ -10197,8 +10581,9 @@ mod tests {
         compile_into(
             "package javax.annotation.processing; \
              import javax.tools.JavaFileObject; import java.io.StringWriter; \
+             import java.io.IOException; \
              public class FilerDriver { \
-                 public static int drive() { \
+                 public static int drive() throws IOException { \
                      Filer f = new KajiFiler(); \
                      JavaFileObject jfo = f.createSourceFile(\"Foo\"); \
                      StringWriter w = (StringWriter) jfo.openWriter(); \

@@ -517,6 +517,47 @@ pub fn supertypes_of(table: &SymbolTable, ty: &RType) -> Vec<RType> {
 /// (`List<String>`) para no perder precisión. El *lub* recursivo de los argumentos de tipo de la
 /// intersección (§4.10.4, con recursión acotada) es cola larga: los miembros van **crudos**.
 pub fn lub(table: &SymbolTable, types: &[RType]) -> RType {
+    // Los **arreglos** van primero y por su propio camino (#477). `erased_id` de un arreglo es
+    // `None` --un arreglo no tiene simbolo-- asi que el filtro de abajo los descartaba a todos y el
+    // lub de dos arreglos quedaba `Unresolved`. Eso no se notaba en el tipo de la expresion, pero
+    // el codegen del ternario declara sus dos ramas con el tipo del ternario entero, y `Unresolved`
+    // se convierte en `Top`: `cond ? new char[0] : copy(p)` producia un frame con `Top` en la pila
+    // y un `.class` que la JVM real rechaza.
+    //
+    // §4.10.3: el lub de dos arreglos con el mismo elemento es ese arreglo; con elementos de
+    // referencia distintos, el arreglo del lub de los elementos; y con elementos primitivos
+    // distintos --`int[]` y `char[]`-- no hay arreglo comun, solo `Object` (en rigor
+    // `Object & Cloneable & Serializable`, cuya erasure es `Object`).
+    //
+    // El `null` y lo no resuelto **no cuentan para decidir**: `cond ? null : bytes` es un arreglo
+    // de bytes, no un `Object`. Sacarlos antes de mirar es lo que hace que el caso mas comun
+    // --devolver `null` o un arreglo-- siga dando el arreglo.
+    let sin_nulos: Vec<&RType> = types
+        .iter()
+        .filter(|t| !matches!(t, RType::Null | RType::Unresolved))
+        .collect();
+    if !sin_nulos.is_empty() && sin_nulos.iter().all(|t| matches!(t, RType::Array(_))) {
+        let comps: Vec<RType> = sin_nulos
+            .iter()
+            .filter_map(|t| match t {
+                RType::Array(c) => Some((**c).clone()),
+                _ => None,
+            })
+            .collect();
+        if comps.iter().all(|c| *c == comps[0]) {
+            return RType::Array(Box::new(comps[0].clone()));
+        }
+        if comps.iter().all(|c| !matches!(c, RType::Prim(_))) {
+            return RType::Array(Box::new(lub(table, &comps)));
+        }
+        return object_id(table).map_or(RType::Unresolved, RType::Class);
+    }
+    // Un arreglo mezclado con algo que no lo es: lo unico en comun es `Object`. Sin esto, el
+    // arreglo se descartaria y el lub devolveria el tipo del otro, que es directamente falso.
+    if sin_nulos.iter().any(|t| matches!(t, RType::Array(_))) {
+        return object_id(table).map_or(RType::Unresolved, RType::Class);
+    }
+
     let resolved: Vec<&RType> =
         types.iter().filter(|t| !matches!(t, RType::Unresolved) && erased_id(t).is_some()).collect();
     let Some(&first) = resolved.first() else { return RType::Unresolved };

@@ -6277,3 +6277,3215 @@ son las que hacen que el compilador emita los **métodos puente** en `LocalDateT
   casos que **no** tienen que andar. Las que dependen del locale —nombres de mes, AM/PM— se
   comprueban por ida y vuelta y no contra texto escrito a mano: el `java` real en español escribe
   `jul` y `a. m.`, así que comparar la cadena compararía el locale y no el parser.
+
+## Tanda: `java.time.chrono` cerrado, y el medidor que contaba mal
+
+`java.time.chrono` **588/589**, desde 576/589. Lo que queda es un solo miembro, y es el que no se
+puede escribir: `ChronoPeriodImpl.writeReplace()`, el gancho de la serialización de Java, que esta
+biblioteca no implementa.
+
+### Un bug que sólo la prueba de comportamiento podía ver
+
+`ChronoLocalDate` no tenía `query(...)`, así que `Chronology.from(minguoDate)` contestaba **ISO**.
+Es exactamente el mismo mecanismo del bug de `TemporalQueries` de la tanda anterior: las consultas
+marcadoras se reconocen **por identidad**, y si nadie las reconoce el `queryFrom` genérico devuelve
+`null` — que acá terminaba cayendo en el ISO por defecto.
+
+Y es exactamente el tipo de error que la medición por forma **no puede ver**: `ChronoLocalDate`
+figuraba en 36/36 porque el JDK declara `query` como `default` heredado de `TemporalAccessor`, así
+que el cierre de herencia lo daba por presente. Lo encontró `ChronoTest`, en la comprobación 46.
+
+**`ChronoTest` da -1 con nuestra VM y con `java` real**: 90 comprobaciones sobre los cinco
+calendarios, sus eras, los períodos y los dos compuestos. Es la primera vez que este paquete se
+ejercita — hasta ahora estaba medido y nada más.
+
+### `atTime` y los retornos estrechados
+
+`ChronoLocalDateTimeImpl` ahora estrecha `with`/`plus` a sí misma, como el JDK. La sutileza que hubo
+que escribir: **no puede pasar por `of`**, porque `of` divierte una fecha ISO a `LocalDateTime`. No
+hay contradicción — un `Impl` nunca lleva una fecha ISO, porque `of` la habría divertido antes de
+construirlo — y lo que garantiza que siga siendo así es el `ensureValid` del JDK, acá `asegurar`:
+mezclar calendarios tira `ClassCastException` en vez de producir un híbrido.
+
+### `getDisplayName`, y por qué la nota anterior estaba mal
+
+La tanda pasada dejó afuera los seis `getDisplayName(TextStyle, Locale)` con este argumento:
+*"devolver `CE` para cualquier locale sería un miembro que miente sobre lo que le pidieron"*. El
+argumento es correcto y no aplica, porque **considera una sola opción**: inventar un nombre.
+
+El contrato tiene una tercera rama, y la nombra él mismo. El javadoc de `Era.getDisplayName` dice
+*"If no textual mapping is found then the numeric value is returned"*, y la implementación de
+`Chronology.getDisplayName` en el JDK termina en
+`Objects.requireNonNullElseGet(name, () -> chrono.getId())`. Esta biblioteca no trae datos del CLDR,
+así que esa rama se toma **siempre** — que es una diferencia con el JDK, no una mentira.
+
+Lo que decide la cuestión es que **el número se anuncia solo**: nadie confunde `"1"` con un nombre
+traducido, mientras que un `"CE"` devuelto para un locale francés pasaría por bueno. La opción
+descartada sigue descartada; la que se implementó es otra.
+
+### El medidor contaba mal las variables de tipo
+
+`apidiff` borraba los genéricos (`<...>` fuera) pero **no sustituía las variables de tipo por su
+cota**. El JDK imprime `public default D toLocalDate()`, y `D extends ChronoLocalDate` borra
+exactamente a `ChronoLocalDate` (§4.6) — que es lo que la implementación declara. El miembro estaba
+escrito bien y se contaba como faltante.
+
+Es el peor tipo de error de medición: **empuja a "arreglar" código que no está roto**. Ahora `parse`
+lee los parámetros de tipo de la declaración de la clase (y los del propio miembro, para un
+`static <R extends X> Foo<R> of(R)`) y los sustituye por su borrado.
+
+**El impacto es chico y verificado**, que es como hay que reportar un cambio de regla: 11 miembros en
+toda la biblioteca, en cuatro paquetes — `java.lang.invoke` 239→241, `java.util.concurrent`
+1028→1032, `java.util.random` 50→52, y 3 de los 12 que ganó `chrono`. Ningún paquete cambió de
+denominador.
+
+### Verificación
+
+- `java.time.chrono` **588/589**; `java.time` **892/892**; `java.time.temporal` **173/173**.
+- La biblioteca recompila **1093/1095**; los dos de siempre.
+- Punto fijo: **1569 idénticos, 0 distintos**.
+- De las **52** pruebas comparables, **50** dan el mismo entero que `java` real; las dos que no son
+  `JcIc` y `WdWide`. La nueva es `ChronoTest`.
+- La biblioteca entera: **10.897/11.611 miembros (93,9 %)** en 39 paquetes, 14 de ellos al 100 %.
+  El detalle por paquete está en `docs/completitud.html`.
+
+## Tanda: de los más completos hacia abajo, y el medidor que engañaba
+
+Se pidió cerrar todos los paquetes en orden de completitud. **Cerrados en esta tanda** (por miembro):
+`java.util` 2152/2152, `java.lang.reflect` 323/323, `java.lang.constant` 163/163,
+`java.lang.invoke` 241/241, `java.util.random` 53/53, `jdk.internal.random` 73/73,
+`jdk.internal.util.random` 38/38, `java.util.concurrent.locks` 59/59. Y muy cerca:
+`java.lang` 1718/1719, `java.io` 643/645, `java.time.zone` 59/60, `java.util.zip` 228/240.
+
+### El punto ciego del medidor, que es lo más importante de la tanda
+
+`medir_todo.py` recorre **nuestras** clases. Una clase que no existe en el árbol es **invisible**
+para esa medida, así que un paquete al que le falta la mitad de sus tipos puede figurar al 100 %.
+
+No es hipotético:
+
+| paquete | miembros | clases públicas |
+|---|---|---|
+| `java.util.concurrent.locks` | **59/59** | **5/10** — falta `AbstractQueuedSynchronizer`, sobre la que se apoya el paquete entero |
+| `java.nio.channels` | **3/3** | **2/53** |
+| `java.security` | 50/58 | **8/81** |
+| `java.net` | 80/102 | **7/64** |
+| `java.nio.file` | 62/65 | **10/44** |
+
+Medido en las dos dimensiones: **674 de 952 clases públicas** en los paquetes empezados. El gráfico
+(`docs/completitud.html`) ahora muestra las dos barras, con la de clases arriba porque es la que
+**acota** a la otra: un 100 % de miembros sobre un 20 % de clases es un 20 %.
+
+### Un chequeo de excepciones que dependía del orden de carga
+
+`ReentrantLock.lock()` llamaba a `sync.wait()` sin manejar `InterruptedException`, y **compilaba**.
+Agregar un `import` distinto en el mismo archivo lo hacía dejar de compilar. La causa es de la misma
+familia que #251: si `java.lang.Object` se cargó por un camino que no leyó su atributo `Exceptions`,
+sus métodos se ven como no-lanzadores; cargar otros tipos cambia ese camino.
+
+Salió al agregar una `ArrayList` a `ReentrantLock`. Lo que destapó vale más que el síntoma: **cinco
+esperas de los dos locks reentrantes ignoraban la interrupción**. Ahora hacen lo del JDK — atrapan,
+siguen esperando, y **remarcan** el hilo al final, que es la diferencia entre "no me interrumpe" y
+"me trago la interrupción".
+
+De paso cayeron tres notas que ya no eran ciertas:
+
+- `lockInterruptibly()` decía *"la VM no tiene interrupción de hilos — idéntico a `lock()`"*.
+  `Thread.interrupt()` existe y despierta las esperas, así que ahora aborta de verdad.
+- Los `tryLock` con plazo decían *"la biblioteca no tiene reloj para recalcular"*.
+  `System.nanoTime()` existe: ahora esperan el **plazo restante** en un bucle, en vez de un solo
+  intento que devolvía `false` con el plazo entero por delante.
+- `readLock()`/`writeLock()` devolvían `Lock` por el finding #108. Ese finding se cerró: ahora
+  devuelven el tipo anidado, y `rwl.writeLock().getHoldCount()` compila.
+
+### Finding #314, segunda mitad
+
+La primera mitad (tanda anterior) era un tipo del fuente nombrado **entero**. Esta es el mismo tipo
+nombrado **corto**, por un `import`: `resolve_type_id` tampoco consultaba el mapa de alias que
+`try_load` registra al detectar el shadowing (#312). Las dos mitades tienen la misma forma y la
+misma causa — la pasada 1 sabe resolver las dos y el generador no consultaba ninguno.
+
+Repro: `scratchpad/zz314/`, con `Base.java` + `Impl.java` (entero) y `Usuario.java` (corto).
+
+### Finding #315 — el literal hexadecimal de coma flotante
+
+`0x1.0p64` (§3.10.2) no lo parsea el compilador: *"se esperaba Semi, se encontró DoubleLiteral"*.
+Sale en los generadores xoshiro, donde el JDK escribe así las distancias de salto. Se usó
+`Math.scalb(1.0, 64)`, que es **el mismo double** —una potencia de dos entra sin redondeo— en vez del
+decimal, que para 2^192 son 58 dígitos. Queda anotado, no arreglado.
+
+### Lo que se escribió, y lo que se corrigió de paso
+
+- **`RandomSupport` 38/38**: los mensajes compartidos, las cuatro constantes irracionales, los ocho
+  `check*`, los ocho `boundedNext*`, y los dos `convertSeedBytes*`. Los tres `compute*` **delegan** en
+  el generador: el JDK usa el ziggurat de McFarland (dos tablas generadas), esta biblioteca el método
+  polar — misma distribución, otra secuencia, y ya estaba así en `RandomGenerator`.
+- **Los diez generadores**: constructor sin argumentos, constructor de `byte[]`, y particiónn real
+  (`SplittableGenerator`) para los ocho LXM; salto y salto largo para los dos xoshiro, con
+  `JumpableGenerator`/`LeapableGenerator` nuevas en `RandomGenerator`.
+- **`RndSeedTest` da el mismo entero que `java` real**: 1222898991. El mapeo de bytes a estado, las
+  tablas de salto y la partición coinciden **bit por bit**. Encontró un error real: el campo `p` de
+  los generadores de 1024 bits se inicializa en la **declaración** en el JDK (`= N - 1`), y el
+  constructor de `byte[]` que escribí no lo ponía — el anillo arrancaba desplazado una palabra y
+  emitía otra secuencia. Ahora se inicializa en la declaración, como allá, para que ningún
+  constructor pueda olvidarlo.
+- **`ClassLoader`**: los tres `find*` no eran sólo miembros faltantes. `getResource` devolvía `null`
+  directo, así que **una subclase que sobrescribiera `findResource` era ignorada** — un método
+  público que no cumple el protocolo que documenta. Ahora delega. Y `definePackage` era la mitad que
+  faltaba de un par cortado: estaban `getDefinedPackage(s)` y no había nada que poblara su registro.
+- **`URL.openStream()`** (sólo `file:`, vía los nativos de `Fs`), con `UnknownServiceException` para
+  el resto de los esquemas — que es lo que distingue "la URL no se entiende" de "se entendió y no hay
+  cómo atenderla".
+- **`ZipInputStream`/`ZipOutputStream` con `Charset`**: no era sólo un constructor. Los nombres de
+  entrada se leían y escribían **byte a byte como Latin-1**, y el largo declarado en la cabecera era
+  el de los caracteres y no el de los bytes — un nombre con acentos producía un archivo **corrupto**.
+- **`ZoneRulesProvider` es un SPI de verdad**: antes era una clase abstracta con dos estáticos que
+  leían la tabla directo, o sea la forma de un SPI sin el mecanismo — un `provideRules` sobrescrito no
+  lo llamaba nadie. Ahora hay lista de proveedores, `registerProvider`, y el de la tabla embebida es
+  simplemente el primero.
+
+### Verificación
+
+- La biblioteca recompila **1095/1097**; los dos que fallan son los de siempre.
+- Punto fijo: **1575 idénticos, 0 distintos**.
+- **1441 tests de Rust pasan**; los 20 que fallan son los mismos, comparados nombre por nombre.
+- De las **53** pruebas comparables, **51** dan el mismo entero que `java` real; las dos que no son
+  `JcIc` y `WdWide`. La nueva es `RndSeedTest`.
+
+## Los dos findings nuevos, arreglados
+
+### #315 — el literal hexadecimal de coma flotante (§3.10.2)
+
+`0x1.0p64` no se parseaba: *"se esperaba Semi, se encontró DoubleLiteral"*. Dos mitades: el **lexer**
+no aceptaba la forma, y el **parser** no sabía convertirla (el `parse::<f64>()` de Rust no entiende
+hexadecimal, así que el valor se arma a mano).
+
+Lo que explica toda la forma de la gramática es que el exponente en `p` es **obligatorio**: sin él,
+`0x1.8` no se podría distinguir de un acceso a miembro (`0x1 . 8`), y el sufijo `d`/`f` chocaría con
+un dígito hexadecimal. Por eso no existe el literal hexadecimal sin exponente — y por eso el arreglo
+sólo consume el `.` cuando después hay una `p`: un `0x1.foo()` sigue siendo una llamada.
+
+La `p` cuenta potencias de **dos**, no de dieciséis. Es la única notación que escribe un `double` sin
+redondeo, y por eso el JDK la usa para las constantes que tienen que ser exactas — las distancias de
+salto de los generadores xoshiro, sin ir más lejos.
+
+`HexFloat` da **-1** con las dos VMs: 20 comprobaciones, incluidas `Double.MAX_VALUE`
+(`0x1.fffffffffffffP1023`), el subnormal más chico (`0x1.0p-1074`), separadores, y que un hexadecimal
+entero **siga siendo** entero.
+
+### #316 — el chequeo de excepciones dependía del orden de carga
+
+Y este es el importante, porque el modo de fallar era un **falso negativo**: un programa con una
+excepción comprobada sin manejar **compilaba**, y la excepción aparecía en tiempo de ejecución.
+
+`is_checked` es indulgente a propósito cuando no puede resolver la jerarquía de una excepción —mejor
+no inventar un error que forzar uno dudoso—. El problema es que la excepción declarada en el `throws`
+de un método **del classpath** no se cargaba nunca: la fase 2 de `load_externals` (finding #251)
+junta los tipos que aparecen en parámetros y retornos, y se olvidaba de los `throws`. Así que la
+indulgencia se aplicaba siempre y `sync.wait()` sin manejar `InterruptedException` compilaba.
+
+Lo que lo volvía desconcertante es que **dependía del resto del round**: si otra unidad nombraba
+`InterruptedException` en un `throws` suyo, el tipo se cargaba por ese camino y el error aparecía.
+`V1.java` sola compilaba; `V1.java` junto a un archivo que mencionara la excepción, no. Repro en
+`scratchpad/zz316/`.
+
+**Y otra vez el patrón: completar el chequeo rompió a los que se apoyaban en que estuviera
+incompleto.** Catorce archivos, todos de espera:
+
+- **`java.util.concurrent`**: `ArrayBlockingQueue`, `LinkedBlockingQueue`, `PriorityBlockingQueue`,
+  `SynchronousQueue`, `DelayQueue`, `CountDownLatch`, `CyclicBarrier`, `Exchanger`, `FutureTask`,
+  `Semaphore`, `ThreadPoolExecutor`, `Phaser`, `ExecutorCompletionService`.
+- **`javax.tools`**: `ForwardingFileObject`, que reenviaba cinco métodos sin declarar la `IOException`
+  que su propia interfaz declara.
+
+El arreglo no fue taparlas sino **declararlas donde el JDK las declara**, lo que de paso hace más
+fieles a tres interfaces que las omitían: `BlockingQueue.take()/put()/offer()/poll()`,
+`Future.get()`, `ExecutorService.awaitTermination()` y `CompletionService.take()/poll()`. La nota de
+esta última decía literalmente *"the JDK's `throws InterruptedException` on take/poll is omitted
+package-wide"* — esa omisión era el error.
+
+Las que el JDK **no** declara —`Phaser.arriveAndAwaitAdvance()`, `awaitAdvance(int)`,
+`Semaphore.acquireUninterruptibly()`, el bucle del pool, `ExecutorService.close()`, `Future.state()` y
+`resultNow()`— atrapan y **remarcan** el hilo al salir, que es lo que distingue "no me interrumpe" de
+"me trago la interrupción".
+
+De paso cayó otra nota falsa: `Semaphore.acquireUninterruptibly` decía *"KajiJDK has no interruption,
+so this is exactly acquire()"*. La tiene, y la diferencia entre los dos métodos es real.
+
+### Finding #316 — un `long...` que recibe `int` no ampliaba
+
+`suma(3, 4, 5)` contra un `long...` guardaba tres `int` **crudos** en un `long[]`, y la VM cortaba con
+*"expected a long, found Int(3)"*. Es el primo del #310 un escalón más abajo: aquél arregló
+primitivo→referencia (el boxing que faltaba dentro de un `Object[]`), éste es primitivo→primitivo más
+ancho.
+
+El arreglo va **sólo en el camino de varargs**, y esa precisión importa: con un parámetro **fijo** la
+conversión ya la emite el generador contra el descriptor y funciona. Lo que no tiene descriptor contra
+el cual convertir es el `astore` del arreglo de varargs — ahí el valor entra tal como está.
+
+Sólo se convierte cuando la **representación** cambia (`long`/`float`/`double`). Dentro de la familia
+del `int` el valor ya está en la pila como `int` y un cast sería ruido.
+
+Repro: `scratchpad/zz316/VarargsLong.java`. Salió escribiendo `SequenceLayout.reshape(3, -1)`.
+
+### Finding #317 — el `<clinit>` de un `enum` corría al revés
+
+Las constantes de un `enum` se construían **después** del inicializador estático del usuario. JLS
+§12.4.2 pide lo contrario, y la consecuencia es de lo peor que puede pasar: **nada falla**. La clase
+carga, y un `static final X ALIAS = A;` queda en `null` porque `A` todavía no existía cuando se leyó.
+
+La causa es de orden de pasadas: `hoist_initializers` corre al entrar a la clase y deja el
+`StaticInit` del usuario en `members`; la síntesis del `enum` corre después y **agregaba** el suyo
+detrás. El emisor concatena en orden de miembro.
+
+Ahora el bloque sintetizado se fusiona **por delante** del que haya. Lo encontró un agente escribiendo
+`AclEntryPermission`, donde tres constantes son alias de otras tres.
+
+Repro: `scratchpad/zz317/EnumAlias.java`.
+
+### Finding #318 — un `super.m()` heredado corría contra el pool de constantes equivocado
+
+`resolve_method` busca el cuerpo en la clase **declarante** (eso ya estaba bien, JVMS §5.4.3.3) pero
+guardaba el `MethodBody` con el nombre de la clase **del sitio de llamada**. Ese campo es de donde sale
+el pool de constantes con el que el cuerpo se ejecuta.
+
+Concretamente: una `class B extends Exception` con `super.getMessage()` emite
+`invokespecial java/lang/Exception.getMessage` —que es lo que emite el `javac` real, verificado con
+`javap`—, el cuerpo se lee de `Throwable`, y después se corría contra el pool de `Exception`, donde el
+`getfield detailMessage` no existe. Reventaba con *"getfield: bad FieldRef"*, tres capas lejos de la
+causa.
+
+Sólo aparece cuando la superclase **nombrada hereda** el método en vez de declararlo, que es
+justamente lo común en una jerarquía de excepciones de dos niveles — y por eso no había salido antes:
+`A extends Throwable` anda, `B extends Exception` no.
+
+De paso se corrigió la clave del caché: ahora se guarda también por la clase declarante, para que un
+mismo método alcanzado por dos nombres dé **el mismo** `MethodId`. Dos ids para un solo método se
+separan en la vtable, y un override reemplazaría una de las dos ranuras.
+
+Repro: `scratchpad/zz318/SuperHeredado.java`. Lo encontró un agente escribiendo
+`InvalidPathException.getReason()`.
+
+### Lo que el #316 rompió dentro de los tests de Rust
+
+Tres pruebas empezaron a fallar, y las tres por lo mismo: **fixtures de Java escritas dentro del
+código Rust** que se tragaban una `IOException` de `Filer.createSourceFile`/`FileObject.openWriter`.
+Compilaban por el mismo motivo que la biblioteca.
+
+- `javac::codegen::tests::the_filer_hands_generated_source_back_to_rust` — el driver es un método
+  estático suelto, así que declara el `throws`.
+- `jvm::interpreter::apt::tests::a_processor_generates_a_source_that_is_recompiled_and_runs` — acá
+  **no** se puede declarar: la firma de `Processor.process` no lo tiene y un override no puede
+  ensanchar las chequeadas. Se atrapa, que es lo que hace cualquier procesador real.
+
+La tercera, `gc::tests::method_handle_constructor`, no era del #316: se rompió porque re-emití
+`java/MHCtor.class`, y esa prueba arranca desde `boot/` —un snapshot viejo de la biblioteca donde
+`MethodHandles.lookup()` funciona— y no desde `KajiLibrary`, donde `lookup()` tira. Restaurar el
+`.class` commiteado la devolvió a verde. **Vale como aviso**: los `.class` de `java/` que arrancan
+desde `boot/` no se pueden recompilar con el javac actual sin romper su prueba.
+
+## Tanda: de más completo a menos, segunda parte
+
+**Cerrados**: `java.util.zip` 240/240, `java.net`→`URI` 35/35, `javax.lang.model` 41/41,
+`java.util.concurrent.locks` 59/59, `jdk.internal.vm`→`ContinuationScope` 6/6.
+
+### `ZipFile` dejó de tirar
+
+Su comentario decía: *"cuando lleguen los nativos de archivo, esto se vuelve un salto más la misma
+decodificación de campos"*. Llegaron, y eso es lo que hace ahora — lee el EOCD desde el final, decodifica
+el directorio central, y salta a la cabecera **local** de cada entrada (los largos de nombre y extra
+pueden diferir entre las dos, y el que vale para encontrar los datos es el de la local).
+
+Se lee el archivo entero de una: no hay descriptor abierto ni posición. Es la misma decisión que
+`FileInputStream`, con la misma contrapartida — un ZIP de un giga entra en memoria, y a cambio no hay
+estado que se pueda quedar colgado.
+
+**Y la prueba destapó dos cosas que valen más que el número:**
+
+- **`ZipInputStream` sólo leía la primera entrada.** El escritor usa descriptor de datos (bit 3) y el
+  lector no lo salteaba: al buscar la cabecera siguiente encontraba la firma del descriptor y se
+  rendía. Peor: para una entrada comprimida el inflater **lee de más**, así que los bytes sobrantes
+  ya habían salido del flujo. `Inflater.getRemaining()` dice cuántos son — la nota de la clase decía
+  *"el inflater puede reportarlo pero la plomería de acá todavía no lo usa"*, y ésta es esa plomería.
+- **Nuestro `Deflater` no comprime**: emite sólo bloques `STORED`, lo cual está documentado con su
+  motivo. La primera versión de `ZipTest` afirmaba que el tamaño comprimido era menor que el
+  original y fallaba — la aserción estaba mal, no la biblioteca. Se cambió por lo que sí es contrato:
+  los tamaños que el directorio guarda son los que hay, y el contenido vuelve exacto.
+
+`ZipTest` da **-1** con las dos VMs: 27 comprobaciones que escriben un ZIP real, lo leen por acceso
+aleatorio **pidiendo la última entrada primero**, y lo vuelven a leer secuencialmente.
+
+### El resto
+
+- **`java.net.URI` 35/35**: los cuatro constructores por partes —que arman la cadena y la
+  **reparsean**, para que un URI armado y uno parseado con el mismo texto sean indistinguibles— y el
+  álgebra de caminos. `normalize` es la única con trampa: sacar un `..` **no** es borrar el segmento
+  anterior si ese segmento era a su vez un `..`; `a/../../b` es `../b`.
+- **`URL`**: `openStream()` (sólo `file:`, vía los nativos), `URL(URL, String)` que delega en
+  `URI.resolve` para que las dos clases no discrepen, `getDefaultPort` y `sameFile` —que ignora el
+  fragmento, y eso es todo su punto: `pagina#a` y `pagina#b` son un solo documento—.
+- **`SourceVersion` 37/37**: las constantes hasta `RELEASE_25` y las tres preguntas sobre una cadena,
+  que son tres y distintas: `isIdentifier` mira la forma léxica (`class` **es** un identificador
+  bien formado), `isKeyword` si está reservada, `isName` si se puede usar como nombre — y ésta acepta
+  puntos, porque `java.util.List` es un nombre válido.
+
+### Lo que sigue bloqueado, y por qué
+
+- **`javax.sql.DataSource` 0/7**: necesita `java.sql.Connection` y `ConnectionBuilder`, o sea empezar
+  `java.sql` entero.
+- **`jdk.internal.vm.Continuation` 3/20**: continuaciones de Loom, que son soporte de VM.
+- **`URL`: `openConnection`, `getContent`, los constructores con handler** — necesitan
+  `URLConnection`/`URLStreamHandler`, que no existen.
+- **`java.io`: los dos `getChannel()`** — necesitan `FileChannel`, y nuestra E/S es de archivo
+  entero, sin posición: un `FileChannel` con `position()` sería un miembro que miente.
+
+### Finding #319 — la resolución de sobrecargas elegía la última declarada, no la más específica
+
+El repro es concluyente porque es **el mismo código dos veces**, con la única diferencia del orden en
+que se declaran las dos sobrecargas:
+
+```
+java/OvLib3.java + java/OvUse3.java    of(T...) antes que of(T)   ->  error: tipo incompatible en `l`
+java/OvLib5.java + java/OvUse5.java    of(T)    antes que of(T...) ->  compila
+```
+
+Con `of(T...)` primero, la llamada `of(unArregloDeString)` liga a `of(T)` con `T = String[]` en vez
+de a la variarg. El JLS §15.12.2 fija lo contrario —gana la más específica, y el orden de declaración
+no participa— así que esto no es una preferencia distinta sino una regla que falta.
+
+**Qué rompe hoy**: es lo que había bloqueado `Stream.of(T)` en una pasada anterior. El rodeo es
+escribir la no-variarg primero, que es lo que `Stream.java` hace ahora, con la razón anotada en la
+declaración y fijada por la prueba. Un rodeo que depende del orden del archivo es frágil por
+definición: cualquiera que reordene por prolijidad lo rompe sin enterarse.
+
+### Finding #320 — una llamada no resuelve si un parámetro mete una variable de tipo dentro de un argumento de tipo invariante
+
+`java/WcLib3.java` + `java/WcUse3.java` prueban las cinco variantes, y lo que separa las que andan de
+las que no es **el comodín en esa posición**:
+
+```
+Supplier<Down3<T>>                 FALLA
+Supplier<? extends Down3<T>>       ok
+BiConsumer<Object, Down3<R>>       FALLA    <- una sola variable, igual falla
+BiConsumer<A, Down3<R>>            FALLA
+BiConsumer<A, ? extends Down3<R>>  ok
+```
+
+No es la cantidad de variables, ni que el tipo anidado sea de primer nivel o miembro, ni la falta de
+un witness explícito: es que el argumento de tipo sea invariante. El error es duro
+(`no resolvió a ningún método`), no una inferencia silenciosamente mala.
+
+**A quién le pega**: las cuatro `Gatherer.of`/`ofSequential` con finalizador, que reciben
+`BiConsumer<A, Downstream<? super R>>` —el `? super` está *adentro* de `Downstream`, no en la
+posición anidada, así que no salva—. Están declaradas y sus cuerpos son correctos; hoy no se pueden
+llamar. `Gatherers` arma sus implementaciones con el constructor para no depender de ellas.
+
+### Finding #321 — `null` en posición de una variable de tipo no infiere
+
+```java
+static <T> Caja<T> f(Runnable r, T t) { ... }
+Caja<String> c = f(r, null);
+```
+
+da `no se pueden inferir los argumentos de tipo de f: restricciones de tipo incompatibles`. El javac
+real lo acepta: `null` tiene el tipo nulo, que es subtipo de todo, así que no restringe nada y `T`
+sale del destino. Acá parece tratarse como una restricción imposible en vez de como ninguna
+restricción. Repro en `scratchpad/zz321/Nl.java`, con el javac real al lado dando cero errores.
+
+### Lo que NO resultó ser un bug
+
+Al arreglar `PriorityBlockingQueue` vi un `.class` sin el atributo `Exceptions` de un método cuya
+fuente sí declaraba `throws`, y estuve por anotarlo como hallazgo. **Dos repros mínimos —uno suelto,
+otro redefiniendo un método de interfaz genérica— emiten el atributo correctamente con nuestro javac
+y con el real.** Era un `.class` viejo en el árbol, no el compilador. Queda escrito acá por la misma
+razón que el #314: el repro que no se construye antes de escribir el arreglo hace perder más tiempo
+que el que ahorra.
+
+### Finding #322 — una referencia a método bajo un cast explícito no se emite
+
+`scratchpad/zz322/Cast.java` lo aísla en dos líneas seguidas, con la misma referencia y la misma
+interfaz funcional:
+
+```java
+Function<Integer, String> sinCast = Ayuda2::dos;                              // compila
+Function<Integer, String> conCast = (Function<Integer, String>) Ayuda2::dos;  // error
+```
+
+La segunda da `el generador de bytecode todavía no soporta una referencia a método (necesita
+invokedynamic)`. Por asignación la referencia se resuelve; con el cast escrito delante, no. El javac
+real acepta las dos.
+
+**No es lo que se había reportado.** El informe del agente de `java.time.format` lo describía como
+"una referencia a método en posición de variarg", y la posición de variarg no tiene nada que ver: la
+llamada variarg fallaba porque el argumento llevaba un cast, y el mismo cast falla igual en una
+asignación común. La otra mitad del informe —que `Tipo::metodo` no resuelve cuando `Tipo` no aparece
+como tipo en ningún otro lado del archivo— **no se reproduce**: `scratchpad/zz322/Mr2.java` tiene
+exactamente esa forma y compila.
+
+**A quién le pega**: el cast sobre una referencia a método es la manera de desambiguar cuando el
+destino es `Object` —que es justo el caso de una llamada variarg—, así que el rodeo es atar la
+referencia a una variable local con el tipo escrito y pasar la variable.
+
+### Finding #323 — la instrucción de invocación se elegía por la clase declarante, no por el owner escrito
+
+**Éste es el más grave de la tanda, porque no lo detectaba nada nuestro.** Los `.class` que emitíamos
+en dos formas muy comunes eran inválidos, y nuestra VM los corría igual.
+
+El repro son dos líneas, en `scratchpad/zz323/Kind2.java`:
+
+```java
+interface Base2 { default int val() { return 1; } }
+final class Impl2 implements Base2 { }
+
+Impl2 i = new Impl2();
+Base2 b = i;
+int x = i.val();          // declarado en una INTERFAZ, receptor de tipo CLASE
+boolean y = b.equals(i);  // declarado en Object (CLASE), receptor de tipo INTERFAZ
+```
+
+| | nuestro javac (antes) | javac real |
+|---|---|---|
+| `i.val()` | `invokeinterface Impl2.val` | `invokevirtual Impl2.val` |
+| `b.equals(i)` | `invokevirtual Base2.equals` | `invokeinterface Base2.equals` |
+
+En los dos casos la **etiqueta** de la entrada del pool (`Methodref` vs `InterfaceMethodref`) no
+concordaba con lo que la clase nombrada realmente es. §5.4.3.3 y §5.4.3.4 exigen que concuerden. La
+JVM real se niega a resolverlas:
+
+```
+Exception in thread "main" java.lang.IncompatibleClassChangeError: Found class Impl2, but interface was expected
+```
+
+**Cómo apareció.** No lo encontró ninguna prueba nuestra: apareció al intentar correr `ChronoTest` y
+`FmtTest` —compilados por nosotros— con `java` de verdad, para comparar resultados entre las dos VMs.
+Los dos fallaron al cargar, uno por cada dirección del error (`MinguoDate` es una clase con métodos
+`default` heredados; `Chronology` es una interfaz a la que se le llama `equals`).
+
+**La causa.** `codegen.rs` decidía la instrucción con `owner_is_interface`, que pregunta por la clase
+que **declara** el método, pero escribía como owner el **tipo estático del receptor** (que es lo
+correcto, §5.4.3.3). Cuando los dos difieren en clase/interfaz —un `default` heredado por una clase,
+o un método de `Object` sobre una interfaz— la etiqueta y el owner se contradicen. Ahora la pregunta
+se hace sobre el owner que se va a escribir (`ref_owner_is_interface`), que es la única que importa.
+
+**Por qué no se notó antes.** Nuestra VM resuelve por nombre y descriptor y no compara la etiqueta
+del pool contra lo que la clase es. Es una permisividad, no una decisión, y su costo es exactamente
+éste: un `.class` que corre acá y ninguna otra JVM acepta. La medición por miembros tampoco lo veía
+—las firmas estaban todas bien— y las pruebas de comportamiento tampoco, porque corrían en la VM
+permisiva. **La prueba que lo encontró es correr nuestros `.class` en la JVM de verdad**, y conviene
+que eso sea parte de la batería y no algo que se hace de casualidad.
+
+### Finding #324 — una variable local declarada dos veces se acepta
+
+```java
+int x = 1;
+int x = 2;   // el javac real: "variable x is already defined in method f()"
+```
+
+Nuestro javac emite el `.class` sin decir nada. Repro en `scratchpad/zz324/Dup.java`.
+
+**No es teórico: ya había una en el árbol.** `Double.java` declaraba `int maxDigits = 17` dos veces
+seguidas en `decimalString`, con el mismo `if (asFloat) maxDigits = 9` repetido debajo. Inofensivo
+—la segunda pisa a la primera con el mismo valor— pero es exactamente el residuo de una edición a
+medio terminar que este chequeo existe para atrapar. Queda una sola.
+
+### Lo que ParseTest destapó: `Double.toString` crece de forma cuadrática
+
+`ParseTest` no termina: pasa de 900 s sin llegar al primer `println`. **No está colgado, está a paso
+de tortuga**, y la causa está acotada:
+
+| llamadas a `Double.toString(3.0)` | tiempo |
+|---|---|
+| 50 | 1 s |
+| 100 | 5 s |
+| 150 | 8 s |
+| 200 | 19 s |
+| 250 | 28 s |
+
+Siempre **el mismo valor**, así que no es el dato: es la cantidad. El costo por llamada crece con
+cuántas van, que es lo que hace el total cuadrático.
+
+Lo que el repro (`scratchpad/zz324/`) ya descarta:
+
+- **No es `parseDouble`**: mil llamadas terminan al instante (`Vol2.p1000`).
+- **No es la presión de asignación en general**: mil `StringBuilder`+`String` y mil `char[24]`
+  terminan al instante (`Aloc`). Si fuera el GC ahogándose con basura joven, éstos también irían mal.
+- **Es específico de `Double.toString`**, que hace una búsqueda binaria sobre la cantidad de dígitos
+  y en cada paso **parsea de nuevo** con `BigInteger`. Cinco parseos por llamada es caro pero
+  constante; que además *crezca* apunta a que algo se acumula entre llamadas.
+
+Queda como hallazgo con repro y medición, no arreglado: pinchar dónde se acumula es entrar en la
+política de promoción del GC y en `BigInteger`, y es otra tarea. Mientras tanto `ParseTest` conviene
+correrlo por método (`basicos`, `dificiles`, `hexadecimal`, `flotantes`, `malos` dan **0** en
+segundos); los dos que barren de a miles —`ida_y_vuelta` y `dobleRedondeo`— son los que no terminan.
+
+### Sobre el bloqueo que `java/text/FieldPosition.java` documenta: la causa que dice NO es la causa
+
+El encabezado de `FieldPosition.java` explica que sus dos constructores con `Format.Field` y
+`getFieldAttribute()` quedan afuera porque declararlos **pone `java/text/Format$Field` en el pool de
+constantes de `FieldPosition.class`**, y que con eso ninguna unidad que declare una subclase de
+`Format.Field` vuelve a compilar. (Cita un "#319" que hoy es otro hallazgo: la numeración se cruzó.)
+
+**Reproducido y ablacionado en `scratchpad/zz325/`**, con la forma exacta —`Fmt` abstracta con una
+anidada `Field`, `Pos` que la nombra, `Num extends Fmt` con `Num.Field extends Fmt.Field`—. El
+síntoma es real: `super(nombre)` da *«el generador de bytecode todavía no soporta un `super(...)` que
+no resolvió a ningún constructor»*.
+
+**Pero la causa no es la que dice.** Con `Pos` reescrita **sin nombrar `Fmt.Field`** —única
+diferencia— el error es idéntico. El pool de constantes de `Pos` no participa.
+
+Y la forma sola tampoco alcanza: `scratchpad/zz326/` prueba las cuatro combinaciones (anidada que
+extiende una anidada de otra clase, de primer nivel que extiende una anidada, con constructor
+`protected` y con `public`) y **las cuatro compilan**. Falta algo más del caso real para cerrarlo —
+lo más probable es la circularidad (`Fmt` nombra `Pos` y `Pos` nombra `Fmt`) sumada al anidamiento.
+
+Queda escrito con el repro porque un bloqueo documentado con la causa equivocada es peor que uno sin
+explicar: manda a arreglar lo que no está roto. Los tres miembros siguen afuera, pero por una razón
+que todavía no está identificada.
+
+## Tanda: `javax.tools`, `javax.sql` y el `java.sql` que hacía falta debajo
+
+Cerrados `javax.tools` (149/149), `javax.transaction.xa` (55/55) y `javax.sql` (19/19 clases,
+198/198 miembros), con el núcleo de `java.sql` (55/56 clases públicas, 1243/1245) y el de
+`java.util.logging` que `getParentLogger()` necesitaba.
+
+Los dos hallazgos salieron de **medir** lo emitido y no de que algo fallara: en los dos casos el
+compilador aceptaba el archivo y escribía un `.class` distinto de lo escrito.
+
+### Finding #325 — un externo nombrado entero resolvía por nombre simple, y ganaba el homónimo cargado antes
+
+`resolve_type_id` (`codegen.rs`) indexaba los externos **solo por nombre simple**. Un
+`java.sql.Date` escrito entero no lo encontraban ni `external(name)` —la clave es `Date`— ni
+`class(name)`, que solo mira el fuente; caía entonces en el `external(simple)` del final, pensado
+para el anidado escrito corto (`Map.Entry` → `external("Entry")`), que **tira el calificador**.
+
+Con lo cual, si otro `Date` cualquiera ya estaba cargado, ganaba ese.
+
+En compilación de a un archivo no pasa nunca. En **multi-unidad** pasa solo: alcanza con que una
+unidad anterior del lote mencione un `java.util.Calendar`, cuyos miembros arrastran `java.util.Date`.
+Emitir `DatabaseMetaData.java` y `CallableStatement.java` juntos hacía que el
+`java.sql.Date getDate(int)` del segundo saliera con `java.util.Date` en el descriptor.
+
+Lo que lo escondía: **la pasada 1 sí consulta el índice por nombre completo** (`enter.rs`,
+`resolve_name_to_sym`, que hace `class(dotted) → external_fqn(dotted) → external(simple)`), así que el
+chequeo daba bien y el desacuerdo aparecía recién en el `.class`. Y la biblioteca recompila de a un
+archivo, donde no hay unidad anterior que cargue al homónimo. Salió al medir `java.sql` y ver seis
+miembros faltando en `CallableStatement` que estaban escritos ahí mismo.
+
+**Arreglo**: consultar `external_fqn(name)` antes del `external(simple)`, en el mismo orden que la
+pasada 1 —exacto primero, simple como red—. Lo simple sigue haciendo falta para `Map.Entry`, donde el
+nombre completo del externo es `java.util.Map$Entry` y no coincide con lo escrito.
+
+Repro en `scratchpad/zz325_fqn/`: `p.Date` (una clase), `p.Uno` (nombra `java.util.Calendar`) y
+`p.Dos` (devuelve `p.Date`). `javac --emit p/Uno.java p/Dos.java` emitía `java.util.Date cual()`;
+`javac --emit p/Dos.java` solo, `p.Date cual()`. Un artefacto que compila, carga, y miente.
+
+Y va **en las dos direcciones**, cosa que apareció sola al comparar el punto fijo. `java/sql/Timestamp.java`
+declara `extends java.util.Date` y `compareTo(java.util.Date)`, las dos escritas enteras. El javac
+congelado emitía `public int compareTo(java.sql.Date)`: al compilar un archivo **del paquete
+`java.sql`**, el `Date` que estaba indexado por nombre simple era el del propio paquete, y ganaba ese.
+El mismo defecto que arruinaba `getDate` en `CallableStatement`, con el calificador tirado hacia el
+otro lado.
+
+### Finding #326 — los argumentos de una constante de `enum` no cargaban sus tipos
+
+`collect_type_names` (`enter.rs`) recorre supertipos, cotas, componentes y miembros — y **no**
+`class.enum_constants`. Los argumentos de una constante de `enum` son las únicas expresiones de una
+declaración que no viven ni en un campo ni en un método, así que un tipo que solo aparece ahí no se
+cargaba del classpath.
+
+El delator es el mismo que en #325 y al revés: **el chequeo pasaba y la emisión fallaba**. La pasada 1
+llega a ese nombre por otro camino, así que el desacuerdo salía como
+*«no se encuentra el símbolo: variable Types»* sobre un tipo escrito ahí mismo — el "variable" es el
+resolvedor de expresiones tomando el calificador como receptor después de que el tipo no resolvió.
+
+`java.sql.JDBCType` es el caso natural: nombra a `java.sql.Types` **solo** dentro de los paréntesis de
+sus treinta y nueve constantes, y en ningún cuerpo ni firma.
+
+**Arreglo**: recorrer `enum_constants` y pasarle cada argumento a `collect_from_expr`.
+`collect_annotation_names` ya recorría `enum_constants` para las anotaciones, lo cual deja ver que la
+omisión fue del recorrido de tipos y no de la representación.
+
+Repro en `scratchpad/zz326_enum/`: `q.K` con una constante `int`, y un `enum` que la nombra **solo**
+en el argumento de sus constantes. Basta con que el mismo `enum` use `K` una vez en un cuerpo para
+que el defecto desaparezca, que es lo que lo hacía parecer caprichoso.
+
+### Cómo quedaron
+
+- **`javax.sql`** 19/19 clases, **198/198** miembros.
+- **`javax.tools`** 17/17, **149/149**. **`javax.transaction.xa`** 3/3, **55/55**.
+- **`java.sql`** 55/55 clases públicas, **1245/1245**. `Connection`, `ResultSet`, `Statement`,
+  `PreparedStatement`, `CallableStatement` y `DatabaseMetaData` completos; `SQLXML` cerró al traer
+  `javax.xml.transform.Source` y `Result`, que son dos interfaces puras.
+- **`java.util.logging`**: se trajo el núcleo —`Level`, `LogRecord`, `Filter`, `Formatter`,
+  `SimpleFormatter`, `ErrorManager`, `Handler`, `StreamHandler`, `ConsoleHandler`, `LogManager`,
+  `Logger`— porque era el único bloqueo de `CommonDataSource.getParentLogger()` y
+  `Driver.getParentLogger()`. Funciona de verdad: los niveles filtran, los mensajes suben por el
+  árbol de nombres y `LogManager` recuelga a los descendientes cuando aparece un intermedio. Faltan
+  `FileHandler`, `SocketHandler`, `MemoryHandler` y `XMLFormatter`, que no los pide nadie todavía.
+- **`java.sql.DriverInfo`** no es pública, así que no cuenta. Su papel —el par (driver, acción de
+  baja)— lo hace una clase privada dentro de `DriverManager`.
+
+### Y un arreglo en la medición
+
+El censo contaba **todas** las clases que el jimage lista, incluidos los internos del JDK
+(`StringLatin1`, `CharacterData00`, `TimSort`, `ImmutableCollections`). Eso hacía que `java.lang`
+leyera 110/145 cuando lo que de verdad le falta son tres clases, y que `java.util` pareciera 113/131
+estando cerrado en 109/109.
+
+Además, el denominador de miembros salía **solo de las clases que tenemos**, que es el mismo punto
+ciego un nivel más abajo: `java.net` leía 93/102 teniendo 7 de sus 64 clases. Ahora una clase ausente
+entra con cero en el numerador y con todos sus miembros en el denominador, y `java.net` lee 93/757 —
+que es lo que es.
+
+`tools/apidiff/censo.py` y `tools/apidiff/grafico.py` quedaron en el repo. De paso el censo pasó de
+correr un `javap` por clase a uno por paquete: de unos doce minutos a treinta segundos.
+
+`java/SqlTest.java` (26 comprobaciones: fecha y hora SQL, el registro de drivers, la herencia de
+niveles por el árbol de nombres) da `-1` en las dos VMs.
+
+### Finding #325 — un cast a primitivo desde una referencia no emitía nada
+
+```java
+Object o = Integer.valueOf(42);
+int v = (int) o;
+```
+
+emitía `aload_0; istore_1`: la referencia guardada tal cual en un local `int`, **sin `checkcast` y sin
+`intValue()`**, y sin un solo diagnóstico. Nuestra VM entraba en panic
+(`expected an int on the operand stack, found Reference`) y la JVM real rechazaba la clase al
+verificarla (`VerifyError: Type 'java/lang/Integer' is not assignable to integer`).
+
+**No es un caso raro**: `(int) mapa.get(k)` es la forma normal de sacar un primitivo de una colección
+heterogénea, y hoy salía mal en todo el árbol.
+
+Lo reportó el agente de `java.lang.foreign` con la ablación ya hecha, y la ablación es la parte que
+importa: el disparador es **el cast explícito**, no el desempaquetado. `Integer o; int v = o;` --que
+es conversión de asignación, §5.2-- siempre estuvo bien, y `((Integer) o).intValue()` también. Sólo
+fallaba el cast.
+
+**La causa**: `transtypes.rs` visitaba el operando del `Cast` y no coercionaba nada. El desempaquetado
+lo inserta esa pasada (el codegen sólo baja lo que le llega), así que un cast a primitivo desde una
+referencia se quedaba sin conversión. Ahora `cast()` la aplica, con las **dos formas** que el javac
+real distingue y que se midieron en `scratchpad/zz333/Casos.java`:
+
+| operando | destino | qué emite |
+|---|---|---|
+| `Integer` | `int` | `intValue()` — sin `checkcast` |
+| `Integer` | `long` | `intValue(); i2l` |
+| `Object` / `Number` | `int` | `checkcast Integer; intValue()` |
+| `Object` | `long` | `checkcast **Long**; longValue()` |
+
+La cuarta fila es la que no se adivina: el `checkcast` va al wrapper **del destino**, no al del
+operando, que no se conoce. `(long) unObject` que en realidad tiene un `Integer` **tiene** que tirar
+`ClassCastException`, y ahora la tira en las dos VMs.
+
+Prueba: `java/CastUnboxTest.java`, **-1** con las dos, y el bytecode de los ocho casos es idéntico
+instrucción por instrucción al del `javac` real.
+
+### Finding #326 — el compilador se colgaba con una variable llamada `con`
+
+Tres líneas:
+
+```java
+String con = "x";
+return con.length();
+```
+
+`javac` se quedaba **colgado para siempre**, sin mensaje y sin consumir CPU.
+
+Al resolver `con.length()` el compilador considera que `con` podría ser un tipo y lo busca en el
+classpath: `std::fs::read("KajiLibrary/con.class")`. En Windows eso **no falla**: `CON` es un nombre
+de dispositivo reservado, se resuelve con cualquier extensión y sin distinguir mayúsculas, y abrirlo
+abre la **consola**. La lectura se queda esperando entrada que nunca llega.
+
+Confirmado con la familia entera, y el patrón cierra: cuelgan los de **entrada** y no los de salida.
+
+| `con` | `aux` | `com1` | `prn` | `nul` | `lpt1` |
+|---|---|---|---|---|---|
+| cuelga | cuelga | cuelga | ok | ok | ok |
+
+`CON` es la consola y `AUX`/`COM1` son puertos serie; `NUL` da EOF al instante y `PRN`/`LPT*` son de
+salida. Se filtran los veintidós igual: ninguno puede contener un `.class`.
+
+**Para este proyecto en particular no es una curiosidad**: `con` es de las palabras más comunes al
+escribir código en castellano, y bastaba una variable local con ese nombre --en posición de
+receptor-- para colgar la compilación entera. Apareció así, en una prueba recién escrita.
+
+Arreglado en `enter.rs`, en `ClassFinder::find`, y sólo bajo `cfg(windows)`: en cualquier otro sistema
+`Con.class` es un archivo común y saltearlo escondería una clase que existe. Repro de tres líneas en
+`scratchpad/zz332/Recep.java`.
+
+### Finding #327 — se pierde `@Retention(RUNTIME)`, y con eso todas las anotaciones en una JVM real
+
+> **Corrección (misma sesión).** La primera versión de este hallazgo decía que hacían falta **dos**
+> cosas: que el tipo anotación viniera del classpath **y** que tuviera un miembro de tipo enum. La
+> segunda mitad es falsa. Mi ablación movió dos variables a la vez —comparé *mismo archivo + enum*
+> (anda) contra *classpath + enum* (falla)— y le atribuí la causa a la que no era. El caso que
+> faltaba, **classpath + miembro `String`**, también falla: `scratchpad/zz340/`. Lo encontró el
+> agente de `javax.annotation.processing`, con la ablación completa.
+>
+> Queda escrito acá y no borrado porque es el mismo error que este archivo le reprocha al #314 y al
+> comentario de `FieldPosition`, cometido por quien escribió esos reproches.
+
+Una anotación cuyo **tipo se resuelve desde el classpath** (un `.class`, no la misma unidad de
+compilación) no emite su atributo `RuntimeVisibleAnnotations`, **sea cual sea el tipo de sus
+miembros**. La misma anotación declarada en el mismo archivo fuente sí lo
+emite. Ablación en `scratchpad/zz336/` y `scratchpad/zz337/`:
+
+| forma | atributo emitido |
+|---|---|
+| `@Deprecated` sobre una clase o sobre un `@interface` | sí |
+| anotación **del mismo archivo**, miembro `String`, `Class` o enum | sí |
+| anotación **del classpath**, miembro `String` | **no** |
+| anotación **del classpath**, miembro enum | **no** |
+| `@Retention(RetentionPolicy.RUNTIME)` | **no** |
+
+Lo que separa las filas es de dónde sale el tipo de la anotación, y nada más. `@Deprecated` se salva
+porque no tiene miembros que resolver.
+
+La última fila es la que hace grave al resto: `java.lang.annotation.Retention` **es** exactamente ese
+caso —del classpath, con miembros—, así que **ningún tipo anotación que compilemos conserva su
+retención**. Y el efecto se propaga: al compilar un `@interface` propio se lee `@Retention` del
+classpath y se pierde, con lo cual esa anotación tampoco es visible en tiempo de ejecución.
+
+Prueba directa y barata de que el atributo ni se intenta: agregarle `@Documented` y `@Target` al
+fuente de un `@interface` de la biblioteca deja el `.class` **byte-idéntico**.
+
+**La consecuencia se ve sólo cruzando a la JVM real**, que es la red nueva de esta tanda:
+
+```
+scratchpad/zz335/M2.java   ->  nuestra VM: 1 anotacion    java real: 0 anotaciones
+```
+
+Nuestra VM devuelve 1 porque no mira la retención; la JVM real trata la anotación como
+`RetentionPolicy.CLASS` --el valor por omisión, que es lo que queda cuando el atributo no está-- y no
+la expone en tiempo de ejecución. O sea que **nuestros `.class` con anotaciones no son portables**:
+todo lo que dependa de leerlas por reflexión ve un programa sin anotaciones.
+
+Es la misma familia que el #323: no hay error de compilación, nuestra VM lo acepta, y el problema
+aparece recién cuando el resultado sale de casa.
+
+### Y algo que topa con lo mismo desde el otro lado: la reflexión sobre una anotación voltea la VM
+
+`scratchpad/zz335/Mi.java` invoca por reflexión los métodos del tipo anotación sobre una instancia
+--que es como se leen los valores de una anotación-- y nuestra VM entra en panic:
+
+```
+panicked at src\jvm\interpreter\bytecode_interpreter.rs:2705: index out of bounds: the len is 0 but the index is 0
+```
+
+Ablado: `Method.invoke` con argumentos anda (`M1`, da 42), sin argumentos anda (`M3`, da 7), y
+`getAnnotations()` responde (`M2`). Lo que rompe es invocar un método **sobre la instancia de la
+anotación**. Los dos juntos son los que dejan afuera `VMSupport.encodeAnnotations`/`decodeAnnotations`,
+documentado en el encabezado de esa clase.
+
+### Finding #328 — un constructor varargs no empaquetaba sus argumentos
+
+Ojo con el numero: el `#327` **ya estaba usado** (la perdida de `@Retention(RUNTIME)`, arriba en esta
+misma tanda). Este es el `#328`.
+
+`f(1, 2)` contra `void f(int... xs)` emite el `anewarray` y pasa el array. `new C(1, 2)` contra
+`C(int... xs)` **no**: emitia los argumentos sueltos contra un descriptor `([I)V`.
+
+Repro en `scratchpad/zz339/Var.java`, con el metodo al lado del constructor para que se vea que es lo
+mismo escrito dos veces:
+
+```java
+public Var(String... xs)        { this.n = xs.length; }
+public static int m(String... xs) { return xs.length; }
+new Var("a").n + m("b", "c")
+```
+
+Lo que salia (`javap -c`), con el metodo bien y el constructor mal:
+
+```
+ 0: new           #23   // class Var
+ 3: dup
+ 4: ldc           #46   // String a          <-- el String suelto...
+ 6: invokespecial #48   // Var."<init>":([Ljava/lang/String;)V   <-- ...contra un [String
+ ...
+19: iconst_2
+20: anewarray     #47   // class java/lang/String                <-- el metodo si empaqueta
+```
+
+**Pasa `javap` y pasa el verificador nuestro**; revienta en tiempo de ejecucion, cuando el
+`invokespecial` toma el `String` como si fuera el array. Es de la familia de #323/#327: el `.class`
+se ve sano y el problema aparece al usarlo.
+
+La causa es de una linea: `Desugar::lower_varargs` solo miraba `ExprKind::Call`. Un `new` es
+`ExprKind::NewObject`, que nunca entraba — aunque su `binding` ya apunte al constructor resuelto y
+lleve el `varargs: true`. Arreglado en `desugar.rs` haciendo que `lower_varargs` acepte las dos
+formas, y llamandola desde la rama de `NewObject`.
+
+**Donde se llama importa.** Va *despues* de `add_local_captures_arg`/`add_outer_arg`, no antes: esos
+dos anteponen argumentos sinteticos (`this$0`, los `val$`) y el simbolo del constructor de una
+interna ya lleva esos parametros en su firma resuelta. Empaquetar primero contaria los fijos contra
+una lista de argumentos a la que todavia le faltan los sinteticos, y partiria en el lugar equivocado.
+
+#### La mitad de la anonima, que fallaba de otra forma
+
+`new Anon("x") { }` contra `Anon(String... xs)` no llegaba ni a emitir: era un **error de
+compilacion**.
+
+```
+error: no se encontro un constructor `$1(String)` aplicable
+  metodo $1.$1(String[]) no es aplicable
+    (los argumentos no coinciden: String no se convierte a String[])
+```
+
+`hoist_anonymous` sintetiza en `$N` un constructor de reenvio con los parametros del ctor del
+supertipo — pero los copiaba con `varargs: false` fijo, en el `Param` del AST y en el
+`Resolved::Method`. Asi el reenvio dejaba de ser variadico y el `new $N("x")` que reemplaza al
+`new Anon("x"){…}` no resolvia. Arreglado en `enter.rs`, heredando la marca del ctor del supertipo en
+los dos lugares. Repro en `scratchpad/zz339/Anon.java`.
+
+Las dos mitades se cruzaron contra la JVM real: `Var.run()` da 5 y `Anon.run()` da 1 en las dos VMs.
+
+Regresiones en `desugar.rs`: `varargs_constructor_wraps_trailing_args_too`,
+`varargs_constructor_with_fixed_params_wraps_only_the_tail` y
+`passing_an_array_directly_to_a_varargs_constructor_is_not_rewrapped` — los espejos de los tres que
+ya existian para `Call`.
+
+**Como aparecio:** escribiendo `java.lang.ProcessBuilder`, cuyo constructor `ProcessBuilder(String...)`
+es de los mas usados de la biblioteca estandar. Un `new ProcessBuilder("cmd")` volteaba la VM con
+`range start index N out of range for slice of length 1024`.
+
+### Finding #328 — un `goto` muerto después de un `throw` hacía que la JVM real rechazara la clase
+
+```java
+try {
+    if (c) { throw new IllegalStateException(); } else { throw new RuntimeException(); }
+} catch (RuntimeException e) { ... }
+```
+
+Nuestra VM lo corría; la JVM real se negaba a cargar la clase:
+
+```
+java.lang.VerifyError: Expecting a stack map frame
+  Location: V3.run(I)I @14: goto
+```
+
+El emisor del `if`/`else` ponía siempre un `goto` para saltear el `else` **después** de la rama
+`then`. Cuando el `then` termina en `throw` o en `return`, ese `goto` es código muerto — y §4.10.1
+exige un frame del `StackMapTable` en toda instrucción que sigue a una transferencia incondicional.
+No lo emitíamos, y no había forma sensata de emitirlo: el código es inalcanzable, no tiene tipos.
+
+El arreglo es el que hace el javac real: **no emitir el salto** cuando la rama no puede llegar hasta
+ahí. El compilador ya llevaba la bandera `reachable`; sólo faltaba consultarla.
+
+Repro y ablación en `scratchpad/zz339/`: `V3` (if/else con dos `throw`) y `V5` (con `else if`)
+fallaban; `V2` (un `throw` suelto) y `V4` (bucle con un `throw`) andaban. Ahora los cinco dan lo mismo
+en las dos VMs.
+
+**Cómo apareció, que es lo que vale la pena anotar**: escribiendo `java/ChanTest.java` para
+`java.nio.channels`. La prueba tenía un `catch` que atrapaba tres excepciones lanzadas desde un
+`if`/`else if`/`else` — código perfectamente normal— y no cargaba en la JVM real. Es el tercer
+hallazgo de esta tanda (con el #323 y el #327) que **sólo se ve cruzando a la JVM de verdad**, y el
+tercero que ninguna de nuestras redes internas podía ver.
+
+### Finding #350 ⬜ — llamar a un método sobre el resultado de un genérico con comodín no emite
+
+```java
+import java.util.List;
+
+public class Repro350 {
+    static String directo(List<? extends CharSequence> l) {
+        return l.get(0).toString();          // error
+    }
+
+    static String porLocal(List<? extends CharSequence> l) {
+        CharSequence c = l.get(0);           // anda
+        return c.toString();
+    }
+}
+```
+
+```
+Repro350.java:5: error: el generador de bytecode todavía no soporta una llamada que no resolvió a ningún método
+        return l.get(0).toString();
+               ^
+```
+
+`List<? extends CharSequence>.get(int)` devuelve el **capture** de `? extends CharSequence`. La
+resolución de métodos no le encuentra supertipo a ese tipo capturado, así que `.toString()` sobre él
+no resuelve y el emisor se queda sin método. Asignarlo primero a una local del límite superior
+(`CharSequence c = l.get(0)`) lo arregla, lo que apunta a que lo que falta es la **conversión de
+captura al límite** en el receptor de la llamada, no la resolución en sí.
+
+No es un caso raro: `List<? extends T>` es el tipo de retorno de
+`java.security.cert.CertPath.getCertificates()` — la firma la fija el JDK — y de ahí sale cualquier
+recorrido de una cadena de certificados. Apareció escribiendo `java.security.CodeSigner`,
+`Timestamp` y `CertPath`, que la recorren para su `toString`.
+
+Rodeo aplicado en esos tres archivos: la local intermedia. Repro mínimo en
+`scratchpad/r350/Repro350.java`.
+
+## Tanda: `java.net` — dos bugs que sólo se ven corriendo la prueba de comportamiento
+
+### Finding #340 — el espejo de `Class` de la clase de entrada nunca se prepara, y consultarlo la rompe para siempre
+
+Repro mínimo: cualquier clase que corra un `static synchronized` **propio** como punto de entrada.
+
+```java
+public class Repro340 {
+    private static synchronized int uno() { return 1; }
+    public static int run() { return uno(); }
+}
+```
+
+```
+thread 'main' panicked at src\jvm\interpreter\bytecode_interpreter\invokestatic.rs:307:
+static synchronized: the Class mirror exists after initialization
+```
+
+Son **dos** bugs encadenados, y el segundo es el que dejaba daño permanente:
+
+1. `invokestatic` daba por hecho que el espejo ya existía porque `ensure_initialized` había corrido
+   más arriba. No alcanza: `ensure_initialized` corre `<clinit>` y nada más. Una clase **sin**
+   `<clinit>` —o una que ya está en estado `Done`, que es exactamente el caso de la clase de
+   entrada, porque la ejecución **empieza adentro** de ella— nunca pasa por `load_class`, que es
+   quien asigna el espejo.
+
+2. `class_mirror(name)` resolvía el nombre con `class_id(name)`, que **acuña un Class ID si no
+   existe**. Y `load_class` se rinde apenas ve que el nombre ya tiene id — su invariante es ser el
+   único que los acuña. Es decir: la consulta fallida dejaba la clase marcada como "ya vista" y
+   `load_class` no la preparaba nunca más. El segundo intento fallaba igual, y cualquier otro uso
+   de esa clase también.
+
+Arreglo, en dos lugares:
+
+- `MetaspaceService::class_mirror` chequea `has_class_id` primero y sale por `None` sin acuñar
+  nada. Una consulta ya no tiene efectos de borde.
+- El sitio de `invokestatic` llama a `class_operations::load_class` **antes** de pedir el espejo,
+  que es el mismo orden que ya usaba `static_slot`.
+
+Con eso, `java/NetTest.class` pasó de voltear la VM a correr entero.
+
+### Finding #341 — un argumento de tipo variable elegía la sobrecarga más angosta, y compilaba a la equivocada
+
+```java
+class Box<V> {
+    V v;
+    String s() { return String.valueOf(v); }   // emite valueOf([C), no valueOf(Object)
+}
+```
+
+```
+  java.lang.String s();
+       0: aload_0
+       1: getfield      #39   // Field v:Ljava/lang/Object;
+       4: invokestatic  #45   // Method java/lang/String.valueOf:([C)Ljava/lang/String;
+```
+
+`convertible` —la relación que decide qué candidatos son aplicables— arrancaba con
+`if from == to || lenient(from) || lenient(to) { return true }`, y `lenient` da `true` para toda
+`RType::TypeVar`. Con el argumento indulgente, **las siete sobrecargas** de `String.valueOf`
+resultaban aplicables en la fase 1, y el desempate por §15.12.2.5 elegía la más específica: `char[]`
+es subtipo de `Object`, así que ganaba `valueOf(char[])`.
+
+La indulgencia tiene sentido en el **destino** (una variable de tipo del propio método genérico, que
+la inferencia resuelve después) pero no en el **origen**: de una variable de tipo sí sabemos algo, su
+cota (§4.4), y la cota es todo lo que el argumento puede ser. `bounds_of` ya devuelve `Object`
+cuando no se declaró ninguna, así que el caso común cae justo en `valueOf(Object)`.
+
+Arreglo: sacar `TypeVar` de la indulgencia del origen en `convertible` y agregar el arm
+`(RType::TypeVar(v), _) => bounds_of(v).any(|b| convertible(b, to, boxing))`. `assignable` —la
+relación de asignación, no la de invocación— se dejó como estaba: el bug era de resolución de
+sobrecargas, y ensancharlo era arriesgar errores nuevos donde no había ninguno.
+
+**Cómo apareció, que es lo que hace que valga la pena anotarlo**: no compilando, sino **corriendo**.
+`java.util.AbstractMap` no tenía `toString`, así que `CookieManager.get(...)` se imprimía como
+`java.util.HashMap@affa061f`. Al escribirle el `toString` —con el `String.valueOf(v)` que escribiría
+cualquiera— la salida pasó a ser `{Cookie=}`: la clave bien, el valor vacío. Es la peor forma de este
+bug: **compila, verifica, y devuelve la cadena vacía**. Ninguna red interna lo veía porque el
+bytecode emitido es formalmente válido — sólo llama a otro método.
+
+Ablación: con el arm puesto, `cargo test --release` da los **mismos 21 fallos** de la base (los dos
+extra que aparecieron en una corrida son los dos de APT, que pasan solos y son intermitentes por el
+directorio temporal que comparten).
+
+### Finding #329 — no se aplica el control de acceso `protected` entre paquetes (JLS 6.6.2)
+
+```java
+package pk;
+public class Base { protected int secreto() { return 7; } protected int campo = 3; }
+```
+
+```java
+import pk.Base;
+public class Prot {                       // NO es subclase de Base, y esta en otro paquete
+    public static int run() {
+        Base b = new Base();
+        return b.secreto() + b.campo;     // los dos accesos son ilegales
+    }
+}
+```
+
+| | |
+|---|---|
+| javac real | `secreto() has protected access in Base` (y lo mismo para el campo) |
+| nuestro javac | **compila y emite el `.class`** |
+| JVM real, con nuestro `.class` | `IllegalAccessError: class Prot tried to access protected method 'int pk.Base.secreto()'` |
+
+Es un *accepts-invalid*: no rompe programas correctos, sólo deja pasar los incorrectos. Pero cae en la
+misma familia de esta tanda, porque el resultado es un `.class` que corre acá y ninguna otra JVM
+acepta — y el error aparece lejos del lugar donde se puede arreglar.
+
+Falta la regla entera, no un caso borde: ni el chequeo de paquete, ni la parte de §6.6.2 que exige que
+el acceso sea a través de una referencia del tipo de la clase que accede (o de un subtipo suyo), que
+es lo que impide que una subclase toque el `protected` de un *hermano*.
+
+Lo encontró el agente de `javax.annotation.processing`, y **lo encontró corriendo su prueba en la JVM
+real**: pasaba en nuestra VM y fallaba allá. Repro en `scratchpad/zz341/`.
+
+### Finding #330 — los tipos anidados se resuelven por nombre simple entre unidades de compilación
+
+En un `--emit` con varios archivos, un tipo anidado mencionado en **un** archivo cambia cómo resuelve
+el mismo nombre simple en **otro**:
+
+```java
+// Sink.java, ya compilado al classpath
+public interface Sink { void take(javax.tools.Diagnostic.Kind k); }
+// Leak1.java
+import javax.tools.JavaFileObject.Kind;
+public class Leak1 { public static Kind k() { return Kind.SOURCE; } }
+// Leak2.java
+public class Leak2 implements Sink { public void take(javax.tools.Diagnostic.Kind k) { } }
+```
+
+```
+javac --emit -cp "KajiLibrary;dir" Leak2.java              ->  compila
+javac --emit -cp "KajiLibrary;dir" Leak1.java Leak2.java   ->  error: `Leak2` no es abstracta
+                                                                y no implementa `take` de `Sink`
+```
+
+`Leak2` no cambió. Lo que cambió es que en el mismo round hay otro archivo que menciona
+`JavaFileObject.Kind`, y a partir de ahí `Kind` --el nombre simple-- resuelve a ése en todos lados. El
+`take` de `Leak2` termina tomando un parámetro de otro tipo que el de la interfaz, y por eso "no la
+implementa".
+
+Ablaciones del agente que lo encontró: sacar el `import` y escribir el nombre completo **no** alcanza
+--es la mención, no el import--; con dos nombres simples distintos (`JavaFileManager.Location`) no
+pasa; si los dos archivos usan `Diagnostic.Kind` tampoco; y el orden en la línea de comandos no
+importa.
+
+**Qué obliga a hacer hoy**: compilar de a un archivo los paquetes que mezclan tipos anidados
+homónimos, que es justamente lo que `javax.tools` y `javax.lang.model` hacen todo el tiempo.
+Repro en `scratchpad/zz342/`.
+
+### Una divergencia de biblioteca que hay que decidir: `java.io` no declara `throws IOException`
+
+No es un bug del compilador sino de la biblioteca, y se anota acá porque **aparece una y otra vez** y
+cada vez cuesta el mismo rato de averiguación.
+
+`java.io.InputStream` y `java.io.Reader` declaran `read`, `available`, `mark`, `reset` y `close`
+**sin** `throws IOException`; el JDK las declara con ella. Lo mismo `java.io.Closeable.close()`, que
+arrastra a `java.nio.channels.Channel` y a todo lo que lo extienda.
+
+Las dos consecuencias, las dos reales y ya encontradas por separado:
+
+1. **Un `catch (IOException)` alrededor de esas llamadas no compila** contra esta biblioteca —el
+   compilador, con razón, dice que esa excepción no se puede lanzar ahí—. El agente de
+   `javax.xml.transform` tuvo que escribir `catch (Throwable)` en `StreamSource.isEmpty()` por eso.
+   O sea que el código escrito para el JDK **no compila acá**, que es la dirección de portabilidad que
+   más duele.
+2. **Ninguna subclase puede señalar un fallo de E/S por el canal previsto**, porque redefinir no puede
+   ensanchar la cláusula `throws` (§8.4.8.3). Un `InputStream` propio que lea de un archivo no tiene
+   cómo reportar que el archivo se rompió.
+
+**Por qué no lo cambié**: agregar `throws IOException` en `InputStream`/`Reader`/`Closeable` obliga a
+todo **llamador** dentro de la biblioteca a atrapar o declarar, y eso es una pasada por buena parte de
+`java.io`, `java.nio`, `java.util.zip` y `javax.xml`. Es la decisión correcta y es grande; conviene
+hacerla de una vez, con la batería entera detrás, y no de a pedazos mientras hay agentes escribiendo.
+
+Queda medido y escrito para que se decida a propósito y no por omisión.
+
+### Arreglado de paso: `Throwable.printStackTrace()` escribía en `System.out`
+
+El JDK escribe en `System.err`. El comentario del archivo justificaba el desvío diciendo que "no hay
+`System.err` en esta biblioteca todavía" — y `System.err` existe desde hace varias tandas, así que la
+nota había quedado vieja y el destino equivocado.
+
+No es cosmético: una traza en la salida estándar se mezcla con lo que el programa imprime, y un
+`programa > archivo` se lleva el error adentro del resultado en vez de dejarlo en la consola. Que los
+dos flujos estén separados es exactamente para que eso no pase. Verificado con
+`scratchpad/zz343/Ps.java`: antes la marca salía por stdout y no por stderr; ahora al revés.
+
+### Finding #342 — un constructor con `super(...)` explícito **y** campos con inicializador construía la superclase dos veces
+
+```java
+class Base {
+    int marca;
+    Base()          { this.marca = 1; }
+    Base(String s)  { this.marca = 2; }
+}
+class ConCampo extends Base {
+    int x = 7;
+    ConCampo() { super("explicito"); }
+}
+```
+
+```
+  Repro342$ConCampo();
+    Code:
+         0: aload_0
+         1: invokespecial #37   // Method Repro342$Base."<init>":()V     <-- de más
+         4: aload_0
+         5: bipush        7
+         7: putfield      #39   // Field x:I
+        10: aload_0
+        11: ldc           #41   // String explicito
+        13: invokespecial #44   // Method Repro342$Base."<init>":(Ljava/lang/String;)V
+        16: return
+```
+
+`desugar` copia los inicializadores de instancia **al frente** del cuerpo de cada constructor
+(§8.6/§12.5). Al frente de todo, incluido delante de un `super(...)` escrito. Después de eso el
+emisor ya no ve un `super` como primera sentencia, así que le antepone el implícito — y quedan
+**dos** `<init>` sobre el mismo `this`.
+
+Lo que eso rompe, en orden de gravedad:
+
+1. **La superclase se construye con el constructor equivocado primero.** Si su no-args tira, el
+   objeto no se puede construir aunque el `super(...)` escrito fuera perfectamente válido.
+2. Si la superclase **no tiene** constructor sin argumentos, el `.class` referencia uno que no
+   existe.
+3. Una JVM real **rechaza la clase**: §4.10.2.4 prohíbe dos `<init>` sobre el mismo
+   `uninitializedThis`.
+
+Cómo apareció: `java.net.MulticastSocket(SocketAddress)` hace `super(bindaddr)` y tiene cuatro
+campos con inicializador. `new MulticastSocket((SocketAddress) null)` —que el JDK documenta como
+"socket sin atar" y que tiene que andar— reventaba con la `SocketException` de
+`DatagramSocket()`, el constructor que **no** se había escrito. Lo agarró `java/NetTest.java`
+corriendo en las dos VMs; compilar no lo veía.
+
+Arreglo, en `desugar.rs`: los inicializadores se insertan **detrás** del `super(...)` explícito
+cuando lo hay (`delegates_to_super`), que es el orden que manda §12.5 —superclase, inicializadores,
+cuerpo— y el que emite el javac real. El caso de `this(...)` ya estaba contemplado.
+
+**Ojo con los `.class` versionados**: todo constructor de KajiLibrary con `super(...)` explícito y
+campos con inicializador quedó mal emitido hasta este arreglo. Los `.class` de `java.net` se
+regeneraron; el resto del árbol conviene refrescarlo.
+
+### Finding #343 ⬜ — la resolución de constructores no filtra por accesibilidad
+
+```java
+new DatagramSocket(null)
+```
+
+```
+error: la referencia a `DatagramSocket` es ambigua
+```
+
+`java.net.DatagramSocket` tiene tres constructores de un argumento: `(SocketAddress)` y `(int)`,
+públicos, y `(DatagramSocketImpl)`, **protected**. El javac real descarta el `protected` desde el
+paso 1 de §15.12.2 —los candidatos tienen que ser accesibles desde el sitio de la llamada— y le
+queda uno solo aplicable a `null`. El nuestro los mantiene a los dos y declara ambigüedad.
+
+No es exclusivo de los constructores: la misma falta de filtro haría ambigua cualquier llamada donde
+la sobrecarga que desempata sea inaccesible. No apareció antes porque hace falta una sobrecarga
+`protected` o package-private con la misma aridad que una pública, que es un diseño poco común fuera
+del JDK.
+
+Rodeo aplicado en `java/NetTest.java`: el cast explícito, `new DatagramSocket((SocketAddress) null)`,
+que además es más claro. Repro mínimo: la línea de arriba contra `KajiLibrary`.
+
+### Finding #351 ⬜ — dos tipos anidados con el mismo nombre simple se pisan dentro de la misma unidad
+
+```java
+public class GF {
+    static java.util.Map.Entry<String, Integer> a(java.util.Map<String, Integer> m) {
+        return m.entrySet().iterator().next();
+    }
+
+    static java.security.KeyStore.Entry b() {
+        return null;
+    }
+}
+```
+
+```
+error: tipo de retorno incompatible
+        return m.entrySet().iterator().next();
+               ^
+```
+
+Los dos tipos anidados se nombran **completamente calificados** y viven en clases distintas
+(`java.util.Map` y `java.security.KeyStore`); lo unico que comparten es el nombre simple `Entry`.
+Con las dos referencias en la misma unidad de compilacion, la de `Map.Entry` se resuelve al `Entry`
+equivocado y cualquier uso parametrizado deja de tipar.
+
+Es **independiente del orden**: da igual cual de los dos metodos venga primero. Y desaparece
+borrando cualquiera de los dos: `a()` sola compila, `b()` sola compila.
+
+Solo pasa con tipos que se cargan desde `.class` del classpath. La version equivalente con dos
+clases anidadas definidas en el mismo archivo fuente compila bien, asi que el problema esta en la
+cache/tabla que se llena al leer tipos anidados de un `.class`, no en el resolutor de nombres del
+parser.
+
+Como aparecio: `java/SecTest.java` prueba `java.security.KeyStore.getEntry` —que devuelve
+`KeyStore.Entry`— y en el mismo archivo un `KeyStoreSpi` de prueba recorre un
+`Map<String, Certificate>` con `Map.Entry`. El error salia en la clase del `Map`, a 2000 lineas de
+la referencia que lo causaba, lo que lo hace especialmente confuso de diagnosticar.
+
+Rodeo aplicado en `java/SecTest.java`: recorrer el mapa por `keySet()` en vez de por `entrySet()`.
+Repro minimo: el bloque de arriba contra `KajiLibrary`.
+
+### Finding #352 ⬜ — un tipo homónimo del propio paquete le gana al import de un solo tipo cuando los dos están en la misma invocación
+
+```java
+// p/sub/Cosa.java
+package p.sub;
+public class Cosa {
+    public int valor() { return 1; }
+}
+
+// p/Cosa.java  — homónima, en el paquete de al lado, sin relación con la anterior
+package p;
+public interface Cosa {
+}
+
+// p/Usa.java
+package p;
+import p.sub.Cosa;
+public class Usa {
+    public static int leer(Cosa c) {
+        return c.valor();
+    }
+}
+```
+
+```
+p/Usa.java:9: error: no se encuentra el método: valor
+        return c.valor();
+               ^
+  símbolo:   método valor()
+```
+
+Un import de un solo tipo **tapa** al tipo homónimo del propio paquete (JLS §6.4.1: el import está
+en un scope más interno que la declaración de paquete). En `Usa`, `Cosa` tiene que significar
+`p.sub.Cosa`, y `valor()` existe.
+
+Lo llamativo es **cuándo** falla: compilar `p/Usa.java` solo, con `p/Cosa.class` ya en disco, anda
+perfecto. Falla únicamente cuando `p/Cosa.java` entra en la **misma invocación** de `javac`, y es
+independiente del orden en la línea de comandos. O sea que los tipos que se están compilando en esta
+tanda se meten en la resolución de nombres con más prioridad que un import explícito, mientras que
+los que vienen del classpath no. El javac real acepta las tres juntas sin chistar.
+
+Cómo apareció: `java/security/CodeSource.java` importa `java.security.cert.Certificate` y en
+`java.security` existe la interfaz obsoleta `java.security.Certificate`. Cada archivo compila bien
+por separado —así se emitió toda la biblioteca— pero **una reconstrucción de `java/security` entero
+en una sola invocación falla**, con el error a 90 líneas del import que lo causa:
+
+```
+javac --emit -cp . java/security/Certificate.java java/security/CodeSource.java
+java/security/CodeSource.java:104: error: tipo incompatible en `cs`
+```
+
+No hay rodeo aplicado: los `.class` del árbol están bien porque se emitieron en tandas chicas. Lo
+que hay que saber es que **`java/security` no se puede reconstruir de un saque** hasta que esto se
+arregle. Repro mínimo: el bloque de arriba.
+
+**Corolario de #352 — la variante silenciosa.** El caso de arriba al menos **falla**. Hay una
+segunda forma del mismo problema que no falla: emite mal y sigue.
+
+`java/security/Identity.java` usa el nombre simple `Certificate` **sin import**, en el paquete
+`java.security`, o sea `java.security.Certificate`. Compilando el directorio en una tanda que
+**excluia** `Certificate.java`, ese nombre se resolvio a `java.security.cert.Certificate` —el tipo
+del otro paquete, que llega por el classpath— y los tres metodos salieron con la firma equivocada:
+
+```
+public java.security.cert.Certificate[] certificates()      // deberia ser java.security.Certificate[]
+public void addCertificate(java.security.cert.Certificate)
+public void removeCertificate(java.security.cert.Certificate)
+```
+
+Sin ningun error. Se detecto midiendo contra el JDK (`Identity` cayo de 17/17 a 14/17), no
+compilando. Recompilando `Identity.java` sola vuelve a salir bien.
+
+Los dos sintomas son la misma causa —que composicion tenga la tanda cambia como se resuelven los
+nombres— y juntos dan la regla practica de hoy: **`java/security` se reconstruye archivo por
+archivo**, no por lotes.
+
+### Finding #331 — el emisor toma la cláusula `throws` del classpath, no de la fuente
+
+La prueba es de dos líneas y concluyente. Se le puso a `java.io.Flushable.flush()` un
+`throws InterruptedException` en la **fuente**; el `.class` emitido salió con
+`throws IOException` — el del JDK.
+
+```
+fuente:  void flush() throws InterruptedException;
+.class:  public abstract void flush() throws java.io.IOException;
+```
+
+Cuando una clase que compilamos **también existe en el classpath**, el atributo `Exceptions` que se
+emite es el de la copia del classpath y la cláusula de la fuente se descarta. Como `-cp KajiLibrary`
+va delante del JDK explotado, para la biblioteca la copia del classpath es **nuestro propio `.class`
+anterior**, así que el valor se autoperpetúa de build en build.
+
+**El chequeador no hace lo mismo**, y ahí está el daño: dentro de un round mira la fuente. Así que
+emisor y chequeador discrepan, y eso produce dos síntomas que parecen no tener relación:
+
+- Un `throws` escrito en la fuente **no aparece** en el `.class` si el JDK no lo tiene. Fue el caso de
+  `PriorityBlockingQueue.put`, que investigué como "un `.class` viejo en el árbol" y **anoté como
+  «lo que NO resultó ser un bug»**. Esa nota estaba equivocada: era este bug.
+- Un `throws` que la fuente **no** declara sí aparece si el JDK lo tiene. Por eso
+  `catch (IOException)` alrededor de `InputStream.read()` compilaba desde afuera aunque la fuente no
+  declarara nada, mientras que dentro de `java.io` el chequeador lo rechazaba.
+
+**Lo que se hizo con esto, y el orden importa.** Se arreglaron primero las **fuentes**: 215
+declaraciones de `java.io` --y `java.lang.Appendable`, y `Closeable`, que arrastraba a toda la cadena
+de canales-- recuperaron el `throws` que el JDK declara, emparejadas contra `javap` por tipos de
+parámetro exactos y tipo de retorno (por nombre y aridad hay falsos positivos, y sin el retorno se le
+atribuye a un método el `throws` de su **puente**). Después de eso `java.io` compila entero y sus
+firmas emitidas siguen coincidiendo con el JDK en las 74 clases.
+
+**Arreglar el emisor tiene que venir después, no antes.** Si se lo hiciera honrar la fuente mientras
+las fuentes estaban incompletas, todas esas firmas habrían perdido su `throws` de golpe: hoy están
+bien **por accidente**, y el accidente es lo único que las sostiene hasta que las fuentes estén
+completas. Falta auditar el resto de los paquetes con el mismo método antes de tocar `src/`.
+
+
+## Tanda: `java.lang.foreign`, y los cuatro bloqueos que lo tenian parado
+
+`java.lang.foreign` cierra en **246/246**. Los seis miembros que faltaban --`MemoryLayout.varHandle`,
+`arrayElementVarHandle`, `byteOffsetHandle`, `sliceHandle`, `scaleHandle` y `ValueLayout.varHandle`--
+no faltaban por alcance: la nota de `MemoryLayout` decia, con razon, que **no habia manera de escribir
+el sitio de llamada** que los usa, y listaba cuatro hechos comprobados. Esta tanda levanta los cuatro.
+
+### Finding #353 - un `native` sin puente mataba el proceso en vez de tirar
+
+`natives::dispatch` terminaba en `_ => panic!("no native implementation for ...")`. O sea que "esta
+biblioteca declara un metodo que la VM todavia no implementa" --una ausencia perfectamente normal
+mientras se construye un JDK-- se convertia en la muerte del interprete: sin traza de Java, sin `catch`
+posible, y sin manera de que una biblioteca degradara con elegancia.
+
+**Arreglo**: `UnsatisfiedLinkError`, que es lo que tira la JVM real. `dispatch` no tenia como
+senalarlo --devolvia `Option<Value>`, con las dos respuestas ya ocupadas por "valor" y "void"-- asi que
+se le agrego una tercera, `NativeOutcome::Unimplemented`. Los tres sitios del opcode la convierten en
+la excepcion; el cuarto --`call_virtual`, el camino de las llamadas **iniciadas por la VM**-- la
+convierte en `None`, porque ahi no hay pila de Java donde ponerla ni `catch` que la pudiera atrapar.
+
+Repro en `scratchpad/unsat/`: un `native` que la VM no implementa, atrapado. Da `-1` en las dos VMs.
+
+### Finding #354 - javac no implementaba el polimorfismo de firma (JLS 15.12.3)
+
+El bloqueo grande, y el que hacia imposible cualquier prueba cruzada. `MethodHandle.invoke`/
+`invokeExact` y los 31 accesores de `VarHandle` se declaran **una sola vez** como `(Object...)`, pero
+no se llaman como un varargs: el descriptor que va al sitio es el de los **argumentos reales**, sin
+boxear, y el de retorno lo dicta el **contexto**. Nuestro javac los trataba como un varargs comun:
+armaba un `Object[]`, boxeaba, y emitia `([Ljava/lang/Object;)Ljava/lang/Object;` -- un sitio que la
+JVM real rechaza con `WrongMethodTypeException`.
+
+**Arreglo**, en cinco lugares y ninguno de mas:
+
+- `codegen.rs`: el predicado `signature_polymorphic` (los cuatro requisitos del JLS: declarado en
+  `MethodHandle` o `VarHandle`, `native`, varargs, un solo `Object[]`), el descriptor armado desde los
+  argumentos reales, y el retorno tomado del contexto por un canal de un solo uso (`sigpoly_ret`) que
+  llenan `cast` y `discard`.
+- `desugar.rs`: no empaquetar el varargs.
+- `transtypes.rs`: no convertir los argumentos, y **no materializar el cast**.
+- `classfile.rs`/`enter.rs`: leer `ACC_NATIVE` de los metodos **externos**. Sin esto el predicado no
+  disparaba nunca, porque `MethodHandle` y `VarHandle` siempre llegan del classpath y jamas del
+  fuente que se compila.
+
+Contra el javac del JDK 25, los cinco casos salen **identicos**:
+
+```
+vh.set(9)                  ->  VarHandle.set:(I)V
+return (int) vh.get(o, i)  ->  VarHandle.get:(Ljava/lang/Object;J)I
+return (String) vh.get()   ->  VarHandle.get:()Ljava/lang/String;
+vh.get();  // sentencia    ->  VarHandle.get:()V
+mh.invokeExact(a)          ->  MethodHandle.invokeExact:(I)V
+```
+
+**Y disolvio el otro defecto que estaba anotado aparte.** La nota de `scratchpad/cast-unbox/` decia
+que `(int) vh.get(...)` "tampoco emite el unboxing", y lo daba por un segundo bug independiente. No lo
+era: el cast se realiza **en el descriptor**, asi que nunca hubo un unboxing que emitir. El javac real
+tampoco emite uno.
+
+Repro en `scratchpad/sigpoly/SpCast.java`, con los cinco casos.
+
+### La VM ahora conoce `VarHandle`
+
+El tercer hecho de la nota --`grep -rn VarHandle src/` daba cero-- ya no es cierto. La intercepcion es
+la misma idea que la de `MethodHandle.invoke`: se ataja **antes** de resolver, porque resolver
+buscaria el `(Object[])Object` declarado.
+
+Lo que se atiende y lo que no, dicho de frente:
+
+- **Si**: las lecturas y escrituras en los cinco modos (plain, `Opaque`, `Acquire`, `Release`,
+  `Volatile`). Los cinco hacen lo mismo, y en un interprete de un solo hilo por acceso eso es
+  **correcto** y no una simplificacion: no hay reordenamiento que impedir, asi que la garantia mas
+  fuerte se cumple sin hacer nada.
+- **No**: los modos de lectura-modificacion-escritura (`compareAndSet`, `getAndAdd`, ...). Esos si
+  necesitan atomicidad de verdad, y fingirla seria exactamente el tipo de mentira que este proyecto no
+  admite. Caen en el `native` sin puente, o sea en el `UnsatisfiedLinkError` del #353 -- que es
+  justamente la razon por la que ese finding va primero.
+
+El despacho va a helpers **tipados** de `VarHandleDeSegmento` (`get` con retorno `I` -> `leerInt`), con
+los indices de los pasos abiertos empaquetados en un `long[]` que la VM arma. Un arreglo y no una
+aridad por cada cantidad de indices: son 18 helpers en vez de setenta y pico. `MethodHandleDeLayout`
+usa el mismo mecanismo con dos helpers, uno por forma de retorno.
+
+Un caso que casi se pasa por alto y que vale anotar: una lectura **como sentencia** (`vh.get(seg, 0);`)
+tiene retorno `V` por la regla del contexto, y no es un no-op -- los chequeos de limites y de
+alineacion son **efectos** de acceder. Tiene su propio helper, `leerYDescartar`, que hace el acceso y
+tira el valor.
+
+### Una divergencia, y es la unica
+
+`java.lang.invoke.VarHandles` queda **publica**, y en el JDK es package-private. El constructor de
+`VarHandle` es package-private, asi que su subclase tiene que vivir en `java.lang.invoke`, y
+`java.lang.foreign` --que es quien la fabrica-- no puede nombrarla. El JDK resuelve esa costura con
+**modulos**; sin modulos, la unica forma de que un paquete llegue a otro es que el miembro sea publico.
+
+No es un miembro que miente --hace exactamente lo que dice-- pero es un miembro **de mas**, que es la
+otra forma de no coincidir: codigo escrito contra `VarHandles.deSegmento` compila aca y no compila
+contra un JDK de verdad. Esta escrito en la cabecera del archivo, con las dos alternativas que se
+descartaron y por que.
+
+### Finding #355 - el #341 rompio la conversion hacia una captura de `? super T`
+
+No es de esta tanda: lo introdujo el #341, y lo destapo el recompile de esta. El #341 hizo que un
+argumento de tipo **variable** solo fuera aplicable a lo que su **cota** es aplicable, que es correcto.
+Lo que le falto es que una **captura** no es un `RType::TypeVar` sino un `RType::Capture`, asi que
+`lenient` no la atajaba y el arm nuevo terminaba preguntando si la cota *superior* del argumento
+--`Object`-- entra en la captura. No entra.
+
+Resultado: `Comparator.thenComparing` dejo de compilar (`otro.compare(a, b)` con
+`otro : Comparator<? super T>` y `a, b : T`), y con el `List`, `Map`, `Collection`, `Iterable`,
+`Collections` y todo lo que los nombra -- **veinticinco archivos en el recompile, en cascada desde uno**.
+
+**Arreglo**: un arm que va **antes** del de `TypeVar`. Un destino que es la captura de un `? super L`
+acepta todo lo que `L` acepta, porque la captura designa *algun* supertipo de `L` (4.10.2, 5.2).
+
+Repro en `scratchpad/zz341/Cmp.java`: el javac congelado y el del JDK 25 lo aceptan; el de la tanda
+anterior lo rechazaba.
+
+### Verificacion
+
+`java/VhTest.java` (21 comprobaciones: los `ValueLayout` sueltos de cuatro carriers, caminos cerrados
+sobre un struct, pasos abiertos, `arrayElementVarHandle`, la suma del desplazamiento del llamador, los
+cinco modos de memoria, y el error por aridad equivocada) y `java/MhLayoutTest.java` (13: `scaleHandle`,
+`byteOffsetHandle` cerrado y abierto, `sliceHandle`) dan **`-1` en las dos VMs**. Las expectativas se
+escribieron y se corrieron **primero contra el JDK real**.
+
+Una divergencia previa que aparecio al escribirlas y que **no** es de VarHandles: `Arena.allocate(n)`
+sola no sirve para probar esto, porque el JDK devuelve memoria nativa --que queda alineada a 8 aunque
+se haya pedido 1-- y nuestro segmento de heap se respalda en un `byte[]`, que solo puede garantizar 1.
+Los dos son correctos para lo que representan. Las pruebas piden el alineamiento explicito.
+
+### Y el arrastre de `java.io` que rompio `java.util.zip`
+
+Otra sesion completo `java.io.InputStream.read()` con su `throws IOException`, y eso volteo la familia
+entera de flujos de `java.util.zip`: once archivos que no compilaban. Es el mismo patron del #316 --
+completar una base rompe a quien se apoyaba en que estuviera incompleta.
+
+La correccion no es opinable y por eso se automatizo en dos pasos: lo **publico** se toma del JDK real
+(que metodos declaran `throws IOException`), y los **helpers privados** --`fill`, `drain`,
+`writeHeader`-- del error del compilador, iterando hasta punto fijo porque agregar un `throws` destapa
+el siguiente. `java.util.zip` vuelve a 240/240 y su prueba sigue en `-1`.
+
+---
+
+## Tanda: `jdk.internal.reflect`
+
+### Finding #390 ⬜ — un literal de clase usado **como receptor** pierde su argumento generico
+
+`X.class` vale `Class<X>`, y ese argumento es lo unico que hace utiles a los metodos de `Class` que
+lo devuelven adentro de otro tipo: `getDeclaredConstructor` devuelve `Constructor<T>`, no
+`Constructor`. Nuestro javac lo tipa como `Class` pelada, y en `attribute.rs` esta dicho a proposito:
+
+```rust
+// `C.class` vale un `java.lang.Class` (se ignora el argumento genérico `<C>`, que la
+// *erasure* borra igual).
+ExprKind::ClassLit(_) => {
+    (resolve_rtype(env.table, env.class_scope, &Type::Class("Class".into())), None)
+}
+```
+
+El comentario es cierto para el **codegen** —la erasure lo borra— y falso para la **atribucion**: el
+tipo del literal es lo que alimenta la sustitucion de `T` cuando el literal es el receptor.
+
+Repro minimo (`scratchpad/G3.java`), que el JDK 25 acepta:
+
+```java
+Constructor<String> k = String.class.getDeclaredConstructor();   // error: tipo incompatible en `k`
+```
+
+Lo que delimita el bug es que **las tres variantes vecinas si compilan**:
+
+```java
+Class<String> c = String.class;  Constructor<String> k = c.getDeclaredConstructor();   // ok
+Constructor<String> k = ((Class<String>) String.class).getDeclaredConstructor();       // ok
+String s = String.class.cast("x");                                                     // ok
+```
+
+O sea: el literal **si** lleva su argumento cuando se lo asigna o se lo castea, y lo pierde solo en
+posicion de receptor. Que `cast` ande y `getDeclaredConstructor` no sugiere que lo que falta es la
+sustitucion de `T` **anidada** dentro del tipo de retorno, no la de `T` a secas.
+
+Arreglo probable: tipar `ClassLit(ty)` como `Parameterized { base: Class, args: [ty] }` (con
+`Integer`/`Void`/etc. para los primitivos, como manda la JLS 15.8.2). **No se hizo en esta sesion**:
+cambia el tipo de *todas* las apariciones de `X.class` en la biblioteca entera, y verificarlo pide un
+recompile completo que no entra en el alcance de esta tanda.
+
+Rodeo mientras tanto: pasar el literal por una variable `Class<X>`. Esta hecho asi, con el numero de
+finding al lado, en `java/ReflTest.java`.
+
+## Tanda: `javax.lang.model.util`
+
+Las 55 clases que faltaban son cinco familias de visitantes por seis versiones del lenguaje, mas
+`ElementFilter`. El paquete quedo en 57/57 y 276/276, y la prueba `java/ModelUtilTest.java` (68
+comprobaciones de despacho) da lo mismo en las dos VMs. Los tres findings de abajo salieron de
+traducir el fuente del JDK: los tres tienen rodeo y ninguno bloqueo el cierre del paquete.
+
+### Finding #400 ⬜ — el parser no acepta `Interface.super.metodo()`
+
+Una clase que implementa una interfaz con metodos `default` puede llamar al cuerpo heredado con
+`Interface.super.m()` (JLS 15.12.1). Nuestro parser corta ahi:
+
+```java
+interface I { default String f() { return "I"; } }
+public class Probe implements I {
+    public String f() { return I.super.f() + "-C"; }   // error: se esperaba un identificador, se encontró Super
+}
+```
+
+Lo delimita que **`Outer.this` si compila**, asi que no es que el parser no sepa calificar una
+expresion primaria con un nombre de tipo — es solo la forma con `super`:
+
+```java
+public class S3 { class In { S3 g() { return S3.this; } } }   // ok
+```
+
+Donde aparecio: `AbstractElementVisitor6.visitModule` en el JDK es
+`return ElementVisitor.super.visitModule(e, p);`. Rodeo: escribir el cuerpo del `default` en vez de
+delegarle. En este caso el `default` de nuestro `ElementVisitor` es `return visitUnknown(e, p);` y esa
+es la linea que quedo, con el numero de finding al lado — las dos formas terminan en el mismo
+`visitUnknown` de la subclase, asi que no hay diferencia observable.
+
+### Finding #401 ⬜ — el generador de bytecode no baja un `switch` con selector `enum`
+
+```java
+switch (k) {                 // k es un javax.lang.model.element.ElementKind
+case CLASS: return "c";
+default: throw new AssertionError();
+}
+// error: el generador de bytecode todavía no soporta un `switch` cuyo selector no es `int`
+```
+
+El mensaje dice "no es `int`" y sugiere que falta todo el desugar, pero **el de `String` si anda**:
+
+```java
+switch (s) { case "a": return 1; default: return 0; }   // ok
+switch (i) { case 1:   return 1; default: return 0; }   // ok
+```
+
+O sea que el desugar existe y lo que le falta es el caso del enum, que se baja distinto: la constante
+de `case` es un nombre **no calificado** que hay que resolver contra el tipo del selector, y el
+selector se convierte con `ordinal()` (o con la tabla `$SwitchMap`).
+
+Donde aparecio: `ElementKindVisitor6` y `TypeKindVisitor6` reparten por kind con tres y dos `switch`
+respectivamente. Rodeo: `if` encadenados. Es la misma semantica porque en el original ninguna rama cae
+en la siguiente — todas devuelven — y esta dicho asi en un comentario en las dos clases.
+
+### Finding #402 ⬜ — una clase anonima no puede pasarle al `super` un argumento tipado con una variable de tipo de la superclase
+
+Repro minimo:
+
+```java
+public class F {
+    static class G<R> { G(R v) {} }
+    public static Object f() { return new G<String>("D") {}; }   // error: el generador de bytecode
+}                                                                //        no puede resolver el tipo `R`
+```
+
+El error no trae linea (sale como `:0:`), asi que es de la fase de emision y no de la atribucion.
+
+Lo que lo delimita son **cuatro variantes vecinas que si compilan**, y entre las cuatro dejan el bug
+en un solo punto:
+
+```java
+new G<String>("D");                                    // ok — instanciacion sin cuerpo
+new G<String>() {};                                    // ok — anonima, pero al constructor sin argumentos
+class E extends G<String> { E() { super("D"); } }      // ok — subclase con nombre
+static class G2<R> { G2(String v) {} }
+new G2<String>("D") {};                                // ok — anonima, ctor cuyo parametro NO es `R`
+```
+
+O sea: falla solo cuando se juntan las tres cosas — clase **anonima**, con **argumento**, y el
+parametro formal de ese constructor **declarado con una variable de tipo de la superclase**. Lo que
+parece faltar es sustituir `R` por el argumento de tipo (`String`) al armar el descriptor de la llamada
+a `<init>` de la superclase; con el parametro ya concreto no hay nada que sustituir y por eso `G2`
+anda.
+
+Donde aparecio: los `SimpleXxxVisitorN` y los `ElementKindVisitorN` toman `(R defaultValue)`, y la
+manera natural de probarlos es `new SimpleElementVisitor6<String, Void>("D") {}`. Rodeo, en
+`java/ModelUtilTest.java`: una subclase **con nombre** por cada visitante, con constructor sin
+argumentos que hace `super("D")`, y la anonima con cuerpo colgando de esa. Prueba exactamente lo mismo
+—`DEFAULT_VALUE` sigue llegando por el constructor de un argumento— y esta explicado ahi con el numero
+de finding al lado.
+
+### Finding #403 ⬜ — el parser no acepta el constructor canonico compacto de un `record`
+
+Un `record` puede escribir su constructor canonico en la forma **compacta**: se declaran los
+parametros implicitamente y las asignaciones a los campos las agrega el compilador al final
+(JLS 8.10.4.2). Nuestro parser corta en la llave:
+
+```java
+public record Compacto(int n) {
+    public Compacto {                       // error: se esperaba un identificador, se encontró LBrace
+        if (n < 0) throw new IllegalArgumentException();
+    }
+}
+```
+
+Lo delimita que **la forma canonica completa si compila**, asi que los `record` con validacion no
+quedan afuera; lo unico que falta es la abreviatura:
+
+```java
+public record Explicito(int n) {
+    public Explicito(int n) {               // ok
+        if (n < 0) throw new IllegalArgumentException();
+        this.n = n;
+    }
+}
+```
+
+Los dos fragmentos de arriba son el repro completo: se compilan solos, sin classpath ni nada al
+lado. El JDK 25 real acepta las dos formas.
+
+Donde aparecio: `java.security.PEMRecord`, que en el JDK usa la forma compacta para rechazar un
+`type` nulo o con sintaxis de PEM ya armada. Rodeo: el constructor canonico completo, con las tres
+asignaciones escritas a mano y el numero de finding al lado. Las dos formas son equivalentes para el
+lenguaje —la compacta solo ahorra escribir las asignaciones— asi que no hay diferencia observable en
+el `.class`; se comprobo con `java/PemTest.java`, que da lo mismo en las dos VMs.
+
+
+## Tanda: el literal de clase perdia su argumento (#390, arreglado)
+
+### Finding #390 - `X.class` tipaba como `Class` pelada, y por eso la inferencia elegia la cota
+
+Lo habia anotado un agente al cerrar `jdk.internal.reflect`, sin arreglar. Se arreglo, y vale la pena
+contar como se delimito porque el sintoma no apunta a la causa.
+
+`ExprKind::ClassLit` resolvia a `java.lang.Class` **sin argumento**, con un comentario que decia que
+el argumento se podia ignorar *"porque la erasure lo borra igual"*. Eso es cierto para el **descriptor**
+que emite el generador y falso para la **atribucion**, que es donde se infiere.
+
+Lo que producia:
+
+```java
+static <T extends Base> T leer(Class<T> c) { ... }
+static void usa(Sub s) { ... }
+
+Sub v = leer(Sub.class); usa(v);   // andaba
+usa(leer(Sub.class));              // "no se encontro un metodo `usa(Base)` aplicable"
+```
+
+La primera forma anda porque ahi la inferencia la dirige el **destino de la asignacion**; la segunda
+la dirige el argumento, y con un `Class` pelado no hay de donde sacar `T`, asi que cae en la cota.
+
+**La delimitacion** esta en `scratchpad/zz405/Loc.java`, y es lo que convierte una sospecha en un
+diagnostico: se probaron cuatro formas de inferir el mismo `T`.
+
+| forma | resultado |
+|---|---|
+| `porValor(s)` con `s : Sub` | anda |
+| `porLista(l)` con `l : List<Sub>` | anda |
+| `porClase(claseDeSub())` con retorno `Class<Sub>` | anda |
+| `porClase(Sub.class)` | **falla** |
+
+O sea que ni la inferencia ni la resolucion de sobrecargas estaban rotas: lo unico roto era el tipo
+del **literal**. Tres de cuatro andando es lo que descarta las otras hipotesis.
+
+**Arreglo**: `C.class` vale `Class<C>` (§15.8.2). Con dos cuidados que el JLS obliga y que es facil
+pasar por alto: un primitivo va con su **envoltorio** --`int.class` es `Class<Integer>`, porque un
+argumento de tipo no puede ser primitivo (§4.5.1)-- y `void.class` es `Class<Void>`. Si el argumento
+no resuelve se cae al `Class` pelado de antes: peor para inferir, pero no rompe nada que ya funcione.
+
+### Y un desmentido: los metodos `default` **no** pierden su `public`
+
+En el mismo informe venia un segundo bug: *"KajiJDK le da acceso de paquete a los metodos `default` de
+una interfaz"*, con un repro de dos archivos en paquetes distintos. **No reproduce**, ni con el javac
+del arbol ni con el congelado de `bin/`:
+
+- El `.class` que emitimos para `default int dos(int)` sale con `flags: (0x0001) ACC_PUBLIC`.
+- La llamada cruzando paquetes compila por los dos caminos --con la interfaz como **fuente** en la
+  misma invocacion, y como **externa** desde el classpath--.
+
+Queda escrito porque un bug fantasma cuesta caro: manda a arreglar lo que no esta roto, y peor, deja
+sin explicar el sintoma real que si estaba. Lo que fallaba en aquel paquete era otra cosa, y sigue sin
+identificarse. Repro del desmentido en `scratchpad/zz404/`.
+
+
+## Tanda: `javax.print.attribute.standard`
+
+### Finding #440 - la instancia externa implicita solo se agrega desde la clase externa
+
+Una clase interna --no `static`-- lleva un primer parametro oculto con la instancia de la clase que
+la encierra. El compilador lo agrega bien cuando el `new` esta escrito **en la clase externa**, y no
+lo agrega cuando esta escrito **adentro de otra interna**, aunque ahi `Externa.this` este igual de
+disponible (JLS §15.9.2: si la clase es interna y el `new` no tiene calificador, la instancia
+externa es la del contexto que encierra al `new`).
+
+Repro minimo, dos formas del mismo programa:
+
+```java
+public class Outer5 {
+    B desdeElExterior() { return new B(1); }   // anda
+    class B { B(int x) {} }
+}
+
+public class Outer6 {
+    class A {
+        A(int y) {}
+        A hacer() { return new A(2); }         // "no se encontro un constructor `A(int)` aplicable"
+    }                                          // "metodo A.A(Outer6, int) no es aplicable"
+}
+```
+
+El mensaje delata la causa: el compilador ya sabe que el constructor real es `A(Outer6, int)` --lo
+imprime-- y le pasa un solo argumento. O sea que la firma se computa bien y lo que falta es el paso
+que sintetiza el argumento del `this` externo, que aparentemente esta condicionado a que el contexto
+del `new` sea la clase externa misma.
+
+**Delimitacion.** Tres cortes, y los tres importan porque descartan lo obvio:
+
+| forma | resultado |
+|---|---|
+| `new B(1)` desde la clase externa | anda |
+| `new B()` sin argumentos, desde otra interna | **anda** |
+| `new B(1)` con argumentos, desde otra interna | falla |
+| `new A(2)` con argumentos, desde la propia `A` | falla |
+
+Que el caso sin argumentos ande es lo que hace ruido: sugiere que hay dos caminos distintos para
+resolver el constructor y que solo uno hace la sintesis. Y que falle tambien dentro de la *misma*
+clase interna descarta que sea un problema de alcance entre hermanas.
+
+No es un problema de generics: se vio primero con
+`Iterator<Map.Entry<PrinterStateReason, Severity>>` y reduce sin generics ninguno.
+
+Donde aparecio: `PrinterStateReasons`, cuya vista por gravedad es un `AbstractSet` interno que
+fabrica un `Iterator` interno. Rodeo: las dos clases auxiliares se declararon `static`. Es
+equivalente aca --ninguna de las dos usa el `this` externo, solo lo que le pasan por constructor-- y
+las dos son `private`, asi que no hay diferencia en la API. En el JDK son internas.
+
+---
+
+### #460 -- la asignacion encadenada sobre dos **campos** no deja el valor en la pila
+
+```java
+class X {
+    Object p, q;
+    X() { p = q = null; }      // compila; el constructor revienta al ejecutarse
+}
+```
+
+Compila sin una queja y emite **bytecode invalido**. La VM lo caza en el primer uso
+(`frame.rs:236: operand stack underflow`); un JVM de verdad lo rechazaria en la verificacion,
+porque el marco declara `stack=3` y el codigo intenta sacar de una pila vacia.
+
+| JDK 25 | el nuestro |
+|---|---|
+| `aload_0` / `aload_0` / `aconst_null` | igual |
+| `dup_x1` | *(nada)* |
+| `putfield q` | `putfield q` |
+| `putfield p` | `putfield p` ← ya no queda el `objectref` |
+
+La causa se lee sola en la tabla. `a = b = v` es una **expresion** de asignacion anidada: la
+interna tiene que *dejar su valor* para que la externa lo consuma. Cuando el destino es un local
+eso es gratis --`istore`/`astore` no tocan lo que ya estaba y el valor se duplica con un `dup`
+comun, o directamente se reemite--, pero cuando es un campo el `putfield` consume **dos** slots
+(el `objectref` y el valor), asi que el valor hay que meterlo *debajo* del `objectref` de la
+asignacion externa: para eso esta el `dup_x1`. Nuestro codegen emite el `putfield` como si fuera
+una sentencia y no una expresion, y el segundo `putfield` se queda sin receptor.
+
+**Delimitacion.** Cuatro cortes, y el contraste entre los dos primeros es el que senala el camino
+roto:
+
+| forma | resultado |
+|---|---|
+| `p = q = v` sobre dos **locales** | anda |
+| `x.p = x.q = v` sobre dos **campos** de referencia | **falla** |
+| `x.a = x.b = 7` sobre dos campos **primitivos** | **falla** |
+| `x.p = h = v` con el **interno** en un local | anda |
+| `x.q = v; x.p = v;` en sentencias separadas | anda |
+
+Que falle igual con `int` que con referencias descarta que sea cosa del tipo, y el cuarto corte
+--el interno en un local, el externo en un campo-- lo termina de acotar: lo que importa no es el
+destino de la asignacion externa sino **el de la interna**, que es la que tiene que dejar el valor.
+Ahi el destino local usa `dup` comun y anda; el campo necesita `dup_x1` y no lo emite. Con un campo
+de categoria 2
+(`long`/`double`) haria falta `dup2_x1`, asi que el arreglo tiene que mirar el ancho y no emitir
+`dup_x1` a ciegas.
+
+Es el mismo modo de falla de #289: **compila, el sintoma aparece lejos** --y aca especialmente
+lejos, porque el constructor que lo lleva puede correr mil veces antes de que a alguien se le
+ocurra mirarlo--. A favor: revienta en el primer uso y no corrompe memoria.
+
+Como salio: escribiendo `javax.naming`. `NamingException` tiene, en sus dos constructores,
+`resolvedName = remainingName = null` --es literalmente el codigo del JDK--, y eso hacia que
+**toda** la jerarquia de veinticinco excepciones del paquete fuera imposible de instanciar. El
+sintoma aparecio a tres saltos de distancia: una prueba de `CompositeName.addAll` que revienta al
+construir el `InvalidNameException` que tiene que lanzar.
+
+Rodeo aplicado en `NamingException`: las dos asignaciones en sentencias separadas, con un
+comentario que apunta aca. Es equivalente --y los campos ya arrancan en `null` de todos modos--,
+pero el defecto queda.
+
+Repro: `KajiLibrary/repros/finding_460.java` (los dos que fallan y los dos controles; el JDK 25
+devuelve `-1 -1 -1 -1` en los cuatro).
+
+### #461 -- una constante `case` que viene de otra unidad de compilacion se rechaza
+
+```java
+switch (x) {
+    case Integer.MAX_VALUE: ...   // error: no soporta un `case` que no es una constante entera
+}
+```
+
+No compila. El mensaje --*"el generador de bytecode todavia no soporta un `case` que no es una
+constante entera"*-- describe mal lo que pasa: `Integer.MAX_VALUE` **es** una constante entera, y
+el propio compilador la pliega sin problemas en cualquier otra posicion.
+
+**Delimitacion.** Cuatro cortes, y el que parte el mundo en dos es el tercero contra el cuarto:
+
+| forma | resultado |
+|---|---|
+| `case P:` -- constante de la misma clase, nombre simple | anda |
+| `case Anidada.N:` -- constante de una clase **anidada**, calificada | anda |
+| `case Vecina.V:` -- otra clase de **primer nivel del mismo archivo**, calificada | anda |
+| `case Integer.MAX_VALUE:` -- constante de **otro archivo** | **falla** |
+| `int lim = Integer.MAX_VALUE;` -- la misma constante, fuera de un `case` | anda |
+
+Las dos primeras filas descartan que moleste el nombre calificado. La tercera y la cuarta usan las
+dos un nombre calificado de una clase de primer nivel y solo difieren en si esa clase esta en el
+mismo archivo. Y la quinta descarta que sea la resolucion del simbolo: la constante ajena se lee
+bien, se pliega bien y se emite bien mientras no este en una etiqueta.
+
+Lo que queda es esto: el plegado de constantes que corre sobre las etiquetas de `case` mira solo
+los tipos de la **unidad de compilacion actual**. Para un tipo de otro archivo --este ya compilado
+en el classpath o pasado en la misma invocacion, da igual: los dos fallan-- no llega al
+`ConstantValue` del campo y trata la etiqueta como si no fuera constante. El arreglo es hacer que
+ese plegado consulte la misma tabla de simbolos que ya usa el resto del compilador, que
+evidentemente si lo resuelve.
+
+A favor: **falla al compilar**, no en ejecucion. Es lo contrario de #460 -- ruidoso, inmediato y sin
+riesgo de llegar a produccion.
+
+Como salio: escribiendo `javax.management`. `BinaryRelQueryExp` y `BinaryOpValueExp` despachan los
+nueve operadores de `Query` con `switch (relOp) { case Query.GT: ... }`, que es literalmente el
+codigo del JDK, y `Query` es otro archivo.
+
+Rodeo aplicado en las dos clases: cadenas de `if`/`else if` sobre los mismos valores, con un
+comentario que apunta aca. Es equivalente y no cuesta nada en un `switch` de cinco ramas, pero
+obliga a desnaturalizar el codigo cada vez que una constante publica vive en su propia clase --que
+es justo el caso normal de una constante publica--.
+
+Repro: `KajiLibrary/repros/finding_461.java` (el que falla mas los cuatro controles; el JDK 25
+compila el archivo entero y `run()` devuelve `-1`).
+
+### #462 -- una constante heredada de una **interfaz implementada** no entra al alcance
+
+```java
+interface Marcas { int DOS = 2; }
+
+class C implements Marcas {
+    int x = DOS;                 // error: no se encuentra el simbolo: DOS
+    int y() { return DOS; }      // error: idem
+    int z() { return Marcas.DOS; }  // anda, calificada
+}
+```
+
+No compila. `DOS` es un miembro heredado de `C` --JLS 8.1.5: una clase hereda de sus
+superinterfaces todos sus campos accesibles-- y por lo tanto esta en el alcance por su nombre
+simple, sin calificar. Nuestro compilador solo lo encuentra calificado.
+
+**Delimitacion.** Cuatro cortes; el que importa es el tercero contra el cuarto:
+
+| forma | resultado |
+|---|---|
+| `Marcas.DOS` -- la misma constante, calificada | anda |
+| `TRES` -- heredada de una **superclase**, nombre simple | anda |
+| `DOS` -- heredada de una **interfaz**, nombre simple, en un cuerpo de metodo | **falla** |
+| `DOS` -- heredada de una **interfaz**, nombre simple, en un inicializador de campo | **falla** |
+
+Las dos primeras filas descartan que el simbolo no exista o no se pueda leer: la constante se
+resuelve, se pliega y se emite bien. Y descartan que sea la herencia de estaticos en general, que
+por `extends` anda. Las dos ultimas descartan que sea una particularidad del inicializador: falla
+igual en un metodo. Da lo mismo que la interfaz este en el mismo archivo o en otro, y da lo mismo
+que se implemente directa o indirectamente.
+
+Lo que queda es esto: la construccion del alcance de una clase sube por la cadena de `extends`
+pero no por la de `implements`. El arreglo es que el mismo recorrido que ya trae los estaticos de
+las superclases recorra tambien las superinterfaces, transitivamente y en el orden de JLS 8.1.5.
+
+A favor: **falla al compilar**. Igual que #461, es ruidoso e inmediato.
+
+Como salio: escribiendo `java.io.ObjectOutputStream`. Toda la familia de la serializacion
+implementa `ObjectStreamConstants` y usa `TC_NULL`, `TC_OBJECT`, `SC_WRITE_METHOD` y
+`PROTOCOL_VERSION_2` por su nombre simple -- que es *el motivo por el que esa interfaz existe*, y
+la forma en que esta escrito el JDK. La interfaz no aporta ningun metodo: su unico proposito es
+meterle esos nombres al alcance de quien la implementa, que es exactamente lo que aca no pasa.
+
+Rodeo aplicado en `ObjectOutputStream` y `ObjectInputStream`: cada constante calificada como
+`ObjectStreamConstants.TC_NULL`. Es equivalente y verboso, y deja la clausula `implements`
+cumpliendo solo con la firma publica.
+
+Repro: `KajiLibrary/repros/finding_462.java` (los dos que fallan mas los dos controles; el JDK 25
+compila el archivo entero y `run()` devuelve `-1`).
+
+### #463 -- ✅ una comparacion **constante** usada como valor emitia codigo muerto sin frame
+
+```java
+boolean b = (1 + 1) == 3;   // VerifyError en la JVM real; anda en la nuestra
+```
+
+`java.lang.VerifyError: Expecting a stack map frame`, en el `iconst_0` que sigue al `goto`.
+
+**Delimitacion.** Seis cortes, y el que parte el mundo en dos es el ultimo:
+
+| forma | resultado |
+|---|---|
+| `boolean b = 2==2;` | **falla** |
+| `boolean b = (1+1)==2;` (constante verdadera) | **falla** |
+| `boolean b = (1+1)==3;` (constante falsa) | **falla** |
+| `int n=(1+1); boolean b = n==2;` (no constante) | anda |
+| `if (x==y) {...} else {...}` con `x`,`y` variables | anda |
+| `boolean c = x&&y` con `x`,`y` variables | anda |
+
+Las tres primeras filas descartan que importe el **valor** de la constante: falla igual verdadera
+que falsa. La cuarta es la misma comparacion con un operando que el compilador no puede plegar, y
+anda -- o sea que el disparador no es la comparacion sino que sea **constante**. La quinta descarta
+que sea la comparacion en general: en posicion de condicion, plegada o no, siempre anduvo. Lo que
+queda es la interseccion de las dos cosas: una comparacion constante **materializada como valor**.
+
+Por que fallaba: `bool_value` emitia siempre la misma forma --`branch_if f; iconst_1; goto end;
+f: iconst_0; end:`-- sin mirar si la condicion era constante. Cuando lo es, `branch_if` emite un
+salto **incondicional**, y entonces una de las dos ramas no la alcanza nadie. La instruccion que
+sigue a una transferencia incondicional necesita su propio frame en el `StackMapTable` (JVMS
+§4.10.1), y para codigo muerto no hay frame que se pueda armar.
+
+Por que solo se ve afuera: **nuestra VM no verifica los frames**. El `.class` cargaba y corria acá
+sin quejarse; el mismo archivo en `java` del JDK 25 no pasa el verificador. Es la quinta vez en
+esta sesion que un bug del codegen solo aparece corriendo el `.class` en una JVM real, y por eso
+esa comprobacion ya no es opcional.
+
+Arreglo: `const_bool(cond)` pliega la condicion antes de emitir nada --literales, `!`, `&&`/`||`
+con los dos lados constantes, y las seis comparaciones-- y en ese caso se emite un solo
+`iconst_0`/`iconst_1`. Sin ramas, no hay codigo muerto.
+
+Un intento anterior, descartado: consultar `self.reachable` **despues** de `branch_if`. Arreglaba
+el caso constantemente verdadero y no el falso, porque con una condicion constante falsa
+`branch_if` salta incondicional y deja `self.reachable` desactualizado. Queda anotado porque
+parecia funcionar: pasaba tres de los cinco repros.
+
+Repro: `scratchpad/zz360/{D1..D5,B1..B5,C1..C6}.java`.
+
+### #464 -- ✅ el `String.valueOf` de una concatenacion no actualizaba la pila simulada
+
+```java
+Object o = "x";
+boolean b = (1 + 1) == 2;
+System.out.println("a=" + o + " b=" + (b == true));   // VerifyError en la JVM real
+```
+
+```
+java.lang.VerifyError: Bad type on operand stack
+  Reason: Type 'java/lang/Object' (current frame, stack[1]) is not assignable to 'java/lang/String'
+  Stackmap Table:
+    full_frame(@21,{...},{Object[#62],Object[#25]})     // #25 = java/lang/Object
+```
+
+El descriptor del call site dice `(Ljava/lang/String;Z)Ljava/lang/String;` y el frame que nosotros
+declaramos dice `Object`. El verificador usa **el frame declarado**, no el que el mismo calcula, y
+por eso rechaza el `invokedynamic` aunque en la pila real haya un `String`.
+
+**Delimitacion.** Cinco cortes:
+
+| forma | resultado |
+|---|---|
+| `"a=" + o` -- un objeto solo | anda |
+| `"a=" + o + " b=" + o` -- dos objetos | anda |
+| `"a=" + o + " b=" + b` -- objeto **mas** un booleano de variable | anda |
+| `"a=" + o + " b=" + (b==true)` -- objeto mas un booleano de una comparacion | **falla** |
+| `"b=" + (b==true)` -- el booleano solo, sin el objeto | anda |
+
+Las tres primeras descartan la concatenacion en general y descartan que moleste tener dos
+operandos. La quinta descarta que el problema sea el booleano. Falla solo la cuarta, la unica que
+tiene las dos cosas juntas: un operando que pasa por `String.valueOf(Object)` **y** un salto
+posterior que obliga a escribir un frame con ese valor todavia en la pila.
+
+Por que fallaba: en `ExprKind::Indy`, para un operando no-`String` se emite un
+`invokestatic String.valueOf(Object)` --correcto-- pero **no se tocaba la pila simulada**. El
+operando entro como `Object` y sale como `String`, y sin decirlo, todo frame que se escriba de ahi
+en adelante lo declara `Object`. Mientras no haya un salto despues, no se escribe ningun frame y no
+se nota: por eso hacen falta las dos condiciones a la vez.
+
+Arreglo: `self.pop(1); self.push(VType::Object("java/lang/String"))` justo despues del
+`invokestatic`.
+
+Sobre la causa que se dio primero y estaba mal: se reporto como *"nuestro javac tipa los operandos
+de la concatenacion como `Object` donde el descriptor del `invokedynamic` pide `String`"*, lo cual
+describe bien el sintoma pero se atribuyo al descriptor del call site, que estaba bien. El
+descriptor nunca fue el problema; el problema era el frame. Y por debajo habia **dos** bugs
+distintos --este y #463-- que daban `VerifyError` en el mismo archivo con mensajes distintos, lo
+que hizo que el primer repro apuntara al lugar equivocado.
+
+Repro: `scratchpad/zz360/{B4,B5,Vt}.java`.
+
+## Tanda: `javax.management`
+
+### #465 ⬜ -- una variable local capturada no se ve desde el **inicializador de campo** de una clase anidada en el metodo
+
+```java
+static S mk() {
+    final int x = 7;
+    return new S() {
+        private int y = x;               // error: no se encuentra el simbolo: x
+        public int get() { return y; }
+    };
+}
+```
+
+```
+Cap1.java:6: error: no se encuentra el símbolo: x
+            private int y = x;
+                            ^
+  símbolo:   variable x
+  ubicación: clase $1
+  ¿quisiste decir 'y'?
+```
+
+El JDK real acepta las cinco formas de abajo. Nosotros rechazamos dos, y las dos tienen en comun
+**donde** aparece la referencia, no que sea una captura:
+
+| forma | resultado |
+|---|---|
+| clase anonima, referencia en el **cuerpo de un metodo** (`return x;`) | anda |
+| clase anonima, referencia en el cuerpo **mezclada con un campo propio** (`return y + x;`) | anda |
+| clase anonima, referencia en un **inicializador de campo** (`int y = x;`) | **falla** |
+| clase anonima, referencia en un **bloque de inicializacion de instancia** (`{ y = x; }`) | **falla** |
+| **clase local** (`class L implements S`), inicializador de campo | **falla** |
+
+Las dos primeras descartan que el problema sea la captura: el mecanismo funciona, y funciona
+incluso conviviendo con campos propios en la misma expresion. Falla exactamente cuando el sitio de
+uso es un inicializador --de campo o de instancia--, y da igual que la clase sea anonima o local.
+
+La pista fuerte es el mensaje: *"¿quisiste decir 'y'?"*. El resolvedor esta buscando `x` **solo
+entre los miembros de la clase anidada** y ni siquiera intenta el alcance del metodo que la
+contiene. O sea: al armar el alcance en el que se resuelven los inicializadores no se le encadena
+el alcance lexico del metodo, mientras que al armar el de los cuerpos de metodo si. Es coherente
+con que los inicializadores se procesen aparte --se mueven al constructor-- y con que ese camino
+aparte se construya el alcance desde cero.
+
+Es distinto de #440: alla faltaba la instancia externa implicita, aca falta el alcance lexico de
+las **locales**, y la clase que falla ni siquiera necesita instancia externa (el metodo es
+`static`).
+
+**Impacto real.** Apareció en `javax/management/MBeanServerPermission.java`, en el `Enumeration`
+anonimo que devuelve `elements()`: el idioma natural es `private boolean pendiente = (p != null);`.
+Rodeo: mover la condicion a los cuerpos de `hasMoreElements`/`nextElement`, que es lo que quedó en
+el arbol.
+
+Repro: `/tmp/rep/{Cap1..Cap5}.java`.
+
+### #466 ⬜ -- `Method.invoke` no redespacha: ejecuta el cuerpo del metodo **declarado**, no el del receptor
+
+No es del compilador sino de la maquina virtual, y no es un error de compilacion sino un panico:
+
+```java
+public interface I { int f(); }
+public static class C implements I { public int f() { return 3; } }
+
+Method m = I.class.getMethod("f");
+m.invoke(new C());                      // panic en el interprete
+```
+
+```
+thread 'main' panicked at src\jvm\interpreter\bytecode_interpreter.rs:2740:22:
+index out of bounds: the len is 0 but the index is 0
+```
+
+La linea 2740 es `let opcode = self.current_code()[self.pc()];`. O sea: se armo un frame para el
+metodo **abstracto de la interfaz**, cuyo `Code` esta vacio, y se intento leer su primer opcode.
+
+**Delimitacion.** Cuatro cortes, y el cuarto es el que da la causa:
+
+| `Method` obtenido de | cuerpo | resultado |
+|---|---|---|
+| la clase concreta (`C.class.getMethod("f")`) | hay | **3**, correcto |
+| una **interfaz**, metodo abstracto | no hay | **panico** |
+| una **clase abstracta**, metodo abstracto | no hay | **panico** |
+| una interfaz, metodo `default`, con override en `C` | hay (el del `default`) | **1**, y tendria que ser **3** |
+
+El cuarto es la clave: no hay panico, hay una respuesta **incorrecta y silenciosa**. Se ejecuto el
+cuerpo del `default` de la interfaz teniendo delante un receptor que lo redefine. Los dos primeros
+casos abstractos no son entonces un bug propio: son el mismo bug --no se redespacha-- donde ademas
+resulta que no hay cuerpo que ejecutar, y el sintoma pasa de resultado equivocado a panico.
+
+La causa esta en como se ejecuta la reflexion: `Method.invoke` invoca el `Method` que le dieron como
+si fuera `invokespecial`, ligado estaticamente al metodo que lo declara, cuando la especificacion
+dice que para un metodo de instancia no privado ni de constructor tiene que comportarse como
+`invokevirtual`/`invokeinterface`, o sea resolver el override sobre `receiver.getClass()`.
+
+**Impacto real.** Es un bloqueante para todo `DynamicMBean` que introspeccione una interfaz, que es
+justo lo que hace `javax.management.StandardMBean`: la especificacion dice mirar **la interfaz de
+administracion**, y entonces cada `getAttribute`/`invoke` termina invocando un `Method` abstracto.
+
+Rodeo que quedo en el arbol: `StandardMBean.resolver(Method)` baja el metodo de la interfaz a
+`implementacion.getClass().getMethod(nombre, tipos)` antes de invocarlo, y solo se queda con el de
+la interfaz si la clase concreta no es publica. Es un rodeo aceptable porque el JDK ya lo necesita
+por accesibilidad, pero **tapa el bug**: si se arregla la VM, el rodeo sigue siendo correcto y deja
+de ser necesario.
+
+Repro: `java/JmxP6.java` (clase, anda), `java/JmxP7.java` (interfaz abstracta, panico),
+`java/JmxP8.java` (clase abstracta, panico), `java/JmxP9.java` (`default`, responde 1 en vez de 3).
+
+### #465 -- ✅ `java.lang` le gana a un tipo anidado en un nombre calificado `Externa.Anidada`
+
+**Arreglado.** La bajada al miembro-tipo del `outer` ahora va **antes** que la busqueda del ultimo
+segmento entre los externos, en los **tres** lugares donde se resolvia un nombre calificado y cada
+uno tenia su propia copia del orden equivocado:
+
+| archivo | funcion | que rompia ahi |
+|---|---|---|
+| `src/javac/enter.rs` | `resolve_name_to_sym` | la pasada 1: el tipo declarado |
+| `src/javac/attribute.rs` | `resolve_type_name` | el atributado: el tipo de un `new` |
+| `src/javac/codegen.rs` | `resolve_type_id` | la emision: el `extends`, el descriptor |
+
+Que hicieran falta los tres se vio de a uno: arreglado `enter`, `Rectangle2D.Double` seguia mal;
+arreglado `attribute`, el `new` salia bien pero `GeneralPath extends Path2D.Float` seguia emitiendo
+`java.lang.Float` como superclase. La prueba que lo cerro: `javap -c` sobre el `.class`, mirando a
+que clase apunta el `new` -- `java/awt/geom/Rectangle2D$Double` y no `java/lang/Double`.
+
+El fallback al nombre simple sigue existiendo en los tres, ultimo, y sigue haciendo falta: un
+anidado escrito corto (`Map.Entry`) tiene nombre completo `java.util.Map$Entry`, que no coincide con
+lo escrito.
+
+Lo que destapo: `java.awt.geom` entero. Sus `Double` y `Float` anidados son la API de ese paquete, y
+ninguno resolvia desde afuera. `CgeomAwtTest` no compilaba; ahora da -1 en las dos VMs y contra el
+JDK. El rodeo que habia en `GeneralPath` --escribir el `extends` con el nombre completo-- ya no hace
+falta, aunque se deja: nombrar entero nunca esta de mas.
+
+**Lo que este arreglo NO cubre, y quedo sin ablar:** `java.lang.Double d = new Rectangle2D.Double(...)`
+**compila**, cuando el JDK lo rechaza. El `new` ya emite la clase correcta --se verifico con
+`javap -c`-- asi que no es esto: es una indulgencia aparte del chequeo de asignacion. No la persegui.
+
+---
+
+### El diagnostico original (queda porque la delimitacion es la que sirvio)
+
+```java
+import java.awt.geom.Point2D;
+...
+Point2D p = new Point2D.Double();   // error: tipo incompatible en `p`
+Object  o = new Point2D.Double();   // COMPILA, y emite `new java/lang/Double`
+```
+
+Al resolver un nombre calificado `Externa.Anidada`, el compilador busca el ultimo segmento por
+nombre simple en `java.lang` **antes** de buscarlo entre los miembros de `Externa`. Si `java.lang`
+tiene una clase con ese nombre, gana ella. `Point2D.Double` no denota
+`java.awt.geom.Point2D$Double` sino `java.lang.Double`.
+
+Lo grave es el segundo caso: **compila limpio y construye la clase equivocada**. El pool de
+constantes del `.class` de `Object o = new Point2D.Double();` no menciona a `Point2D$Double` en
+ningun lado -- solo `java/lang/Double`. Si el tipo destino no acepta un `java.lang.Double` el error
+aparece al compilar; si lo acepta (`Object`, `Number`, `Comparable`, un parametro generico), no
+aparece nunca.
+
+**Delimitacion.** Siete cortes. Ninguno usa `java.awt.geom` como parte esencial: el paquete de
+prueba `probe` es mio y reproduce lo mismo.
+
+| forma | resultado |
+|---|---|
+| `Padre p = new Padre.Hija();` (`import probe.Padre`, sin choque) | anda |
+| `Caja c = new Caja.Zed();` con una clase `Zed` de primer nivel en el classpath | anda |
+| `Caja2 c = new Caja2.Deriv();` con `import probe.Deriv;` en el mismo archivo | **anda** |
+| `Caja c = new Caja.Double();` (choque con `java.lang.Double`) | **falla** |
+| `Caja2 c = new Caja2.Thread();` (choque con `java.lang.Thread`) | **falla** |
+| `probe.Caja.Double` / `java.awt.geom.Point2D.Double` -- calificado completo | anda |
+| `Object o = new Point2D.Double();` | **compila mal en silencio** |
+
+Las dos primeras filas descartan que moleste el nombre calificado o los tipos anidados en general.
+La tercera es la que sorprende y la que delimita: un `import` de tipo unico que trae `Deriv` al
+alcance del archivo **no** le gana al miembro `Caja2.Deriv` -- o sea que no es "cualquier nombre
+simple en alcance gana", como decia la nota que hasta ahora estaba en `Point2D.java`. La cuarta y
+la quinta muestran que el que gana es especificamente el import implicito de `java.lang`, y con dos
+nombres distintos, asi que no es una particularidad de `Double`. La sexta descarta la resolucion
+del tipo anidado en si: por su nombre completo se encuentra y se instancia bien.
+
+Lo que queda es esto: el paso que resuelve `A.B` como tipo consulta `java.lang` en la resolucion
+del segmento `B` antes de mirar los miembros de `A`. El orden correcto (JLS 6.5.5.2) es al reves:
+`B` en `A.B` es **solo** un miembro de `A`; `java.lang` no participa. El arreglo es que la
+resolucion de un nombre calificado de tipo no caiga al alcance global para el ultimo segmento.
+
+Cuanto duele: `java.awt.geom` es el caso extremo. Sus veinte clases anidadas se llaman `Double` y
+`Float` --`Point2D.Double`, `Rectangle2D.Float`, `Line2D.Double`, `Arc2D.Float`, `Path2D.Double`...--
+que son justo los dos nombres de `java.lang` con los que se choca. Desde afuera del paquete, la
+forma normal de usar el paquete entero esta rota.
+
+Rodeo en `java.awt.geom`: las fabricas internas `Point2D.newDouble`, `Rectangle2D.newDouble`,
+`Path2D.newDouble`, que construyen la anidada desde el cuerpo de la clase externa (ahi `Double` a
+secas ya es la anidada y no hay choque). Para el codigo de afuera el rodeo es el nombre completo
+`java.awt.geom.Point2D.Double`, que anda.
+
+Nota: la nota que estaba en el encabezado de `Point2D.java` daba otra causa --"el javac mantiene un
+solo mapa nombre-simple -> tipo por archivo, y un archivo que nombre a la vez `Point2D.Double` y
+`java.lang.Double` resuelve mal uno de los dos"--. Es falsa: los repros de arriba no nombran
+`java.lang.Double` en ningun lado y fallan igual, y el caso del `import probe.Deriv` demuestra que
+tener dos nombres iguales vivos en el archivo no alcanza para romperlo. Esa nota quedo corregida.
+
+Repro: `scratchpad/zz319b/{S1..S6,U1..U6,T1}.java` mas `scratchpad/zz319b/probe/`, y
+`scratchpad/zz319/{R1..R11}.java`. `T1.java` es el silencioso: compila y `strings` sobre el
+`.class` muestra `java/lang/Double` y ni rastro de `Point2D`.
+
+## Tanda: `org.xml.sax.ext`, y los dos bugs que estaban tapados por un `javap` mentiroso
+
+El paquete `org.xml.sax.ext` entro entero sin tropezar con nada: los ocho tipos compilaron a la
+primera. Los dos hallazgos de abajo salieron de **verificar** lo que ya estaba, no de escribirlo.
+
+### Antes que nada: `javap -cp` miente sobre cualquier paquete que este en un modulo del JDK
+
+No es un bug nuestro, es una trampa del metodo de verificacion, y conviene que quede escrita porque
+casi me hace reportar un desmentido falso.
+
+```
+javap -cp scratchpad/repro org.xml.sax.helpers.DefaultHandler   # lee el java.xml del JDK
+javap        scratchpad/repro/org/xml/sax/helpers/DefaultHandler.class   # lee el nuestro
+```
+
+`org.xml.sax`, `org.w3c.dom`, `javax.xml.*` y todo lo que vive en un modulo de la plataforma le
+ganan al classpath. Pedir la clase **por nombre** con `-cp` devuelve la del JDK, con sus supertipos
+correctos, sin ningun aviso. Con eso yo "comprobe" cuatro veces seguidas que un bug no reproducia,
+cuando reproducia siempre. **Para verificar un `.class` nuestro de uno de esos paquetes hay que
+pasarle a `javap` la ruta del archivo**, o cargarlo con `--patch-module` (ver mas abajo).
+
+### #466 -- un `import` de un solo tipo pierde contra una clase del classpath cuando el fuente del tipo importado esta en la misma invocacion
+
+Esto es el bug que el comentario de `KajiLibrary/org/xml/sax/helpers/DefaultHandler.java` ya
+describia y que **no estaba en este informe**. Queda confirmado y ablado.
+
+```java
+// org/xml/sax/helpers/DefaultHandler.java
+import org.xml.sax.ContentHandler;          // import explicito, de un solo tipo
+public class DefaultHandler
+        implements EntityResolver, DTDHandler, ContentHandler, ErrorHandler { ... }
+```
+
+```
+bin/javac.exe --emit -cp KajiLibrary org/xml/sax/ContentHandler.java \
+                                     org/xml/sax/helpers/DefaultHandler.java
+javap org/xml/sax/helpers/DefaultHandler.class
+  -> implements ...,java.net.ContentHandler,...      # deberia ser org.xml.sax.ContentHandler
+```
+
+`java.net.ContentHandler` existe en el arbol (`KajiLibrary/java/net/ContentHandler.class`) y es una
+**clase abstracta**, no la interfaz. El `.class` sale diciendo que implementa otra cosa: compila,
+mide bien, y despues ningun parser acepta la clase como manejador.
+
+**Ablacion del disparador.** Lo unico que se movio entre las dos corridas es si el *fuente* de
+`ContentHandler.java` entra o no en la invocacion:
+
+| invocacion | resultado |
+|---|---|
+| `DefaultHandler.java` **solo** (con `org/xml/sax/ContentHandler.class` en el classpath) | `org.xml.sax.ContentHandler` -- bien |
+| `ContentHandler.java` + `DefaultHandler.java` | `java.net.ContentHandler` -- **mal** |
+| las dos, orden invertido | `java.net.ContentHandler` -- **mal** |
+| las ~27 fuentes de `sax`+`helpers`+`ext` juntas | `java.net.ContentHandler` -- **mal** |
+
+Sacado el fuente de la invocacion, el sintoma desaparece; puesto, vuelve. El orden de los argumentos
+no cambia nada. Es decir: tener el tipo **como fuente en la tanda** es lo que lo saca de la mesa
+como candidato del `import`, y gana el homonimo del classpath.
+
+Emparentado con #351 y #352, pero no es ninguno de los dos: aca el homonimo que gana **no** esta en
+el paquete propio (`java.net` contra `org.xml.sax.helpers`) y el import es de un solo tipo, no
+on-demand.
+
+**Rodeo, y por eso esta asi hoy:** el nombre calificado en la clausula `implements`. Es lo que tiene
+`DefaultHandler.java` en el arbol, y por eso mide y anda bien.
+
+Repro: `scratchpad/abl1/` (el caso que anda) y `scratchpad/saxrepro/` (el que falla).
+
+### #467 -- la clausula `implements` no comprueba que el tipo sea una interfaz
+
+Este es el que hace que #466 sea **silencioso** en vez de un error de compilacion, y es mas general:
+no necesita ninguna ambiguedad de nombres.
+
+```java
+// pkgc/Foo.java
+package pkgc;
+public class Foo { }        // una CLASE
+
+// pkgd/Baz.java
+package pkgd;
+public class Baz implements pkgc.Foo { }    // nombre totalmente calificado, sin ambiguedad
+```
+
+Nuestro javac lo acepta y emite `Baz` con `pkgc.Foo` en la lista de interfaces:
+
+```
+javap pkgd/Baz.class  ->  public class pkgd.Baz implements pkgc.Foo {
+```
+
+El javac real lo rechaza:
+
+```
+Baz.java:2: error: interface expected here
+public class Baz implements pkgc.Foo { }
+```
+
+**Y corre en las dos VMs de forma distinta**, que es la parte que importa:
+
+```
+bin/run-headless.exe pkgd/Uso.class run          -> Some(Int(-1))          # anda
+java -cp ... Corre pkgd.Uso
+  -> java.lang.IncompatibleClassChangeError: class pkgd.Baz can not implement
+     pkgc.Foo, because it is not an interface
+```
+
+Nuestra VM no mira el flag `ACC_INTERFACE` de los supertipos al cargar, asi que se lo traga; la JVM
+real lo rechaza en `defineClass`. Es exactamente la familia de bugs que solo se ve corriendo en las
+dos.
+
+No lo arregle: no me bloqueaba --el rodeo del nombre calificado alcanza-- y tocar la resolucion de
+nombres o el chequeo de supertipos en `src/` no es un cambio chico. Queda con el repro completo.
+
+Repro: `scratchpad/abl2/` (`pkgc/Foo.java`, `pkgd/Baz.java`, `pkgd/Uso.java`).
+
+### #467 ⬜ -- una declaracion `@interface` se emite **sin** sus meta-anotaciones, y eso borra `@Retention`
+
+```java
+// Ann.java, compilado solo
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.TYPE)
+public @interface Ann { boolean value() default true; }
+```
+
+Nuestro `Ann.class` **no tiene atributo `RuntimeVisibleAnnotations`**; el del JDK real si:
+
+```
+RuntimeVisibleAnnotations:
+  0: #14()    java.lang.annotation.Documented
+  1: #15(...) java.lang.annotation.Retention(RUNTIME)
+  2: #18(...) java.lang.annotation.Target(TYPE)
+```
+
+El `AnnotationDefault` del metodo `value()` si se emite. O sea que no es que las anotaciones no se
+escriban en general: es que las que van **sobre la declaracion del tipo de anotacion** se pierden.
+
+**El daño no esta ahi, esta en la unidad siguiente.** Un `@interface` sin `@Retention` legible vale
+como `CLASS` --es el valor por omision de la especificacion--. Entonces, cuando se compila **otra**
+unidad que usa esa anotacion y la resuelve leyendo el `.class`, javac concluye que la retencion es
+`CLASS` y **no** emite la anotacion en la clase del usuario. El resultado en ejecucion es
+`getAnnotation(...) == null`, sin ningun error en ningun paso.
+
+**Delimitacion.** El corte deja ver por que el bug se esconde tan bien:
+
+| la anotacion se declara | resultado de `getAnnotation` |
+|---|---|
+| en **la misma** unidad de compilacion que la usa | **anda** (`value()` correcto, y el `default` tambien) |
+| en **otra** unidad, resuelta desde el `.class` | **null** |
+
+En el primer caso javac tiene la retencion en el AST y nunca consulta el classfile, asi que todo
+funciona; en el segundo tiene que leerla del `.class`, donde no esta. Cualquier prueba de
+anotaciones escrita en un solo archivo pasa, y por eso esto no se detecto antes.
+
+**Impacto real.** `javax.management.JMX.isMXBeanInterface` mira `@MXBean`, que es una anotacion de
+biblioteca: sobre esta VM devuelve siempre lo que dice la convencion del sufijo, porque la anotacion
+del usuario nunca llega al classfile. Es un caso perdido desde `javax.management`: el descarte pasa
+al compilar el codigo del usuario, no adentro de la biblioteca, asi que no hay rodeo posible del
+lado de la biblioteca. La implementacion quedo escrita como corresponde --lee la anotacion primero--
+y la prueba `java/JmxTest.java` **retiro** el caso 92, que era exactamente ese, con la nota
+correspondiente.
+
+Repro: `scratchpad/anno/{Ann,UsaAnn}.java` (dos unidades), y `java/JmxP13.java` (falla, con
+`@MXBean` de biblioteca) contra `java/JmxP14.java` (anda, con la anotacion en el mismo archivo).
+
+### #468 ⬜ -- las vistas de `LinkedHashMap` no conservan el orden, y eso rompe `ObjectName.toString()`
+
+No es del compilador ni de la VM: es una **divergencia declarada** en
+`KajiLibrary/java/util/LinkedHashMap.java`, y se anota aca porque el costo aparece lejos de donde se
+tomo la decision.
+
+```java
+Map<String,String> m = new LinkedHashMap<String,String>();
+m.put("z","1"); m.put("a","2"); m.put("m","3");
+for (String v : m.values()) ...     // da 2,1,3 -- deberia dar 1,2,3
+m.keySet()                          // da a,z,m -- deberia dar z,a,m
+```
+
+La causa esta a la vista en el propio archivo: `keySet()` recorre la lista de orden como
+corresponde, pero **vuelca el resultado en un `HashSet`**, que no lo conserva; y `values()` y
+`entrySet()` se construyen a partir de `keySet()`, asi que heredan la perdida. El comentario del
+archivo lo declara ("Divergencia: el JDK devuelve una vista ordenada por insercion; este devuelve un
+HashSet, que no conserva ese orden").
+
+**Por que importa mas de lo que parece.** Un `LinkedHashMap` no se elige por lo que hace sino por el
+orden: si el orden no se conserva, la clase entera es un `HashMap` con mas costo. Y el que la usa no
+tiene forma de enterarse, porque el orden **casi** se conserva --con pocas claves la tabla suele
+devolverlas en un orden parecido-- y falla de a poco.
+
+**Impacto real.** `javax.management.ObjectName` guardaba las claves en un `LinkedHashMap` para poder
+cumplir su contrato: `getCanonicalName()` devuelve las claves ordenadas y `toString()` **el nombre
+tal como se escribio**. Con la divergencia, `new ObjectName("d:z=1,a=2,m=3").toString()` devolvia
+`d:a=2,z=1,m=3`. Arreglado del lado de `ObjectName`, que ahora guarda una `List` y detecta claves
+repetidas con un recorrido --las listas de claves de un MBean son de unos pocos elementos--.
+
+Repro: `java/JmxP12.java`.
+
+### #468 -- con `--emit`, un tipo del classpath nombrado con nombre completo se resuelve distinto segun la POSICION del archivo en la linea de comandos
+
+Salio al reconstruir `org.xml.sax.helpers` entero. El paquete compila archivo por archivo y falla en
+lote, con un error que no tiene sentido leido solo:
+
+```
+bin/javac.exe --emit -cp KajiLibrary KajiLibrary/org/xml/sax/helpers/*.java
+  ParserAdapter.java:216: error: asignación de tipo incompatible
+          contentHandler = handler;
+```
+
+El campo y el parametro estan declarados con **el mismo nombre completo**:
+
+```java
+org.xml.sax.ContentHandler contentHandler = null;                 // linea 87
+public void setContentHandler(org.xml.sax.ContentHandler handler) {
+    contentHandler = handler;                                     // linea 216 -- "incompatible"
+}
+```
+
+Para que el compilador los considere incompatibles tiene que estar resolviendo las dos apariciones
+del mismo nombre calificado a dos tipos distintos.
+
+**Tres ablaciones, una variable por vez.**
+
+| lo unico que se mueve | resultado |
+|---|---|
+| `... ParserAdapter.java LocatorImpl.java` (ParserAdapter **primero**) | compila |
+| `... LocatorImpl.java ParserAdapter.java` (ParserAdapter **segundo**) | **falla** |
+| el mismo lote segundo, pero con `--check` en vez de `--emit` | compila |
+| el mismo lote segundo, agregando `org/xml/sax/ContentHandler.java` al lote | compila |
+
+O sea que hacen falta las tres cosas a la vez: `--emit`, el archivo **no** en primera posicion, y el
+fuente de `ContentHandler.java` **fuera** del lote. Sacando cualquiera de las tres el sintoma
+desaparece. Con `--check` no pasa nunca, que es la razon por la que se puede "validar" el paquete
+entero y creer que esta bien: **`--check` no es un sustituto de `--emit` ni para detectar esto**.
+
+No lo achique mas alla de estos archivos ni mire `src/`, asi que **no tengo la causa**; lo de arriba
+es el disparador, no la explicacion. La sospecha razonable, sin comprobar, es que con `--emit` el
+tipo se resuelve una vez al armar el esqueleto de la clase y otra al generar el cuerpo, y que entre
+las dos cambia lo que hay en la tabla de tipos --el `.class` de un archivo anterior del lote ya
+fue escrito-- pero no la ablacie y puede ser falso.
+
+**Rodeo, y es el que uso el build:** listar el archivo afectado primero, o compilar el paquete de a
+un archivo. Con eso `ParserAdapter.class` sale correcto (verificado contra el JDK: mismos
+supertipos, mismo descriptor de `setContentHandler`).
+
+## Tanda: `java.awt` (parte de datos: color, geometria entera, constantes de disposicion)
+
+### #469 ⬜ -- los campos de una interfaz **no se heredan**: ni al que la implementa ni a una subinterfaz
+
+Salio escribiendo `java.awt.Polygon`, cuyo `PathIterator` interno devuelve `WIND_EVEN_ODD` y
+`SEG_MOVETO` sin calificar, que es como estan escritos los otros iteradores del JDK.
+
+```java
+interface ConIface {
+    int VALOR = 7;
+}
+
+class DirectaIface implements ConIface {
+    public int f() { return VALOR; }   // error: no se encuentra el simbolo: VALOR
+}
+
+interface SubIface extends ConIface { }
+// SubIface.VALOR   ->   error: no se encuentra el campo: VALOR
+```
+
+```
+javac: java/IfaceConst.java:7: error: no se encuentra el simbolo: VALOR
+    public int f() { return VALOR; }
+                            ^
+  simbolo:   variable VALOR
+  ubicacion: clase DirectaIface
+```
+
+**Que si anda, para acotarlo.** No es "no se heredan campos": la herencia por `extends` de una
+**clase** funciona bien, tanto para los estaticos como para los de instancia.
+
+| forma | resultado |
+|---|---|
+| `class Sub extends Base` y usar `Base.CAMPO_ESTATICO` sin calificar | compila |
+| `class Sub extends Base` y usar un campo de instancia heredado | compila |
+| `class C implements I` y usar `I.VALOR` **calificado** | compila |
+| `class C implements I` y usar `VALOR` **sin calificar** | **falla** |
+| `interface S extends I` y usar `S.VALOR` | **falla** |
+
+O sea que lo que falta es meter los campos de las interfaces implementadas --y de las
+superinterfaces-- en el conjunto de miembros heredados. Los de las superclases si se meten. Que
+`S.VALOR` tambien falle dice que el problema no esta en la resolucion de nombres simples sino en la
+construccion de la tabla de miembros del tipo: por eso falla igual con el nombre calificado.
+
+**Por que importa mas de lo que parece.** Es el patron de todas las implementaciones de
+`PathIterator`, `Transparency`, `Paint` y compania: la interfaz declara las constantes y las clases
+que la implementan las usan a secas. Cualquier reimplementacion fiel del JDK lo va a pisar.
+
+**Rodeo:** calificar siempre con el nombre de la interfaz que **declara** la constante --
+`PathIterator.WIND_EVEN_ODD`, no `SubInterfaz.WIND_EVEN_ODD`, que tampoco anda--. Es lo que hace
+`java/awt/Polygon.java`.
+
+### Nota sobre un sintoma que resulto ser cascada
+
+Antes de achicarlo, el mismo `Polygon.java` daba en un lote multi-archivo:
+
+```
+error: no se encuentra el metodo: moveTo
+    camino.moveTo(xpoints[0], ypoints[0]);
+  simbolo: metodo moveTo(int, int)
+  ubicacion: clase Double
+```
+
+que parece un problema de ensanchamiento `int` -> `double`. **No lo es**: compilando el archivo
+solo, ese error no aparece y sale el de arriba. El ensanchamiento anda en todos los casos que
+probe (metodo estatico, metodo de instancia, clase anidada, elemento de arreglo, constructor de dos
+argumentos de `Path2D.Double`). Queda anotado porque el mensaje manda a mirar el lugar equivocado:
+**ante un error raro en un lote, recompilar el archivo solo antes de creerle al mensaje.**
+
+## Tanda: `java.beans` -- XMLDecoder, y el bug que solo se ve en la JVM real
+
+### Finding #470 ⬜ -- un cast a un tipo **arreglo** no emite `checkcast`, y la JVM real rechaza la clase
+
+Nuestra VM no verifica los stack maps, asi que el .class corre igual aca y explota alla. Salio
+escribiendo `java/BeansTest.java`: un `(String[]) arr[0]` seguido de `.length`.
+
+```
+java.lang.VerifyError: Bad type on operand stack in arraylength
+  Reason: Invalid type: 'java/lang/Object' (current frame, stack[0])
+```
+
+**Repro minimo** (`scratchpad/zzbeans/CastArr.java`):
+
+```java
+public class CastArr {
+  public static int run() {
+    Object[] caja = new Object[] { new String[] { "a", "b" }, "x" };
+    String[] s = (String[]) caja[0];
+    return s.length;
+  }
+}
+```
+
+`bin/javac.exe --emit -cp KajiLibrary scratchpad/zzbeans/CastArr.java` compila y escribe el
+`.class`; `bin/run-headless.exe scratchpad/zzbeans/CastArr.class run` da 2; y
+`java.exe -cp "KajiLibrary;scratchpad/zzbeans;scratchpad/zz319" Corre CastArr` da VerifyError.
+
+**Causa, ablada.** Se saco el unico disparador sospechado --que el tipo destino del cast sea un
+arreglo-- y el sintoma desaparece. El par de archivos es identico salvo en eso:
+
+| fuente | cast | `checkcast` emitido | JVM real |
+|---|---|---|---|
+| `CastObj.java` | `(String) caja[0]` | si (`checkcast #34`) | anda, da 4 |
+| `CastArr.java` | `(String[]) caja[0]` | **no, cero** | VerifyError |
+
+Y no depende de la forma en que llega el valor: `CastArr2.java` castea desde un `Object` que
+devuelve un metodo, y `CastArr3.java` castea la llamada en el lugar (`((int[]) dame()).length`).
+Los tres emiten **cero** `checkcast` y los tres fallan igual. Lo unico comun es el tipo destino.
+
+El desensamblado del repro es literalmente `aload_0 / iconst_0 / aaload / astore_1 / aload_1 /
+arraylength`: entre el `aaload` y el `astore_1` deberia ir el `checkcast [Ljava/lang/String;` y no
+va ninguno. La `LocalVariableTable` **si** dice `[Ljava/lang/String;`, asi que el frontend tipa
+bien y lo que falta es la emision: el emisor de casts debe estar mirando solo el caso "tipo destino
+es una clase" y saliendo sin hacer nada cuando es un arreglo.
+
+**Alcance.** Pega en todo cast a arreglo, que es el patron de cualquier API que devuelve `Object`
+--`XMLDecoder.readObject()`, `Array.newInstance`, `List.toArray(new T[0])` guardado en `Object`,
+`Map.get`--. Lo que se emite compila, mide bien y **corre bien en nuestra VM**; solo la JVM real lo
+rechaza, que es exactamente la clase de bug que la verificacion cruzada esta para encontrar.
+
+**Rodeo mientras tanto:** no escribir el cast. Si el valor viene de un `Object`, sacarle lo que se
+necesite por un metodo que ya devuelva el tipo arreglo (`bean.getNicknames().length` anda: ahi el
+tipo lo da el descriptor del metodo y no hay cast), o por `getClass()`. Es lo que hace
+`java/BeansTest.java` en la prueba de `<array>`. `java.lang.reflect.Array.getLength/get` **no**
+sirven de rodeo en este arbol: son `native` sin implementacion registrada.
+
+### Finding #471 ⬜ -- los miembros de un supertipo **crudo** no se erasan, y por eso no se lo puede implementar como manda el JLS
+
+JLS 4.8: los miembros de un tipo crudo son las **erasuras** de los miembros de la declaracion
+generica. Nuestro javac los deja parametrizados, asi que una clase que implementa un supertipo
+crudo no puede escribir sus metodos ni de la forma erasada ni de la parametrizada.
+
+**Repro y ablacion.** Los dos archivos son identicos salvo en la clausula `implements`, que es la
+unica variable:
+
+```java
+// scratchpad/zzbeans/RawA.java  -- crudo
+public class RawA implements Collection {
+  public Iterator<Object> iterator(){ ... }
+  ...
+}
+// scratchpad/zzbeans/RawB.java  -- parametrizado
+public class RawB implements Collection<Object> {
+  public Iterator<Object> iterator(){ ... }
+  ...
+}
+```
+
+| clausula | resultado |
+|---|---|
+| `implements Collection<Object>` | compila |
+| `implements Collection` | `error: el retorno de 'iterator' no es compatible con el de 'Iterable': Iterator no es un subtipo de Iterator` |
+
+El mensaje se delata solo: dice "Iterator no es un subtipo de Iterator". Lo que compara son
+`Iterator` (crudo, lo que declara la clase) contra `Iterator<E>` sin erasar (lo que saco del
+supertipo crudo), y como no unifica, falla.
+
+El mismo tipo crudo rompe la otra mitad: con `implements Collection` crudo,
+`public Object[] toArray(Object[] a)` --que es como el JDK escribe ese metodo en
+`BeanContextSupport`-- da `error: Object[] no es un subtipo de T[]`.
+
+**Por que importa.** `java.beans.beancontext.BeanContext extends ... java.util.Collection` es
+crudo en el JDK, asi que toda clase que implemente BeanContext cae aca. Es tambien el patron de
+cualquier API vieja anterior a los genericos.
+
+**Rodeo, y no cuesta nada porque las erasuras coinciden:** declarar el metodo crudo
+(`public Iterator iterator()`) y el otro generico (`public <T> T[] toArray(T[] a)`). Los dos
+erasan exactamente a lo que el JDK declara --`Iterator iterator()` y
+`Object[] toArray(Object[])`-- asi que el `.class` que sale es el correcto y `medir.py` lo cuenta
+bien. Es lo que hace `KajiLibrary/java/beans/beancontext/BeanContextSupport.java`.
+
+### #470 ⬜ -- una clase anonima declarada **adentro** de otra clase anonima no se puede emitir
+
+**Sintoma.** `error: el generador de bytecode todavia no soporta una clase anonima (necesita una
+clase sintetica anidada)`.
+
+Lo que confunde es que las clases anonimas **si** andan: la de un nivel se emite bien y se usa por
+todo el arbol. Lo que no anda es la del segundo nivel, y el mensaje no dice que el problema es el
+anidamiento.
+
+**Repro** (`scratchpad/rep469/R469.java`, tres lineas de sustancia):
+
+```java
+public class R469 {
+    interface F { String f(); }
+
+    static String correr(F f) { return f.f(); }
+
+    public static void main(String[] a) {
+        String r = correr(new F() {              // esta se emite bien
+            public String f() {
+                return correr(new F() {          // esta rompe
+                    public String f() { return "adentro"; }
+                });
+            }
+        });
+        System.out.println(r);
+    }
+}
+```
+
+| forma | nuestro javac | JDK 25 |
+|---|---|---|
+| una anonima sola | compila | compila |
+| una anonima adentro del **metodo** de otra anonima | **error** | compila, imprime `adentro` |
+
+**Donde aparece.** Cualquier prueba o codigo que anide dos callbacks. Lo encontre escribiendo
+`java/AuthTest.java`, donde el caso natural para `Subject.callAs` anidado --que es justamente el
+comportamiento que hay que probar: el de adentro tapa al de afuera y al salir vuelve el de afuera--
+pide un `Callable` adentro de otro `Callable`.
+
+**Rodeo.** Sacar la de adentro a una clase anidada con nombre (`static class X implements F`), que
+es lo que hace `java/AuthTest.java`. No cuesta nada de semantica; solo deja de leerse en linea.
+
+**Nota de numeracion.** Este archivo tiene los numeros #465 a #468 **repetidos**: dos sesiones
+distintas escribieron findings en paralelo y ninguna vio la del otro. Los textos son todos validos
+y distintos entre si; lo unico que colisiona es el numero. Al citarlos conviene nombrar el titulo y
+no solo el numero.
+
+### #471 -- ✅ un `wait(ms)` vencido dejaba al hilo **adentro** del conjunto de espera del monitor
+
+**Sintoma, y por que costo encontrarlo.** Dos sintomas distintos, los dos silenciosos:
+
+1. `run()` devolvia `None` sin excepcion, sin panico y en 70 ms. Es el
+   `Step::Return(None)` de `bytecode_interpreter.rs:1302` --"nothing left to run"--: un abrazo
+   mortal de verdad, no un cuelgue.
+2. En otras corridas, `panicked at bytecode_interpreter.rs:1167: no frame on the call stack`.
+
+Ninguno de los dos nombra a `wait`, y el segundo apunta a `frame()`, que no tiene nada que ver.
+
+**La causa.** `expire_timed_block` saca al hilo del conjunto de espera del monitor **solo si su
+estado es `Waiting`**:
+
+```rust
+if self.shared.threads[idx].status == ThreadStatus::Waiting {   // <-- nunca es este
+    if let Some((obj, _)) = self.shared.threads[idx].wait_reacquire {
+        if let Some(mon) = self.shared.monitors.get_mut(&obj) { mon.waiting.retain(...); }
+    }
+}
+self.make_runnable(idx);
+```
+
+Pero un `wait(ms)` se estaciona como **`TimedWaiting`**, que es justamente el unico estado en el
+que esta funcion se llama. O sea que la rama no corria nunca, y el comentario de `monitor_wait`
+--"`expire_timed_block` then pulls the thread out of the wait-set"-- describia algo que el codigo
+no hacia.
+
+La consecuencia se acumula: el hilo se despierta por vencimiento **sin salir del conjunto de
+espera**, vuelve a llamar a `wait` y `mon.waiting.push(current)` lo mete **de nuevo**. Cada
+vencimiento agrega un duplicado. Un `notifyAll()` despues mueve esos duplicados al conjunto de
+bloqueados, y el que de verdad esperaba el monitor se queda afuera: el escritor no podia ni entrar
+al metodo `synchronized`.
+
+**Repro.** `java/Tubo2.java`: una `PipedOutputStream.write(byte[], 0, n)` contra una
+`PipedInputStream.read(byte[], int, int)` en dos hilos.
+
+| n | antes | despues |
+|---|---|---|
+| 10 | anda | anda |
+| 1000, 1024, 1025, 3000 | `run()I -> None` (abrazo mortal) | anda |
+
+El 10 andaba porque el escritor alcanzaba a entrar antes del primer vencimiento. Y ojo con el
+plazo: en el motor verde `wait(1000)` son **mil opcodes**, no un segundo, asi que vence enseguida.
+
+**El arreglo** es la condicion correcta: `matches!(status, Waiting | TimedWaiting)`.
+
+### #472 -- ✅ un plazo vencido resucitaba un hilo **ya terminado**, que no tiene marcos
+
+Sale del mismo lugar y es el que producia el panico `no frame on the call stack`.
+
+Un `wait(ms)` que termina **por aviso** y no por vencimiento dejaba su `sleep_until` armado. El
+hilo seguia, terminaba, y mas tarde `wake_sleepers` veia ese plazo viejo y llamaba a
+`expire_timed_block`, que hacia `make_runnable` sobre un hilo `Terminated`. El planificador
+cambiaba a el y `frame()` --`self.running.frames.last().expect("no frame on the call stack")`--
+reventaba.
+
+Que reventara o no dependia de cuantos opcodes corriera el programa despues: por eso dos programas
+casi identicos (`java/Mon4.java` y `java/Mon7.java`) daban resultados distintos, y por eso
+`wait(100)` no fallaba y `wait(300)` si --con 100 el plazo vencia **antes** del aviso, que es el
+camino que si limpiaba--.
+
+**Dos arreglos, los dos necesarios:**
+
+1. Al retomar el monitor despues de un `wait` (`wait_reacquire = None`), limpiar tambien
+   `sleep_until`: la espera se acabo, su plazo esta gastado.
+2. En `expire_timed_block`, no reprogramar un hilo `Terminated`. Limpiar el plazo es todo el
+   trabajo que queda ahi.
+
+**Repro.** `java/Mon4.java` --un hilo secundario con `notifyAll(); wait(1000);` en un bucle y el
+principal avisando a los 200 ms-- panicaba en las tres corridas de tres; despues de los dos
+arreglos da `-1` en las tres.
+
+**Lo que destapo.** Con los dos arreglados, `java/IoKajiTest.java` --las cuatro clases `Piped*` de
+`java.io`-- pasa en las dos VMs. Antes moria sin decir nada en la seccion de tuberias.
+
+### #473 ⬜ -- un local puede redeclarar un **parametro** del metodo, y gana el local
+
+**Sintoma.** No hay sintoma en la compilacion: compila. El programa hace otra cosa, y en silencio.
+
+**La regla.** JLS 6.4: el alcance de un parametro es **todo el cuerpo** del metodo, asi que un
+local con el mismo nombre no lo tapa -- lo redeclara, y eso es un error de compilacion. El JDK dice
+`variable n is already defined in method f(int)`.
+
+**Repro** (`scratchpad/rep473/R473.java`):
+
+```java
+public class R473 {
+    static int f(int n) {
+        int n = 5;      // el JDK lo rechaza; nosotros lo aceptamos
+        return n;
+    }
+    public static void main(String[] a) { System.out.println(f(1)); }
+}
+```
+
+| | resultado |
+|---|---|
+| nuestro javac | `javac: escrito R473.class` |
+| JDK 25 | `error: variable n is already defined in method f(int)` |
+
+**Por que importa, con un caso real.** Lo encontre renombrando identificadores al ingles en
+`X509CRLSelector.setIssuerNames(Collection<?> names)`: el renombre dejo un local `names` adentro de
+un metodo cuyo parametro ya se llamaba `names`. Compilo sin una palabra, y el `for` recorrio el
+conjunto **vacio** que acababa de declarar en vez del argumento. El selector quedaba sin criterio de
+emisor -- o sea aceptando CRLs de cualquier CA -- y solo lo delato una prueba de comportamiento
+(`java/CertX500Test.java`, caso 64).
+
+Ese es exactamente el error que el chequeo del JLS existe para evitar, y es el peor de los dos
+mundos: el codigo dice una cosa y hace otra.
+
+**Donde mirar.** El alcance se arma al entrar al metodo; el parametro tendria que estar ya en la
+tabla de locales antes de procesar el cuerpo, y la declaracion tendria que chocar con el como choca
+con otro local del mismo bloque.
+
+### #474 -- un `import` de un solo tipo pierde segun QUE OTROS archivos entren en la invocacion
+
+```java
+// jdk/internal/classfile/impl/Annotations.java
+import java.lang.classfile.Annotation;      // el import explicito
+
+public static Annotation annotation(Utf8Entry className, List<AnnotationElement> elements) { ... }
+```
+
+Compilado **solo**, el `.class` dice lo correcto:
+
+```
+public static java.lang.classfile.Annotation annotation(...)
+```
+
+Compilado **en el mismo lote que los demas archivos de su paquete**, el mismo archivo, con el mismo
+classpath, emite:
+
+```
+public static java.lang.annotation.Annotation annotation(...)
+```
+
+**Delimitacion.** Una sola variable, y es el lote:
+
+| forma | resultado |
+|---|---|
+| `javac --emit Annotations.java` | `java.lang.classfile.Annotation` -- correcto |
+| `javac --emit impl/*.java` (mismo archivo adentro) | `java.lang.annotation.Annotation` -- **mal** |
+
+Nada mas cambia: mismo fuente, mismo `-cp`, mismo import explicito. `java/lang/classfile/Annotation.java`
+**no** estaba en ninguno de los dos lotes --se lee del `.class` del classpath en los dos casos-- asi
+que esto no es #466, donde el disparador era que el fuente del tipo importado entrara en la
+invocacion. Aca el disparador es la presencia de *otros* archivos.
+
+Lo que se puede decir con lo ablado: el alcance de nombres simples se comparte entre las unidades de
+compilacion de una misma invocacion, y un tipo que otra unidad trajo puede ganarle al `import`
+explicito de esta. **La causa exacta no la able**: no probe cual de los otros archivos es el que
+introduce `java.lang.annotation.Annotation` en el alcance, ni si hace falta que alguno lo importe o
+alcanza con que lo mencione. Lo digo asi en vez de completar la explicacion.
+
+Es la version peligrosa de #330 y de #468, y peligrosa por una razon concreta: **no falla al
+compilar**. El `.class` sale con un descriptor equivocado y el error aparece mucho despues, en otro
+archivo que consume ese metodo, con un mensaje que no apunta ni de lejos al lugar del problema.
+
+Como salio: escribiendo `AttributeReader`. Un `readAnnotation` que devolvia `Annotation` no tipaba
+contra `Annotations.annotation(...)`, con el mensaje "tipo de retorno incompatible" y las dos partes
+diciendo `Annotation` en el fuente.
+
+Rodeo aplicado: `Annotations.java` se compila **solo**, y el resto del paquete en lote aparte. Vale
+la pena revisar el arbol despues de un lote grande: `javap -p` sobre los `.class` y buscar
+`java.lang.annotation.Annotation` donde no corresponde encuentra el sintoma en un segundo.
+
+### #475 -- los miembros de un supertipo **crudo** no vienen borrados
+
+```java
+public interface R extends java.util.Collection { }   // cruda, sin argumento de tipo
+
+public class RImpl implements R {
+    public Object[] toArray(Object[] a) { return a; }  // error acá; el JDK 25 lo acepta
+    ...
+}
+```
+
+```
+error: el retorno de `toArray` no es compatible con el de `Collection`:
+       Object[] no es un subtipo de T[]
+```
+
+Con un supertipo crudo, JLS 4.8 dice que los miembros heredados son los **borrados**: `toArray(T[])`
+se ve como `Object[] toArray(Object[])`, y eso es exactamente lo que la clase escribe. Nuestro javac
+sigue viendo la firma generica y exige `T[]`.
+
+**Delimitacion.** Tres cortes:
+
+| forma | resultado |
+|---|---|
+| `implements R` (R extiende `Collection` cruda) + `Object[] toArray(Object[])` | **falla** |
+| `implements R` + `<T> T[] toArray(T[])` | anda |
+| `implements R2` (R2 extiende `Collection<Object>`) + `Object[] toArray(Object[])` | falla |
+
+La segunda fila descarta que el problema sea la clase o el metodo: el mismo archivo, cambiando solo
+la forma de esa firma, compila. La primera contra la tercera muestra que el borrado por crudeza no
+se esta aplicando --si se aplicara, la primera andaria--.
+
+Repro: `KajiLibrary/repros/finding_475/` (`R.java` + `RImpl.java`; el JDK 25 compila los dos sin un
+aviso).
+
+Como salio: escribiendo `java.beans.beancontext.BeanContextSupport`. El JDK declara
+`BeanContext extends Collection` **cruda** --el paquete es de 1998 y nunca se genero-- y por eso su
+`BeanContextSupport` tiene `public Object[] toArray(Object[])` a secas.
+
+Rodeo aplicado: se declaro `public <T> T[] toArray(T[])`. Tiene el **mismo borrado**
+--`Object[] toArray(Object[])`-- asi que la firma que queda en el `.class` es la del JDK y el medidor
+no ve diferencia; lo que cambia es la firma generica, que acepta un poco mas que la de alla. Queda
+dicho en el javadoc del metodo.
+
+### #476 -- ✅ un cast a un tipo **arreglo** no emitia `checkcast`
+
+```java
+static int run(Object o) {
+    Object[] k = (Object[]) o;   // sin checkcast
+    return k.length;
+}
+```
+
+Dos sintomas, y el segundo es el grave:
+
+```
+java.lang.VerifyError: Bad type on operand stack in arraylength
+  Reason: Invalid type: 'java/lang/Object' (current frame, stack[0])
+```
+
+y, cuando el verificador no llega a quejarse, **el cast que tenia que fallar no falla**: pasarle un
+`String` a ese metodo devolvia 17 --el largo de la cadena leido como largo de arreglo-- en vez de
+tirar `ClassCastException`. El mismo fuente con el javac del JDK 25 tira, que es lo correcto.
+
+**Delimitacion.** Ocho cortes. El primer intento culpo al `instanceof` que habia antes del cast en
+el codigo donde aparecio, y estaba **mal**:
+
+| forma | resultado |
+|---|---|
+| `(String) o` sobre un parametro | anda |
+| `(String) o` con `if (o instanceof String)` antes | anda |
+| `(Object[]) o` sobre un **parametro** | **falla** |
+| `(int[]) o` sobre un parametro | **falla** |
+| `(Object[]) o` con `instanceof` antes | **falla** |
+| `(Object[]) o` sobre un **local** al que se le asigno un arreglo en el mismo metodo | anda |
+| `(String[]) o` sobre ese mismo local | anda |
+| `((Object[]) o).length` sin local intermedio, sobre ese local | anda |
+
+Las dos primeras filas descartan el `instanceof`: con un tipo de clase, la guarda no cambia nada.
+Las filas 3 y 5 son el mismo cast con y sin guarda y fallan las dos, o sea que la guarda tampoco es
+el disparador **con arreglos**. Lo que parte el mundo en dos es la fila 3 contra la 6: el mismo cast
+sobre un parametro falla y sobre un local recien asignado anda.
+
+Y esa ultima fila no es que ahi si se emita el `checkcast`: **tampoco se emite**. Lo que pasa es que
+el verificador infiere el tipo del local por si mismo --vio el `anewarray`-- y no necesita el
+`checkcast` para creerse el `arraylength`. Por eso el bug se escondio tanto tiempo: se ve solo
+cuando el valor entra por un parametro, un campo o un retorno declarado `Object`, que es justo donde
+un cast hace falta de verdad.
+
+Causa: en `cast()` de `codegen.rs`, la rama de las referencias era
+
+```rust
+if let RType::Class(id) | RType::Parameterized { base: id, .. } = &to { ... }
+```
+
+Un `RType::Array(_)` no entra en ese `if let` y el metodo salia sin emitir nada -- ni el opcode ni
+el cambio de tipo en la pila simulada. `checkcast_name` ya sabia dar el descriptor de un arreglo
+(`[Ljava/lang/Object;`); lo que faltaba era llamarla.
+
+Como salio: escribiendo `javax.management.openmbean`. `TabularDataSupport.remove(Object)` hace
+`(Object[]) key` sobre su parametro, y el `.class` cargado en la JVM real con `-Xverify:all` no
+paso. En **nuestra** VM el test daba -1 igual, porque no verifica frames: es la sexta vez en esta
+sesion que un bug del codegen aparece solo corriendo el `.class` afuera.
+
+Repro: `scratchpad/zzcast/{K1..K9,KA,KB,KC,KD}.java`. `KD` es el que importa: comprueba que un cast
+invalido **tire**, y es el que separa este bug de un mero problema de verificacion.
+
+### #477 -- ✅ el literal `null` se declaraba `Object` en el `StackMapTable`
+
+```java
+// javax/xml/datatype/DatatypeFactory.java
+return newDuration(isPositive, null, null, day, hour, minute,
+        second != null ? new BigDecimal(second) : null);
+```
+
+```
+java.lang.VerifyError: Bad type on operand stack
+  Location: newDurationDayTime(...)  @27: invokevirtual
+  Reason: Type 'java/lang/Object' (current frame, stack[3]) is not assignable to 'java/math/BigInteger'
+```
+
+`null` tiene **tipo propio** en el verificador --`ITEM_NULL`, la etiqueta 5-- y es asignable a
+cualquier referencia. `Object` no es asignable a ninguna otra. Nuestro `VType` no tenia esa variante:
+`aconst_null` empujaba `Object("java/lang/Object")`, y el comentario que estaba al lado lo decia sin
+saber lo que estaba diciendo -- *"declararlo `Object` alcanza mientras no se mezcle en un merge"*.
+
+**Delimitacion.** El disparador son las dos cosas juntas:
+
+| forma | resultado |
+|---|---|
+| `f(null, x)` -- sin salto en el medio | anda |
+| `f(a ? null : b, x)` -- el `null` sobrevive a un salto | **falla** |
+
+Sin salto no se escribe ningun frame y el tipo del `null` nunca se anota; con salto, el frame dice
+`Object` y el llamado pide otra cosa. Por eso paso desapercibido tanto tiempo: la forma comun de
+pasar `null` no lo toca.
+
+Arreglo: `VType::Null` (etiqueta 5), empujada por `ExprKind::Null`. Y en `merge_states`, `null`
+mezclado con una referencia da **esa referencia** en vez de `Top` -- es asignable a todas, asi que
+el merge no pierde nada al quedarse con la mas especifica, mientras que degradar a `Top` dejaba el
+valor inutilizable.
+
+Como salio: corriendo `StaxTest` con `--patch-module` y `-Xverify:all` en el JDK 25.
+
+### #478 -- ✅ un `goto` muerto despues de un cuerpo que no termina
+
+```java
+while (true) {
+    if (a) { ...; continue; }
+    if (b) { ...; continue; }
+    break;
+}
+```
+
+```
+java.lang.VerifyError: Expecting a stack map frame
+  Location: nextTag()I @66: goto
+```
+
+El cuerpo del bucle **no termina normalmente** --toda salida es un `continue` o el `break`-- y aun
+asi el generador emitia la arista de vuelta al encabezado. Esa instruccion queda despues de una
+transferencia incondicional y nadie llega a ella; §4.10.1 exige un frame ahi, y para codigo muerto
+no hay frame que armar.
+
+En el mismo repro habia **dos** instrucciones muertas y no una: el `goto` del `break` --escrito
+despues del segundo `continue`, que ya corto el flujo-- y el de vuelta del `while`.
+
+Arreglo: `if self.reachable` antes de emitir, en los cuatro lugares que emiten un salto que puede
+quedar muerto -- el `while`, el `for`, el `break` y el `continue`. Es la misma idea del #463, que
+arreglaba el caso del ternario constante; este es el caso a nivel de sentencia.
+
+Nuestra VM no verifica frames, asi que estos `.class` cargaban y corrian bien aca. Es el sexto bug
+del codegen que solo se ve corriendo el `.class` en una JVM real.
+
+### #479 ⬜ -- `java.lang.Double d = new Rectangle2D.Double(...)` compila
+
+El `new` emite la clase correcta --`javap -c` muestra `new java/awt/geom/Rectangle2D$Double`-- y sin
+embargo el resultado se deja asignar a un `java.lang.Double`. El JDK lo rechaza.
+
+Salio como control del #465: la asignacion se escribio para **comprobar** que el `new` resolvia mal,
+y siguio compilando despues de que el `new` se arreglara. O sea que son dos cosas distintas y esta
+segunda sigue abierta.
+
+**No able la causa** y lo digo asi: no se si el chequeo de asignacion no consulta la jerarquia, si la
+consulta y encuentra un supertipo que no corresponde, o si hay una indulgencia deliberada para los
+tipos de `java.lang`. Lo unico comprobado es lo de arriba.
+
+Repro: `java.lang.Double a = new java.awt.geom.Rectangle2D.Double(0.0, 0.0, 2.0, 2.0);`
+
+### #477 -- ✅ el `lub` de dos arreglos daba `Unresolved`, y el ternario lo emitia como `Top`
+
+```java
+static char[] f(char[] p) {
+    return p == null ? new char[0] : copy(p);   // VerifyError en la JVM real
+}
+```
+
+```
+java.lang.VerifyError: Bad type on operand stack
+  Reason: Type top (current frame, stack[0]) is not assignable to reference type
+  Stackmap Table:
+    same_locals_1_stack_item_frame(@14,Top)
+```
+
+**Delimitacion.** Siete cortes:
+
+| forma | resultado |
+|---|---|
+| ternario de `char[]`, una rama `new` y otra una llamada | **falla** |
+| ternario de `char[]`, las **dos** ramas `new` | **falla** |
+| ternario de `int[]` | **falla** |
+| ternario de `String[]` | **falla** |
+| ternario de `char[]` asignado a un campo | **falla** |
+| ternario de `String` | anda |
+| el mismo tipo y las mismas ramas con `if/return` en vez de ternario | anda |
+
+Las cuatro primeras filas descartan que dependa del tipo del elemento o de como se construya el
+arreglo. La sexta descarta el ternario en general. La septima es la que senala el mecanismo: con
+`if/return` no hay merge --cada rama retorna-- y por eso anda.
+
+Causa: `types::lub` filtra sus entradas por `erased_id(t).is_some()`, y `erased_id` de un
+`RType::Array(_)` es `None` --un arreglo no tiene simbolo--. Con dos arreglos, el filtro se los
+lleva a los dos, la lista queda vacia y `lub` devuelve `RType::Unresolved`. Eso no se ve en el tipo
+de la expresion, pero el codegen del ternario declara sus dos ramas con el tipo del ternario
+**entero** --que es lo que las hace coincidir en el destino-- y `vtype_of(Unresolved)` es `Top`.
+
+Arreglo: `lub` trata los arreglos antes del filtro, siguiendo §4.10.3 -- mismo elemento da ese
+arreglo; elementos de referencia distintos, el arreglo del lub de los elementos; elementos
+primitivos distintos, `Object`. El `null` y lo no resuelto **no cuentan para decidir**: sin esa
+salvedad, `cond ? null : bytes` pasaba a valer `Object` y rompia una asignacion que antes andaba
+(lo detecto el compilado de `HKDFParameterSpec` inmediatamente despues del primer intento).
+
+### #478 -- ✅ el ternario descontaba uno de mas de la pila, y `max_stack` salia corto
+
+```java
+class M { byte[] f;
+    M(byte[] p) { this.f = p == null ? null : g(p, 0, p.length); }   // VerifyError
+}
+```
+
+```
+java.lang.VerifyError: Operand stack overflow
+  Reason: Exceeded max stack size.
+  stack: { 'M', '[B', integer }      // y todavia falta un `aload` mas
+```
+
+El metodo declaraba `stack=3` y necesitaba 4.
+
+**Delimitacion.** Tres cortes, y el segundo es el que parte el mundo en dos:
+
+| forma | resultado |
+|---|---|
+| `this.f = cond ? null : g(p, 0, p.length)` --ternario **con algo debajo** en la pila | **falla** |
+| `byte[] r = cond ? null : g(p, 0, p.length)` --el mismo ternario en un local | anda |
+| lo mismo con `String` en vez de `byte[]` | **falla** |
+
+La segunda fila descarta el ternario y la llamada: lo unico que cambia es si hay algo en la pila
+cuando el ternario empieza. La tercera descarta que tenga que ver con #477 --con `String` el `lub`
+anda y el `max_stack` sale corto igual--, o sea que son dos bugs distintos que se manifestaban en el
+mismo archivo.
+
+Causa: `ExprKind::Ternary` hacia `self.pop(1)` **despues** de `self.bind(otherwise)`. `bind` ya
+restaura el estado anotado en el salto --el de antes de la rama verdadera--, asi que ese `pop`
+descuenta uno de mas y la rama falsa se simula una posicion por debajo de la real. Con el ternario
+solo, la altura previa es cero y el `pop` satura sin dano; con algo debajo --el `this` de una
+asignacion a campo-- el `max_stack` sale exactamente uno corto.
+
+Se veia solo si la rama falsa era **la mas alta del metodo**: en cualquier otro caso el maximo lo
+fijaba otra instruccion y el numero corto no molestaba. Y nuestra VM no comprueba `max_stack`, asi
+que el `.class` corria bien aca.
+
+Repro: `scratchpad/zzter/{T1..T7}.java` (#477) y `scratchpad/zzmax/{M1,M2,M3}.java` (#478).
+
+### #480 ⬜ -- un `super(...)` de una interna al constructor de la interna de su superclase
+
+```java
+public class Outer {
+    protected class Inner { Inner(Object a) { } }
+}
+public class Sub extends Outer {
+    protected class SubInner extends Inner {
+        SubInner(Object a) { super(a); }   // <-- aca
+    }
+}
+```
+
+Dos sintomas distintos segun de donde venga `Inner`, y **no able por que difieren**:
+
+| forma | resultado |
+|---|---|
+| `Outer.java` y `Sub.java` en la misma invocacion | `error: el generador de bytecode todavia no soporta un super(...) que no resolvio a ningun constructor` |
+| `Inner` leida de un `.class` del classpath | **compila**, y emite un descriptor que no existe |
+
+El segundo es el peligroso. El constructor de `Inner` se emite bien --con la instancia envolvente de
+cabecera, `(Outer, Object)V`-- y la llamada desde `SubInner` se emite sin ella:
+
+```
+Sub$SubInner(Sub, java.lang.Object);
+   0: aload_0
+   1: aload_2
+   2: invokespecial // Method Outer$Inner."<init>":(Ljava/lang/Object;)V   <-- no existe
+```
+
+Falta el `aload_1` de la envolvente, y el descriptor del `Methodref` se arma con los argumentos
+escritos en vez de con la firma del constructor que se resolvio. El `.class` carga en nuestra VM
+--que no comprueba que el metodo exista hasta usarlo-- y muere en una JVM real con
+`NoSuchMethodError` al construir el objeto.
+
+Como salio: escribiendo `java.beans.beancontext.BeanContextServicesSupport`, cuyo `BCSSChild`
+extiende al `BCSChild` de `BeanContextSupport`. `BeanCtxTest` daba -1 en nuestra VM y
+`NoSuchMethodError` en el JDK 25 con `--patch-module`.
+
+Rodeo aplicado: `BCSSChild` no se escribio. `createBCSChild` delega en el de la superclase, y el
+javadoc dice por que. No es parte de la superficie medida, asi que no cuesta nada medido -- pero es
+una clase del JDK que falta por un bug nuestro, no por una decision de diseno.
+
+Repro: `KajiLibrary/repros/finding_480/` (`Outer.java`, `Sub.java`; el JDK 25 compila los dos y emite
+el `aload_1` que falta).
