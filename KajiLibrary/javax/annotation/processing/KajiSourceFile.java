@@ -31,6 +31,30 @@ class KajiSourceFile implements JavaFileObject {
     }
 
     // The name the processor asked to create ("Foo" for a top-level class Foo).
+    /**
+     * El URI que identifica a esta fuente generada.
+     *
+     * <p>Esquema `kaji:` y no `file:`, y a proposito: esta fuente **no esta en el disco** -- vive en
+     * el `StringWriter` que el `Filer` entrego. Un `file:` prometeria un archivo que nadie puede
+     * abrir.
+     */
+    public java.net.URI toUri() {
+        return java.net.URI.create("kaji:///" + this.getName());
+    }
+
+    /**
+     * El anidamiento, o `null`: averiguarlo pide leer el texto generado, y esta clase no lo parsea.
+     * `null` es la respuesta que el contrato define para "no se".
+     */
+    public javax.lang.model.element.NestingKind getNestingKind() {
+        return null;
+    }
+
+    /** El nivel de acceso, o `null`. Misma razon que arriba. */
+    public javax.lang.model.element.Modifier getAccessLevel() {
+        return null;
+    }
+
     public String getName() {
         return this.name;
     }
