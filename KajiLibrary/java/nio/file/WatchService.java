@@ -7,8 +7,10 @@ import java.util.concurrent.TimeUnit;
 // KajiJDK creates none (FileSystem.newWatchService rejects the request), so this is inert surface.
 public interface WatchService extends Closeable {
 
-    // No `throws IOException` here: KajiLibrary's Closeable.close() declares none, and an override
-    // may not widen the throws clause.
+    // Sin `throws IOException`, y eso **estrecha** lo que hereda: `java.io.Closeable.close()` si lo
+    // declara. Estrechar es legal (JLS 8.4.8.3 solo prohibe ensanchar) y aca es honesto, porque
+    // cerrar este servicio no toca nada que pueda fallar. El JDK lo declara igual que `Closeable`;
+    // la diferencia solo se nota en que un `catch (IOException)` alrededor de este `close` sobra.
     void close();
 
     /** Retrieves and removes the next signalled key, or null if none is present. */
