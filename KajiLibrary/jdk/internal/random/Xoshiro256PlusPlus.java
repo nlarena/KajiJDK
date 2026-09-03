@@ -25,7 +25,7 @@ import jdk.internal.util.random.RandomSupport;
  *           stream — which a nested type cannot resolve to (finding #101), so this one implements
  *           the top-level {@link RandomGenerator} and omits {@code jump}/{@code leap}.
  */
-public final class Xoshiro256PlusPlus implements RandomGenerator {
+public final class Xoshiro256PlusPlus implements RandomGenerator.LeapableGenerator {
 
     private long x0;
     private long x1;
@@ -100,5 +100,99 @@ public final class Xoshiro256PlusPlus implements RandomGenerator {
         this.x2 = q2;
         this.x3 = q3;
         return result;
+    }
+
+    // ---- las entradas que faltaban ---------------------------------------------------------------
+
+    // La semilla de los generadores sin argumentos: un contador compartido que avanza de a
+    // GOLDEN_RATIO_64, para que dos generadores seguidos no arranquen en estados vecinos.
+    private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
+            new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
+
+    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    public Xoshiro256PlusPlus() {
+        this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
+    }
+
+    /**
+     * Un generador sembrado desde bytes.
+     *
+     * <p>Los 4 valores que salen de la semilla **no pueden ser todos cero**: para un xor-shift el
+     * cero es un punto fijo, y el generador se quedaria ahi. Lo garantiza
+     * `RandomSupport.convertSeedBytesToLongs`, con los mismos parametros que usa el JDK.
+     */
+    public Xoshiro256PlusPlus(byte[] seed) {
+        long[] data = RandomSupport.convertSeedBytesToLongs(seed, 4, 4);
+        this.x0 = data[0];
+        this.x1 = data[1];
+        this.x2 = data[2];
+        this.x3 = data[3];
+    }
+
+    // ---- salto y salto largo ----------------------------------------------------------------------
+    //
+    // Las dos tablas son los **polinomios de salto** del algoritmo: cada bit en uno dice que hay que
+    // acumular el estado en ese paso. Recorrerlas equivale a avanzar `jumpDistance()` valores, y esa
+    // equivalencia es la que hace que dos hilos que arrancan a un salto de distancia recorran tramos
+    // que **no se solapan** -- no es una garantia estadistica sino aritmetica.
+    //
+    // Los numeros no son ajustables: son los publicados para este generador.
+
+    private static final long[] TABLA_SALTO = { 0x180ec6d33cfd0abaL, 0xd5a61266f0c9392cL, 0xa9582618e03fc9aaL, 0x39abdc4529b1661cL };
+
+    private static final long[] TABLA_SALTO_LARGO = { 0x76e15d3efefdcbbfL, 0xc5004e441c522fb3L, 0x77710069854ee241L, 0x39109bb02acbe635L };
+
+    /** Una copia de este generador, en el mismo estado. */
+    public Xoshiro256PlusPlus copy() {
+        return new Xoshiro256PlusPlus(this.x0, this.x1, this.x2, this.x3);
+    }
+
+    /** Avanza este generador dos a la 128 valores. */
+    public void jump() {
+        this.saltar(TABLA_SALTO);
+    }
+
+    /** Avanza este generador dos a la 192 valores. */
+    public void leap() {
+        this.saltar(TABLA_SALTO_LARGO);
+    }
+
+    /** Cuantos valores avanza {@link #jump()}. */
+    public double jumpDistance() {
+        return Math.scalb(1.0d, 128);
+    }
+
+    /** Cuantos valores avanza {@link #leap()}. */
+    public double leapDistance() {
+        return Math.scalb(1.0d, 192);
+    }
+
+    // El algoritmo de salto: se avanza el generador 64 veces por palabra de la tabla, acumulando el
+    // estado en los pasos que la tabla marca. Al final el acumulador **es** el estado que el
+    // generador habria tenido despues de la distancia de salto.
+    private void saltar(long[] tabla) {
+        long s0 = 0L;
+        long s1 = 0L;
+        long s2 = 0L;
+        long s3 = 0L;
+        int i = 0;
+        while (i < tabla.length) {
+            int b = 0;
+            while (b < 64) {
+                if ((tabla[i] & (1L << b)) != 0L) {
+                    s0 ^= this.x0;
+                    s1 ^= this.x1;
+                    s2 ^= this.x2;
+                    s3 ^= this.x3;
+                }
+                this.nextLong();
+                b = b + 1;
+            }
+            i = i + 1;
+        }
+        this.x0 = s0;
+        this.x1 = s1;
+        this.x2 = s2;
+        this.x3 = s3;
     }
 }

@@ -1,6 +1,7 @@
 package jdk.internal.random;
 
 import java.util.random.RandomGenerator;
+import java.util.random.RandomGenerator.SplittableGenerator;
 import jdk.internal.util.random.RandomSupport;
 
 /**
@@ -22,7 +23,7 @@ import jdk.internal.util.random.RandomSupport;
  *           implements the nested SplittableGenerator interface (finding #101), so {@code split} is omitted, as are
  *           the byte[] seed constructor and the no-arg one (which needs a shared AtomicLong counter).
  */
-public final class L64X256MixRandom implements RandomGenerator {
+public final class L64X256MixRandom implements RandomGenerator.SplittableGenerator {
 
     private static long multiplier() {
         return -3372029247567499371L;
@@ -118,5 +119,73 @@ public final class L64X256MixRandom implements RandomGenerator {
         this.x2 = q2;
         this.x3 = q3;
         return result;
+    }
+
+    // ---- las tres entradas que faltaban ----------------------------------------------------------
+
+    // La semilla de los generadores sin argumentos. Es un contador compartido que avanza de a
+    // GOLDEN_RATIO_64: dos generadores creados uno detras del otro no arrancan en estados vecinos,
+    // que es lo unico que se le pide.
+    private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
+            new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
+
+    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    public L64X256MixRandom() {
+        this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
+    }
+
+    /**
+     * Un generador sembrado desde bytes.
+     *
+     * <p>Los bytes se reparten en las palabras del estado y, si no alcanzan, el resto se rellena con
+     * un generador auxiliar -- una semilla corta dejaria el estado casi en cero, que para un
+     * xor-shift es un punto fijo. Lo hace {@link RandomSupport#convertSeedBytesToLongs}, con los
+     * mismos 6 y 4 que usa el JDK para este algoritmo, asi que la misma semilla da el mismo
+     * generador.
+     */
+    public L64X256MixRandom(byte[] seed) {
+        long[] data = RandomSupport.convertSeedBytesToLongs(seed, 6, 4);
+        this.a = data[0] | 1L;
+        this.s = data[1];
+        this.x0 = data[2];
+        this.x1 = data[3];
+        this.x2 = data[4];
+        this.x3 = data[5];
+    }
+
+    // ---- particion ---------------------------------------------------------------------------------
+    //
+    // Partir no es "sembrar otro al azar": dos semillas cercanas pueden dar secuencias que se pisan.
+    // La garantia sale de que el **addend** del LCG --la `a`-- del hijo se toma de la salmuera
+    // (`brine`) y no del azar, con lo cual cada hijo recorre una orbita distinta del mismo espacio.
+    //
+    // El corrimiento `brine << 1` deja el bit bajo libre, que es donde el constructor fuerza el
+    // impar. Sin eso, la mitad de las salmueras darian el mismo addend.
+
+    /** Un generador independiente de este, con la entropia de este. */
+    public SplittableGenerator split() {
+        return this.split(this);
+    }
+
+    /** Un generador independiente de este, con la entropia de `source`. */
+    public SplittableGenerator split(SplittableGenerator source) {
+        return this.split(source, source.nextLong());
+    }
+
+    /** El de arriba con la salmuera explicita: es el que hace el trabajo. */
+    public SplittableGenerator split(SplittableGenerator source, long brine) {
+        return new L64X256MixRandom(brine << 1, source.nextLong(),
+                source.nextLong(), source.nextLong(), source.nextLong(), source.nextLong());
+    }
+
+    /** `streamSize` generadores independientes, con la entropia de este. */
+    public java.util.stream.Stream<SplittableGenerator> splits(long streamSize) {
+        return this.splits(streamSize, this);
+    }
+
+    /** `streamSize` generadores independientes, con la entropia de `source`. */
+    public java.util.stream.Stream<SplittableGenerator> splits(long streamSize,
+            SplittableGenerator source) {
+        return Splits.de(this, streamSize, source);
     }
 }

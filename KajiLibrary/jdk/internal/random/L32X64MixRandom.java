@@ -1,6 +1,7 @@
 package jdk.internal.random;
 
 import java.util.random.RandomGenerator;
+import java.util.random.RandomGenerator.SplittableGenerator;
 import jdk.internal.util.random.RandomSupport;
 
 /**
@@ -21,7 +22,7 @@ import jdk.internal.util.random.RandomSupport;
  * @implNote An INTERNAL class; the JDK's is splittable through a nested interface (finding #101), so {@code split}
  *           is omitted.
  */
-public final class L32X64MixRandom implements RandomGenerator {
+public final class L32X64MixRandom implements RandomGenerator.SplittableGenerator {
 
     // The 32-bit LCG multiplier, 0xadb4a92d.
     private static int multiplier() {
@@ -116,5 +117,75 @@ public final class L32X64MixRandom implements RandomGenerator {
      */
     public long nextLong() {
         return (((long) this.nextInt()) << 32) ^ (long) this.nextInt();
+    }
+
+    // ---- las tres entradas que faltaban ----------------------------------------------------------
+
+    // La semilla de los generadores sin argumentos. Es un contador compartido que avanza de a
+    // GOLDEN_RATIO_64: dos generadores creados uno detras del otro no arrancan en estados vecinos,
+    // que es lo unico que se le pide.
+    private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
+            new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
+
+    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    public L32X64MixRandom() {
+        this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
+    }
+
+    /**
+     * Un generador sembrado desde bytes.
+     *
+     * <p>Los bytes se reparten en las palabras del estado y, si no alcanzan, el resto se rellena con
+     * un generador auxiliar -- una semilla corta dejaria el estado casi en cero, que para un
+     * xor-shift es un punto fijo. Lo hace {@link RandomSupport#convertSeedBytesToLongs}, con los
+     * mismos 4 y 2 que usa el JDK para este algoritmo, asi que la misma semilla da el mismo
+     * generador.
+     */
+    public L32X64MixRandom(byte[] seed) {
+        int[] data = RandomSupport.convertSeedBytesToInts(seed, 4, 2);
+        int a = data[0];
+        int s = data[1];
+        int x0 = data[2];
+        int x1 = data[3];
+        this.a = a | 1;
+        this.s = s;
+        this.x0 = x0;
+        this.x1 = x1;
+    }
+
+    // ---- particion ---------------------------------------------------------------------------------
+    //
+    // Partir no es "sembrar otro al azar": dos semillas cercanas pueden dar secuencias que se pisan.
+    // La garantia sale de que el **addend** del LCG --la `a`-- del hijo se toma de la salmuera
+    // (`brine`) y no del azar, con lo cual cada hijo recorre una orbita distinta del mismo espacio.
+    //
+    // El corrimiento `brine << 1` deja el bit bajo libre, que es donde el constructor fuerza el
+    // impar. Sin eso, la mitad de las salmueras darian el mismo addend.
+
+    /** Un generador independiente de este, con la entropia de este. */
+    public SplittableGenerator split() {
+        return this.split(this);
+    }
+
+    /** Un generador independiente de este, con la entropia de `source`. */
+    public SplittableGenerator split(SplittableGenerator source) {
+        return this.split(source, source.nextLong());
+    }
+
+    /** El de arriba con la salmuera explicita: es el que hace el trabajo. */
+    public SplittableGenerator split(SplittableGenerator source, long brine) {
+        return new L32X64MixRandom((int) (brine << 1), (int) source.nextLong(),
+                (int) source.nextLong(), (int) source.nextLong());
+    }
+
+    /** `streamSize` generadores independientes, con la entropia de este. */
+    public java.util.stream.Stream<SplittableGenerator> splits(long streamSize) {
+        return this.splits(streamSize, this);
+    }
+
+    /** `streamSize` generadores independientes, con la entropia de `source`. */
+    public java.util.stream.Stream<SplittableGenerator> splits(long streamSize,
+            SplittableGenerator source) {
+        return Splits.de(this, streamSize, source);
     }
 }

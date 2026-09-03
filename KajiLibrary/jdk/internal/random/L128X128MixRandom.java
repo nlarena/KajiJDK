@@ -1,6 +1,7 @@
 package jdk.internal.random;
 
 import java.util.random.RandomGenerator;
+import java.util.random.RandomGenerator.SplittableGenerator;
 import jdk.internal.util.random.RandomSupport;
 
 /**
@@ -28,7 +29,7 @@ import jdk.internal.util.random.RandomSupport;
  *
  * @implNote An INTERNAL class; the JDK's is splittable through a nested interface (finding #101).
  */
-public final class L128X128MixRandom implements RandomGenerator {
+public final class L128X128MixRandom implements RandomGenerator.SplittableGenerator {
 
     // The 128-bit LCG multiplier's low half, 0xd605bbb58c8abbfd. (The high half is 1, implicit.)
     private static long multiplier() {
@@ -124,5 +125,73 @@ public final class L128X128MixRandom implements RandomGenerator {
         this.x0 = q0;
         this.x1 = q1;
         return result;
+    }
+
+    // ---- las tres entradas que faltaban ----------------------------------------------------------
+
+    // La semilla de los generadores sin argumentos. Es un contador compartido que avanza de a
+    // GOLDEN_RATIO_64: dos generadores creados uno detras del otro no arrancan en estados vecinos,
+    // que es lo unico que se le pide.
+    private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
+            new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
+
+    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    public L128X128MixRandom() {
+        this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
+    }
+
+    /**
+     * Un generador sembrado desde bytes.
+     *
+     * <p>Los bytes se reparten en las palabras del estado y, si no alcanzan, el resto se rellena con
+     * un generador auxiliar -- una semilla corta dejaria el estado casi en cero, que para un
+     * xor-shift es un punto fijo. Lo hace {@link RandomSupport#convertSeedBytesToLongs}, con los
+     * mismos 6 y 2 que usa el JDK para este algoritmo, asi que la misma semilla da el mismo
+     * generador.
+     */
+    public L128X128MixRandom(byte[] seed) {
+        long[] data = RandomSupport.convertSeedBytesToLongs(seed, 6, 2);
+        this.ah = data[0];
+        this.al = data[1] | 1L;
+        this.sh = data[2];
+        this.sl = data[3];
+        this.x0 = data[4];
+        this.x1 = data[5];
+    }
+
+    // ---- particion ---------------------------------------------------------------------------------
+    //
+    // Partir no es "sembrar otro al azar": dos semillas cercanas pueden dar secuencias que se pisan.
+    // La garantia sale de que el **addend** del LCG --la `a`-- del hijo se toma de la salmuera
+    // (`brine`) y no del azar, con lo cual cada hijo recorre una orbita distinta del mismo espacio.
+    //
+    // El corrimiento `brine << 1` deja el bit bajo libre, que es donde el constructor fuerza el
+    // impar. Sin eso, la mitad de las salmueras darian el mismo addend.
+
+    /** Un generador independiente de este, con la entropia de este. */
+    public SplittableGenerator split() {
+        return this.split(this);
+    }
+
+    /** Un generador independiente de este, con la entropia de `source`. */
+    public SplittableGenerator split(SplittableGenerator source) {
+        return this.split(source, source.nextLong());
+    }
+
+    /** El de arriba con la salmuera explicita: es el que hace el trabajo. */
+    public SplittableGenerator split(SplittableGenerator source, long brine) {
+        return new L128X128MixRandom(source.nextLong(), brine << 1,
+                source.nextLong(), source.nextLong(), source.nextLong(), source.nextLong());
+    }
+
+    /** `streamSize` generadores independientes, con la entropia de este. */
+    public java.util.stream.Stream<SplittableGenerator> splits(long streamSize) {
+        return this.splits(streamSize, this);
+    }
+
+    /** `streamSize` generadores independientes, con la entropia de `source`. */
+    public java.util.stream.Stream<SplittableGenerator> splits(long streamSize,
+            SplittableGenerator source) {
+        return Splits.de(this, streamSize, source);
     }
 }
