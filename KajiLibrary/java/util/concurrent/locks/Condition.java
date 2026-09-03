@@ -19,6 +19,32 @@ public interface Condition {
     void awaitUninterruptibly();
 
     // Wake one thread waiting on this condition.
+    /**
+     * Espera hasta que la senialen o pase `time`.
+     *
+     * @return `false` si el plazo se agoto antes de la senial
+     */
+    boolean await(long time, java.util.concurrent.TimeUnit unit)
+            throws InterruptedException;
+
+    /**
+     * Espera hasta que la senialen o pasen `nanosTimeout` nanosegundos.
+     *
+     * <p>Devuelve **lo que sobro del plazo**, y ese detalle es el que la hace util en un bucle: una
+     * espera puede despertar sin senial --un *spurious wakeup*-- y hay que volver a esperar, pero
+     * solo por el resto. Con un `boolean` no se puede, porque no se sabe cuanto paso.
+     *
+     * @return los nanosegundos que sobraron; cero o menos si el plazo se agoto
+     */
+    long awaitNanos(long nanosTimeout) throws InterruptedException;
+
+    /**
+     * Espera hasta que la senialen o llegue `deadline`.
+     *
+     * @return `false` si la fecha llego antes de la senial
+     */
+    boolean awaitUntil(java.util.Date deadline) throws InterruptedException;
+
     void signal();
 
     // Wake all threads waiting on this condition.
