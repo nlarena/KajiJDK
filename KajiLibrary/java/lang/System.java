@@ -227,6 +227,12 @@ public final class System {
             "os.arch",
             "native.encoding",
             "file.encoding",
+            // Las dos que salen del entorno y no de una constante. `java.io.tmpdir` es la que hace
+            // usables a `Files.createTempFile`/`createTempDirectory`: sin ella no hay donde crear un
+            // temporal, y su caida a `"."` tampoco servia porque `user.dir` tambien faltaba y una
+            // ruta relativa no se podia llevar a absoluta. Eran dos ausencias que se tapaban entre si.
+            "java.io.tmpdir",
+            "user.dir",
         };
         int i = 0;
         while (i < keys.length) {

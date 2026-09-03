@@ -1046,7 +1046,11 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
      * one domain keyed by its (bootstrap) class loader.
      */
     public java.security.ProtectionDomain getProtectionDomain() {
-        return new ProtectionDomain(this.getClassLoader());
+        // Cuatro argumentos y no dos: el de dos crea un dominio de permisos **estaticos**, y decir
+        // que este dominio tiene fijados sus permisos para siempre seria afirmar algo que nadie
+        // comprobo. Con el de cuatro queda dinamico, que es lo que hace el JDK, y sin codesource ni
+        // permisos —los dos en null— porque es lo unico que se sabe: quien lo cargo.
+        return new ProtectionDomain(null, null, this.getClassLoader(), null);
     }
 
     // ---- three that answer without a table ----

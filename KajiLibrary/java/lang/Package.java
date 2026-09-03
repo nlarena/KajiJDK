@@ -17,11 +17,33 @@ import java.net.URL;
 public final class Package implements AnnotatedElement {
 
     private final String name;
+    // Los atributos que un manifiesto traeria. Son `null` para un paquete que se mintio al vuelo
+    // desde el nombre de una clase, y tienen valor para uno que `ClassLoader.definePackage` creo.
+    private final String specTitle;
+    private final String specVersion;
+    private final String specVendor;
+    private final String implTitle;
+    private final String implVersion;
+    private final String implVendor;
+    private final URL sealBase;
 
     // Package-private: only the class library (i.e. {@link Class}) mints these, from a loaded
     // class's package name.
     Package(String name) {
+        this(name, null, null, null, null, null, null, null);
+    }
+
+    // El constructor completo, para `ClassLoader.definePackage`.
+    Package(String name, String specTitle, String specVersion, String specVendor,
+            String implTitle, String implVersion, String implVendor, URL sealBase) {
         this.name = name;
+        this.specTitle = specTitle;
+        this.specVersion = specVersion;
+        this.specVendor = specVendor;
+        this.implTitle = implTitle;
+        this.implVersion = implVersion;
+        this.implVendor = implVendor;
+        this.sealBase = sealBase;
     }
 
     /** The fully-qualified name of this package (e.g. {@code java.lang}); {@code ""} for the default. */
@@ -31,41 +53,56 @@ public final class Package implements AnnotatedElement {
 
     // ---- manifest attributes ----
     //
-    // All null: a class loaded from a directory has no manifest to read a title, version or vendor
-    // from. The methods exist so code that probes for them degrades to "absent" rather than failing.
+    // Un paquete que se minto desde el nombre de una clase --el camino de `Class.getPackage()`--
+    // los tiene todos en `null`: una clase cargada de un directorio no tiene manifiesto que leer, y
+    // "ausente" es la respuesta correcta. Uno creado con `ClassLoader.definePackage` devuelve lo que
+    // le pasaron, que es de donde el JDK los saca tambien.
 
     public String getSpecificationTitle() {
-        return null;
+        return this.specTitle;
     }
 
     public String getSpecificationVersion() {
-        return null;
+        return this.specVersion;
     }
 
     public String getSpecificationVendor() {
-        return null;
+        return this.specVendor;
     }
 
     public String getImplementationTitle() {
-        return null;
+        return this.implTitle;
     }
 
     public String getImplementationVersion() {
-        return null;
+        return this.implVersion;
     }
 
     public String getImplementationVendor() {
-        return null;
+        return this.implVendor;
     }
 
-    /** Whether this package is sealed. Nothing is, without a JAR to seal it against. */
+    /** Si este paquete esta sellado, o sea si se lo definio con una base de sellado. */
     public boolean isSealed() {
-        return false;
+        return this.sealBase != null;
     }
 
-    /** Whether this package is sealed with respect to {@code url}. Never, here. */
+    /**
+     * Si este paquete esta sellado **contra esa** URL.
+     *
+     * <p>Sellar quiere decir "todas las clases de este paquete vienen del mismo lugar", y esta
+     * pregunta es la que lo comprueba: una clase que llega de otra URL no entra.
+     *
+     * @throws SecurityException si el paquete no esta sellado
+     */
     public boolean isSealed(URL url) {
-        return false;
+        if (url == null) {
+            throw new NullPointerException("url");
+        }
+        if (this.sealBase == null) {
+            throw new SecurityException("el paquete " + this.name + " no esta sellado");
+        }
+        return this.sealBase.equals(url);
     }
 
     /**
@@ -127,17 +164,18 @@ public final class Package implements AnnotatedElement {
 
     // ---- deprecated caller-sensitive lookups ----
     //
-    // The JDK walks the calling class's loader for these. KajiLibrary does not track defined
-    // packages behind the loader, so the honest answers are "none".
+    // En el JDK estas dos caminan el loader de **quien llama**. Aca hay un solo loader, asi que la
+    // pregunta "el loader de quien" no tiene mas que una respuesta y se la puede contestar: van al
+    // registro del loader unico, el mismo que `definePackage` puebla.
 
-    /** @deprecated a caller-sensitive lookup; returns {@code null} here. */
+    /** @deprecated una busqueda sensible al llamador; aca va al registro del loader unico. */
     public static Package getPackage(String name) {
-        return null;
+        return ClassLoader.getSystemClassLoader().getDefinedPackage(name);
     }
 
-    /** The packages known to the caller's loader — none are tracked here. */
+    /** Los paquetes definidos en el loader unico. */
     public static Package[] getPackages() {
-        return new Package[0];
+        return ClassLoader.getSystemClassLoader().getDefinedPackages();
     }
 
     // ---- annotations ----

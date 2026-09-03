@@ -95,10 +95,6 @@ public final class Double extends Number implements Comparable<Double>, Constant
             m = BigInteger.valueOf(rawSignificand | 0x0010000000000000L);
             e = (int) biasedExp - 1075;
         }
-        int maxDigits = 17;
-        if (asFloat) {
-            maxDigits = 9;
-        }
         // The decimal place, computed EXACTLY once rather than estimated per candidate: the
         // number of digits before the point does not depend on how many we choose to print.
         int place = Double.exactPlace(m, e);

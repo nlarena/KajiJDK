@@ -17,6 +17,10 @@ public class Throwable {
     private StackTraceElement[] stackTrace;
     // Las excepciones **suprimidas** (§14.20.3.1, try-with-resources): crece de a una.
     private Throwable[] suppressed;
+    // Los dos interruptores del constructor de cuatro argumentos. Arrancan en `true` porque es lo
+    // que hacen los otros cuatro constructores.
+    private boolean suppressionEnabled = true;
+    private boolean stackTraceWritable = true;
 
     public Throwable() {
         this.message = null;
@@ -31,6 +35,30 @@ public class Throwable {
     public Throwable(String message, Throwable cause) {
         this.message = message;
         this.cause = cause;
+    }
+
+    /**
+     * El constructor con los dos interruptores, para una subclase que quiera apagarlos.
+     *
+     * <p>Los dos existen por la misma razon: hay excepciones que se lanzan **muchisimas veces** como
+     * senal de control --el fin de un iterador, un salto de flujo-- y para esas, guardar la pila y la
+     * lista de suprimidas es trabajo puro que nadie va a mirar. Apagarlos es lo que permite que una
+     * excepcion singleton sea barata.
+     *
+     * <p>Con `enableSuppression` en `false`, `addSuppressed` **no hace nada** (no tira) y
+     * `getSuppressed` devuelve siempre vacio. Con `writableStackTrace` en `false`, ni
+     * `fillInStackTrace` ni `setStackTrace` cambian nada y el trace queda vacio para siempre.
+     *
+     * <p>Nota propia de esta biblioteca: KajiJDK **no captura la pila de forma nativa**, asi que el
+     * trace ya venia vacio con el interruptor en `true`. Lo que el `false` agrega de verdad aca es
+     * que `setStackTrace` deje de tener efecto, que es la mitad observable del contrato.
+     */
+    protected Throwable(String message, Throwable cause, boolean enableSuppression,
+            boolean writableStackTrace) {
+        this.message = message;
+        this.cause = cause;
+        this.suppressionEnabled = enableSuppression;
+        this.stackTraceWritable = writableStackTrace;
     }
 
     public Throwable(Throwable cause) {
@@ -80,6 +108,9 @@ public class Throwable {
      * KajiJDK has no such capture, so it just returns {@code this} with an empty trace.
      */
     public synchronized Throwable fillInStackTrace() {
+        if (!this.stackTraceWritable) {
+            return this;
+        }
         this.stackTrace = new StackTraceElement[0];
         return this;
     }
@@ -92,7 +123,13 @@ public class Throwable {
         return this.stackTrace.clone();
     }
 
-    /** Replace the stack trace with a copy of {@code stackTrace}. */
+    /**
+     * Replace the stack trace with a copy of {@code stackTrace}.
+     *
+     * <p>No hace nada si el objeto se construyo con `writableStackTrace` en `false`. Los chequeos
+     * del argumento corren igual --el `null` se rechaza siempre-- porque son del contrato del
+     * argumento y no del interruptor.
+     */
     public void setStackTrace(StackTraceElement[] stackTrace) {
         StackTraceElement[] copy = stackTrace.clone();
         int i = 0;
@@ -101,6 +138,9 @@ public class Throwable {
                 throw new NullPointerException("stackTrace[" + i + "]");
             }
             i = i + 1;
+        }
+        if (!this.stackTraceWritable) {
+            return;
         }
         this.stackTrace = copy;
     }
@@ -121,6 +161,11 @@ public class Throwable {
         if (exception == null) {
             throw new NullPointerException("la excepción suprimida es null");
         }
+        // Los dos chequeos de arriba valen igual: son del contrato del argumento, no del
+        // interruptor. Recien aca la supresion apagada se vuelve un no-op, como en el JDK.
+        if (!this.suppressionEnabled) {
+            return;
+        }
         if (this.suppressed == null) {
             this.suppressed = new Throwable[] { exception };
             return;
@@ -140,12 +185,20 @@ public class Throwable {
     }
 
     // ---- printing ----
-    //
-    // A KajiJDK va a `System.out`: no hay `System.err` en esta biblioteca todavía.
 
-    /** Print this throwable and its backtrace to the standard output. */
+    /**
+     * Print this throwable and its backtrace to the standard **error** stream.
+     *
+     * <p>A `System.err`, como el JDK. El comentario que estaba acá decia que iba a `System.out`
+     * porque "no hay `System.err` en esta biblioteca todavia" -- y `System.err` existe desde hace
+     * rato, asi que la nota quedo vieja y el destino equivocado.
+     *
+     * <p>No es un detalle cosmetico: una traza en la salida estandar se mezcla con lo que el programa
+     * imprime, y un `programa > archivo` se lleva el error adentro del resultado en vez de dejarlo en
+     * la consola. Que los dos flujos esten separados es justamente para que eso no pase.
+     */
     public void printStackTrace() {
-        printStackTrace(System.out);
+        printStackTrace(System.err);
     }
 
     /** Print this throwable and its backtrace to {@code s}. */

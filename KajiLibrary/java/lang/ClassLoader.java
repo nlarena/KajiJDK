@@ -131,14 +131,48 @@ public class ClassLoader {
 
     // ---- packages ----
     //
-    // KajiJDK does not track which packages a loader has defined (there is no `definePackage`
-    // bookkeeping behind the single loader), so a specific lookup finds nothing and the set is
-    // empty. `Class.getPackage()` still mints a `Package` on demand from a loaded class's name;
-    // these two answer the loader-centric question, which here has no state to answer from.
+    // El loader **si** lleva un registro de los paquetes que definio. Antes no lo llevaba, y eso
+    // dejaba el par cortado por la mitad: estaban las dos consultas (`getDefinedPackage`,
+    // `getDefinedPackages`) y no estaba lo unico que podria poblarlas (`definePackage`), asi que las
+    // dos contestaban "ninguno" para siempre.
+    //
+    // Lo que **no** cambia es de donde salen: aca nadie lee manifiestos, asi que el registro solo
+    // tiene lo que alguien haya definido a mano. `Class.getPackage()` sigue acuniando un `Package`
+    // al vuelo desde el nombre de la clase, sin pasar por aca -- son dos preguntas distintas.
+
+    private final java.util.HashMap<String, Package> paquetes =
+            new java.util.HashMap<String, Package>();
 
     /**
-     * The {@link Package} of the given name defined by this loader, or {@code null}. None are
-     * tracked here, so this is always {@code null}.
+     * Define un paquete en este loader, con los atributos que un manifiesto traeria.
+     *
+     * <p>Es `protected` porque es una operacion del loader sobre si mismo: quien define clases es
+     * quien sabe de que JAR vinieron y, por lo tanto, quien puede decir su version y su vendor.
+     *
+     * @param name el nombre del paquete
+     * @param sealBase la URL contra la que el paquete queda sellado, o `null` para no sellarlo
+     * @throws IllegalArgumentException si el paquete ya estaba definido en este loader
+     * @throws NullPointerException si `name` es `null`
+     */
+    protected Package definePackage(String name, String specTitle, String specVersion,
+            String specVendor, String implTitle, String implVersion, String implVendor,
+            URL sealBase) {
+        if (name == null) {
+            throw new NullPointerException("name");
+        }
+        synchronized (this.paquetes) {
+            if (this.paquetes.containsKey(name)) {
+                throw new IllegalArgumentException("el paquete " + name + " ya esta definido");
+            }
+            Package p = new Package(name, specTitle, specVersion, specVendor,
+                    implTitle, implVersion, implVendor, sealBase);
+            this.paquetes.put(name, p);
+            return p;
+        }
+    }
+
+    /**
+     * The {@link Package} of the given name defined by this loader, or {@code null}.
      *
      * @param name the package name; the empty string for the default package
      * @throws NullPointerException if {@code name} is null
@@ -147,12 +181,55 @@ public class ClassLoader {
         if (name == null) {
             throw new NullPointerException("name");
         }
+        synchronized (this.paquetes) {
+            return this.paquetes.get(name);
+        }
+    }
+
+    /** The packages defined by this loader. */
+    public final Package[] getDefinedPackages() {
+        synchronized (this.paquetes) {
+            return this.paquetes.values().toArray(new Package[0]);
+        }
+    }
+
+    /**
+     * El paquete de ese nombre, buscando **tambien en los padres**.
+     *
+     * <p>Es la diferencia con `getDefinedPackage`, que mira solo este loader. Aca hay un solo loader
+     * y por lo tanto ningun padre, asi que las dos respuestas coinciden -- pero la delegacion esta
+     * escrita, porque es la parte del contrato que importa el dia que haya jerarquia.
+     *
+     * @deprecated en el JDK, porque no distingue paquetes del mismo nombre en loaders distintos.
+     *     Usar {@link #getDefinedPackage(String)}.
+     */
+    protected Package getPackage(String name) {
+        Package propio = this.getDefinedPackage(name);
+        if (propio != null) {
+            return propio;
+        }
+        if (this.parent != null) {
+            return this.parent.getPackage(name);
+        }
         return null;
     }
 
-    /** The packages defined by this loader — none are tracked, so this is empty. */
-    public final Package[] getDefinedPackages() {
-        return new Package[0];
+    /**
+     * Todos los paquetes visibles desde este loader: los suyos y los de sus padres.
+     *
+     * <p>Los del padre van **primero** y los propios despues, que es el orden en que se los
+     * encuentra al delegar.
+     */
+    protected Package[] getPackages() {
+        Package[] propios = this.getDefinedPackages();
+        if (this.parent == null) {
+            return propios;
+        }
+        Package[] delPadre = this.parent.getPackages();
+        Package[] todos = new Package[delPadre.length + propios.length];
+        System.arraycopy(delPadre, 0, todos, 0, delPadre.length);
+        System.arraycopy(propios, 0, todos, delPadre.length, propios.length);
+        return todos;
     }
 
     // ---- resources ----
@@ -161,24 +238,97 @@ public class ClassLoader {
     // lookup honestly misses: a stream is {@code null}, an enumeration or stream of URLs is empty.
     // This is the same answer the real loader gives for a resource that is simply not present.
 
-    /** The resource of this name, or {@code null} — no non-class resources are served. */
+    // Los tres `find*` de abajo son **los puntos de extension**, y las tres formas publicas los
+    // llaman. Ese cableado es la parte que faltaba y no era cosmetica: antes `getResource` devolvia
+    // `null` directo, asi que una subclase que sobrescribiera `findResource` --que es la unica forma
+    // documentada de servir recursos propios-- **era ignorada**. El metodo publico no cumplia el
+    // protocolo que su javadoc promete.
+
+    /**
+     * The resource of this name, or {@code null}.
+     *
+     * <p>Delega primero en el padre y despues en {@link #findResource(String)}, que es el orden del
+     * JDK: un recurso del padre gana sobre uno propio del mismo nombre.
+     */
     public URL getResource(String name) {
-        return null;
+        if (name == null) {
+            throw new NullPointerException("name");
+        }
+        URL url = null;
+        if (this.parent != null) {
+            url = this.parent.getResource(name);
+        }
+        if (url == null) {
+            url = this.findResource(name);
+        }
+        return url;
     }
 
-    /** A stream for the resource of this name, or {@code null} — none are served. */
+    /** A stream for the resource of this name, or {@code null} if there is none. */
     public InputStream getResourceAsStream(String name) {
+        URL url = this.getResource(name);
+        if (url == null) {
+            return null;
+        }
+        try {
+            return url.openStream();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** Every resource of this name: los del padre y despues los propios. */
+    public Enumeration<URL> getResources(String name) throws IOException {
+        if (name == null) {
+            throw new NullPointerException("name");
+        }
+        java.util.ArrayList<URL> todos = new java.util.ArrayList<URL>();
+        if (this.parent != null) {
+            Enumeration<URL> delPadre = this.parent.getResources(name);
+            while (delPadre.hasMoreElements()) {
+                todos.add(delPadre.nextElement());
+            }
+        }
+        Enumeration<URL> propios = this.findResources(name);
+        while (propios.hasMoreElements()) {
+            todos.add(propios.nextElement());
+        }
+        return java.util.Collections.enumeration(todos);
+    }
+
+    /** Every resource of this name as a stream. */
+    public Stream<URL> resources(String name) {
+        try {
+            Enumeration<URL> e = this.getResources(name);
+            java.util.ArrayList<URL> todos = new java.util.ArrayList<URL>();
+            while (e.hasMoreElements()) {
+                todos.add(e.nextElement());
+            }
+            return todos.stream();
+        } catch (IOException ex) {
+            return Stream.empty();
+        }
+    }
+
+    // ---- los puntos de extension -------------------------------------------------------------------
+    //
+    // Los tres devuelven "nada": KajiJDK sirve clases del classpath, no archivos de recursos al lado.
+    // Es la misma respuesta que da el loader real para un recurso que no esta, y es donde una
+    // subclase que quiera servir recursos propios tiene que meter mano.
+
+    /** El recurso de ese nombre que **este** loader sirve, o `null`. */
+    protected URL findResource(String name) {
         return null;
     }
 
-    /** Every resource of this name — an empty enumeration, as none are served. */
-    public Enumeration<URL> getResources(String name) throws IOException {
-        return new EmptyEnumeration();
+    /** El recurso de ese nombre en ese modulo, o `null`. */
+    protected URL findResource(String moduleName, String name) throws IOException {
+        return null;
     }
 
-    /** Every resource of this name as a stream — empty, as none are served. */
-    public Stream<URL> resources(String name) {
-        return Stream.empty();
+    /** Todos los recursos de ese nombre que **este** loader sirve. */
+    protected Enumeration<URL> findResources(String name) throws IOException {
+        return new EmptyEnumeration();
     }
 
     /** A system resource of this name, or {@code null} — none are served. */
@@ -211,23 +361,43 @@ public class ClassLoader {
     /**
      * The type named {@code name}, optionally linked.
      *
-     * <p>{@code resolve} is accepted and ignored, and that is not laziness: the JVM is allowed to
-     * resolve lazily, this one does, and asking for eager resolution cannot make a correct
-     * program behave differently.
+     * <p>The order is the one §5.3.2 fixes: already loaded, then the parent (or the bootstrap
+     * loader when there is none), then this loader's own {@link #findClass}.
      *
      * @param name the binary name, with dots
      * @param resolve whether to link the type as well
      * @throws ClassNotFoundException if there is no such type
      */
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        Class<?> found = this.findLoadedClass(name);
-        if (found != null) {
+        synchronized (this.getClassLoadingLock(name)) {
+            Class<?> found = this.findLoadedClass(name);
+            if (found == null) {
+                // Delegacion al padre primero (§5.3.2): el que esta mas arriba gana. Es lo que
+                // impide que un `java.lang.String` puesto en un classpath cualquiera reemplace al
+                // de la plataforma.
+                try {
+                    found = this.parent != null
+                            ? this.parent.loadClass(name, false)
+                            : Class.forName(name);
+                } catch (ClassNotFoundException noEstaArriba) {
+                    found = null;
+                }
+            }
+            if (found == null) {
+                // Y recien despues, `findClass`: el gancho que la subclase escribe.
+                //
+                // Este paso FALTABA, y su ausencia no se veia porque el `findClass` de esta clase
+                // tira siempre: sin subclases que lo escribieran, delegar y despues no preguntar
+                // daba el mismo resultado. Con `java.net.URLClassLoader` --la primera subclase real
+                // del arbol-- se vio de inmediato: encontraba el archivo con `findResource` y
+                // despues `loadClass` tiraba `ClassNotFoundException` sin haberlo mirado.
+                found = this.findClass(name);
+            }
+            if (resolve) {
+                this.resolveClass(found);
+            }
             return found;
         }
-        if (this.parent != null) {
-            return this.parent.loadClass(name, resolve);
-        }
-        return Class.forName(name);
     }
 
     /**

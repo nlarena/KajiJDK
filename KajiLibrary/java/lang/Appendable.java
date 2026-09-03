@@ -6,9 +6,9 @@ package java.lang;
 // we don't model IOException yet.)
 public interface Appendable {
 
-    Appendable append(CharSequence csq);
+    Appendable append(CharSequence csq) throws java.io.IOException;
 
-    Appendable append(CharSequence csq, int start, int end);
+    Appendable append(CharSequence csq, int start, int end) throws java.io.IOException;
 
-    Appendable append(char c);
+    Appendable append(char c) throws java.io.IOException;
 }

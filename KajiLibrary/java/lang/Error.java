@@ -18,6 +18,17 @@ public class Error extends Throwable {
         super(message, cause);
     }
 
+    /**
+     * El constructor con los dos interruptores de `Throwable`: la supresion y la escritura del
+     * stack trace. Es `protected` porque solo tiene sentido para una subclase que quiera una
+     * excepcion **barata** -- una que se lanza como senal de control muchas veces y cuya pila nadie
+     * va a mirar.
+     */
+    protected Error(String message, Throwable cause, boolean enableSuppression,
+            boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
+
     public Error(Throwable cause) {
         super(cause);
     }
