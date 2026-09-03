@@ -21,9 +21,9 @@ import java.time.ZoneOffset;
 //   - the time is stated in one of three frames — UTC, wall time, or standard time — and
 //     converting between them is what `timeDefinition` selects.
 //
-// A KajiLibrary subset: the JDK's `of(...)` factory and `getTimeDefinition()` both mention the
-// nested enum `ZoneOffsetTransitionRule.TimeDefinition`, and a nested type does not resolve
-// (finding #101), so both are omitted. The definition is carried internally as an int.
+// El enum anidado `TimeDefinition` esta: se habia omitido porque un tipo anidado no resolvia
+// (finding #101), y ese finding se cerro. Adentro la definicion se sigue llevando como `int` --es lo
+// que la tabla guarda-- y el enum es la cara publica.
 public final class ZoneOffsetTransitionRule {
 
     private final int month;
@@ -48,6 +48,108 @@ public final class ZoneOffsetTransitionRule {
         this.standardOffset = standardOffset;
         this.offsetBefore = offsetBefore;
         this.offsetAfter = offsetAfter;
+    }
+
+    /**
+     * En que **marco** esta expresada la hora de la regla.
+     *
+     * <p>Es la parte de una regla de transicion que mas confunde, y la que hace falta para que el
+     * calculo de un instante de cambio sea correcto. "El ultimo domingo de octubre a las 2" tiene
+     * tres lecturas distintas segun a que reloj se refiera ese "las 2", y las tres se usan en la
+     * base de datos IANA: el reloj de pared vigente **antes** del cambio, el reloj estandar de la
+     * zona --el de invierno--, o UTC.
+     */
+    public enum TimeDefinition {
+
+        /** La hora esta en el reloj de pared vigente justo antes del cambio. */
+        WALL,
+
+        /** La hora esta en el reloj estandar de la zona, ignorando el horario de verano. */
+        STANDARD,
+
+        /** La hora esta en UTC. */
+        UTC;
+
+        /**
+         * Convierte `dateTime`, leida en **este** marco, al reloj de pared de antes del cambio.
+         *
+         * @param dateTime la fecha y hora tal como la regla la escribe
+         * @param standardOffset el desplazamiento estandar de la zona
+         * @param wallOffset el desplazamiento vigente antes del cambio
+         */
+        public LocalDateTime createDateTime(LocalDateTime dateTime, ZoneOffset standardOffset,
+                ZoneOffset wallOffset) {
+            if (this == UTC) {
+                return dateTime.plusSeconds((long) wallOffset.getTotalSeconds());
+            }
+            if (this == STANDARD) {
+                int diferencia = wallOffset.getTotalSeconds() - standardOffset.getTotalSeconds();
+                return dateTime.plusSeconds((long) diferencia);
+            }
+            return dateTime;
+        }
+    }
+
+    /** El marco en que esta expresada la hora de esta regla. */
+    public TimeDefinition getTimeDefinition() {
+        if (this.timeDefinition == 0) {
+            return TimeDefinition.UTC;
+        }
+        if (this.timeDefinition == 2) {
+            return TimeDefinition.STANDARD;
+        }
+        return TimeDefinition.WALL;
+    }
+
+    /**
+     * Una regla de transicion.
+     *
+     * @param dayOfMonthIndicator positivo, "el primer `dayOfWeek` en o despues del dia N"; negativo,
+     *     "en o antes del dia |N| contado desde el fin del mes"
+     * @param dayOfWeek el dia de la semana buscado, o `null` para el dia exacto
+     * @param timeEndOfDay si la hora es la medianoche del **final** del dia (las 24:00)
+     * @throws NullPointerException si `month`, `time`, `timeDefinition` o alguno de los tres
+     *     desplazamientos es `null`
+     * @throws IllegalArgumentException si `dayOfMonthIndicator` es 0 o esta fuera de [-28, 31], o si
+     *     `timeEndOfDay` es cierto y la hora no es medianoche
+     */
+    public static ZoneOffsetTransitionRule of(Month month, int dayOfMonthIndicator,
+            DayOfWeek dayOfWeek, LocalTime time, boolean timeEndOfDay,
+            TimeDefinition timeDefinition, ZoneOffset standardOffset, ZoneOffset offsetBefore,
+            ZoneOffset offsetAfter) {
+        if (month == null) {
+            throw new NullPointerException("month");
+        }
+        if (time == null) {
+            throw new NullPointerException("time");
+        }
+        if (timeDefinition == null) {
+            throw new NullPointerException("timeDefinition");
+        }
+        if (standardOffset == null || offsetBefore == null || offsetAfter == null) {
+            throw new NullPointerException("offset");
+        }
+        if (dayOfMonthIndicator == 0 || dayOfMonthIndicator < -28 || dayOfMonthIndicator > 31) {
+            throw new IllegalArgumentException(
+                    "Day of month indicator must be between -28 and 31 inclusive excluding zero");
+        }
+        if (timeEndOfDay && !time.equals(LocalTime.MIDNIGHT)) {
+            throw new IllegalArgumentException(
+                    "Time must be midnight when end of day flag is true");
+        }
+        int def = 1;
+        if (timeDefinition == TimeDefinition.UTC) {
+            def = 0;
+        } else if (timeDefinition == TimeDefinition.STANDARD) {
+            def = 2;
+        }
+        int dow = 0;
+        if (dayOfWeek != null) {
+            dow = dayOfWeek.getValue();
+        }
+        return new ZoneOffsetTransitionRule(month.getValue(), dayOfMonthIndicator, dow,
+                time.toSecondOfDay(), timeEndOfDay, def, standardOffset.getTotalSeconds(),
+                offsetBefore.getTotalSeconds(), offsetAfter.getTotalSeconds());
     }
 
     public Month getMonth() {

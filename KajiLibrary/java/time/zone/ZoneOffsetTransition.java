@@ -15,9 +15,10 @@ import java.time.ZoneOffset;
 // `isGap()` and `isOverlap()` are the whole point of the class: they are what a caller needs to
 // know before pretending a LocalDateTime names one instant.
 //
-// A KajiLibrary subset: `getValidOffsets` (package-private in the JDK) and Comparable/Serializable
-// are omitted; `compareTo(ZoneOffsetTransition)` is declared directly, so no bridge is needed.
-public final class ZoneOffsetTransition {
+// Implementa `Comparable`, que es lo que corresponde: la clase ya declaraba `compareTo`, y sin la
+// interfaz ese metodo no le sirve a nadie que ordene por la via generica --un `TreeSet`, un
+// `Collections.sort`-- porque el puente `compareTo(Object)` no se emitia. Ordena por instante.
+public final class ZoneOffsetTransition implements Comparable<ZoneOffsetTransition> {
 
     private final long epochSecond;
     private final int offsetBefore;
