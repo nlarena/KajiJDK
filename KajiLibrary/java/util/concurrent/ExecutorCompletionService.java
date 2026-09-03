@@ -19,9 +19,10 @@ package java.util.concurrent;
 // tasks happened to finish.
 //
 // WHERE THIS DIVERGES FROM THE JDK. The JDK's QueueingFuture *extends* FutureTask and
-// overrides its protected `done()` hook. KajiLibrary's FutureTask has no such hook, and our
-// javac cannot emit a `super.run()` call, so subclassing is not available: {@link
-// QueueingFuture} below instead *wraps* a FutureTask and forwards the Future methods to it.
+// overrides its protected `done()` hook. FutureTask here has that hook too, but subclassing is
+// still not available: the override would have to call `super.run()`, and our javac emits no
+// invokespecial for it (finding #125). So {@link QueueingFuture} below *wraps* a FutureTask and
+// forwards the Future methods to it.
 // Observably it is the same — the wrapper is what the caller gets back and what lands in the
 // queue, so the identity comparison `completionService.take() == theFutureIGotBack` still
 // holds. The JDK also reuses an {@link AbstractExecutorService}'s newTaskFor when it can; we
@@ -74,7 +75,7 @@ public class ExecutorCompletionService<V> implements CompletionService<V> {
     }
 
     // The next task to have finished, blocking until one has.
-    public Future<V> take() {
+    public Future<V> take() throws InterruptedException {
         return completionQueue.take();
     }
 
@@ -83,7 +84,7 @@ public class ExecutorCompletionService<V> implements CompletionService<V> {
         return completionQueue.poll();
     }
 
-    public Future<V> poll(long timeout, TimeUnit unit) {
+    public Future<V> poll(long timeout, TimeUnit unit) throws InterruptedException {
         return completionQueue.poll(timeout, unit);
     }
 }
@@ -122,11 +123,12 @@ final class QueueingFuture<V> implements RunnableFuture<V> {
         return task.isDone();
     }
 
-    public V get() {
+    public V get() throws InterruptedException, ExecutionException {
         return task.get();
     }
 
-    public V get(long timeout, TimeUnit unit) {
+    public V get(long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException {
         return task.get(timeout, unit);
     }
 }

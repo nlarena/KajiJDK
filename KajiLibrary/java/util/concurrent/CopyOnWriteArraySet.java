@@ -31,6 +31,13 @@ public class CopyOnWriteArraySet<E> extends AbstractSet<E> implements Serializab
     public CopyOnWriteArraySet() {
     }
 
+    // A set holding the distinct elements of `c`. Built through addAllAbsent rather than by copying
+    // the array: `c` is a Collection, not a Set, so it may well contain duplicates, and dropping
+    // them here is the whole difference between this constructor and the list's.
+    public CopyOnWriteArraySet(Collection<? extends E> c) {
+        al.addAllAbsent(c);
+    }
+
     public int size() {
         return al.size();
     }

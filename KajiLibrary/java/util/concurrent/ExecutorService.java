@@ -1,16 +1,27 @@
 package java.util.concurrent;
 
+import java.util.Collection;
+import java.util.List;
+
 // An {@link Executor} with a lifecycle and results: tasks can be submitted for a
 // {@link Future}, and the service can be shut down and waited on. This is the interface
 // application code normally holds — a pool, hidden behind its contract.
-//
-// Subset: invokeAll / invokeAny (batch submission) and shutdownNow are omitted; the
-// `throws InterruptedException` clauses are omitted package-wide (no interruption in
-// KajiJDK, and a throws clause is not part of the descriptor).
 public interface ExecutorService extends Executor, AutoCloseable {
 
     // Stop accepting tasks; those already submitted still run.
     void shutdown();
+
+    /**
+     * Stops accepting tasks, gives up on the ones still queued, and returns them.
+     *
+     * <p>The list is the point. {@link #shutdown} drains the backlog; this one abandons it, and a
+     * caller that has to abandon work usually has to *account* for it -- log it, persist it, hand it
+     * to another service. Discarding the tasks and returning nothing would leave no way to do that.
+     *
+     * <p>Tasks already running are asked to stop by interruption, which they are free to ignore; the
+     * name promises a best effort and not a guarantee.
+     */
+    List<Runnable> shutdownNow();
 
     boolean isShutdown();
 
@@ -18,7 +29,7 @@ public interface ExecutorService extends Executor, AutoCloseable {
     boolean isTerminated();
 
     // Wait for termination, up to the given time; reports whether it terminated.
-    boolean awaitTermination(long timeout, TimeUnit unit);
+    boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
 
     // Submit a value-returning task.
     <T> Future<T> submit(Callable<T> task);
@@ -28,6 +39,41 @@ public interface ExecutorService extends Executor, AutoCloseable {
 
     // Submit a Runnable; the Future yields null when it completes.
     Future<?> submit(Runnable task);
+
+    /**
+     * Runs every task and returns once they have ALL finished, one Future per task in the order of
+     * the collection's iterator.
+     *
+     * <p>Every returned Future {@code isDone()}; that is the contract, and it is what separates this
+     * from a loop of {@code submit}. Finished does not mean succeeded -- a task that threw is done
+     * too, and its Future reports the failure when read.
+     */
+    <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) throws InterruptedException;
+
+    /**
+     * The same, but giving up on whatever has not finished when the timeout expires.
+     *
+     * <p>The Futures of the unfinished tasks come back cancelled rather than missing, so the result
+     * list still lines up one-to-one with the input -- the caller can tell *which* task did not make
+     * it, which a shorter list would not say.
+     */
+    <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit)
+            throws InterruptedException;
+
+    /**
+     * Runs the tasks and returns the result of the first one to SUCCEED, cancelling the rest.
+     *
+     * <p>"Succeed", not "finish": tasks that throw are passed over and the others keep running. This
+     * is the redundant-request pattern -- ask three replicas, take the first good answer -- and it
+     * only works if a failure is a reason to wait for the others rather than to give up.
+     *
+     * @throws ExecutionException if no task succeeded; the cause is the last failure seen
+     */
+    <T> T invokeAny(Collection<? extends Callable<T>> tasks) throws InterruptedException, ExecutionException;
+
+    // The same with a deadline; a TimeoutException means nothing succeeded in time.
+    <T> T invokeAny(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException;
 
     /**
      * Shuts the service down and waits for the tasks already submitted to finish -- which is what
@@ -46,9 +92,22 @@ public interface ExecutorService extends Executor, AutoCloseable {
     default void close() {
         this.shutdown();
         int rounds = 0;
+        boolean interrumpido = false;
         while (!this.isTerminated() && rounds < 100) {
-            this.awaitTermination(100L, TimeUnit.MILLISECONDS);
+            // `close()` viene de `AutoCloseable` y **no** puede declarar `InterruptedException`: un
+            // try-with-resources no podria cerrarla. El JDK hace lo mismo -- atrapa, corta la espera
+            // y remarca el hilo, que es lo unico honesto: el pool queda pidiendo apagarse aunque no
+            // se lo haya esperado hasta el final.
+            try {
+                this.awaitTermination(100L, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                interrumpido = true;
+                rounds = 100;
+            }
             rounds = rounds + 1;
+        }
+        if (interrumpido) {
+            Thread.currentThread().interrupt();
         }
     }
 }

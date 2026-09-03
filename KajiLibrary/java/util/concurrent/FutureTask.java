@@ -62,20 +62,105 @@ public class FutureTask<V> implements RunnableFuture<V> {
             } catch (Exception e) {
                 thrown = e;
             }
-            synchronized (sync) {
-                // A cancel that landed while we ran wins: leave the outcome alone.
-                if (state == NEW) {
-                    if (thrown == null) {
-                        result = value;
-                        state = COMPLETED;
-                    } else {
-                        failure = thrown;
-                        state = FAILED;
-                    }
-                }
-                sync.notifyAll();
+            if (thrown == null) {
+                set(value);
+            } else {
+                setException(thrown);
             }
         }
+    }
+
+    /**
+     * Runs the task without recording its result, leaving it ready to run again; reports whether it
+     * ran to completion and stayed unfinished.
+     *
+     * <p>This is what a periodic task is built on: {@code ScheduledThreadPoolExecutor} reruns the
+     * same FutureTask on every tick, and a task that latched a result on the first tick could never
+     * be rerun. A failure is *not* reset -- a periodic task that throws stops repeating, which is
+     * the JDK's behaviour and the reason the return value exists.
+     */
+    protected boolean runAndReset() {
+        boolean shouldRun;
+        synchronized (sync) {
+            shouldRun = state == NEW;
+        }
+        boolean ran = false;
+        if (shouldRun) {
+            Throwable thrown = null;
+            try {
+                callable.call();
+                ran = true;
+            } catch (Exception e) {
+                thrown = e;
+            }
+            if (thrown != null) {
+                setException(thrown);
+            }
+        }
+        boolean stillNew;
+        synchronized (sync) {
+            stillNew = state == NEW;
+        }
+        return ran && stillNew;
+    }
+
+    /**
+     * Records a normal result and wakes the waiters, unless the task already finished or was
+     * cancelled.
+     *
+     * <p>{@code protected} rather than private because it is the seam a subclass uses to complete
+     * the task from somewhere other than {@link #run} -- a task completed by a callback, an I/O
+     * completion, another thread's answer.
+     */
+    protected void set(V v) {
+        boolean transitioned;
+        synchronized (sync) {
+            // A cancel that landed while we ran wins: leave the outcome alone.
+            if (state == NEW) {
+                result = v;
+                state = COMPLETED;
+                transitioned = true;
+            } else {
+                transitioned = false;
+            }
+            sync.notifyAll();
+        }
+        if (transitioned) {
+            done();
+        }
+    }
+
+    // The failing counterpart of {@link #set}: the task's own throwable is what get() will wrap.
+    protected void setException(Throwable t) {
+        boolean transitioned;
+        synchronized (sync) {
+            if (state == NEW) {
+                failure = t;
+                state = FAILED;
+                transitioned = true;
+            } else {
+                transitioned = false;
+            }
+            sync.notifyAll();
+        }
+        if (transitioned) {
+            done();
+        }
+    }
+
+    /**
+     * Called exactly once, on the thread that settled the task, right after it became done -- by
+     * completion, by failure or by cancellation.
+     *
+     * <p>Empty here on purpose: it exists so a subclass can react to completion without polling.
+     * {@code ExecutorCompletionService} is the canonical user -- its tasks push themselves onto the
+     * completion queue from this hook, which is what makes "take the next task that finished"
+     * possible at all.
+     *
+     * <p>Invoked outside the monitor: a subclass's hook is arbitrary code, and running it under the
+     * lock that {@code get} waits on would let a hook that blocks deadlock every waiter.
+     */
+    protected void done() {
     }
 
     // Cancel if the task has not finished. There is no interruption in KajiJDK, so a task
@@ -91,6 +176,9 @@ public class FutureTask<V> implements RunnableFuture<V> {
             } else {
                 cancelled = false;
             }
+        }
+        if (cancelled) {
+            done();
         }
         return cancelled;
     }
@@ -112,7 +200,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
     }
 
     // No `throws` on these two overrides — see #104 on ExecutionException.
-    public V get() {
+    public V get() throws InterruptedException {
         V value;
         synchronized (sync) {
             while (state == NEW) {
@@ -123,7 +211,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
         return value;
     }
 
-    public V get(long timeout, TimeUnit unit) {
+    public V get(long timeout, TimeUnit unit) throws InterruptedException {
         V value;
         synchronized (sync) {
             if (state == NEW) {

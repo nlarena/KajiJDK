@@ -26,17 +26,27 @@ package java.util.concurrent;
 // between opcodes the two are observably the same, and the phase-number-as-generation trick
 // is the same one {@link CyclicBarrier} uses.
 //
-// Subset: the tiered (parent/child) phasers are not modelled — {@code getParent}, {@code
-// getRoot} and the two Phaser-taking constructors are absent. Tiering exists only to spread
-// CAS contention across a tree of phasers, which is a cost we do not pay: a monitor-based
-// phaser gets nothing from being split.
+// TIERING. A phaser may name a parent, and then it is one *party* of that parent rather than a
+// barrier of its own: the phase number, the termination flag and the waiting all live at the
+// ROOT of the tree, and a child only keeps its own party count. When a child's last local party
+// arrives, the child arrives at its parent; when a child's first party registers, the child
+// registers itself with its parent; when its last party deregisters, it deregisters. So a tree
+// of phasers behaves exactly like one phaser with all the leaves' parties, which is the point --
+// in the JDK tiering exists to spread CAS contention over several state words, and the semantics
+// were never supposed to change. Here there is no contention to spread, so what is implemented is
+// only the part that IS observable: the shared phase, and the parent/child registration cascade.
 //
 // Single-exit style throughout (finding #105).
 public class Phaser {
 
     private final Object sync = new Object();
+    // The tree. `root` is `this` for an untiered phaser, and both are final -- a phaser's place
+    // in the tree is fixed at construction, so no reader ever needs a lock to follow them.
+    private final Phaser parent;
+    private final Phaser root;
     // The current phase number, always >= 0; the negative values callers see are produced on
-    // the way out by terminated(), never stored.
+    // the way out by terminatedPhase(), never stored. Meaningful only at the ROOT: a child reads
+    // its parent's, all the way up, which is what makes the whole tree advance as one.
     private int phase;
     // Parties currently registered.
     private int parties;
@@ -45,15 +55,42 @@ public class Phaser {
     private boolean terminated;
 
     public Phaser() {
-        this(0);
+        this(null, 0);
     }
 
     public Phaser(int parties) {
+        this(null, parties);
+    }
+
+    /** A child of {@code parent} with no parties of its own yet. */
+    public Phaser(Phaser parent) {
+        this(parent, 0);
+    }
+
+    /**
+     * A child of {@code parent} with {@code parties} parties.
+     *
+     * <p>Registering with the parent happens here only when there is at least one party: an empty
+     * child is not yet anybody's party, exactly as in the JDK. A party registered later takes the
+     * child from zero to one and *that* is when the child joins its parent.
+     *
+     * @param parent the phaser this one is a party of, or null for a root
+     */
+    public Phaser(Phaser parent, int parties) {
         if (parties < 0) {
             throw new IllegalArgumentException("parties < 0");
         }
+        this.parent = parent;
+        if (parent == null) {
+            this.root = this;
+        } else {
+            this.root = parent.root;
+        }
         this.parties = parties;
         this.unarrived = parties;
+        if (parent != null && parties > 0) {
+            parent.register();
+        }
     }
 
     // The phase number as a *terminated* phaser reports it: the same number with the sign bit
@@ -63,15 +100,28 @@ public class Phaser {
         return p | (1 << 31);
     }
 
-    // The phase to report right now: negative once terminated. Caller holds sync.
+    // The phase to report right now: negative once terminated. Read from the ROOT, because that
+    // is where both the number and the termination flag live -- a child that answered from its own
+    // fields would report a phase the rest of the tree had already left.
     private int currentPhase() {
         int p;
-        if (terminated) {
-            p = terminatedPhase(phase);
-        } else {
-            p = phase;
+        synchronized (root.sync) {
+            if (root.terminated) {
+                p = terminatedPhase(root.phase);
+            } else {
+                p = root.phase;
+            }
         }
         return p;
+    }
+
+    // Whether the tree has terminated. Same reasoning: the flag belongs to the root.
+    private boolean treeTerminated() {
+        boolean t;
+        synchronized (root.sync) {
+            t = root.terminated;
+        }
+        return t;
     }
 
     // Add `n` parties to the current phase. They count as *unarrived*, so a party that
@@ -79,14 +129,25 @@ public class Phaser {
     // what makes "spawn a helper and have it join this round" work.
     private int doRegister(int n) {
         int p;
+        boolean joinParent = false;
         synchronized (sync) {
-            if (terminated) {
-                p = terminatedPhase(phase);
+            if (treeTerminated()) {
+                p = currentPhase();
             } else {
+                // Zero to nonzero is when a child becomes a party of its parent -- see the note
+                // on the tiering constructor.
+                if (parties == 0 && parent != null) {
+                    joinParent = true;
+                }
                 parties = parties + n;
                 unarrived = unarrived + n;
-                p = phase;
+                p = currentPhase();
             }
+        }
+        // Outside our own monitor: the registration may cascade all the way to the root, and the
+        // other parties of *this* phaser have no business waiting for that climb.
+        if (joinParent) {
+            parent.register();
         }
         return p;
     }
@@ -147,93 +208,181 @@ public class Phaser {
     // arrived at (negative if terminated). This is the "producer" half of a phaser: a thread
     // that only needs to signal its progress, not to synchronize with it.
     public int arrive() {
-        int p;
-        synchronized (sync) {
-            if (terminated) {
-                p = terminatedPhase(phase);
-            } else {
-                if (unarrived <= 0) {
-                    throw new IllegalStateException("Attempted arrival of unregistered party");
-                }
-                p = phase;
-                unarrived = unarrived - 1;
-                if (unarrived == 0) {
-                    advance();
-                }
-            }
-        }
-        return p;
+        return doArrive(false);
     }
 
     // Arrive and give up registration in one step, then leave without waiting. Returns the
     // phase arrived at. This is how a worker retires: the parties it leaves behind are one
-    // fewer, so the *next* phase completes with one fewer arrival — and if it was the last
-    // party, the phaser terminates.
+    // fewer, so the *next* phase completes with one fewer arrival -- and if it was the last
+    // party, the phaser terminates (or, in a tree, leaves its parent).
     public int arriveAndDeregister() {
+        return doArrive(true);
+    }
+
+    /**
+     * The body of both arrivals.
+     *
+     * <p>The interesting half is the branch on {@code parent}. A ROOT that runs out of unarrived
+     * parties advances the phase itself. A CHILD instead resets its own round and reports a
+     * single arrival to its parent -- which is the whole of tiering: N parties of a child count
+     * as one party of its parent, so the tree completes a phase exactly when every leaf has.
+     *
+     * <p>The parent is called after the monitor is released. Holding a child's lock across a call
+     * that may climb to the root would make every party of that child wait for the climb, and it
+     * is the one place where the tree's depth would become visible as latency.
+     */
+    private int doArrive(boolean deregister) {
         int p;
+        boolean tellParentArrived = false;
+        boolean tellParentGone = false;
         synchronized (sync) {
-            if (terminated) {
-                p = terminatedPhase(phase);
+            if (treeTerminated()) {
+                p = currentPhase();
             } else {
                 if (unarrived <= 0) {
                     throw new IllegalStateException("Attempted arrival of unregistered party");
                 }
-                p = phase;
-                parties = parties - 1;
+                p = currentPhase();
                 unarrived = unarrived - 1;
+                if (deregister) {
+                    parties = parties - 1;
+                }
                 if (unarrived == 0) {
-                    // parties is already decremented, so onAdvance sees the population that
-                    // will actually run the next phase.
-                    advance();
+                    if (parent == null) {
+                        // parties is already decremented, so onAdvance sees the population that
+                        // will actually run the next phase.
+                        advance();
+                    } else {
+                        unarrived = parties;
+                        tellParentArrived = true;
+                    }
+                }
+                if (deregister && parties == 0 && parent != null) {
+                    // Nothing left here, so this phaser stops being a party of its parent. It
+                    // arrives *and* deregisters, so the parent's round is not left short.
+                    tellParentGone = true;
+                    tellParentArrived = false;
                 }
             }
+        }
+        if (tellParentGone) {
+            parent.arriveAndDeregister();
+        } else if (tellParentArrived) {
+            parent.arrive();
         }
         return p;
     }
 
-    // Arrive and block until every other registered party has arrived too — the barrier
+    // Arrive and block until every other registered party has arrived too -- the barrier
     // proper. Returns the phase number of the phase that just *started* (negative if the
     // arrival terminated the phaser instead), which is what makes a worker loop of the form
     // `while (phaser.arriveAndAwaitAdvance() >= 0)` terminate on its own.
+    //
+    // Written as arrive-then-await, exactly as the JDK writes it, and that is not a shortcut: the
+    // arrival must not be made while holding a lock the wait would then need, or a tiered phaser
+    // would deadlock against its own root. Between the two calls the phase may already have
+    // moved, which awaitAdvance handles by returning at once.
     public int arriveAndAwaitAdvance() {
-        int next;
-        synchronized (sync) {
-            if (terminated) {
-                next = terminatedPhase(phase);
-            } else {
-                if (unarrived <= 0) {
-                    throw new IllegalStateException("Attempted arrival of unregistered party");
-                }
-                int arrivedAt = phase;
-                unarrived = unarrived - 1;
-                if (unarrived == 0) {
-                    advance();
-                } else {
-                    // The phase number *is* the generation: block until it moves on, or until
-                    // someone terminates the phaser out from under us.
-                    while (phase == arrivedAt && !terminated) {
-                        sync.wait();
-                    }
-                }
-                next = currentPhase();
-            }
-        }
-        return next;
+        return awaitAdvance(arrive());
     }
 
-    // Block until the phaser leaves the given phase, **without** arriving at it. Useful for
-    // an observer that is not one of the parties. Returns the phase that follows; a negative
-    // argument (the value a terminated phaser reports) returns immediately.
+    /**
+     * Blocks until the phaser leaves the given phase, **without** arriving at it.
+     *
+     * <p>Useful for an observer that is not one of the parties. A negative argument -- the value a
+     * terminated phaser reports -- returns immediately, so a loop reading the previous call's
+     * result unwinds by itself.
+     *
+     * <p>The wait is on the ROOT's monitor and takes no other lock. Every phaser in a tree shares
+     * one phase, so there is exactly one place to wait, and waiting anywhere else would mean
+     * missing the advance that a sibling's arrival caused.
+     *
+     * <p>Not interruptible: advancing a phase is not something a party may abandon halfway, since
+     * the others would wait for ever for an arrival that never comes. The interrupt is not lost --
+     * the thread is marked again on the way out. {@link #awaitAdvanceInterruptibly} is the
+     * abortable form.
+     */
     public int awaitAdvance(int p) {
         int result;
-        synchronized (sync) {
-            if (p < 0) {
-                result = p;
-            } else {
-                while (phase == p && !terminated) {
-                    sync.wait();
+        boolean interrumpido = false;
+        if (p < 0) {
+            result = p;
+        } else {
+            synchronized (root.sync) {
+                while (root.phase == p && !root.terminated) {
+                    try {
+                        root.sync.wait();
+                    } catch (InterruptedException e) {
+                        interrumpido = true;
+                    }
                 }
-                result = currentPhase();
+                if (root.terminated) {
+                    result = terminatedPhase(root.phase);
+                } else {
+                    result = root.phase;
+                }
+            }
+            if (interrumpido) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        return result;
+    }
+
+    /**
+     * {@link #awaitAdvance} that gives up when the thread is interrupted.
+     *
+     * <p>The difference is not cosmetic: this one leaves without arriving and without advancing
+     * anything, so the caller inherits responsibility for whatever the other parties are still
+     * waiting for. That is the trade the two methods offer -- a wait that cannot be aborted and a
+     * phase that always completes, or a wait that can and a phase that may not.
+     */
+    public int awaitAdvanceInterruptibly(int p) throws InterruptedException {
+        int result;
+        if (p < 0) {
+            result = p;
+        } else {
+            synchronized (root.sync) {
+                while (root.phase == p && !root.terminated) {
+                    root.sync.wait();
+                }
+                if (root.terminated) {
+                    result = terminatedPhase(root.phase);
+                } else {
+                    result = root.phase;
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * The same with a deadline.
+     *
+     * @throws TimeoutException if the phase had not advanced when the time ran out -- and note
+     *         that this leaves the phaser exactly as it was, since waiting never changed it
+     */
+    public int awaitAdvanceInterruptibly(int p, long timeout, TimeUnit unit)
+            throws InterruptedException, TimeoutException {
+        int result;
+        if (p < 0) {
+            result = p;
+        } else {
+            long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
+            synchronized (root.sync) {
+                long remaining = deadline - System.currentTimeMillis();
+                while (root.phase == p && !root.terminated && remaining > 0L) {
+                    root.sync.wait(remaining);
+                    remaining = deadline - System.currentTimeMillis();
+                }
+                if (root.phase == p && !root.terminated) {
+                    throw new TimeoutException();
+                }
+                if (root.terminated) {
+                    result = terminatedPhase(root.phase);
+                } else {
+                    result = root.phase;
+                }
             }
         }
         return result;
@@ -244,18 +393,27 @@ public class Phaser {
     // is the escape hatch for a worker that fails and would otherwise leave the rest blocked
     // forever waiting for an arrival that will never come.
     public void forceTermination() {
-        synchronized (sync) {
-            terminated = true;
-            sync.notifyAll();
+        // Terminated at the root, because that is where the flag lives: terminating a child alone
+        // would leave the rest of the tree waiting for a party that is never coming back.
+        synchronized (root.sync) {
+            root.terminated = true;
+            root.sync.notifyAll();
         }
     }
 
     public boolean isTerminated() {
-        boolean t;
-        synchronized (sync) {
-            t = terminated;
-        }
-        return t;
+        return treeTerminated();
+    }
+
+    // The phaser this one is a party of, or null if it is a root.
+    public Phaser getParent() {
+        return parent;
+    }
+
+    // The top of the tree -- `this` for an untiered phaser. The root is where the phase, the
+    // termination flag and every waiter actually are.
+    public Phaser getRoot() {
+        return root;
     }
 
     // The current phase, or a negative value once terminated.

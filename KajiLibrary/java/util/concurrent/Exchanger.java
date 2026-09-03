@@ -26,7 +26,7 @@ public class Exchanger<V> {
     }
 
     // Offer `x` and receive the partner's value, blocking until a partner arrives.
-    public V exchange(V x) {
+    public V exchange(V x) throws InterruptedException {
         Object result;
         synchronized (sync) {
             // Let any in-flight handshake finish before joining as a new party.
@@ -61,7 +61,7 @@ public class Exchanger<V> {
 
     // Like {@link #exchange}, but gives up after the timeout with a TimeoutException,
     // withdrawing the offer so no later partner can complete a stale handshake.
-    public V exchange(V x, long timeout, TimeUnit unit) throws TimeoutException {
+    public V exchange(V x, long timeout, TimeUnit unit) throws TimeoutException, InterruptedException {
         Object result;
         synchronized (sync) {
             while (handed) {

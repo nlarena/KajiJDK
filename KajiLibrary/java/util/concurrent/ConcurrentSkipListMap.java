@@ -53,7 +53,7 @@ import java.util.SortedSet;
  *           left throwing, so a caller that needs them gets a compile error instead of a surprise.
  */
 public class ConcurrentSkipListMap<K, V> extends AbstractMap<K, V>
-        implements ConcurrentNavigableMap<K, V> {
+        implements ConcurrentNavigableMap<K, V>, Cloneable {
 
     // The comparator, or null to compare keys by their own natural ordering.
     private final Comparator<? super K> keyComparator;
@@ -92,6 +92,54 @@ public class ConcurrentSkipListMap<K, V> extends AbstractMap<K, V>
         this.head = new SkipNode<K, V>(null, null, ConcurrentSkipListMap.maxLevel());
         this.count = 0;
         this.randomState = 0x2545F491;
+    }
+
+    /**
+     * Creates a map holding the mappings of {@code m}, ordered by the keys' NATURAL ordering.
+     *
+     * <p>Natural even when {@code m} is sorted by a comparator: a plain {@link Map} has no ordering
+     * to preserve, and this constructor cannot tell one that happens to be sorted from one that is
+     * not. That is what the {@code SortedMap} overload is for, and picking between the two is the
+     * caller's decision, made by the static type of the argument.
+     */
+    public ConcurrentSkipListMap(Map<? extends K, ? extends V> m) {
+        this();
+        this.copyFrom(m);
+    }
+
+    // Creates a map holding the mappings of `m`, keeping ITS ordering. Dropping the comparator here
+    // would re-sort the entries under the caller, and the copy would disagree with the original
+    // about which key is first.
+    public ConcurrentSkipListMap(java.util.SortedMap<K, ? extends V> m) {
+        this(m.comparator());
+        this.copyFrom(m);
+    }
+
+    /**
+     * A shallow copy: same mappings, same ordering, independent map.
+     *
+     * <p>Rebuilt by re-inserting rather than by copying the node graph. A skip list node carries
+     * forward pointers at several levels, so a field-by-field copy would leave both maps sharing
+     * one structure -- a write through either would show up in the other, which is the opposite of
+     * what clone promises.
+     */
+    @Override
+    public ConcurrentSkipListMap<K, V> clone() {
+        ConcurrentSkipListMap<K, V> copy = new ConcurrentSkipListMap<K, V>(this.keyComparator);
+        copy.copyFrom(this);
+        return copy;
+    }
+
+    // The shared body of the two copying constructors and of clone, over a raw Map: the source is
+    // walked by key, since this library's Map has no entrySet to walk.
+    @SuppressWarnings("unchecked")
+    private void copyFrom(Map source) {
+        Set keys = source.keySet();
+        Iterator it = keys.iterator();
+        while (it.hasNext()) {
+            Object key = it.next();
+            this.put((K) key, (V) source.get(key));
+        }
     }
 
     // ---- ordering ----

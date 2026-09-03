@@ -37,6 +37,30 @@ public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements
         this(capacity);
     }
 
+    /**
+     * A queue of the given capacity, pre-filled with the elements of {@code c}.
+     *
+     * @throws IllegalStateException if {@code c} holds more elements than the capacity -- the same
+     *         failure {@code add} reports on a full queue, and reported rather than truncated
+     *         because silently dropping the tail of the caller's collection is never what was meant
+     */
+    public ArrayBlockingQueue(int capacity, boolean fair, Collection<? extends E> c) {
+        this(capacity);
+        Iterator<? extends E> it = c.iterator();
+        synchronized (sync) {
+            while (it.hasNext()) {
+                E e = it.next();
+                if (e == null) {
+                    throw new NullPointerException();
+                }
+                if (count == items.length) {
+                    throw new IllegalStateException("Queue full");
+                }
+                enqueue(e);
+            }
+        }
+    }
+
     // Append at putIndex, wrapping around. Caller holds sync and has checked for space.
     private void enqueue(E e) {
         items[putIndex] = e;
@@ -61,7 +85,7 @@ public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements
         return e;
     }
 
-    public void put(E e) {
+    public void put(E e) throws InterruptedException {
         synchronized (sync) {
             while (count == items.length) {
                 sync.wait();
@@ -70,7 +94,7 @@ public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements
         }
     }
 
-    public E take() {
+    public E take() throws InterruptedException {
         E e;
         synchronized (sync) {
             while (count == 0) {
@@ -95,7 +119,7 @@ public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements
     }
 
     // Best-effort timed offer: park once for the whole timeout, then re-check.
-    public boolean offer(E e, long timeout, TimeUnit unit) {
+    public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
         boolean added;
         synchronized (sync) {
             if (count == items.length) {
@@ -126,7 +150,7 @@ public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements
         return e;
     }
 
-    public E poll(long timeout, TimeUnit unit) {
+    public E poll(long timeout, TimeUnit unit) throws InterruptedException {
         E e;
         synchronized (sync) {
             if (count == 0) {
@@ -183,6 +207,36 @@ public class ArrayBlockingQueue<E> extends java.util.AbstractQueue<E> implements
             free = items.length - count;
         }
         return free;
+    }
+
+    public int drainTo(Collection<? super E> c) {
+        return drainInto(c, 2147483647);
+    }
+
+    public int drainTo(Collection<? super E> c, int maxElements) {
+        return drainInto(c, maxElements);
+    }
+
+    // The shared body, over a raw Collection. Handing a `Collection<? super E>` parameter
+    // straight to another `Collection<? super E>` parameter is rejected here — the captured
+    // wildcard is not recognised as convertible to itself — so the capture is dropped at
+    // this one boundary instead.
+    //
+    // The whole transfer happens under one monitor: that is the difference between drainTo and
+    // a poll loop, since a producer cannot slip an element in between two of the moves.
+    private int drainInto(Collection sink, int maxElements) {
+        if (sink == this) {
+            throw new IllegalArgumentException("cannot drain a queue into itself");
+        }
+        int moved = 0;
+        synchronized (sync) {
+            while (moved < maxElements && count > 0) {
+                E value = dequeue();
+                sink.add(value);
+                moved = moved + 1;
+            }
+        }
+        return moved;
     }
 
     // Null-safe equality. Written as a helper with an explicit if/else because a

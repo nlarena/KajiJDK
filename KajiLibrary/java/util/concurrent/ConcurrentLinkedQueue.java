@@ -34,6 +34,16 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E> implements Queue<
     public ConcurrentLinkedQueue() {
     }
 
+    // A queue holding the elements of `c`, in the order its iterator returns them. Each goes in
+    // through offer(), so a null element in `c` is rejected here rather than becoming an element
+    // that poll() would later report as "empty".
+    public ConcurrentLinkedQueue(Collection<? extends E> c) {
+        Iterator<? extends E> it = c.iterator();
+        while (it.hasNext()) {
+            offer(it.next());
+        }
+    }
+
     // Always succeeds: the queue is unbounded, so there is no "full" to report.
     public boolean offer(E e) {
         if (e == null) {

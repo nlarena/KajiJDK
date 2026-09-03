@@ -90,7 +90,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E> implements BlockingQue
 
     // Hand `e` to a consumer, blocking until one takes it. Returning is the *proof* that a
     // taker received it — which is the guarantee no buffered queue can give.
-    public void put(E e) {
+    public void put(E e) throws InterruptedException {
         if (e == null) {
             throw new NullPointerException();
         }
@@ -128,7 +128,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E> implements BlockingQue
 
     // Offer the item and wait up to the timeout for a consumer. If none arrives the item is
     // **retracted** — it was never in a queue, so there is nothing to leave behind.
-    public boolean offer(E e, long timeout, TimeUnit unit) {
+    public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
         if (e == null) {
             throw new NullPointerException();
         }
@@ -165,7 +165,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E> implements BlockingQue
     }
 
     // Receive an item, blocking until a producer offers one.
-    public E take() {
+    public E take() throws InterruptedException {
         E e;
         synchronized (sync) {
             waitingTakers = waitingTakers + 1;
@@ -194,7 +194,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E> implements BlockingQue
     }
 
     // Wait up to the timeout for a producer to appear; null if none does.
-    public E poll(long timeout, TimeUnit unit) {
+    public E poll(long timeout, TimeUnit unit) throws InterruptedException {
         E e;
         synchronized (sync) {
             waitingTakers = waitingTakers + 1;
@@ -240,6 +240,42 @@ public class SynchronousQueue<E> extends AbstractQueue<E> implements BlockingQue
     }
 
     public void clear() {
+    }
+
+    /**
+     * Receives whatever hand-off is on the table right now, and nothing more.
+     *
+     * <p>A queue with no capacity has almost nothing to drain, but "almost" is not "nothing": a
+     * producer already parked in {@code put} has placed its element and is waiting for a receiver,
+     * and this drains it -- the caller acts as that receiver. What it will never do is wait for the
+     * *next* producer, so the count is at most one in practice.
+     */
+    public int drainTo(Collection<? super E> c) {
+        return drainInto(c, 2147483647);
+    }
+
+    public int drainTo(Collection<? super E> c, int maxElements) {
+        return drainInto(c, maxElements);
+    }
+
+    // The shared body, over a raw Collection — the capture is dropped at this one boundary, as in
+    // the other blocking queues.
+    private int drainInto(Collection sink, int maxElements) {
+        if (sink == this) {
+            throw new IllegalArgumentException("cannot drain a queue into itself");
+        }
+        int moved = 0;
+        boolean more = true;
+        while (more && moved < maxElements) {
+            E value = poll();
+            if (value == null) {
+                more = false;
+            } else {
+                sink.add(value);
+                moved = moved + 1;
+            }
+        }
+        return moved;
     }
 
     public boolean contains(Object o) {

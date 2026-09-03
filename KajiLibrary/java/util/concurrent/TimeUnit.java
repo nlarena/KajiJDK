@@ -115,6 +115,50 @@ public enum TimeUnit {
         }
     }
 
+    /**
+     * {@code obj.wait(...)} with the timeout expressed in THIS unit.
+     *
+     * <p>The point of the method is that the caller stops converting by hand. {@code
+     * SECONDS.timedWait(lock, 3)} cannot be misread, whereas {@code lock.wait(3)} next to a
+     * variable named {@code seconds} silently waits three milliseconds -- the classic unit bug this
+     * whole enum exists to make impossible.
+     *
+     * <p>A timeout of zero or less returns at once instead of waiting forever. That is the opposite
+     * of {@code Object.wait(0)}, which means "no timeout", and it is deliberate here: a caller who
+     * asked to wait for no time did not ask to wait indefinitely.
+     *
+     * <p>The caller must hold {@code obj}'s monitor, exactly as for {@code Object.wait}.
+     */
+    public void timedWait(Object obj, long timeout) throws InterruptedException {
+        if (timeout > 0L) {
+            long ms = toMillis(timeout);
+            int ns = excessNanos(timeout, ms);
+            obj.wait(ms, ns);
+        }
+    }
+
+    // {@code thread.join(...)} with the timeout in this unit; same reasoning as timedWait.
+    public void timedJoin(Thread thread, long timeout) throws InterruptedException {
+        if (timeout > 0L) {
+            long ms = toMillis(timeout);
+            int ns = excessNanos(timeout, ms);
+            thread.join(ms, ns);
+        }
+    }
+
+    // The sub-millisecond remainder of `duration` once `ms` milliseconds are taken out, for the two
+    // methods above. Only the units finer than a millisecond can have one; for the rest the
+    // conversion to millis is exact, so the remainder is zero by construction.
+    private int excessNanos(long duration, long ms) {
+        int excess = 0;
+        if (this == NANOSECONDS) {
+            excess = (int) (duration - ms * 1000000L);
+        } else if (this == MICROSECONDS) {
+            excess = (int) (duration * 1000L - ms * 1000000L);
+        }
+        return excess;
+    }
+
     public ChronoUnit toChronoUnit() {
         if (this == NANOSECONDS) return ChronoUnit.NANOS;
         if (this == MICROSECONDS) return ChronoUnit.MICROS;

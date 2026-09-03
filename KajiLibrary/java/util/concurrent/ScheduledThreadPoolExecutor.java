@@ -27,8 +27,6 @@ import java.util.List;
 public class ScheduledThreadPoolExecutor extends ThreadPoolExecutor implements ScheduledExecutorService {
 
     private final Object policyLock = new Object();
-    private final ThreadFactory threadFactory;
-    private final RejectedExecutionHandler rejectionHandler;
     private boolean continueExistingPeriodicTasksAfterShutdown;
     private boolean executeExistingDelayedTasksAfterShutdown = true;
     private boolean removeOnCancel;
@@ -37,38 +35,46 @@ public class ScheduledThreadPoolExecutor extends ThreadPoolExecutor implements S
     // arrives on a clock rather than in bursts. The queue-only super constructor is the
     // package-private one, which avoids naming a TimeUnit constant — reading an enum
     // constant of a classpath class compiles to `getfield` and traps (finding #110).
+    //
+    // The factory and the rejection policy are handed to the SUPERCLASS and not kept here. They
+    // used to be stored in fields of this class and read by nobody, which made the inherited
+    // getThreadFactory() answer about a factory this pool was not using — a getter that reports
+    // something other than what is in force is exactly the kind of member this project refuses to
+    // write. Now there is one copy, in the class that builds the threads.
     public ScheduledThreadPoolExecutor(int corePoolSize) {
         super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>());
-        this.threadFactory = null;
-        this.rejectionHandler = null;
     }
 
     public ScheduledThreadPoolExecutor(int corePoolSize, ThreadFactory threadFactory) {
-        super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>());
-        if (threadFactory == null) {
-            throw new NullPointerException();
-        }
-        this.threadFactory = threadFactory;
-        this.rejectionHandler = null;
+        super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>(),
+                requireFactory(threadFactory), null);
     }
 
     public ScheduledThreadPoolExecutor(int corePoolSize, RejectedExecutionHandler handler) {
-        super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>());
-        if (handler == null) {
-            throw new NullPointerException();
-        }
-        this.threadFactory = null;
-        this.rejectionHandler = handler;
+        super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>(),
+                null, requireHandler(handler));
     }
 
     public ScheduledThreadPoolExecutor(int corePoolSize, ThreadFactory threadFactory,
                                        RejectedExecutionHandler handler) {
-        super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>());
-        if (threadFactory == null || handler == null) {
+        super(corePoolSize, maxOf(corePoolSize), new LinkedBlockingQueue<Runnable>(),
+                requireFactory(threadFactory), requireHandler(handler));
+    }
+
+    // The null checks have to happen inside the super call's argument list, because a `super(...)`
+    // must be the first statement and there is nowhere earlier to put an `if`.
+    private static ThreadFactory requireFactory(ThreadFactory f) {
+        if (f == null) {
             throw new NullPointerException();
         }
-        this.threadFactory = threadFactory;
-        this.rejectionHandler = handler;
+        return f;
+    }
+
+    private static RejectedExecutionHandler requireHandler(RejectedExecutionHandler h) {
+        if (h == null) {
+            throw new NullPointerException();
+        }
+        return h;
     }
 
     // A core size of zero is legal for a scheduled pool but the super constructor insists on

@@ -1,6 +1,8 @@
 package java.util.concurrent;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
 
 // A counting semaphore: a pool of permits handed out by {@link #acquire} and returned by
 // {@link #release}. Guarding a resource with N permits limits concurrent use to N; with
@@ -13,8 +15,10 @@ public class Semaphore implements Serializable {
 
     private final Object sync = new Object();
     private int permits;
-    // Threads currently blocked in an acquire (for the queue queries).
-    private int queued;
+    // Threads currently blocked in an acquire, in the order they blocked. A list of the threads
+    // themselves rather than a counter: getQueuedThreads has to name them, and a count cannot be
+    // turned back into names. Everything else the queue queries need is derivable from the list.
+    private final ArrayList<Thread> waiters = new ArrayList<Thread>();
     // Fairness flag: stored and reported, but the cooperative scheduler already hands the
     // monitor out in near-FIFO order, so it does not change policy here.
     private final boolean fair;
@@ -29,30 +33,56 @@ public class Semaphore implements Serializable {
         this.fair = fair;
     }
 
-    public void acquire() {
+    public void acquire() throws InterruptedException {
         acquire(1);
     }
 
-    public void acquire(int permits) {
+    public void acquire(int permits) throws InterruptedException {
         synchronized (sync) {
             if (this.permits < permits) {
-                queued++;
-                while (this.permits < permits) {
-                    sync.wait();
+                Thread me = Thread.currentThread();
+                waiters.add(me);
+                // El `finally` no es adorno: si interrumpen la espera, `wait` sale por excepcion y
+                // el hilo quedaria listado como encolado para siempre -- getQueueLength contaria un
+                // esperador que ya no existe, y hasQueuedThreads no volveria a dar false nunca.
+                try {
+                    while (this.permits < permits) {
+                        sync.wait();
+                    }
+                } finally {
+                    waiters.remove(me);
                 }
-                queued--;
             }
             this.permits = this.permits - permits;
         }
     }
 
-    // KajiJDK has no interruption, so this is exactly {@link #acquire}.
+    /**
+     * Toma un permiso **sin** poder ser interrumpido.
+     *
+     * <p>La nota que estaba aca decia que era identico a `acquire()` porque KajiJDK no tenia
+     * interrupcion. La tiene: la diferencia es real y es esta -- `acquire()` aborta si interrumpen,
+     * esta sigue esperando y **remarca** el hilo al salir, para que la interrupcion no se pierda.
+     */
     public void acquireUninterruptibly() {
-        acquire(1);
+        acquireUninterruptibly(1);
     }
 
+    /** El de arriba, con varios permisos. */
     public void acquireUninterruptibly(int permits) {
-        acquire(permits);
+        boolean interrumpido = false;
+        boolean listo = false;
+        while (!listo) {
+            try {
+                acquire(permits);
+                listo = true;
+            } catch (InterruptedException e) {
+                interrumpido = true;
+            }
+        }
+        if (interrumpido) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public boolean tryAcquire() {
@@ -72,20 +102,24 @@ public class Semaphore implements Serializable {
         return got;
     }
 
-    public boolean tryAcquire(long timeout, TimeUnit unit) {
+    public boolean tryAcquire(long timeout, TimeUnit unit) throws InterruptedException {
         return tryAcquire(1, timeout, unit);
     }
 
     // Best-effort timed acquire: park once for the whole timeout, then re-check.
-    public boolean tryAcquire(int permits, long timeout, TimeUnit unit) {
+    public boolean tryAcquire(int permits, long timeout, TimeUnit unit) throws InterruptedException {
         boolean got;
         synchronized (sync) {
             if (this.permits < permits) {
                 long ms = unit.toMillis(timeout);
                 if (ms > 0L) {
-                    queued++;
-                    sync.wait(ms);
-                    queued--;
+                    Thread me = Thread.currentThread();
+                    waiters.add(me);
+                    try {
+                        sync.wait(ms);
+                    } finally {
+                        waiters.remove(me);
+                    }
                 }
             }
             if (this.permits >= permits) {
@@ -143,7 +177,7 @@ public class Semaphore implements Serializable {
     public final boolean hasQueuedThreads() {
         boolean any;
         synchronized (sync) {
-            any = queued > 0;
+            any = waiters.size() > 0;
         }
         return any;
     }
@@ -151,8 +185,27 @@ public class Semaphore implements Serializable {
     public final int getQueueLength() {
         int n;
         synchronized (sync) {
-            n = queued;
+            n = waiters.size();
         }
         return n;
+    }
+
+    /**
+     * The threads blocked in an acquire right now.
+     *
+     * <p>A snapshot, and a copy: handing out the live list would let a caller iterating it collide
+     * with a thread joining or leaving the queue. Best-effort by nature -- the answer is already
+     * stale by the time it is read -- which is why the JDK makes it {@code protected} and documents
+     * it as a monitoring aid rather than a synchronisation primitive.
+     *
+     * <p>A thread appears here only while it is *parked* for permits. A thread that entered
+     * {@link #tryAcquire} and found none never blocked, so it was never queued.
+     */
+    protected Collection<Thread> getQueuedThreads() {
+        ArrayList<Thread> snapshot;
+        synchronized (sync) {
+            snapshot = new ArrayList<Thread>(waiters);
+        }
+        return snapshot;
     }
 }

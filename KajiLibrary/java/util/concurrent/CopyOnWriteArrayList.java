@@ -27,6 +27,35 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
     public CopyOnWriteArrayList() {
     }
 
+    /**
+     * A list holding the elements of {@code c}, in the order its iterator returns them.
+     *
+     * <p>The elements are copied into a fresh array rather than adopting whatever
+     * {@code c.toArray()} hands back. Two reasons, and both are bugs avoided: some collections
+     * return their *own* backing array, which the caller could then mutate behind this list's back
+     * -- destroying the one invariant the class has, that the array is never written after
+     * publication; and {@code toArray()} on a typed collection may return a {@code String[]} rather
+     * than an {@code Object[]}, which would make a later {@code set} of an unrelated type throw
+     * ArrayStoreException from deep inside an unrelated call.
+     */
+    public CopyOnWriteArrayList(java.util.Collection<? extends E> c) {
+        Object[] source = c.toArray();
+        Object[] copy = new Object[source.length];
+        for (int i = 0; i < source.length; i++) {
+            copy[i] = source[i];
+        }
+        elements = copy;
+    }
+
+    // A list over a copy of the given array; the caller keeps its own and may mutate it freely.
+    public CopyOnWriteArrayList(E[] toCopyIn) {
+        Object[] copy = new Object[toCopyIn.length];
+        for (int i = 0; i < toCopyIn.length; i++) {
+            copy[i] = toCopyIn[i];
+        }
+        elements = copy;
+    }
+
     public int size() {
         return elements.length;
     }
@@ -178,6 +207,58 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
             }
         }
         return added;
+    }
+
+    /**
+     * Adds the elements of {@code c} that are not already here, and reports how many went in.
+     *
+     * <p>Held under the monitor for the whole batch: {@link #addIfAbsent} is already atomic on its
+     * own, but a caller adding a batch wants "none of these is a duplicate of anything, including of
+     * each other", and that is only true if no other writer interleaves. Duplicates *within* {@code
+     * c} are dropped too, since each element is checked against the list as it stands.
+     */
+    public int addAllAbsent(java.util.Collection<? extends E> c) {
+        int added = 0;
+        synchronized (sync) {
+            Iterator<? extends E> it = c.iterator();
+            while (it.hasNext()) {
+                E e = it.next();
+                if (addIfAbsent(e)) {
+                    added = added + 1;
+                }
+            }
+        }
+        return added;
+    }
+
+    // The index of the first occurrence of `e` at or after `index`, or -1. The bounded form exists
+    // so a caller scanning for repeated occurrences does not restart from zero each time -- turning
+    // an O(n^2) sweep into an O(n) one.
+    public int indexOf(E e, int index) {
+        Object[] snapshot = elements;
+        int found = -1;
+        for (int i = index; i < snapshot.length; i++) {
+            if (found < 0 && eq(e, snapshot[i])) {
+                found = i;
+            }
+        }
+        return found;
+    }
+
+    // The index of the last occurrence of `e` at or before `index`, or -1 -- the backward sweep.
+    public int lastIndexOf(E e, int index) {
+        Object[] snapshot = elements;
+        int found = -1;
+        int from = index;
+        if (from >= snapshot.length) {
+            from = snapshot.length - 1;
+        }
+        for (int i = from; i >= 0; i--) {
+            if (found < 0 && eq(e, snapshot[i])) {
+                found = i;
+            }
+        }
+        return found;
     }
 
     public void clear() {

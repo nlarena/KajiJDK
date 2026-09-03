@@ -94,19 +94,19 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E> implements B
 
     // Never blocks: there is no capacity limit, so a producer is only ever delayed by the
     // monitor itself.
-    public void put(E e) {
+    public void put(E e) throws InterruptedException {
         offer(e);
     }
 
     // The timeout is unreachable for the same reason; it is ignored.
-    public boolean offer(E e, long timeout, TimeUnit unit) {
+    public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
         return offer(e);
     }
 
     // Wait until the head is due, then take it. An empty queue waits indefinitely; a
     // non-empty one waits out the head's remaining delay, re-reading the head after every
     // wake because an insert may have changed which element is next.
-    public E take() {
+    public E take() throws InterruptedException {
         E e = null;
         synchronized (sync) {
             boolean taken = false;
@@ -147,7 +147,7 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E> implements B
 
     // Wait up to the timeout for the head to come due. Waits for whichever is shorter, the
     // caller's timeout or the head's remaining delay, then checks once more.
-    public E poll(long timeout, TimeUnit unit) {
+    public E poll(long timeout, TimeUnit unit) throws InterruptedException {
         E e;
         synchronized (sync) {
             long remaining = headDelay();
@@ -193,6 +193,67 @@ public class DelayQueue<E extends Delayed> extends AbstractQueue<E> implements B
     // Unbounded. Spelled out rather than read from Integer.MAX_VALUE (finding #110).
     public int remainingCapacity() {
         return 2147483647;
+    }
+
+    // Declared here rather than inherited from AbstractQueue for the sake of the *erasure*: with
+    // `E extends Delayed`, this method's descriptor is `add(Delayed)`, which is what a caller
+    // holding a raw DelayQueue links against. Inheriting AbstractQueue's `add(E)` would leave only
+    // `add(Object)` in the class file. The body is AbstractQueue's, since this queue is unbounded
+    // and offer never refuses.
+    public boolean add(E e) {
+        return offer(e);
+    }
+
+    /**
+     * The head, or a failure if nothing is due.
+     *
+     * <p>Same erasure reason as {@link #add}. The distinction from {@link #poll} is the one the
+     * Queue contract draws: poll reports emptiness by returning null, remove by throwing -- and
+     * here "empty" means "nothing *due*", so a queue full of unexpired elements throws too.
+     *
+     * @throws java.util.NoSuchElementException if no element has expired
+     */
+    public E remove() {
+        E e = poll();
+        if (e == null) {
+            throw new java.util.NoSuchElementException();
+        }
+        return e;
+    }
+
+    /**
+     * Moves the **expired** elements into {@code c}; unexpired ones stay.
+     *
+     * <p>That restriction is the class's second rule applied to a batch: draining is a bulk
+     * {@link #poll}, not a bulk {@link #remove}, so an element that is not due yet cannot leave
+     * this way. A drain of a queue whose head is still pending therefore moves nothing and returns
+     * zero, however many elements the queue holds.
+     */
+    public int drainTo(Collection<? super E> c) {
+        return drainInto(c, 2147483647);
+    }
+
+    public int drainTo(Collection<? super E> c, int maxElements) {
+        return drainInto(c, maxElements);
+    }
+
+    // The shared body, over a raw Collection. Handing a `Collection<? super E>` parameter
+    // straight to another `Collection<? super E>` parameter is rejected here — the captured
+    // wildcard is not recognised as convertible to itself — so the capture is dropped at
+    // this one boundary instead.
+    private int drainInto(Collection sink, int maxElements) {
+        if (sink == this) {
+            throw new IllegalArgumentException("cannot drain a queue into itself");
+        }
+        int moved = 0;
+        synchronized (sync) {
+            while (moved < maxElements && headDelay() <= 0L) {
+                E value = heap.poll();
+                sink.add(value);
+                moved = moved + 1;
+            }
+        }
+        return moved;
     }
 
     // Removes regardless of whether the element has expired — the one operation that can take

@@ -46,7 +46,7 @@ public class CyclicBarrier {
     // Wait until every party has arrived. Returns this thread's arrival index:
     // `getParties() - 1` for the first to arrive, 0 for the last (which is the party
     // that runs the barrier action).
-    public int await() throws BrokenBarrierException {
+    public int await() throws BrokenBarrierException, InterruptedException {
         int index;
         synchronized (sync) {
             if (brokenGen == generation) {
@@ -72,7 +72,7 @@ public class CyclicBarrier {
     // Like {@link #await}, but gives up after the timeout — which **breaks** the barrier
     // for everyone still waiting, exactly as the JDK does (a party that never arrives
     // makes the rendezvous unachievable for all).
-    public int await(long timeout, TimeUnit unit) throws BrokenBarrierException, TimeoutException {
+    public int await(long timeout, TimeUnit unit) throws BrokenBarrierException, TimeoutException, InterruptedException {
         int index;
         synchronized (sync) {
             if (brokenGen == generation) {

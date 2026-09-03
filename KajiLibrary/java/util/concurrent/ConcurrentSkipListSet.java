@@ -35,7 +35,7 @@ import java.util.SortedSet;
  *           hashCode} come from {@link AbstractSet} — the JDK overrides them for speed, not for a
  *           different answer.
  */
-public class ConcurrentSkipListSet<E> extends AbstractSet<E> implements NavigableSet<E> {
+public class ConcurrentSkipListSet<E> extends AbstractSet<E> implements NavigableSet<E>, Cloneable {
 
     // The value every element maps to. Its identity is irrelevant -- only "there is an entry here"
     // matters -- so one instance is shared by every element of every set.
@@ -248,23 +248,51 @@ public class ConcurrentSkipListSet<E> extends AbstractSet<E> implements Navigabl
         return this.setOver(view);
     }
 
-    /** The SortedSet-shaped forms: {@code from} inclusive, {@code to} exclusive. */
+    /**
+     * The SortedSet-shaped forms: {@code from} inclusive, {@code to} exclusive.
+     *
+     * <p>Declared to return {@link NavigableSet} rather than the {@link SortedSet} the interface
+     * asks for. That is a narrowing, so it satisfies SortedSet either way; the point is what the
+     * caller gets without a cast. A range view of a navigable set is navigable -- {@code
+     * s.headSet(k).descendingIterator()} is a reasonable thing to write -- and returning the wider
+     * type would have thrown that away at every view boundary.
+     */
     @Override
-    public SortedSet<E> subSet(E from, E to) {
+    public NavigableSet<E> subSet(E from, E to) {
         NavigableMap<E, Object> view = this.m.subMap(from, true, to, false);
         return this.setOver(view);
     }
 
     @Override
-    public SortedSet<E> headSet(E to) {
+    public NavigableSet<E> headSet(E to) {
         NavigableMap<E, Object> view = this.m.headMap(to, false);
         return this.setOver(view);
     }
 
     @Override
-    public SortedSet<E> tailSet(E from) {
+    public NavigableSet<E> tailSet(E from) {
         NavigableMap<E, Object> view = this.m.tailMap(from, true);
         return this.setOver(view);
+    }
+
+    /**
+     * A shallow copy: same elements, same ordering, independent set.
+     *
+     * <p>Built by re-inserting into a fresh map rather than by cloning the backing one. A skip list
+     * is a graph of nodes with forward pointers at several levels, and copying the field would
+     * share every one of them -- the "copy" and the original would be the same structure behind two
+     * references, and a write through either would be seen by both.
+     */
+    @Override
+    public ConcurrentSkipListSet<E> clone() {
+        ConcurrentSkipListMap<E, Object> copy =
+                new ConcurrentSkipListMap<E, Object>(this.m.comparator());
+        Iterator<E> it = this.iterator();
+        while (it.hasNext()) {
+            E element = it.next();
+            copy.put(element, ConcurrentSkipListSet.PRESENT);
+        }
+        return new ConcurrentSkipListSet<E>(copy);
     }
 
     @Override

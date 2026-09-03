@@ -33,6 +33,15 @@ public class ConcurrentLinkedDeque<E> extends AbstractCollection<E> implements D
     public ConcurrentLinkedDeque() {
     }
 
+    // A deque holding the elements of `c`, appended at the tail in iteration order -- so the first
+    // element of `c` ends up at the head, which is what "same order" means for a deque.
+    public ConcurrentLinkedDeque(Collection<? extends E> c) {
+        Iterator<? extends E> it = c.iterator();
+        while (it.hasNext()) {
+            offerLast(it.next());
+        }
+    }
+
     // --- insertion ---
 
     public void addFirst(E e) {

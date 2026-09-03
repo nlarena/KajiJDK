@@ -10,7 +10,9 @@ package java.util.concurrent;
 // CompletionService the total latency is bounded by the *slowest* task, but the *first*
 // result is available as soon as any task finishes.
 //
-// Subset: the JDK's `throws InterruptedException` on take/poll is omitted package-wide.
+// Las esperas declaran `throws InterruptedException`, como en el JDK. La nota que estaba aca decia
+// que se omitia "en todo el paquete"; esa omision era un error que el finding #316 destapo -- una
+// espera que no puede ser interrumpida deja al que llama sin forma de sacar a un hilo de ella.
 public interface CompletionService<V> {
 
     // Submit a value-returning task; its future will appear in the completion queue.
@@ -20,11 +22,11 @@ public interface CompletionService<V> {
     Future<V> submit(Runnable task, V result);
 
     // Take the next completed task's future, waiting if none has completed yet.
-    Future<V> take();
+    Future<V> take() throws InterruptedException;
 
     // The next completed task's future, or null if none is ready right now.
     Future<V> poll();
 
     // The next completed task's future, waiting up to the timeout; null if none arrives.
-    Future<V> poll(long timeout, TimeUnit unit);
+    Future<V> poll(long timeout, TimeUnit unit) throws InterruptedException;
 }

@@ -10,15 +10,34 @@ package java.util.concurrent;
 // after the last one. `run` guarantees the pairing: `onTermination` is called exactly once
 // however the worker ends, with the throwable that ended it or null.
 //
-// The JDK's constructor takes a ThreadGroup as well; that overload is omitted here because
-// java.lang.ThreadGroup does not exist in this library, and declaring it with a substituted
-// parameter type would be a worse lie than leaving it out.
 public class ForkJoinWorkerThread extends Thread {
 
     private final ForkJoinPool pool;
     private final int poolIndex;
 
     protected ForkJoinWorkerThread(ForkJoinPool pool) {
+        if (pool == null) {
+            throw new NullPointerException();
+        }
+        this.pool = pool;
+        this.poolIndex = pool.nextWorkerIndex();
+    }
+
+    /**
+     * The form that names a thread group, for a pool whose workers must be reachable through one.
+     *
+     * @param preserveThreadLocals whether this worker keeps its thread-locals between tasks.
+     *        Accepted and ignored: the JDK clears them by resetting fields of {@code Thread} that
+     *        only its own package can reach, and there is no such door here. Ignoring it is a
+     *        divergence in what the flag *does*, and it is recorded rather than dressed up --
+     *        passing {@code false} does not clear anything, so a task must not rely on starting
+     *        with empty thread-locals.
+     */
+    protected ForkJoinWorkerThread(ThreadGroup group, ForkJoinPool pool,
+                                   boolean preserveThreadLocals) {
+        // The group can only be set through a Thread constructor, so this one must call super
+        // before anything else — which is why the name cannot carry the pool index yet.
+        super(group, null, "ForkJoinPool-worker", 0L);
         if (pool == null) {
             throw new NullPointerException();
         }

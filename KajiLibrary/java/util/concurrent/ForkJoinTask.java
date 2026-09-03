@@ -146,19 +146,56 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
 
     // ---------------------------------------------------------------- waiting, quietly or not
 
+    /**
+     * Blocks until this task is done.
+     *
+     * <p>The pool is told first. A joining worker stops being a worker for as long as it waits,
+     * and this pool cannot make it help the way HotSpot's does -- so it replaces it instead. Skip
+     * the notification and a computation that forks deeper than the pool is wide deadlocks: every
+     * thread parked here, and the subtasks they are waiting for still in the queue with nobody
+     * left to take them.
+     *
+     * <p>The whole point is that the pool is told before the wait and after it, on every path,
+     * hence the finally: a compensation thread that is never released is a thread leak.
+     */
     private void awaitDone() {
-        synchronized (lock) {
-            while (!done) {
-                try {
-                    lock.wait();
-                } catch (InterruptedException e) {
-                    throw new CancellationException();
+        ForkJoinPool pool = getPool();
+        if (pool != null) {
+            pool.beforeBlock();
+        }
+        try {
+            synchronized (lock) {
+                while (!done) {
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        throw new CancellationException();
+                    }
                 }
+            }
+        } finally {
+            if (pool != null) {
+                pool.afterBlock();
             }
         }
     }
 
+    // The timed twin. Same compensation, same reason.
     private boolean awaitDone(long millis) {
+        ForkJoinPool pool = getPool();
+        if (pool != null) {
+            pool.beforeBlock();
+        }
+        try {
+            return awaitDoneTimed(millis);
+        } finally {
+            if (pool != null) {
+                pool.afterBlock();
+            }
+        }
+    }
+
+    private boolean awaitDoneTimed(long millis) {
         long deadline = System.currentTimeMillis() + millis;
         boolean finished;
         synchronized (lock) {

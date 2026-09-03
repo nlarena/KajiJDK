@@ -81,20 +81,27 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         return true;
     }
 
-    // Never blocks, despite the name — the queue is unbounded, so there is nothing to wait
+    // Never blocks, despite the name -- the queue is unbounded, so there is nothing to wait
     // for. Present because BlockingQueue demands it.
+    //
+    // No `throws InterruptedException`, y eso es deliberado: `BlockingQueue.put` la declara, pero un
+    // metodo que redefine puede declarar MENOS de lo que declara el que redefine, y el JDK usa
+    // exactamente esa libertad aca. Ponerla obligaria a quien llame a atrapar una excepcion que este
+    // metodo no puede tirar, y --peor-- el codigo que compila contra el JDK real dejaria de compilar
+    // contra esta biblioteca. La firma mas estricta no es un subconjunto legal: es otra firma.
     public void put(E e) {
         offer(e);
     }
 
-    // Same: the timeout is unreachable, so it is ignored and the answer is always true.
+    // Same: the timeout is unreachable, so it is ignored and the answer is always true. Sin `throws`
+    // por la misma razon que `put`.
     public boolean offer(E e, long timeout, TimeUnit unit) {
         return offer(e);
     }
 
     // Remove and return the smallest element, waiting while the queue is empty. This is the
     // one operation that can block.
-    public E take() {
+    public E take() throws InterruptedException {
         E e;
         synchronized (sync) {
             while (heap.size() == 0) {
@@ -113,7 +120,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E> implements Blocki
         return e;
     }
 
-    public E poll(long timeout, TimeUnit unit) {
+    public E poll(long timeout, TimeUnit unit) throws InterruptedException {
         E e;
         synchronized (sync) {
             if (heap.size() == 0) {
@@ -147,6 +154,36 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E> implements Blocki
     // reading a static field of another compiled class traps at run time (finding #110).
     public int remainingCapacity() {
         return 2147483647;
+    }
+
+    // Drains in *priority* order, not in the heap's internal order: every element leaves through
+    // poll(), so the receiver ends up with them sorted. Iteration cannot promise that; draining
+    // can, and it is the cheapest way to read this queue in order.
+    public int drainTo(Collection<? super E> c) {
+        return drainInto(c, 2147483647);
+    }
+
+    public int drainTo(Collection<? super E> c, int maxElements) {
+        return drainInto(c, maxElements);
+    }
+
+    // The shared body, over a raw Collection. Handing a `Collection<? super E>` parameter
+    // straight to another `Collection<? super E>` parameter is rejected here — the captured
+    // wildcard is not recognised as convertible to itself — so the capture is dropped at
+    // this one boundary instead.
+    private int drainInto(Collection sink, int maxElements) {
+        if (sink == this) {
+            throw new IllegalArgumentException("cannot drain a queue into itself");
+        }
+        int moved = 0;
+        synchronized (sync) {
+            while (moved < maxElements && heap.size() > 0) {
+                E value = heap.poll();
+                sink.add(value);
+                moved = moved + 1;
+            }
+        }
+        return moved;
     }
 
     public boolean contains(Object o) {

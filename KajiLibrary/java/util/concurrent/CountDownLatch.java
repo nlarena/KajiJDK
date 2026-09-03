@@ -26,7 +26,7 @@ public class CountDownLatch {
     }
 
     // Block until the count reaches zero. Returns at once if it already has.
-    public void await() {
+    public void await() throws InterruptedException {
         synchronized (sync) {
             while (count > 0) {
                 sync.wait();
@@ -36,7 +36,7 @@ public class CountDownLatch {
 
     // Block until the count reaches zero or the wait elapses; reports whether the count
     // reached zero. Best-effort: parks once for the whole timeout, then re-checks.
-    public boolean await(long timeout, TimeUnit unit) {
+    public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
         boolean opened;
         synchronized (sync) {
             if (count > 0) {
