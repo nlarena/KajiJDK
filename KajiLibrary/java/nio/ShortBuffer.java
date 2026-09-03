@@ -665,6 +665,36 @@ public abstract class ShortBuffer extends Buffer implements Comparable<ShortBuff
  */
 class HeapShortBuffer extends ShortBuffer {
 
+    /**
+     * El constructor **completo**: el arreglo, los cuatro indices, el desplazamiento, y el segmento
+     * de memoria del que este buffer es una vista.
+     *
+     * <p>Existe porque el JDK lo declara, y estuvo afuera hasta ahora por una razon concreta: nombra
+     * `java.lang.foreign.MemorySegment`, que no existia en esta biblioteca. Ahora existe.
+     *
+     * <p><strong>El segmento se acepta y no se guarda</strong>, y conviene decir por que eso no
+     * pierde nada aca. En el JDK ese campo es lo que hace que `MemorySegment.ofBuffer(buffer)`
+     * devuelva **el mismo** segmento del que el buffer salio. Esta biblioteca lo reconstruye desde el
+     * arreglo de respaldo, asi que `ofBuffer` sigue dando una vista correcta de los mismos bytes; lo
+     * unico que se pierde es la **identidad** del segmento, que ningun metodo publico expone.
+     *
+     * <p>Los indices se fijan en el orden que el contrato de `Buffer` obliga --limite antes que
+     * posicion-- porque una posicion no puede pasar del limite, y hacerlo al reves fallaria fijando
+     * un estado que despues iba a ser valido.
+     *
+     * @param mark la marca, o negativo si no hay
+     */
+    protected HeapShortBuffer(short[] buf, int mark, int pos, int lim, int cap, int off,
+            java.lang.foreign.MemorySegment segment) {
+        super(buf, off, cap);
+        this.limit(lim);
+        if (mark >= 0) {
+            this.position(mark);
+            this.mark();
+        }
+        this.position(pos);
+    }
+
     HeapShortBuffer(short[] hb, int offset, int capacity) {
         super(hb, offset, capacity);
     }
