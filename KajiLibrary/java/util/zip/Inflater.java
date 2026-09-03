@@ -89,6 +89,44 @@ public class Inflater implements AutoCloseable {
         this(false);
     }
 
+    /**
+     * Toma como entrada los bytes que quedan en `input`, y lo deja consumido.
+     *
+     * <p>Se copia, igual que en `Deflater`: ver la nota de alla sobre la diferencia con el JDK.
+     */
+    public void setInput(java.nio.ByteBuffer input) {
+        int n = input.remaining();
+        byte[] tmp = new byte[n];
+        if (n > 0) {
+            input.get(tmp, 0, n);
+        }
+        this.setInput(tmp, 0, n);
+    }
+
+    /** El diccionario de precarga, desde los bytes que quedan en `dictionary`. */
+    public void setDictionary(java.nio.ByteBuffer dictionary) {
+        int n = dictionary.remaining();
+        byte[] tmp = new byte[n];
+        if (n > 0) {
+            dictionary.get(tmp, 0, n);
+        }
+        this.setDictionary(tmp, 0, n);
+    }
+
+    /** Descomprime en el espacio que queda en `output`, avanzando su posicion por lo escrito. */
+    public int inflate(java.nio.ByteBuffer output) throws DataFormatException {
+        int espacio = output.remaining();
+        if (espacio <= 0) {
+            return 0;
+        }
+        byte[] tmp = new byte[espacio];
+        int n = this.inflate(tmp, 0, espacio);
+        if (n > 0) {
+            output.put(tmp, 0, n);
+        }
+        return n;
+    }
+
     public void setInput(byte[] b, int off, int len) {
         // Input accumulates: a rewound checkpoint has to be able to re-read what it already saw.
         int keep = inLen - (bitPos >> 3);

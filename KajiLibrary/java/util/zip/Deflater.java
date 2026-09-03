@@ -71,6 +71,52 @@ public class Deflater implements AutoCloseable {
         this(DEFAULT_COMPRESSION, false);
     }
 
+    /**
+     * Toma como entrada los bytes que quedan en `input`, y lo deja consumido.
+     *
+     * <p>**Se copia**, y eso es una diferencia con el JDK que conviene decir: alli un buffer directo
+     * se pasa al deflate nativo sin copiar, y por eso el JDK exige no tocarlo hasta que
+     * `needsInput()` vuelva a dar `true`. Aca la copia hace que esa exigencia no aplique -- el
+     * codigo que la respeta funciona igual, y el que no la respetaba tambien.
+     */
+    public void setInput(java.nio.ByteBuffer input) {
+        int n = input.remaining();
+        byte[] tmp = new byte[n];
+        if (n > 0) {
+            input.get(tmp, 0, n);
+        }
+        this.setInput(tmp, 0, n);
+    }
+
+    /** El diccionario de precarga, desde los bytes que quedan en `dictionary`. */
+    public void setDictionary(java.nio.ByteBuffer dictionary) {
+        int n = dictionary.remaining();
+        byte[] tmp = new byte[n];
+        if (n > 0) {
+            dictionary.get(tmp, 0, n);
+        }
+        this.setDictionary(tmp, 0, n);
+    }
+
+    /** Comprime en el espacio que queda en `output`, avanzando su posicion por lo escrito. */
+    public int deflate(java.nio.ByteBuffer output) {
+        return this.deflate(output, NO_FLUSH);
+    }
+
+    /** El de arriba con modo de vaciado explicito. */
+    public int deflate(java.nio.ByteBuffer output, int flush) {
+        int espacio = output.remaining();
+        if (espacio <= 0) {
+            return 0;
+        }
+        byte[] tmp = new byte[espacio];
+        int n = this.deflate(tmp, 0, espacio, flush);
+        if (n > 0) {
+            output.put(tmp, 0, n);
+        }
+        return n;
+    }
+
     public void setInput(byte[] b, int off, int len) {
         byte[] grown = new byte[pendingLen - pendingOff + len];
         int i = 0;

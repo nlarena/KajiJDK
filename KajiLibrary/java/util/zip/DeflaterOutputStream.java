@@ -52,13 +52,13 @@ public class DeflaterOutputStream extends FilterOutputStream {
         this(out, false);
     }
 
-    public void write(int b) {
+    public void write(int b) throws java.io.IOException {
         byte[] one = new byte[1];
         one[0] = (byte) b;
         write(one, 0, 1);
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws java.io.IOException {
         def.setInput(b, off, len);
         deflate();
     }
@@ -66,7 +66,7 @@ public class DeflaterOutputStream extends FilterOutputStream {
     // Drains whatever the deflater is willing to hand over right now. Called after every write
     // and repeatedly from `finish()`; the difference between the two is only whether the
     // deflater has been told there is no more input.
-    protected void deflate() {
+    protected void deflate() throws java.io.IOException {
         int n = def.deflate(buf, 0, buf.length);
         while (n > 0) {
             out.write(buf, 0, n);
@@ -76,14 +76,14 @@ public class DeflaterOutputStream extends FilterOutputStream {
 
     // Ends the compressed stream without closing the underlying one — what a zip writer needs
     // between entries, since each entry is its own compressed stream inside one file.
-    public void finish() {
+    public void finish() throws java.io.IOException {
         if (!def.finished()) {
             def.finish();
             deflate();
         }
     }
 
-    public void close() {
+    public void close() throws java.io.IOException {
         if (!closed) {
             closed = true;
             finish();
@@ -94,7 +94,7 @@ public class DeflaterOutputStream extends FilterOutputStream {
         }
     }
 
-    public void flush() {
+    public void flush() throws java.io.IOException {
         // With `syncFlush` the caller wants what has been written so far to be readable now. Our
         // deflater emits stored blocks, which are already self-contained and byte-aligned, so
         // draining is all a flush point needs to be.

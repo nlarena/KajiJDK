@@ -15,17 +15,17 @@ public class GZIPInputStream extends InflaterInputStream {
     protected CRC32 crc;
     protected boolean eos;
 
-    public GZIPInputStream(InputStream in, int size) {
+    public GZIPInputStream(InputStream in, int size) throws java.io.IOException {
         super(in, new Inflater(true), size);
         this.crc = new CRC32();
         readHeader();
     }
 
-    public GZIPInputStream(InputStream in) {
+    public GZIPInputStream(InputStream in) throws java.io.IOException {
         this(in, 512);
     }
 
-    private void readHeader() {
+    private void readHeader() throws java.io.IOException {
         int magic1 = in.read();
         int magic2 = in.read();
         if (magic1 != 31 || magic2 != 139) {
@@ -63,14 +63,14 @@ public class GZIPInputStream extends InflaterInputStream {
         }
     }
 
-    private void skipZeroTerminated() {
+    private void skipZeroTerminated() throws java.io.IOException {
         int b = in.read();
         while (b != 0 && b != -1) {
             b = in.read();
         }
     }
 
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws java.io.IOException {
         // `readInflated` y no `super.read(...)`: finding #125.
         int n = readInflated(b, off, len);
         if (n > 0) {

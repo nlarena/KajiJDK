@@ -16,27 +16,27 @@ public class GZIPOutputStream extends DeflaterOutputStream {
 
     protected CRC32 crc;
 
-    public GZIPOutputStream(OutputStream out, int size, boolean syncFlush) {
+    public GZIPOutputStream(OutputStream out, int size, boolean syncFlush) throws java.io.IOException {
         super(out, new Deflater(Deflater.DEFAULT_COMPRESSION, true), size, syncFlush);
         this.crc = new CRC32();
         writeHeader();
     }
 
-    public GZIPOutputStream(OutputStream out, int size) {
+    public GZIPOutputStream(OutputStream out, int size) throws java.io.IOException {
         this(out, size, false);
     }
 
-    public GZIPOutputStream(OutputStream out, boolean syncFlush) {
+    public GZIPOutputStream(OutputStream out, boolean syncFlush) throws java.io.IOException {
         this(out, 512, syncFlush);
     }
 
-    public GZIPOutputStream(OutputStream out) {
+    public GZIPOutputStream(OutputStream out) throws java.io.IOException {
         this(out, 512, false);
     }
 
     // The header is fixed except for the timestamp, which is left at zero: "no time available"
     // is a legal value, and KajiLibrary has no clock native to ask.
-    private void writeHeader() {
+    private void writeHeader() throws java.io.IOException {
         out.write(31);          // magic, low byte
         out.write(139);         // magic, high byte (0x8b)
         out.write(8);           // compression method: deflate
@@ -49,7 +49,7 @@ public class GZIPOutputStream extends DeflaterOutputStream {
         out.write(255);         // operating system: unknown
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws java.io.IOException {
         // El cuerpo de `DeflaterOutputStream.write` inlineado en vez de `super.write(...)`, que el
         // emisor todavia no soporta (finding #125). Son dos lineas, asi que copiarlas cuesta menos
         // que el rodeo de renombrar el metodo del padre.
@@ -59,7 +59,7 @@ public class GZIPOutputStream extends DeflaterOutputStream {
         crc.update(b, off, len);
     }
 
-    public void finish() {
+    public void finish() throws java.io.IOException {
         if (!def.finished()) {
             // Idem: el cuerpo de `DeflaterOutputStream.finish` inlineado (finding #125).
             def.finish();
@@ -70,14 +70,14 @@ public class GZIPOutputStream extends DeflaterOutputStream {
 
     // CRC-32 then the uncompressed size, both little-endian — the opposite byte order from
     // zlib's Adler-32 trailer, which is one of the small ways the two envelopes differ.
-    private void writeTrailer() {
+    private void writeTrailer() throws java.io.IOException {
         long sum = crc.getValue();
         long total = def.getBytesRead();
         writeInt(sum);
         writeInt(total);
     }
 
-    private void writeInt(long value) {
+    private void writeInt(long value) throws java.io.IOException {
         out.write((int) (value & 0xff));
         out.write((int) ((value >> 8) & 0xff));
         out.write((int) ((value >> 16) & 0xff));

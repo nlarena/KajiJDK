@@ -17,6 +17,23 @@ public interface Checksum {
         update(b, 0, b.length);
     }
 
+    /**
+     * Suma los bytes que quedan en `buffer`, y **lo deja consumido**.
+     *
+     * <p>Dejar la posicion en el limite no es un detalle de implementacion: es lo que distingue a un
+     * metodo que "lee un buffer" de uno que lo espia. Sin eso, un bucle que sume y vuelva a sumar
+     * procesaria los mismos bytes para siempre.
+     */
+    default void update(java.nio.ByteBuffer buffer) {
+        int n = buffer.remaining();
+        if (n <= 0) {
+            return;
+        }
+        byte[] tmp = new byte[n];
+        buffer.get(tmp, 0, n);
+        this.update(tmp, 0, n);
+    }
+
     void update(byte[] b, int off, int len);
 
     // The checksum so far, as an unsigned value widened into a `long`.

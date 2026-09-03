@@ -27,6 +27,10 @@ public class ZipEntry implements Cloneable {
     private int method;
     private byte[] extra;
     private String comment;
+    // Creacion y ultimo acceso: `null` mientras nadie las fije. La de modificacion no esta aca
+    // porque ya vive en `time`, que es el campo que la cabecera guarda de verdad.
+    private java.nio.file.attribute.FileTime creacion;
+    private java.nio.file.attribute.FileTime ultimoAcceso;
 
     public ZipEntry(String name) {
         this.name = name;
@@ -58,6 +62,58 @@ public class ZipEntry implements Cloneable {
 
     public long getTime() {
         return time;
+    }
+
+    // ---- las tres marcas como `FileTime` -----------------------------------------------------------
+    //
+    // Son la cara moderna de lo mismo: un `FileTime` lleva la precision que tenga y no obliga a
+    // pasar por un `long` de milisegundos. Los tres `set*` devuelven `this` para poder encadenar,
+    // que es la unica razon de que no sean `void`.
+
+    /**
+     * La marca de modificacion.
+     *
+     * <p>Nunca es `null`: el formato **siempre** guarda esta, aunque sea con la precision de dos
+     * segundos de MS-DOS.
+     */
+    public java.nio.file.attribute.FileTime getLastModifiedTime() {
+        return java.nio.file.attribute.FileTime.fromMillis(this.getTime());
+    }
+
+    /** Fija la marca de modificacion. */
+    public ZipEntry setLastModifiedTime(java.nio.file.attribute.FileTime time) {
+        if (time == null) {
+            throw new NullPointerException("time");
+        }
+        this.setTime(time.toMillis());
+        return this;
+    }
+
+    /**
+     * La marca de ultimo acceso, o `null` si la entrada no la trae.
+     *
+     * <p>`null` es la respuesta correcta y comun: esta marca vive en un campo *extra* opcional que
+     * la mayoria de los escritores no pone.
+     */
+    public java.nio.file.attribute.FileTime getLastAccessTime() {
+        return this.ultimoAcceso;
+    }
+
+    /** Fija la marca de ultimo acceso. */
+    public ZipEntry setLastAccessTime(java.nio.file.attribute.FileTime time) {
+        this.ultimoAcceso = time;
+        return this;
+    }
+
+    /** La marca de creacion, o `null` si la entrada no la trae. Ver la nota de arriba. */
+    public java.nio.file.attribute.FileTime getCreationTime() {
+        return this.creacion;
+    }
+
+    /** Fija la marca de creacion. */
+    public ZipEntry setCreationTime(java.nio.file.attribute.FileTime time) {
+        this.creacion = time;
+        return this;
     }
 
     // A zip stores the modification time as an MS-DOS date and time: two 16-bit words with the

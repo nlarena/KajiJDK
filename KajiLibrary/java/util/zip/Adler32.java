@@ -29,6 +29,23 @@ public class Adler32 implements Checksum {
         b = (b + a) % BASE;
     }
 
+    /**
+     * Suma los bytes que quedan en `buffer`, y **lo deja consumido**.
+     *
+     * <p>Dejar la posicion en el limite no es un detalle de implementacion: es lo que distingue a un
+     * metodo que "lee un buffer" de uno que lo espia. Sin eso, un bucle que sume y vuelva a sumar
+     * procesaria los mismos bytes para siempre.
+     */
+    public void update(java.nio.ByteBuffer buffer) {
+        int n = buffer.remaining();
+        if (n <= 0) {
+            return;
+        }
+        byte[] tmp = new byte[n];
+        buffer.get(tmp, 0, n);
+        this.update(tmp, 0, n);
+    }
+
     public void update(byte[] buf, int off, int len) {
         int i = off;
         int remaining = len;

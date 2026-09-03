@@ -35,7 +35,7 @@ public class DeflaterInputStream extends FilterInputStream {
         this.ownsDeflater = false;
     }
 
-    public int read() {
+    public int read() throws java.io.IOException {
         byte[] one = new byte[1];
         int n = read(one, 0, 1);
         int result = -1;
@@ -45,7 +45,7 @@ public class DeflaterInputStream extends FilterInputStream {
         return result;
     }
 
-    public int read(byte[] b, int off, int len) {
+    public int read(byte[] b, int off, int len) throws java.io.IOException {
         int produced = 0;
         boolean done = false;
         while (produced == 0 && !done) {
@@ -73,7 +73,7 @@ public class DeflaterInputStream extends FilterInputStream {
         return result;
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws java.io.IOException {
         byte[] scratch = new byte[512];
         long skipped = 0;
         boolean done = false;
@@ -93,7 +93,7 @@ public class DeflaterInputStream extends FilterInputStream {
         return skipped;
     }
 
-    public int available() {
+    public int available() throws java.io.IOException {
         int n = 1;
         if (def.finished()) {
             n = 0;
@@ -101,7 +101,7 @@ public class DeflaterInputStream extends FilterInputStream {
         return n;
     }
 
-    public void close() {
+    public void close() throws java.io.IOException {
         if (!closed) {
             closed = true;
             if (ownsDeflater) {
@@ -119,6 +119,6 @@ public class DeflaterInputStream extends FilterInputStream {
     public void mark(int readlimit) {
     }
 
-    public void reset() {
+    public void reset() throws java.io.IOException {
     }
 }

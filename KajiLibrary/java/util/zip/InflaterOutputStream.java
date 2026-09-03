@@ -35,19 +35,19 @@ public class InflaterOutputStream extends FilterOutputStream {
         this.ownsInflater = false;
     }
 
-    public void write(int b) {
+    public void write(int b) throws java.io.IOException {
         byte[] one = new byte[1];
         one[0] = (byte) b;
         write(one, 0, 1);
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws java.io.IOException {
         inf.setInput(b, off, len);
         drain();
     }
 
     // Pushes out whatever the inflater can produce from what it has been given.
-    private void drain() {
+    private void drain() throws java.io.IOException {
         boolean more = true;
         while (more) {
             int n = 0;
@@ -64,16 +64,16 @@ public class InflaterOutputStream extends FilterOutputStream {
         }
     }
 
-    public void finish() {
+    public void finish() throws java.io.IOException {
         drain();
     }
 
-    public void flush() {
+    public void flush() throws java.io.IOException {
         drain();
         out.flush();
     }
 
-    public void close() {
+    public void close() throws java.io.IOException {
         if (!closed) {
             closed = true;
             finish();

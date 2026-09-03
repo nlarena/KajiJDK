@@ -38,7 +38,7 @@ public class InflaterInputStream extends FilterInputStream {
         this.ownsInflater = true;
     }
 
-    public int read() {
+    public int read() throws java.io.IOException {
         byte[] one = new byte[1];
         int n = read(one, 0, 1);
         int result = -1;
@@ -48,14 +48,14 @@ public class InflaterInputStream extends FilterInputStream {
         return result;
     }
 
-    public int read(byte[] b, int off, int length) {
+    public int read(byte[] b, int off, int length) throws java.io.IOException {
         return readInflated(b, off, length);
     }
 
     // El cuerpo vive aca, con otro nombre, para que una subclase pueda ampliarlo sin escribir
     // `super.read(...)` — que el emisor todavia no soporta (finding #125). Llamarlo HEREDADO y sin
     // calificar es lo que funciona.
-    int readInflated(byte[] b, int off, int length) {
+    int readInflated(byte[] b, int off, int length) throws java.io.IOException {
         int produced = 0;
         boolean done = false;
         while (produced == 0 && !done) {
@@ -91,14 +91,14 @@ public class InflaterInputStream extends FilterInputStream {
 
     // Pulls the next compressed chunk. `len` holds what the last pull returned — the JDK exposes
     // it as a protected field, so a subclass such as `GZIPInputStream` can see how much arrived.
-    protected void fill() {
+    protected void fill() throws java.io.IOException {
         len = in.read(buf, 0, buf.length);
         if (len > 0) {
             inf.setInput(buf, 0, len);
         }
     }
 
-    public int available() {
+    public int available() throws java.io.IOException {
         int n = 1;
         if (inf.finished()) {
             n = 0;
@@ -106,7 +106,7 @@ public class InflaterInputStream extends FilterInputStream {
         return n;
     }
 
-    public long skip(long n) {
+    public long skip(long n) throws java.io.IOException {
         byte[] scratch = new byte[512];
         long skipped = 0;
         boolean done = false;
@@ -126,7 +126,7 @@ public class InflaterInputStream extends FilterInputStream {
         return skipped;
     }
 
-    public void close() {
+    public void close() throws java.io.IOException {
         if (!closed) {
             closed = true;
             if (ownsInflater) {
@@ -145,6 +145,6 @@ public class InflaterInputStream extends FilterInputStream {
     public void mark(int readlimit) {
     }
 
-    public void reset() {
+    public void reset() throws java.io.IOException {
     }
 }

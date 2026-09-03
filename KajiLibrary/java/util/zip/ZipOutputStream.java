@@ -43,8 +43,25 @@ public class ZipOutputStream extends DeflaterOutputStream {
     private long entrySize;
     private boolean finished;
 
+    // El charset con el que se codifican los **nombres de entrada**. Ver la nota de `ZipInputStream`.
+    private final java.nio.charset.Charset charset;
+
+    /** Escribe el archivo, codificando los nombres en UTF-8. */
     public ZipOutputStream(OutputStream out) {
+        this(out, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Escribe el archivo, codificando los nombres con `charset`.
+     *
+     * @throws NullPointerException si `charset` es `null`
+     */
+    public ZipOutputStream(OutputStream out, java.nio.charset.Charset charset) {
         super(out, new Deflater(Deflater.DEFAULT_COMPRESSION, true));
+        if (charset == null) {
+            throw new NullPointerException("charset");
+        }
+        this.charset = charset;
         this.written = new ArrayList<ZipEntry>();
         this.offsets = new ArrayList<Long>();
         this.crc = new CRC32();
@@ -63,7 +80,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         def.setLevel(level);
     }
 
-    public void putNextEntry(ZipEntry entry) {
+    public void putNextEntry(ZipEntry entry) throws java.io.IOException {
         if (current != null) {
             closeEntry();
         }
@@ -77,7 +94,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         writeLocalHeader(entry);
     }
 
-    public void closeEntry() {
+    public void closeEntry() throws java.io.IOException {
         if (current != null) {
             if (current.getMethod() == DEFLATED) {
                 // Flush the compressed stream for this entry, then start a fresh deflater: each
@@ -104,7 +121,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         }
     }
 
-    public void write(byte[] b, int off, int len) {
+    public void write(byte[] b, int off, int len) throws java.io.IOException {
         if (current.getMethod() == STORED) {
             // A stored entry goes out untouched — no deflater in the path at all.
             out.write(b, off, len);
@@ -119,7 +136,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         entrySize = entrySize + (long) len;
     }
 
-    public void finish() {
+    public void finish() throws java.io.IOException {
         if (!finished) {
             finished = true;
             if (current != null) {
@@ -135,7 +152,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         }
     }
 
-    public void close() {
+    public void close() throws java.io.IOException {
         finish();
         out.close();
     }
@@ -143,10 +160,10 @@ public class ZipOutputStream extends DeflaterOutputStream {
     // ---- el formato, campo por campo ----
 
     private int localHeaderSize(ZipEntry entry) {
-        return 30 + entry.getName().length();
+        return 30 + this.bytesDelNombre(entry).length;
     }
 
-    private void writeLocalHeader(ZipEntry entry) {
+    private void writeLocalHeader(ZipEntry entry) throws java.io.IOException {
         writeInt(LOCAL_SIG);
         writeShort(20);                    // version needed: 2.0, which is where deflate appears
         writeShort(FLAG_DESCRIPTOR);       // sizes unknown until the data has been written
@@ -155,19 +172,19 @@ public class ZipOutputStream extends DeflaterOutputStream {
         writeInt(0);                       // crc, filled in by the data descriptor
         writeInt(0);                       // compressed size, idem
         writeInt(0);                       // uncompressed size, idem
-        writeShort(entry.getName().length());
+        writeShort(this.bytesDelNombre(entry).length);
         writeShort(0);                     // no extra field
         writeName(entry.getName());
     }
 
-    private void writeDataDescriptor(ZipEntry entry) {
+    private void writeDataDescriptor(ZipEntry entry) throws java.io.IOException {
         writeInt(DESCRIPTOR_SIG);
         writeInt((int) entry.getCrc());
         writeInt((int) entry.getCompressedSize());
         writeInt((int) entry.getSize());
     }
 
-    private void writeCentralEntry(ZipEntry entry, long offset) {
+    private void writeCentralEntry(ZipEntry entry, long offset) throws java.io.IOException {
         writeInt(CENTRAL_SIG);
         writeShort(20);                    // version made by
         writeShort(20);                    // version needed
@@ -177,7 +194,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         writeInt((int) entry.getCrc());
         writeInt((int) entry.getCompressedSize());
         writeInt((int) entry.getSize());
-        writeShort(entry.getName().length());
+        writeShort(this.bytesDelNombre(entry).length);
         writeShort(0);                     // extra length
         writeShort(0);                     // comment length
         writeShort(0);                     // disk number
@@ -187,7 +204,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         writeName(entry.getName());
     }
 
-    private void writeEnd(long directoryStart, long directorySize) {
+    private void writeEnd(long directoryStart, long directorySize) throws java.io.IOException {
         writeInt(END_SIG);
         writeShort(0);                     // this disk
         writeShort(0);                     // disk with the directory
@@ -216,7 +233,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
     // Everything in the zip format is LITTLE-endian — the opposite of the class file, and of
     // gzip's trailer being little-endian while zlib's is big-endian. Mixing them up produces
     // fields that look plausible and are wrong.
-    private void writeInt(int value) {
+    private void writeInt(int value) throws java.io.IOException {
         out.write(value & 0xff);
         out.write((value >> 8) & 0xff);
         out.write((value >> 16) & 0xff);
@@ -224,18 +241,26 @@ public class ZipOutputStream extends DeflaterOutputStream {
         position = position + 4;
     }
 
-    private void writeShort(int value) {
+    private void writeShort(int value) throws java.io.IOException {
         out.write(value & 0xff);
         out.write((value >> 8) & 0xff);
         position = position + 2;
     }
 
-    private void writeName(String s) {
+    // Los **bytes** del nombre en el charset elegido. Antes se escribia caracter a caracter con
+    // `charAt(i) & 0xff`, que trunca a Latin-1: un nombre con acentos salia mal escrito **y** con un
+    // largo declarado que no coincidia con los bytes, o sea un archivo corrupto.
+    private byte[] bytesDelNombre(ZipEntry entry) {
+        return entry.getName().getBytes(this.charset);
+    }
+
+    private void writeName(String s) throws java.io.IOException {
+        byte[] raw = s.getBytes(this.charset);
         int i = 0;
-        while (i < s.length()) {
-            out.write(s.charAt(i) & 0xff);
+        while (i < raw.length) {
+            out.write(raw[i] & 0xff);
             i = i + 1;
         }
-        position = position + (long) s.length();
+        position = position + (long) raw.length;
     }
 }
