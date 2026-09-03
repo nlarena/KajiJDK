@@ -22,6 +22,18 @@ public class InvocationTargetException extends ReflectiveOperationException {
      *
      * @param target the exception the invoked member threw
      */
+    /**
+     * Sin objetivo.
+     *
+     * <p>Es `protected` a proposito: nadie deberia poder construir esta excepcion **sin** la que la
+     * causo, porque entonces no envuelve nada y pierde su unica razon de existir. El JDK lo deja
+     * para las subclases, que pueden tener otra forma de proveer el objetivo.
+     */
+    protected InvocationTargetException() {
+        super((Throwable) null);
+        this.target = null;
+    }
+
     public InvocationTargetException(Throwable target) {
         super();
         this.target = target;

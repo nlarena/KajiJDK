@@ -16,15 +16,18 @@ package java.lang.reflect;
  *
  * <h2>KajiLibrary status</h2>
  *
- * <p>The interface is complete and usable as a type today: a handler can be written and passed
- * around. What cannot happen yet is a proxy calling it, because {@link Proxy} does not exist in
- * KajiJDK — generating a class at runtime needs a class loader, and {@code java.lang.ClassLoader}
- * has not been written.
+ * <p>The interface is complete, and {@link Proxy} calls it for real: a proxy instance routes every
+ * interface method — plus {@code equals}, {@code hashCode} and {@code toString} — to {@link #invoke}.
  *
- * <p>{@link #invokeDefault} throws {@link UnsupportedOperationException} for the same reason: it
- * exists to let a handler delegate to an interface's {@code default} implementation, and it can only
- * be called with a proxy instance as its first argument. With no proxies there is no legal call, so
- * refusing loudly beats returning something invented.
+ * <p>{@link #invokeDefault} is the one gap, and it is a gap for a reason that is not laziness. Its
+ * job is to run an interface's {@code default} body <em>as the proxy would have</em>, which at the
+ * bytecode level is an {@code invokespecial} into a superinterface — an instruction only the proxy
+ * class itself is allowed to execute (JVMS §6.5, {@code invokespecial}). Reaching it needs either
+ * {@code MethodHandles.Lookup.findSpecial} with the proxy class as the special caller, or an extra
+ * generated method per default method. Neither is wired, so this throws
+ * {@link UnsupportedOperationException} rather than invent a semantics — running the body on some
+ * other receiver, or calling back into the handler and looping, would both be wrong in ways the
+ * caller could not see.
  */
 public interface InvocationHandler {
 
@@ -55,6 +58,7 @@ public interface InvocationHandler {
      * @throws Throwable whatever the default implementation throws
      */
     static Object invokeDefault(Object proxy, Method method, Object... args) throws Throwable {
-        throw new UnsupportedOperationException("invokeDefault requires java.lang.reflect.Proxy");
+        throw new UnsupportedOperationException(
+                "invokeDefault requires invokespecial into a superinterface");
     }
 }
