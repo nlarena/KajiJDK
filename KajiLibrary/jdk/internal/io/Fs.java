@@ -108,4 +108,33 @@ public final class Fs {
 
     /** Fija la fecha de ultima modificacion, en milisegundos desde la epoca. */
     public static native boolean setMtime(String ruta, long millis);
+
+    /**
+     * El tamano total, en bytes, del volumen que contiene a esa ruta; **-1 si no se pudo saber**.
+     *
+     * <p>El centinela no es cero por lo mismo que en {@link #mtime}: cero **es** una respuesta
+     * valida --un volumen sin espacio-- y confundirla con "no se" es el error que este valor evita.
+     * El lado Java traduce el -1 a la `IOException` que `FileStore` declara.
+     */
+    public static native long diskTotal(String ruta);
+
+    /**
+     * Lo que **este usuario** puede escribir en ese volumen, en bytes; -1 si no se pudo saber.
+     *
+     * <p>No es lo mismo que {@link #diskUnallocated}, y la diferencia importa donde hay cuotas: lo
+     * utilizable es lo que la cuota deja, lo sin asignar es lo que el volumen tiene. Sin cuota los
+     * dos coinciden.
+     */
+    public static native long diskUsable(String ruta);
+
+    /** Los bytes sin asignar del volumen; -1 si no se pudo saber. Ver {@link #diskUsable}. */
+    public static native long diskUnallocated(String ruta);
+
+    /**
+     * Las raices del sistema de archivos: `C:\`, `D:\`, ... en Windows; `/` en el resto.
+     *
+     * <p>Se pregunta al sistema en cada llamada y no se guarda: una unidad que se conecta agrega una
+     * raiz, y una lista cacheada estaria vieja justo cuando alguien la mira para ver que hay.
+     */
+    public static native String[] roots();
 }
