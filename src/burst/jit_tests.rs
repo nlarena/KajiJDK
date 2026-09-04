@@ -43,9 +43,62 @@ fn run(class_file: &str, jit: bool) -> (i32, usize, JitStats) {
 /// same binary at the same addresses, or this machine's code-layout noise would be indistinguishable
 /// from the effect, and an environment variable set from a test would leak into every other test in
 /// the process.
+/// El bootclasspath de este arnés, y **el mismo** que usa `run-headless`.
+///
+/// Estaba en `boot/` a secas, o sea que estos tests cargaban un `java.lang.String` distinto del que
+/// carga la VM de verdad: `run-headless` bootea con `KajiLibrary` primero —la biblioteca propia, la
+/// fuente de verdad— y `boot/` como relleno para lo que ahí falte. Dos imágenes distintas quieren
+/// decir que un test del JIT puede pasar contra una clase que ningún programa real va a ver, que es
+/// la forma exacta de un test que parece probar algo y no lo prueba.
+///
+/// Un solo lugar y no nueve copias, por la razón de siempre: nueve copias son ocho oportunidades de
+/// que la próxima diverja en silencio.
+fn boot_class_path() -> Vec<PathBuf> {
+    vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")]
+}
+
+/// Una fixture que toca `String` da lo mismo por este arnés que por la VM de verdad.
+///
+/// # Qué se estaba escapando
+///
+/// Este arnés arrancaba desde `boot/` a secas y `run-headless` desde `KajiLibrary` con `boot/` de
+/// relleno. O sea que los tests del JIT cargaban **otro** `java.lang.String` que el que corre
+/// cualquier programa real, y nada lo comprobaba. Un test que pasa contra una clase que ningún
+/// programa va a ver es la definición de un test que parece probar algo y no lo prueba — la familia
+/// FZ-003…FZ-007.
+///
+/// # Por qué `String` y no cualquier clase
+///
+/// Porque es donde las dos imágenes más se pueden separar sin que se note: `KajiLibrary` es el
+/// superset y su `String` tiene el pool de internado que `FZ-008` arregló. La fixture toca la
+/// **identidad** de dos literales iguales, que es exactamente lo que ese arreglo cambió, más
+/// `length`, `charAt` y `equals`, que leen el arreglo de respaldo.
+///
+/// El valor está horneado y es el que imprime `java KjBootStr`, como el resto de este archivo.
+///
+/// # Lo que este test **no** custodia, medido
+///
+/// No custodia el bootclasspath. Se plantó el sabotaje —volver a `boot/` a secas— y este test
+/// **siguió pasando**: `boot/java/lang/String.class` son 407 bytes contra 33612 de `KajiLibrary`,
+/// pero los métodos que la fixture toca los intrinsifica el intérprete, así que el archivo de clase
+/// casi no participa. Un stub y la biblioteca real dan lo mismo.
+///
+/// Lo que sí custodia el arranque son los conteos de métodos escaneados de
+/// `getstatic_of_an_int_agrees_with_the_interpreter` y `a_loop_before_a_monitorenter_still_runs_natively`:
+/// con `boot/` solo dan uno menos cada uno, y los dos fallan. Queda anotado para que nadie lea este
+/// test como la garantía que no es.
+#[test]
+fn una_fixture_de_string_da_lo_mismo_que_el_jdk_real() {
+    const ESPERADO: i32 = -713_034_848;
+    let (sin_jit, _, _) = run("java/KjBootStr.class", false);
+    let (con_jit, _, _) = run("java/KjBootStr.class", true);
+    assert_eq!(sin_jit, ESPERADO, "el intérprete no coincide con `java KjBootStr`");
+    assert_eq!(con_jit, sin_jit, "el JIT calcula otra cosa que el intérprete");
+}
+
 fn run_tuned(class_file: &str, jit: bool, regs: Option<u32>) -> (i32, usize, JitStats) {
     use crate::jvm::interpreter::bytecode_interpreter::execute_counting_tuned;
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let class = ClassFile::from_path(class_file).expect("load class");
     let name = class.class_name(class.this_class).unwrap().to_string();
     metaspace.add(name.clone(), class);
@@ -296,7 +349,7 @@ fn with_poll_on(
     raise: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
 ) -> (i32, JitStats) {
     use crate::jvm::interpreter::bytecode_interpreter::execute_counting_with_jit_and_poll;
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let class = ClassFile::from_path(class_file).expect("load class");
     let name = class.class_name(class.this_class).unwrap().to_string();
     metaspace.add(name.clone(), class);
@@ -372,7 +425,7 @@ fn the_poll_may_be_raised_and_lowered_while_the_program_runs() {
 /// One timed run: the class is loaded and resolved *outside* the timer, so what is measured is
 /// execution and nothing else.
 fn timed(class_file: &str, jit: bool) -> (i32, usize, JitStats, std::time::Duration) {
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let class = ClassFile::from_path(class_file).expect("load class");
     let name = class.class_name(class.this_class).unwrap().to_string();
     metaspace.add(name.clone(), class);
@@ -563,7 +616,7 @@ fn the_env_var_is_the_user_facing_switch() {
     let setting = std::env::var("JVM_JIT").unwrap_or_else(|_| "<unset>".to_string());
     // `None` = respect the environment, which is exactly what `execute` does for a real run.
     let (value, _, stats) = {
-        let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+        let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
         let class = ClassFile::from_path("java/JtLoop.class").expect("load class");
         let name = class.class_name(class.this_class).unwrap().to_string();
         metaspace.add(name.clone(), class);
@@ -676,7 +729,15 @@ fn getstatic_of_an_int_agrees_with_the_interpreter() {
     // step added: it is `new int[16]` in a loop, and it was refused for that opcode alone.
     // Not `notAnInt` (a `String` static, so the resolver refuses it), not `run` (invokes).
     assert_eq!(stats.compiled, 6);
-    assert_eq!(stats.rejected, 2, "`notAnInt` and `run`, each scanned once");
+    // Tres y no dos desde que este arnés bootea con `KajiLibrary` en vez de `boot/` a secas (ver
+    // [`boot_class_path`]): la biblioteca de verdad pone **un** método más en el camino de este
+    // workload, y se lo escanea y se lo rechaza. Que sea rechazado y no compilado se ve en que
+    // `compiled` no se movió, y que el JIT siga acertando se ve en que el diferencial de arriba
+    // sigue dando 246189. Lo que cambió es cobertura, no corrección.
+    //
+    // El número es a propósito exacto y no un `>=`: depende de la imagen de arranque, así que si la
+    // biblioteca crece este test tiene que fallar y que alguien lo mire.
+    assert_eq!(stats.rejected, 3, "`notAnInt`, `run`, y uno de la biblioteca");
     assert_eq!(stats.deopts, 0);
     assert_eq!(stats.unmarshallable, 0);
     // `churn` is the reason this workload was written — it allocates hard enough to force
@@ -1031,7 +1092,11 @@ fn a_loop_before_a_monitorenter_still_runs_natively() {
     // that dispatch is gated on there being no monitor. So it is never offered, never scanned and
     // never refused — which is why it is absent from both counters rather than present in
     // `rejected`. `run` itself is the one refusal: its loop calls a method that loops.
-    assert_eq!(stats.rejected, 1, "`run`; `syncMethod` is never even offered");
+    // Dos desde el cambio de imagen de arranque, y es **el mismo** `+1` que en
+    // `getstatic_of_an_int_agrees_with_the_interpreter`: el método de biblioteca que ahora entra al
+    // camino se escanea y se rechaza en los dos workloads. `syncMethod` sigue sin ser ofrecido, que
+    // es lo que este aserto existe para decir.
+    assert_eq!(stats.rejected, 2, "`run` y uno de la biblioteca; `syncMethod` sigue sin ofrecerse");
 }
 
 // =============================================================================================
@@ -1301,10 +1366,12 @@ fn subset_census() {
     // `boot/` is in the table but not in the population — nothing there is censused, but a
     // constructor's `super()` has to be able to find `java.lang.Object.<init>` or no `<init>` would
     // ever inline.
-    let (mut java_paths, mut boot_paths) = (Vec::new(), Vec::new());
+    let (mut java_paths, mut lib_paths, mut boot_paths) = (Vec::new(), Vec::new(), Vec::new());
     walk(std::path::Path::new("java"), &mut java_paths);
+    walk(std::path::Path::new("KajiLibrary"), &mut lib_paths);
     walk(std::path::Path::new("boot"), &mut boot_paths);
     java_paths.sort();
+    lib_paths.sort();
     boot_paths.sort();
 
     let mut classes: Vec<(String, ClassFile)> = Vec::new();
@@ -1320,7 +1387,11 @@ fn subset_census() {
     let mut files = 0usize;
 
     for (from_java, path) in
-        java_paths.iter().map(|p| (true, p)).chain(boot_paths.iter().map(|p| (false, p)))
+        java_paths
+            .iter()
+            .map(|p| (true, p))
+            .chain(lib_paths.iter().map(|p| (false, p)))
+            .chain(boot_paths.iter().map(|p| (false, p)))
     {
         let Ok(class) = ClassFile::from_path(path.to_str().expect("utf-8 path")) else { continue };
         let Some(name) = class.class_name(class.this_class).map(str::to_string) else { continue };
@@ -2105,7 +2176,7 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
     use crate::jvm::interpreter::heap::HeapService;
     use crate::jvm::interpreter::metaspace::InitState;
 
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let mut heap = HeapService::new();
     // `BmField`'s pool names `BmCell`, which has two `int` fields — a real class, a real layout, a
     // real mirror. Loading it is what mints its Class ID and allocates that mirror in Old.
@@ -2243,7 +2314,7 @@ fn an_unlogged_allocation_is_exactly_the_corruption_the_replay_prevents() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let mut heap = HeapService::new();
     class_operations::load_class(&mut metaspace, &mut heap, "BmCell");
     // An object in Eden that the collector's log does not contain. `malloc` records into the
@@ -2465,7 +2536,7 @@ fn a_compiled_array_is_zeroed_to_the_rounded_stride() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let mut heap = HeapService::new();
     // The mirror has to exist before anything is compiled — minting one allocates, and a
     // compilation may not. The refusal is checked rather than assumed.
@@ -2534,7 +2605,7 @@ fn an_array_allocated_by_compiled_code_survives_a_minor_collection() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let mut heap = HeapService::new();
     let class_id = array_operations::array_class_mirror(&mut metaspace, &mut heap, "[I") as u32;
 
@@ -2598,7 +2669,7 @@ fn an_unlogged_array_is_exactly_the_corruption_the_replay_prevents() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(vec![PathBuf::from("boot")], vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
     let mut heap = HeapService::new();
     array_operations::array_class_mirror(&mut metaspace, &mut heap, "[I");
     let compiled = compile_newarray(&heap, &metaspace, 10, "(I)[I").expect("`[I` has a mirror");
@@ -2625,3 +2696,21 @@ fn an_unlogged_array_is_exactly_the_corruption_the_replay_prevents() {
 
 
 
+
+/// **Argumentos `long` y `double` en callees que el JIT inlinea**, contra un `java` de verdad.
+///
+/// Los tests de `compile_tests.rs` prueban la copia con un `Environment` de mentira; éste la prueba
+/// con el resolver real, el intérprete real y el layout de locales real — que es el único lugar
+/// donde se ve si el JIT y `Frame::reset_for_call` acuerdan sobre en qué slot cae cada argumento.
+///
+/// El fixture tiene los cuatro casos que se pueden equivocar de forma distinta: un `long` **en el
+/// medio** (el que corre al argumento siguiente), un `long` **primero**, dos categoría-2 seguidas, y
+/// un método de instancia (donde el receptor ocupa el slot 0 y corre todo lo demás). Y uno de los
+/// callees devuelve `long` y lo usa como `long`, no casteado a `int`: si la mitad alta se leyera del
+/// slot de al lado, un cast a 32 bits no lo mostraría.
+///
+/// `1566736103` es lo que imprime `java JcCat2` con un JDK 25.
+#[test]
+fn argumentos_de_categoria_2_en_callees_inlineados_dan_lo_mismo_que_el_jdk_real() {
+    differential("java/JcCat2.class", 1566736103);
+}

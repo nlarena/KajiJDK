@@ -4470,3 +4470,146 @@ fn instanceof_agrees_at_every_cache_size_and_every_depth() {
         }
     }
 }
+
+// =================================================================================================
+// Argumentos de categoría-2 en callees inlineados.
+// =================================================================================================
+
+/// **Un `long` en el medio de los argumentos de un callee inlineado.**
+///
+/// El caso que estuvo rechazado desde que existe el inlining, y exactamente lo que compraba la
+/// igualdad `ancho de slots == cantidad de operandos`: `m(int, long, int)` deja el tercer argumento
+/// en el local **3**, no en el 2, porque el `long` se lleva dos slots. La regla vieja del emisor
+/// —"operando `k` al local `k`"— lo dejaba en el 2, y el local 3 se quedaba con el cero del cerado.
+///
+/// Por eso el callee lee **los tres**: si el destino se calcula mal, `iload_3` lee ese cero y la
+/// respuesta baja en exactamente el valor del tercer argumento, en vez de romper de una forma
+/// ruidosa. Es la clase de error que un test que sólo mirara el primero no vería nunca.
+#[test]
+fn un_callee_inlineado_recibe_un_long_en_el_medio() {
+    let heap = FakeHeap::new();
+    // `sum(int a, long b, int c) { return a + (int) b + c; }` — locales: a=0, b=1..2, c=3.
+    let callee = [
+        ILOAD_0, // a
+        0x1f, 0x88, // lload_1; l2i
+        0x60, // iadd
+        0x1d, // iload_3   <- el que cae un slot más allá por culpa del `long`
+        0x60, IRETURN,
+    ];
+    // `caller(int a) { return sum(a, 1L, 5); }`
+    let caller = [ILOAD_0, 0x0a, 0x08, 0xb8, 0x00, 0x01, IRETURN];
+
+    let compiled = super::compile::compile(
+        &Method {
+            unit: 0,
+            code: &caller,
+            max_locals: 1,
+            descriptor: "(I)I",
+            is_static: true,
+            has_handlers: false,
+        },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| {
+                Some(super::compile::Callee {
+                    method: Method {
+                        unit: 1,
+                        code: &callee,
+                        max_locals: 4,
+                        descriptor: "(IJI)I",
+                        is_static: true,
+                        has_handlers: false,
+                    },
+                    // **Tres**, no cuatro: es la cantidad de *operandos* que consume la llamada, y
+                    // un `Value::Long` es una sola entrada de pila. Que este número no sea el ancho
+                    // en slots es todo el asunto.
+                    arg_slots: 3,
+                    guard: super::compile::Guard::Static,
+                })
+            },
+            heap: heap.bases(),
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .expect("un callee con un argumento `long` se inlinea");
+
+    // 7 + 1 + 5. Con la copia por índice de operando daría 13: el 5 iría al local 2 y el `iload_3`
+    // leería el cero.
+    assert_eq!(call(&compiled, &[7]), Some(13), "a + (int) b + c");
+    assert_eq!(call(&compiled, &[-2]), Some(4));
+}
+
+/// **El techo: los destinos tienen que entrar en `max_locals` del callee.**
+///
+/// Es lo único que impide que la copia de argumentos escriba más allá de los locales del cuerpo
+/// inlineado y pise su propia área de spill. Antes lo cubría de rebote la igualdad contra la
+/// cantidad de operandos; ahora es un chequeo propio, y sin este test nada lo custodia.
+///
+/// El `max_locals` mentiroso no sale de `javac` —el verificador no lo dejaría— pero sale de un
+/// class file escrito a mano, que es de quien este tier tiene que defenderse.
+#[test]
+fn un_callee_cuyos_argumentos_no_entran_en_sus_locales_se_rechaza() {
+    let heap = FakeHeap::new();
+    let callee = [ILOAD_0, IRETURN];
+    let caller = [ILOAD_0, 0x0a, 0x08, 0xb8, 0x00, 0x01, IRETURN];
+
+    let intento = |callee_locals: usize| {
+        super::compile::compile(
+            &Method {
+                unit: 0,
+                code: &caller,
+                max_locals: 1,
+                descriptor: "(I)I",
+                is_static: true,
+                has_handlers: false,
+            },
+            &Environment {
+                int_const: &|_, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
+                instance: &|_, _| None,
+                array: &|_, _| None,
+                invoke: &|_, _, _| {
+                    Some(super::compile::Callee {
+                        method: Method {
+                            unit: 1,
+                            code: &callee,
+                            max_locals: callee_locals,
+                            descriptor: "(IJI)I",
+                            is_static: true,
+                            has_handlers: false,
+                        },
+                        arg_slots: 3,
+                        guard: super::compile::Guard::Static,
+                    })
+                },
+                heap: heap.bases(),
+                class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
+                poll_word: &POLL as *const _ as usize,
+            },
+        )
+    };
+
+    // El descriptor `(IJI)I` necesita cuatro slots: 0, 1-2, 3.
+    assert!(intento(4).is_ok(), "el control: con los cuatro slots declarados, compila");
+    for miente in [0, 1, 2, 3] {
+        assert_eq!(
+            intento(miente),
+            Err(Ineligible::WrongType { pc: 3 }),
+            "con max_locals = {miente} los argumentos no entran y hay que rechazar"
+        );
+    }
+}

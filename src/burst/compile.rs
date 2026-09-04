@@ -3045,20 +3045,31 @@ fn transfer(
         //
         // This is the one opcode whose type effect is stated by a *different* method's descriptor,
         // and stating it here is what makes the caller and the callee agree by construction. The
-        // operands `[depth - arg_slots, depth)` become the callee's locals `[0, arg_slots)`
-        // bottom-first, so operand `depth - arg_slots + k` is local `k` — and [`entry_locals`] is
-        // the authority on what kind local `k` is, exactly as it is for the root's own entry.
+        // operands `[depth - arg_slots, depth)` become the callee's locals bottom-first, and
+        // [`arg_destinations`] says which local each one lands in.
         //
-        // Popping top-first with `state.pop` therefore walks the slots **downwards**, and a
-        // mismatch is an [`Ineligible::WrongType`] like any other. It is also what refuses a
-        // `long`, a `double` or a `float` argument without a special case: such a slot is
-        // [`Kind::Opaque`], nothing on the operand stack can ever be `Opaque`, so the pop fails.
+        // **La lista que se consulta acá es por operando, no por slot**, y esa distinción es todo
+        // lo que costaba un argumento de categoría-2. [`entry_locals`] está indexada por slot, así
+        // que con `(IJJ)V` dice `[Int, Long, Cat2High, Long, Cat2High]`; indexarla con el número de
+        // operando comparaba el tercer operando contra `Cat2High`, que nada en la pila puede ser, y
+        // rechazaba el método entero. [`arg_kinds`] dice `[Int, Long, Long]`, que es lo que la pila
+        // realmente tiene — un `Value::Long` es **una** entrada.
+        //
+        // Popping top-first with `state.pop` therefore walks the arguments **downwards**, and a
+        // mismatch is an [`Ineligible::WrongType`] like any other.
         0xb6..=0xb9 => {
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             let callee = (env.invoke)(method.unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode: op })?;
-            let want = entry_locals(&callee.method);
+            let want = arg_kinds(&callee.method).ok_or(Ineligible::WrongType { pc })?;
+            // El conteo que reporta la VM y el que dice el descriptor tienen que coincidir. No es
+            // defensa contra un class file hostil: es que `arg_slots` viene del resolver del
+            // intérprete y `want` de parsear el descriptor acá, y si alguna vez dejaran de contar
+            // lo mismo, el pop leería el argumento equivocado en silencio.
+            if want.len() != callee.arg_slots {
+                return Err(Ineligible::WrongType { pc });
+            }
             for k in (0..callee.arg_slots).rev() {
-                state.pop(pc, want.get(k).copied().unwrap_or(Kind::Opaque))?;
+                state.pop(pc, want[k])?;
             }
             if !returns_void(callee.method.descriptor) {
                 // A callee returning a `double` or a `float` has no exit this tier can express, so
@@ -4177,17 +4188,20 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, In
             // The **shape** check the emitter depends on and the type map cannot state: the call
             // must consume exactly the operands the callee's locals are built from.
             let entry_depth = bodies[at].state[pc].as_ref().expect("a reachable invoke").stack.len();
-            if callee.arg_slots > entry_depth || callee.arg_slots > callee.method.max_locals {
+            if callee.arg_slots > entry_depth {
                 return Err(Ineligible::StackUnderflow { pc });
             }
-            // **One operand, one local slot.** The emitter copies operand `k` to local `k`, which
-            // is only the callee's argument layout while every argument is category-1: a `long`
-            // occupies one operand (the interpreter's stack holds one `Value::Long`) and *two*
-            // local slots, and the arguments after it would land one slot low. Comparing the VM's
-            // operand count against the descriptor's slot width is what catches that, and it
-            // catches it for the receiver too. See [`arg_slot_width`] for why the category-2 step
-            // left this refusal in place.
-            if arg_slot_width(&callee.method) != Some(callee.arg_slots) {
+            // **Un operando, un slot local — pero no el mismo número.** El emisor copia el operando
+            // `k` al local `w(k)`, con `w` acumulando anchos ([`arg_destinations`]), que es la misma
+            // cuenta que hace `Frame::reset_for_call` del otro lado. Lo único que hay que exigir acá
+            // es que los destinos **entren**: el ancho total incluye la mitad alta de cada
+            // categoría-2, y escribir fuera de `max_locals` sería pisar los locales del llamador.
+            //
+            // Esto reemplaza a la igualdad `ancho == cantidad de operandos`, que era la forma de
+            // decir "todos los argumentos son categoría-1" y rechazaba **150 métodos del censo**,
+            // el 100% de ellos con un `long` o un `double` en el descriptor.
+            let width = arg_slot_width(&callee.method).ok_or(Ineligible::WrongType { pc })?;
+            if width > callee.method.max_locals {
                 return Err(Ineligible::WrongType { pc });
             }
             let mut body = scan_body(callee.method, env, true)?;
@@ -4250,24 +4264,74 @@ fn invoke_len(op: u8) -> u16 {
     }
 }
 
-/// The number of **local slots** a callee's receiver and arguments occupy, or `None` for a
-/// descriptor this tier cannot parse.
+/// El **kind de cada operando** que consume un invoke de `method`, el receptor primero.
 ///
-/// It is compared against the operand count the VM reports for the same call, and the comparison is
-/// the whole point: the two are equal exactly when every argument is category-1, which is exactly
-/// when "operand `k` becomes local `k`" — the only argument-passing rule the emitter implements —
-/// is the callee's real layout. A `long` or `double` parameter makes the width larger than the
-/// count and the call is refused.
+/// No es la misma lista que [`entry_locals`], y la diferencia es exactamente lo que cuesta un
+/// argumento de categoría-2: `entry_locals` está indexada por **slot**, así que un `long` mete un
+/// [`Kind::Cat2High`] entre él y el argumento que sigue, mientras que la pila de operandos lleva
+/// **una entrada por valor** (un `Value::Long` es una). Indexar la primera con un número de
+/// operando es correcto exactamente mientras todos los argumentos sean categoría-1 — y era el bug:
+/// con `(IJJ)V` la lista por slots es `[Int, Long, Cat2High, Long, Cat2High]` y el tercer operando
+/// se comparaba contra `Cat2High`, que nada en la pila puede ser.
 ///
-/// **That refusal survived the `long` step deliberately, and it is the one place category-2 still
-/// costs a whole feature.** A `long` *return* from an inlined callee needs nothing new — the
-/// callee's `lreturn` writes one operand into the caller's stack, which is exactly what an `int`
-/// return does. A `long` *parameter* would need the emitted call to copy operand `k` into local
-/// `w(k)` for a width-aware `w`, and to zero the high slot it skipped; that is a small change to
-/// the invoke arm and a real change to [`VirtualFrame`]'s locals, which are complete rather than
-/// differential and would then contain a [`Kind::Cat2High`] the call really did write. It is left
-/// out rather than half-done: a call with a `long` argument is simply not inlined, so the method
-/// containing it is not compiled, exactly as before.
+/// `None` para un descriptor que este tier no sabe parsear, que es la misma respuesta que da
+/// [`arg_slot_width`] y por la misma razón.
+fn arg_kinds(method: &Method) -> Option<Vec<Kind>> {
+    let mut kinds = Vec::new();
+    if !method.is_static {
+        kinds.push(Kind::Reference); // `this`
+    }
+    let bytes = method.descriptor.as_bytes();
+    let mut at = bytes.iter().position(|&b| b == b'(')? + 1;
+    while at < bytes.len() && bytes[at] != b')' {
+        let (kind, _, len) = descriptor_kind(&bytes[at..])?;
+        kinds.push(kind);
+        at += len;
+    }
+    Some(kinds)
+}
+
+/// El **slot local en el que cae cada operando**, en orden de operando.
+///
+/// Es la convención de llamada de un callee inlineado en una línea: el operando `k` no es el local
+/// `k` sino el local `w(k)`, con `w` acumulando anchos. Lo escriben dos lugares que tienen que
+/// coincidir a la fuerza —el emisor, que hace la copia, y nada más— así que se calcula acá una vez.
+/// Es la misma cuenta que hace `Frame::reset_for_call` del lado del intérprete.
+fn arg_destinations(method: &Method) -> Option<Vec<usize>> {
+    let mut slot = 0usize;
+    Some(
+        arg_kinds(method)?
+            .into_iter()
+            .map(|kind| {
+                let at = slot;
+                slot += if kind.is_category2() { 2 } else { 1 };
+                at
+            })
+            .collect(),
+    )
+}
+
+/// La cantidad de **slots locales** que ocupan el receptor y los argumentos de un callee, o
+/// `None` para un descriptor que este tier no sabe parsear.
+///
+/// **Ya no se compara contra la cantidad de operandos.** Esa igualdad —`ancho == operandos`— era la
+/// forma de decir "todos los argumentos son categoría-1", y con ella un `long` o un `double` como
+/// parámetro rechazaba el método llamador entero. Medido sobre el censo: **158 rechazos, el 100% de
+/// ellos con un `J` o una `D` en el descriptor**, y 50 de esos por un solo constructor —el de
+/// `Thread`, por su parámetro `stackSize`.
+///
+/// Hoy el emisor copia el operando `k` al local `w(k)` ([`arg_destinations`]) y cera lo que ningún
+/// argumento ocupa, así que lo único que este ancho decide es si los destinos **entran** en
+/// `max_locals`. Es el único techo que impide que la copia pise el área de spill del propio cuerpo,
+/// y por eso el chequeo quedó del lado estricto: `width` ≥ la cantidad de operandos siempre.
+///
+/// Lo que hizo barato el cambio es que las dos mitades difíciles ya estaban hechas: [`entry_locals`]
+/// ya coloca el [`Kind::Cat2High`] en la mitad alta, y `JitValue::of_value` ya lo devuelve como el
+/// `Value::Int(0)` que el intérprete deja ahí — así que un deopt reconstruye el frame de un callee
+/// inlineado con un `long` sin una línea nueva. **Corolario que conviene tener presente:** lo que
+/// sostiene la corrección de ese slot es que el *mapa de tipos* diga `Cat2High`, no que el buffer
+/// tenga cero; el cerado es higiene, y el peligro real es un slot que el mapa tipa como valor y el
+/// emisor no escribe.
 fn arg_slot_width(method: &Method) -> Option<usize> {
     let bytes = method.descriptor.as_bytes();
     let mut slots = usize::from(!method.is_static); // `this`
@@ -6091,15 +6155,42 @@ fn emit_body(
                     a.cmp_rr(T1, T2);
                     a.jcc(Cond::Ne, deopt);
                 }
-                for k in 0..args {
-                    let v = in_reg(a, home(d - args + k), T0);
-                    a.mov_mr(Mem::at(LOCALS, 8 * (base + k as i32)), v);
+                // **El operando `k` es el local `w(k)`, no el local `k`.** Un argumento de
+                // categoría-2 se lleva dos slots y los que vienen después arrancan uno más allá —
+                // exactamente el layout que arma `Frame::reset_for_call` del lado del intérprete,
+                // que es con quien esto tiene que coincidir al byte.
+                //
+                // El orden es **primero cerar, después escribir**, y no al revés: con anchos, los
+                // slots que nadie ocupa ya no son sólo la cola (`args..locals`) sino también las
+                // mitades altas, que quedan *entre* dos argumentos. Cerar todo lo que no es destino
+                // y después escribir los destinos deja el frame idéntico al que arma el intérprete
+                // —que hace `resize(max_locals, Value::Int(0))` y encima escribe los argumentos— y
+                // deja la mitad alta en el cero que [`Kind::Cat2High`] nombra.
+                let dest = arg_destinations(&bodies[child].method).ok_or(Ineligible::WrongType { pc })?;
+                // **Un destino por operando, y esto es un rechazo y no un `debug_assert`.** El bucle
+                // de abajo lee el operando `k` en `home(d - args + k)`: si `dest` fuera más largo
+                // que `args`, leería operandos de *arriba* de la región de argumentos y los
+                // escribiría en los locales del callee. `transfer` ya chequea lo mismo, pero contra
+                // **su** respuesta de `(env.invoke)` — el resolver se consulta tres veces por sitio
+                // y sólo la de `plan` llega hasta acá, así que las dos no son el mismo hecho. Un
+                // `debug_assert` no corre en release, que es donde esto importa.
+                if dest.len() != args as usize {
+                    return Err(Ineligible::WrongType { pc });
                 }
-                if (args as usize) < locals {
-                    a.xor_rr(T0, T0);
-                    for i in args as usize..locals {
+                // Cerado **incondicional**: todo slot que ningún argumento ocupa. Antes alcanzaba
+                // con la cola `args..locals`; con anchos, los slots libres son también las mitades
+                // altas, que quedan *entre* dos argumentos. Sin condición previa a propósito — la
+                // que había (`dest.len() < locals`) era cierta por una consecuencia del techo de
+                // `plan`, y habría dejado de serlo en silencio el día que ese techo se aflojara.
+                a.xor_rr(T0, T0);
+                for i in 0..locals {
+                    if !dest.contains(&i) {
                         a.mov_mr(Mem::at(LOCALS, 8 * (base + i as i32)), T0);
                     }
+                }
+                for (k, &to) in dest.iter().enumerate() {
+                    let v = in_reg(a, home(d - args + k as u16), T0);
+                    a.mov_mr(Mem::at(LOCALS, 8 * (base + to as i32)), v);
                 }
                 emit_body(a, bodies, child, env, frame, layout, st)?;
             }
