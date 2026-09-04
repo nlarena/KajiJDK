@@ -29,13 +29,22 @@ public abstract class Permission implements Guard, Serializable {
         this.name = name;
     }
 
-    // Vigila el acceso a `object`.
+    // Vigila el acceso a `object`. **Siempre lanza.**
     //
-    // A KajiLibrary subset, y coincide con lo que hace el JDK 24+: el `SecurityManager` esta
-    // permanentemente deshabilitado, asi que no hay a quien preguntarle y esto no lanza nunca. Se
-    // conserva porque es como `Permission` cumple `Guard`, que es lo que permite pasar un permiso
-    // a un `GuardedObject`.
+    // Parece al reves y no lo es. Desde que el `SecurityManager` quedo permanentemente
+    // deshabilitado (JDK 24) no hay nadie a quien preguntarle si el permiso esta concedido, y ante
+    // esa pregunta hay dos respuestas posibles: dejar pasar o negar. El JDK 25 niega —tira
+    // `SecurityException("checking permissions is not supported")`— y es la unica correcta: un
+    // `GuardedObject` existe **para** que alguien decida, y un guardia que no puede decidir y deja
+    // pasar convierte cada uno de esos objetos en un objeto sin proteccion, en silencio y sin que
+    // el codigo que lo armo se entere.
+    //
+    // Esta clase decia lo contrario hasta que la prueba de comportamiento la comparo contra el JDK
+    // real: devolvia sin hacer nada, con un comentario afirmando que eso era lo que hacia el JDK.
+    // No lo era. La diferencia se veia justo donde importa: un `GuardedObject` que el JDK cierra,
+    // aca se abria.
     public void checkGuard(Object object) throws SecurityException {
+        throw new SecurityException("checking permissions is not supported");
     }
 
     // Si este permiso implica al otro. Es la unica pregunta que un chequeo de acceso hace.

@@ -25,6 +25,9 @@ public abstract class BasicPermission extends Permission implements Serializable
     // Si el nombre terminaba en un `*` que cuenta como comodin.
     private transient boolean wildcard;
 
+    // Si el nombre es el `"exitVM"` pelado de antes de 1.6. Ver `init`.
+    private transient boolean exitVM;
+
     // Un permiso con el nombre dado.
     public BasicPermission(String name) {
         super(name);
@@ -58,6 +61,19 @@ public abstract class BasicPermission extends Permission implements Serializable
             } else {
                 this.path = name.substring(0, len - 1);
             }
+        } else if (name.equals("exitVM")) {
+            // La unica excepcion a la regla, y viene de una compatibilidad vieja: hasta 1.6 el
+            // permiso para terminar la VM se llamaba `"exitVM"` a secas, y despues paso a ser
+            // `"exitVM.<codigo>"` con `"exitVM.*"` para cualquiera. Los dos nombres tienen que
+            // seguir significando lo mismo, asi que el viejo se parsea como si fuera el comodin:
+            // sin esto, un `"exitVM.*"` no implicaria a un `"exitVM"` y una policy escrita antes
+            // de 1.6 dejaria de valer.
+            //
+            // Vive aca y no en `RuntimePermission` —que es la unica clase donde el nombre
+            // aparece— porque el JDK lo puso aca, y moverlo cambiaria a que permiso se aplica.
+            this.wildcard = true;
+            this.path = "exitVM.";
+            this.exitVM = true;
         } else {
             this.path = name;
         }
@@ -114,7 +130,14 @@ public abstract class BasicPermission extends Permission implements Serializable
     }
 
     // El nombre tal como quedo tras parsear el comodin. Package-private, como en el JDK.
+    //
+    // Es el nombre con el que la coleccion indexa, y por eso el `"exitVM"` viejo tiene que
+    // canonizarse como `"exitVM.*"`: los dos nombres son el mismo permiso y deben caer en la misma
+    // entrada.
     final String getCanonicalName() {
+        if (this.exitVM) {
+            return "exitVM.*";
+        }
         if (this.wildcard) {
             return this.path + "*";
         }
