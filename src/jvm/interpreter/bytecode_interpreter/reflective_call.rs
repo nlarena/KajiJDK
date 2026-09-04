@@ -134,11 +134,34 @@ impl Exec<'_> {
             return self.throw_exception("java/lang/NullPointerException");
         }
 
-        // El método se resuelve sobre la clase que lo DECLARA. Un `invoke` no despacha
-        // virtualmente por su cuenta: lo hace `call_java` si el callee tiene una entrada de
-        // vtable, y si no, la declarante es la única respuesta posible.
-        let Some(callee) = self.shared.metaspace.resolve_method(&owner, &name, &descriptor) else {
+        // La resolución arranca en la clase que **declara** el método, que es la que el objeto
+        // `Method` nombra.
+        let Some(declared) = self.shared.metaspace.resolve_method(&owner, &name, &descriptor)
+        else {
             return self.throw_exception("java/lang/NoSuchMethodError");
+        };
+
+        // Pero ahí no termina. `Method.invoke` está especificado como una llamada **virtual**: para
+        // un método de instancia que no sea privado, el cuerpo que corre es el del receptor, no el
+        // de la clase donde se declaró. Sin este paso, un `Method` sacado de una interfaz ejecuta
+        // el cuerpo de la interfaz — que si el método es abstracto no existe, y el intérprete
+        // arma un frame con `Code` vacío y revienta al leer su primer opcode.
+        //
+        // Se busca por firma en la tabla **fusionada** del receptor, que es la misma búsqueda que
+        // hace `invokeinterface`: encuentra tanto un override de clase como un `default` heredado
+        // de una superinterfaz. Si no aparece —un receptor que no implementa el método, que sólo
+        // puede pasar si el llamador mintió sobre el tipo— se cae a lo declarado, que es donde
+        // estaba antes de este arreglo y donde el chequeo de tipos posterior dará el error.
+        const ACC_PRIVATE: u16 = 0x0002;
+        let callee = if is_static || flags & ACC_PRIVATE != 0 || name == "<init>" {
+            declared
+        } else {
+            let mirror_offset = self.shared.heap.read_u32(receiver) as usize;
+            let signature = self.shared.metaspace.intern_signature(&name, &descriptor);
+            self.shared
+                .metaspace
+                .vtable_method_at_mirror_by_signature(mirror_offset, signature)
+                .unwrap_or(declared)
         };
 
         // --- 2. Desempaquetar los argumentos ------------------------------------------------

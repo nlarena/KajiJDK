@@ -3,11 +3,13 @@
 //! the whole call stack, not just one frame), dispatched from `step()`.
 
 use super::call_site::{CallSite, SiteKind};
+use super::array_operations;
 use super::class_operations;
 use super::{Exec, Step, Widths};
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::metaspace::{Intrinsic, MethodId};
 use crate::jvm::interpreter::natives;
+use crate::jvm::interpreter::strings;
 
 impl Exec<'_> {
     /// `invokestatic` (0xb8): resolve the target static method through the
@@ -152,6 +154,78 @@ impl Exec<'_> {
                 self.advance_past_call();
                 return Step::Continue;
             }
+            // `jdk.internal.vm.Stack.frames()`: los cuadros de la pila, de arriba hacia abajo, como
+            // `"clase|metodo"`. Se resuelve aca y no en el puente de nativos porque el puente no ve
+            // los frames -- y son justamente lo que hay que leer.
+            //
+            // Se saltea el cuadro del propio llamador de `frames()` **no**: se devuelve la pila tal
+            // como esta, y quien la use decide cuantos niveles suyos descartar. Recortar aca
+            // obligaria a adivinar cuantos frames de envoltorio puso el que llama, y ese numero no lo
+            // sabe la VM.
+            // `Reflection.getCallerClass()`: la clase del **llamador del llamador**.
+            //
+            // Los tres cuadros de arriba son, de la punta hacia abajo: el de `getCallerClass` no
+            // --todavia no se empujo, esto corre en el sitio de llamada--, el del metodo que la
+            // llamo, y el de quien llamo a ese. El que se busca es el tercero, o sea `len() - 2`.
+            //
+            // Devuelve null si no hay tanto: llamarla desde el metodo de entrada es legitimo y la
+            // respuesta correcta ahi es "nadie", no una excepcion.
+            Intrinsic::GetCallerClass => {
+                let frames = self.frames();
+                let mirror = if frames.len() < 2 {
+                    0
+                } else {
+                    let m = frames[frames.len() - 2].method();
+                    let owner = self.shared.metaspace.class_of(m).to_string();
+                    class_operations::load_class(
+                        &mut self.shared.metaspace,
+                        &mut self.shared.heap,
+                        &owner,
+                    );
+                    self.shared.metaspace.class_mirror(&owner).unwrap_or(0)
+                };
+                self.top().push(Value::Reference(mirror));
+                self.advance_past_call();
+                return Step::Continue;
+            }
+            Intrinsic::StackFrames => {
+                let mut nombres: Vec<String> = Vec::with_capacity(self.frames().len());
+                for f in self.frames().iter().rev() {
+                    let m = f.method();
+                    nombres.push(format!(
+                        "{}|{}",
+                        self.shared.metaspace.class_of(m),
+                        self.shared.metaspace.name(m)
+                    ));
+                }
+                let arr = match array_operations::allocate_array_of_class(
+                    &mut self.shared.metaspace,
+                    &mut self.shared.heap,
+                    "[Ljava/lang/String;",
+                    nombres.len(),
+                ) {
+                    Ok(o) => o,
+                    Err(_) => 0,
+                };
+                if arr != 0 {
+                    for (i, n) in nombres.iter().enumerate() {
+                        // Se interna y se escribe de a uno: `intern` puede disparar una recoleccion,
+                        // y guardar los offsets antes de tiempo dejaria referencias viejas.
+                        let sref = strings::intern(
+                            &mut self.shared.metaspace,
+                            &mut self.shared.heap,
+                            n,
+                        ) as u32;
+                        self.shared.heap.write_u32(
+                            arr + array_operations::ARRAY_HEADER_SIZE + i * 4,
+                            sref,
+                        );
+                    }
+                }
+                self.top().push(Value::Reference(arr));
+                self.advance_past_call();
+                return Step::Continue;
+            }
             // `System.exit(status)`: end the VM. Handled here and **not** in the native bridge for
             // a structural reason: `natives::dispatch` returns an `Option<Value>` — a value to
             // push — so it can only ever *continue* execution. Terminating means answering with a
@@ -220,6 +294,15 @@ impl Exec<'_> {
             // `park`/`park(Object blocker)` block the current thread (the blocker is ignored);
             // `unpark` hands its `Thread` argument a permit.
             Intrinsic::LockSupportPark => return self.thread_park(),
+            // `parkNanos(nanos)` and `parkNanos(blocker, nanos)`: the deadline is the **last**
+            // argument in both, so it's read off the end rather than by position.
+            Intrinsic::LockSupportParkNanos => {
+                let nanos = match args.last() {
+                    Some(Value::Long(n)) => *n,
+                    _ => 0,
+                };
+                return self.thread_park_nanos(nanos);
+            }
             Intrinsic::LockSupportUnpark => {
                 let target = match args.first() {
                     Some(Value::Reference(offset)) => *offset,
@@ -282,6 +365,24 @@ impl Exec<'_> {
                 let m = &self.shared.metaspace;
                 (m.class_of(callee).to_string(), m.name(callee).to_string(), m.descriptor(callee).to_string())
             };
+            // Alocar una instancia es un **uso activo** de su clase y le debe el `<clinit>`
+            // (JVMS §5.5); el `new` de bytecode lo pide por su cuenta. `allocateInstance` aloca
+            // desde el puente nativo, que solo tiene metaspace y heap y no puede empujar un frame
+            // de Java, asi que la inicializacion se pide aca --el mismo arreglo que el acceso
+            // reflexivo a un campo estatico necesito en #361--. Sin esto, un objeto deserializado
+            // podia salir de una clase con sus estaticos todavia en el valor por defecto.
+            if class == "java/io/ObjectStreamClass" && name == "allocateInstance" {
+                if let Some(Value::Reference(mirror)) = args.first() {
+                    if let Some(objetivo) =
+                        self.shared.metaspace.class_name_at_mirror(*mirror).map(str::to_string)
+                    {
+                        self.ensure_initialized(&objetivo);
+                        if let Some(step) = self.take_pending_throw() {
+                            return step; // el <clinit> fallo: no se aloca nada
+                        }
+                    }
+                }
+            }
             let result = natives::dispatch(
                 &class,
                 &name,
@@ -292,6 +393,27 @@ impl Exec<'_> {
                 &mut self.shared.console,
                 &mut self.shared.apt,
             );
+            let result = match result {
+                natives::NativeOutcome::Ran(v) => v,
+                natives::NativeOutcome::RanEInicializa(clase) => {
+                    // El nativo cargó la clase y pide que quede inicializada. Correr el `<clinit>`
+                    // acá y no adentro del nativo es lo que permite que sea un `<clinit>` de verdad
+                    // —un marco empujado y drivado hasta el final— y no una imitación.
+                    self.ensure_initialized(&clase);
+                    if let Some(step) = self.take_pending_throw() {
+                        return step; // el <clinit> falló: no hay valor que devolver
+                    }
+                    // El mirror, recién ahora: el `<clinit>` alocó y pudo haber corrido el GC.
+                    Some(Value::Reference(natives::mirror_de_clase(
+                        &mut self.shared.metaspace,
+                        &mut self.shared.heap,
+                        &clase,
+                    )))
+                }
+                natives::NativeOutcome::Unimplemented => {
+                    return self.throw_exception("java/lang/UnsatisfiedLinkError")
+                }
+            };
             if let Some(value) = result {
                 self.top().push(value);
             }
@@ -299,13 +421,23 @@ impl Exec<'_> {
             return Step::Continue;
         }
 
-        // A `static synchronized` method locks the class's `Class` mirror (already
-        // allocated — `ensure_initialized` ran above). Ordinary statics: no lock.
+        // A `static synchronized` method locks the class's `Class` mirror. Ordinary statics: no
+        // lock.
+        //
+        // The mirror has to be **prepared here** and not assumed: `ensure_initialized` above only
+        // runs `<clinit>`, and a class without one --or one already `Done`, like the entry class of
+        // a run that starts inside it-- never reaches `load_class` on this path. Same order as
+        // `static_slot`: prepare first, look up second (COMPILER_FINDINGS #340).
         let lock = match self.shared.metaspace.is_synchronized(callee) {
             true => {
                 let callee_class = self.shared.metaspace.class_of(callee).to_string();
+                class_operations::load_class(
+                    &mut self.shared.metaspace,
+                    &mut self.shared.heap,
+                    &callee_class,
+                );
                 Some(self.shared.metaspace.class_mirror(&callee_class).expect(
-                    "static synchronized: the Class mirror exists after initialization",
+                    "static synchronized: the Class mirror exists after preparation",
                 ))
             }
             false => None,

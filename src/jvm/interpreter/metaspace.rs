@@ -76,6 +76,15 @@ pub enum Intrinsic {
     SystemGc,
     /// `System.exit(status)` — end the VM.
     SystemExit,
+    /// `jdk.internal.vm.Stack.frames()` — los cuadros de la pila de llamadas, como `String[]`.
+    ///
+    /// Va como intrínseco y no por el puente de nativos por una razón estructural: el puente recibe
+    /// el metaspace y el heap, y **no la pila de frames**. El único lugar donde los frames están a la
+    /// vista es adentro del intérprete, así que la lectura se hace ahí.
+    ///
+    /// Es la costura que le faltaba a todo lo que necesita saber quién llamó:
+    /// `SecurityManager.getClassContext()`, `StackWalker`, y las trazas de `Throwable`.
+    StackFrames,
     /// `String.valueOf(Object)` — calls back into the object's own `toString()`.
     StringValueOfObject,
     /// `String.publish(String)` — how a String constructor hands back what it built.
@@ -93,6 +102,13 @@ pub enum Intrinsic {
     LockSupportPark,
     /// `LockSupport.unpark(Thread)` — hand a thread a permit.
     LockSupportUnpark,
+    /// `LockSupport.parkNanos(long)` / `parkNanos(Object, long)` — block with a deadline.
+    ///
+    /// A separate intrinsic and not a flag on [`Self::LockSupportPark`] because the two differ in
+    /// what wakes them: a plain `park` waits for an `unpark` and nothing else, and this one is also
+    /// woken by the clock. Both consume a waiting permit first, which is what keeps them
+    /// interchangeable from the caller's side.
+    LockSupportParkNanos,
     /// `Thread.sleep(ms)`.
     ThreadSleep,
     /// `Thread.yield()`.
@@ -139,6 +155,8 @@ pub enum Intrinsic {
     /// Va acá y no en el puente de nativas porque tiene que **correr bytecode**: el puente sólo
     /// puede computar y devolver, y una llamada reflexiva es, entera, empujar un frame.
     MethodInvoke,
+    /// `Reflection.getCallerClass()`: la clase del llamador del llamador. Ver el sitio de despacho.
+    GetCallerClass,
     /// `java.lang.reflect.Constructor.newInstance(Object[])` — alocar y correr `<init>`.
     ///
     /// Acá por lo mismo que `MethodInvoke`, y con una razón de más: tiene que **alocar**, y
@@ -156,6 +174,9 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
             "exit" => Intrinsic::SystemExit,
             _ => Intrinsic::None,
         },
+        "jdk/internal/vm/Stack" if name == "frames" && descriptor == "()[Ljava/lang/String;" => {
+            Intrinsic::StackFrames
+        }
         "java/lang/String"
             if (name == "rawValueOfObject" || name == "valueOf")
                 && descriptor == "(Ljava/lang/Object;)Ljava/lang/String;" =>
@@ -168,6 +189,9 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
         "java/util/concurrent/locks/LockSupport" => match name {
             "park" => Intrinsic::LockSupportPark,
             "unpark" => Intrinsic::LockSupportUnpark,
+            // Both overloads: the blocker argument is diagnostic and the deadline is the last
+            // parameter in either, so the same handler reads it off the end of the argument list.
+            "parkNanos" => Intrinsic::LockSupportParkNanos,
             _ => Intrinsic::None,
         },
         "java/lang/Thread" => match (name, descriptor) {
@@ -205,6 +229,14 @@ fn classify_intrinsic(class: &str, name: &str, descriptor: &str) -> Intrinsic {
             ("getEnclosedElements", "()Ljava/util/List;") => Intrinsic::SymElementGetEnclosedElements,
             _ => Intrinsic::None,
         },
+        // `Reflection.getCallerClass()` tiene que mirar **la pila**, y el puente de natives no la
+        // ve -- recibe metaspace y heap y nada mas. Un intrinseco si: corre dentro del interprete,
+        // con los marcos a mano.
+        "jdk/internal/reflect/Reflection"
+            if name == "getCallerClass" && descriptor == "()Ljava/lang/Class;" =>
+        {
+            Intrinsic::GetCallerClass
+        }
         "java/lang/reflect/Method"
             if name == "invoke"
                 && descriptor == "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;" =>
@@ -787,9 +819,17 @@ impl MetaspaceService {
     }
 
     /// The heap offset of `name`'s `Class<…>` mirror — the lock object for a `static
-    /// synchronized` method. Resolves the name to its Class ID (minting one if needed),
-    /// then looks up the mirror; `None` until the class has been prepared.
+    /// synchronized` method. `None` until the class has been prepared.
+    ///
+    /// **No mintea el id.** Un nombre desconocido sale por `None` en vez de estrenar un Class ID,
+    /// y eso es lo unico que hace que `load_class` siga sirviendo despues: `load_class` se rinde
+    /// apenas ve que el nombre ya tiene id --su invariante es ser el unico que los mintea-- asi que
+    /// una consulta que minteara de paso dejaria a esa clase sin preparar para siempre
+    /// (COMPILER_FINDINGS #340).
     pub fn class_mirror(&mut self, name: &str) -> Option<usize> {
+        if !self.has_class_id(name) {
+            return None;
+        }
         let uuid = self.class_id(name).to_string();
         self.class_object(&uuid)
     }
@@ -1016,6 +1056,7 @@ impl MetaspaceService {
         // No es un caso raro: `super.m()` emite `invokespecial <superclase directa>.m`, que es lo
         // que emite el javac real, y la superclase directa **no tiene por que declarar el metodo**.
         let declaring = self.declaring_class(class, name, descriptor)?;
+        let declaring = declaring.to_string();
         let declaring = declaring.as_str();
         let (max_locals, code, exceptions, native_, abstract_, synchronized_, static_) = {
             let cf = self.classes.get(declaring)?;
@@ -1067,7 +1108,18 @@ impl MetaspaceService {
         let mut slot_widths = vec![1];
         slot_widths.extend(Self::param_slot_widths(descriptor));
         self.methods.push(MethodBody {
-            class: class.to_string(),
+            // La clase **declarante** y no la nombrada en el sitio de llamada (#318).
+            //
+            // Este campo es de donde sale el pool de constantes con el que se ejecuta el cuerpo. Con
+            // la clase nombrada, un `super.getMessage()` desde una subclase de `Exception` emite
+            // `invokespecial java/lang/Exception.getMessage` --que es lo que emite el javac real--,
+            // el cuerpo se lee de `Throwable` (que es quien lo declara) y despues se corria contra el
+            // pool de `Exception`, donde el `getfield detailMessage` no existe. Reventaba con
+            // "getfield: bad FieldRef", tres capas lejos de la causa.
+            //
+            // Solo aparece cuando la superclase **nombrada hereda** el metodo en vez de declararlo,
+            // que es justamente lo comun en una jerarquia de excepciones de dos niveles.
+            class: declaring.to_string(),
             name: name.to_string(),
             descriptor: descriptor.to_string(),
             max_locals,
@@ -1082,8 +1134,14 @@ impl MetaspaceService {
             call_sites,
             receiver_classes,
             slot_widths,
-            intrinsic: classify_intrinsic(class, name, descriptor),
+            intrinsic: classify_intrinsic(declaring, name, descriptor),
         });
+        // La clave sigue siendo la clase **nombrada** en el sitio, y eso es a proposito. Se probo
+        // unificarla por la declarante --para que un metodo alcanzado por dos nombres diera un solo
+        // `MethodId`-- y **rompe tres pruebas**: el `MethodId` es la identidad con la que la
+        // maquinaria de `MethodHandle` y el cache de sitios distinguen una entrada, y fusionar dos
+        // nombres en un id los confunde. La duplicacion cuesta un `MethodBody` repetido; unificar
+        // costaba correccion.
         self.resolved.insert(key, id);
         Some(id)
     }

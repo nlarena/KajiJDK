@@ -49,6 +49,14 @@ pub(super) enum SiteKind {
     /// `MethodHandle.invokeWithArguments(Object[])` — a regular descriptor, but spreading the
     /// array and dispatching is a VM operation.
     MethodHandleInvokeWithArguments,
+    /// A `VarHandle` accessor — **signature-polymorphic** like `MethodHandle.invoke`, and
+    /// intercepted for the same reason: the declared `(Object[])Object` is not what the site says.
+    ///
+    /// The payload is the interned `(name, descriptor)` of the **typed helper** the site maps to
+    /// (`get` returning `I` → `VarHandleDeSegmento.leerInt`), found on the receiver's own table
+    /// exactly as [`Self::Signature`] does. The trailing arguments — the indices of the path's open
+    /// steps — are packed into a `long[]` before the helper is entered.
+    VarHandleAccess(SignatureId),
 }
 
 impl SiteKind {
@@ -62,6 +70,7 @@ impl SiteKind {
             SiteKind::ArrayClone => 4,
             SiteKind::MethodHandleInvoke => 5,
             SiteKind::MethodHandleInvokeWithArguments => 6,
+            SiteKind::VarHandleAccess(_) => 7,
         }
     }
 
@@ -70,7 +79,7 @@ impl SiteKind {
         match self {
             SiteKind::Direct(method) => method as u64,
             SiteKind::Vtable(slot) => slot as u64,
-            SiteKind::Signature(id) => id as u64,
+            SiteKind::Signature(id) | SiteKind::VarHandleAccess(id) => id as u64,
             _ => 0,
         }
     }
@@ -116,7 +125,8 @@ impl CallSite {
             3 => SiteKind::NoTarget,
             4 => SiteKind::ArrayClone,
             5 => SiteKind::MethodHandleInvoke,
-            _ => SiteKind::MethodHandleInvokeWithArguments,
+            6 => SiteKind::MethodHandleInvokeWithArguments,
+            _ => SiteKind::VarHandleAccess(payload as SignatureId),
         };
         Some(CallSite {
             kind,

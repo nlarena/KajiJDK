@@ -589,9 +589,16 @@ public class GenProcessor extends AbstractProcessor {
         if (!roundEnv.processingOver() && !this.done) {
             this.done = true;
             Filer f = this.env.getFiler();
-            JavaFileObject jfo = f.createSourceFile("FooGreeting");
-            StringWriter w = (StringWriter) jfo.openWriter();
-            w.write("public class FooGreeting { public static int value() { return 42; } }");
+            // `process` no puede declarar `throws IOException`: la firma de `Processor` no la tiene y
+            // un override no puede ensanchar las chequeadas (JLS 8.4.8.3). Se atrapa, que es lo que
+            // hace cualquier procesador real.
+            try {
+                JavaFileObject jfo = f.createSourceFile("FooGreeting");
+                StringWriter w = (StringWriter) jfo.openWriter();
+                w.write("public class FooGreeting { public static int value() { return 42; } }");
+            } catch (java.io.IOException e) {
+                throw new RuntimeException(e);
+            }
         }
         return false;
     }

@@ -139,7 +139,10 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
     // the use site, or the @interface's defaults) and allocates an instance. No @Inherited walk.
     private native java.lang.annotation.Annotation[] declaredAnnotations0();
 
-    private static native Class<?> forName0(String name);
+    // La bandera dice si ademas de **cargar** hay que **inicializar**: son dos cosas distintas
+    // (JVMS 5.4 y 5.5) y `forName` promete una u otra segun por donde se entre. La VM la necesita
+    // explicita porque correr un `<clinit>` no es algo que este lado pueda pedir de otra forma.
+    private static native Class<?> forName0(String name, boolean initialize);
 
     // The mirror of a PRIMITIVE type, by its keyword. Package-private and native, exactly as the
     // JDK declares it, and its only callers are the `TYPE` fields of the wrapper classes, which
@@ -531,7 +534,10 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
      * @throws ClassNotFoundException if there is no such class
      */
     public static Class<?> forName(String className) throws ClassNotFoundException {
-        Class<?> found = Class.forName0(className);
+        // Esta forma **si** inicializa, y es la unica de las tres que lo hace siempre. Es lo que
+        // convierte a `Class.forName("...")` en la manera estandar de hacer que una clase se
+        // registre sola desde su bloque `static`.
+        Class<?> found = Class.forName0(className, true);
         if (found == null) {
             throw new ClassNotFoundException(className);
         }
@@ -541,18 +547,26 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
     /**
      * The mirror of the type named {@code name}.
      *
-     * <p>Both extra arguments are accepted and ignored, and that is honest rather than lazy:
-     * there is exactly one class loader here, so naming another one cannot change the answer,
-     * and every class is initialized on first active use whatever {@code initialize} says.
+     * <p>{@code loader} se acepta y se ignora, y eso es honesto y no perezoso: hay exactamente un
+     * cargador de clases aca, asi que nombrar otro no puede cambiar la respuesta.
+     *
+     * <p>{@code initialize} <b>si</b> se respeta, y es la unica diferencia entre esta forma y la de
+     * un argumento. Con `false` la clase queda **cargada pero sin inicializar**: su bloque `static`
+     * no corrio, y va a correr recien en el primer uso activo. Es la forma que se usa cuando
+     * nombrar una clase no deberia tener efectos.
      *
      * @param name the binary name, with dots
      * @param initialize whether to run the static initializer
-     * @param loader the loader to search
+     * @param loader the loader to search (ignored)
      * @throws ClassNotFoundException if there is no such class
      */
     public static Class<?> forName(String name, boolean initialize, ClassLoader loader)
             throws ClassNotFoundException {
-        return Class.forName(name);
+        Class<?> found = Class.forName0(name, initialize);
+        if (found == null) {
+            throw new ClassNotFoundException(name);
+        }
+        return found;
     }
 
     /**
@@ -560,17 +574,15 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
      * reports absence with {@code null} rather than an exception. The module is ignored: with a
      * single unnamed module over one class path, naming one cannot change which class is found.
      *
+     * <p><b>No inicializa</b>, a diferencia de {@link #forName(String)}: la clase queda cargada y su
+     * bloque `static` corre recien en el primer uso activo. Se comprobo contra el JDK 25, que hace
+     * exactamente esto.
+     *
      * @param module the module to search (ignored)
      * @param name the binary name, with dots
      */
     public static Class<?> forName(Module module, String name) {
-        Class<?> found;
-        try {
-            found = Class.forName(name);
-        } catch (ClassNotFoundException e) {
-            found = null;
-        }
-        return found;
+        return Class.forName0(name, false);
     }
 
     /**

@@ -284,6 +284,23 @@ impl Frame {
         if let Some(obj) = self.monitor {
             self.monitor = Some(remap(obj));
         }
+        // Y el par que publicó un constructor de `String`, por la misma razón y con una
+        // consecuencia peor. Son **dos offsets del heap guardados en un frame**, así que el
+        // colector los mueve como a cualquier otro; sin esto quedan viejos, y entonces el
+        // `remap_references` que hace `return_void` busca en el llamador un offset que ya no
+        // tiene nadie: no falla, no lanza, **no encuentra nada**. El llamador se queda con el
+        // objeto sin inicializar, que por construcción tiene lugar para cero caracteres, y el
+        // programa ve un `""` donde escribió `new String("ab")`. Eso es FZ-012.
+        //
+        // Va acá y no sólo en el camino del colector porque este método es el que promete
+        // visitar *todas* las referencias del frame: dejar un campo afuera es la forma exacta
+        // en que el bug entró. Aplicarlo también en el remap del publish es inocuo — el par del
+        // llamador no puede nombrar el objeto que se está publicando: `publish` es la última
+        // sentencia de un constructor, así que un frame con `published` puesto no vuelve a
+        // llamar a nada.
+        if let Some((handed, built)) = self.published {
+            self.published = Some((remap(handed), remap(built)));
+        }
     }
 
     /// This frame's method handle — resolve its bytecode via `MetaspaceService::code`.
@@ -307,5 +324,50 @@ impl Frame {
     /// back-edge).
     pub fn jump(&mut self, target: usize) {
         self.pc = target;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **FZ-012** — el par que publica un constructor de `String` tiene que moverse con el
+    /// colector, igual que la pila, los locales y el monitor.
+    ///
+    /// El bug no se veía como un bug del colector. Se veía como el JIT contestando distinto que el
+    /// intérprete sobre un programa determinista, y hubo que llegar hasta acá: el colector mueve el
+    /// objeto entre `String.publish(...)` y el `return` del constructor, `published` queda con el
+    /// offset viejo, y el `remap_references` que hace `return_void` busca en el llamador un offset
+    /// que ya no tiene nadie. No falla, no lanza: **no encuentra nada**, y el llamador se queda con
+    /// el objeto sin inicializar —que tiene lugar para cero caracteres— así que `new String("ab")`
+    /// se lee como `""`.
+    ///
+    /// El JIT sólo corría la película a otra velocidad. Por eso este test es de frames y no de
+    /// código generado: la propiedad que faltaba es de acá.
+    #[test]
+    fn el_par_publicado_se_mueve_con_el_colector() {
+        let mut frame = Frame::new(0 as MethodId, 2, vec![Value::Reference(112)]);
+        frame.push(Value::Reference(112));
+        frame.set_published(112, 208);
+        frame.set_monitor(112);
+
+        // Lo que hace el colector al compactar: 112 se fue a 3866, 208 a 4000.
+        frame.remap_references(|off| match off {
+            112 => 3866,
+            208 => 4000,
+            otro => otro,
+        });
+
+        assert_eq!(
+            frame.take_published(),
+            Some((3866, 4000)),
+            "el par publicado quedó con offsets viejos: el `return` del constructor va a buscar en \
+             el llamador un objeto que se movió y no lo va a encontrar"
+        );
+        // Y los otros tres, que ya se movían, para que este test falle por lo que dice y no por
+        // haber roto el resto.
+        assert_eq!(frame.load(0), Value::Reference(3866), "los locales");
+        assert_eq!(frame.pop(), Value::Reference(3866), "la pila de operandos");
+        assert_eq!(frame.monitor(), Some(3866), "el monitor");
     }
 }

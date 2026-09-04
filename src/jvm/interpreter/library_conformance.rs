@@ -255,7 +255,10 @@ mod tests {
             import java.util.Map;
 
             public class SystemProbe {
-                public int run() {
+                // `System.in.read()` throws a checked `IOException`, so the probe has to declare it
+                // — real javac rejects the body without this, and so does ours now that name
+                // resolution reaches `InputStream.read` (bug #465).
+                public int run() throws java.io.IOException {
                     int acc = 0;
 
                     // (1) a platform-seeded property reads back.

@@ -44,6 +44,431 @@ pub struct FilerState {
     pub pending: Vec<(String, u32)>,
 }
 
+/// Un proceso hijo lanzado por `ProcessBuilder.start()`: el `Child` de Rust y su codigo de salida
+/// una vez que se supo.
+///
+/// La salida se **memoiza** porque `wait()` de Rust solo se puede llamar una vez -- la segunda
+/// devuelve error, y el contrato de `Process.waitFor()` es que se puede llamar todas las veces que
+/// uno quiera y siempre da lo mismo.
+struct ProcState {
+    hijo: std::process::Child,
+    salida: Option<i32>,
+    /// Si el hijo se lanzo con `redirectErrorStream`, o sea que su error tiene que salir por el
+    /// mismo flujo que su salida.
+    ///
+    /// La union se hace **al leer** y no al lanzar, y eso es una limitacion que conviene tener
+    /// escrita: `Stdio::piped()` dos veces crea **dos tuberias distintas**, y desde Rust no hay forma
+    /// de duplicar un descriptor para que las dos puntas sean la misma. La primera version duplicaba
+    /// el destino y por eso el error nunca aparecia en la salida.
+    ///
+    /// Lo que se pierde con unir al leer es el **entrelazado**: se entrega toda la salida y despues
+    /// todo el error, en vez de mezclados en el orden en que el hijo los escribio. El contenido esta
+    /// completo; el orden entre los dos flujos no se preserva. Se dice aca y en el javadoc de
+    /// `ProcessBuilder.redirectErrorStream`.
+    unir_error: bool,
+}
+
+
+
+/// La costura cruda con los sockets del sistema.
+///
+/// `std::net` cubre casi todo lo que hace falta, pero **tres cosas que `java.net` promete no las
+/// expone**, y ninguna se puede rodear desde arriba:
+///
+///  - **Atar antes de conectar.** `TcpStream::connect` toma destino y nada mas; los constructores
+///    `Socket(host, port, localAddr, localPort)` prometen elegir tambien la punta local. Es la misma
+///    capacidad que necesita `InetAddress.isReachable(NetworkInterface, ...)` para probar **por esa
+///    placa** y no por la que el sistema elija.
+///  - **El TTL de una conexion saliente**, que es el otro parametro de ese `isReachable`.
+///  - **Mandar un byte fuera de banda** (`sendUrgentData`), que no es escribir en el flujo: es una
+///    bandera del protocolo.
+///
+/// Se declara a mano, como `GetDiskFreeSpaceExW` mas abajo, y **no se inventa nada**: son las
+/// llamadas de siempre --`socket`, `bind`, `connect`, `setsockopt`, `send`-- con los numeros que
+/// cada sistema les da. Lo unico que cambia entre plataformas son esos numeros y el tipo del
+/// descriptor, asi que cada `cfg` define su tabla y sus envoltorios, y la logica de arriba es una
+/// sola.
+///
+/// El socket que sale de aca se le entrega a `std` con `from_raw_socket`/`from_raw_fd`: desde ese
+/// momento lo administra `TcpStream` --lo cierra al soltarlo-- y el resto del archivo no se entera
+/// de que nacio distinto.
+#[cfg(windows)]
+mod crudo {
+    use std::os::windows::io::{AsRawSocket, FromRawSocket};
+
+    pub const AF_INET: u16 = 2;
+    pub const AF_INET6: u16 = 23;
+    const SOCK_STREAM: i32 = 1;
+    const IPPROTO_TCP: i32 = 6;
+    const IPPROTO_IP: i32 = 0;
+    const IP_TTL: i32 = 4;
+    const MSG_OOB: i32 = 1;
+
+    type Descriptor = usize;
+    const INVALIDO: Descriptor = usize::MAX;
+
+    extern "system" {
+        fn socket(af: i32, tipo: i32, protocolo: i32) -> Descriptor;
+        fn bind(s: Descriptor, nombre: *const u8, largo: i32) -> i32;
+        fn connect(s: Descriptor, nombre: *const u8, largo: i32) -> i32;
+        fn setsockopt(s: Descriptor, nivel: i32, opcion: i32, valor: *const u8, largo: i32) -> i32;
+        fn send(s: Descriptor, buf: *const u8, largo: i32, banderas: i32) -> i32;
+        fn closesocket(s: Descriptor) -> i32;
+    }
+
+    /// Un socket TCP de esa familia, o `None`.
+    ///
+    /// Antes de la primera llamada se fuerza a que `std` arranque Winsock: en Windows nada de esta
+    /// biblioteca funciona hasta que alguien llamo a `WSAStartup`, y `std` lo hace la primera vez
+    /// que crea un socket suyo. Abrir y soltar un UDP es la forma mas corta de pedirselo sin
+    /// replicar la estructura `WSADATA`, que es lo unico que se ganaria haciendolo a mano.
+    pub fn nuevo(familia: u16) -> Option<Descriptor> {
+        static ARRANQUE: std::sync::Once = std::sync::Once::new();
+        ARRANQUE.call_once(|| {
+            let _ = std::net::UdpSocket::bind("127.0.0.1:0");
+        });
+        let s = unsafe { socket(familia as i32, SOCK_STREAM, IPPROTO_TCP) };
+        if s == INVALIDO {
+            None
+        } else {
+            Some(s)
+        }
+    }
+
+    pub fn atar(s: Descriptor, dir: &[u8]) -> bool {
+        unsafe { bind(s, dir.as_ptr(), dir.len() as i32) == 0 }
+    }
+
+    pub fn conectar(s: Descriptor, dir: &[u8]) -> bool {
+        unsafe { connect(s, dir.as_ptr(), dir.len() as i32) == 0 }
+    }
+
+    pub fn poner_ttl(s: Descriptor, ttl: u32) -> bool {
+        let v = ttl.to_ne_bytes();
+        unsafe { setsockopt(s, IPPROTO_IP, IP_TTL, v.as_ptr(), v.len() as i32) == 0 }
+    }
+
+    pub fn cerrar(s: Descriptor) {
+        unsafe {
+            closesocket(s);
+        }
+    }
+
+    /// Le entrega el socket a `std`, que desde ahora lo administra.
+    pub fn adoptar(s: Descriptor) -> std::net::TcpStream {
+        unsafe { std::net::TcpStream::from_raw_socket(s as std::os::windows::io::RawSocket) }
+    }
+
+    /// Un byte **fuera de banda** por un flujo que ya existe.
+    pub fn fuera_de_banda(flujo: &std::net::TcpStream, b: u8) -> bool {
+        let s = flujo.as_raw_socket() as Descriptor;
+        unsafe { send(s, &b, 1, MSG_OOB) == 1 }
+    }
+}
+
+#[cfg(not(windows))]
+mod crudo {
+    use std::os::fd::{AsRawFd, FromRawFd};
+
+    pub const AF_INET: u16 = 2;
+    pub const AF_INET6: u16 = 10;
+    const SOCK_STREAM: i32 = 1;
+    const IPPROTO_TCP: i32 = 6;
+    const IPPROTO_IP: i32 = 0;
+    // El numero de `IP_TTL` **no** es el mismo que en Windows: alla es 4 y aca 2. Es el unico de la
+    // tabla que no coincide, y por eso esta escrito dos veces en vez de compartirse.
+    const IP_TTL: i32 = 2;
+    const MSG_OOB: i32 = 1;
+
+    type Descriptor = i32;
+    const INVALIDO: Descriptor = -1;
+
+    extern "C" {
+        fn socket(af: i32, tipo: i32, protocolo: i32) -> Descriptor;
+        fn bind(s: Descriptor, nombre: *const u8, largo: u32) -> i32;
+        fn connect(s: Descriptor, nombre: *const u8, largo: u32) -> i32;
+        fn setsockopt(s: Descriptor, nivel: i32, opcion: i32, valor: *const u8, largo: u32) -> i32;
+        fn send(s: Descriptor, buf: *const u8, largo: usize, banderas: i32) -> isize;
+        fn close(s: Descriptor) -> i32;
+    }
+
+    pub fn nuevo(familia: u16) -> Option<Descriptor> {
+        let s = unsafe { socket(familia as i32, SOCK_STREAM, IPPROTO_TCP) };
+        if s == INVALIDO {
+            None
+        } else {
+            Some(s)
+        }
+    }
+
+    pub fn atar(s: Descriptor, dir: &[u8]) -> bool {
+        unsafe { bind(s, dir.as_ptr(), dir.len() as u32) == 0 }
+    }
+
+    pub fn conectar(s: Descriptor, dir: &[u8]) -> bool {
+        unsafe { connect(s, dir.as_ptr(), dir.len() as u32) == 0 }
+    }
+
+    pub fn poner_ttl(s: Descriptor, ttl: u32) -> bool {
+        let v = ttl.to_ne_bytes();
+        unsafe { setsockopt(s, IPPROTO_IP, IP_TTL, v.as_ptr(), v.len() as u32) == 0 }
+    }
+
+    pub fn cerrar(s: Descriptor) {
+        unsafe {
+            close(s);
+        }
+    }
+
+    pub fn adoptar(s: Descriptor) -> std::net::TcpStream {
+        unsafe { std::net::TcpStream::from_raw_fd(s) }
+    }
+
+    pub fn fuera_de_banda(flujo: &std::net::TcpStream, b: u8) -> bool {
+        let s = flujo.as_raw_fd();
+        unsafe { send(s, &b, 1, MSG_OOB) == 1 }
+    }
+}
+
+/// La direccion en la forma que espera el sistema: `sockaddr_in` o `sockaddr_in6`.
+///
+/// Los dos empiezan igual --familia y puerto-- y de ahi se separan. La familia va en el orden de la
+/// maquina y el puerto en el de la red; **no es un descuido**, es como estan definidos, y
+/// confundirlos da un puerto al reves que se nota recien al conectar.
+fn como_sockaddr(dir: &std::net::SocketAddr) -> (Vec<u8>, u16) {
+    match dir {
+        std::net::SocketAddr::V4(a) => {
+            let mut b = vec![0u8; 16];
+            b[0..2].copy_from_slice(&crudo::AF_INET.to_ne_bytes());
+            b[2..4].copy_from_slice(&a.port().to_be_bytes());
+            b[4..8].copy_from_slice(&a.ip().octets());
+            (b, crudo::AF_INET)
+        }
+        std::net::SocketAddr::V6(a) => {
+            let mut b = vec![0u8; 28];
+            b[0..2].copy_from_slice(&crudo::AF_INET6.to_ne_bytes());
+            b[2..4].copy_from_slice(&a.port().to_be_bytes());
+            b[4..8].copy_from_slice(&a.flowinfo().to_be_bytes());
+            b[8..24].copy_from_slice(&a.ip().octets());
+            b[24..28].copy_from_slice(&a.scope_id().to_ne_bytes());
+            (b, crudo::AF_INET6)
+        }
+    }
+}
+
+/// La primera direccion a la que resuelve `host:puerto`, o `None`.
+fn resolver(host: &str, puerto: u16) -> Option<std::net::SocketAddr> {
+    use std::net::ToSocketAddrs;
+    (host, puerto).to_socket_addrs().ok().and_then(|mut a| a.next())
+}
+
+/// Conecta a `remoto` saliendo por `local`, opcionalmente con ese TTL.
+///
+/// **Bloquea**, y por eso nadie la llama desde el hilo del interprete: los dos que la usan
+/// --`connectFromStart` y `reachableStart`-- la corren en un hilo del sistema aparte y contestan
+/// por el casillero. Ver la nota de los codigos de error.
+///
+/// `local` con puerto cero y direccion comodin es lo mismo que no atar, salvo que el sistema ya
+/// sabe por que placa va a salir, que es justamente lo que se le esta pidiendo.
+fn conectar_desde(
+    remoto: std::net::SocketAddr,
+    local: std::net::SocketAddr,
+    ttl: u32,
+) -> Option<std::net::TcpStream> {
+    let (dir_remota, familia) = como_sockaddr(&remoto);
+    let (dir_local, familia_local) = como_sockaddr(&local);
+    if familia != familia_local {
+        // Atar una punta IPv4 a una conexion IPv6 no es un caso raro que valga la pena rodear: es
+        // una peticion contradictoria, y el que llama tiene que enterarse.
+        return None;
+    }
+    let s = crudo::nuevo(familia)?;
+    if !crudo::atar(s, &dir_local) {
+        crudo::cerrar(s);
+        return None;
+    }
+    if ttl > 0 && !crudo::poner_ttl(s, ttl) {
+        crudo::cerrar(s);
+        return None;
+    }
+    if !crudo::conectar(s, &dir_remota) {
+        crudo::cerrar(s);
+        return None;
+    }
+    Some(crudo::adoptar(s))
+}
+
+/// Un socket TCP abierto, del lado de la VM.
+///
+/// Un `Socket` de Java es un `handle` --un indice en [`SOCKETS`]-- y nada mas. El estado vive aca
+/// porque un socket **es** estado entre llamadas: su par, sus tiempos de espera, si ya se cerro una
+/// de sus mitades. No hay forma de representarlo con operaciones de una sola vez.
+enum SockState {
+    /// Una conexion establecida.
+    Stream(std::net::TcpStream),
+    /// Un socket a la escucha.
+    Listener(std::net::TcpListener),
+    /// Un socket de datagramas.
+    ///
+    /// Guarda de quien vino el ultimo paquete recibido porque **un datagrama y su remitente son un
+    /// solo dato**: `DatagramPacket` los quiere juntos, y un nativo que devuelve un entero no puede
+    /// devolver los dos. Se lee con `udpSenderAddress`/`udpSenderPort` justo despues de recibir, y
+    /// para que ese par sea atomico el lado Java recibe adentro de un `synchronized`.
+    Datagram {
+        sock: std::net::UdpSocket,
+        ultimo: Option<(String, u16)>,
+    },
+}
+
+/// Los sockets abiertos, indexados por handle.
+///
+/// Es un `Mutex` global y **no** un `thread_local` como [`PROCS`], y la diferencia importa: un
+/// socket se usa desde otro hilo del que lo creo todo el tiempo --un servidor acepta en uno y
+/// atiende en otro-- asi que una tabla por hilo lo perderia. Con `JVM_THREADS=os`, donde los hilos
+/// de Java son hilos del sistema, eso dejaria de ser teorico.
+///
+/// **Las entradas no se reciclan**, por lo mismo que en `PROCS`: un handle viejo apunta a `None` o
+/// al socket que siempre fue, nunca a uno nuevo. Reciclar indices ahorraria memoria irrelevante a
+/// cambio del peor error posible de encontrar.
+static SOCKETS: std::sync::Mutex<Vec<Option<SockState>>> = std::sync::Mutex::new(Vec::new());
+
+/// Las respuestas que todavia no llegaron, indexadas por id.
+///
+/// Es la tabla de las dos operaciones que **tienen** que usar el `connect` bloqueante del sistema
+/// --la sonda de alcance y el connect con punta local elegida-- porque ninguna de las dos se puede
+/// hacer sin bloquear. Cada casillero lo llena un hilo del sistema cuando su `connect` termina, y el
+/// lado Java lo mira con `answerPoll` hasta que aparezca.
+///
+/// Un `i32` y no algo mas rico porque las dos respuestas son un entero y quien pregunta ya sabe cual
+/// esta esperando: la sonda contesta 1 o 0, y el connect contesta el handle o -1.
+///
+/// **Las entradas no se reciclan**, por lo mismo que en [`SOCKETS`].
+#[allow(clippy::type_complexity)]
+static SONDAS: std::sync::Mutex<Vec<Option<std::sync::Arc<std::sync::Mutex<Option<i32>>>>>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// Guarda un casillero vacio y devuelve su id.
+fn nuevo_casillero() -> (i32, std::sync::Arc<std::sync::Mutex<Option<i32>>>) {
+    let casillero = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let mut t = SONDAS.lock().unwrap();
+    t.push(Some(casillero.clone()));
+    ((t.len() - 1) as i32, casillero)
+}
+
+/// Guarda ese socket y devuelve su handle.
+fn guardar_socket(s: SockState) -> i32 {
+    let mut t = SOCKETS.lock().unwrap();
+    t.push(Some(s));
+    (t.len() - 1) as i32
+}
+
+/// Corre `f` sobre el flujo de ese handle, o devuelve `si_no` si el handle no nombra uno.
+///
+/// **Solo para operaciones instantaneas.** Tiene la tabla tomada mientras corre `f`, asi que una
+/// operacion que espere ahi adentro le cierra la puerta a todos los demas sockets de la VM. Lo que
+/// puede esperar --leer, escribir, aceptar-- saca antes su propio duplicado con [`tomar_flujo`] o
+/// [`tomar_escucha`] y suelta la tabla.
+fn con_flujo<T>(h: i32, si_no: T, f: impl FnOnce(&mut std::net::TcpStream) -> T) -> T {
+    let mut t = SOCKETS.lock().unwrap();
+    match t.get_mut(h as usize).and_then(|e| e.as_mut()) {
+        Some(SockState::Stream(s)) => f(s),
+        _ => si_no,
+    }
+}
+
+/// Un duplicado del flujo de ese handle, **con la tabla ya soltada**.
+///
+/// `try_clone` no copia el socket: da otro descriptor sobre el mismo. Sirve para sacar de la tabla
+/// lo que hace falta y devolver el candado antes de tocar la red, que es lo que evita que un hilo
+/// leyendo deje sin sockets al resto de la VM.
+fn tomar_flujo(h: i32) -> Option<std::net::TcpStream> {
+    let t = SOCKETS.lock().unwrap();
+    let d = match t.get(h as usize).and_then(|e| e.as_ref()) {
+        Some(SockState::Stream(s)) => s.try_clone().ok(),
+        _ => None,
+    };
+    if let Some(d) = &d {
+        // **El duplicado no hereda el modo.** En Windows "no bloqueante" es una propiedad del
+        // descriptor y no del socket, asi que el duplicado nace bloqueante aunque el original no lo
+        // sea, y una lectura sobre el cuelga la VM entera. Costo un rato encontrarlo: el original
+        // estaba bien puesto y el sintoma aparecia igual.
+        let _ = d.set_nonblocking(true);
+    }
+    d
+}
+
+/// Entra o sale de un grupo multicast. Es una sola funcion porque las dos operaciones tienen que
+/// resolver exactamente lo mismo --el grupo, la placa, y si son v4 o v6-- y separarlas duplicaria
+/// esa resolucion, que es donde estan todos los casos raros.
+///
+/// La `interfaz` vacia significa "la que elija el sistema": `0.0.0.0` en v4 y el indice 0 en v6.
+fn membresia(h: i32, grupo: &str, interfaz: &str, entrar: bool) -> bool {
+    use std::net::{IpAddr, Ipv4Addr};
+    let Some(sock) = tomar_datagrama(h) else {
+        return false;
+    };
+    let Ok(dir) = grupo.parse::<IpAddr>() else {
+        return false;
+    };
+    match dir {
+        IpAddr::V4(g) => {
+            let placa = interfaz.parse::<Ipv4Addr>().unwrap_or(Ipv4Addr::UNSPECIFIED);
+            if entrar {
+                sock.join_multicast_v4(&g, &placa).is_ok()
+            } else {
+                sock.leave_multicast_v4(&g, &placa).is_ok()
+            }
+        }
+        IpAddr::V6(g) => {
+            // En v6 la placa se nombra por indice, no por direccion. Sin uno, cero: "la que elija
+            // el sistema", que es lo mismo que el `0.0.0.0` de v4.
+            let indice = interfaz.parse::<u32>().unwrap_or(0);
+            if entrar {
+                sock.join_multicast_v6(&g, indice).is_ok()
+            } else {
+                sock.leave_multicast_v6(&g, indice).is_ok()
+            }
+        }
+    }
+}
+
+/// Un duplicado del socket de datagramas de ese handle, con la tabla ya soltada. Ver
+/// [`tomar_flujo`].
+fn tomar_datagrama(h: i32) -> Option<std::net::UdpSocket> {
+    let t = SOCKETS.lock().unwrap();
+    let d = match t.get(h as usize).and_then(|e| e.as_ref()) {
+        Some(SockState::Datagram { sock, .. }) => sock.try_clone().ok(),
+        _ => None,
+    };
+    if let Some(d) = &d {
+        // Ver [`tomar_flujo`]: el duplicado nace bloqueante en Windows.
+        let _ = d.set_nonblocking(true);
+    }
+    d
+}
+
+/// Un duplicado del escucha de ese handle, con la tabla ya soltada. Ver [`tomar_flujo`].
+fn tomar_escucha(h: i32) -> Option<std::net::TcpListener> {
+    let t = SOCKETS.lock().unwrap();
+    let d = match t.get(h as usize).and_then(|e| e.as_ref()) {
+        Some(SockState::Listener(l)) => l.try_clone().ok(),
+        _ => None,
+    };
+    if let Some(d) = &d {
+        // Ver [`tomar_flujo`]: el duplicado nace bloqueante en Windows.
+        let _ = d.set_nonblocking(true);
+    }
+    d
+}
+
+thread_local! {
+    /// Los procesos hijo de este hilo, indexados por handle. **Las entradas no se reciclan**: un
+    /// handle viejo apunta a `None` o al proceso que siempre fue, nunca a uno nuevo. Reciclar
+    /// indices ahorraria memoria irrelevante a cambio del peor error posible de encontrar --dos
+    /// `Process` de Java refiriendose al mismo hijo--.
+    static PROCS: RefCell<Vec<Option<ProcState>>> = const { RefCell::new(Vec::new()) };
+}
+
 thread_local! {
     /// El Filer **armado** en este hilo, o `None` si no hay ninguno corriendo. Los nativos del
     /// Filer solo registran cuando está armado, así que una llamada suelta a `createSourceFile`
@@ -89,7 +514,8 @@ pub fn drain_filer() -> Vec<(String, u32)> {
 }
 
 /// Runs the native method `class.name descriptor` with `args` (slot 0 is the
-/// receiver for an instance method), returning its result (`None` for `void`).
+/// receiver for an instance method), returning its result ([`NativeOutcome::Ran`] with `None` for
+/// `void`), or [`NativeOutcome::Unimplemented`] when there is no bridge for that method.
 /// `heap` lets a native read object memory (e.g. an object's header); anything the
 /// method "prints" is appended to `out` — the program's stdout, which the caller
 /// surfaces (the visualizer shows it; a headless run would flush it). `apt` is the
@@ -104,8 +530,8 @@ pub fn dispatch(
     heap: &mut HeapService,
     out: &mut String,
     apt: &mut Option<AptContext>,
-) -> Option<Value> {
-    match (class, name, descriptor) {
+) -> NativeOutcome {
+    NativeOutcome::Ran(match (class, name, descriptor) {
         // --- I/O: PrintStream.println --------------------------------------------
         // The receiver is args[0]; the value follows. The native `write` the real
         // java.io chain bottoms out at.
@@ -164,7 +590,7 @@ pub fn dispatch(
                         metaspace, heap, "[B", bytes.len(),
                     ) {
                         Ok(o) => o,
-                        Err(_) => return Some(Value::Reference(0)),
+                        Err(_) => return NativeOutcome::Ran(Some(Value::Reference(0))),
                     };
                     for (i, &b) in bytes.iter().enumerate() {
                         heap.write_u8(offset + array_operations::ARRAY_HEADER_SIZE + i, b);
@@ -180,7 +606,7 @@ pub fn dispatch(
             let arr = reference(&args[1]);
             let anexar = matches!(args[2], Value::Int(1));
             if arr == 0 {
-                return Some(Value::Int(0));
+                return NativeOutcome::Ran(Some(Value::Int(0)));
             }
             let n = heap.read_u32(arr + HEADER_SIZE) as usize;
             let mut bytes = Vec::with_capacity(n);
@@ -228,6 +654,50 @@ pub fn dispatch(
             let n = std::fs::metadata(&ruta).map(|m| m.len()).unwrap_or(0);
             Some(Value::Long(n as i64))
         }
+        // Las raices del sistema de archivos: `C:\\`, `D:\\`, ... en Windows; `/` en el resto.
+        //
+        // Es lo que le faltaba a `FileSystem.getRootDirectories()`, que devolvia una lista vacia. El
+        // vacio era la respuesta mas debil que tenia: se lee como "no hay raices", que no es lo
+        // mismo que "no las puedo enumerar".
+        ("jdk/internal/io/Fs", "roots", "()[Ljava/lang/String;") => {
+            let raices = raices_del_sistema();
+            let arr = match array_operations::allocate_array_of_class(
+                metaspace, heap, "[Ljava/lang/String;", raices.len(),
+            ) {
+                Ok(o) => o,
+                Err(_) => return NativeOutcome::Ran(Some(Value::Reference(0))),
+            };
+            for (i, r) in raices.iter().enumerate() {
+                // De a uno y escribiendo enseguida, como en `list`: internar puede disparar una
+                // recoleccion, y guardar los offsets antes de tiempo dejaria referencias viejas.
+                let sref = strings::intern(metaspace, heap, r) as u32;
+                heap.write_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4, sref);
+            }
+            Some(Value::Reference(arr))
+        }
+        // --- Espacio de volumen: `Fs.diskTotal/diskUsable/diskUnallocated` -------------------
+        //
+        // Los tres que `java.nio.file.FileStore` promete, y la costura que le faltaba a
+        // `Files.getFileStore`. Devuelven **-1** cuando no se pudo averiguar, y eso es parte del
+        // contrato de estos tres nativos: el lado Java lo traduce a la `IOException` que el
+        // `FileStore` declara. Devolver cero seria peor -- un volumen con cero bytes libres es una
+        // respuesta valida y muy distinta de "no se sabe".
+        //
+        // El camino se toma tal cual viene: la API de Windows acepta un archivo o un directorio
+        // cualquiera y contesta por el volumen que lo contiene, que es exactamente lo que
+        // `getFileStore(path)` quiere.
+        ("jdk/internal/io/Fs", "diskTotal", "(Ljava/lang/String;)J") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            Some(Value::Long(espacio_de_volumen(&ruta).map(|(t, _, _)| t).unwrap_or(-1)))
+        }
+        ("jdk/internal/io/Fs", "diskUsable", "(Ljava/lang/String;)J") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            Some(Value::Long(espacio_de_volumen(&ruta).map(|(_, u, _)| u).unwrap_or(-1)))
+        }
+        ("jdk/internal/io/Fs", "diskUnallocated", "(Ljava/lang/String;)J") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            Some(Value::Long(espacio_de_volumen(&ruta).map(|(_, _, l)| l).unwrap_or(-1)))
+        }
         // Borra un archivo o un directorio **vacio**. `true` si se pudo.
         //
         // Vacio a proposito: `File.delete()` no borra recursivamente, y un nativo que si lo hiciera
@@ -241,6 +711,95 @@ pub fn dispatch(
             };
             Some(Value::Int(if ok { 1 } else { 0 }))
         }
+        // Los nombres **simples** de las entradas de un directorio, o `null` si no se pudo leer
+        // (no existe, no es un directorio, sin permisos).
+        //
+        // Es el nativo que faltaba para que se pueda **recorrer** el disco y no solo tocar archivos
+        // sueltos. Con el entran los nueve metodos de `java.nio.file` que enumeran --`list`, `walk`,
+        // `find`, `walkFileTree`, los tres `newDirectoryStream`-- y los cinco `list`/`listFiles` de
+        // `java.io.File`, que hasta ahora devolvian `null` siempre.
+        //
+        // Nombres simples y no rutas completas, como hace `File.list()`: quien quiera la ruta la
+        // arma con el directorio que ya tiene, y devolverla armada obligaria al nativo a elegir un
+        // separador y a decidir si normaliza -- dos decisiones que son del lado Java.
+        //
+        // El orden es el que da el sistema de archivos y **no se ordena**: el contrato dice
+        // explicitamente que no hay garantia de orden, y ordenar aca haria que alguien se apoyara en
+        // uno que otra plataforma no le va a dar.
+        ("jdk/internal/io/Fs", "list", "(Ljava/lang/String;)[Ljava/lang/String;") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let Ok(entradas) = std::fs::read_dir(&ruta) else {
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
+            };
+            let mut nombres: Vec<String> = Vec::new();
+            for e in entradas.flatten() {
+                nombres.push(e.file_name().to_string_lossy().into_owned());
+            }
+            let arr = match array_operations::allocate_array_of_class(
+                metaspace, heap, "[Ljava/lang/String;", nombres.len(),
+            ) {
+                Ok(o) => o,
+                Err(_) => return NativeOutcome::Ran(Some(Value::Reference(0))),
+            };
+            for (i, n) in nombres.iter().enumerate() {
+                // Se internan de a uno y se escriben enseguida: `intern` puede disparar una
+                // recoleccion, y guardar los offsets antes de tiempo dejaria referencias viejas.
+                let sref = strings::intern(metaspace, heap, n) as u32;
+                heap.write_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4, sref);
+            }
+            Some(Value::Reference(arr))
+        }
+        // El camino **canonico**: resuelto, absoluto y sin enlaces. Es lo que contesta si dos rutas
+        // distintas nombran el mismo archivo, que es la pregunta de `Files.isSameFile` y la unica
+        // que no se puede contestar comparando cadenas -- en Windows `C:\A.TXT` y `C:.txt` son
+        // el mismo archivo y no son la misma cadena.
+        //
+        // `null` si la ruta no existe: canonicalizar lo que no esta no tiene respuesta.
+        ("jdk/internal/io/Fs", "canonical", "(Ljava/lang/String;)Ljava/lang/String;") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            match std::fs::canonicalize(&ruta) {
+                Ok(p) => {
+                    let texto = p.to_string_lossy().into_owned();
+                    Some(Value::Reference(strings::intern(metaspace, heap, &texto)))
+                }
+                Err(_) => Some(Value::Reference(0)),
+            }
+        }
+        // La fecha de ultima modificacion, en milisegundos desde la epoca; `Long.MIN_VALUE` si no
+        // se pudo leer. Un centinela y no un cero: cero **es** una fecha valida (la epoca), y era
+        // justamente la que se devolvia antes por no tener con que leer la de verdad.
+        ("jdk/internal/io/Fs", "mtime", "(Ljava/lang/String;)J") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let millis = std::fs::metadata(&ruta)
+                .and_then(|m| m.modified())
+                .ok()
+                .map(|t| match t.duration_since(std::time::UNIX_EPOCH) {
+                    Ok(d) => d.as_millis() as i64,
+                    // Anterior a 1970: la resta va al reves y el resultado es negativo.
+                    Err(e) => -(e.duration().as_millis() as i64),
+                });
+            Some(Value::Long(millis.unwrap_or(i64::MIN)))
+        }
+        // Fija la fecha de ultima modificacion, en milisegundos desde la epoca.
+        ("jdk/internal/io/Fs", "setMtime", "(Ljava/lang/String;J)Z") => {
+            let ruta = strings::read(heap, reference(&args[0]));
+            let Value::Long(millis) = args[1] else {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            };
+            // `SystemTime` no admite negativos por resta desde `UNIX_EPOCH`, asi que una fecha
+            // anterior a 1970 se arma restando en vez de sumando.
+            let base = std::time::UNIX_EPOCH;
+            let t = if millis >= 0 {
+                base.checked_add(std::time::Duration::from_millis(millis as u64))
+            } else {
+                base.checked_sub(std::time::Duration::from_millis((-millis) as u64))
+            };
+            let ok = match (t, std::fs::File::options().write(true).open(&ruta)) {
+                (Some(t), Ok(f)) => f.set_modified(t).is_ok(),
+                _ => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
         // Crea un directorio. `todos` decide si tambien los padres que falten.
         ("jdk/internal/io/Fs", "mkdir", "(Ljava/lang/String;Z)Z") => {
             let ruta = strings::read(heap, reference(&args[0]));
@@ -251,6 +810,746 @@ pub fn dispatch(
                 std::fs::create_dir(&ruta)
             };
             Some(Value::Int(if r.is_ok() { 1 } else { 0 }))
+        }
+
+
+        // --- TCP: `jdk/internal/net/Net` ------------------------------------------------------
+        //
+        // La costura que le faltaba a `java.net.Socket`, a `ServerSocket` y a todo lo que se apoya
+        // en ellos. El diseno es el mismo que el de `Proc`: el nativo hace lo minimo y **no sabe
+        // nada de las clases de Java**. Toma y devuelve cadenas, arreglos y enteros; quien sea
+        // `Socket` es problema del lado Java, que puede cambiar sin tocar Rust.
+        //
+        // Los codigos de error se eligieron para que el lado Java pueda distinguir los casos que el
+        // contrato distingue, y por eso no son todos -1:
+        //
+        //   - `connect`/`listen`/`accept` devuelven **-1** si no se pudo. El nativo no distingue
+        //     "rechazado" de "no hay ruta", asi que el lado Java arma la `IOException` con lo unico
+        //     que sabe con certeza: a donde intento conectarse.
+        //   - `read` devuelve **-1** en fin de flujo y **-2** si vencio el tiempo de espera. Son dos
+        //     cosas distintas --una conexion cerrada y una que sigue viva pero callada-- y un solo
+        //     centinela haria que `SocketTimeoutException` fuera indistinguible del EOF.
+        //   - `read` y `accept` devuelven **-3** para "todavia no hay nada", y ese codigo es la
+        //     pieza que hace que TCP funcione en esta VM.
+        //
+        // **Por que ningun nativo de aca bloquea.** Los hilos de Java de esta VM comparten un
+        // interprete: el verde los multiplexa sobre un solo hilo del sistema, y los dos modos con
+        // hilos del sistema todavia serializan la ejecucion con un candado global. Un nativo que se
+        // quede esperando adentro --un `accept` que espera a que alguien conecte-- no deja correr a
+        // **ningun** otro hilo de Java, y el que iba a conectar es justamente uno de ellos: la VM se
+        // cuelga entera. Es un abrazo mortal, no una lentitud.
+        //
+        // Por eso todos los sockets se ponen en modo **no bloqueante** apenas se crean, y lo que
+        // antes esperaba ahora contesta -3 en el acto. La espera se hace del lado Java, con un
+        // `Thread.sleep` corto entre intentos: dormir **si** es una operacion que esta VM sabe
+        // manejar --suelta el interprete y deja correr a los demas-- asi que el hilo que espera no
+        // le impide a nadie avanzar. De regalo, esa espera del lado Java es la que le permite a
+        // `ServerSocket.accept` respetar `setSoTimeout`, cosa que un `accept` bloqueante del sistema
+        // no daba.
+
+        // Conecta. `timeoutMs` en cero significa sin limite.
+        ("jdk/internal/net/Net", "connect", "(Ljava/lang/String;II)I") => {
+            let host = strings::read(heap, reference(&args[0]));
+            let puerto = entero(&args[1]) as u16;
+            let espera = entero(&args[2]);
+            let r = if espera > 0 {
+                // Con plazo hay que resolver el nombre primero: `connect_timeout` toma una direccion
+                // ya resuelta, no un nombre. Se prueba la primera que resuelva, que es lo que hace
+                // `Socket` cuando el nombre tiene varias.
+                use std::net::ToSocketAddrs;
+                match (host.as_str(), puerto).to_socket_addrs().ok().and_then(|mut a| a.next()) {
+                    Some(dir) => std::net::TcpStream::connect_timeout(
+                        &dir,
+                        std::time::Duration::from_millis(espera as u64),
+                    ),
+                    None => Err(std::io::Error::new(std::io::ErrorKind::Other, "sin direccion")),
+                }
+            } else {
+                std::net::TcpStream::connect((host.as_str(), puerto))
+            };
+            match r {
+                Ok(s) => {
+                    // Desde aca en adelante el socket no espera: ver la nota de arriba.
+                    let _ = s.set_nonblocking(true);
+                    Some(Value::Int(guardar_socket(SockState::Stream(s))))
+                }
+                Err(_) => Some(Value::Int(-1)),
+            }
+        }
+        // Ata y escucha. Un puerto cero deja que el sistema elija uno, que es lo que
+        // `ServerSocket(0)` promete; el lado Java lo lee despues con `localPort`.
+        ("jdk/internal/net/Net", "listen", "(Ljava/lang/String;II)I") => {
+            let host = strings::read(heap, reference(&args[0]));
+            let puerto = entero(&args[1]) as u16;
+            match std::net::TcpListener::bind((host.as_str(), puerto)) {
+                Ok(l) => {
+                    let _ = l.set_nonblocking(true);
+                    Some(Value::Int(guardar_socket(SockState::Listener(l))))
+                }
+                Err(_) => Some(Value::Int(-1)),
+            }
+        }
+        // Acepta una conexion **sin esperar**: -3 si todavia no hay nadie, -1 si el handle no es un
+        // escucha o si el sistema fallo. Quien quiera esperar, espera del lado Java.
+        ("jdk/internal/net/Net", "accept", "(I)I") => {
+            let h = entero(&args[0]);
+            let Some(escucha) = tomar_escucha(h) else {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            };
+            match escucha.accept() {
+                Ok((s, _)) => {
+                    // El socket aceptado hereda el modo del escucha en algunos sistemas y en otros
+                    // no; ponerlo siempre es la unica forma de que no dependa del sistema.
+                    let _ = s.set_nonblocking(true);
+                    Some(Value::Int(guardar_socket(SockState::Stream(s))))
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Some(Value::Int(-3)),
+                Err(_) => Some(Value::Int(-1)),
+            }
+        }
+        // Lee. Devuelve cuantos bytes puso, -1 en fin de flujo, -2 si vencio el plazo.
+        ("jdk/internal/net/Net", "read", "(I[BII)I") => {
+            use std::io::Read;
+            let h = entero(&args[0]);
+            let arr = reference(&args[1]);
+            let off = entero(&args[2]) as usize;
+            let len = entero(&args[3]) as usize;
+            if arr == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            }
+            let mut buf = vec![0u8; len];
+            let Some(mut flujo) = tomar_flujo(h) else {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            };
+            let n = match flujo.read(&mut buf) {
+                Ok(0) => -1,
+                Ok(n) => n as i32,
+                // Nada que leer todavia. No es fin de flujo --la conexion sigue viva-- y no es un
+                // plazo vencido, porque el plazo lo cuenta el lado Java.
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
+                    -3
+                }
+                Err(_) => -1,
+            };
+            if n > 0 {
+                for i in 0..n as usize {
+                    heap.write_u8(arr + array_operations::ARRAY_HEADER_SIZE + off + i, buf[i]);
+                }
+            }
+            Some(Value::Int(n))
+        }
+        // Escribe. `true` si se pudo escribir **todo**: una escritura parcial sobre un socket es una
+        // escritura fallida desde el punto de vista de quien llama.
+        ("jdk/internal/net/Net", "write", "(I[BII)Z") => {
+            use std::io::Write;
+            let h = entero(&args[0]);
+            let arr = reference(&args[1]);
+            let off = entero(&args[2]) as usize;
+            let len = entero(&args[3]) as usize;
+            if arr == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let mut bytes = Vec::with_capacity(len);
+            for i in 0..len {
+                bytes.push(heap.read_u8(arr + array_operations::ARRAY_HEADER_SIZE + off + i));
+            }
+            let Some(mut flujo) = tomar_flujo(h) else {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            };
+            // Un socket no bloqueante puede aceptar solo una parte de lo que se le da cuando el
+            // buffer de salida del sistema esta lleno, asi que hay que insistir con lo que quedo.
+            // La espera es de este lado y no del de Java porque una escritura parcial no es un
+            // estado que se pueda devolver: `write` promete todo o nada, y a mitad de camino no hay
+            // nada honesto que contestar. El buffer se llena solo si el par no lee, y entonces el
+            // milisegundo de espera entre intentos es lo unico que se puede hacer igual.
+            let mut escrito = 0usize;
+            let ok = loop {
+                if escrito == bytes.len() {
+                    break flujo.flush().is_ok();
+                }
+                match flujo.write(&bytes[escrito..]) {
+                    Ok(0) => break false,
+                    Ok(n) => escrito += n,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    Err(_) => break false,
+                }
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // Cierra. La entrada se saca de la tabla, y ahi Rust cierra el descriptor al soltarla.
+        ("jdk/internal/net/Net", "close", "(I)V") => {
+            let h = entero(&args[0]);
+            let mut t = SOCKETS.lock().unwrap();
+            if let Some(e) = t.get_mut(h as usize) {
+                *e = None;
+            }
+            None
+        }
+        ("jdk/internal/net/Net", "shutdownIn", "(I)Z") => {
+            let h = entero(&args[0]);
+            let ok = con_flujo(h, false, |s| s.shutdown(std::net::Shutdown::Read).is_ok());
+            Some(Value::Int(i32::from(ok)))
+        }
+        ("jdk/internal/net/Net", "shutdownOut", "(I)Z") => {
+            let h = entero(&args[0]);
+            let ok = con_flujo(h, false, |s| s.shutdown(std::net::Shutdown::Write).is_ok());
+            Some(Value::Int(i32::from(ok)))
+        }
+        // El puerto local. Sirve para las dos formas --un flujo y un escucha-- porque los dos lo
+        // tienen, y `ServerSocket(0)` lo necesita para saber que puerto le dio el sistema.
+        ("jdk/internal/net/Net", "localPort", "(I)I") => {
+            let h = entero(&args[0]);
+            let t = SOCKETS.lock().unwrap();
+            let p = match t.get(h as usize).and_then(|e| e.as_ref()) {
+                Some(SockState::Stream(s)) => s.local_addr().map(|a| a.port() as i32).unwrap_or(-1),
+                Some(SockState::Listener(l)) => {
+                    l.local_addr().map(|a| a.port() as i32).unwrap_or(-1)
+                }
+                Some(SockState::Datagram { sock, .. }) => {
+                    sock.local_addr().map(|a| a.port() as i32).unwrap_or(-1)
+                }
+                None => -1,
+            };
+            Some(Value::Int(p))
+        }
+        ("jdk/internal/net/Net", "localAddress", "(I)Ljava/lang/String;") => {
+            let h = entero(&args[0]);
+            let dir = {
+                let t = SOCKETS.lock().unwrap();
+                match t.get(h as usize).and_then(|e| e.as_ref()) {
+                    Some(SockState::Stream(s)) => s.local_addr().ok().map(|a| a.ip().to_string()),
+                    Some(SockState::Listener(l)) => l.local_addr().ok().map(|a| a.ip().to_string()),
+                    Some(SockState::Datagram { sock, .. }) => {
+                        sock.local_addr().ok().map(|a| a.ip().to_string())
+                    }
+                    None => None,
+                }
+            };
+            match dir {
+                Some(d) => Some(Value::Reference(strings::intern(metaspace, heap, &d))),
+                None => Some(Value::Reference(0)),
+            }
+        }
+        ("jdk/internal/net/Net", "remotePort", "(I)I") => {
+            let h = entero(&args[0]);
+            Some(Value::Int(con_flujo(h, -1, |s| {
+                s.peer_addr().map(|a| a.port() as i32).unwrap_or(-1)
+            })))
+        }
+        ("jdk/internal/net/Net", "remoteAddress", "(I)Ljava/lang/String;") => {
+            let h = entero(&args[0]);
+            let dir = con_flujo(h, None, |s| s.peer_addr().ok().map(|a| a.ip().to_string()));
+            match dir {
+                Some(d) => Some(Value::Reference(strings::intern(metaspace, heap, &d))),
+                None => Some(Value::Reference(0)),
+            }
+        }
+        // Cero significa **sin limite**, como en `Socket.setSoTimeout`. `Duration::ZERO` no sirve
+        // para eso: en Rust un plazo de cero es un error, y el "sin limite" es `None`.
+        //
+        // La opcion se pone igual, pero **no es la que hace cumplir el plazo**: sobre un socket no
+        // bloqueante el sistema contesta "todavia no" en el acto y nunca llega a vencer nada. Quien
+        // cuenta el tiempo es el lado Java, que es el que sabe cuando empezo a esperar.
+        ("jdk/internal/net/Net", "setSoTimeout", "(II)Z") => {
+            let h = entero(&args[0]);
+            let ms = entero(&args[1]);
+            let d = if ms > 0 {
+                Some(std::time::Duration::from_millis(ms as u64))
+            } else {
+                None
+            };
+            let ok = con_flujo(h, false, |s| s.set_read_timeout(d).is_ok());
+            Some(Value::Int(i32::from(ok)))
+        }
+        ("jdk/internal/net/Net", "setTcpNoDelay", "(IZ)Z") => {
+            let h = entero(&args[0]);
+            let on = matches!(args[1], Value::Int(1));
+            let ok = con_flujo(h, false, |s| s.set_nodelay(on).is_ok());
+            Some(Value::Int(i32::from(ok)))
+        }
+
+        // La prueba de alcance de `InetAddress.isReachable`, en tres partes.
+        //
+        // **Que se prueba.** Un TCP al puerto 7 --el de `echo`, donde casi nunca hay nadie-- tomando
+        // **el rechazo como respuesta**: el RST lo manda el host, asi que un "conexion rechazada"
+        // prueba que esta vivo tanto como un "conectado". El silencio es el unico `false`. Es el
+        // camino de reserva del JDK cuando no puede mandar un ICMP, que es lo normal: un ping crudo
+        // necesita permisos que un proceso comun no tiene.
+        //
+        // **Por que son tres nativos y no uno.** `connect_timeout` no sirve: en Windows un rechazo
+        // llega por el conjunto de excepciones del `select` y no por el de escritura, asi que Rust
+        // lo reporta como `TimedOut` --se comprobo-- y el rechazo, que es justamente la respuesta
+        // que mas prueba, quedaria indistinguible del silencio. El `connect` bloqueante **si** lo
+        // distingue, pero bloquea, y ya se sabe lo que pasa cuando un nativo de aca bloquea.
+        //
+        // Asi que el `connect` bloqueante corre en un hilo del sistema aparte --uno de Rust, no de
+        // Java: no ejecuta bytecode, solo escribe un entero-- y el lado Java pregunta con
+        // `answerPoll` hasta que conteste o se acabe el plazo. Misma forma que `accept` y que
+        // `read`: el -3 es "todavia no se sabe".
+        //
+        // El mismo mecanismo lo usa `connectFromStart`, que es el `connect` que ata la punta local
+        // antes de salir. Bloquea por el mismo motivo --no hay forma de atar y conectar sin un
+        // `connect` de verdad-- y se contesta por el mismo casillero.
+        //
+        // `local` vacia significa "por donde el sistema quiera" y `ttl` cero "el que venga por
+        // omision": son los dos casos que `isReachable(null, 0, plazo)` pide, y los unicos en los que
+        // no hace falta el socket crudo.
+        ("jdk/internal/net/Net", "reachableStart", "(Ljava/lang/String;Ljava/lang/String;I)I") => {
+            let host = strings::read(heap, reference(&args[0]));
+            let local = strings::read(heap, reference(&args[1]));
+            let ttl = entero(&args[2]).max(0) as u32;
+            let (id, casillero) = nuevo_casillero();
+            std::thread::spawn(move || {
+                let vivo = if local.is_empty() && ttl == 0 {
+                    // Sin placa ni TTL que elegir, `std` alcanza y no hace falta bajar al crudo.
+                    match std::net::TcpStream::connect((host.as_str(), 7u16)) {
+                        Ok(_) => true,
+                        Err(e) => matches!(
+                            e.kind(),
+                            std::io::ErrorKind::ConnectionRefused
+                                | std::io::ErrorKind::ConnectionReset
+                        ),
+                    }
+                } else {
+                    // Con placa o con TTL hay que armar el socket a mano. Aca **no** se puede
+                    // distinguir el rechazo del silencio --`conectar_desde` devuelve `None` para los
+                    // dos-- asi que una prueba por una placa concreta solo afirma que **llego**.
+                    // Es menos de lo que dice la de un parametro, y esta dicho en el javadoc.
+                    let remoto = resolver(&host, 7);
+                    let salida = if local.is_empty() {
+                        // El comodin de la familia del destino: no elige placa, pero deja poner TTL.
+                        remoto.map(|r| match r {
+                            std::net::SocketAddr::V4(_) => {
+                                "0.0.0.0:0".parse::<std::net::SocketAddr>().unwrap()
+                            }
+                            std::net::SocketAddr::V6(_) => {
+                                "[::]:0".parse::<std::net::SocketAddr>().unwrap()
+                            }
+                        })
+                    } else {
+                        resolver(&local, 0)
+                    };
+                    match (remoto, salida) {
+                        (Some(r), Some(l)) => conectar_desde(r, l, ttl).is_some(),
+                        _ => false,
+                    }
+                };
+                *casillero.lock().unwrap() = Some(i32::from(vivo));
+            });
+            Some(Value::Int(id))
+        }
+        // Conecta atando primero la punta local. Devuelve el id del casillero; la respuesta es el
+        // handle del socket, o -1.
+        ("jdk/internal/net/Net", "connectFromStart", "(Ljava/lang/String;ILjava/lang/String;I)I") => {
+            let host = strings::read(heap, reference(&args[0]));
+            let puerto = entero(&args[1]) as u16;
+            let local = strings::read(heap, reference(&args[2]));
+            let puerto_local = entero(&args[3]) as u16;
+            let (id, casillero) = nuevo_casillero();
+            std::thread::spawn(move || {
+                let remoto = resolver(&host, puerto);
+                let salida = if local.is_empty() {
+                    remoto.map(|r| match r {
+                        std::net::SocketAddr::V4(_) => std::net::SocketAddr::from((
+                            std::net::Ipv4Addr::UNSPECIFIED,
+                            puerto_local,
+                        )),
+                        std::net::SocketAddr::V6(_) => std::net::SocketAddr::from((
+                            std::net::Ipv6Addr::UNSPECIFIED,
+                            puerto_local,
+                        )),
+                    })
+                } else {
+                    resolver(&local, puerto_local)
+                };
+                let r = match (remoto, salida) {
+                    (Some(r), Some(l)) => match conectar_desde(r, l, 0) {
+                        Some(s) => {
+                            // Igual que en `connect`: de aca en adelante el socket no espera.
+                            let _ = s.set_nonblocking(true);
+                            guardar_socket(SockState::Stream(s))
+                        }
+                        None => -1,
+                    },
+                    _ => -1,
+                };
+                *casillero.lock().unwrap() = Some(r);
+            });
+            Some(Value::Int(id))
+        }
+        // La respuesta, o **-3** si todavia no llego. Que significa depende de quien pregunte: la
+        // sonda de alcance contesta 1 o 0, el connect contesta el handle o -1.
+        ("jdk/internal/net/Net", "answerPoll", "(I)I") => {
+            let id = entero(&args[0]) as usize;
+            let t = SONDAS.lock().unwrap();
+            let r = match t.get(id).and_then(|e| e.as_ref()) {
+                Some(c) => match *c.lock().unwrap() {
+                    Some(v) => v,
+                    None => -3,
+                },
+                // Un casillero que no existe es un error del que llama, no una espera eterna.
+                None => -1,
+            };
+            Some(Value::Int(r))
+        }
+        // Suelta el casillero. El hilo que quedo colgado del `connect` termina solo y escribe en un
+        // casillero que ya no mira nadie, que es todo lo que puede hacer de malo.
+        ("jdk/internal/net/Net", "answerFree", "(I)V") => {
+            let id = entero(&args[0]) as usize;
+            let mut t = SONDAS.lock().unwrap();
+            if let Some(e) = t.get_mut(id) {
+                *e = None;
+            }
+            None
+        }
+        // Un byte **fuera de banda**. No es escribir en el flujo: va con una bandera del protocolo,
+        // y el que lo recibe lo ve por un camino aparte.
+        ("jdk/internal/net/Net", "sendUrgent", "(II)Z") => {
+            let h = entero(&args[0]);
+            let b = entero(&args[1]) as u8;
+            let ok = match tomar_flujo(h) {
+                Some(f) => crudo::fuera_de_banda(&f, b),
+                None => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // --- UDP: la otra mitad de `jdk/internal/net/Net` ------------------------------------
+        //
+        // Mismas reglas que TCP: nada bloquea, y "todavia no llego nada" es **-3**. Un datagrama no
+        // tiene fin de flujo --no hay conexion que cerrar-- asi que aca el -1 es siempre un error de
+        // verdad y no hay -2.
+
+        // Ata un socket de datagramas. Puerto cero: lo elige el sistema, y se lee con `localPort`.
+        ("jdk/internal/net/Net", "udpBind", "(Ljava/lang/String;I)I") => {
+            let host = strings::read(heap, reference(&args[0]));
+            let puerto = entero(&args[1]) as u16;
+            match std::net::UdpSocket::bind((host.as_str(), puerto)) {
+                Ok(s) => {
+                    let _ = s.set_nonblocking(true);
+                    // La difusion se pide explicitamente en casi todos los sistemas, y el lado Java
+                    // promete que `setBroadcast(true)` --su valor por omision-- funciona.
+                    let _ = s.set_broadcast(true);
+                    Some(Value::Int(guardar_socket(SockState::Datagram { sock: s, ultimo: None })))
+                }
+                Err(_) => Some(Value::Int(-1)),
+            }
+        }
+        // Manda un datagrama. `true` solo si salio entero: un datagrama partido no es un datagrama.
+        ("jdk/internal/net/Net", "udpSend", "(ILjava/lang/String;I[BII)Z") => {
+            let h = entero(&args[0]);
+            let host = strings::read(heap, reference(&args[1]));
+            let puerto = entero(&args[2]) as u16;
+            let arr = reference(&args[3]);
+            let off = entero(&args[4]) as usize;
+            let len = entero(&args[5]) as usize;
+            if arr == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let mut bytes = Vec::with_capacity(len);
+            for i in 0..len {
+                bytes.push(heap.read_u8(arr + array_operations::ARRAY_HEADER_SIZE + off + i));
+            }
+            let ok = match tomar_datagrama(h) {
+                Some(s) => s.send_to(&bytes, (host.as_str(), puerto)).map(|n| n == len).unwrap_or(false),
+                None => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // Recibe un datagrama. Devuelve cuantos bytes puso, **-3** si todavia no llego nada, -1 si
+        // fallo. Deja anotado el remitente para `udpSenderAddress`/`udpSenderPort`.
+        ("jdk/internal/net/Net", "udpReceive", "(I[BII)I") => {
+            let h = entero(&args[0]);
+            let arr = reference(&args[1]);
+            let off = entero(&args[2]) as usize;
+            let len = entero(&args[3]) as usize;
+            if arr == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            }
+            let Some(sock) = tomar_datagrama(h) else {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            };
+            let mut buf = vec![0u8; len];
+            match sock.recv_from(&mut buf) {
+                Ok((n, dir)) => {
+                    for i in 0..n.min(len) {
+                        heap.write_u8(arr + array_operations::ARRAY_HEADER_SIZE + off + i, buf[i]);
+                    }
+                    let mut t = SOCKETS.lock().unwrap();
+                    if let Some(SockState::Datagram { ultimo, .. }) =
+                        t.get_mut(h as usize).and_then(|e| e.as_mut())
+                    {
+                        *ultimo = Some((dir.ip().to_string(), dir.port()));
+                    }
+                    Some(Value::Int(n.min(len) as i32))
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Some(Value::Int(-3)),
+                Err(_) => Some(Value::Int(-1)),
+            }
+        }
+        // De quien vino el ultimo datagrama recibido. `null` si todavia no se recibio ninguno.
+        ("jdk/internal/net/Net", "udpSenderAddress", "(I)Ljava/lang/String;") => {
+            let h = entero(&args[0]);
+            let dir = {
+                let t = SOCKETS.lock().unwrap();
+                match t.get(h as usize).and_then(|e| e.as_ref()) {
+                    Some(SockState::Datagram { ultimo, .. }) => ultimo.clone(),
+                    _ => None,
+                }
+            };
+            match dir {
+                Some((d, _)) => Some(Value::Reference(strings::intern(metaspace, heap, &d))),
+                None => Some(Value::Reference(0)),
+            }
+        }
+        ("jdk/internal/net/Net", "udpSenderPort", "(I)I") => {
+            let h = entero(&args[0]);
+            let t = SOCKETS.lock().unwrap();
+            let p = match t.get(h as usize).and_then(|e| e.as_ref()) {
+                Some(SockState::Datagram { ultimo, .. }) => {
+                    ultimo.as_ref().map(|(_, p)| *p as i32).unwrap_or(-1)
+                }
+                _ => -1,
+            };
+            Some(Value::Int(p))
+        }
+        // Entra a un grupo multicast. `interfaz` vacia significa "la que elija el sistema".
+        ("jdk/internal/net/Net", "udpJoin", "(ILjava/lang/String;Ljava/lang/String;)Z") => {
+            let h = entero(&args[0]);
+            let grupo = strings::read(heap, reference(&args[1]));
+            let interfaz = strings::read(heap, reference(&args[2]));
+            Some(Value::Int(i32::from(membresia(h, &grupo, &interfaz, true))))
+        }
+        ("jdk/internal/net/Net", "udpLeave", "(ILjava/lang/String;Ljava/lang/String;)Z") => {
+            let h = entero(&args[0]);
+            let grupo = strings::read(heap, reference(&args[1]));
+            let interfaz = strings::read(heap, reference(&args[2]));
+            Some(Value::Int(i32::from(membresia(h, &grupo, &interfaz, false))))
+        }
+        // El limite de saltos de los paquetes multicast que salgan de aca.
+        ("jdk/internal/net/Net", "udpSetTtl", "(II)Z") => {
+            let h = entero(&args[0]);
+            let ttl = entero(&args[1]);
+            let ok = match tomar_datagrama(h) {
+                Some(s) => s.set_multicast_ttl_v4(ttl as u32).is_ok(),
+                None => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // --- Procesos hijo: `jdk/internal/proc/Proc` -----------------------------
+        //
+        // La costura que faltaba para `ProcessBuilder.start()`. Hasta ahora la VM no sabía lanzar
+        // procesos, y por eso `start()` y `startPipeline()` quedaban sin declarar --un `Process` que
+        // no representa ningún proceso no es un miembro que se pueda escribir--.
+        //
+        // El diseño es el mismo que el de `Fs`: el nativo hace lo mínimo y **no sabe nada de las
+        // clases de Java**. Toma y devuelve cadenas, arreglos y enteros; quién sea `Process` o
+        // `ProcessBuilder` es problema del lado Java, que puede cambiar sin tocar Rust.
+        //
+        // A diferencia de `Fs`, acá **sí hay handle**: un proceso es estado que vive entre llamadas
+        // --su salida, sus tuberías, su código de salida-- y no hay forma de representarlo con
+        // operaciones de una sola vez. El handle es un índice en una tabla por hilo; las entradas no
+        // se reciclan, así que un handle viejo nunca apunta a un proceso nuevo (el error que sí sería
+        // difícil de encontrar).
+        //
+        // Los modos de redirección son los tres que `ProcessBuilder.Redirect` distingue de verdad:
+        // 0 = tubería, 1 = heredar, 2 = descartar, 3 = archivo (la ruta va en el arreglo de rutas).
+
+        // Lanza el proceso. Devuelve el handle, o -1 si no se pudo (ejecutable inexistente, permisos).
+        // Devolver -1 y no tirar es lo que deja que el lado Java arme la `IOException` con el mensaje
+        // que corresponde -- el nativo no distingue "no existe" de "no se puede ejecutar".
+        ("jdk/internal/proc/Proc", "spawn",
+         "([Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;[IZ)I") => {
+            let cmd = leer_arreglo_de_cadenas(heap, reference(&args[0]));
+            if cmd.is_empty() {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            }
+            let dir_ref = reference(&args[1]);
+            let env = leer_arreglo_de_cadenas(heap, reference(&args[2]));
+            let rutas = leer_arreglo_de_cadenas_con_nulos(heap, reference(&args[3]));
+            let modos = leer_arreglo_de_int(heap, reference(&args[4]));
+            let unir_error = matches!(args[5], Value::Int(1));
+
+            let mut c = std::process::Command::new(&cmd[0]);
+            c.args(&cmd[1..]);
+            if dir_ref != 0 {
+                c.current_dir(strings::read(heap, dir_ref));
+            }
+            // Un `env` no nulo **reemplaza** el entorno entero, como `ProcessBuilder.environment()`:
+            // el mapa que el llamador manipuló es el entorno del hijo, no un agregado al nuestro.
+            if !env.is_empty() {
+                c.env_clear();
+                let mut i = 0;
+                while i + 1 < env.len() {
+                    c.env(&env[i], &env[i + 1]);
+                    i += 2;
+                }
+            }
+            let modo = |k: usize| -> i32 { modos.get(k).copied().unwrap_or(0) };
+            let ruta = |k: usize| -> Option<String> { rutas.get(k).cloned().flatten() };
+            c.stdin(redireccion_entrada(modo(0), ruta(0)));
+            c.stdout(redireccion_salida(modo(1), ruta(1)));
+            // Con `redirectErrorStream` el error va a la misma tubería que la salida, y eso se hace
+            // duplicando el destino de stdout -- no se puede clonar el pipe desde acá, así que el
+            // lado Java lee un solo flujo y `getErrorStream()` devuelve uno vacío, tal como el JDK.
+            if unir_error {
+                // Su propia tuberia, y la union se hace al leer -- ver `unir_error` en `ProcState`.
+                // Si la salida no es tuberia (archivo, heredada), se manda al mismo destino, que ahi
+                // si funciona: dos escritores al mismo archivo o a la misma consola se mezclan solos.
+                c.stderr(if modo(1) == 0 {
+                    std::process::Stdio::piped()
+                } else {
+                    redireccion_salida(modo(1), ruta(1))
+                });
+            } else {
+                c.stderr(redireccion_salida(modo(2), ruta(2)));
+            }
+            match c.spawn() {
+                Ok(hijo) => Some(Value::Int(PROCS.with(|t| {
+                    let mut t = t.borrow_mut();
+                    t.push(Some(ProcState { hijo, salida: None, unir_error }));
+                    (t.len() - 1) as i32
+                }))),
+                Err(_) => Some(Value::Int(-1)),
+            }
+        }
+        // Espera a que termine y devuelve su código de salida. Si el handle no vale, -1.
+        ("jdk/internal/proc/Proc", "waitFor", "(I)I") => {
+            let h = entero(&args[0]) as usize;
+            Some(Value::Int(PROCS.with(|t| {
+                let mut t = t.borrow_mut();
+                match t.get_mut(h).and_then(|e| e.as_mut()) {
+                    Some(p) => {
+                        if let Some(c) = p.salida {
+                            return c;
+                        }
+                        match p.hijo.wait() {
+                            Ok(st) => {
+                                let c = st.code().unwrap_or(-1);
+                                p.salida = Some(c);
+                                c
+                            }
+                            Err(_) => -1,
+                        }
+                    }
+                    None => -1,
+                }
+            })))
+        }
+        // El código de salida si ya terminó. `i32::MIN` es el centinela de "sigue corriendo": es lo
+        // que le permite al lado Java tirar `IllegalThreadStateException`, que es lo que el contrato
+        // pide, en vez de bloquearse.
+        ("jdk/internal/proc/Proc", "exitValue", "(I)I") => {
+            let h = entero(&args[0]) as usize;
+            Some(Value::Int(PROCS.with(|t| {
+                let mut t = t.borrow_mut();
+                match t.get_mut(h).and_then(|e| e.as_mut()) {
+                    Some(p) => {
+                        if let Some(c) = p.salida {
+                            return c;
+                        }
+                        match p.hijo.try_wait() {
+                            Ok(Some(st)) => {
+                                let c = st.code().unwrap_or(-1);
+                                p.salida = Some(c);
+                                c
+                            }
+                            _ => i32::MIN,
+                        }
+                    }
+                    None => i32::MIN,
+                }
+            })))
+        }
+        ("jdk/internal/proc/Proc", "isAlive", "(I)Z") => {
+            let h = entero(&args[0]) as usize;
+            Some(Value::Int(PROCS.with(|t| {
+                let mut t = t.borrow_mut();
+                match t.get_mut(h).and_then(|e| e.as_mut()) {
+                    Some(p) => {
+                        if p.salida.is_some() {
+                            return 0;
+                        }
+                        match p.hijo.try_wait() {
+                            Ok(Some(st)) => {
+                                p.salida = Some(st.code().unwrap_or(-1));
+                                0
+                            }
+                            Ok(None) => 1,
+                            Err(_) => 0,
+                        }
+                    }
+                    None => 0,
+                }
+            })))
+        }
+        // Mata el proceso. `forzar` se acepta y no cambia nada en Windows, donde no hay una señal
+        // "amable" -- se dice acá y se documenta del lado Java en vez de fingir dos comportamientos.
+        ("jdk/internal/proc/Proc", "destroy", "(IZ)V") => {
+            let h = entero(&args[0]) as usize;
+            PROCS.with(|t| {
+                let mut t = t.borrow_mut();
+                if let Some(p) = t.get_mut(h).and_then(|e| e.as_mut()) {
+                    let _ = p.hijo.kill();
+                }
+            });
+            None
+        }
+        ("jdk/internal/proc/Proc", "pid", "(I)J") => {
+            let h = entero(&args[0]) as usize;
+            Some(Value::Long(PROCS.with(|t| {
+                let t = t.borrow();
+                t.get(h).and_then(|e| e.as_ref()).map(|p| i64::from(p.hijo.id())).unwrap_or(-1)
+            })))
+        }
+        // Escribe en la entrada estándar del hijo. `true` si se pudo.
+        ("jdk/internal/proc/Proc", "writeIn", "(I[BII)Z") => {
+            use std::io::Write;
+            let h = entero(&args[0]) as usize;
+            let arr = reference(&args[1]);
+            let off = entero(&args[2]) as usize;
+            let len = entero(&args[3]) as usize;
+            if arr == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let mut bytes = Vec::with_capacity(len);
+            for i in 0..len {
+                bytes.push(heap.read_u8(arr + array_operations::ARRAY_HEADER_SIZE + off + i));
+            }
+            Some(Value::Int(PROCS.with(|t| {
+                let mut t = t.borrow_mut();
+                match t.get_mut(h).and_then(|e| e.as_mut()).and_then(|p| p.hijo.stdin.as_mut()) {
+                    Some(w) => i32::from(w.write_all(&bytes).and_then(|_| w.flush()).is_ok()),
+                    None => 0,
+                }
+            })))
+        }
+        // Cierra la entrada del hijo, que es como se le dice "no viene más".
+        ("jdk/internal/proc/Proc", "closeIn", "(I)V") => {
+            let h = entero(&args[0]) as usize;
+            PROCS.with(|t| {
+                let mut t = t.borrow_mut();
+                if let Some(p) = t.get_mut(h).and_then(|e| e.as_mut()) {
+                    p.hijo.stdin = None; // al soltarlo se cierra
+                }
+            });
+            None
+        }
+        // Lee de la salida del hijo. Devuelve cuántos bytes puso, o -1 en fin de flujo. Bloquea, que
+        // es lo que un `InputStream` promete.
+        ("jdk/internal/proc/Proc", "readOut", "(I[B)I") => {
+            let h = entero(&args[0]) as usize;
+            let arr = reference(&args[1]);
+            leer_de_hijo(heap, h, arr, true)
+        }
+        ("jdk/internal/proc/Proc", "readErr", "(I[B)I") => {
+            let h = entero(&args[0]) as usize;
+            let arr = reference(&args[1]);
+            leer_de_hijo(heap, h, arr, false)
         }
 
         // --- Introspection / identity (things Java can't read of itself) ---------
@@ -408,13 +1707,74 @@ pub fn dispatch(
             None
         }
 
+        // --- Serializacion: las dos preguntas que la reflexion no contesta -------------------
+        //
+        // `ObjectStreamClass.hasStaticInitializer(Class)` -- si la clase declara `<clinit>`.
+        //
+        // Entra en el `serialVersionUID` calculado (el bit `0x08` de los modificadores de la forma
+        // canonica), y **no hay manera de averiguarlo por reflexion**: `getDeclaredMethods` filtra
+        // `<clinit>` a proposito, aca y en el JDK. Por eso el JDK tambien lo resuelve con un nativo
+        // y no con reflexion; sin el, el UID sale bien para las clases sin bloque estatico y mal
+        // para las demas, que son la mayoria.
+        //
+        // La respuesta sale del archivo de clase, que es donde vive el dato: un metodo llamado
+        // `<clinit>`. Una primitiva o un arreglo no tienen archivo detras, y contestan `false`.
+        ("java/io/ObjectStreamClass", "hasStaticInitializer", "(Ljava/lang/Class;)Z") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let tiene = if name.starts_with('[') || is_primitive_name(&name) {
+                false
+            } else {
+                metaspace
+                    .get_or_load(&name)
+                    .map(|cf| {
+                        cf.methods
+                            .iter()
+                            .any(|m| cf.utf8(m.name_index) == Some("<clinit>"))
+                    })
+                    .unwrap_or(false)
+            };
+            Some(Value::Int(tiene as i32))
+        }
+        // `ObjectStreamClass.allocateInstance(Class)` -- una instancia con todos sus campos en el
+        // valor por defecto y **sin correr ningun constructor**.
+        //
+        // Es la unica pieza de la deserializacion que no se puede escribir en Java. Reconstruir un
+        // objeto no es construirlo: los campos vienen del flujo, y correr el constructor de la
+        // clase ejecutaria sus efectos --validaciones, contadores, registros en tablas globales--
+        // por un objeto que no se esta creando sino leyendo. La especificacion de serializacion lo
+        // dice al reves de como suena: del constructor **solo** corre el de la primera superclase
+        // no serializable, y de ahi para abajo nada.
+        //
+        // Devuelve `null` --y no un objeto a medias-- para lo que no se puede instanciar: una
+        // interfaz, una abstracta, un arreglo o una primitiva. El que llama lo convierte en la
+        // excepcion que corresponda; el nativo no puede tirar.
+        ("java/io/ObjectStreamClass", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;") => {
+            const ACC_INTERFACE: u16 = 0x0200;
+            const ACC_ABSTRACT: u16 = 0x0400;
+            let name = mirror_name(metaspace, reference(&args[0]));
+            if name.starts_with('[') || is_primitive_name(&name) {
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
+            }
+            let instanciable = metaspace
+                .get_or_load(&name)
+                .map(|cf| cf.access_flags & (ACC_INTERFACE | ACC_ABSTRACT) == 0)
+                .unwrap_or(false);
+            if !instanciable {
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
+            }
+            // `try_allocate` y no `allocate`: quedarse sin heap deserializando es recuperable, y
+            // el que llama lo ve como el `null` de arriba en vez de bajar la VM.
+            let objeto = objects_operations::try_allocate(metaspace, heap, &name).unwrap_or(0);
+            Some(Value::Reference(objeto))
+        }
+
         // --- Class.isInstance: the subtype check, reusing is_subtype -------------
         // The receiver is a Class mirror; args[1] is the object to test. `null` is
         // never an instance.
         ("java/lang/Class", "isInstance", "(Ljava/lang/Object;)Z") => {
             let object = reference(&args[1]);
             if object == 0 {
-                return Some(Value::Int(0));
+                return NativeOutcome::Ran(Some(Value::Int(0)));
             }
             let target = metaspace.class_name_at_mirror(reference(&args[0])).map(str::to_string);
             let runtime =
@@ -464,6 +1824,51 @@ pub fn dispatch(
         // no `<init>` needs to run. The Java side filters this array by type
         // (getAnnotation/getAnnotationsByType/…). No @Inherited walk: only *directly present*
         // class-level annotations, matching `isAnnotationPresent`.
+        // Las anotaciones **del metodo**, no de su clase.
+        //
+        // El mecanismo es el mismo que el de `Class.declaredAnnotations0` --resolver el atributo y
+        // fabricar una clase sintetica por anotacion-- solo que el atributo se busca en el
+        // `method_info` en vez de en el `ClassFile`. Hizo falta cuando el compilador dejo de perder
+        // las meta-anotaciones (finding #467): hasta entonces ningun `.class` de esta biblioteca
+        // llevaba anotaciones de metodo, asi que `Method.getAnnotation` podia devolver null sin
+        // mentir. Ahora si las lleva.
+        ("java/lang/reflect/Method", "declaredAnnotations0", "()[Ljava/lang/annotation/Annotation;") => {
+            let this = reference(&args[0]);
+            let clazz_at = field_offset(metaspace, "java/lang/reflect/Method", "clazz");
+            let owner = mirror_name(metaspace, heap.read_u32(this + clazz_at) as usize);
+            let name_at = field_offset(metaspace, "java/lang/reflect/Method", "name");
+            let name = strings::read(heap, heap.read_u32(this + name_at) as usize);
+            let params_at = field_offset(metaspace, "java/lang/reflect/Method", "parameterTypes");
+            let ret_at = field_offset(metaspace, "java/lang/reflect/Method", "returnType");
+            let params = heap.read_u32(this + params_at) as usize;
+            let mut descriptor = String::from("(");
+            if params != 0 {
+                let n = heap.read_u32(params + array_operations::LENGTH_OFFSET) as usize;
+                for k in 0..n {
+                    let at = params + array_operations::ARRAY_HEADER_SIZE + k * SLOT_SIZE;
+                    let mirror = heap.read_u32(at) as usize;
+                    descriptor.push_str(&descriptor_of(&mirror_name(metaspace, mirror)));
+                }
+            }
+            descriptor.push(')');
+            let ret = heap.read_u32(this + ret_at) as usize;
+            descriptor.push_str(&descriptor_of(&mirror_name(metaspace, ret)));
+            let objects = method_annotation_objects(metaspace, heap, &owner, &name, &descriptor);
+            Some(Value::Reference(reference_array(
+                metaspace,
+                heap,
+                "[Ljava/lang/annotation/Annotation;",
+                &objects,
+            )))
+        }
+        // Los `access_flags` **crudos** del class file, sin las correcciones que `getModifiers`
+        // aplica a una clase anidada -- que ahi devuelve los del `InnerClasses` y no los del
+        // encabezado. La diferencia importa justo para lo que este metodo se usa: decidir accesos.
+        ("jdk/internal/reflect/Reflection", "getClassAccessFlags", "(Ljava/lang/Class;)I") => {
+            let name = mirror_name(metaspace, reference(&args[0]));
+            let flags = metaspace.get_or_load(&name).map_or(0, |cf| cf.access_flags as i32);
+            Some(Value::Int(flags))
+        }
         ("java/lang/Class", "declaredAnnotations0", "()[Ljava/lang/annotation/Annotation;") => {
             let this = mirror_name(metaspace, reference(&args[0]));
             let objects = annotation_objects(metaspace, heap, &this);
@@ -679,18 +2084,32 @@ pub fn dispatch(
             Some(Value::Reference(mirror))
         }
 
-        ("java/lang/Class", "forName0", "(Ljava/lang/String;)Ljava/lang/Class;") => {
+        ("java/lang/Class", "forName0", "(Ljava/lang/String;Z)Ljava/lang/Class;") => {
             // El nombre llega en forma binaria con puntos ("java.lang.String") o ya como
             // descriptor de array ("[I", "[Ljava.lang.String;"). Devolver 0 y no panicar es
             // deliberado: el que no exista es una respuesta normal, y el lado Java la convierte
             // en ClassNotFoundException.
+            //
+            // La bandera es la mitad que faltaba, y no es un detalle: cargar una clase **no** es
+            // inicializarla (JVMS §5.4 vs §5.5), y `forName(String)` promete las dos cosas. Sin eso
+            // toda clase que se registra sola desde un bloque `static` —un driver de JDBC, un
+            // proveedor de `spi`— se cargaba y no hacía nada, sin un solo error que mirar. Ver el
+            // hallazgo #487.
+            //
+            // Un array no tiene `<clinit>` ni estáticos, así que la bandera no lo toca.
             let dotted = strings::read(heap, reference(&args[0]));
+            let inicializar = matches!(args[1], Value::Int(1));
             let internal = dotted.replace('.', "/");
             if internal.starts_with('[') {
-                return Some(Value::Reference(mirror_for(metaspace, heap, &internal)));
+                return NativeOutcome::Ran(Some(Value::Reference(mirror_for(metaspace, heap, &internal))));
             }
             if metaspace.get_or_load(&internal).is_none() {
-                return Some(Value::Reference(0));
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
+            }
+            if inicializar {
+                // El mirror lo toma el sitio de despacho después de correr el `<clinit>`; ver la
+                // nota de `RanEInicializa`.
+                return NativeOutcome::RanEInicializa(internal);
             }
             Some(Value::Reference(mirror_for(metaspace, heap, &internal)))
         }
@@ -714,7 +2133,7 @@ pub fn dispatch(
             let bytes: Vec<u8> = {
                 let array = reference(&args[1]);
                 if array == 0 {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 }
                 let offset = int(&args[2]) as usize;
                 let length = int(&args[3]) as usize;
@@ -725,10 +2144,10 @@ pub fn dispatch(
                     .collect()
             };
             let Ok(class) = ClassFile::from_bytes(&bytes) else {
-                return Some(Value::Reference(0));
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
             };
             let Some(internal) = class.class_name(class.this_class).map(str::to_string) else {
-                return Some(Value::Reference(0));
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
             };
             // El nombre que el llamador dijo tiene que coincidir con el que el archivo dice; si
             // no, es un `NoClassDefFoundError` en el JDK y acá un cero que el lado Java traduce.
@@ -736,7 +2155,7 @@ pub fn dispatch(
             if asked != 0 {
                 let dotted = strings::read(heap, asked);
                 if dotted.replace('.', "/") != internal {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 }
             }
             metaspace.add(internal.clone(), class);
@@ -774,7 +2193,7 @@ pub fn dispatch(
             if !has_attribute(metaspace, &name, "PermittedSubclasses") {
                 // Null y no un array vacio: "no es sellada" y "es sellada y no permite a nadie"
                 // son cosas distintas, y `isSealed` se apoya en esa diferencia.
-                return Some(Value::Reference(0));
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
             }
             let mut mirrors = Vec::with_capacity(permitted.len());
             for p in &permitted {
@@ -844,10 +2263,10 @@ pub fn dispatch(
             let name = mirror_name(metaspace, reference(&args[0]));
             let indices = {
                 let Some(body) = attribute_body(metaspace, &name, "EnclosingMethod") else {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 };
                 if body.len() < 4 {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 }
                 (
                     u16::from_be_bytes([body[0], body[1]]),
@@ -855,17 +2274,17 @@ pub fn dispatch(
                 )
             };
             if indices.1 == 0 {
-                return Some(Value::Reference(0));
+                return NativeOutcome::Ran(Some(Value::Reference(0)));
             }
             let (owner, method, descriptor) = {
                 let Some(class) = metaspace.get(&name) else {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 };
                 let Some(owner) = class.class_name(indices.0).map(str::to_string) else {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 };
                 let Some((m, d)) = class.name_and_type(indices.1) else {
-                    return Some(Value::Reference(0));
+                    return NativeOutcome::Ran(Some(Value::Reference(0)));
                 };
                 (owner, m.to_string(), d.to_string())
             };
@@ -899,7 +2318,7 @@ pub fn dispatch(
             "()[Ljava/lang/reflect/RecordComponent;") => {
             let name = mirror_name(metaspace, reference(&args[0]));
             let Some(components) = record_components(metaspace, &name) else {
-                return Some(Value::Reference(0)); // no es un record
+                return NativeOutcome::Ran(Some(Value::Reference(0))); // no es un record
             };
             class_operations::load_class(metaspace, heap, "java/lang/reflect/RecordComponent");
             let empty: Vec<usize> = vec![0; components.len()];
@@ -1239,6 +2658,37 @@ pub fn dispatch(
         // El reloj de pared, en milisegundos desde la epoca. Declarado hace rato del lado
         // Java y sin implementar de este; lo destapo `java.util.Random`, cuyo constructor sin
         // argumentos se siembra de aca.
+        // --- entropia del sistema operativo -------------------------------------
+        //
+        // The one thing a CSPRNG cannot compute: the seed. Everything above this line is
+        // deterministic, so `SecureRandom` has to reach the OS, and this is the seam.
+        //
+        // Per platform, the *system* generator — not a library's own:
+        //   - Windows: `BCryptGenRandom` with the system-preferred algorithm. `bcrypt` is the
+        //     documented replacement for the deprecated `RtlGenRandom`, and it is what the JDK
+        //     and the Rust standard library both call.
+        //   - everything else: `/dev/urandom`, which never blocks once the pool is seeded and is
+        //     the source the kernel itself recommends for everything after early boot.
+        //
+        // Returns whether it filled the buffer. **A partial read is a failure**, not a short
+        // result: the caller cannot tell which bytes are real, and half a seed that looks like a
+        // whole one is the worst outcome available here.
+        ("java/security/OsEntropy", "fill0", "([B)Z") => {
+            let arr = reference(&args[0]);
+            if arr == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let len = heap.read_u32(arr + array_operations::LENGTH_OFFSET) as usize;
+            let mut bytes = vec![0u8; len];
+            let ok = os_entropy(&mut bytes);
+            if ok {
+                for i in 0..len {
+                    heap.write_u8(arr + array_operations::ARRAY_HEADER_SIZE + i, bytes[i]);
+                }
+            }
+            Some(Value::Int(i32::from(ok)))
+        }
+
         ("java/lang/System", "currentTimeMillis", "()J") => {
             let since = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1267,6 +2717,25 @@ pub fn dispatch(
                 "native.encoding" | "file.encoding" => Some("UTF-8"),
                 _ => None,
             };
+            // `java.io.tmpdir` y `user.dir` salen del entorno, así que no entran en el `match` de
+            // arriba —que devuelve `&'static str`— y se resuelven aparte.
+            //
+            // Sin `java.io.tmpdir` **no hay dónde crear un temporal**, y eso deja inservibles a
+            // `Files.createTempFile`/`createTempDirectory` y a todo lo que se apoya en ellas: la
+            // caída a `"."` que hacen no sirve, porque `user.dir` también faltaba y una ruta
+            // relativa no se podía llevar a absoluta. Eran dos ausencias que se tapaban entre sí.
+            let del_entorno: Option<String> = match key.as_str() {
+                "java.io.tmpdir" => Some(std::env::temp_dir().to_string_lossy().into_owned()),
+                "user.dir" => std::env::current_dir()
+                    .ok()
+                    .map(|p| p.to_string_lossy().into_owned()),
+                _ => None,
+            };
+            if let Some(text) = del_entorno {
+                return NativeOutcome::Ran(Some(Value::Reference(strings::intern(
+                    metaspace, heap, &text,
+                ))));
+            }
             match value {
                 Some(text) => Some(Value::Reference(strings::intern(metaspace, heap, text))),
                 None => Some(Value::Reference(0)),
@@ -1421,8 +2890,47 @@ pub fn dispatch(
             Some(Value::Reference(offset))
         }
 
-        _ => panic!("no native implementation for {class}.{name}{descriptor}"),
-    }
+        // Un `native` sin puente **no puede voltear el proceso**. Antes esto era un `panic!`, que
+        // convertía "esta biblioteca declara un método que la VM todavía no implementa" —una
+        // ausencia perfectamente normal mientras se construye un JDK— en la muerte del intérprete,
+        // sin traza de Java y sin `catch` posible.
+        //
+        // `UnsatisfiedLinkError` es lo que la JVM real tira, y es lo correcto por partida doble: es
+        // atrapable, así que una biblioteca puede degradar con elegancia; y es un `Error`, así que
+        // nadie lo confunde con una condición del programa.
+        _ => return NativeOutcome::Unimplemented,
+    })
+}
+
+/// Qué pasó al intentar correr un `native`.
+///
+/// Existe porque `Option<Value>` ya estaba ocupado distinguiendo un resultado de un `void`, y hacen
+/// falta **tres** respuestas y no dos: devolvió algo, no devolvió nada, y no había qué correr.
+pub enum NativeOutcome {
+    /// Corrió; `None` si es `void`.
+    Ran(Option<Value>),
+    /// Corrió, **y esa clase tiene que quedar inicializada** antes de seguir. El valor que se
+    /// devuelve es el mirror de esa clase, y se toma **después** de inicializar.
+    ///
+    /// Existe por un solo nativo, `Class.forName0`, y por una razón que no se puede resolver de
+    /// otra manera: cargar una clase no es inicializarla (JVMS §5.4 vs §5.5), pero `forName`
+    /// promete las dos cosas. Correr un `<clinit>` es empujar un marco y drivearlo hasta el final
+    /// —lo hace `ensure_initialized`, que vive en el intérprete— y un nativo no tiene al intérprete
+    /// a mano: recibe el metaspace y el heap, no el `&mut self`.
+    ///
+    /// Así que el nativo **pide** y el sitio de despacho **hace**. La alternativa era darle al
+    /// nativo acceso al intérprete entero, que es mucho más de lo que necesita para esto.
+    ///
+    /// **Por qué no trae el valor ya calculado.** Porque entre calcularlo y usarlo corre un
+    /// `<clinit>` entero, que aloca, y alocar puede disparar el GC. Una referencia guardada mientras
+    /// tanto en una variable de Rust **no es una raíz** para el recolector: quedaría apuntando a un
+    /// objeto que se movió o se juntó. No se llegó a ver el síntoma --y no hace falta verlo, es la
+    /// clase de error que aparece una vez cada mil corridas-- así que el mirror se pide con
+    /// [`mirror_de_clase`] recién cuando la inicialización terminó, que es el único momento en que
+    /// ya no queda nada por correr en el medio.
+    RanEInicializa(String),
+    /// No hay puente nativo para ese método.
+    Unimplemented,
 }
 
 /// The `int` payload of an argument (a verifier-guaranteed `Int`).
@@ -1440,6 +2948,147 @@ pub fn dispatch(
 // lectores son la otra mitad: cada uno conoce el formato de §4.7 del que le toca y nada mas.
 
 /// El cuerpo crudo del atributo `wanted` de la clase `name`, si lo tiene.
+/// Los elementos de un `String[]` del heap, como cadenas de Rust. Un `null` en el arreglo se lee
+/// como cadena vacia; para distinguir el nulo de la cadena vacia esta [`leer_arreglo_de_cadenas_con_nulos`].
+fn leer_arreglo_de_cadenas(heap: &mut HeapService, arr: usize) -> Vec<String> {
+    if arr == 0 {
+        return Vec::new();
+    }
+    let n = heap.read_u32(arr + HEADER_SIZE) as usize;
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let elem = heap.read_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4) as usize;
+        out.push(if elem == 0 { String::new() } else { strings::read(heap, elem) });
+    }
+    out
+}
+
+/// Lo mismo, pero conservando la diferencia entre `null` y `""`. La necesitan las rutas de
+/// redireccion: `null` quiere decir "sin archivo" y `""` seria una ruta vacia, que es otra cosa.
+fn leer_arreglo_de_cadenas_con_nulos(heap: &mut HeapService, arr: usize) -> Vec<Option<String>> {
+    if arr == 0 {
+        return Vec::new();
+    }
+    let n = heap.read_u32(arr + HEADER_SIZE) as usize;
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let elem = heap.read_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4) as usize;
+        out.push(if elem == 0 { None } else { Some(strings::read(heap, elem)) });
+    }
+    out
+}
+
+/// Los elementos de un `int[]` del heap.
+fn leer_arreglo_de_int(heap: &mut HeapService, arr: usize) -> Vec<i32> {
+    if arr == 0 {
+        return Vec::new();
+    }
+    let n = heap.read_u32(arr + HEADER_SIZE) as usize;
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        out.push(heap.read_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4) as i32);
+    }
+    out
+}
+
+/// El `int` de un `Value`, o 0.
+fn entero(v: &Value) -> i32 {
+    match v {
+        Value::Int(n) => *n,
+        _ => 0,
+    }
+}
+
+/// La redireccion de la **entrada** segun el modo: 0 tuberia, 1 heredar, 2 descartar, 3 archivo.
+///
+/// Un archivo que no se puede abrir cae a `null()` en vez de hacer fallar el lanzamiento, porque el
+/// contrato de `ProcessBuilder` para una entrada ilegible es que el hijo vea fin de archivo -- no que
+/// el `start()` explote.
+fn redireccion_entrada(modo: i32, ruta: Option<String>) -> std::process::Stdio {
+    match modo {
+        1 => std::process::Stdio::inherit(),
+        2 => std::process::Stdio::null(),
+        3 => match ruta.and_then(|r| std::fs::File::open(r).ok()) {
+            Some(f) => std::process::Stdio::from(f),
+            None => std::process::Stdio::null(),
+        },
+        _ => std::process::Stdio::piped(),
+    }
+}
+
+/// La redireccion de una **salida**. Modos: 0 tuberia, 1 heredar, 2 descartar, 3 archivo (pisando),
+/// 4 archivo (agregando al final).
+///
+/// El 3 y el 4 son dos modos y no un modo con bandera porque `ProcessBuilder.Redirect` los distingue
+/// como dos tipos, `WRITE` y `APPEND`, y la diferencia es observable: uno borra lo que habia.
+fn redireccion_salida(modo: i32, ruta: Option<String>) -> std::process::Stdio {
+    match modo {
+        1 => std::process::Stdio::inherit(),
+        2 => std::process::Stdio::null(),
+        3 => match ruta.and_then(|r| std::fs::File::create(r).ok()) {
+            Some(f) => std::process::Stdio::from(f),
+            None => std::process::Stdio::null(),
+        },
+        4 => match ruta.and_then(|r| {
+            std::fs::OpenOptions::new().create(true).append(true).open(r).ok()
+        }) {
+            Some(f) => std::process::Stdio::from(f),
+            None => std::process::Stdio::null(),
+        },
+        _ => std::process::Stdio::piped(),
+    }
+}
+
+/// Lee de la salida o del error de un hijo al `byte[]` dado. Devuelve cuantos bytes puso, o -1 en fin
+/// de flujo -- que es exactamente el contrato de `InputStream.read(byte[])`.
+fn leer_de_hijo(heap: &mut HeapService, h: usize, arr: usize, es_salida: bool) -> Option<Value> {
+    use std::io::Read;
+    if arr == 0 {
+        return Some(Value::Int(-1));
+    }
+    let cap = heap.read_u32(arr + HEADER_SIZE) as usize;
+    let mut buf = vec![0u8; cap];
+    let leidos = PROCS.with(|t| {
+        let mut t = t.borrow_mut();
+        let Some(p) = t.get_mut(h).and_then(|e| e.as_mut()) else {
+            return -1i32;
+        };
+        // Con `redirectErrorStream`, `getErrorStream()` esta vacio --como en el JDK-- y la salida
+        // entrega primero todo stdout y despues todo stderr.
+        if p.unir_error && !es_salida {
+            return -1;
+        }
+        let r = if es_salida {
+            p.hijo.stdout.as_mut().map(|s| s.read(&mut buf))
+        } else {
+            p.hijo.stderr.as_mut().map(|s| s.read(&mut buf))
+        };
+        let n = match r {
+            // Cero bytes de una tuberia **es** fin de flujo: `read` solo devuelve 0 cuando el otro
+            // extremo se cerro. Devolver 0 haria que el lado Java girara en vacio para siempre.
+            Some(Ok(0)) => -1,
+            Some(Ok(n)) => n as i32,
+            _ => -1,
+        };
+        if n < 0 && es_salida && p.unir_error {
+            // La salida se agoto: se sigue por el error, que es lo que hace que los dos lleguen por
+            // `getInputStream()`.
+            return match p.hijo.stderr.as_mut().map(|s| s.read(&mut buf)) {
+                Some(Ok(0)) => -1,
+                Some(Ok(m)) => m as i32,
+                _ => -1,
+            };
+        }
+        n
+    });
+    if leidos > 0 {
+        for i in 0..leidos as usize {
+            heap.write_u8(arr + array_operations::ARRAY_HEADER_SIZE + i, buf[i]);
+        }
+    }
+    Some(Value::Int(leidos))
+}
+
 fn attribute_body<'a>(
     metaspace: &'a mut MetaspaceService,
     name: &str,
@@ -1460,6 +3109,31 @@ fn has_attribute(metaspace: &mut MetaspaceService, name: &str, wanted: &str) -> 
 /// The absolute heap offset of the slot a `Field` object names, and the object that HOLDS it (for
 /// the write barrier). A static field's slot lives on the owner's `Class` mirror; an instance
 /// field's at the target object's offset. Reads the Field's own `clazz`/`name`/`modifiers`.
+/// El nombre de la clase que declara el campo descripto por `field_obj`, **solo si el campo es
+/// estático**; `None` para uno de instancia (o para un `Field` nulo).
+///
+/// Existe para que el intérprete pueda correrle el `<clinit>` antes de dejar que los accesores
+/// nativos toquen el slot: leer o escribir un estático **por reflexión** es un uso activo de la
+/// clase igual que un `getstatic` (JLS §12.4.1), y sin esto el campo se lee en su valor por defecto
+/// mientras nadie haya tocado la clase por la vía normal. Ver el finding #361.
+pub(crate) fn static_field_owner(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    field_obj: usize,
+) -> Option<String> {
+    if field_obj == 0 {
+        return None;
+    }
+    const F: &str = "java/lang/reflect/Field";
+    let mods_off = field_offset(metaspace, F, "modifiers");
+    if heap.read_u32(field_obj + mods_off) & 0x0008 == 0 {
+        return None;
+    }
+    let clazz_off = field_offset(metaspace, F, "clazz");
+    let clazz_mirror = heap.read_u32(field_obj + clazz_off) as usize;
+    metaspace.class_name_at_mirror(clazz_mirror).map(str::to_string)
+}
+
 fn field_slot_addr(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
@@ -1496,6 +3170,44 @@ fn field_slot_addr(
 /// implementing the @interface (see `annotation_factory`). Since annotation objects carry no
 /// instance fields, `allocate` alone yields a complete object; the constructor (just `super()`)
 /// need not run, which is what lets this stay a plain native without re-entering the interpreter.
+/// Las anotaciones de un **metodo**, como objetos en el heap.
+///
+/// Comparte todo con [`annotation_objects`] salvo de donde sale el atributo: del `method_info` del
+/// metodo con esa firma en vez de del `ClassFile`. La clase sintetica se nombra con la clase, el
+/// metodo y la ranura, para que dos metodos anotados con la misma anotacion no compartan una que
+/// tenga valores distintos.
+fn method_annotation_objects(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    owner: &str,
+    name: &str,
+    descriptor: &str,
+) -> Vec<usize> {
+    let resolved: Vec<ResolvedAnnotation> = match metaspace.get_or_load(owner) {
+        Some(cf) => cf
+            .methods
+            .iter()
+            .find(|m| {
+                cf.utf8(m.name_index) == Some(name)
+                    && cf.utf8(m.descriptor_index) == Some(descriptor)
+            })
+            .and_then(|m| {
+                m.attributes
+                    .iter()
+                    .find(|a| cf.utf8(a.name_index) == Some("RuntimeVisibleAnnotations"))
+                    .map(|a| annotations::resolve(cf, &a.info))
+            })
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    // El nombre sintetico lleva la firma saneada: `(` y `/` no pueden ir en un nombre de clase.
+    let tag: String = format!("{name}{descriptor}")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    spin_annotation_objects(metaspace, heap, &resolved, &format!("{owner}$$MAnno${tag}"))
+}
+
 fn annotation_objects(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
@@ -1512,6 +3224,19 @@ fn annotation_objects(
             .unwrap_or_default(),
         None => Vec::new(),
     };
+    spin_annotation_objects(metaspace, heap, &resolved, &format!("{this}$$Anno"))
+}
+
+/// Fabrica un objeto por anotacion resuelta, con una clase sintetica por ranura bajo `prefix`.
+///
+/// La clase es **estable**: reflexionar dos veces sobre lo mismo reusa la que ya se giro en vez de
+/// acuñar una nueva en cada llamada.
+fn spin_annotation_objects(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    resolved: &[ResolvedAnnotation],
+    prefix: &str,
+) -> Vec<usize> {
     let mut objects = Vec::with_capacity(resolved.len());
     for (i, ann) in resolved.iter().enumerate() {
         let iface = ann
@@ -1521,9 +3246,7 @@ fn annotation_objects(
             .unwrap_or(&ann.type_descriptor)
             .to_string();
         let elements = annotation_elements(metaspace, &iface, ann);
-        // One spun class per (annotated class, annotation slot): stable, so repeated reflection
-        // over the same class reuses it instead of minting a new class each call.
-        let synthetic = format!("{this}$$Anno${i}");
+        let synthetic = format!("{prefix}${i}");
         if metaspace.get(&synthetic).is_none() {
             let bytes = annotation_factory::generate_annotation_class(&synthetic, &iface, &elements);
             match ClassFile::from_bytes(&bytes) {
@@ -1851,6 +3574,18 @@ fn component_name(array_class: &str) -> Option<String> {
 /// El mirror de un nombre interno cualquiera, creandolo si hace falta. Las tres formas de tipo
 /// llegan por caminos distintos: un array por su mirror sintetico, un primitivo por el suyo
 /// (idem, pero indexado por la palabra clave) y una clase de verdad cargandola.
+/// El mirror de esa clase, para quien lo necesite desde afuera de este módulo.
+///
+/// Lo usa el sitio de despacho de [`NativeOutcome::RanEInicializa`], que tiene que tomarlo después
+/// de correr el `<clinit>` y no antes. Ver la nota de esa variante.
+pub fn mirror_de_clase(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    name: &str,
+) -> usize {
+    mirror_for(metaspace, heap, name)
+}
+
 fn mirror_for(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {
     if name.starts_with('[') {
         return array_operations::array_class_mirror(metaspace, heap, name);
@@ -1976,4 +3711,130 @@ fn make_name(metaspace: &mut MetaspaceService, heap: &mut HeapService, text: &st
     let value_offset = field_offset(metaspace, SYM_NAME, "value");
     heap.store_reference(object, object + value_offset, value);
     object
+}
+
+/// Fills `out` with bytes from the operating system's own generator, reporting whether it could.
+///
+/// Two implementations, both the platform's documented system source:
+///
+///   - **Windows**: `BCryptGenRandom` with `BCRYPT_USE_SYSTEM_PREFERRED_RNG`, so no algorithm
+///     handle has to be opened and closed. It is what replaced `RtlGenRandom`.
+///   - **everything else**: `/dev/urandom`, read to the end of the buffer. It does not block once
+///     the pool is seeded, which for any process that has reached this code is already true.
+///
+/// A short read is reported as a failure. The caller cannot tell which bytes came from the OS and
+/// which are still zero, and half a seed that looks whole is worse than no seed at all.
+fn os_entropy(out: &mut [u8]) -> bool {
+    if out.is_empty() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        #[link(name = "bcrypt")]
+        extern "system" {
+            fn BCryptGenRandom(
+                h_algorithm: *mut core::ffi::c_void,
+                pb_buffer: *mut u8,
+                cb_buffer: u32,
+                dw_flags: u32,
+            ) -> i32;
+        }
+        const USE_SYSTEM_PREFERRED_RNG: u32 = 0x0000_0002;
+        // Chunked because the count is a u32 and a caller could ask for more than that.
+        for chunk in out.chunks_mut(u32::MAX as usize) {
+            let status = unsafe {
+                BCryptGenRandom(
+                    core::ptr::null_mut(),
+                    chunk.as_mut_ptr(),
+                    chunk.len() as u32,
+                    USE_SYSTEM_PREFERRED_RNG,
+                )
+            };
+            if status != 0 {
+                return false;
+            }
+        }
+        true
+    }
+    #[cfg(not(windows))]
+    {
+        use std::io::Read;
+        let mut f = match std::fs::File::open("/dev/urandom") {
+            Ok(f) => f,
+            Err(_) => return false,
+        };
+        f.read_exact(out).is_ok()
+    }
+}
+
+
+/// El espacio del volumen que contiene a `ruta`: (total, utilizable, sin asignar), en bytes.
+///
+/// Los tres que el formato de `FileStore` distingue, y **no son dos de lo mismo**: "utilizable" es
+/// lo que este usuario puede escribir y "sin asignar" es lo que le queda al volumen. Con una cuota
+/// puesta, el segundo es mayor que el primero; sin cuota son iguales. Devolverlos como uno solo
+/// haria que un `getUsableSpace` mintiera justo en la maquina donde la cuota importa.
+///
+/// `None` si no se pudo averiguar. Es distinto de cero: cero bytes libres es una respuesta.
+#[cfg(windows)]
+fn espacio_de_volumen(ruta: &str) -> Option<(i64, i64, i64)> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            lp_directory_name: *const u16,
+            lp_free_bytes_available_to_caller: *mut u64,
+            lp_total_number_of_bytes: *mut u64,
+            lp_total_number_of_free_bytes: *mut u64,
+        ) -> i32;
+    }
+    // UTF-16 terminado en cero, que es lo que la API `W` espera.
+    let mut ancha: Vec<u16> = ruta.encode_utf16().collect();
+    ancha.push(0);
+    let mut disponible: u64 = 0;
+    let mut total: u64 = 0;
+    let mut libre: u64 = 0;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(ancha.as_ptr(), &mut disponible, &mut total, &mut libre)
+    };
+    if ok == 0 {
+        return None;
+    }
+    Some((total as i64, disponible as i64, libre as i64))
+}
+
+/// Ver la version de Windows. Fuera de Windows no hay una forma portable de preguntar esto sin
+/// dependencias, así que se contesta "no se sabe" -- que es lo que el lado Java traduce a
+/// `IOException`, y no un cero que se leería como un disco lleno.
+#[cfg(not(windows))]
+fn espacio_de_volumen(_ruta: &str) -> Option<(i64, i64, i64)> {
+    None
+}
+
+/// Las raices del sistema de archivos.
+///
+/// En Windows, las unidades que existen **ahora**: `GetLogicalDrives` devuelve un bit por letra, y
+/// se pregunta en cada llamada en vez de guardarse -- un pendrive que se conecta agrega una raiz, y
+/// una lista cacheada se quedaria vieja justo cuando alguien la mira para ver que hay conectado.
+///
+/// Fuera de Windows hay una sola raiz y es `/`. No hace falta preguntarle a nadie.
+#[cfg(windows)]
+fn raices_del_sistema() -> Vec<String> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetLogicalDrives() -> u32;
+    }
+    let mascara = unsafe { GetLogicalDrives() };
+    let mut out = Vec::new();
+    for i in 0..26u32 {
+        if mascara & (1 << i) != 0 {
+            out.push(format!("{}:\\", (b'A' + i as u8) as char));
+        }
+    }
+    out
+}
+
+/// Ver la version de Windows.
+#[cfg(not(windows))]
+fn raices_del_sistema() -> Vec<String> {
+    vec!["/".to_string()]
 }

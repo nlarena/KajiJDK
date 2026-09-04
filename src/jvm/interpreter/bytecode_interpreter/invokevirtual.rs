@@ -6,7 +6,7 @@ use super::call_site::{CallSite, SiteKind};
 use super::objects_operations::{self, HEADER_SIZE, SLOT_SIZE};
 use super::{array_operations, class_operations, Exec, Step, Widths};
 use crate::jvm::interpreter::frame::Value;
-use crate::jvm::interpreter::metaspace::{Intrinsic, MethodId, MetaspaceService};
+use crate::jvm::interpreter::metaspace::{Intrinsic, MethodId, MetaspaceService, SignatureId};
 use crate::jvm::interpreter::{natives, strings};
 
 impl Exec<'_> {
@@ -91,7 +91,17 @@ impl Exec<'_> {
             // call site's descriptor is the *real* one, so normal vtable resolution — which
             // expects the declared `(Object...)Object` — would fail. Intercepted before it, and
             // the `arg_count` the cache holds is the call site's own, which is the whole point.
-            SiteKind::MethodHandleInvoke => return self.invoke_method_handle(receiver, &locals[1..]),
+            SiteKind::MethodHandleInvoke => {
+                // Un `MethodHandle` de layout (`byteOffsetHandle`, `sliceHandle`, `scaleHandle`) no
+                // apunta a ningún método: lleva adentro un layout y un camino, así que el intrínseco
+                // de abajo —que lee `owner`/`name`/`descriptor`/`kind`, los campos de un handle
+                // **directo**— no tiene qué leer. Se prueba primero el helper tipado; si el receptor
+                // no lo tiene, es un handle directo y sigue por el camino de siempre.
+                if let Some(sig) = self.helper_de_handle_de_layout(receiver, &locals[1..]) {
+                    return self.varhandle_access(receiver, sig, &locals[1..]);
+                }
+                return self.invoke_method_handle(receiver, &locals[1..]);
+            }
             // `MethodHandle.invokeWithArguments(Object[])`: a *regular* method (fixed descriptor),
             // but spreading the array and dispatching is a VM operation. Read the elements and
             // invoke the handle with them — `ConstantBootstraps.invoke` (now Java) is built on it.
@@ -137,6 +147,9 @@ impl Exec<'_> {
                     Some(callee) => callee,
                     None => return self.throw_exception("java/lang/NoSuchMethodError"),
                 }
+            }
+            SiteKind::VarHandleAccess(signature) => {
+                return self.varhandle_access(receiver, signature, &locals[1..]);
             }
             SiteKind::NoTarget => {
                 unreachable!("invokevirtual never records a targetless site")
@@ -282,6 +295,31 @@ impl Exec<'_> {
             let m = &self.shared.metaspace;
             (m.class_of(callee).to_string(), m.name(callee).to_string(), m.descriptor(callee).to_string())
         };
+        // Un acceso reflexivo a un campo **estático** es un uso activo de su clase, igual que un
+        // `getstatic`, y le debe el `<clinit>` (JLS §12.4.1, y el javadoc de `Field` lo dice con
+        // todas las letras). El opcode ya lo hacía; este camino no, así que el campo se leía en su
+        // valor por defecto mientras nadie hubiera tocado la clase por la vía normal — un `null`
+        // perfectamente creíble en lugar del arreglo que el inicializador arma. Finding #361.
+        //
+        // Va acá y no adentro del nativo porque correr un `<clinit>` es empujar un frame de Java, y
+        // `natives::dispatch` solo tiene el metaspace y el heap: no puede ejecutar nada.
+        if native_class == "java/lang/reflect/Field" && !locals.is_empty() {
+            let field_obj = match locals[0] {
+                Value::Reference(r) => r,
+                _ => 0,
+            };
+            let owner = natives::static_field_owner(
+                &mut self.shared.metaspace,
+                &mut self.shared.heap,
+                field_obj,
+            );
+            if let Some(owner) = owner {
+                self.ensure_initialized(&owner);
+                if let Some(step) = self.take_pending_throw() {
+                    return Some(step); // el <clinit> falló: no se toca el slot
+                }
+            }
+        }
         let result = natives::dispatch(
             &native_class,
             &name,
@@ -292,11 +330,135 @@ impl Exec<'_> {
             &mut self.shared.console,
             &mut self.shared.apt,
         );
+        let result = match result {
+            natives::NativeOutcome::Ran(v) => v,
+            natives::NativeOutcome::RanEInicializa(clase) => {
+                self.ensure_initialized(&clase);
+                if let Some(step) = self.take_pending_throw() {
+                    return Some(step);
+                }
+                Some(Value::Reference(natives::mirror_de_clase(
+                    &mut self.shared.metaspace,
+                    &mut self.shared.heap,
+                    &clase,
+                )))
+            }
+            natives::NativeOutcome::Unimplemented => {
+                return Some(self.throw_exception("java/lang/UnsatisfiedLinkError"))
+            }
+        };
         if let Some(value) = result {
             self.top().push(value);
         }
         self.advance_past_call();
         Some(Step::Continue)
+    }
+
+    /// Corre un accesor de `VarHandle` en el helper tipado que el sitio nombró.
+    ///
+    /// Los argumentos del sitio son `(receptor, segmento, desplazamiento, índices…, [valor])`; el
+    /// helper toma `(segmento, desplazamiento, long[] índices, [valor])`. O sea que lo único que hay
+    /// que hacer acá es **empaquetar los índices**: cuántos son sale de la aridad del helper, que es
+    /// 3 para una lectura y 4 para una escritura.
+    ///
+    /// Se llama con `call_java` —síncrono— y no empujando un frame, porque el resultado tiene que
+    /// volver a la pila de **este** sitio con el tipo que el descriptor del sitio declaró.
+    fn varhandle_access(&mut self, receiver: usize, signature: SignatureId, args: &[Value]) -> Step {
+        let mirror = self.shared.heap.read_u32(receiver) as usize;
+        // Un `VarHandle` que no es de layout no tiene estos helpers. No es un fallo del programa
+        // sino un modo que esta VM no atiende, y `UnsupportedOperationException` lo dice sin mentir.
+        let Some(callee) =
+            self.shared.metaspace.vtable_method_at_mirror_by_signature(mirror, signature)
+        else {
+            return self.throw_exception("java/lang/UnsupportedOperationException");
+        };
+        // Dónde va el `long[]` en el helper y cuántos parámetros tiene: los tres helpers de layout
+        // y los dieciocho de `VarHandle` difieren solo en eso, así que se lee del descriptor en vez
+        // de cablearlo.
+        let desc = self.shared.metaspace.descriptor(callee).to_string();
+        let params = tipos_de_parametros(&desc);
+        let n_params = params.len();
+        let Some(k) = params.iter().position(|t| t == "[J") else {
+            return self.throw_exception("java/lang/UnsupportedOperationException");
+        };
+        // Los argumentos del sitio son los del helper menos el arreglo, más los índices.
+        let fijos = n_params - 1;
+        if args.len() < fijos {
+            return self.throw_exception("java/lang/UnsupportedOperationException");
+        }
+        let n_indices = args.len() - fijos;
+        let indices = match array_operations::allocate_array_of_class(
+            &mut self.shared.metaspace,
+            &mut self.shared.heap,
+            "[J",
+            n_indices,
+        ) {
+            Ok(o) => o,
+            Err(_) => return self.throw_exception("java/lang/OutOfMemoryError"),
+        };
+        for i in 0..n_indices {
+            let v = match args[k + i] {
+                Value::Long(n) => n,
+                Value::Int(n) => i64::from(n),
+                _ => 0,
+            };
+            self.shared
+                .heap
+                .write_u64(indices + array_operations::ARRAY_HEADER_SIZE + i * 8, v as u64);
+        }
+        // [receptor, los fijos de adelante, el arreglo, los fijos de atrás]
+        let ancho = |v: &Value| match v {
+            Value::Long(_) | Value::Double(_) => 2,
+            _ => 1,
+        };
+        let mut locals = vec![Value::Reference(receiver)];
+        let mut widths = vec![1];
+        for a in &args[..k] {
+            locals.push(*a);
+            widths.push(ancho(a));
+        }
+        locals.push(Value::Reference(indices));
+        widths.push(1);
+        for a in &args[k + n_indices..] {
+            locals.push(*a);
+            widths.push(ancho(a));
+        }
+        let resultado = self.call_java(callee, locals, &widths);
+        if let Some(step) = self.take_pending_throw() {
+            return step;
+        }
+        if let Some(v) = resultado {
+            self.top().push(v);
+        }
+        self.advance_past_call();
+        Step::Continue
+    }
+
+    /// El helper de un {@link MethodHandle} de layout, o `None` si el receptor es un handle
+    /// **directo** (los que el intrínseco de `MethodHandle` sabe correr).
+    ///
+    /// La forma se deduce del primer argumento y no del descriptor del sitio, que en el camino
+    /// caliente ya no está: un `long` primero es `byteOffsetHandle`/`scaleHandle`, una referencia es
+    /// `sliceHandle`. Con eso alcanza porque los tres tienen retornos distintos y ninguno se solapa.
+    fn helper_de_handle_de_layout(
+        &mut self,
+        receiver: usize,
+        args: &[Value],
+    ) -> Option<SignatureId> {
+        let (name, desc) = match args.first() {
+            Some(Value::Long(_)) => ("aplicarLong", "(J[J)J"),
+            Some(Value::Reference(_)) => (
+                "aplicarSegmento",
+                "(Ljava/lang/Object;J[J)Ljava/lang/foreign/MemorySegment;",
+            ),
+            _ => return None,
+        };
+        let sig = self.shared.metaspace.intern_signature(name, desc);
+        let mirror = self.shared.heap.read_u32(receiver) as usize;
+        self.shared
+            .metaspace
+            .vtable_method_at_mirror_by_signature(mirror, sig)
+            .map(|_| sig)
     }
 
     /// The `(static class, name, descriptor)` an `invokevirtual`'s `Methodref` names — the only
@@ -335,6 +497,18 @@ impl Exec<'_> {
                 "invoke" | "invokeExact" => return Ok(SiteKind::MethodHandleInvoke),
                 "invokeWithArguments" => return Ok(SiteKind::MethodHandleInvokeWithArguments),
                 _ => {}
+            }
+        }
+        // Un accesor de `VarHandle`: polimórfico de firma, igual que `MethodHandle.invoke`, y por
+        // el mismo motivo se intercepta **antes** de resolver — resolver buscaría el `(Object[])Object`
+        // declarado, que no es lo que el sitio dice.
+        //
+        // Lo que se cachea es la firma del **helper tipado** al que el sitio mapea; el despacho lo
+        // hace `varhandle_access` sobre la tabla del receptor, igual que `SiteKind::Signature`.
+        if static_class == "java/lang/invoke/VarHandle" {
+            if let Some((helper, helper_desc)) = varhandle_helper(name, descriptor) {
+                let sig = self.shared.metaspace.intern_signature(&helper, &helper_desc);
+                return Ok(SiteKind::VarHandleAccess(sig));
             }
         }
         if self.shared.metaspace.method_is_private(static_class, name, descriptor) {
@@ -459,6 +633,23 @@ impl Exec<'_> {
                 &mut self.shared.console,
                 &mut self.shared.apt,
             );
+            let result = match result {
+                natives::NativeOutcome::Ran(v) => v,
+                natives::NativeOutcome::RanEInicializa(clase) => {
+                    self.ensure_initialized(&clase);
+                    if let Some(step) = self.take_pending_throw() {
+                        return step;
+                    }
+                    Some(Value::Reference(natives::mirror_de_clase(
+                        &mut self.shared.metaspace,
+                        &mut self.shared.heap,
+                        &clase,
+                    )))
+                }
+                natives::NativeOutcome::Unimplemented => {
+                    return self.throw_exception("java/lang/UnsatisfiedLinkError")
+                }
+            };
             if let Some(value) = result {
                 self.top().push(value);
             }
@@ -567,4 +758,114 @@ impl Exec<'_> {
         self.shared.heap.store_reference(object, object + desc_off, desc_ref);
         object
     }
+}
+
+/// El helper tipado al que mapea un accesor de `VarHandle`, o `None` si el modo no se atiende.
+///
+/// El **carrier** sale del descriptor del sitio: de su retorno si es una lectura, de su último
+/// parámetro si es una escritura. De ahí el nombre (`leerInt`, `escribirLong`) y de ahí el descriptor
+/// del helper, que es fijo salvo por ese tipo.
+///
+/// Los modos de **lectura-modificación-escritura** (`compareAndSet`, `getAndAdd`, …) devuelven `None`
+/// a propósito: necesitan atomicidad real, y fingirla sería peor que no atenderlos. Caen en el
+/// `native` sin puente, o sea `UnsatisfiedLinkError`.
+fn varhandle_helper(name: &str, descriptor: &str) -> Option<(String, String)> {
+    const LEE: [&str; 4] = ["get", "getVolatile", "getAcquire", "getOpaque"];
+    const ESCRIBE: [&str; 4] = ["set", "setVolatile", "setRelease", "setOpaque"];
+    let (params, ret) = descriptor.strip_prefix('(')?.split_once(')')?;
+    if LEE.contains(&name) {
+        // Retorno `V`: la lectura es una **sentencia**, y su valor se descarta (JLS §15.12.3). No es
+        // un no-op — los chequeos de límites y de alineación son efectos de acceder — así que va a un
+        // helper propio que lee y tira el resultado.
+        if ret == "V" {
+            return Some((
+                "leerYDescartar".to_string(),
+                "(Ljava/lang/Object;J[J)V".to_string(),
+            ));
+        }
+        let carrier = sufijo_carrier(ret)?;
+        return Some((
+            format!("leer{carrier}"),
+            format!("(Ljava/lang/Object;J[J){ret}"),
+        ));
+    }
+    if ESCRIBE.contains(&name) {
+        let ultimo = ultimo_tipo(params)?;
+        let carrier = sufijo_carrier(&ultimo)?;
+        return Some((
+            format!("escribir{carrier}"),
+            format!("(Ljava/lang/Object;J[J{ultimo})V"),
+        ));
+    }
+    None
+}
+
+/// El sufijo del helper para un tipo del descriptor. Toda referencia es `Ref`: el helper la recibe
+/// como `Object` y el molde lo hace el lado Java.
+fn sufijo_carrier(t: &str) -> Option<&'static str> {
+    Some(match t {
+        "Z" => "Boolean",
+        "B" => "Byte",
+        "C" => "Char",
+        "S" => "Short",
+        "I" => "Int",
+        "J" => "Long",
+        "F" => "Float",
+        "D" => "Double",
+        _ if t.starts_with('L') || t.starts_with('[') => "Ref",
+        _ => return None, // `V`: una lectura no puede devolver void
+    })
+}
+
+/// El último tipo de una lista de parámetros de descriptor.
+fn ultimo_tipo(params: &str) -> Option<String> {
+    let b = params.as_bytes();
+    let mut i = 0;
+    let mut ultimo = None;
+    while i < b.len() {
+        let comienzo = i;
+        while i < b.len() && b[i] == b'[' {
+            i += 1;
+        }
+        if i >= b.len() {
+            return None;
+        }
+        if b[i] == b'L' {
+            let fin = params[i..].find(';')? + i;
+            i = fin + 1;
+        } else {
+            i += 1;
+        }
+        ultimo = Some(params[comienzo..i].to_string());
+    }
+    ultimo
+}
+
+/// Los tipos de parámetro de un descriptor, en orden.
+fn tipos_de_parametros(descriptor: &str) -> Vec<String> {
+    let Some(params) = descriptor.strip_prefix('(').and_then(|d| d.split(')').next()) else {
+        return Vec::new();
+    };
+    let b = params.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let comienzo = i;
+        while i < b.len() && b[i] == b'[' {
+            i += 1;
+        }
+        if i >= b.len() {
+            break;
+        }
+        if b[i] == b'L' {
+            match params[i..].find(';') {
+                Some(fin) => i += fin + 1,
+                None => break,
+            }
+        } else {
+            i += 1;
+        }
+        out.push(params[comienzo..i].to_string());
+    }
+    out
 }

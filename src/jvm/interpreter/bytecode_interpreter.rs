@@ -1981,6 +1981,23 @@ impl Exec<'_> {
     /// whose contents are a pure function of `(method, pc)`. That is a memoisation, not a state
     /// change: the same word the next interpreted execution of that site would have written.)
     fn compile_method(&mut self, method: MethodId) {
+        // **`JVM_JIT_DENY=<subcadena>`: dejar un método interpretado a la fuerza.** El compañero de
+        // `JVM_JIT_LOG`: el log dice qué se compiló, esto dice qué pasa si uno de ésos no se
+        // compila. Es la única forma de aislar un método sospechoso sin tocar el programa Java —
+        // que en un bug sensible al umbral cambia el conjunto entero y no prueba nada. Volver acá
+        // sin instalar es exactamente «interpretado para siempre»: `on_entry` ya escribió la
+        // entrada pesimista.
+        if let Some(patron) = std::env::var_os("JVM_JIT_DENY") {
+            let patron = patron.to_string_lossy().to_string();
+            let metaspace = &self.shared.metaspace;
+            let nombre = format!("{}.{}", metaspace.class_of(method), metaspace.name(method));
+            if !patron.is_empty() && nombre.contains(patron.as_str()) {
+                if std::env::var_os("JVM_JIT_LOG").is_some() {
+                    eprintln!("[jit] denegado {nombre}");
+                }
+                return;
+            }
+        }
         let max_locals = self.shared.metaspace.max_locals(method);
         let poll = self.running.jit.poll_address();
         // F3 step 10: how many operand-stack positions this compilation keeps in registers. Read
@@ -2089,6 +2106,24 @@ impl Exec<'_> {
                 regs,
             )
         };
+        // **`JVM_JIT_LOG=1`: qué se compiló y qué se rechazó, en orden.** No es telemetría: la
+        // decisión de compilar depende del umbral, así que dos corridas con `JVM_JIT_THRESHOLD`
+        // distinto compilan **conjuntos distintos de métodos**, y cuando una da bien y la otra mal
+        // la diferencia entre esos dos conjuntos es el sospechoso. Sin esto hay que adivinarlo.
+        if std::env::var_os("JVM_JIT_LOG").is_some() {
+            let veredicto = match &result {
+                Ok(_) => "compila".to_string(),
+                Err(e) => format!("rechaza {e:?}"),
+            };
+            let metaspace = &self.shared.metaspace;
+            eprintln!(
+                "[jit] {} {}.{}{}",
+                veredicto,
+                metaspace.class_of(method),
+                metaspace.name(method),
+                metaspace.descriptor(method),
+            );
+        }
         self.running.jit.install(method, result, max_locals);
     }
 
@@ -2586,6 +2621,42 @@ impl Exec<'_> {
         Step::Continue
     }
 
+    /// `LockSupport.parkNanos(nanos)`: block until unparked **or** the deadline lapses.
+    ///
+    /// Same permit rule as [`Self::thread_park`] — a permit that arrived first is consumed and the
+    /// call returns at once — plus a deadline on the clock. That the two share the permit is the
+    /// whole point: emulating the timeout in Java would need a second permit system, and an
+    /// `unpark` (which the VM keeps) would only touch one of the two.
+    ///
+    /// **The deadline is on the opcode clock**, like every other timed block in this VM
+    /// (`Thread.sleep`, `Object.wait(ms)`, `join(ms)`): there is no wall clock here. Nanoseconds
+    /// come in and are read as the millisecond-equivalent tick count, with a floor of one tick for
+    /// any positive request — a sub-millisecond park that returned at once would be legal (the
+    /// contract allows early returns) and useless.
+    ///
+    /// A non-positive `nanos` returns immediately without consuming the permit, which is what the
+    /// JDK does: `parkNanos(0)` is documented as a no-op, not as a permit-eating park.
+    fn thread_park_nanos(&mut self, nanos: i64) -> Step {
+        if nanos <= 0 {
+            self.advance_past_call();
+            return Step::Continue;
+        }
+        let current = self.running.current;
+        if self.shared.threads[current].park_permit {
+            self.shared.threads[current].park_permit = false;
+            self.advance_past_call();
+            return Step::Continue;
+        }
+        let ticks = (nanos / 1_000_000).max(1) as usize;
+        self.shared.threads[current].block_call_pc = self.frame().pc();
+        self.shared.threads[current].parked = true;
+        // `TimedWaiting` and not `Waiting`: it has a deadline, and `Thread.getState` has to say so.
+        self.block(current, ThreadStatus::TimedWaiting);
+        self.shared.threads[current].sleep_until = Some(self.shared.steps + ticks);
+        self.advance_past_call();
+        Step::Continue
+    }
+
     /// `LockSupport.unpark(thread)`: hand `thread_obj` a permit. If it's parked in `park()`, wake
     /// it; otherwise store the permit so its next `park()` returns immediately. `unpark(null)` and
     /// unparking a thread with no slot (not started / terminated) are no-ops.
@@ -2611,9 +2682,27 @@ impl Exec<'_> {
     /// self-`notify`. (A plain `sleep` has no monitor and just becomes runnable.)
     fn expire_timed_block(&mut self, idx: usize) {
         self.shared.threads[idx].sleep_until = None;
+        // Un `parkNanos` que llega a su plazo deja de estar estacionado. Sin limpiar la bandera, un
+        // `unpark` posterior creeria que hay a quien despertar --y llamaria a `make_runnable` sobre
+        // un hilo que ya corre-- en vez de guardarle el permiso.
+        self.shared.threads[idx].parked = false;
+        // A terminated thread has no frames, so scheduling it would panic on the first
+        // `frame()`. It can hold a stale deadline whenever its timed block ended some other
+        // way, and clearing the deadline is the whole job here.
+        if self.shared.threads[idx].status == ThreadStatus::Terminated {
+            return;
+        }
         // A timed `join(long)` that reaches its deadline stops waiting on its target.
         self.shared.threads[idx].joining_on = None;
-        if self.shared.threads[idx].status == ThreadStatus::Waiting {
+        // Both wait states, and `TimedWaiting` is the one that matters: a `wait(ms)` reaching
+        // its deadline parks as `TimedWaiting`, so testing only for `Waiting` never pulled the
+        // thread out of the wait-set it was about to leave. It then resumed while still listed
+        // there, and its next `wait` pushed a duplicate — a wait-set that grows every timeout,
+        // whose stale entries take the notifications meant for whoever is really waiting.
+        if matches!(
+            self.shared.threads[idx].status,
+            ThreadStatus::Waiting | ThreadStatus::TimedWaiting
+        ) {
             if let Some((obj, _)) = self.shared.threads[idx].wait_reacquire {
                 if let Some(mon) = self.shared.monitors.get_mut(&obj) {
                     mon.waiting.retain(|&w| w != idx);
@@ -2678,6 +2767,11 @@ impl Exec<'_> {
             };
             if acquired {
                 self.shared.threads[current].wait_reacquire = None;
+                // The wait is over — by notify *or* by deadline — so its deadline is spent.
+                // Leaving it armed lets `wake_sleepers` fire it long after this thread has
+                // moved on (and possibly terminated), which would resurrect a thread with an
+                // empty frame stack.
+                self.shared.threads[current].sleep_until = None;
             } else {
                 self.block(current, ThreadStatus::Blocked); // still contending for the monitor
                 return Step::Continue; // can't re-acquire yet — yield and retry
@@ -3850,7 +3944,12 @@ impl Exec<'_> {
 
         if self.shared.metaspace.is_native(callee) {
             let class = self.shared.metaspace.class_of(callee).to_string();
-            return crate::jvm::interpreter::natives::dispatch(
+            // Este camino es el de las llamadas **iniciadas por la VM** (el driver de APT, los
+            // tests), no el del opcode: no hay pila de Java donde poner un `UnsatisfiedLinkError`
+            // ni un `catch` que lo pudiera atrapar. `None` —que en esta función ya significa "no se
+            // pudo despachar", igual que los `?` de arriba— es la respuesta que el llamador sabe
+            // leer.
+            return match crate::jvm::interpreter::natives::dispatch(
                 &class,
                 name,
                 descriptor,
@@ -3859,7 +3958,21 @@ impl Exec<'_> {
                 &mut self.shared.heap,
                 &mut self.shared.console,
                 &mut self.shared.apt,
-            );
+            ) {
+                crate::jvm::interpreter::natives::NativeOutcome::Ran(v) => v,
+                crate::jvm::interpreter::natives::NativeOutcome::RanEInicializa(clase) => {
+                    // Este camino es el de las llamadas iniciadas por la VM, donde ya se está
+                    // adentro de un `call_java`: inicializar acá anidaría un marco sobre otro. Se
+                    // entrega el mirror igual, y la clase queda inicializada en su primer uso
+                    // activo, que es lo que la JVMS pide de todos modos.
+                    Some(Value::Reference(crate::jvm::interpreter::natives::mirror_de_clase(
+                        &mut self.shared.metaspace,
+                        &mut self.shared.heap,
+                        &clase,
+                    )))
+                }
+                crate::jvm::interpreter::natives::NativeOutcome::Unimplemented => None,
+            };
         }
         let mut widths = vec![1]; // the receiver, then each parameter at its own width
         widths.extend(MetaspaceService::param_slot_widths(descriptor));
