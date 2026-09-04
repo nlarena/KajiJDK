@@ -287,6 +287,17 @@ public final class Instructions {
         return new ArgumentConstantImpl(op, op.sizeIfFixed(), Integer.valueOf(value));
     }
 
+    /**
+     * La entrada de pool de un `ldc`, preguntada por su interfaz anidada.
+     *
+     * <p>Esta acá y no en el escritor porque nuestro javac no resuelve un metodo declarado en una
+     * interfaz **anidada** que redefine al de la que la encierra, y desde este paquete se puede
+     * preguntar a la implementacion, que si lo declara directo.
+     */
+    public static LoadableConstantEntry constantEntryOf(Instruction ins) {
+        return ((LoadConstantInstruction) ins).constantEntry();
+    }
+
     public static LoadConstantInstruction loadConstant(Opcode op, LoadableConstantEntry entry) {
         if (op != Opcode.LDC && op != Opcode.LDC_W && op != Opcode.LDC2_W) {
             throw new IllegalArgumentException(op + " no es un ldc");

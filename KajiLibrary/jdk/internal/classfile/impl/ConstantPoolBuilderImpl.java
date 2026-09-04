@@ -407,6 +407,80 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
 
     // --- Adopción: una entrada de otro pool se reconstruye acá ---
 
+    /**
+     * Esa entrada, traida a **este** pool si venia de otro.
+     *
+     * <p>Es lo que hace posible transformar una clase: los elementos del modelo original llevan
+     * entradas del pool original, y su indice no significa nada en el pool nuevo. Sin adoptarlas, el
+     * `.class` que sale tiene indices que apuntan a cualquier cosa -- y lo peor es que **el archivo
+     * queda bien formado**, asi que no falla al escribir sino mucho despues, al leerlo.
+     *
+     * <p>Si la entrada ya es de este pool se devuelve tal cual: adoptar es idempotente y barato.
+     */
+    public PoolEntry adoptEntry(PoolEntry e) {
+        if (e == null || e.constantPool() == this) {
+            return e;
+        }
+        int tag = e.tag();
+        if (tag == TAG_UTF8) {
+            return utf8Entry(((Utf8Entry) e).stringValue());
+        }
+        if (tag == TAG_INTEGER) {
+            return intEntry(((IntegerEntry) e).intValue());
+        }
+        if (tag == TAG_FLOAT) {
+            return floatEntry(((FloatEntry) e).floatValue());
+        }
+        if (tag == TAG_LONG) {
+            return longEntry(((LongEntry) e).longValue());
+        }
+        if (tag == TAG_DOUBLE) {
+            return doubleEntry(((DoubleEntry) e).doubleValue());
+        }
+        if (tag == TAG_CLASS) {
+            return adoptar((ClassEntry) e);
+        }
+        if (tag == TAG_STRING) {
+            return stringEntry(utf8Entry(((StringEntry) e).stringValue()));
+        }
+        if (tag == TAG_NAME_AND_TYPE) {
+            return adoptar((NameAndTypeEntry) e);
+        }
+        if (tag == TAG_FIELDREF || tag == TAG_METHODREF || tag == TAG_INTERFACE_METHODREF) {
+            return adoptar((MemberRefEntry) e);
+        }
+        if (tag == TAG_METHOD_HANDLE) {
+            MethodHandleEntry mh = (MethodHandleEntry) e;
+            return methodHandleEntry(mh.kind(), adoptar(mh.reference()));
+        }
+        if (tag == TAG_METHOD_TYPE) {
+            return methodTypeEntry(utf8Entry(((MethodTypeEntry) e).descriptor().stringValue()));
+        }
+        if (tag == TAG_MODULE) {
+            return moduleEntry(utf8Entry(((ModuleEntry) e).name().stringValue()));
+        }
+        if (tag == TAG_PACKAGE) {
+            return packageEntry(utf8Entry(((PackageEntry) e).name().stringValue()));
+        }
+        if (tag == TAG_DYNAMIC || tag == TAG_INVOKE_DYNAMIC) {
+            DynamicConstantPoolEntry d = (DynamicConstantPoolEntry) e;
+            BootstrapMethodEntry b = d.bootstrap();
+            MethodHandleEntry mh = (MethodHandleEntry) adoptEntry(b.bootstrapMethod());
+            List<LoadableConstantEntry> args = new ArrayList<LoadableConstantEntry>();
+            List<LoadableConstantEntry> src = b.arguments();
+            for (int i = 0; i < src.size(); i++) {
+                args.add((LoadableConstantEntry) adoptEntry(src.get(i)));
+            }
+            BootstrapMethodEntry nb = bsmEntry(mh, args);
+            NameAndTypeEntry nt = adoptar(d.nameAndType());
+            if (tag == TAG_DYNAMIC) {
+                return constantDynamicEntry(nb, nt);
+            }
+            return invokeDynamicEntry(nb, nt);
+        }
+        throw new IllegalArgumentException("no se sabe adoptar una entrada de etiqueta " + tag);
+    }
+
     private Utf8Entry adoptar(Utf8Entry e) {
         return e.constantPool() == this ? e : utf8Entry(e.stringValue());
     }
