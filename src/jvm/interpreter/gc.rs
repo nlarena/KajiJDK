@@ -1328,6 +1328,181 @@ mod tests {
         );
     }
 
+    // =========================================================================================
+    // "Js" — the string pool, asked the way a *program* can ask it.
+    //
+    // The tests above this line reach into the pool's own API, which is the right way to test
+    // pinning and rooting and the wrong way to test **conformance**: they would all still pass on
+    // a VM where `ldc` never called `intern` at all. These go through the whole VM instead, with
+    // `KajiLibrary` on the boot path, and every expected number is what `java` 25 prints for the
+    // same source (`java/JsPool.java`, which prints 1010).
+    // =========================================================================================
+
+    /// **The `+8` word of a `String` is its LENGTH, not a reference.**
+    ///
+    /// This VM lays a `String`'s text *inline*, so the word after the header is the UTF-16 count.
+    /// A `java.lang.String` that declared a `value` field would make [`reference_slots`] report a
+    /// slot there, and the collector would then follow a small integer as if it were a heap
+    /// offset — on a **permanent, pinned** object, so it would do it on every collection for the
+    /// life of the VM rather than once.
+    ///
+    /// Asserted rather than assumed because it is a fact about the *class library*, not about this
+    /// file: it holds only as long as `KajiLibrary`'s `String` declares no instance fields, and
+    /// nothing else in the tree would notice the day one is added.
+    #[test]
+    fn js_a_pooled_literal_has_no_reference_slots() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        let literal = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kajiJs");
+        assert_eq!(
+            reference_slots(&metaspace, &heap, literal),
+            Vec::<usize>::new(),
+            "a String's text is inline and the word at +8 is its length — a slot reported here \
+             would be the collector chasing the number {} as a heap offset, forever",
+            crate::jvm::interpreter::strings::length(&heap, literal)
+        );
+    }
+
+    /// A literal survives a **compaction** with both halves of its identity intact: the same
+    /// address, and the same bytes still at it.
+    ///
+    /// The neighbouring test `a_pooled_literal_does_not_move_when_the_heap_compacts` asks only the
+    /// first half. That is enough to catch un-pinning, but not enough to catch a compactor that
+    /// left the offset alone and packed *another* object over the text — and "the pool still names
+    /// the right address" is worth nothing if the address no longer holds the string.
+    #[test]
+    fn js_a_literal_keeps_its_text_and_its_identity_across_a_compaction() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        // **The address order is the test**, and both halves of it were got wrong once each while
+        // writing this.
+        //
+        //   1. A first `intern` goes first so that `java/lang/String` and its mirror are dragged
+        //      into Old *in front of* the hole. A mirror is pinned too; leave it behind the hole
+        //      and it plugs the hole, nothing moves at all, and the run passes with the pool
+        //      unpinned as happily as with it pinned.
+        //   2. The **contrast** object has to sit between the hole and the literal, not behind the
+        //      literal. The compactor packs in address order and a pinned block stops everything
+        //      behind it from sliding past, so an object placed behind the literal is already at
+        //      the cursor and is reported as "did not move" whatever the pool does.
+        let earlier = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "antesJs");
+        let hole = heap.malloc_old(128);
+        let plain = heap.malloc_old(16); // the contrast: something that *must* move
+        heap.write_u32(plain, 0);
+        let literal = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kajiJs");
+        heap.free(hole);
+        assert!(literal > hole, "the literal has to sit behind the hole to have anywhere to go");
+
+        let mut extra_roots = [plain];
+        let report = compact(&metaspace, &mut heap, &mut [], &mut extra_roots);
+
+        assert!(
+            report.relocations.contains_key(&plain),
+            "nothing moved at all, so this run would pass with the pool unpinned"
+        );
+        assert!(!report.relocations.contains_key(&earlier), "the earlier literal moved as well");
+        assert!(
+            !report.relocations.contains_key(&literal),
+            "the literal at {literal} moved to {:?}",
+            report.relocations.get(&literal)
+        );
+        assert_eq!(
+            crate::jvm::interpreter::strings::read(&heap, literal),
+            "kajiJs",
+            "the address survived but the text at it did not"
+        );
+        assert_eq!(
+            metaspace.interned_string(&"kajiJs".encode_utf16().collect::<Vec<_>>()),
+            Some(literal),
+            "and a later `ldc` of the same literal still resolves to it"
+        );
+    }
+
+    /// A literal survives a **sweep** that nothing but the pool holds — text included.
+    ///
+    /// The sibling test asserts the offset is not in `report.garbage`; this one also reads the
+    /// string back afterwards, because "not reported as garbage" and "still there" are two claims
+    /// and a collector can get the second wrong on its own.
+    #[test]
+    fn js_a_literal_survives_a_sweep_with_its_text_intact() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        let literal = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "kajiJs");
+        // The contrast: an Old object nothing names, so a sweep that reclaimed nothing would fail.
+        let doomed = heap.malloc_old(16);
+        heap.write_u32(doomed, 0);
+
+        let report = sweep(&metaspace, &mut heap, &[], &[]);
+
+        assert!(report.garbage.contains(&doomed), "the sweep reclaimed nothing, so it proved nothing");
+        assert!(!report.garbage.contains(&literal), "the pooled literal at {literal} was collected");
+        assert_eq!(
+            crate::jvm::interpreter::strings::read(&heap, literal),
+            "kajiJs",
+            "kept, but the bytes are gone"
+        );
+    }
+
+    /// **Two `ldc`s of one literal, in two different methods, are one object** — JLS 3.10.5 as a
+    /// running program sees it. `java JsPool` prints `1010`, whose leading `1` is this.
+    #[test]
+    fn js_two_literals_in_different_methods_are_one_object() {
+        assert_eq!(
+            run_with_kajilibrary("java/JsPool.class", "sameLiteral"),
+            Some(Value::Int(1)),
+            "`\"kajiJsPooled\" == \"kajiJsPooled\"` across two methods — the literal is not pooled"
+        );
+    }
+
+    /// The other half: a String the program **computes** is a different object, so
+    /// `new String(lit) == lit` is `false`. A pool that swallowed computed strings would answer
+    /// `1` here, which is as wrong as not pooling at all.
+    #[test]
+    fn js_a_computed_string_is_not_the_literal() {
+        assert_eq!(
+            run_with_kajilibrary("java/JsPool.class", "computedIsFresh"),
+            Some(Value::Int(0)),
+            "`new String(lit) == lit` answered true — everything is being interned"
+        );
+    }
+
+    /// `String.intern()`, which was declared `native` and had no implementation at all until the
+    /// pool existed to canonicalise into (it threw `UnsatisfiedLinkError`). The case that matters:
+    /// interning a computed copy hands the **literal** back.
+    #[test]
+    fn js_intern_of_a_copy_hands_back_the_literal() {
+        assert_eq!(
+            run_with_kajilibrary("java/JsPool.class", "internRoundTrip"),
+            Some(Value::Int(1)),
+            "`new String(lit).intern() == lit` — the pool and `String.intern()` disagree"
+        );
+    }
+
+    /// The classification, on the half of it that lives in `natives.rs`: a native that **builds** a
+    /// String hands back a fresh one every call. `System.mapLibraryName` concatenates a suffix, so
+    /// it is computed and not a symbol, and `java` 25 answers `false` to the identity question.
+    ///
+    /// This is the test for the change that made `intern`'s callers match its documentation: before
+    /// it, every native that produced text put it in the **literal** pool — permanently, since the
+    /// pool is a GC root and pinned — so a directory listing or a stack trace could never be freed.
+    #[test]
+    fn js_a_native_that_builds_a_string_does_not_pool_it() {
+        assert_eq!(
+            run_with_kajilibrary("java/JsPool.class", "nativeComputedIsFresh"),
+            Some(Value::Int(0)),
+            "two calls to `System.mapLibraryName` gave one object — a computed string is in the pool"
+        );
+    }
+
     #[test]
     fn a_class_mirror_is_pinned_across_a_compaction() {
         use std::path::PathBuf;

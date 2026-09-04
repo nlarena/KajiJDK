@@ -19,8 +19,8 @@
 //! | give-up-and-resume | `frem`, `drem` — compiled to an unconditional deopt, since SSE has no scalar remainder; `athrow`, `monitorenter`, `monitorexit` — the same shape, for the reasons in "Group 5" below |
 //! | control flow | `if_icmp<cond>`, `if<cond>`, `if_acmpeq`, `if_acmpne`, `ifnull`, `ifnonnull`, `goto`, `tableswitch`, `lookupswitch` |
 //! | stack | `nop`, `pop`, `pop2`, `dup`, `dup_x1`, `dup_x2`, `dup2`, `dup2_x1`, `dup2_x2`, `swap` — **category-1 operands only** |
-//! | heap (read) | `getstatic` **of any primitive or reference, in an already-initialised class**; `getfield` **of any primitive or reference**, `volatile` included; `arraylength`; `iaload` |
-//! | heap (write) | `putstatic` and `putfield` under the same conditions as their reading twins **except that the field may not hold a reference** ([`Ineligible::ReferenceWrite`]); `iastore` |
+//! | heap (read) | `getstatic` **of any primitive or reference, in an already-initialised class**; `getfield` **of any primitive or reference**, `volatile` included; `arraylength`; `iaload`; `aaload` |
+//! | heap (write) | `putstatic` and `putfield` under the same conditions as their reading twins, **references included** — a reference `putfield` carries the deferred write barrier ([`CompiledCode::barrier_base`]), a reference `putstatic` owes none; `iastore`; `aastore` **of a site whose array class the interpreter has profiled**, guarded on exact classes ([`ArrayStore`]) |
 //! | type checks | `checkcast` and `instanceof` — **exact class or deopt**, and `null` never deopts |
 //! | allocation | `new` **of an already-initialised class**; `newarray` of any primitive and `anewarray` **of a class whose array mirror exists** — all three on Eden's fast path only, and arrays only up to [`MAX_INLINE_ARRAY_BYTES`] |
 //! | exits | `ireturn`, `areturn`, `lreturn`, `freturn`, `dreturn`, `return` — i.e. all of them |
@@ -546,24 +546,56 @@
 //! loading it is not a deopt, `ifnull` tests it with the `cmp` it always did, and only
 //! *dereferencing* it deopts, exactly as before.
 //!
-//! ## What is **not** in, and why the line is drawn at writing rather than at reading
+//! ## Writing a reference: the barrier, deferred (F3-H3)
 //!
-//! **`putfield` of a reference, `putstatic` of one, and `aastore` are out** —
-//! [`Ineligible::ReferenceWrite`] and the still-unknown opcode `0x53`. Not for want of an
-//! instruction: a four-byte store would do it. What a reference store owes is the collector's
-//! **write barrier** — the interpreter routes one through `HeapService::store_reference`, which
-//! records an old→young pointer in the remembered set — and there is no instruction stream that can
-//! run one. An unrecorded old→young pointer is not a crash; it is a live object the next minor
-//! collection frees, discovered much later and somewhere else. That is a milestone of its own.
+//! **`putfield` of a reference, `putstatic` of one, and `aastore` used to be out** — the first two
+//! as [`Ineligible::ReferenceWrite`], the third as an unknown opcode. Not for want of an
+//! instruction: a four-byte store would always have done it. What a reference store owes is the
+//! collector's **write barrier** — the interpreter routes one through
+//! `HeapService::store_reference`, which records an old→young pointer in the remembered set — and
+//! there is no instruction stream that can run one. An unrecorded old→young pointer is not a crash;
+//! it is a live object the next minor collection frees, discovered much later and somewhere else.
 //!
-//! It also buys a *diagnostic* property worth stating, because it is load-bearing for an
-//! investigation that is still open: this VM has an intermittent `DANGLING (Old, …) → (Eden, …)`
-//! report, and the argument that isolates it as **not the JIT's** is precisely that compiled code
-//! cannot write a reference into the heap, and therefore cannot create such a pointer. Widening
-//! this rule would destroy the argument before the bug is understood.
+//! What let all three in is not a weakening of that argument but the **same deferral the allocation
+//! log already used**: the compiled store writes the pointer itself and records the pair
+//! `(holder, value)` into a fixed array in the caller's buffer ([`CompiledCode::barrier_base`]), and
+//! the trampoline replays every pair through `HeapService::replay_jit_reference_store` the instant
+//! native code returns, on every outcome. Sound for the one reason everything in this tier is: no
+//! collection can run while native code is on this thread's stack, so the window between the store
+//! and the replay contains no GC *by construction*.
 //!
-//! Writing a **primitive** `volatile` field is in: an `int`, a `long`, a `float` and a `double` are
-//! not pointers, so no barrier is owed and nothing about the collector's world-view is at stake.
+//! Three things make the shape work, and each is a decision rather than a detail:
+//!
+//!  - **The record is a `(holder, value)` pair, not a slot.** The remembered set is keyed by the
+//!    *object*: `record_reference_store` inserts the holder, and `gc::minor` derives which of its
+//!    words to look at from the holder's class. The value travels only because the predicate needs
+//!    it.
+//!  - **Compiled code filters, and is never the authority.** It evaluates the barrier's own
+//!    predicate inline — `holder >= old_start && value != 0 && value < old_start`, three compares —
+//!    so a store into a young holder, which is nearly every store a hot method makes, records
+//!    nothing and the log does not fill. But the trampoline re-runs the *real* barrier over every
+//!    pair it is handed, so a filter that keeps too much costs one call and changes nothing. The
+//!    only way to be wrong is to keep too little.
+//!  - **`putstatic` of a reference records nothing at all**, and that is agreement rather than a
+//!    shortcut: a static lives in a `Class<…>` mirror, and `gc::minor` scans every mirror's statics
+//!    as an Old→young root *unconditionally*, before it consults the remembered set. The
+//!    interpreter's own `putstatic` skips the barrier for exactly that reason.
+//!
+//! `aastore` owes one thing more — JVMS §6.5's **dynamic assignability check** — and pays for it
+//! the way `checkcast` does: two equality comparisons against mirrors resolved at compile time (the
+//! array class the interpreter profiled at that site, and *that array class's* element class), with
+//! a deopt for every other answer. A legal covariant store and an illegal one therefore leave native
+//! code alike, and the interpreter re-executes the instruction and decides which of them it was. See
+//! [`ArrayStore`].
+//!
+//! **What this retirement takes away**, stated because it was load-bearing: while compiled code
+//! could not write a reference, the intermittent `DANGLING (Old, …) → (Eden, …)` report was provably
+//! not this tier's — it could not create such a pointer at all. It can now, and the only evidence
+//! left about that report is its *frequency* with the JIT on against with it off.
+//!
+//! Writing a **primitive** `volatile` field is in for a different reason entirely: an `int`, a
+//! `long`, a `float` and a `double` are not pointers, so no barrier is owed and nothing about the
+//! collector's world-view is at stake.
 //!
 //! ## `volatile`: the argument is the substrate, **not** x86-TSO
 //!
@@ -1267,6 +1299,20 @@ pub struct Heap {
     /// [`ArrayType::element`], because they are a property of the array class being allocated
     /// rather than of the VM.
     pub int_element: u32,
+    /// Bytes per element of a **reference** array — what `aaload`/`aastore` bake in. One number
+    /// for every reference array whatever it holds, because a reference is a heap offset and this
+    /// VM stores one in four bytes; that is exactly why the interpreter's `aaload` passes a
+    /// constant `SLOT_SIZE` rather than looking the element type up.
+    pub reference_element: u32,
+    /// The first offset of the **Old** generation — `HeapService::old_start`, the boundary the
+    /// write barrier's predicate is stated in terms of (`holder >= old_start && value != 0 &&
+    /// value < old_start`).
+    ///
+    /// Fixed for the VM's life: it is Eden's size plus both survivors', all decided when the heap
+    /// is built and never changed by a collection or by Old growing. That is what lets it be an
+    /// immediate — and it is only ever used to *filter* the barrier log, never to decide anything,
+    /// so a stale value could at worst log a pair the replay then discards.
+    pub old_start: u32,
 }
 
 /// What a compiled `new` needs to know about the class it is allocating: how many bytes, and what
@@ -1287,6 +1333,25 @@ pub struct Instance {
     /// interpreter's `allocate` writes it. A byte of difference here is an object the collector
     /// cannot type, which is why it is resolved by the VM rather than derived here.
     pub class_id: u32,
+}
+
+/// What a compiled **`aastore`** needs to know to guard its store: the two `Class<…>` mirror
+/// offsets it compares headers against.
+///
+/// Both are resolved at **compile time** and baked in as immediates, and both may be, for the one
+/// reason every mirror comparison in this module may: a mirror is allocated in Old and pinned out
+/// of `gc::compact`, so its offset is fixed for the VM's life.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ArrayStore {
+    /// The mirror offset of the **array class** the interpreter profiled at this site — compared
+    /// against the first word of the array's header. Anything else deopts, which includes the array
+    /// being of a different class than last time and the array being of no class this tier knows.
+    pub array_class: u32,
+    /// The mirror offset of that array class's **element class** — compared against the first word
+    /// of the *value's* header, when the value is not `null`. Equality is the whole check: a
+    /// subclass is assignable and still deopts, because proving that is a walk this tier does not
+    /// do.
+    pub element_class: u32,
 }
 
 /// **Which array a `newarray`/`anewarray` is asking about**, in the operand's own terms — the
@@ -1531,6 +1596,28 @@ pub struct Environment<'a> {
     /// first active use. A `checkcast` is not, so requiring it here would refuse methods for a
     /// reason the JVMS does not have.
     pub class_mirror: &'a dyn Fn(Unit, u16) -> Option<u32>,
+    /// Resolves the **`aastore` at `(unit, pc)`** to the two `Class<…>` mirror offsets its type
+    /// guard compares against: the array class this site was profiled storing into, and that array
+    /// class's **element** class. `None` refuses the whole method.
+    ///
+    /// It is the one resolver keyed by a pc alone rather than by a constant-pool index, because an
+    /// `aastore` has no operands at all — everything it needs is on the stack, and everything this
+    /// tier can know about it is what the *interpreter observed happening there*.
+    ///
+    /// **Why compiled code needs anything at all for a store it could do in four bytes.** Arrays
+    /// are covariant, so JVMS §6.5 requires a dynamic assignability check on every non-null value,
+    /// and assignability is a walk over class metadata. Native code answers only the exact-class
+    /// case — two compares — and hands the method back for every other one, including the covariant
+    /// stores that are perfectly legal and the illegal ones that must throw
+    /// `ArrayStoreException`. This tier decides neither.
+    ///
+    /// **The element class must be derived from the array class, not from the value.** A value that
+    /// passed through once says nothing about the next one; the element type is a property of the
+    /// array, so a value whose class equals it is assignable by construction. The VM owes that
+    /// derivation (`burst` does not know what a descriptor is) and owes it read-only, like every
+    /// resolver here: a `None` for a site that has never run, for a class with no mirror yet, or
+    /// for a primitive element — which cannot reach an `aastore` in verified code at all.
+    pub array_store: &'a dyn Fn(Unit, usize) -> Option<ArrayStore>,
     /// `ldc` of a `String`: the **pooled** literal's offset, or `None`.
     ///
     /// Read-only, like [`class_mirror`][Environment::class_mirror], and refusing for the same
@@ -1922,23 +2009,45 @@ pub enum Ineligible {
     /// [`UnresolvedStatic`][Ineligible::UnresolvedStatic] this is a property of the VM's state as
     /// well as of the bytecode, and caching it is the same deliberate price.
     UnresolvedField { pc: usize, index: u16 },
-    /// A `putfield`/`putstatic` whose field holds a **reference** (group 2).
+    /// **Retired (F3-H3): nothing constructs this any more.** A `putfield`/`putstatic` whose field
+    /// holds a **reference** used to refuse its whole method here.
     ///
-    /// Reading one is in the subset and costs nothing (see the module docs, "reference fields");
-    /// *writing* one is out, and it is out for a reason that has nothing to do with widths — a
-    /// four-byte store would do. What a reference store owes is the collector's **write barrier**:
-    /// the interpreter writes it through `HeapService::store_reference`, which records an
-    /// old→young pointer in the remembered set, and an instruction stream has no way to run one. An
-    /// unrecorded old→young pointer is not a crash, it is an object the minor collection frees
-    /// while it is still reachable.
+    /// The reason it did had nothing to do with widths — a four-byte store would always have done.
+    /// What a reference store owes is the collector's **write barrier**: the interpreter writes it
+    /// through `HeapService::store_reference`, which records an old→young pointer in the remembered
+    /// set, and an instruction stream has no way to run one. An unrecorded old→young pointer is not
+    /// a crash, it is an object the minor collection frees while it is still reachable.
     ///
-    /// So the ban lives **here**, in the compiler, rather than in the VM's resolvers: the resolvers
-    /// answer what a field *is*, and the one opcode-shaped rule — "compiled code may read a
-    /// reference field and may not write one" — is stated once, where both halves of the pair can
-    /// be seen at the same time. It is also what keeps the diagnostic argument about the
-    /// intermittent `DANGLING (Old, …) → (Eden, …)` report intact: compiled code cannot create such
-    /// a pointer, so a dangling one is provably not this tier's.
+    /// What removed the refusal was not a weakening of that argument but a **place to put the
+    /// record**: compiled code writes the `(holder, value)` pair into the caller's buffer and the
+    /// trampoline replays it through the real barrier the instant native code returns — see
+    /// [`CompiledCode::barrier_base`]. `putstatic` needed even that much less: a static lives in a
+    /// mirror, and mirrors are scanned as roots unconditionally, so it compiles to a bare store.
+    ///
+    /// **The variant is kept rather than deleted, and deliberately.** The census in `burst::
+    /// jit_tests` prints a fixed list of variants *with their zeros*, because a reason that has
+    /// stopped happening is the most informative row in that table — it is what a widening was for
+    /// — and deleting it would make "no longer possible" indistinguishable from "never
+    /// instrumented".
+    ///
+    /// **One argument this retirement takes away**, and it is worth writing down where it was
+    /// made: while compiled code could not write a reference field, the intermittent
+    /// `DANGLING (Old, …) → (Eden, …)` report was provably not this tier's, because this tier could
+    /// not create such a pointer at all. It can now. The only remaining evidence about that report
+    /// is its **frequency**, measured with the JIT on against the frequency measured with it off.
     ReferenceWrite { pc: usize },
+    /// An `aastore` this tier has nothing to guard with: the site has never executed (so there is
+    /// no array class to speculate on), or the array class it was seen storing into has an element
+    /// class the interpreter has never prepared a mirror for.
+    ///
+    /// Like the resolver refusals above it is a property of the **VM's state** as well as of the
+    /// bytecode, and caching it is the same deliberate price: an `aastore` on a cold branch of a
+    /// hot method refuses the whole method, and stays refused even after that branch runs.
+    ///
+    /// A never-executed site is the ordinary reason and is not a failure — the honest answer for a
+    /// store that has never happened is that there is nothing to speculate on, which is exactly
+    /// what a cold dispatched call site answers for inlining.
+    UnprofiledArrayStore { pc: usize },
     /// A `new`, `newarray` or `anewarray` the resolver would not answer for: the class is not
     /// loaded, has no mirror, or — the common case for `new` — has not been initialised yet. Like
     /// the two above it is a property of the VM's state as well as of the bytecode, and caching it
@@ -2025,6 +2134,9 @@ impl std::fmt::Display for Ineligible {
             }
             Ineligible::ReferenceWrite { pc } => {
                 write!(f, "the field written at {pc} holds a reference, which needs the GC write barrier")
+            }
+            Ineligible::UnprofiledArrayStore { pc } => {
+                write!(f, "the aastore at {pc} has never run, so there is no array class to guard against")
             }
             Ineligible::UnresolvedClass { pc, index } => {
                 write!(f, "new #{index} at {pc} is not an instance of a loaded, initialised class")
@@ -2234,10 +2346,38 @@ pub struct CompiledCode {
     /// method contains a `new`, and **0** when it does not, in which case the method carries no log
     /// at all and the caller has nothing to replay.
     pub alloc_records: u32,
+    /// Where the **write-barrier log** starts in the caller's buffer: past the allocation log.
+    /// Only meaningful when [`barrier_records`][CompiledCode::barrier_records] is non-zero.
+    ///
+    /// The log is `[count, holder₀, value₀, holder₁, value₁, …]` — one `i64` holding how many
+    /// reference stores this excursion recorded, then that many `(holder offset, value offset)`
+    /// pairs, in store order. **The caller must zero the count before every call and replay the
+    /// records through `HeapService::replay_jit_reference_store` the instant the call returns**, on
+    /// *every* outcome — a returned method, a deopt and a safepoint exit have all equally already
+    /// written. That is the fourth clause of the marshalling contract, and like the third its
+    /// omission would be silent: an unrecorded old→young pointer is not a crash, it is a live
+    /// object the next minor collection frees.
+    ///
+    /// **Pairs, not slots**, because the remembered set is keyed by the *holder*: the barrier
+    /// inserts the holder and the minor collector derives which of its words to look at from the
+    /// holder's class. The value travels only because the predicate needs it.
+    pub barrier_base: u32,
+    /// How many `(holder, value)` records the barrier log has room for — [`BARRIER_LOG_RECORDS`]
+    /// when the method contains a compiled reference store (`putfield` of a reference field, or
+    /// `aastore`), and **0** when it does not, in which case the method carries no barrier log at
+    /// all and the caller has nothing to replay.
+    ///
+    /// A `putstatic` of a reference does **not** put a method in this class, and that is not an
+    /// oversight: a static lives in its class's `Class<…>` mirror, and `gc::minor` scans every
+    /// mirror's statics as an Old→young root *unconditionally*, before it consults the remembered
+    /// set at all. The interpreter's own `putstatic` skips the barrier for exactly that reason, so
+    /// compiled code that skipped it would be agreeing with the interpreter rather than cutting a
+    /// corner.
+    pub barrier_records: u32,
     /// Total 8-byte slots the caller's buffer must have: every body's locals and operand spill
-    /// area, the result slot, and the allocation log. **The marshalling contract's second half** —
-    /// a shorter buffer would be written past the end by a deopt spill, by the return, or by the
-    /// first inline allocation.
+    /// area, the result slot, the allocation log and the write-barrier log. **The marshalling
+    /// contract's second half** — a shorter buffer would be written past the end by a deopt spill,
+    /// by the return, by the first inline allocation or by the first recorded reference store.
     pub buffer_slots: u32,
     /// **Loop headers**: the bytecode pcs this code may be entered at on-stack, and the same pcs
     /// at which it polls the safepoint word. Ascending, and always the target of some backward
@@ -2309,6 +2449,22 @@ const MAX_STACK_SLOTS: u16 = 64;
 /// needs, and shared by all of them — and an allocating loop crosses the boundary once per 256
 /// objects, which is far less often than it fills Eden.
 pub const ALLOC_LOG_RECORDS: u32 = 256;
+
+/// How many `(holder, value)` pairs one excursion's **write-barrier log** holds — see
+/// [`CompiledCode::barrier_base`].
+///
+/// The twin of [`ALLOC_LOG_RECORDS`], for the same reason and with the same trade: a compiled
+/// reference store cannot insert into the collector's remembered set (that is a `HashSet` behind a
+/// decision about heap regions), so it records the pair and the trampoline replays it. Fixed
+/// because the buffer is allocated once, therefore bounded, therefore a full log is a reason to
+/// leave.
+///
+/// It fills far more slowly than the allocation log does, because compiled code applies the
+/// barrier's own predicate before it records: a store whose holder is young — which is nearly
+/// every store a hot method makes, since the objects a loop touches are the ones it just allocated
+/// — logs nothing at all. So 256 is generous rather than tight, and the cost of the feature to a
+/// method that stores no references is zero slots (see [`CompiledCode::barrier_records`]).
+pub const BARRIER_LOG_RECORDS: u32 = 256;
 
 /// The most cases this tier will turn into a compare chain. A `tableswitch`/`lookupswitch` with
 /// more is [`Ineligible::TooBig`] rather than a kilobyte of `cmp`/`je` — the honest answer while
@@ -2780,6 +2936,16 @@ fn transfer(
             state.pop(pc, Reference)?; // ...over the array
             state.stack.push(Int);
         }
+        // `aaload` is `iaload`'s shape with the *element's* kind: a reference in, a reference out.
+        // The array is a `Reference` here exactly as an `int[]` is -- the type map does not
+        // distinguish array classes, and it does not need to: verified bytecode never puts an
+        // `aaload` on an `int[]`, and if it did the interpreter would read the same four bytes at
+        // the same stride and call them a reference too.
+        0x32 => {
+            state.pop(pc, Int)?; // aaload: index...
+            state.pop(pc, Reference)?; // ...over the array
+            state.stack.push(Reference);
+        }
 
         // --- the heap, written (step 6) -----------------------------------------------------
         // The mirror images of the three reads above, and the pops come off in JVMS's order: the
@@ -2797,6 +2963,13 @@ fn transfer(
         }
         0x4f => {
             state.pop(pc, Int)?; // iastore: the value...
+            state.pop(pc, Int)?; // ...over the index...
+            state.pop(pc, Reference)?; // ...over the array
+        }
+        // `aastore`'s shape is `iastore`'s with the value's kind changed, and the pops come off in
+        // the same JVMS order: value on top, then the index, then the array underneath both.
+        0x53 => {
+            state.pop(pc, Reference)?; // aastore: the value...
             state.pop(pc, Int)?; // ...over the index...
             state.pop(pc, Reference)?; // ...over the array
         }
@@ -3605,18 +3778,24 @@ fn decode(
             simple(3, 0, 1)
         }
 
-        // --- putstatic of an int (step 6) -----------------------------------------------------
+        // --- putstatic (step 6; references since F3-H3) ---------------------------------------
         // The same resolver, the same baked-in address, and the same requirement that the declaring
         // class be **initialised already** — which is what makes writing through that address sound
         // rather than merely possible: an uninitialised class's mirror may not exist yet, and
         // compiled code has no way to trigger a `<clinit>`. It is the one write in the subset with
         // no guard at all, because there is nothing about a fixed address that can fail.
+        //
+        // **A reference static owes the collector nothing**, which is why this arm has no barrier
+        // and no log. A static lives in a slot of its class's `Class<…>` mirror, and `gc::minor`
+        // scans every mirror's statics as an Old→young root *unconditionally*, before it ever
+        // consults the remembered set — so recording the holder would be recording a root that is
+        // already permanent. The interpreter's own `putstatic` skips the barrier for exactly that
+        // reason and says so in as many words, which is what makes the two agree here rather than
+        // merely coincide.
         0xb3 => {
             need(3)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let (_, kind) =
-                (env.static_field)(method.unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
-            writable(pc, kind)?;
+            (env.static_field)(method.unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
             simple(3, 1, 0)
         }
 
@@ -3662,7 +3841,7 @@ fn decode(
             reachable_heap()?;
             simple(1, 1, 1)
         }
-        0x2e => {
+        0x2e | 0x32 => {
             reachable_heap()?;
             simple(1, 2, 1)
         }
@@ -3676,14 +3855,26 @@ fn decode(
             need(3)?;
             reachable_heap()?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let (offset, kind) =
+            let (offset, _) =
                 (env.field)(method.unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
-            writable(pc, kind)?;
             i32::try_from(offset).map_err(|_| Ineligible::HeapOutOfReach { pc })?;
             simple(3, 2, 0)
         }
         0x4f => {
             reachable_heap()?;
+            simple(1, 3, 0)
+        }
+        // --- aastore ---------------------------------------------------------------------------
+        // `iastore`'s three guards plus two of its own, and the two are what make this opcode a
+        // different problem rather than a wider one: JVMS §6.5's **dynamic assignability check**,
+        // which is a walk over class metadata, and the collector's **write barrier**, which is a
+        // `HashSet` insert. Neither is an instruction. The first becomes an exact-class comparison
+        // against a *profiled* array class and its element class — resolved here, refusing the
+        // method when the site has never run — and the second becomes a record in the barrier log.
+        // See the emitter for the order the five guards go in and why it is not the JVMS's.
+        0x53 => {
+            reachable_heap()?;
+            (env.array_store)(method.unit, pc).ok_or(Ineligible::UnprofiledArrayStore { pc })?;
             simple(1, 3, 0)
         }
 
@@ -4456,8 +4647,24 @@ pub fn compile_with_regs<'a>(
     // Where the **allocation log** starts: right after the result slot. Slot `alloc_base` is the
     // record count, and record `r` is the pair at `alloc_base + 1 + 2r`.
     let alloc_base: i32 = result_base + 1;
+    // **Which logs this compilation carries, decided before a byte is emitted.** The barrier log
+    // sits past the allocation log, so its base is not a number the emitter can discover as it
+    // goes — it has to be known when the first record is written, whichever of the two comes
+    // first in the code. Both questions are answered by walking the reachable instruction starts,
+    // which is exactly the set `emit_body` will emit, so the two cannot disagree (and a
+    // `debug_assert` below says so for the allocation half, which the emitter still tracks).
+    //
+    // A method that carries neither log pays **no slot at all** for either feature — the buffer
+    // ends at `alloc_base`, exactly as it did before this step.
+    let allocates = bodies.iter().any(|b| b.order.iter().any(|&pc| matches!(b.method.code[pc], 0xbb..=0xbd)));
+    let barriers = bodies.iter().any(|b| b.order.iter().any(|&pc| logs_barrier(&b.method, env, pc)));
+    let alloc_slots: i32 = match allocates {
+        true => 1 + 2 * ALLOC_LOG_RECORDS as i32,
+        false => 0,
+    };
+    let barrier_base: i32 = alloc_base + alloc_slots;
 
-    emit_body(&mut a, &bodies, 0, env, &frame, Layout { result_base, alloc_base }, &mut st)?;
+    emit_body(&mut a, &bodies, 0, env, &frame, Layout { result_base, alloc_base, barrier_base }, &mut st)?;
 
     // The safepoint exit stubs, one per loop header, parked here at the end of the function so a
     // taken poll costs the loop body nothing but the `jcc` — the stub itself never shares a cache
@@ -4583,14 +4790,19 @@ pub fn compile_with_regs<'a>(
     // The deepest chain a deopt can hand back: the root plus its longest run of expansions.
     let frame_depth = (0..bodies.len()).map(|b| chain_len(&bodies, b)).max().unwrap_or(1) as u32;
     // A method that allocates nothing — no `new`, no `newarray`, no `anewarray` — carries no log
-    // and the caller has nothing to replay, so it pays no slot for the feature.
-    let alloc_records = match st.allocs.is_empty() {
-        true => 0,
-        false => ALLOC_LOG_RECORDS,
+    // and the caller has nothing to replay, so it pays no slot for the feature. Same for a method
+    // that writes no reference into an object or an array.
+    let alloc_records = match allocates {
+        true => ALLOC_LOG_RECORDS,
+        false => 0,
     };
-    let log_slots = match alloc_records {
-        0 => 0,
-        n => 1 + 2 * n,
+    let barrier_records = match barriers {
+        true => BARRIER_LOG_RECORDS,
+        false => 0,
+    };
+    let barrier_slots: i32 = match barriers {
+        true => 1 + 2 * BARRIER_LOG_RECORDS as i32,
+        false => 0,
     };
     Ok(CompiledCode {
         code: emitted,
@@ -4600,7 +4812,9 @@ pub fn compile_with_regs<'a>(
         result_base: result_base as u32,
         alloc_base: alloc_base as u32,
         alloc_records,
-        buffer_slots: alloc_base as u32 + log_slots,
+        barrier_base: barrier_base as u32,
+        barrier_records,
+        buffer_slots: (barrier_base + barrier_slots) as u32,
         osr_entries: bodies[0].osr.iter().map(|&pc| pc as u32).collect(),
         resume_sites,
         frame_depth,
@@ -4609,16 +4823,50 @@ pub fn compile_with_regs<'a>(
     })
 }
 
-/// **The two whole-compilation buffer offsets** every body needs and none of them owns: where the
-/// method's result goes, and where the allocation log starts. Both sit past the last body's region,
-/// so they are a property of the tree rather than of any one node — which is exactly why they are
-/// passed down as a pair rather than derived inside [`emit_body`].
+/// **The whole-compilation buffer offsets** every body needs and none of them owns: where the
+/// method's result goes, where the allocation log starts, and where the write-barrier log starts.
+/// All three sit past the last body's region, so they are a property of the tree rather than of any
+/// one node — which is exactly why they are passed down together rather than derived inside
+/// [`emit_body`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct Layout {
     /// [`CompiledCode::result_base`], as an `i64`-slot index.
     result_base: i32,
     /// [`CompiledCode::alloc_base`], as an `i64`-slot index. Always `result_base + 1`.
     alloc_base: i32,
+    /// [`CompiledCode::barrier_base`], as an `i64`-slot index: past the allocation log when this
+    /// compilation carries one, and `alloc_base` itself when it does not.
+    barrier_base: i32,
+}
+
+/// Whether the opcode at `pc` of `method` is a reference store **compiled code must record for the
+/// collector** — i.e. whether it needs a slot in the write-barrier log.
+///
+/// Two opcodes, and the pair is exactly the interpreter's two calls to `HeapService::store_reference`
+/// from bytecode: `aastore`, always, and `putfield` when the resolver says the field holds a
+/// reference. `putstatic` is deliberately absent — see [`CompiledCode::barrier_records`].
+///
+/// Read by [`compile`] before anything is emitted, over the same reachable pcs [`emit_body`] will
+/// walk, so the buffer layout and the code cannot come apart.
+fn logs_barrier(method: &Method, env: &Environment, pc: usize) -> bool {
+    method.code.get(pc) == Some(&0x53) || barrier_field(method.code, method.unit, pc, env)
+}
+
+/// Whether the opcode at `pc` is a `putfield` of a **reference** field — the half of
+/// [`logs_barrier`] that has to ask the resolver, and the one condition that separates a `putfield`
+/// which owes the collector a record from one that owes it nothing.
+///
+/// Asked twice per site (once by the guard-status split in [`emit_body`], once by the emitter arm
+/// itself) rather than threaded through, because the resolver is a pure function of `(unit, pc)`
+/// backed by the VM's own per-site cache — the second call is an indexed atomic load.
+fn barrier_field(code: &[u8], unit: Unit, pc: usize, env: &Environment) -> bool {
+    if code.get(pc) != Some(&0xb5) {
+        return false;
+    }
+    let (Some(&hi), Some(&lo)) = (code.get(pc + 1), code.get(pc + 2)) else {
+        return false;
+    };
+    matches!((env.field)(unit, pc, u16::from_be_bytes([hi, lo])), Some((_, Kind::Reference)))
 }
 
 /// The **labels and stubs** one compilation accumulates, kept apart from the bodies so the emitter
@@ -4634,8 +4882,10 @@ struct Frames {
     /// and it is what the resume map is built from.
     sites: BTreeSet<(usize, usize)>,
     /// The subset of [`sites`][Frames::sites] whose stub reports `Status::ALLOC` rather than
-    /// `Status::DEOPT` — the `new`s. Same stub shape, same state, different reason; see
-    /// [`Status::ALLOC`] for why the difference is worth a status of its own.
+    /// `Status::DEOPT` — the three allocating opcodes, and the `putfield` of a **reference** field.
+    /// Same stub shape, same state, different reason; see [`Status::ALLOC`] for why the difference
+    /// is worth a status of its own, and the `putfield` arm of [`emit_body`] for why a barrier-log
+    /// site belongs on this side of the split and an `aastore` does not.
     allocs: BTreeSet<(usize, usize)>,
     /// The **root's** loop headers: where an on-stack entry lands (past the poll). Root-only —
     /// an inlined body may loop (group 3, stage 1) but may never be *entered* at one of its
@@ -4822,6 +5072,8 @@ fn emit_body(
     let unit = body.method.unit;
     let alloc_count = Mem::at(LOCALS, 8 * layout.alloc_base);
     let alloc_first = 8 * (layout.alloc_base + 1);
+    let barrier_count = Mem::at(LOCALS, 8 * layout.barrier_base);
+    let barrier_first = 8 * (layout.barrier_base + 1);
     // Where a `return`-family opcode of the **root** leaves its value. An inlined body's `return`
     // never touches it: its result is an operand of its caller, not a boundary value.
     let result = Mem::at(LOCALS, 8 * layout.result_base);
@@ -4886,7 +5138,20 @@ fn emit_body(
                 // so the loop it is in does not continue; an oversized count is the ordinary case
                 // of a big array, which recurs, and which is exactly the "this is not native
                 // code's job" shape `ALLOC` was introduced for. Neither wants the loop retired.
-                if matches!(op, 0xbb..=0xbd) {
+                //
+                // **A `putfield` of a reference joins them, and an `aastore` does not.** Both
+                // record into the write-barrier log and both can find it full — but that is a
+                // `putfield`'s *only* recurring guard (its other one, a null receiver, throws and
+                // ends the loop), and a full log is precisely the "capacity ran out, the
+                // interpreter's turn" shape `ALLOC` exists for: it must not retire the method's
+                // on-stack entry, because the very next excursion starts with an empty log and
+                // makes progress. An `aastore` also guards on **type**, and a type guard recurs
+                // *without throwing* — a covariant store the interpreter accepts deopts here every
+                // iteration — which is exactly the "this loop cannot progress natively" shape OSR
+                // retirement exists for. One stub per pc carries one status, so the two cannot both
+                // be served at one site; the price, stated rather than hidden, is that a full
+                // barrier log inside an `aastore` closes that method's on-stack entry for good.
+                if matches!(op, 0xbb..=0xbd) || barrier_field(code, unit, pc, env) {
                     st.allocs.insert((b, pc));
                 }
                 label
@@ -5255,11 +5520,23 @@ fn emit_body(
             // one. The unsigned trick (`index >= length` as `u32` catches negatives too) needs the
             // index zero-extended, and here it arrives sign-extended into 64 bits — where a
             // negative is a huge positive and would pass. Two compares, and no re-normalisation.
-            0x2e => {
+            //
+            // **`aaload` is the same instruction with two constants changed**, and that is the
+            // whole of it: the element stride is a reference's rather than an `int`'s, and the load
+            // **zero-extends** instead of sign-extending, because a heap offset is a `u32` and
+            // `movsxd` of one above 2 GiB would produce a negative "reference". It owes the
+            // collector nothing — nothing is stored, no object graph changes — and it owes JVMS
+            // §6.5 no type check either, because *reading* an element cannot be unsound the way
+            // writing one can. So the two guards are `iaload`'s two, unchanged.
+            0x2e | 0x32 => {
                 // Both operands are read into scratch and neither home is touched until the last
                 // `jcc` is behind us — the array's home in particular, which the address
                 // computation would otherwise overwrite with an *address* that the deopt stub of
                 // the bounds check would then spill as if it were a reference.
+                let (kind, stride) = match op {
+                    0x2e => (Kind::Int, env.heap.int_element),
+                    _ => (Kind::Reference, env.heap.reference_element),
+                };
                 read_home(a, T0, home(d - 2)); // the array reference...
                 a.cmp_ri(T0, 0);
                 a.jcc(Cond::E, deopt);
@@ -5270,10 +5547,10 @@ fn emit_body(
                 a.mov_rm32(T2, Mem::at(T0, env.heap.array_length as i32));
                 a.cmp_rr(T1, T2);
                 a.jcc(Cond::Ge, deopt);
-                a.imul_rri(T1, T1, env.heap.int_element as i32);
+                a.imul_rri(T1, T1, stride as i32);
                 a.add_rr(T0, T1);
                 let w = work_reg(home(d - 2));
-                a.movsxd_rm(w, Mem::at(T0, env.heap.array_data as i32));
+                heap_load(a, kind, w, Mem::at(T0, env.heap.array_data as i32));
                 write_home(a, home(d - 2), w);
             }
 
@@ -5292,7 +5569,6 @@ fn emit_body(
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
                 let (address, kind) =
                     (env.static_field)(unit, index).ok_or(Ineligible::UnresolvedStatic { pc, index })?;
-                writable(pc, kind)?;
                 a.mov_ri(T1, address as i64);
                 let v = in_reg(a, home(d - 1), T0);
                 // The mirror image of the load's width choice, and the one that is *destructive* if
@@ -5309,14 +5585,69 @@ fn emit_body(
             // instruction writes it exactly once. Reverse the two and the interpreter would write
             // it twice — which is precisely why `putfield` was outside the subset until deopt could
             // resume rather than restart.
+            //
+            // **A reference field adds the write barrier**, and the barrier is the reason this
+            // opcode was outside the subset until now. The store itself is four bytes like an
+            // `int`'s; what a reference owes on top is the collector's record of an old→young
+            // pointer, which the interpreter makes by calling `HeapService::store_reference` and
+            // which an instruction stream cannot make at all (it is a `HashSet` insert). So it is
+            // *recorded* — `(holder, value)` into the caller's buffer — and replayed by the
+            // trampoline the instant native code returns, exactly as an allocation's log entry is,
+            // and sound for the same single reason: no collection can run while native code is on
+            // this thread's stack.
+            //
+            // **The filter, and why getting it wrong is not a correctness bug.** The barrier's
+            // predicate is `holder >= old_start && value != 0 && value < old_start`, and compiled
+            // code evaluates it inline — three compares — so that the overwhelmingly common store,
+            // into an object the hot method itself just allocated, records nothing and the log
+            // never fills. But the filter is an *optimisation and never the authority*: the
+            // trampoline re-runs the real barrier over every pair it is handed
+            // (`HeapService::replay_jit_reference_store`), so a filter that is too permissive costs
+            // one redundant call and a filter that is too strict is the only way to be wrong. Which
+            // is why the two inequalities below are written the same way round as the VM's.
+            //
+            // **Order.** The receiver's null check, then the log-capacity check, then the record,
+            // then the store — with nothing after the record that can leave. Writing the record
+            // before the store is deliberate: after the capacity check no guard remains, so a pair
+            // in the log is a store that provably happened.
             0xb5 => {
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
                 let (offset, kind) =
                     (env.field)(unit, pc, index).ok_or(Ineligible::UnresolvedField { pc, index })?;
-                writable(pc, kind)?;
                 read_home(a, T0, home(d - 2)); // the receiver, under the value
                 a.cmp_ri(T0, 0);
                 a.jcc(Cond::E, deopt);
+                if kind == Kind::Reference {
+                    let skip = a.new_label();
+                    // The barrier's own predicate, in the order that discards the most for the
+                    // least: a null value first (one compare against zero), then a young holder.
+                    read_home(a, T1, home(d - 1)); // the value — scratch only, its home is untouched
+                    a.cmp_ri(T1, 0);
+                    a.jcc(Cond::E, skip);
+                    // `old_start` goes through a register rather than a `cmp r, imm32` for the
+                    // reason the mirror comparisons do: a heap offset is a `u32` and a truncated
+                    // signed immediate would be right for every small heap and wrong above 2 GiB.
+                    a.mov_ri(T2, i64::from(env.heap.old_start));
+                    a.cmp_rr(T0, T2);
+                    a.jcc(Cond::B, skip); // a young holder remembers nothing
+                    a.cmp_rr(T1, T2);
+                    a.jcc(Cond::Ae, skip); // an old value is not a young pointer
+                    // Room in this excursion's log? This is the last thing that can deopt, and
+                    // nothing has been written yet when it does.
+                    a.mov_rm(T2, barrier_count);
+                    a.cmp_ri(T2, BARRIER_LOG_RECORDS as i32);
+                    a.jcc(Cond::Ae, deopt);
+                    // `T2` becomes the record's address: `LOCALS + 8*(barrier_base + 1) + 16*count`.
+                    a.imul_rri(T2, T2, 16);
+                    a.add_rr(T2, LOCALS);
+                    a.mov_mr(Mem::at(T2, barrier_first), T0); // the holder
+                    a.mov_mr(Mem::at(T2, barrier_first + 8), T1); // the value
+                    a.mov_rm(T0, barrier_count);
+                    a.add_ri(T0, 1);
+                    a.mov_mr(barrier_count, T0);
+                    read_home(a, T0, home(d - 2)); // `T0` carried the count; the receiver comes back
+                    a.bind(skip);
+                }
                 heap_address(a, env.heap, T0, T1);
                 let v = in_reg(a, home(d - 1), T1); // the value
                 heap_store(a, kind, Mem::at(T0, offset as i32), v);
@@ -5343,6 +5674,119 @@ fn emit_body(
                 a.cmp_rr(T1, T2);
                 a.jcc(Cond::Ge, deopt);
                 a.imul_rri(T1, T1, env.heap.int_element as i32);
+                a.add_rr(T0, T1);
+                let v = in_reg(a, home(d - 1), T1); // ...and the value, on top of both
+                a.mov_mr32(Mem::at(T0, env.heap.array_data as i32), v);
+            }
+
+            // --- aastore ----------------------------------------------------------------------
+            // **The most guarded instruction in the subset**, and each of its five guards is one of
+            // the three kinds this tier knows: two are `iastore`'s (a null array, an index outside
+            // the length), two are JVMS §6.5's dynamic assignability check turned into equality
+            // comparisons against profiled mirrors, and one is the write-barrier log's capacity.
+            //
+            // **The type check, and why equality is the whole of it.** Arrays are covariant, so
+            // `animals[0] = cat` on a `Dog[]` is an `ArrayStoreException` that only the runtime
+            // classes can detect — and detecting it in general is `is_subtype`, a walk over class
+            // metadata. So this is `checkcast`'s trade, made twice: compare the array's header word
+            // against the array class the interpreter profiled here, compare the value's header
+            // word against **that array class's element class**, and deopt for every other answer.
+            // A `null` value skips the second comparison entirely, because a null stores into any
+            // reference array — JVMS says so, and it is also what keeps the guard from reading the
+            // header at `eden_base + 0`.
+            //
+            // The element class is derived from the *array's* class rather than from any value seen
+            // here, which is what makes the second comparison a guard and not a guess: a value
+            // whose class equals the element class is assignable by construction. What it costs is
+            // that a legal covariant store deopts — every time, which is why this site reports
+            // `Status::DEOPT` and so retires its own on-stack entry rather than paying the crossing
+            // forever. The interpreter then does the store, and decides the exception if there is
+            // one; this tier throws nothing, as everywhere.
+            //
+            // **The order is not the JVMS's**, and does not need to be: every one of the five ways
+            // out is a deopt, and the interpreter re-executes this instruction and raises whichever
+            // of `NullPointerException` / `ArrayIndexOutOfBoundsException` / `ArrayStoreException`
+            // is right by its own order. What the order *does* have to satisfy is the write/pc
+            // rule — every guard before the store — and the register budget, which is three
+            // scratch registers and no more. Hence the re-reads: an operand's home is never touched
+            // by a guard, so reading it again is a `mov` and always the value the instruction was
+            // entered with.
+            0x53 => {
+                let store = (env.array_store)(unit, pc).ok_or(Ineligible::UnprofiledArrayStore { pc })?;
+                let (value_ok, skip) = (a.new_label(), a.new_label());
+
+                // (1) A null array.
+                read_home(a, T0, home(d - 3));
+                a.cmp_ri(T0, 0);
+                a.jcc(Cond::E, deopt);
+
+                // (2) The array's class is the profiled one. `T0` becomes the array's machine
+                // address here and stays that until the store — its home still holds the offset.
+                heap_address(a, env.heap, T0, T1);
+                a.mov_rm32(T1, Mem::at(T0, 0)); // the header's class_id
+                a.mov_ri(T2, i64::from(store.array_class));
+                a.cmp_rr(T1, T2);
+                a.jcc(Cond::Ne, deopt);
+
+                // (3) The index is inside `[0, length)`. Two signed compares rather than one
+                // unsigned one, for `iaload`'s reason: the index arrives sign-extended, where a
+                // negative is a huge positive that an unsigned test would let through.
+                read_home(a, T1, home(d - 2));
+                a.cmp_ri(T1, 0);
+                a.jcc(Cond::L, deopt);
+                a.mov_rm32(T2, Mem::at(T0, env.heap.array_length as i32));
+                a.cmp_rr(T1, T2);
+                a.jcc(Cond::Ge, deopt);
+
+                // (4) The value's class is the array's element class — unless the value is null,
+                // which stores into any reference array without a dereference.
+                read_home(a, T1, home(d - 1));
+                a.cmp_ri(T1, 0);
+                a.jcc(Cond::E, value_ok);
+                a.mov_rr(T2, T1);
+                heap_address(a, env.heap, T2, T1);
+                a.mov_rm32(T1, Mem::at(T2, 0)); // the value's class_id
+                a.mov_ri(T2, i64::from(store.element_class));
+                a.cmp_rr(T1, T2);
+                a.jcc(Cond::Ne, deopt);
+                a.bind(value_ok);
+
+                // (5) The write barrier: the same three-compare filter and the same capacity guard
+                // the `putfield` arm uses, with the **array** as the holder — which is exactly what
+                // the interpreter passes (`heap.store_reference(array, at, value)`), because the
+                // remembered set is keyed by the object and the collector derives the slots. The
+                // filter is an optimisation and the trampoline re-runs the real predicate over
+                // every pair; the capacity check is the last thing here that can deopt, and nothing
+                // has been written when it does.
+                read_home(a, T1, home(d - 1)); // the value, as a heap offset
+                a.cmp_ri(T1, 0);
+                a.jcc(Cond::E, skip);
+                read_home(a, T0, home(d - 3)); // the array, as a heap offset — the address is dead
+                a.mov_ri(T2, i64::from(env.heap.old_start));
+                a.cmp_rr(T0, T2);
+                a.jcc(Cond::B, skip); // a young array remembers nothing
+                a.cmp_rr(T1, T2);
+                a.jcc(Cond::Ae, skip); // an old value is not a young pointer
+                a.mov_rm(T2, barrier_count);
+                a.cmp_ri(T2, BARRIER_LOG_RECORDS as i32);
+                a.jcc(Cond::Ae, deopt);
+                a.imul_rri(T2, T2, 16);
+                a.add_rr(T2, LOCALS);
+                a.mov_mr(Mem::at(T2, barrier_first), T0); // the holder
+                a.mov_mr(Mem::at(T2, barrier_first + 8), T1); // the value
+                a.mov_rm(T0, barrier_count);
+                a.add_ri(T0, 1);
+                a.mov_mr(barrier_count, T0);
+                a.bind(skip);
+
+                // (6) The store, and nothing above it can be reached from here. The array's address
+                // is recomputed rather than kept: the barrier needed all three scratch registers,
+                // and re-reading a home is a `mov` against carrying a fourth live value this tier
+                // has nowhere to put.
+                read_home(a, T0, home(d - 3));
+                heap_address(a, env.heap, T0, T2);
+                read_home(a, T1, home(d - 2)); // the index
+                a.imul_rri(T1, T1, env.heap.reference_element as i32);
                 a.add_rr(T0, T1);
                 let v = in_reg(a, home(d - 1), T1); // ...and the value, on top of both
                 a.mov_mr32(Mem::at(T0, env.heap.array_data as i32), v);
@@ -6243,27 +6687,18 @@ fn heap_load(a: &mut Asm, kind: Kind, dst: Reg, at: Mem) {
 }
 
 /// The mirror image of [`heap_load`]: writes `src` at the width its kind says. Eight bytes for a
-/// category-2 value, four for everything else — which for a `float` is its whole IEEE pattern and
-/// for an `int` is the whole of its value, both lossless because of the invariants above.
-/// **The one rule of group 2, stated once**: a field of this kind may be *read* by compiled code,
-/// and may it be *written*?
+/// category-2 value, four for everything else — which for a `float` is its whole IEEE pattern, for
+/// an `int` the whole of its value and for a **reference** the whole heap offset, all three
+/// lossless because of the invariants above.
 ///
-/// Every kind but [`Kind::Reference`] may. A reference store owes the collector's write barrier —
-/// the interpreter's `HeapService::store_reference`, which records an old→young pointer in the
-/// remembered set — and there is no instruction that runs one. See
-/// [`Ineligible::ReferenceWrite`] for the whole argument, including why it is checked here rather
-/// than refused by the VM's resolvers.
-///
-/// Called from **both** passes: `decode`, where it is the eligibility answer, and the emitter,
-/// where it can no longer fire and is kept anyway — an emitter that could be reached with a
-/// reference here would emit a barrier-less store, and a `Result` costs nothing next to that.
-fn writable(pc: usize, kind: Kind) -> Result<(), Ineligible> {
-    match kind {
-        Kind::Reference => Err(Ineligible::ReferenceWrite { pc }),
-        _ => Ok(()),
-    }
-}
-
+/// **Every kind may now be written, references included** (F3-H3). Until this step there was a rule
+/// here — `writable`, and `Ineligible::ReferenceWrite` behind it — that a reference field could be
+/// read by compiled code and not written, because a reference store owes the collector's write
+/// barrier and no instruction runs one. What removed the rule is not a change to that argument but
+/// a place to put the barrier: the store is emitted here and the *record* is deferred to the
+/// trampoline (`CompiledCode::barrier_base`), which is the same split an inline allocation already
+/// used for its pending-log entry. So the width choice is all this function decides, and the
+/// barrier lives in the `putfield` and `aastore` arms of the emitter, where the holder is in hand.
 fn heap_store(a: &mut Asm, kind: Kind, at: Mem, src: Reg) {
     match kind {
         Kind::Long | Kind::Double => a.mov_mr(at, src),
@@ -6286,8 +6721,10 @@ fn guards(op: u8) -> bool {
         | 0xb4      // getfield: a null receiver
         | 0xbe      // arraylength: a null array
         | 0x2e      // iaload: a null array, or an index out of range
+        | 0x32      // aaload: the same two, and nothing else -- see the emitter
         | 0xb5      // putfield: a null receiver
         | 0x4f      // iastore: a null array, or an index out of range
+        | 0x53      // aastore: those two, plus both halves of the type check and a full barrier log
         | 0xbb      // new: Eden full, or this excursion's allocation log full
         | 0xbc | 0xbd // newarray / anewarray: those two, plus a negative or oversized count
         | 0xc0 | 0xc1 // checkcast / instanceof: anything but the *exact* class (null never deopts)
@@ -6634,6 +7071,7 @@ mod tests {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 heap: Heap::default(),

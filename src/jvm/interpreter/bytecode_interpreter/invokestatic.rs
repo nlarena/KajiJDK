@@ -209,14 +209,21 @@ impl Exec<'_> {
                 };
                 if arr != 0 {
                     for (i, n) in nombres.iter().enumerate() {
-                        // Se interna y se escribe de a uno: `intern` puede disparar una recoleccion,
-                        // y guardar los offsets antes de tiempo dejaria referencias viejas.
-                        let sref = strings::intern(
+                        // **Alocado, no agrupado**: `"clase|metodo"` es una cadena que este
+                        // intrinseco *arma* con un `format!`, no una entrada del pool de
+                        // constantes de nadie. Meterla en la tabla de literales la volveria
+                        // inmortal y clavada en Old, y una traza de pila se pide en un bucle.
+                        //
+                        // `store_reference` y no `write_u32`: el `String` es joven y el array pudo
+                        // caer en Old (`try_malloc` escala con Eden lleno), asi que hace falta la
+                        // barrera de escritura para que el minor lo trate como raiz.
+                        let sref = strings::allocate(
                             &mut self.shared.metaspace,
                             &mut self.shared.heap,
                             n,
-                        ) as u32;
-                        self.shared.heap.write_u32(
+                        );
+                        self.shared.heap.store_reference(
+                            arr,
                             arr + array_operations::ARRAY_HEADER_SIZE + i * 4,
                             sref,
                         );

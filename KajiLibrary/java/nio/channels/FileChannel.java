@@ -244,7 +244,11 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
 
         private final String nombre;
 
-        private MapMode(String nombre) {
+        // De paquete y no privado --el JDK lo tiene privado-- para que `FabricaMapMode` pueda
+        // construir los modos de `jdk.nio.mapmode`. Ver el comentario de esa clase: es el mismo
+        // puente que el JDK hace con `SharedSecrets`, sin la maquinaria. No es API: no cambia
+        // ningun miembro publico ni protegido de `MapMode`.
+        MapMode(String nombre) {
             this.nombre = nombre;
         }
 

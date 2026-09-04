@@ -205,4 +205,51 @@ public abstract class URLStreamHandler {
         }
         return b.toString();
     }
+
+    /**
+     * Parsea {@code spec} y le carga los componentes a {@code u}.
+     *
+     * <p>Es el protocolo con el que el JDK deja que un manejador entienda un esquema propio: la
+     * {@link URL} llega vacia, el manejador la parsea a su manera y la llena con {@link #setURL}.
+     *
+     * <h2>Por que aca no puede andar</h2>
+     *
+     * <p>Porque la {@link URL} de esta biblioteca es <strong>inmutable</strong>: guarda un
+     * {@link java.net.URI} y una cadena, los dos {@code final}. No hay nada que llenar despues de
+     * construida, asi que el protocolo de "parsear y cargar" no tiene donde apoyarse.
+     *
+     * <p>No es una omision que se arregle escribiendo mas: seria cambiar la representacion de
+     * {@code URL}. Queda declarado con la firma exacta —una subclase que lo sobrescriba compila— y
+     * lo que declina es la version heredada, que mentiria si no hiciera nada.
+     *
+     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     */
+    protected void parseURL(URL u, String spec, int start, int limit) {
+        throw new UnsupportedOperationException(
+                "la URL de esta biblioteca es inmutable: no se la puede llenar despues de creada");
+    }
+
+    /**
+     * Le carga los componentes a {@code u}.
+     *
+     * @throws UnsupportedOperationException siempre — ver {@link #parseURL}
+     */
+    protected void setURL(URL u, String protocol, String host, int port, String authority,
+            String userInfo, String path, String query, String ref) {
+        throw new UnsupportedOperationException(
+                "la URL de esta biblioteca es inmutable: no se la puede llenar despues de creada");
+    }
+
+    /**
+     * La forma vieja, de antes de que una URL distinguiera autoridad de host.
+     *
+     * @deprecated usar la de nueve argumentos, que separa {@code authority}, {@code userInfo} y
+     *     {@code query} en vez de meterlos en {@code file}
+     * @throws UnsupportedOperationException siempre — ver {@link #parseURL}
+     */
+    @Deprecated(since = "1.2")
+    protected void setURL(URL u, String protocol, String host, int port, String file, String ref) {
+        throw new UnsupportedOperationException(
+                "la URL de esta biblioteca es inmutable: no se la puede llenar despues de creada");
+    }
 }

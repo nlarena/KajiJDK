@@ -1941,15 +1941,31 @@ impl Exec<'_> {
             return None;
         }
         // `jit` and `heap` are disjoint fields of two disjoint halves of `Exec`, so the call can
-        // hand the cache a closure that logs straight into the heap. That is not a convenience: the
-        // objects native code allocated are invisible to the collector until this runs, and making
-        // it an argument of the call is what stops a caller from forgetting it.
+        // hand the cache two closures that write straight into the heap. That is not a convenience:
+        // the objects native code allocated are invisible to the collector until the first runs,
+        // and the old→young pointers it wrote are invisible to the *minor* collector until the
+        // second does. Making both arguments of the call is what stops a caller from forgetting
+        // either.
+        //
+        // The barrier's pairs take **one hop more than the allocations do**, and the reason is
+        // borrow-shaped rather than semantic: logging an allocation needs `&HeapService` (the
+        // pending log is a `Mutex`), while running the write barrier needs `&mut` (the remembered
+        // set is a `HashSet`), and two closures cannot hold those at once. So they land in a local
+        // and are applied on the very next line — still before the interpreter has run a single
+        // opcode, which is the whole of what the window has to be. The `Vec` does not allocate
+        // until something is pushed into it, and compiled code pushes only for a store that really
+        // is old→young, so the ordinary excursion pays nothing at all for this.
+        let mut pairs: Vec<(usize, usize)> = Vec::new();
         let (jit, heap) = (&mut self.running.jit, &self.shared.heap);
         let outcome = jit.run(
             callee,
             |slot| Self::marshal(frame.load(slot as usize)),
             |offset, size| heap.log_jit_allocation(offset, size),
+            |holder, value| pairs.push((holder, value)),
         );
+        for (holder, value) in pairs {
+            self.shared.heap.replay_jit_reference_store(holder, value);
+        }
         match outcome? {
             // The outer `Some` is "native code finished the method"; the inner one is its value, and
             // `None` there is a `void` return — nothing to push.
@@ -2082,6 +2098,25 @@ impl Exec<'_> {
                         array_length: array_operations::LENGTH_OFFSET as u32,
                         array_data: array_operations::ARRAY_HEADER_SIZE as u32,
                         int_element: array_operations::array_element_width("[I") as u32,
+                        // A reference element is one heap offset, four bytes, for every reference
+                        // array whatever it holds — asked of the module that owns the layout
+                        // rather than assumed, exactly as the three above are.
+                        reference_element: array_operations::array_element_width("[Ljava/lang/Object;") as u32,
+                        // The Old boundary the write barrier's filter is stated in: fixed for the
+                        // VM's life (Eden plus both survivors), and only ever used to decide
+                        // whether a store is worth *recording* — never whether it is legal.
+                        old_start: heap.old_start().min(u32::MAX as usize) as u32,
+                    },
+                    // `aastore`: the array class this site was profiled storing into, and that
+                    // array class's element class — the two mirror offsets its type guard compares
+                    // headers against. Read-only, and `None` for a site that has never run, which
+                    // refuses the method exactly as a never-dispatched call site does for inlining.
+                    array_store: &|unit, pc| {
+                        array_operations::jit_array_store(metaspace, unit, pc)
+                            .map(|(array_class, element_class)| crate::burst::compile::ArrayStore {
+                                array_class,
+                                element_class,
+                            })
                     },
                     // `checkcast`/`instanceof`/`ldc Foo.class`: the target class's **pinned**
                     // mirror offset, read-only. `None` for a class the interpreter has never
@@ -2363,6 +2398,9 @@ impl Exec<'_> {
         if self.running.frames.len() + new_frames > Self::MAX_FRAMES {
             return None;
         }
+        // The write barrier's pairs, applied the moment the borrow of `jit` ends — see the same
+        // local in `try_compiled_call` for why they take one hop more than the allocations do.
+        let mut pairs: Vec<(usize, usize)> = Vec::new();
         let outcome = {
             // `jit` and `frames` are disjoint fields of one context; splitting the borrow here is
             // what lets the marshalling closure read the very frame the cache is about to run
@@ -2375,6 +2413,7 @@ impl Exec<'_> {
                 target_pc as u32,
                 |slot| Self::marshal(frame.load(slot as usize)),
                 |offset, size| heap.log_jit_allocation(offset, size),
+                |holder, value| pairs.push((holder, value)),
             );
             // Typed, and typed **per pc**: the compiler's map says which of these `i64`s is an
             // `int` and which is a heap offset at exactly the pc native code stopped at, and says
@@ -2387,6 +2426,9 @@ impl Exec<'_> {
             frames.extend(deopted);
             outcome
         };
+        for (holder, value) in pairs {
+            self.shared.heap.replay_jit_reference_store(holder, value);
+        }
         // That call may have closed OSR for this method (a deopt from a loop header does), so
         // re-read the verdict instead of carrying a stale `true` into the next iteration.
         self.running.osr_watch = self.running.jit.watches_back_edges(method);

@@ -1,6 +1,21 @@
-"""Censo de todos los paquetes empezados, en las dos dimensiones, a JSON.
+"""Censo de la API publica de OpenJDK 25 contra KajiLibrary, en las dos dimensiones, a JSON.
 
-    python tools/apidiff/censo.py docs/censo.json
+    python tools/apidiff/censo.py docs/censo.json              # el objetivo: TODA la API publica
+    python tools/apidiff/censo.py docs/censo.json --empezados   # solo lo ya arrancado
+
+**El universo son los paquetes EXPORTADOS, no los empezados.** Hasta el 2026-09-04 este script
+recorria `empezados` --los paquetes con al menos un `.class` nuestro-- con el argumento de que un
+paquete sin empezar "no es un hueco de cobertura sino una decision de alcance". Eso hacia que el
+denominador se moviera con el numerador: cada paquete nuevo se sumaba a los dos lados a la vez, y el
+porcentaje media *que tan completo esta lo que tocamos*, no cuanto falta. Leia **91.4% de clases**
+sobre 164 paquetes cuando el objetivo son **233**, y los 75 sin empezar --1335 clases-- eran
+literalmente invisibles.
+
+Exportado sin calificar es el criterio correcto de "API publica", y no una eleccion de gusto: un
+paquete que su modulo no exporta (`sun.*`, `jdk.internal.*`, `com.sun.*` no exportados) **no tiene
+contrato que cumplir** -- ningun programa puede importarlo sin `--add-exports`. Por eso el universo
+sale de `java --describe-module`, y no de listar el jimage entero: eso daria 877 paquetes y 14681
+clases, con `jdk.localedata` y `jdk.hotspot.agent` adentro.
 
 **Solo cuenta lo publico.** El jimage lista todo lo que hay en el paquete, y la mitad de `java.lang`
 son internos --`StringLatin1`, `CharacterData00`, `Shutdown`-- que no son API y que nadie tiene por
@@ -40,6 +55,27 @@ def supertipos(d):
     if not m:
         return []
     return [t.strip() for t in re.split(r",|\bextends\b|\bimplements\b", m.group(1)) if t.strip()]
+
+
+def exportados():
+    """Los paquetes que algun modulo del JDK exporta **sin calificar**.
+
+    Un `exports x.y to z` no cuenta: es un contrato entre dos modulos del JDK, no API para nadie
+    mas, y meterlo en el denominador seria comprometerse con algo que ni siquiera es alcanzable
+    desde codigo de usuario.
+    """
+    java = os.path.join(os.environ["JDK_HOME"], "bin", "java.exe")
+    mods = [l.split("@")[0].strip()
+            for l in subprocess.run([java, "--list-modules"], capture_output=True,
+                                    text=True).stdout.splitlines() if l.strip()]
+    out = set()
+    for m in mods:
+        txt = subprocess.run([java, "--describe-module", m], capture_output=True, text=True).stdout
+        for l in txt.splitlines():
+            t = l.strip()
+            if t.startswith("exports ") and " to " not in t:
+                out.add(t.split()[1])
+    return out
 
 
 # ---- el lado del JDK: un javap por paquete ----------------------------------------------------------
@@ -124,18 +160,22 @@ def main():
         pkg, _, simple = l[:-len(".class")].rpartition("/")
         del_jdk.setdefault(pkg.replace("/", "."), set()).add(simple)
 
-    # Los paquetes que tenemos empezados.
-    empezados = set()
-    for dp, _, fs in os.walk(RAIZ):
-        if not any(f.endswith(".class") and "$" not in f for f in fs):
-            continue
-        pkg = os.path.relpath(dp, RAIZ).replace("\\", ".").replace("/", ".")
-        if pkg.startswith(("repros", "boot", ".")):
-            continue
-        empezados.add(pkg)
+    # El universo: los paquetes que algun modulo exporta sin calificar.
+    universo = exportados()
+    if "--empezados" in sys.argv:
+        # El modo viejo, conservado para poder comparar contra `docs/censo.json` historicos.
+        empezados = set()
+        for dp, _, fs in os.walk(RAIZ):
+            if not any(f.endswith(".class") and "$" not in f for f in fs):
+                continue
+            pkg = os.path.relpath(dp, RAIZ).replace("\\", ".").replace("/", ".")
+            if pkg.startswith(("repros", "boot", ".")):
+                continue
+            empezados.add(pkg)
+        universo &= empezados
 
     salida = []
-    for pkg in sorted(empezados):
+    for pkg in sorted(universo):
         todas = del_jdk.get(pkg)
         if not todas:
             continue

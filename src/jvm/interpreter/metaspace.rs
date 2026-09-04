@@ -348,6 +348,25 @@ struct MethodBody {
     /// self-contained, publishes no other memory, and two threads writing different receivers race
     /// to a value that is a real receiver either way.
     receiver_classes: Vec<AtomicU32>,
+    /// **The last array class seen at each `aastore`** (F3-H3, the JIT's array-store guard): the
+    /// heap offset of the `Class<…>` mirror the `aastore` at `pc` last stored into, or `0` for
+    /// "never executed". One cell per code byte, allocated only for a method whose bytes contain a
+    /// `0x53`.
+    ///
+    /// **Its own table, deliberately not [`Self::receiver_classes`].** The two hold the same kind
+    /// of value for the same reason and could share a `Vec` without a single cell ever colliding —
+    /// a pc is one opcode, and no pc is both an `invokevirtual` and an `aastore`. They are kept
+    /// apart because they are read by two independent things: the inline cache's measurements
+    /// assert over the receiver table, and folding a second population into it would make those
+    /// numbers mean something else. The cost is one `Vec<AtomicU32>` for the methods that store
+    /// into reference arrays, which is a small minority.
+    ///
+    /// The "last, not a majority" argument is [`Self::receiver_classes`]' word for word: by the
+    /// time the JIT reads this the site has run at least as many times as the compile threshold, a
+    /// monomorphic site wrote the same value every time, and a wrong guess is a deopt rather than a
+    /// wrong answer. `AtomicU32`/`Relaxed` for the same reason too — the word is self-contained and
+    /// publishes no other memory.
+    array_classes: Vec<AtomicU32>,
     /// The slot width of the callee's own arguments, **receiver-first**: `[1, param widths…]`.
     /// Parsed once here instead of by a fresh `param_slot_widths` `Vec` on every call — laying a
     /// call's operands into the callee's locals is the last thing every invoke does, and it used
@@ -1103,6 +1122,12 @@ impl MetaspaceService {
             true => (0..code.len()).map(|_| AtomicU32::new(0)).collect(),
             false => Vec::new(),
         };
+        // The array-store profile (F3-H3), on exactly the same terms: only a method that can reach
+        // an `aastore` pays for a table, which is a small minority of them.
+        let array_classes = match code.iter().any(|&b| b == 0x53) {
+            true => (0..code.len()).map(|_| AtomicU32::new(0)).collect(),
+            false => Vec::new(),
+        };
         // `[1, param widths…]` — receiver-first, so an instance call takes the whole slice and a
         // static one takes `[1..]`. Parsed here, once, instead of per call.
         let mut slot_widths = vec![1];
@@ -1133,6 +1158,7 @@ impl MetaspaceService {
             field_sites,
             call_sites,
             receiver_classes,
+            array_classes,
             slot_widths,
             intrinsic: classify_intrinsic(declaring, name, descriptor),
         });
@@ -1301,6 +1327,26 @@ impl MetaspaceService {
     /// silent no-op — exactly like the two site caches above.
     pub fn set_receiver_class(&self, method: MethodId, pc: usize, mirror: u32) {
         if let Some(cell) = self.methods[method].receiver_classes.get(pc) {
+            cell.store(mirror, Ordering::Relaxed);
+        }
+    }
+
+    /// The **last array class** the `aastore` at `pc` of `method` stored into — the heap offset of
+    /// its `Class<…>` mirror — or `0` for a site that has never run (and for a `pc` with no cell).
+    /// See [`MethodBody::array_classes`]; `0` is what makes a never-executed `aastore` refuse its
+    /// method, exactly as a never-dispatched call site does.
+    pub fn array_class(&self, method: MethodId, pc: usize) -> u32 {
+        match self.methods[method].array_classes.get(pc) {
+            Some(cell) => cell.load(Ordering::Relaxed),
+            None => 0,
+        }
+    }
+
+    /// Records the array class of the `aastore` at `pc`. One `Relaxed` store on a path that has
+    /// already read the same word out of the array's header, and a `pc` with no cell is a silent
+    /// no-op — exactly like the three caches above.
+    pub fn set_array_class(&self, method: MethodId, pc: usize, mirror: u32) {
+        if let Some(cell) = self.methods[method].array_classes.get(pc) {
             cell.store(mirror, Ordering::Relaxed);
         }
     }

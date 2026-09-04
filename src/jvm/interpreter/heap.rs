@@ -250,14 +250,38 @@ impl HeapService {
         self.record_reference_store(holder, value);
     }
 
-    /// The **write barrier** (private — reached only via [`HeapService::store_reference`]):
-    /// if an **Old** object comes to hold a **young** pointer, it's recorded in the
-    /// remembered set so the next minor GC treats it as a root. Without this, a young
-    /// object reachable only from Old would be wrongly collected.
+    /// The **write barrier** (private — reached only via [`HeapService::store_reference`] and
+    /// [`HeapService::replay_jit_reference_store`]): if an **Old** object comes to hold a
+    /// **young** pointer, it's recorded in the remembered set so the next minor GC treats it as
+    /// a root. Without this, a young object reachable only from Old would be wrongly collected.
     fn record_reference_store(&mut self, holder: usize, value: usize) {
         if value != 0 && self.gen_of(holder) == Gen::Old && self.gen_of(value) == Gen::Young {
             self.remembered.insert(holder);
         }
+    }
+
+    /// Runs the **write barrier alone**, for a reference store **compiled code has already
+    /// performed** — the JIT's half of [`Self::store_reference`].
+    ///
+    /// A reference store is two things: the four-byte store, and the barrier. An instruction
+    /// stream does the first perfectly well; the second is a `HashSet` insert behind a decision
+    /// that reads the heap's own region boundaries, which is not something a `mov` can do. So the
+    /// compiled `putfield`/`aastore` writes the pair `(holder, value)` into a flat array in the
+    /// caller's buffer and the JIT trampoline replays it here the instant native code returns —
+    /// the same shape, and the same soundness argument, as [`Self::log_jit_allocation`]: **no
+    /// collection can run while native code is on this thread's stack**, so the window between the
+    /// store and this call contains no GC by construction.
+    ///
+    /// **What compiled code decides and what it does not.** The record is a *pair*, not a slot,
+    /// because that is what the remembered set is keyed by — [`Self::record_reference_store`]
+    /// inserts the **holder** and the minor collector derives the slots from the holder's class.
+    /// Compiled code may filter the pairs it logs (an old→young test is three compares, and a
+    /// young holder is the overwhelmingly common case), but it is never the *authority*: whatever
+    /// it logs is re-tested here by the same predicate the interpreter uses. A filter that is too
+    /// permissive costs one redundant call and changes nothing; that separation is what keeps a
+    /// mistake in the emitted filter from being a correctness bug.
+    pub fn replay_jit_reference_store(&mut self, holder: usize, value: usize) {
+        self.record_reference_store(holder, value);
     }
 
     /// The remembered Old holders (snapshot), for the minor collector to scan as roots.

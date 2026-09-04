@@ -376,6 +376,70 @@ pub fn jit_array_class(metaspace: &MetaspaceService, array_class: &str) -> Optio
     Some((class_id, array_element_width(array_class) as u32))
 }
 
+/// What the JIT bakes into a compiled **`aastore`**: the two `Class<…>` mirror offsets its type
+/// guard compares against — the array class this site was profiled storing into, and that array
+/// class's **element** class. `None` refuses the whole method.
+///
+/// # Why an `aastore` needs a type guard at all
+///
+/// Arrays are covariant (`Dog[] <: Animal[]`), so the static types cannot make the store sound and
+/// JVMS §6.5 requires the **dynamic** check: a non-null value whose runtime class is not assignable
+/// to the array's element type is an `ArrayStoreException`. Assignability is [`is_subtype`], a walk
+/// over class metadata — not something an instruction stream does. So compiled code answers only
+/// the case it can answer in two compares, the **exact** classes, and deopts for everything else;
+/// the interpreter then re-executes the very same `aastore` and decides by its full path, throwing
+/// the exception if that is the answer. This tier computes no hierarchy and throws nothing, which
+/// is the same trade `checkcast` makes and for the same reason.
+///
+/// # What is profiled and what is derived
+///
+/// Only the **array's** class is profiled (`MetaspaceService::array_class`). The element class is
+/// then *derived from it*, by stripping one `[` off the array's descriptor — never taken from
+/// whatever value happened to pass through. That is the difference between a guard and a guess: the
+/// element type is a property of the array, so a value that matches it is assignable by
+/// construction, whereas a value class that merely showed up here once tells you nothing about the
+/// next one.
+///
+/// **What it costs, stated rather than hidden.** The guard is exact equality, so a store into an
+/// `Object[]` of anything that is not literally an `Object` deopts every time — and `Object[]` is
+/// the common shape in library code. A covariant store that the interpreter accepts perfectly well
+/// is therefore native code's "not my job", not an error; it is also why an `aastore`'s stub
+/// reports `Status::DEOPT` rather than `Status::ALLOC` (see `burst::compile`), so a loop that keeps
+/// failing this guard stops being re-entered on-stack instead of paying the crossing forever.
+///
+/// # Read-only, like every other resolver
+///
+/// `&MetaspaceService`: it cannot mint a Class ID or allocate a mirror, so `None` is the answer for
+/// a site that has never run (profile `0`), for an array class or element class the interpreter has
+/// never prepared, and for a primitive element (which cannot reach an `aastore` in verified code at
+/// all). Baking the two offsets in is sound for the one reason every mirror comparison here is: a
+/// mirror is `malloc_old`ed and pinned out of `gc::compact`, so its offset is fixed for the VM's
+/// life.
+pub fn jit_array_store(
+    metaspace: &MetaspaceService,
+    method: crate::jvm::interpreter::metaspace::MethodId,
+    pc: usize,
+) -> Option<(u32, u32)> {
+    let array_mirror = metaspace.array_class(method, pc);
+    if array_mirror == 0 {
+        return None; // never executed: there is nothing to speculate on
+    }
+    let array_class = metaspace.class_name_at_mirror(array_mirror as usize)?;
+    // The element descriptor is the array's minus one `[`: `L<name>;` names a class, a nested `[…`
+    // is itself an array class, and anything else is a primitive — which `aastore` cannot legally
+    // reach. This is the same three-way split the interpreter's own `aastore` makes, so the two
+    // cannot come to disagree about what the element type of a given array is.
+    let component = array_class.strip_prefix('[')?;
+    let element = match component.strip_prefix('L') {
+        Some(name) => name.trim_end_matches(';'),
+        None if component.starts_with('[') => component,
+        None => return None,
+    };
+    let element_uuid = metaspace.class_id_read(element)?;
+    let element_mirror = u32::try_from(metaspace.class_object(element_uuid)?).ok()?;
+    Some((array_mirror, element_mirror))
+}
+
 /// `arraylength` (0xbe): pop an array reference, push its `length`. A null array is
 /// a NullPointerException.
 pub fn arraylength(heap: &HeapService, frame: &mut Frame) -> Result<(), &'static str> {
@@ -547,6 +611,12 @@ pub fn aastore(
     let index = pop_int(frame);
     let array = pop_array_ref(frame)?;
     let at = element_offset(heap, array, index, SLOT_SIZE)?;
+    // **The site's profile** (F3-H3): the array class this store went into, for the JIT's
+    // array-store guard. One `Relaxed` store of a word this path is about to read anyway, and it is
+    // recorded for a `null` value too — a loop that only ever nulls out a slot is still a
+    // monomorphic site, and leaving it unprofiled would refuse the whole method for no reason.
+    // See `MetaspaceService::array_classes`.
+    metaspace.set_array_class(frame.method(), frame.pc(), heap.read_u32(array));
     // null always stores fine; a real reference must be assignable to the element type.
     if value != 0 {
         let array_class = metaspace

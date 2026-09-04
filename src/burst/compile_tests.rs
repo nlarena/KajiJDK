@@ -76,6 +76,7 @@ fn compile_shaped(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word,
@@ -267,6 +268,7 @@ fn compile_long(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -1139,6 +1141,7 @@ fn getstatic_reads_the_live_four_bytes_at_the_address_it_was_given() {
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -1194,6 +1197,9 @@ const ALOAD_0: u8 = 0x2a;
 const ALOAD_1: u8 = 0x2b;
 const ASTORE_1: u8 = 0x4c;
 const IALOAD: u8 = 0x2e;
+const AALOAD: u8 = 0x32;
+const ALOAD_2: u8 = 0x2c;
+const AASTORE: u8 = 0x53;
 const IF_ACMPEQ: u8 = 0xa5;
 const IFNULL: u8 = 0xc6;
 const ARETURN: u8 = 0xb0;
@@ -1244,6 +1250,11 @@ impl FakeHeap {
             array_length: 8,    // the `length` word, right after the object header
             array_data: 12, // ...and the elements right after that
             int_element: 4,
+            reference_element: 4,
+            // Old starts where the "other" buffer does — everything below `EDEN_END` is Eden and
+            // therefore young, which is the same split the real heap makes and the one the write
+            // barrier's filter is compiled against.
+            old_start: Self::EDEN_END,
         }
     }
 
@@ -1335,11 +1346,144 @@ fn compile_instance(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
         },
     )
+}
+
+/// The two `Class<…>` mirror offsets every `aastore` in this file guards against — a **pinned**
+/// pair, like [`MIRROR`], because the whole point of the value is that it never changes.
+const ARRAY_CLASS: u32 = 0x0300;
+/// The element class of [`ARRAY_CLASS`], as the VM's resolver would derive it from the array's
+/// descriptor. A *different* number from the array's, which is what makes a test that swapped the
+/// two comparisons fail.
+const ELEMENT_CLASS: u32 = 0x0400;
+
+/// [`compile_heap`] for `aastore`: every site resolves to the [`ARRAY_CLASS`]/[`ELEMENT_CLASS`]
+/// pair, which is what a warm site in a running VM would have been profiled into.
+fn compile_astore(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap,
+            array_store: &|_, _| {
+                Some(super::compile::ArrayStore { array_class: ARRAY_CLASS, element_class: ELEMENT_CLASS })
+            },
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+#[test]
+fn aastore_stores_the_exact_type_records_the_barrier_and_deopts_for_everything_else() {
+    // **The five guards of `aastore`, each asserted on its own**, because any one of them silently
+    // omitted still passes a test of the other four: a missing type check writes a `Cat` into a
+    // `Dog[]` and nothing complains until much later, and a missing barrier record loses a live
+    // object at the next minor collection rather than here.
+    let mut heap = FakeHeap::new();
+    heap.array(2000, &[0, 0, 0]); // an Old array...
+    heap.write(2000, ARRAY_CLASS as i32); // ...of the profiled class
+    heap.array(24, &[0, 0]); // and a young one of the same class
+    heap.write(24, ARRAY_CLASS as i32);
+    heap.array(2100, &[0]); // an Old array of some *other* class
+    heap.write(2100, 0x0999);
+    heap.write(100, ELEMENT_CLASS as i32); // a young value of the element class
+    heap.write(1004, ELEMENT_CLASS as i32); // ...and an Old one
+    heap.write(120, 0x0777); // a young value of some other class — a subtype, say
+
+    // aload_0; iload_1; aload_2; aastore; return
+    let code = [ALOAD_0, ILOAD_1, ALOAD_2, AASTORE, RETURN];
+    let d = "([Ljava/lang/Object;ILjava/lang/Object;)V";
+    let compiled = compile_astore(&code, 3, d, heap.bases()).unwrap();
+    assert_eq!(compiled.barrier_records, super::compile::BARRIER_LOG_RECORDS, "an aastore stores a reference");
+
+    // (1) The whole point: exact classes, Old array, young value — stored *and* recorded.
+    let (outcome, buffer) = call_at(&compiled, &[2000, 1, 100], 0);
+    assert_eq!(outcome, Outcome::Returned(0));
+    assert_eq!(heap.read(2000 + 12 + 4), 100, "the element really is in the slot");
+    assert_eq!(barrier_log(&compiled, &buffer), vec![(2000, 100)], "the array is the holder");
+
+    // (2) `null` stores into any reference array and never reads a header — so it neither deopts on
+    // the element check nor records anything.
+    let (outcome, buffer) = call_at(&compiled, &[2000, 0, 0], 0);
+    assert_eq!(outcome, Outcome::Returned(0));
+    assert_eq!(heap.read(2000 + 12), 0);
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "null is not a pointer to remember");
+
+    // (3) A **young array** is written without a record, exactly as a young `putfield` holder is.
+    let (_, buffer) = call_at(&compiled, &[24, 0, 100], 0);
+    assert_eq!(heap.read(24 + 12), 100, "written all the same");
+    assert!(barrier_log(&compiled, &buffer).is_empty());
+
+    // (4) An **Old value** into an Old array: stored, not recorded — old→old is not the minor
+    // collector's problem.
+    let (_, buffer) = call_at(&compiled, &[2000, 2, 1004], 0);
+    assert_eq!(heap.read(2000 + 12 + 8), 1004);
+    assert!(barrier_log(&compiled, &buffer).is_empty());
+
+    // (5) **The type check, both halves.** A value of the wrong class deopts *without storing* —
+    // which is the assertion a missing check would fail, and it is checked on the heap rather than
+    // on the outcome, because "did not store" is the property that matters.
+    let before = heap.read(2000 + 12);
+    let (outcome, buffer) = call_at(&compiled, &[2000, 0, 120], 0);
+    assert_eq!(outcome, Outcome::Deopt(3), "a subtype is legal, and still native code's `not mine`");
+    assert_eq!(heap.read(2000 + 12), before, "and nothing was written");
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "nor recorded");
+    // ...and an array of the wrong class, which is the other half — and would pass if the two
+    // comparisons were swapped, since the value at 100 is of the *element* class.
+    assert_eq!(call_at(&compiled, &[2100, 0, 100], 0).0, Outcome::Deopt(3), "an unprofiled array class");
+
+    // (6) `iastore`'s own three, unchanged and at the same pc.
+    assert_eq!(call_at(&compiled, &[0, 0, 100], 0).0, Outcome::Deopt(3), "a null array");
+    assert_eq!(call_at(&compiled, &[2000, 3, 100], 0).0, Outcome::Deopt(3), "one past the end");
+    assert_eq!(call_at(&compiled, &[2000, -1, 100], 0).0, Outcome::Deopt(3), "before the start");
+    assert_eq!(call_at(&compiled, &[2000, i32::MIN, 100], 0).0, Outcome::Deopt(3), "and the extreme");
+}
+
+#[test]
+fn an_aastore_with_no_profile_refuses_its_method() {
+    // The resolver's `None` — a site the interpreter has never executed, so there is no array class
+    // to build a guard from. Refusing the whole method is the same answer a never-dispatched call
+    // site gives inlining, and for the same reason: this tier speculates on what was observed, and
+    // inventing an observation is not a speculation.
+    let heap = FakeHeap::new();
+    let code = [ALOAD_0, ILOAD_1, ALOAD_2, AASTORE, RETURN];
+    let d = "([Ljava/lang/Object;ILjava/lang/Object;)V";
+    let err = super::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 3, descriptor: d, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: heap.bases(),
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err, Ineligible::UnprofiledArrayStore { pc: 3 });
 }
 
 #[test]
@@ -1418,6 +1562,53 @@ fn arraylength_and_iaload_read_and_check_their_bounds() {
     assert_eq!(call_at(&at, &[24, -1], 0).0, Outcome::Deopt(2), "before the start");
     assert_eq!(call_at(&at, &[24, i32::MIN], 0).0, Outcome::Deopt(2), "and the extreme of that");
     assert_eq!(call_at(&at, &[0, 0], 0).0, Outcome::Deopt(2), "a null array");
+}
+
+#[test]
+fn aaload_reads_a_reference_element_zero_extended_and_checks_the_same_two_bounds() {
+    // **The two constants that separate `aaload` from `iaload`, asserted apart from each other.**
+    //
+    //  - the **stride** is a reference's, which here equals an `int`'s — so a test that only
+    //    indexed would not distinguish the two, and this one also chains: `a[i][j]`, where getting
+    //    the first stride wrong lands on a length word rather than on an element;
+    //  - the **extension** is zero rather than sign. A heap offset is a `u32`; `movsxd` of one
+    //    with the top bit set would hand back a negative number that no arm of `heap_address`
+    //    would then route correctly. `0x8000_0004` is that value, and it is the assertion that a
+    //    copy-paste from `iaload` would fail.
+    let mut heap = FakeHeap::new();
+    heap.array(24, &[2000, 0, 0x0100]); // an Eden `Object[]`, its first element pointing at Old
+    heap.array(2000, &[1004, -0x7fff_fffc]); // ...an Old one, whose second element has bit 31 set
+
+    let at = compile_heap(
+        &[ALOAD_0, ILOAD_1, AALOAD, ARETURN],
+        2,
+        "([Ljava/lang/Object;I)Ljava/lang/Object;",
+        heap.bases(),
+        0,
+    )
+    .unwrap();
+    assert_eq!(at.barrier_records, 0, "a load owes the collector nothing, so it carries no log");
+    assert_eq!(call_at(&at, &[24, 0], 0).0, Outcome::Returned(2000));
+    assert_eq!(call_at(&at, &[24, 1], 0).0, Outcome::Returned(0), "null is an element like any other");
+    assert_eq!(call_at(&at, &[2000, 1], 0).0, Outcome::Returned(0x8000_0004), "zero-extended, not sign-");
+
+    // The same two ways out `iaload` has, at the same pc, and for the same reasons.
+    assert_eq!(call_at(&at, &[24, 3], 0).0, Outcome::Deopt(2), "one past the end");
+    assert_eq!(call_at(&at, &[24, -1], 0).0, Outcome::Deopt(2), "before the start");
+    assert_eq!(call_at(&at, &[0, 0], 0).0, Outcome::Deopt(2), "a null array");
+
+    // Chained: `a[0][0]` — the second `aaload` dereferences what the first produced, which is what
+    // proves the first one's result is a usable reference and not merely the right number.
+    let chained = compile_heap(
+        &[ALOAD_0, ICONST_0, AALOAD, ICONST_0, AALOAD, ARETURN],
+        1,
+        "([Ljava/lang/Object;)Ljava/lang/Object;",
+        heap.bases(),
+        0,
+    )
+    .unwrap();
+    assert_eq!(call_at(&chained, &[24], 0).0, Outcome::Returned(1004));
+    assert_eq!(call_at(&chained, &[24], 0).1[0], 24, "the array's home was never overwritten");
 }
 
 #[test]
@@ -1639,6 +1830,7 @@ fn a_body_with_exception_handlers_refuses_a_conflict_rather_than_carrying_one() 
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: heap.bases(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
@@ -1755,6 +1947,7 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
                     })
                 },
                 heap: heap.bases(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
@@ -1908,6 +2101,7 @@ fn a_method_with_exception_handlers_still_compiles_but_is_never_entered_on_stack
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: Heap::default(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
@@ -1966,6 +2160,7 @@ fn compile_static(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -2220,6 +2415,7 @@ fn compile_alloc(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -2411,6 +2607,7 @@ fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: heap.bases(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -2476,6 +2673,7 @@ fn compile_at(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -2666,6 +2864,7 @@ fn a_guard_never_writes_a_home_register_before_it_can_still_fire() {
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: heap.bases(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
@@ -2740,6 +2939,7 @@ fn every_heap_opcode_agrees_at_every_cache_size_and_every_depth() {
                     array: &|_, _| None,
                     invoke: &|_, _, _| None,
                     heap: bases,
+                    array_store: &|_, _| None,
                     class_mirror: &|_, _| None,
                     string_literal: &|_, _| None,
                     poll_word: &POLL as *const _ as usize,
@@ -2915,6 +3115,7 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
                     guard: super::compile::Guard::Static,
                 }),
                 heap: heap.bases(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,
@@ -3275,6 +3476,7 @@ fn a_long_crossing_a_safepoint_poll_is_the_locals_buffer_and_nothing_else() {
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &WORD as *const _ as usize,
@@ -3382,6 +3584,7 @@ fn compile_long_heap(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -3505,6 +3708,7 @@ fn the_resolver_decides_the_width_and_a_kind_mismatch_is_refused() {
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: heap.bases(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -3580,6 +3784,7 @@ fn compile_fp(
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: Heap::default(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -3865,6 +4070,7 @@ fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: heap.bases(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -3890,6 +4096,7 @@ fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
             array: &|_, _| None,
             invoke: &|_, _, _| None,
             heap: heap.bases(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -3951,6 +4158,7 @@ fn compile_array(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) -
             },
             invoke: &|_, _, _| None,
             heap,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -4206,6 +4414,7 @@ fn compile_group2(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            array_store: &|_, _| None,
             class_mirror: &|_, _| mirror,
             string_literal: &|_, _| None,
             heap,
@@ -4302,28 +4511,133 @@ fn a_reference_static_is_read_live_and_dereferenced() {
     assert_eq!(call_at(&compiled, &[], 0).0, Outcome::Deopt(3), "a null static deopts at the read");
 }
 
+/// The `(holder, value)` pairs compiled code recorded in the **write-barrier log**, read out of the
+/// buffer `call_at` handed back — exactly what the trampoline replays through
+/// `HeapService::replay_jit_reference_store`.
+///
+/// A method with no barrier log answers the empty list, and that is the *right* answer rather than
+/// a convenience: `barrier_records == 0` is the compiler's claim that this method writes no
+/// reference into an object, so a test asserting "nothing was recorded" is also asserting that
+/// claim.
+fn barrier_log(compiled: &CompiledCode, buffer: &[i64]) -> Vec<(usize, usize)> {
+    if compiled.barrier_records == 0 {
+        return Vec::new();
+    }
+    let base = compiled.barrier_base as usize;
+    let count = buffer[base] as usize;
+    assert!(count <= compiled.barrier_records as usize, "the log overflowed its declared capacity");
+    (0..count).map(|r| (buffer[base + 1 + 2 * r] as usize, buffer[base + 2 + 2 * r] as usize)).collect()
+}
+
 #[test]
-fn writing_a_reference_field_is_refused_and_reading_one_is_not() {
-    // **The hard limit of this group, asserted as a limit.** A reference store owes the collector's
-    // write barrier (`HeapService::store_reference`, which records an old→young pointer in the
-    // remembered set) and no instruction stream can run one, so both write opcodes are refused —
-    // while their reading twins, above and below, compile.
+fn a_reference_field_is_written_and_the_old_to_young_pair_is_recorded() {
+    // **The opcode this whole group was blocked on.** A reference store is four bytes like an
+    // `int`'s; what it owes on top is the collector's write barrier — the record of an old→young
+    // pointer that lets a minor collection find a young object whose only root is in Old. Compiled
+    // code cannot insert into the remembered set, so it *records the pair* and the trampoline
+    // replays it; this asserts both halves at once, because either alone is silently wrong.
+    //
+    // In [`FakeHeap`] the split is Eden (`< 264`) against everything above it, which is what
+    // `old_start` in `bases()` says — so `1000` is an Old object and `24` a young one.
     let heap = FakeHeap::new();
 
-    // aload_0; aload_1; putfield #1 (a reference field); return
+    // aload_0; aload_1; putfield #1 (a reference field, at +8); return
     let code = [ALOAD_0, ALOAD_1, PUTFIELD, 0x00, 0x01, RETURN];
-    let err = compile_group2(&code, 2, "(LA;LB;)V", heap.bases(), 0, None).unwrap_err();
-    assert_eq!(err, Ineligible::ReferenceWrite { pc: 2 });
+    let compiled = compile_group2(&code, 2, "(LA;LB;)V", heap.bases(), 0, None).unwrap();
+    assert_eq!(compiled.barrier_records, super::compile::BARRIER_LOG_RECORDS, "the method stores a reference");
+
+    // (1) **Old holder, young value** — the one case the remembered set exists for.
+    let (outcome, buffer) = call_at(&compiled, &[1000, 24], 0);
+    assert_eq!(outcome, Outcome::Returned(0), "a `void` return");
+    assert_eq!(heap.read(1000 + 8), 24, "the pointer really is in the slot");
+    assert_eq!(barrier_log(&compiled, &buffer), vec![(1000, 24)], "holder and value, in that order");
+
+    // (2) **Young holder** — the overwhelmingly common store, and the one the inline filter exists
+    // to make free. The write still happens; only the record is skipped.
+    let (_, buffer) = call_at(&compiled, &[24, 40], 0);
+    assert_eq!(heap.read(24 + 8), 40, "written all the same");
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "a young holder remembers nothing");
+
+    // (3) **A null value**, and (4) **an old value** — the other two arms of the barrier's own
+    // predicate, and both are skips rather than refusals.
+    let (_, buffer) = call_at(&compiled, &[1000, 0], 0);
+    assert_eq!(heap.read(1000 + 8), 0, "the null was stored");
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "null is not a pointer to remember");
+    let (_, buffer) = call_at(&compiled, &[1000, 2000], 0);
+    assert_eq!(heap.read(1000 + 8), 2000, "the old pointer was stored");
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "old→old is not the minor collector's problem");
+
+    // (5) The **null receiver** still deopts, ahead of everything above — and a deopt at this pc
+    // means the field was not written and nothing was recorded.
+    let (outcome, buffer) = call_at(&compiled, &[0, 24], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(2), "a barrier-carrying putfield reports ALLOC");
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "a guard that fired recorded nothing");
+}
+
+#[test]
+fn a_reference_static_is_written_without_a_barrier_and_an_int_field_carries_no_log() {
+    // **The two writes that owe the collector nothing, asserted as owing nothing.**
+    //
+    // A `putstatic` of a reference writes into a slot of a `Class<…>` mirror, and `gc::minor` scans
+    // every mirror's statics as an Old→young root *unconditionally*, before it consults the
+    // remembered set at all — so recording the holder would be recording a permanent root. The
+    // interpreter's own `putstatic` skips the barrier for exactly that reason. If this ever starts
+    // carrying a log, the two have stopped agreeing.
+    use std::sync::atomic::AtomicU32;
+    static CELL: AtomicU32 = AtomicU32::new(0);
+    let heap = FakeHeap::new();
+    let cell = &CELL as *const _ as usize;
 
     // aload_0; putstatic #1 (a reference static); return
     let code = [ALOAD_0, PUTSTATIC, 0x00, 0x01, RETURN];
-    let err = compile_group2(&code, 1, "(LA;)V", heap.bases(), 0x40, None).unwrap_err();
-    assert_eq!(err, Ineligible::ReferenceWrite { pc: 1 });
+    let compiled = compile_group2(&code, 1, "(LA;)V", heap.bases(), cell, None).unwrap();
+    assert_eq!(compiled.barrier_records, 0, "a static needs no barrier, so it needs no log");
+    let (outcome, _) = call_at(&compiled, &[1000], 0);
+    assert_eq!(outcome, Outcome::Returned(0));
+    assert_eq!(CELL.load(Ordering::Acquire), 1000, "four bytes, exactly as `write_u32` writes them");
 
-    // ...and the `int` field at #2 writes perfectly well through the very same resolver, which is
-    // what makes the two refusals above about *references* rather than about writes.
+    // And an `int` `putfield` through the very same resolver carries no log either — which is what
+    // makes the log above about *references* rather than about writes.
     let code = [ALOAD_0, ICONST_1, PUTFIELD, 0x00, 0x02, RETURN];
-    assert!(compile_group2(&code, 1, "(LA;)V", heap.bases(), 0, None).is_ok());
+    let compiled = compile_group2(&code, 1, "(LA;)V", heap.bases(), 0, None).unwrap();
+    assert_eq!(compiled.barrier_records, 0, "an int field owes the collector nothing");
+    assert_eq!(compiled.buffer_slots, compiled.alloc_base, "and therefore pays no slot for one");
+}
+
+#[test]
+fn the_barrier_log_fills_and_the_method_leaves_without_losing_a_pair() {
+    // **A bounded log is a reason to leave, and leaving must lose nothing.** The log is a fixed
+    // array in a buffer allocated once, so a loop can outrun it; what must never happen is a store
+    // that happens with its pair dropped on the floor. So the capacity check comes *before* both
+    // the record and the store, and this asserts the consequence: at the moment native code gives
+    // up, the number of pairs recorded is exactly the log's capacity and every one of them is the
+    // store that was actually made.
+    //
+    // The program stores `local1` into `local0.f` in a **counted** loop, one iteration longer than
+    // the log is deep. Counted rather than unbounded on purpose: a compilation that recorded
+    // nothing would spin for ever in an unbounded loop, and a test that hangs says much less than
+    // one that fails — this one returns normally and the `AllocFailed` assertion is what fires.
+    let heap = FakeHeap::new();
+    // 0: iconst_0; 1: istore_2
+    // 2: iload_2; 3: sipush n; 6: if_icmpge +14 (→ 20: return)
+    // 9: aload_0; 10: aload_1; 11: putfield #1
+    // 14: iinc 2 1; 17: goto -15 (→ 2)
+    // 20: return
+    let n = super::compile::BARRIER_LOG_RECORDS as i32 + 8;
+    let code = [
+        ICONST_0, ISTORE_2, // 0..1
+        ILOAD_2, SIPUSH, (n >> 8) as u8, n as u8, IF_ICMPGE, 0x00, 0x0e, // 2..8
+        ALOAD_0, ALOAD_1, PUTFIELD, 0x00, 0x01, // 9..13
+        IINC, 0x02, 0x01, GOTO, 0xff, 0xf1, // 14..19
+        RETURN, // 20
+    ];
+    let compiled = compile_group2(&code, 3, "(LA;LB;)V", heap.bases(), 0, None).unwrap();
+
+    let (outcome, buffer) = call_at(&compiled, &[1000, 24, 0], 0);
+    assert_eq!(outcome, Outcome::AllocFailed(11), "a full barrier log is a capacity exit, not a guard failure");
+    let log = barrier_log(&compiled, &buffer);
+    assert_eq!(log.len(), super::compile::BARRIER_LOG_RECORDS as usize, "the log is full to its capacity");
+    assert!(log.iter().all(|&pair| pair == (1000, 24)), "every pair is the store that was made");
 }
 
 #[test]
@@ -4450,6 +4764,7 @@ fn instanceof_agrees_at_every_cache_size_and_every_depth() {
                     array: &|_, _| None,
                     invoke: &|_, _, _| None,
                     heap: bases,
+                    array_store: &|_, _| None,
                     class_mirror: &|_, _| Some(MIRROR),
                     string_literal: &|_, _| None,
                     poll_word: &POLL as *const _ as usize,
@@ -4535,6 +4850,7 @@ fn un_callee_inlineado_recibe_un_long_en_el_medio() {
                 })
             },
             heap: heap.bases(),
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &POLL as *const _ as usize,
@@ -4596,6 +4912,7 @@ fn un_callee_cuyos_argumentos_no_entran_en_sus_locales_se_rechaza() {
                     })
                 },
                 heap: heap.bases(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: &POLL as *const _ as usize,

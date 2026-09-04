@@ -503,25 +503,38 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     /**
      * Un contexto para dibujar sobre esta imagen.
      *
-     * @throws UnsupportedOperationException siempre: hace falta un rasterizador que esta biblioteca
-     *     no trae. Ver {@link #createGraphics}.
+     * <p><strong>Funciona.</strong> Devuelve el rasterizador de esta biblioteca: lineas por
+     * Bresenham, rellenos por barrido, arcos, poligonos, recorte rectangular, traslacion, copia de
+     * areas y dibujado de otras {@code BufferedImage}. Lo unico que declina es {@code drawString},
+     * que necesita los contornos de los glifos — un subsistema aparte que todavia no esta.
+     *
+     * <p>No es lo mismo que {@link #createGraphics}: aquel promete un {@link Graphics2D}, con
+     * transformaciones afines, trazos, composicion y sugerencias de renderizado, y eso es una capa
+     * mas que esta arriba de esta.
      */
     public Graphics getGraphics() {
-        return this.createGraphics();
+        return new KajiGraphics(this);
     }
 
     /**
      * Un contexto para dibujar sobre esta imagen.
      *
-     * @throws UnsupportedOperationException siempre: devolver un {@link Graphics2D} que dibuje de
-     *     verdad exige un rasterizador —relleno por barrido, recorte, trazo, composición— y esta
-     *     biblioteca no lo trae. Los píxeles se pueden leer y escribir con {@link #getRGB},
-     *     {@link #setRGB} y {@link #getRaster}.
+     * <p><strong>Funciona.</strong> Devuelve el mismo objeto que {@link #getGraphics}, que es un
+     * {@link Graphics2D} completo: transformaciones afines —traslación, rotación, escala,
+     * cizalladura—, {@code draw} y {@code fill} de cualquier {@link java.awt.Shape}, grosor de
+     * trazo, recorte por figura y dibujado de imágenes con transformación.
+     *
+     * <p>Tres cosas se guardan y se reportan pero <strong>no se aplican</strong>, y conviene
+     * saberlo: una {@link java.awt.Paint} que no sea un color uniforme, una
+     * {@link java.awt.Composite} con alfa parcial, y las sugerencias de renderizado. Las tres piden
+     * evaluación por píxel contra el destino, que es un mecanismo que este tier no tiene. Lo que sí
+     * se cumple es que {@code getPaint}, {@code getComposite} y {@code getRenderingHint} devuelvan
+     * lo que se fijó, porque hay código que las guarda y las restaura.
+     *
+     * <p>Y {@code drawString} sigue declinando: necesita los contornos de los glifos.
      */
     public Graphics2D createGraphics() {
-        throw new UnsupportedOperationException("dibujar sobre una BufferedImage requiere un "
-                + "rasterizador; esta biblioteca no lo trae. Los píxeles se leen y se escriben con "
-                + "getRGB, setRGB y getRaster.");
+        return new KajiGraphics(this);
     }
 
     /**

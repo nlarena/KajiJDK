@@ -307,6 +307,11 @@ enum Entry {
         /// [`CompiledCode::alloc_base`].
         alloc_base: usize,
         alloc_records: usize,
+        /// Where this code's **write-barrier log** starts in the buffer, and how many
+        /// `(holder, value)` pairs it holds — `0` for a method that writes no reference into an
+        /// object or an array, which carries no log at all. See [`CompiledCode::barrier_base`].
+        barrier_base: usize,
+        barrier_records: usize,
         /// The bytecode pcs this code may be entered at on-stack (its loop headers), ascending.
         osr_entries: Vec<u32>,
         /// **The resume map**: every point native code can hand a half-finished method back at,
@@ -681,6 +686,8 @@ impl JitCache {
                 result_base: compiled.result_base as usize,
                 alloc_base: compiled.alloc_base as usize,
                 alloc_records: compiled.alloc_records as usize,
+                barrier_base: compiled.barrier_base as usize,
+                barrier_records: compiled.barrier_records as usize,
                 osr_entries: compiled.osr_entries,
                 resume: compiled.resume_sites,
                 frame_depth: compiled.frame_depth as usize,
@@ -717,13 +724,20 @@ impl JitCache {
     /// `allocated(offset, size)` is called **once for every object native code allocated**, in
     /// allocation order, before this returns — see [`JitCache::enter`]. It is not optional and it is
     /// not conditional on the outcome: a deopt has allocated just as much as a return has.
+    ///
+    /// `remembered(holder, value)` is the same clause for the collector's **write barrier**: it is
+    /// called once for every reference store compiled code recorded, in store order, before this
+    /// returns, on every outcome. The pointer is already in the heap; what this replays is the
+    /// remembered-set entry the store owes. Omitting it does not crash — it frees a live object at
+    /// the next minor collection, which is worse.
     pub fn run(
         &mut self,
         key: usize,
         local: impl Fn(u16) -> Option<i64>,
         allocated: impl FnMut(usize, usize),
+        remembered: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
-        self.enter(key, 0, false, local, allocated)
+        self.enter(key, 0, false, local, allocated, remembered)
     }
 
     /// Enters `key`'s compiled code **at a loop header**, marshalling its locals through `local`.
@@ -737,19 +751,24 @@ impl JitCache {
     ///
     /// On [`OsrResult::Safepoint`] or [`OsrResult::Deopt`] the caller must rebuild this frame from
     /// the state it carries and resume at its pc.
+    ///
+    /// `allocated` and `remembered` carry the same obligations they do in [`JitCache::run`], and
+    /// for the same reason: an on-stack excursion allocates and stores references exactly as an
+    /// ordinary one does.
     pub fn run_osr(
         &mut self,
         key: usize,
         entry_pc: u32,
         local: impl Fn(u16) -> Option<i64>,
         allocated: impl FnMut(usize, usize),
+        remembered: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
         match self.entries.get(&key) {
             Some(Entry::Compiled { osr_entries, osr_open, .. })
                 if *osr_open && osr_entries.contains(&entry_pc) => {}
             _ => return None,
         }
-        let result = self.enter(key, entry_pc, true, local, allocated)?;
+        let result = self.enter(key, entry_pc, true, local, allocated, remembered)?;
         if let OsrResult::Safepoint(_) = result {
             self.stats.safepoint_exits += 1;
         }
@@ -861,6 +880,7 @@ impl JitCache {
         on_stack: bool,
         local: impl Fn(u16) -> Option<i64>,
         mut allocated: impl FnMut(usize, usize),
+        mut remembered: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
         if !self.enabled {
             return None;
@@ -874,6 +894,8 @@ impl JitCache {
             result_base,
             alloc_base,
             alloc_records,
+            barrier_base,
+            barrier_records,
             ..
         }) = self.entries.get(&key)
         else {
@@ -883,6 +905,7 @@ impl JitCache {
         let returns_void = *returns_void;
         let result_base = *result_base;
         let (alloc_base, alloc_records) = (*alloc_base, *alloc_records);
+        let (barrier_base, barrier_records) = (*barrier_base, *barrier_records);
         debug_assert!(self.scratch.len() >= *slots, "the scratch buffer was sized at install time");
         for &i in touched {
             match local(i) {
@@ -905,6 +928,13 @@ impl JitCache {
         if alloc_records > 0 {
             self.scratch[alloc_base] = 0;
         }
+        // The barrier log starts empty for the same reason, with a different failure mode behind
+        // it: a stale count would replay pairs from the previous excursion, and after a collection
+        // has moved things those are two offsets that no longer name what they named — a holder
+        // remembered for a store that is not there.
+        if barrier_records > 0 {
+            self.scratch[barrier_base] = 0;
+        }
         // SAFETY: `scratch` is a live, initialised `Vec<i64>` of at least `locals` elements (sized
         // in `install`, and every index in `touched` is `< max_locals` by construction — `compile`
         // rejects a local index at or past `max_locals`). The pointer is valid for the duration of
@@ -926,6 +956,27 @@ impl JitCache {
             for r in 0..count {
                 let at = alloc_base + 1 + 2 * r;
                 allocated(self.scratch[at] as usize, self.scratch[at + 1] as usize);
+            }
+        }
+        // **And the write barrier, on the same terms and in the same window.** Compiled code wrote
+        // the reference itself — that part is four bytes and needs nobody's help — but the
+        // collector's record of an old→young pointer is a `HashSet` insert, so the pair was logged
+        // and is replayed here through the real barrier (`HeapService::replay_jit_reference_store`).
+        //
+        // Compiled code filters the pairs it logs by the barrier's own predicate, and that filter
+        // is an optimisation only: every pair is re-tested on the far side of this call. So a
+        // filter that keeps too much costs one call per redundant pair, and the only way to be
+        // wrong is to keep too little — which is why the emitted inequalities are written the same
+        // way round as the VM's.
+        if barrier_records > 0 {
+            let count = (self.scratch[barrier_base] as usize).min(barrier_records);
+            debug_assert!(
+                self.scratch[barrier_base] as usize <= barrier_records,
+                "compiled code logged more reference stores than the buffer holds"
+            );
+            for r in 0..count {
+                let at = barrier_base + 1 + 2 * r;
+                remembered(self.scratch[at] as usize, self.scratch[at + 1] as usize);
             }
         }
         match Status::unpack(raw) {
@@ -995,6 +1046,7 @@ mod tests {
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: Heap::default(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: c.poll_address(),
@@ -1038,6 +1090,13 @@ mod tests {
     /// this test never asked for.
     fn no_allocations(offset: usize, size: usize) {
         panic!("this program allocates nothing, but native code logged ({offset}, {size})");
+    }
+
+    /// The write-barrier sink for the programs below, asserted unused on the same terms: none of
+    /// them stores a reference, so a call would mean compiled code recorded a pointer this test
+    /// never asked it to write.
+    fn no_barriers(holder: usize, value: usize) {
+        panic!("this program stores no reference, but native code logged ({holder}, {value})");
     }
 
     fn cache() -> JitCache {
@@ -1095,7 +1154,7 @@ mod tests {
         for _ in 0..1000 {
             assert_eq!(c.on_entry(7), Decision::Interpret);
         }
-        assert_eq!(c.run(7, |_| Some(0), no_allocations), None);
+        assert_eq!(c.run(7, |_| Some(0), no_allocations, no_barriers), None);
         assert_eq!(c.stats(), JitStats::default());
     }
 
@@ -1109,7 +1168,7 @@ mod tests {
         let code = add_two(&c);
         c.install(7, Ok(code), 2);
         assert_eq!(c.on_entry(7), Decision::Ready);
-        assert_eq!(c.run(7, |i| Some(i as i64 * 10 + 1), no_allocations), Some(returned(1 + 11)));
+        assert_eq!(c.run(7, |i| Some(i as i64 * 10 + 1), no_allocations, no_barriers), Some(returned(1 + 11)));
         assert_eq!(c.stats().compiled, 1);
         assert_eq!(c.stats().rejected, 0);
         assert_eq!(c.stats().native_calls, 1);
@@ -1125,7 +1184,7 @@ mod tests {
         let code = add_two(&c);
         c.install(7, Ok(code), 2);
         // Slot 1 holds something that is not an int (a reference, a long, a double...).
-        assert_eq!(c.run(7, |i| (i != 1).then_some(3), no_allocations), None);
+        assert_eq!(c.run(7, |i| (i != 1).then_some(3), no_allocations, no_barriers), None);
         assert_eq!(c.stats().unmarshallable, 1);
         assert_eq!(c.stats().native_calls, 0);
     }
@@ -1147,8 +1206,8 @@ mod tests {
         }
         let code = compiled(&c, &[0x1a, 0x1b, 0x6c, 0xac], 2, "(II)I");
         c.install(7, Ok(code), 2);
-        assert_eq!(c.run(7, |i| Some(if i == 0 { 100 } else { 7 }), no_allocations), Some(returned(14)));
-        let out = c.run(7, |i| Some(if i == 0 { 100 } else { 0 }), no_allocations);
+        assert_eq!(c.run(7, |i| Some(if i == 0 { 100 } else { 7 }), no_allocations, no_barriers), Some(returned(14)));
+        let out = c.run(7, |i| Some(if i == 0 { 100 } else { 0 }), no_allocations, no_barriers);
         assert_eq!(
             out,
             Some(OsrResult::Deopt(ResumeState {
@@ -1191,7 +1250,7 @@ mod tests {
         // Local 0 is the zero divisor *and* the branch flag, so this call takes the path that never
         // writes slot 2 — and the assertion below is that the answer does not depend on which path
         // it took, because the map says `Conflict` either way.
-        let out = c.run(9, |i| Some([0, 264, 4242][i as usize]), no_allocations);
+        let out = c.run(9, |i| Some([0, 264, 4242][i as usize]), no_allocations, no_barriers);
         assert_eq!(
             out,
             Some(OsrResult::Deopt(ResumeState {
@@ -1243,7 +1302,7 @@ mod tests {
         // Enter at the loop header with i already at 5 and the bound at 9. Native code must run
         // the remaining four iterations and return 9 — not restart from `i = 0`, which is the one
         // thing an entry-point mix-up would look like.
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 9 }), no_allocations);
+        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 9 }), no_allocations, no_barriers);
         assert_eq!(out, Some(returned(9)));
         assert_eq!(c.stats().osr_entries, 1);
         assert_eq!(c.stats().native_calls, 1);
@@ -1256,7 +1315,7 @@ mod tests {
         let mut c = warm_loop();
         // pc 7 is the `iinc` — a real instruction, but not a loop header, so not an entry point.
         // Falling through the dispatch would run the method from pc 0 and answer 9 instead.
-        assert_eq!(c.run_osr(7, 7, |_| Some(0), no_allocations), None);
+        assert_eq!(c.run_osr(7, 7, |_| Some(0), no_allocations, no_barriers), None);
         assert_eq!(c.stats().native_calls, 0, "nothing must have been entered");
     }
 
@@ -1267,7 +1326,7 @@ mod tests {
         // Raise the poll *before* entering: the first time the loop comes round to its header the
         // check fires, so exactly one iteration runs natively.
         c.poll_word().store(1, std::sync::atomic::Ordering::Release);
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 1_000_000 }), no_allocations);
+        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 1_000_000 }), no_allocations, no_barriers);
         // The state it comes back with is the state the interpreter has to resume from: local 0
         // advanced by exactly the one iteration that ran, the pc at the loop header, and an empty
         // operand stack — which is what a loop header being an entry point *means*.
@@ -1286,7 +1345,7 @@ mod tests {
         // Lower it again and the very same code runs the loop to the end — the poll is a
         // condition, not a mode.
         c.poll_word().store(0, std::sync::atomic::Ordering::Release);
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 6 } else { 9 }), no_allocations);
+        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 6 } else { 9 }), no_allocations, no_barriers);
         assert_eq!(out, Some(returned(9)));
         assert_eq!(c.stats().safepoint_exits, 1);
     }
@@ -1323,7 +1382,7 @@ mod tests {
         assert_eq!(code.resume_sites.iter().map(|s| s.pc).collect::<Vec<_>>(), vec![0, 2]);
         c.install(7, Ok(code), 2);
         assert!(c.watches_back_edges(7));
-        let out = c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 0 }), no_allocations);
+        let out = c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 0 }), no_allocations, no_barriers);
         assert_eq!(
             out,
             Some(OsrResult::Deopt(ResumeState {
@@ -1335,7 +1394,7 @@ mod tests {
         );
         assert_eq!(c.stats().deopts, 1);
         assert!(!c.watches_back_edges(7), "OSR is closed after a deopt from a loop header");
-        assert_eq!(c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 2 }), no_allocations), None, "and stays closed");
+        assert_eq!(c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 2 }), no_allocations, no_barriers), None, "and stays closed");
         assert_eq!(c.stats().native_calls, 1, "the second attempt never entered");
     }
 
@@ -1401,6 +1460,10 @@ mod tests {
                 array_length: 8,
                 array_data: 12,
                 int_element: 4,
+                reference_element: 4,
+                // Everything this fake hands out is "young": there is no Old generation to
+                // separate, so the barrier's filter can never fire and the log stays empty.
+                old_start: u32::MAX,
             }
         }
     }
@@ -1422,6 +1485,7 @@ mod tests {
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
                 heap: eden.heap(),
+                array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
                 poll_word: c.poll_address(),
@@ -1445,7 +1509,7 @@ mod tests {
         c.install(7, Ok(program), 1);
 
         let mut seen: Vec<(usize, usize)> = Vec::new();
-        let out = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)));
+        let out = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)), no_barriers);
         assert!(matches!(out, Some(OsrResult::Returned(Some(JitValue::Reference(_))))));
         assert_eq!(
             seen,
@@ -1457,7 +1521,7 @@ mod tests {
         // objects, not four. A stale count here would replay references to objects that a
         // collection has since recycled — the one bookkeeping mistake that is silent.
         seen.clear();
-        let _ = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)));
+        let _ = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)), no_barriers);
         assert_eq!(seen, vec![(TestEden::NULL_PAGE + 32, 16), (TestEden::NULL_PAGE + 48, 16)]);
     }
 
@@ -1489,7 +1553,7 @@ mod tests {
         c.install(7, Ok(program), 1);
 
         let mut seen = 0usize;
-        let out = c.run_osr(7, 2, |_| Some(0), |_, _| seen += 1);
+        let out = c.run_osr(7, 2, |_| Some(0), |_, _| seen += 1, no_barriers);
         // The state contract is a deopt's — the interpreter resumes at the `new` that did not run.
         match out {
             Some(OsrResult::Deopt(state)) => assert_eq!(state.pc, 8),

@@ -94,9 +94,14 @@ class HeadlessToolkit extends Toolkit {
      *     de la fuente, y esta biblioteca no trae motor tipográfico. Es la misma frontera que parte
      *     a {@link Font} en dos mitades.
      */
+    /**
+     * Las metricas de la unica fuente de esta VM, sea cual sea la pedida.
+     *
+     * <p>Ver {@link KajiFontMetrics}: toda fuente se sustituye por la misma cara, y las metricas
+     * son las de esa cara, que es lo que el rasterizador efectivamente pinta.
+     */
     public FontMetrics getFontMetrics(Font font) {
-        throw new UnsupportedOperationException("medir una fuente requiere leer sus glifos; esta "
-                + "biblioteca no trae motor tipográfico");
+        return new KajiFontMetrics(font);
     }
 
     /** No hay nada pendiente de dibujar: no hay pantalla. */

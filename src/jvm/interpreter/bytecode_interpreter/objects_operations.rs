@@ -505,12 +505,12 @@ fn resolve_field_site_read(
 ///    emitted access — four bytes sign-extending for an `int`, four zero-extending for a `float` or
 ///    a **reference**, eight for a `long` or a `double` — so it is handed back rather than left to
 ///    be inferred, which is why the answer is a pair and not just an offset. A reference field used
-///    to be refused here because a compiled `putfield` of one would need the GC write barrier; that
-///    rule is still absolute, but it now lives where it belongs, in the compiler
-///    (`burst::compile::writable`, `Ineligible::ReferenceWrite`), so that *reading* a reference —
-///    which owes nothing to the collector, since no barrier is involved and no object graph changes
-///    — is not refused along with it. This resolver answers what the field *is*; the compiler
-///    decides what may be done with it.
+///    to be refused here because a compiled `putfield` of one would need the GC write barrier; the
+///    barrier is still owed, and since F3-H3 the compiler *pays* it — the emitted store records the
+///    `(holder, value)` pair and the JIT trampoline replays it through
+///    `HeapService::replay_jit_reference_store` (see `burst::compile`'s `putfield` arm and
+///    `CompiledCode::barrier_base`). This resolver answers what the field *is*; the compiler decides
+///    what has to happen around writing it.
 ///  - **`volatile` too, now** — for reads *and* for primitive writes. VOLATILE-REVISIT-OS-PARALLEL.
 ///    The argument is **not** x86-TSO. It is that the JIT runs only on `green` (one OS thread) and
 ///    `os-gil` (the thread holds the one global lock for the whole opcode, the native call

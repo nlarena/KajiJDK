@@ -1179,6 +1179,10 @@ fn subset_census() {
         array_length: 8,
         array_data: 12,
         int_element: 4,
+        reference_element: 4,
+        // The real heap's shape: young below Eden's end plus two survivors, Old above. Nothing here
+        // runs, so this only has to be a plausible constant for the filter to be compiled against.
+        old_start: 264 + 2 * 256,
     };
 
     /// Every `.class` under `root`, recursively — `boot/` is a package tree, not a flat directory.
@@ -1613,6 +1617,14 @@ fn subset_census() {
                 // stubs apart, so each is counted against its own pool tag. A running VM
                 // additionally requires the mirror to exist already, which this cannot know: upper
                 // bound, exactly like the `new` and `newarray` stubs above.
+                // The `aastore` stub: **every** site answers, with two plausible mirror offsets no
+                // code here compares against. A running VM additionally requires the site to have
+                // *executed at least once* — the guard is built on the array class the interpreter
+                // observed there — which a static census cannot know. Upper bound again, and the
+                // same kind of upper bound as the `new` and `newarray` stubs above: it counts the
+                // methods that are inside the subset's *shape*, not the ones a given run would
+                // actually have profiled.
+                array_store: &|_, _| Some(crate::burst::compile::ArrayStore { array_class: 1, element_class: 1 }),
                 class_mirror: &|unit, index| class_of(&classes, &units, unit).class_name(index).map(|_| 1),
                 // The `ldc "…"` stub, and an upper bound for the same reason: **any
                 // `CONSTANT_String`** resolves, where a running VM would additionally require the
@@ -2135,6 +2147,54 @@ fn rooted_thread(frames: Vec<Frame>) -> crate::jvm::interpreter::bytecode_interp
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The write barrier (F3-H3). Two workloads, and they ask the two questions this milestone is
+// about: does a compiled reference *store* leave the collector able to find what it points at, and
+// does a compiled `aastore` agree with the interpreter about which stores are legal.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_compiled_reference_store_agrees_with_the_interpreter() {
+    // `WbRef` writes reference fields in a loop, chains through them, and — the part that could not
+    // be tested before this milestone — hands a **promoted** holder a fresh young object, drops
+    // every other root to it, allocates hard enough to provoke a minor collection, and only then
+    // reads the field back. An unrecorded old→young pointer does not fail *there*: it frees a live
+    // object, and the read that follows is a read of whatever took its place.
+    //
+    // 6322635 is what `java WbRef` prints.
+    let stats = differential("java/WbRef.class", 6_322_635);
+    // `chainSum`, `oldToYoung`, `spine` and `run` — every one of them was refused before this
+    // milestone, three for `putfield` of a reference and one (`spine`) for `aaload`.
+    assert!(stats.compiled >= 3, "the reference-storing helpers compile now");
+    assert_eq!(stats.unmarshallable, 0, "a reference marshals as its heap offset like any other");
+}
+
+#[test]
+fn a_compiled_aastore_agrees_with_the_interpreter_about_every_answer() {
+    // `WbArr` asks all three of `aastore`'s answers in one number: the exact element class (stored
+    // natively), the legal covariant store (deopted, and done by the interpreter), and the illegal
+    // one (deopted, and turned into the `ArrayStoreException` the Java `catch` counts). That the
+    // score matches means the JIT arm threw the same exception the same number of times, which is
+    // the only way to check "native code decides that it cannot proceed, never *which* exception"
+    // from outside.
+    //
+    // 66371768 is what `java WbArr` prints.
+    let stats = differential("java/WbArr.class", 66_371_768);
+    // **The deopts are the assertion.** `covariant` stores a `WbLeaf` into an `Object[]` 500 times
+    // and `illegal` stores a `String` into a `WbLeaf[]` 300 times; both are exact-class misses, so
+    // every one of them that native code reaches leaves. A zero here would mean the type guard was
+    // not emitted at all — which is the shape of the mistake this milestone is most exposed to,
+    // since a missing check writes the wrong object into the array and nothing complains until far
+    // away.
+    //
+    // `arrayClass` is the third shape, and it separates the guard's two halves: its payload is a
+    // plain `java.lang.Object`, i.e. *exactly* the element class of the `Object[]` its site is
+    // profiled on, so the value comparison alone would wave the `WbLeaf[]` call through. Only the
+    // array comparison can turn that into the `ArrayStoreException` the `catch` counts.
+    assert!(stats.deopts > 0, "a covariant or illegal store must be leaving native code");
+    assert!(stats.compiled > 0, "something with an aastore in it compiled");
+}
+
 /// The constant-pool index of the `Class` entry naming `target` in `caller`'s pool — how the JIT's
 /// `new` resolver is actually reached, so the test drives the real path rather than a fabricated
 /// index.
@@ -2241,7 +2301,10 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
                 array_length: 8,
                 array_data: 12,
                 int_element: 4,
+                reference_element: 4,
+                old_start: bases.max_offset.min(u32::MAX as usize) as u32,
             },
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &JIT_GC_POLL as *const _ as usize,
@@ -2330,6 +2393,308 @@ fn an_unlogged_allocation_is_exactly_the_corruption_the_replay_prevents() {
     gc::verify_heap(&metaspace, &heap, &threads);
 }
 
+/// The constant-pool index of the `Fieldref` naming `class.field` in `caller`'s pool, and the pc of
+/// the `putfield` that uses it — so the JIT's field resolver is reached exactly as the VM reaches
+/// it, through a real site of a real method rather than through a fabricated `(pc, index)`.
+#[cfg(windows)]
+fn putfield_site(metaspace: &mut MetaspaceService, caller: &str, method: &str, descriptor: &str, class: &str, field: &str) -> (u16, usize, crate::jvm::interpreter::metaspace::MethodId) {
+    let pool = metaspace.get(caller).expect("the caller is loaded");
+    let index = (1..pool.constant_pool.len() as u16)
+        .find(|&i| pool.fieldref_target(i).map(|(c, n, _)| (c, n)) == Some((class, field)))
+        .expect("the caller's pool names the field");
+    let id = metaspace.resolve_method(caller, method, descriptor).expect("the method resolves");
+    let code = metaspace.code(id);
+    let pc = (0..code.len().saturating_sub(2))
+        .find(|&pc| code[pc] == 0xb5 && u16::from_be_bytes([code[pc + 1], code[pc + 2]]) == index)
+        .expect("the method contains that putfield");
+    (index, pc, id)
+}
+
+/// **The test the write barrier turns on**, and the one every cheaper version of gets wrong.
+///
+/// The claim being checked is not "the compiled store writes the right four bytes" — a machine-code
+/// test proves that, and one does, in `compile_tests`. It is that after the store the **collector**
+/// can find what those four bytes point at. That claim only has teeth under three conditions at
+/// once, and all three are set up below:
+///
+///  1. the holder is in **Old**, so a minor collection does not scan it as part of the young set;
+///  2. the value is in **Eden**, so a minor collection *will* free it unless something roots it;
+///  3. **there is no other root at all** — no thread, no frame, no local, no operand. The frames
+///     argument is empty. So the remembered-set entry the barrier made is the only thing standing
+///     between the young object and the collector, and if it is missing the object dies.
+///
+/// Without (3) the test passes with the barrier deleted, because the frame holding the reference
+/// keeps the object alive by itself — which is exactly why the assertions here are made against an
+/// empty thread list rather than against the convenient one.
+#[test]
+#[cfg(windows)]
+fn a_reference_stored_by_compiled_code_survives_a_minor_with_no_root_but_the_barrier() {
+    use crate::burst::compile::{Environment, Method, Outcome, Status};
+    use crate::burst::exec_mem::ExecMem;
+    use crate::jvm::interpreter::bytecode_interpreter::{class_operations, objects_operations};
+    use crate::jvm::interpreter::gc;
+    use crate::jvm::interpreter::heap::HeapService;
+
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut heap = HeapService::new();
+    for name in ["WbRef", "WbCell"] {
+        class_operations::load_class(&mut metaspace, &mut heap, name);
+    }
+    // `WbCell.next` — a real reference field of a real class, reached through a real `putfield`
+    // site, so the offset compiled code writes to is the one `gc::reference_slots` will look at.
+    let (index, site_pc, unit) = putfield_site(&mut metaspace, "WbRef", "chainSum", "(I)I", "WbCell", "next");
+    let (field_offset, kind) =
+        objects_operations::jit_field_site(&metaspace, unit, site_pc, index).expect("a reference field");
+    assert_eq!(kind, crate::burst::compile::Kind::Reference, "the field under test holds a reference");
+    let field_offset = field_offset as usize;
+
+    // (1) and (2): an Old holder, and a young value with nothing pointing at it.
+    let holder = objects_operations::allocate_old(&mut metaspace, &mut heap, "WbCell");
+    let young = objects_operations::allocate(&mut metaspace, &mut heap, "WbCell");
+    heap.commit_pending();
+    assert!(holder >= heap.old_start(), "the holder must be tenured for this to mean anything");
+    assert!(young < heap.old_start(), "...and the value must be in the young generation");
+    heap.write_u32(young + field_offset + 4, 0x0BAD_F00D); // `tag`, a witness
+    let young_tag = heap.read_u32(young + field_offset + 4);
+
+    // Compile `aload_0; aload_1; putfield WbCell.next; return`.
+    let bases = heap.jit_bases();
+    let code = [0x2a, 0x2b, 0xb5, (index >> 8) as u8, index as u8, 0xb1];
+    let compiled = crate::burst::compile::compile(
+        &Method {
+            unit,
+            code: &code,
+            max_locals: 2,
+            descriptor: "(LWbCell;LWbCell;)V",
+            is_static: true,
+            has_handlers: false,
+        },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            // The site's own `(unit, pc)`, so this is the VM's resolver answering about the VM's
+            // field rather than a number this test made up.
+            field: &|_, _, i| objects_operations::jit_field_site(&metaspace, unit, site_pc, i),
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: crate::burst::compile::Heap {
+                eden_base: bases.eden,
+                other_base: bases.other,
+                eden_end: bases.eden_end as u32,
+                max_offset: bases.max_offset,
+                eden_cursor: bases.eden_cursor,
+                eden_capacity: bases.eden_capacity,
+                null_page: bases.null_page as u32,
+                array_length: 8,
+                array_data: 12,
+                int_element: 4,
+                reference_element: 4,
+                old_start: heap.old_start() as u32,
+            },
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &JIT_GC_POLL as *const _ as usize,
+        },
+    )
+    .expect("a reference putfield is inside the subset");
+    assert_eq!(compiled.barrier_records, crate::burst::compile::BARRIER_LOG_RECORDS);
+
+    // Run it, exactly as `JitCache::enter` does: zero the count, call, replay.
+    let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
+    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
+    buffer[0] = holder as i64;
+    buffer[1] = young as i64;
+    // SAFETY: the contract `JitCache::enter` satisfies — a live `[i64]` at least `buffer_slots`
+    // long, with every `touched_locals` slot filled, and an entry pc of 0.
+    let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
+    let raw = f(buffer.as_mut_ptr(), 0);
+    assert_eq!(Status::unpack(raw), Outcome::Returned, "nothing here can deopt");
+    assert_eq!(heap.read_u32(holder + field_offset) as usize, young, "machine code wrote the pointer");
+
+    let base = compiled.barrier_base as usize;
+    assert_eq!(buffer[base], 1, "one old→young store was recorded");
+    assert_eq!(buffer[base + 1] as usize, holder, "the holder, first");
+    assert_eq!(buffer[base + 2] as usize, young, "the value, second");
+    assert!(!heap.remembered().contains(&holder), "not remembered until the trampoline replays");
+    for r in 0..buffer[base] as usize {
+        heap.replay_jit_reference_store(buffer[base + 1 + 2 * r] as usize, buffer[base + 2 + 2 * r] as usize);
+    }
+    assert!(heap.remembered().contains(&holder), "the barrier put the holder in the remembered set");
+
+    // Collect, with **nothing** rooting the young object but that remembered entry.
+    let report = gc::minor(&metaspace, &mut heap, &mut [], 15, &mut []);
+    assert!(report.copied > 0, "the young object was evacuated rather than freed");
+
+    // It survived, it left Eden, its bytes came with it, and the holder's slot was rewritten.
+    let moved = heap.read_u32(holder + field_offset) as usize;
+    assert_ne!(moved, young, "a minor collection evacuates out of Eden");
+    assert!(moved >= bases.eden_end, "...and the new home is outside Eden");
+    assert_eq!(heap.read_u32(moved + field_offset + 4), young_tag, "the object's own bytes travelled");
+    assert!(heap.allocations().iter().any(|a| a.offset == moved), "and the collector logged it");
+    gc::verify_heap(&metaspace, &heap, &[]);
+}
+
+/// The counterpart, and the failure it describes is the silent one: the pair was recorded and the
+/// trampoline **did not replay it**. Everything else is byte-for-byte the test above — same store,
+/// same machine code, same collection — so the panic can only be about the missing replay.
+///
+/// Without this, a refactor that dropped the `remembered` closure from `JitCache::enter` would pass
+/// every other test in this file: the store still writes the right four bytes, the method still
+/// returns, and the object only disappears once a minor collection happens to run while nothing
+/// else holds it.
+#[test]
+#[cfg(windows)]
+#[should_panic(expected = "DANGLING")]
+fn a_reference_store_whose_barrier_is_not_replayed_is_exactly_the_corruption_it_prevents() {
+    use crate::jvm::interpreter::bytecode_interpreter::{class_operations, objects_operations};
+    use crate::jvm::interpreter::gc;
+    use crate::jvm::interpreter::heap::HeapService;
+
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut heap = HeapService::new();
+    for name in ["WbRef", "WbCell"] {
+        class_operations::load_class(&mut metaspace, &mut heap, name);
+    }
+    let (index, site_pc, unit) = putfield_site(&mut metaspace, "WbRef", "chainSum", "(I)I", "WbCell", "next");
+    let (field_offset, _) =
+        objects_operations::jit_field_site(&metaspace, unit, site_pc, index).expect("a reference field");
+    let field_offset = field_offset as usize;
+
+    let holder = objects_operations::allocate_old(&mut metaspace, &mut heap, "WbCell");
+    let young = objects_operations::allocate(&mut metaspace, &mut heap, "WbCell");
+    heap.commit_pending();
+    // The four bytes, and *only* the four bytes — which is precisely the state compiled code leaves
+    // behind when its barrier log is never replayed. (`write_u32` rather than `store_reference`:
+    // the gateway would run the barrier, which is the thing being withheld.)
+    heap.write_u32(holder + field_offset, young as u32);
+    assert!(!heap.remembered().contains(&holder), "the whole premise: nothing was recorded");
+
+    gc::minor(&metaspace, &mut heap, &mut [], 15, &mut []);
+    gc::verify_heap(&metaspace, &heap, &[]);
+}
+
+/// The same claim for **`aastore`**, and it is not a duplicate of the `putfield` test: the holder is
+/// an **array**, and `gc::reference_slots` reaches an array's slots down a different arm
+/// (`array_reference_slots`, which reads the `length` word) than an instance's. A barrier that
+/// recorded the element's *address* instead of the array's offset would pass the machine-level
+/// tests, satisfy the interpreter's own `store_reference(array, at, value)` signature by accident,
+/// and fail exactly here — because an offset that is not an object's start has no reference slots
+/// at all, so the value it "roots" is rooted by nothing.
+///
+/// Same three conditions as the `putfield` test, and for the same reason: an Old holder, a young
+/// value, and **no other root anywhere**.
+#[test]
+#[cfg(windows)]
+fn an_aastore_by_compiled_code_keeps_its_element_alive_across_a_minor() {
+    use crate::burst::compile::{ArrayStore, Environment, Method, Outcome, Status};
+    use crate::burst::exec_mem::ExecMem;
+    use crate::jvm::interpreter::bytecode_interpreter::{array_operations, class_operations, objects_operations};
+    use crate::jvm::interpreter::gc;
+    use crate::jvm::interpreter::heap::HeapService;
+
+    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut heap = HeapService::new();
+    for name in ["WbArr", "WbLeaf"] {
+        class_operations::load_class(&mut metaspace, &mut heap, name);
+    }
+    // A real `WbLeaf[]`, minted by the interpreter's own path so the array class, its mirror and
+    // the element class all exist exactly as they would in a running VM.
+    let scratch = array_operations::allocate_array_of_class(&mut metaspace, &mut heap, "[LWbLeaf;", 1)
+        .expect("the array class is nameable");
+    let array_class = heap.read_u32(scratch);
+    let element_class = u32::try_from(
+        metaspace.class_object(metaspace.class_id_read("WbLeaf").expect("WbLeaf has an id")).expect("a mirror"),
+    )
+    .expect("the mirror fits 32 bits");
+
+    // The holder is an Old `WbLeaf[2]`; the value is a young `WbLeaf` with nothing pointing at it.
+    let holder = heap.malloc_old(array_operations::ARRAY_HEADER_SIZE + 2 * 4);
+    heap.write_u32(holder, array_class);
+    heap.write_u32(holder + array_operations::LENGTH_OFFSET, 2);
+    let young = objects_operations::allocate(&mut metaspace, &mut heap, "WbLeaf");
+    heap.commit_pending();
+    assert!(holder >= heap.old_start(), "the array must be tenured for this to mean anything");
+    assert!(young < heap.old_start(), "...and the element must be young");
+
+    // `aload_0; iconst_1; aload_1; aastore; return`
+    let bases = heap.jit_bases();
+    let code = [0x2a, 0x04, 0x2b, 0x53, 0xb1];
+    let compiled = crate::burst::compile::compile(
+        &Method {
+            unit: 0,
+            code: &code,
+            max_locals: 2,
+            descriptor: "([LWbLeaf;LWbLeaf;)V",
+            is_static: true,
+            has_handlers: false,
+        },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: crate::burst::compile::Heap {
+                eden_base: bases.eden,
+                other_base: bases.other,
+                eden_end: bases.eden_end as u32,
+                max_offset: bases.max_offset,
+                eden_cursor: bases.eden_cursor,
+                eden_capacity: bases.eden_capacity,
+                null_page: bases.null_page as u32,
+                array_length: array_operations::LENGTH_OFFSET as u32,
+                array_data: array_operations::ARRAY_HEADER_SIZE as u32,
+                int_element: array_operations::array_element_width("[I") as u32,
+                reference_element: array_operations::array_element_width("[Ljava/lang/Object;") as u32,
+                old_start: heap.old_start() as u32,
+            },
+            // The two mirrors the VM's own resolver would derive from this site's profile.
+            array_store: &|_, _| Some(ArrayStore { array_class, element_class }),
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &JIT_GC_POLL as *const _ as usize,
+        },
+    )
+    .expect("an aastore with a profiled array class is inside the subset");
+
+    let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
+    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
+    buffer[0] = holder as i64;
+    buffer[1] = young as i64;
+    // SAFETY: the contract `JitCache::enter` satisfies — a live `[i64]` at least `buffer_slots`
+    // long, with every `touched_locals` slot filled, and an entry pc of 0.
+    let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
+    assert_eq!(Status::unpack(f(buffer.as_mut_ptr(), 0)), Outcome::Returned, "every guard holds here");
+    let slot = holder + array_operations::ARRAY_HEADER_SIZE + 4;
+    assert_eq!(heap.read_u32(slot) as usize, young, "machine code wrote the element");
+
+    let base = compiled.barrier_base as usize;
+    assert_eq!(buffer[base], 1, "one old→young store was recorded");
+    assert_eq!(buffer[base + 1] as usize, holder, "**the array**, not the element's address");
+    assert_eq!(buffer[base + 2] as usize, young);
+    for r in 0..buffer[base] as usize {
+        heap.replay_jit_reference_store(buffer[base + 1 + 2 * r] as usize, buffer[base + 2 + 2 * r] as usize);
+    }
+    assert!(heap.remembered().contains(&holder), "the array is the remembered holder");
+
+    let report = gc::minor(&metaspace, &mut heap, &mut [], 15, &mut []);
+    assert!(report.copied > 0, "the element was evacuated rather than freed");
+    let moved = heap.read_u32(slot) as usize;
+    assert_ne!(moved, young, "a minor collection evacuates out of Eden");
+    assert!(moved >= bases.eden_end, "...and the new home is outside Eden");
+    assert!(heap.allocations().iter().any(|a| a.offset == moved), "and the collector logged it");
+    gc::verify_heap(&metaspace, &heap, &[]);
+}
+
 /// The poll word the GC tests compile against; never raised.
 #[cfg(windows)]
 static JIT_GC_POLL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -2399,10 +2764,11 @@ fn array_allocation_agrees_with_the_interpreter() {
     // byte anywhere moves it. 549311 is what `java JaArray` prints.
     let stats = differential("java/JaArray.class", 549_311);
     // `fill`, `chars`, `bytes`, `refs`, `big`, `neg` — every method whose body is an allocation and
-    // the arithmetic around it. Not `scanChars`/`scanBytes`/`countNulls` (`caload`, `baload` and
-    // `aaload` are outside the subset), and not `run` (a `try`/`catch` around invokes).
-    assert_eq!(stats.compiled, 6);
-    assert_eq!(stats.rejected, 4, "the three scanners and `run`");
+    // the arithmetic around it — **and, since F3-H3, `countNulls`**: `aaload` joined the subset,
+    // and this counter is where that shows up. Still out: `scanChars`/`scanBytes` (`caload` and
+    // `baload` are outside it) and `run` (a `try`/`catch` around invokes).
+    assert_eq!(stats.compiled, 7, "the six allocators, plus `countNulls` now that `aaload` compiles");
+    assert_eq!(stats.rejected, 3, "the two remaining scanners and `run`");
     // **The negative count is not a deopt**, and that is deliberate rather than incidental: the
     // guard rides the same stub as the Eden-full one, which reports `Status::ALLOC`. The two are
     // the same rebuilt state resumed at the same instruction, so what the interpreter does next is
@@ -2476,7 +2842,10 @@ fn compile_newarray(
                 array_length: array_operations::LENGTH_OFFSET as u32,
                 array_data: array_operations::ARRAY_HEADER_SIZE as u32,
                 int_element: array_operations::array_element_width("[I") as u32,
+                reference_element: array_operations::array_element_width("[Ljava/lang/Object;") as u32,
+                old_start: bases.max_offset.min(u32::MAX as usize) as u32,
             },
+            array_store: &|_, _| None,
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &JIT_GC_POLL as *const _ as usize,

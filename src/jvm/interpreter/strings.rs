@@ -25,10 +25,38 @@
 //! wrong in the other direction.
 //!
 //! Hence two entry points that look alike and must not be confused: [`intern`] for a literal,
-//! [`allocate`] for everything else. There are exactly three callers of the first — `ldc` of a
-//! `String` constant, the `ConstantValue` of a static `String` field (JVMS §5.4.2) and a `String`
-//! static argument of a bootstrap method — because those are the three places a *constant pool
-//! entry* becomes an object.
+//! [`allocate`] for everything else.
+//!
+//! # Which side of the line a caller falls on
+//!
+//! The rule is **not** "three callers, the rest allocate", which is what this paragraph used to
+//! say and what the callers never matched. It is the one the reference implementation actually
+//! follows, and it was read off `java` 25 rather than reasoned about:
+//!
+//! > A string that *is* a symbol — an entry of some class file's constant pool — is **pooled**. A
+//! > string the VM **computes**, character by character, is not.
+//!
+//! Every measurement lines up with it. `String.class.getName() == "java.lang.String"` is `true` on
+//! `java` 25, and so is `field.getName() == "fld"` and `int[].class.getName() == "[I"`: those names
+//! come straight off a `Symbol`, and HotSpot interns them. `getSimpleName() == "String"` is
+//! `false`, `descriptorString() == descriptorString()` is `false`, and
+//! `e.toString() == e.toString()` is `false`: each of those is *built* — a substring, a
+//! concatenation — and none of them is in the table.
+//!
+//! So [`intern`] is for the constant-pool side: `ldc` of a `String` constant, the `ConstantValue`
+//! of a static `String` field (JVMS §5.4.2), a `String` static argument of a bootstrap method — the
+//! three places a pool *entry* becomes an object — plus the reflective names that are pool entries
+//! read back out (`Class.name0`, `innerName0`, a `Method`/`Field`/`RecordComponent` name, the
+//! `MethodHandle` owner/name/descriptor triple) and `String.intern()` itself, which is the one
+//! place a program may add to the table on purpose.
+//!
+//! [`allocate`] is for everything the VM builds: a concatenation, a `new String(…)`,
+//! `String.valueOf`, `Throwable.toString`, `Class.getSimpleName`/`descriptorString`,
+//! `System.mapLibraryName`, a file name from `Fs.list`, a socket address, a rendered stack trace.
+//! Two reasons, and either alone decides it: `java` answers `false` to the identity question for
+//! all of them, and the pool is **permanent** — a pooled string is a GC root, pinned out of the
+//! compactor, alive for the life of the VM. Pooling `Fs.list`'s output is not a subtle semantic
+//! slip, it is a directory listing that can never be freed.
 //!
 //! **The pool is allocated in Old, is a GC root and is pinned in `gc::compact`.** All three are
 //! required and for different reasons: between two `ldc`s of the same literal nothing else refers

@@ -668,10 +668,16 @@ pub fn dispatch(
                 Err(_) => return NativeOutcome::Ran(Some(Value::Reference(0))),
             };
             for (i, r) in raices.iter().enumerate() {
-                // De a uno y escribiendo enseguida, como en `list`: internar puede disparar una
-                // recoleccion, y guardar los offsets antes de tiempo dejaria referencias viejas.
-                let sref = strings::intern(metaspace, heap, r) as u32;
-                heap.write_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4, sref);
+                // **Alocada, no agrupada.** El nombre de una raiz es una cadena que la VM
+                // *computa* a partir del host, no una entrada del pool de constantes: meterla en
+                // la tabla de literales haria `roots()[0] == "C:\\"` verdadero (el `java` real
+                // dice falso) y la dejaria inmortal y clavada en Old para siempre.
+                //
+                // Y por `store_reference`, no por `write_u32`: ahora es un objeto **joven** y el
+                // array pudo caer en Old (`try_malloc` escala cuando Eden esta lleno), asi que sin
+                // la barrera de escritura el minor no lo tomaria como raiz.
+                let sref = strings::allocate(metaspace, heap, r);
+                heap.store_reference(arr, arr + array_operations::ARRAY_HEADER_SIZE + i * 4, sref);
             }
             Some(Value::Reference(arr))
         }
@@ -742,10 +748,15 @@ pub fn dispatch(
                 Err(_) => return NativeOutcome::Ran(Some(Value::Reference(0))),
             };
             for (i, n) in nombres.iter().enumerate() {
-                // Se internan de a uno y se escriben enseguida: `intern` puede disparar una
-                // recoleccion, y guardar los offsets antes de tiempo dejaria referencias viejas.
-                let sref = strings::intern(metaspace, heap, n) as u32;
-                heap.write_u32(arr + array_operations::ARRAY_HEADER_SIZE + i * 4, sref);
+                // **Alocado, no agrupado** — y es el caso donde mas se nota: un nombre de archivo
+                // es texto arbitrario del host, asi que agruparlo convierte cada `list()` en una
+                // fuga permanente (la tabla es raiz de GC y esta clavada) ademas de hacer
+                // `list()[0] == "algo"` verdadero, que el `java` real contesta falso.
+                //
+                // `store_reference` por la misma razon que en `roots`: joven adentro de un array
+                // que pudo caer en Old necesita la barrera de escritura.
+                let sref = strings::allocate(metaspace, heap, n);
+                heap.store_reference(arr, arr + array_operations::ARRAY_HEADER_SIZE + i * 4, sref);
             }
             Some(Value::Reference(arr))
         }
@@ -760,7 +771,7 @@ pub fn dispatch(
             match std::fs::canonicalize(&ruta) {
                 Ok(p) => {
                     let texto = p.to_string_lossy().into_owned();
-                    Some(Value::Reference(strings::intern(metaspace, heap, &texto)))
+                    Some(Value::Reference(strings::allocate(metaspace, heap, &texto)))
                 }
                 Err(_) => Some(Value::Reference(0)),
             }
@@ -1031,7 +1042,7 @@ pub fn dispatch(
                 }
             };
             match dir {
-                Some(d) => Some(Value::Reference(strings::intern(metaspace, heap, &d))),
+                Some(d) => Some(Value::Reference(strings::allocate(metaspace, heap, &d))),
                 None => Some(Value::Reference(0)),
             }
         }
@@ -1045,7 +1056,7 @@ pub fn dispatch(
             let h = entero(&args[0]);
             let dir = con_flujo(h, None, |s| s.peer_addr().ok().map(|a| a.ip().to_string()));
             match dir {
-                Some(d) => Some(Value::Reference(strings::intern(metaspace, heap, &d))),
+                Some(d) => Some(Value::Reference(strings::allocate(metaspace, heap, &d))),
                 None => Some(Value::Reference(0)),
             }
         }
@@ -1302,7 +1313,7 @@ pub fn dispatch(
                 }
             };
             match dir {
-                Some((d, _)) => Some(Value::Reference(strings::intern(metaspace, heap, &d))),
+                Some((d, _)) => Some(Value::Reference(strings::allocate(metaspace, heap, &d))),
                 None => Some(Value::Reference(0)),
             }
         }
@@ -1581,7 +1592,7 @@ pub fn dispatch(
             } else {
                 format!("{dotted}: {}", strings::read(heap, msg_ref))
             };
-            Some(Value::Reference(strings::intern(metaspace, heap, &text)))
+            Some(Value::Reference(strings::allocate(metaspace, heap, &text)))
         }
         // System.identityHashCode(Object): the same, as a static.
         ("java/lang/System", "identityHashCode", "(Ljava/lang/Object;)I") => {
@@ -1609,7 +1620,7 @@ pub fn dispatch(
             } else {
                 format!("lib{name}.so")
             };
-            Some(Value::Reference(strings::intern(metaspace, heap, &mapped)))
+            Some(Value::Reference(strings::allocate(metaspace, heap, &mapped)))
         }
         // System.setIn0/setOut0/setErr0(stream): the native seams behind setIn/setOut/setErr. They
         // exist because `in`/`out`/`err` are `public static final`: bytecode cannot reassign a final
@@ -1910,7 +1921,7 @@ pub fn dispatch(
                 n if n.starts_with('[') => n.to_string(),
                 n => format!("L{n};"),
             };
-            let offset = strings::intern(metaspace, heap, &descriptor);
+            let offset = strings::allocate(metaspace, heap, &descriptor);
             Some(Value::Reference(offset))
         }
         ("java/lang/Class", "getName", "()Ljava/lang/String;") => {
@@ -1951,7 +1962,7 @@ pub fn dispatch(
                 _ => element.rsplit(|c| c == '/' || c == '$').next().unwrap_or(element),
             };
             let simple = format!("{base}{}", "[]".repeat(dims));
-            Some(Value::Reference(strings::intern(metaspace, heap, &simple)))
+            Some(Value::Reference(strings::allocate(metaspace, heap, &simple)))
         }
         // --- Class: la capa de METADATOS -----------------------------------------
         //
@@ -2826,6 +2837,32 @@ pub fn dispatch(
             // `char[]` is allowed to hold one. `new String(chars).charAt(0)` must answer 0xD800
             // when that is what was put in.
             Some(Value::Reference(strings::allocate_units(metaspace, heap, &units)))
+        }
+        // `String.intern()` — declared `native` by `KajiLibrary` since the class was written, and
+        // until now the only one with **no implementation at all**: it threw
+        // `UnsatisfiedLinkError`, because there was no table for it to canonicalise into. There is
+        // one now (FZ-008), and this is the only place a *program* may add to it. It has to be
+        // native for the reason the method's own doc gives: the pool is the VM's and Java cannot
+        // name it.
+        //
+        // By UNITS, like `rawValueOf` and for the same reason: a Java `String` may hold an
+        // unpaired surrogate, and going through a Rust `String` would fold it to U+FFFD — which
+        // would put two *different* strings on the same pool entry.
+        //
+        // **One divergence from HotSpot, stated rather than hidden.** There, a string that is not
+        // in the table yet is added *itself*, so `s.intern() == s` for a freshly computed `s`;
+        // here the pool's entries must be `malloc_old`ed and pinned (that is what lets `ldc` and
+        // the JIT bake an address), and a young object cannot become one without moving — which is
+        // exactly what a pooled literal may never do. So a miss canonicalises into a **copy** and
+        // `s.intern() == s` answers false for a string seen for the first time. What the method is
+        // actually used for is unaffected and exact: `a.intern() == b.intern()` whenever the two
+        // are `equals`, and `lit.intern() == lit` for every literal — including the case that
+        // matters, `new String(lit).intern() == lit`.
+        ("java/lang/String", "intern", "()Ljava/lang/String;") => {
+            let this = reference(&args[0]);
+            let units: Vec<u16> =
+                (0..strings::length(heap, this)).map(|i| strings::char_at(heap, this, i)).collect();
+            Some(Value::Reference(strings::intern_units(metaspace, heap, &units)))
         }
 
         // The CAS primitive (H5) — the atomic root of every lock-free counter. Compare the

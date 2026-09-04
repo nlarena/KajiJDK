@@ -7607,6 +7607,16 @@ Los dos sintomas son la misma causa —que composicion tenga la tanda cambia com
 nombres— y juntos dan la regla practica de hoy: **`java/security` se reconstruye archivo por
 archivo**, no por lotes.
 
+**Manifestacion 2026-09-04, en `java.awt`.** Compilar `Component.java` y `List.java` de
+`java.awt` en la misma invocacion hace que `private final List<PopupMenu> popups = new
+ArrayList<PopupMenu>();` falle con *"tipo incompatible en el inicializador"*: el `List` del
+`import java.util.List` resuelve a `java.awt.List`, que no es generico. Bisecado unidad por
+unidad contra todo `java/awt/*.java`: **solo `List.java` lo dispara**; `Component.java` solo, o
+junto con cualquier otra unidad del paquete, compila. Es el mismo defecto con un homonimo de
+`java.util` en vez de uno propio. No afecta el build de la biblioteca, que compila de a un
+archivo (`recompile.py`); salio al compilar `java/awt/*.java` de una vez para verificar que
+nada estuviera roto tras agregar el rasterizador.
+
 ### Finding #331 — el emisor toma la cláusula `throws` del classpath, no de la fuente
 
 La prueba es de dos líneas y concluyente. Se le puso a `java.io.Flushable.flush()` un
@@ -10138,6 +10148,47 @@ escribir `java.util.List` entero donde convivan los dos (`CardLayout`).
 
 Repro: `repros/finding_493/`.
 
+**Sintoma C -- el `import` ON DEMAND tambien se filtra (2026-09-04).** El sintoma B es con `import`
+de un solo tipo; el escalon de abajo tiene el mismo problema. Dos archivos del **mismo paquete**,
+cada uno con su comodin sobre paquetes distintos que comparten un nombre simple:
+
+```java
+// zz/UsaP.java          // zz/UsaQ.java
+package zz;              package zz;
+import pp.*;             import qq.*;
+public class UsaP {      public class UsaQ {
+    static int h(A a) {      static int h(A a) {
+        return a.f();            return a.g();
+    }                        }
+}                        }
+```
+
+| fuente | nuestro javac | JDK 25 |
+|---|---|---|
+| `UsaP.java` sola | compila | compila |
+| `UsaQ.java` sola | compila | compila |
+| **las dos juntas** | error en `UsaQ` | compila |
+
+El mensaje es la prueba de que el nombre resolvio al de la otra unidad:
+
+```
+zz/UsaQ.java:3: error: no se encuentra el metodo: g
+    static int h(A a) { return a.g(); }
+                                 ^
+  ubicacion: clase A
+  ¿quisiste decir 'f'?
+```
+
+`f` es el metodo de `pp.A`, que es lo que importa el **otro** archivo. Cual gana depende del orden
+en la linea de comandos, igual que en el sintoma B.
+
+**Donde salio.** Escribiendo `com.sun.source.util`: `TreeScanner` importa `com.sun.source.tree.*` y
+`DocTreeScanner` importa `com.sun.source.doctree.*`, y los dos paquetes tienen un `LiteralTree` y un
+`ErroneousTree`. Cada archivo compila solo; los dos juntos, no.
+
+**Mientras tanto:** compilar de a un archivo. Con dependencias mutuas hay que dar varias pasadas
+hasta el punto fijo, porque cada pasada deja `.class` que la siguiente ya puede leer.
+
 ### #494 -- ✅ `java.lang.reflect.Array` medía completo y no servía para nada (VM)
 
 Los diecisiete accesores --`getLength`, `get`, `set` y las catorce variantes tipadas-- estaban
@@ -10241,3 +10292,386 @@ en el repro de #496, que no lo traia. Mientras tanto: escribir el constructor.
 
 Repro: el `q/Sub.java` de `repros/finding_496/` sin su `public Sub() { }`.
 
+---
+
+### #498 ⬜ -- el tipo objetivo con **comodin** no llega a la inferencia de un metodo generico
+
+```java
+interface Nodo { }
+
+List<? extends Nodo> falla() {
+    return Collections.emptyList();   // error: tipo de retorno incompatible
+}
+```
+
+**Delimitacion.** Hacen falta *las dos cosas a la vez*, y por separado ninguna molesta:
+
+| forma | resultado |
+|---|---|
+| `List<? extends Nodo>` <- una **variable** `List<Nodo>` | anda |
+| `List<? extends Nodo>` <- `new ArrayList<Nodo>()` | anda |
+| pasar un `List<Nodo>` a un **parametro** `List<? extends Nodo>` | anda |
+| `List<Nodo>` <- `Collections.emptyList()` -- generico, **sin** comodin | anda |
+| `List<Nodo> v = Collections.emptyList();` -- generico en un local | anda |
+| `List<Nodo>` <- `List.of()` | anda |
+| `String` <- un `<T> T` propio | anda |
+| **`List<? extends Nodo>` <- `Collections.emptyList()`** | **falla** |
+
+Las tres primeras filas descartan que el problema sea la **contencion de comodines**: un
+`List<Nodo>` se acepta donde se pide un `List<? extends Nodo>` en todas las posiciones probadas.
+Las cuatro siguientes descartan que sea el **tipo objetivo** en si: la misma llamada generica se
+tipa bien contra un retorno sin comodin, contra un local declarado y contra un retorno no
+parametrizado.
+
+Lo que queda es el cruce: cuando el objetivo lleva comodin, la inferencia no lo usa como
+restriccion -- presumiblemente infiere `Object` y recien despues chequea la asignabilidad, que
+entonces ya no puede andar. El orden correcto (JLS 18.5.2) es al reves: el tipo objetivo entra
+como restriccion **antes** de resolver las variables de inferencia.
+
+**No es #106**, que es un retorno generico con comodin que se **borra** a `Object` en el
+descriptor emitido: alli el problema esta en la emision y compila igual. Aca no llega a compilar.
+**Tampoco es #204/#215 ni #248**, que necesitan que el destino este parametrizado por *variables de
+tipo*; aca no hay ninguna variable de tipo en juego.
+
+**Como salio.** Escribiendo `com.sun.source.doctree`: el `getPreamble` y el `getPostamble` de
+`DocCommentTree` son metodos `default` que devuelven `List<? extends DocTree>` y el JDK los escribe
+con `Collections.emptyList()`. Fue el unico error en 43 interfaces.
+
+**Mientras tanto:** el testigo explicito, `Collections.<Nodo>emptyList()`, que nombra lo que la
+inferencia no dedujo. Es lo que hoy tiene `DocCommentTree`.
+
+Repro: `repros/finding_498/Finding498.java`.
+
+---
+
+### #499 ⬜ -- una clase anonima en un **inicializador de campo** no llega al generador de bytecode
+
+```java
+interface F { boolean f(String s); }
+
+static F campo = new F() {                 // error: el generador de bytecode todavia no soporta
+    public boolean f(String s) {           //        una clase anonima (necesita una clase
+        return false;                      //        sintetica anidada)
+    }
+};
+```
+
+**Delimitacion.** Lo que decide es **donde** se escribe el `new`, no que sea anonima:
+
+| forma | resultado |
+|---|---|
+| anonima en el inicializador de un campo **estatico** | **falla** |
+| anonima en el inicializador de un campo de **instancia** | **falla** |
+| anonima dentro del cuerpo de un **metodo** | anda |
+| clase anidada **con nombre**, instanciada en el inicializador | anda |
+
+Las dos ultimas filas descartan las dos explicaciones faciles. La tercera muestra que
+`hoist_anonymous` funciona -- el mecanismo de sintetizar la clase `$N` esta y produce bytecode
+correcto. La cuarta muestra que el inicializador de campo tampoco es el problema por si mismo: ahi
+se puede instanciar cualquier cosa. Falla solo el cruce.
+
+**No es #465**, aunque los dos hablen de inicializadores de campo, y la diferencia esta en que
+falla y en que etapa. Alli la clase anonima **se construye bien** y lo que no resuelve es una
+referencia a una local capturada escrita *adentro* de ella; el error viene del resolvedor y dice
+"no se encuentra el simbolo". Aca la clase no se construye: el error viene del **generador de
+bytecode**, y no hay ninguna captura en juego -- el repro no toca una sola variable del entorno.
+
+**Como salio.** Escribiendo `javax.net.ssl.HttpsURLConnection`, cuyo verificador de nombres por
+omision el JDK escribe como una anonima en un campo estatico. Fue el unico error en 44 archivos.
+
+**Mientras tanto:** una clase anidada con nombre. Es lo que hoy tiene `HttpsURLConnection`, con
+este numero al lado.
+
+Repro: `repros/finding_499/Finding499.java`.
+
+---
+
+## Tanda: los 11 paquetes vacios (sesion de biblioteca, 2026-09-04)
+
+`jdk.nio.mapmode`, `java.rmi.dgc`, `java.rmi.registry`, `javax.rmi.ssl`, `jdk.security.jarsigner`,
+`sun.reflect`, `com.sun.security.jgss`, `java.awt.im.spi`, `javax.swing.colorchooser`,
+`com.sun.jdi.connect` y `com.sun.tools.jconsole`, mas el andamiaje que hacia falta debajo
+(`javax.swing.JFrame`/`JPanel`/`JColorChooser`/`SwingWorker`/`WindowConstants`, `com.sun.jdi.Mirror`
+y `com.sun.jdi.VirtualMachine`). **Un solo defecto en 41 archivos**, y no es nuevo.
+
+### #285, confirmado sobre un `new` -- y la delimitacion que faltaba: la variable de tipo tiene que ser **de la clase**
+
+```java
+public class C<V> {
+    List<V> falla(V[] xs) {
+        return new ArrayList<V>(Arrays.asList(xs));   // error: un `new` con argumentos que
+    }                                                 // no resolvio a ningun constructor
+}
+```
+
+**No lleva numero nuevo: es #285.** Lo dice la ablacion, no el parecido. #285 esta escrito sobre
+una llamada a metodo (`out.add(Map.entry(k, v))`) y su entrada dice que el `new` **no** lo sufre
+--"las de `java.util` no lo tocan: usan `new FixedEntry<K, V>(...)`, que es un `new` y no una
+llamada generica"--. Esa frase es cierta y enganosa a la vez: lo que salva a ese `new` no es ser un
+`new`, es que su **argumento** no es una llamada generica. Cuando el argumento si lo es, el `new`
+falla igual que la llamada.
+
+Y el dato nuevo, que vale para las dos formas: **falla solo si la variable de tipo se declara en la
+clase.** Con la misma forma y la variable declarada en el metodo, compila.
+
+| forma | variable de tipo | resultado |
+|---|---|---|
+| `new ArrayList<V>(Arrays.asList(xs))` | de la **clase** | **falla** |
+| `new ArrayList<W>(Arrays.asList(xs))` | del **metodo** | anda |
+| `List<V> t = Arrays.asList(xs); new ArrayList<V>(t)` | de la clase, nombrada en un local | anda |
+| `List<V> t = Arrays.asList(xs)` (solo la llamada) | de la clase | anda |
+| `sumidero(Arrays.asList(xs))` con `static <W> void sumidero(List<W>)` | de la clase | anda |
+| `out.add(Map.entry(k, v))` con `HashSet<Map.Entry<K,V>>` | de la **clase** | **falla** (es #285) |
+| lo mismo con `<A, B>` del metodo | del **metodo** | anda |
+
+Las dos ultimas filas son el repro **original** de #285 corrido en sus dos variantes, y son las que
+cierran el argumento: el mismo codigo, movido de una variable de clase a una de metodo, pasa de
+fallar a compilar. O sea que el eje "clase vs metodo" es una propiedad de #285 y no de un defecto
+aparte, y las filas del `new` son ese mismo defecto sobre otro sitio de invocacion.
+
+Que las dos ultimas filas se distingan asi es, ademas, la pista mas concreta que hay para
+arreglarlo: la instanciacion de la firma del candidato esta sustituyendo las variables del metodo y
+dejando las de la clase sin sustituir, o al reves; en cualquier caso el problema esta en de donde
+sale el mapa de sustitucion, no en la aridad ni en la ambiguedad --hay un solo candidato aplicable
+en los cuatro casos que fallan.
+
+**Como salio.** Escribiendo `javax.swing.SwingWorker`, cuyo `publish(V... chunks)` es exactamente
+esa forma: `V` es de la clase y el argumento del `new` es un `Arrays.asList`. Fue el unico error en
+41 archivos.
+
+**Mientras tanto:** el local intermedio (fila 3). Es lo que hoy tiene `SwingWorker.publish`, con
+este numero al lado y la instruccion de sacarlo cuando #285 se cierre.
+
+Repro: `repros/finding_285_ctor/` -- `Finding285Ctor.java` (el `new`, con cuatro controles) y
+`Finding285Clase.java` (el repro original de #285 en sus dos variantes). El JDK 25 compila los dos
+archivos enteros.
+
+### Lo que **no** fallo, y vale anotarlo
+
+Cuarenta y un archivos y un solo error es un dato sobre el compilador, no sobre los archivos.
+Pasaron sin quejarse, entre otras cosas: cuatro `enum` (uno anidado en una interfaz), interfaces con
+metodos `default`, tipos anidados en interfaces con herencia entre ellos (`Connector.Argument` y sus
+cuatro subinterfaces), genericos con comodines acotados en las firmas
+(`Map<String, ? extends Connector.Argument>`), varargs genericos con `@SafeVarargs`, clases
+anidadas estaticas genericas que extienden un generico del classpath (`Tarea<T> extends
+FutureTask<T>`), `synchronized` de instancia y de clase, `@Deprecated` sobre metodos y sobre
+constantes de `enum`, y la recursion mutua entre tipos del mismo paquete --que compila si los
+archivos entran en **una sola** invocacion, que es como hay que arrancar un paquete desde cero
+antes de que existan sus `.class`.
+
+---
+
+## Tanda: `jdk.dynalink.linker` y `jdk.dynalink.linker.support` (sesion de biblioteca, 2026-09-04)
+
+Los dos paquetes quedaron en 11/11 + 44/44 y 7/7 + 48/48. Salieron dos hallazgos, uno mio y uno de
+la biblioteca. Los dos aparecieron **despues** de que el censo dijera COMPLETO, que es el punto de
+esta nota.
+
+### #500 -- `Number`, `String` y `ArrayList` no declaraban `Serializable` (biblioteca) -- parcialmente arreglado
+
+`Serializable.class.isAssignableFrom(Integer.class)` contestaba `false`. En el JDK contesta `true`,
+y lo contesta por la clausula `implements Serializable` de `java.lang.Number`, que las cajas heredan
+sin declararla ellas.
+
+Encontrado corriendo el diferencial de `TypeUtilities` contra el JDK 25 real: de 900 pares de
+`isAssignableFrom` sobre 30 tipos, difieren 9, y los nueve son de la forma
+`Serializable.isAssignableFrom(X)` con X en {`Byte`, `Short`, `Integer`, `Long`, `Float`, `Double`,
+`Number`, `String`, `ArrayList`}. `Boolean` y `Character` no aparecen porque esas dos **si** la
+declaran.
+
+**Arreglado aca:** `java.lang.Number implements Serializable`. Cierra siete de los nueve, porque las
+seis cajas numericas lo heredan.
+
+**Abierto, y no lo toco:** `java.lang.String` y `java.util.ArrayList`, que en el JDK la declaran
+directamente. Los dos archivos los modifico otra sesion hoy 2026-09-04 a las 10:19 y no los piso.
+Es una clausula `implements` en cada uno. Repro: `java/TU3.java`, metodo `asig`, contra el mismo
+archivo compilado con el JDK real -- con los dos arreglados tiene que dar `377829863`.
+
+**Por que importa mas de lo que parece:** una clausula `implements` **no es un miembro**, asi que el
+censo de API no la ve. Un paquete puede dar 100% de clases y 100% de miembros con la jerarquia mal.
+Es un agujero conocido de la metrica, no un descuido del que la corrio.
+
+### #501 -- `TypeUtilities`: la tabla de conversiones no se puede derivar de la JLS (mio, cerrado)
+
+Escribi `jdk.dynalink.linker.support.TypeUtilities` desde la JLS --4.10.1 para el subtipado entre
+primitivos, 5.1.2 para las ampliaciones exactas-- y el diferencial contra el JDK real dio **18
+discrepancias sobre 243** (9x9 primitivos x 3 predicados). El censo decia COMPLETO igual: los siete
+metodos estaban, con la firma correcta, contestando mal.
+
+Las tres cosas que la JLS no alcanza para adivinar, sacadas de decompilar la clase real:
+
+1. **`isConvertibleWithoutLoss(x, void)` es `true` para todo `x`, `boolean` incluido.** El destino
+   `void` descarta el valor, y descartar no pierde nada que alguien vaya a mirar. Al reves no vale:
+   `isConvertibleWithoutLoss(void, t)` es `true` solo para `t == Object`.
+2. **`char` esta excluido de las conversiones exactas en las dos direcciones.** `char` a `int`
+   conserva todos los bits y aun asi el JDK contesta `false`. La pregunta es sobre el valor, no
+   sobre los bits: un caracter que pasa a ser el numero de su punto de codigo dejo de significar lo
+   mismo.
+3. **`isProperPrimitiveSubtype` esta escrito por negacion para `byte`, `char` y `short`** (`byte`
+   sube a todo *menos* `char`), y por enumeracion para `int`, `long` y `float`. Con un tipo que no
+   esta en la cadena eso se nota: `isSubtype(byte, void)` da `true` y `isSubtype(int, void)` da
+   `false`. Es un artefacto de como esta escrita la tabla; lo reproduzco a proposito, con el
+   comentario al lado, porque es lo que el JDK contesta.
+
+Repro y regresion: `java/TU6.java`, metodo `fila(i)` -- devuelve, para el primitivo `i`, el mapa de bits de los tres predicados contra los nueve primitivos. Compilado con el JDK real da la referencia; con el nuestro tiene que dar lo mismo.
+
+Despues de reescribir con esa logica: **0 discrepancias de 243** en primitivos, y 0 sobre los 28
+tipos del diferencial completo una vez sacados `String` y `ArrayList` (los dos de #500).
+
+**La leccion, que es la que hay que llevarse:** para una clase de logica pura, "el censo dice
+COMPLETO" y "hace lo mismo que el JDK" son dos afirmaciones distintas, y la primera no implica la
+segunda ni de cerca. Cuando la clase es decidible sin estado --tablas, predicados, conversiones--
+el diferencial contra el JDK real cuesta veinte minutos y es la unica forma de saberlo.
+
+### Lo que no se pudo verificar, y por que
+
+`Guards`, `Lookup`, `DefaultInternalObjectFilter` y `GuardedInvocation` se apoyan en
+`java.lang.invoke.MethodHandles`, cuyos combinadores son stubs honestos
+(`UnsupportedOperationException("no method handle factory without VM support")`, decision
+documentada en el propio archivo). La logica de esas cuatro esta escrita entera y es la del JDK;
+lo que no hay debajo es el fabricante de handles. No es comparable contra el JDK real hasta que ese
+exista.
+
+Una desviacion deliberada, anotada en el archivo: `Guards` resuelve sus handles **a demanda** y no
+en el inicializador estatico como el JDK. Asi el fallo sale como el `UnsupportedOperationException`
+que nombra lo que falta, en vez de un `ExceptionInInitializerError` que lo envuelve y deja la clase
+inutilizable para siempre.
+
+---
+
+## Tanda: `jdk.javadoc.doclet` (sesion de biblioteca, 2026-09-04)
+
+Cerrado en 5/5 clases y 37/37 miembros. Salio un hallazgo de compilador.
+
+### #502 -- `--emit` rechaza una inferencia que el chequeo acepta (javac) -- ABIERTO
+
+```java
+static Set<? extends Runnable> mal() { return Collections.emptySet(); }
+```
+
+```
+bin/javac.exe        -cp KajiLibrary Finding502.java   -> compila
+bin/javac.exe --emit -cp KajiLibrary Finding502.java   -> "tipo de retorno incompatible"
+```
+
+El JDK 25 compila el archivo entero.
+
+**Lo que dispara.** El **destino** es un tipo parametrizado con comodin acotado
+(`Set<? extends X>`) y la llamada es a un metodo generico cuyo argumento de tipo hay que inferir
+(`Collections.emptySet()`, `Collections.emptyList()`). Los tres se necesitan juntos:
+
+| forma | `--emit` |
+|---|---|
+| `Set<Runnable>` inferido (sin comodin) | compila |
+| `Set<? extends Runnable>` con testigo `Collections.<Runnable>emptySet()` | compila |
+| `Set<Base.Op>` inferido (anidado, sin comodin) | compila |
+| `Set<? extends Runnable>` inferido | **falla** |
+| `List<? extends Runnable>` inferido | **falla** |
+| `Set<? extends Base.Op>` inferido | **falla** |
+
+No es de `Set` ni de los tipos anidados: las dos ultimas filas estan solo para descartarlos. Con
+`Runnable`, que es lo mas simple que hay, ya falla.
+
+**Por que es distinto de los otros findings de inferencia.** Porque el compilador se contradice a
+si mismo. No es que no sepa inferir --sin `--emit` infiere bien y acepta--; es que la ruta de
+emision vuelve a decidir y decide distinto. Eso acota mucho donde mirar: el desacuerdo esta entre
+la comprobacion de asignabilidad del chequeo y la que hace el generador, no en la inferencia
+propiamente dicha, que ya dio un resultado correcto una vez.
+
+**Sospecha concreta:** la ruta de emision esta comparando el tipo inferido `Set<X>` contra el
+declarado `Set<? extends X>` con igualdad de tipos en lugar de con contencion de argumentos de
+tipo (JLS 4.5.1). `Set<X>` no es igual a `Set<? extends X>`, pero si es asignable a el, y esa es
+exactamente la distincion que la fila 1 de la tabla no ejercita --sin comodin los dos tipos
+coinciden y la comparacion por igualdad alcanza.
+
+**Como salio.** Escribiendo `jdk.javadoc.doclet.StandardDoclet`, cuyo
+`getSupportedOptions()` devuelve `Set<? extends Doclet.Option>`. Fue el unico error del paquete.
+
+**Mientras tanto:** el testigo explicito (`Collections.<Option>emptySet()`), que es lo que hoy
+tiene ese metodo, con este numero al lado.
+
+Repro: `repros/finding_502/Finding502.java` -- tres controles que compilan y tres que fallan.
+Probar los que fallan **de a uno**: el compilador corta en el primer error.
+
+---
+
+## Tanda: `com.sun.management` y `com.sun.security.auth.module` (sesion de biblioteca, 2026-09-04)
+
+Los dos cerrados: 9/9 + 60/60 y 8/8 + 55/55. Sin hallazgos de compilador -- los 17 archivos
+compilaron y emitieron a la primera.
+
+### Nota importante: `com.sun.security.auth.module` dice COMPLETO y tres de sus ocho modulos no autentican
+
+Es el mismo agujero de metrica que #501, y conviene que quede escrito porque en un paquete de
+**seguridad** leer mal el censo es peor que en otro lado. El detalle, modulo por modulo:
+
+| clase | estado real |
+|---|---|
+| `KeyStoreLoginModule` | **completo y funcional.** Abre el almacen, saca cadena y clave privada, arma el `CertPath` y el `X500PrivateCredential`. Anda de punta a punta con el `KeyStore` que ya teniamos. |
+| `LdapLoginModule` | **codigo completo.** Busqueda del DN, atadura con las credenciales del usuario, traduccion del rechazo a `FailedLoginException`. Le falta un **proveedor JNDI de LDAP** debajo; sin el, `InitialDirContext` lanza `NamingException` y el modulo la envuelve. |
+| `JndiLoginModule` | **casi completo.** Consultas al directorio y lectura de atributos, reales. La comparacion de contrasena necesita `crypt(3)` y **lanza `LoginException` a proposito** -- ver abajo. |
+| `UnixLoginModule`, `NTLoginModule` | **maquina de estados JAAS completa** (login/commit/abort/logout con las banderas y el manejo de principales). Falla el unico paso que necesita al sistema operativo: construir `UnixSystem`/`NTSystem`. |
+| `UnixSystem`, `NTSystem` | **el constructor lanza `UnsupportedOperationException`.** Ver la razon abajo. |
+| `Krb5LoginModule` | **no implementado.** `login()` lanza `LoginException`; los otros tres contestan `false`, que es lo que el contrato pide de un modulo que no autentico. |
+
+**Por que `UnixSystem` falla en vez de contestar algo.** Los identificadores salen de `getuid`,
+`getgid` y `getgroups`. `user.name` da el nombre y el nombre no determina el uid. Rellenar los
+campos con ceros seria devolver **`getUid() == 0`, que no significa "no se" sino root**: un programa
+que consulte esta clase para saber si corre como administrador recibiria un si. Mismo argumento con
+`NTSystem` y los SID, que se comparan contra listas de control de acceso -- un SID inventado puede
+dar verdadero en esa comparacion.
+
+**Por que `crypt(3)` no esta escrito.** Es DES con tablas grandes (IP, E, P, ocho S-boxes).
+Transcribirlas de memoria, sin una referencia contra la cual verificar, produce un modulo que
+compila, corre y acepta o rechaza contrasenas equivocadas **sin avisar nunca**. No se puede
+verificar diferencialmente contra el JDK porque su `Crypt` es de paquete y no se alcanza desde
+afuera. Es exactamente el caso que la casa evita, asi que la comparacion lanza `LoginException`
+nombrando lo que falta.
+
+**La regla que se repite y conviene recordar:** el censo mide firmas, no comportamiento. En una
+clase de logica pura eso se corrige con un diferencial contra el JDK (#501). En una que depende del
+sistema operativo o de un protocolo no hay diferencial posible, y lo unico que queda es que la
+ausencia **falle diciendo que falta**, en vez de contestar un valor que el llamador no pueda
+distinguir de uno real.
+
+---
+
+## Tanda: `javax.sql.rowset` y `javax.sql.rowset.spi` (sesion de biblioteca, 2026-09-04)
+
+### #503 -- un `case` con una constante leida de un `.class` no se pliega (javac) -- ABIERTO
+
+```java
+switch (x) {
+    case java.sql.Types.BIT: return 1;   // --emit: "un `case` que no es una constante entera"
+    default: return 0;
+}
+```
+
+Sin `--emit` compila; con `--emit` falla. El JDK 25 compila el archivo entero. La JLS 14.11 pide que
+la etiqueta sea una expresion constante (15.29), y un `static final int` inicializado con un literal
+lo es, venga de donde venga.
+
+**Lo que separa lo que anda de lo que no es de donde sale la constante:**
+
+| forma | `--emit` |
+|---|---|
+| `case 7:` (literal) | compila |
+| `case PROPIA:` (constante del mismo tipo) | compila |
+| `case OtraClase.DE_CLASE:` (otra clase del **mismo archivo**) | compila |
+| `case Ajena.DE_INTERFAZ:` (interfaz del **mismo archivo**) | compila |
+| `case java.sql.Types.BIT:` (clase del **classpath**, leida de un `.class`) | **falla** |
+
+O sea: el plegado de constantes mira el arbol de sintaxis y **no** el atributo `ConstantValue` del
+`.class`. Todo lo que este en el archivo que se compila se pliega; lo que ya esta compilado, no.
+
+**Es de la misma familia que #502** —la ruta de emision sabe menos que la de chequeo, que si
+resuelve la constante— y las dos apuntan al mismo lugar: el generador no esta consultando la
+informacion que el chequeo ya obtuvo. Vale la pena mirarlas juntas.
+
+**Como salio.** Escribiendo `javax.sql.rowset.RowSetMetaDataImpl.getColumnClassName`, que mapea los
+veintipico de tipos de `java.sql.Types` a nombres de clase Java. Es el uso natural de un `switch`.
+
+**Mientras tanto:** una cadena de `if`/`else if`, que es lo que ese metodo tiene hoy con este numero
+al lado. Peor de leer y equivalente.
+
+Repro: `repros/finding_503/Finding503.java` -- cuatro controles que compilan y uno que falla.
