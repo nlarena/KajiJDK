@@ -140,6 +140,7 @@ pub struct Observation {
     pub stdout: String,
 }
 
+
 /// A program the generator produced. Abstract so the reducer can work on the tree while the runner
 /// only ever sees the text.
 pub trait Program: Clone {

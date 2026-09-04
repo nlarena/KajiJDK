@@ -68,6 +68,7 @@ pub enum Pass {
     CollapseIf,
     CollapseSwitch,
     PromoteOperand,
+    PromoteCondition,
     UnrollLoop,
     ShrinkArray,
     ShrinkWarmup,
@@ -83,6 +84,7 @@ pub const PASSES: &[Pass] = &[
     Pass::CollapseIf,
     Pass::CollapseSwitch,
     Pass::PromoteOperand,
+    Pass::PromoteCondition,
     Pass::UnrollLoop,
     Pass::ShrinkArray,
     Pass::ShrinkWarmup,
@@ -283,6 +285,25 @@ pub fn candidates(program: &JavaProgram, pass: Pass) -> Vec<JavaProgram> {
             // simply not offered.
             let same: Vec<Expr> = operands.into_iter().filter(|k| k.ty() == ty).collect();
             (!same.is_empty()).then_some(same)
+        }),
+        // Reemplaza una condicion por **una de sus propias ramas**.
+        //
+        // El gemelo de [`Pass::PromoteOperand`] del otro lado del arbol, y el pase que le faltaba
+        // al reductor. Una condicion no es una `Expr`: tiene su propia gramatica —`&&`, `||`, `!`—
+        // y ningun pase la miraba, asi que `ExprToConstant` le bajaba las **hojas** a cero y la
+        // **forma** quedaba entera.
+        //
+        // El caso que lo hizo aparecer, anotado en `K7`: un `>>>` que el predicado necesitaba,
+        // metido en la guarda de un `while`. El reductor dejaba
+        // `((((0.0 > 0.0) && (0.0 != 0.0)) || (0.0 <= ((0 == (0 >>> 0)) ? 0.0 : 0.0))))` — todas
+        // las hojas ya en `0.0`, y las dos ramas que no hacian falta todavia ahi.
+        //
+        // No hay filtro de tipos que hacer, al reves que en `PromoteOperand`: toda `Cond` es una
+        // `Cond`, asi que cualquier rama entra donde estaba su padre.
+        Pass::PromoteCondition => cond_edits(program, &|c| match c {
+            Cond::And(a, b) | Cond::Or(a, b) => Some(vec![(**a).clone(), (**b).clone()]),
+            Cond::Not(a) => Some(vec![(**a).clone()]),
+            Cond::Cmp(_, _, _) | Cond::BoolVar(_) => None,
         }),
         Pass::ExprToConstant => expr_edits(program, &|e| {
             let zero = Expr::zero(e.ty());
@@ -617,8 +638,8 @@ fn substitute_var(method: &mut Method, name: &str, ty: Ty) {
             }
         }
     };
-    visit_block_exprs(&mut method.body, &mut visit);
-    visit_expr(&mut method.result, &mut visit);
+    visit_block_exprs(&mut method.body, &mut visit, &mut |_| {});
+    visit_expr(&mut method.result, &mut visit, &mut |_| {});
     // An assignment *to* the vanished parameter has nowhere to go; drop it. The statement passes
     // would get there eventually, but leaving a dangling name would make every candidate from this
     // pass fail `well_formed` and the pass would look like it does nothing.
@@ -641,6 +662,61 @@ fn strip_assignments(block: &mut Block, name: &str) {
 
 
 /// One candidate per `(expression, replacement)` that `replacements` offers.
+/// El gemelo de [`expr_edits`] para condiciones. Misma forma y por la misma razon: numerar en el
+/// mismo orden en que se cuenta es lo unico que hace que reemplazar el n-esimo nodo sea reemplazar
+/// el que se miro.
+fn cond_edits(
+    program: &JavaProgram,
+    replacements: &dyn Fn(&Cond) -> Option<Vec<Cond>>,
+) -> Vec<JavaProgram> {
+    let mut out = Vec::new();
+    for index in 0..count_conds(program) {
+        let Some(original) = nth_cond(program, index) else {
+            break;
+        };
+        let Some(options) = replacements(&original) else {
+            continue;
+        };
+        for option in options {
+            if option == original {
+                continue;
+            }
+            let mut candidate = program.clone();
+            let (mut seen, mut applied) = (0, false);
+            visit_conds_mut(&mut candidate, &mut |c| {
+                if seen == index && !applied {
+                    *c = option.clone();
+                    applied = true;
+                }
+                seen += 1;
+            });
+            if applied {
+                out.push(candidate);
+            }
+        }
+    }
+    out
+}
+
+fn count_conds(program: &JavaProgram) -> usize {
+    let mut n = 0;
+    let mut copy = program.clone();
+    visit_conds_mut(&mut copy, &mut |_| n += 1);
+    n
+}
+
+fn nth_cond(program: &JavaProgram, index: usize) -> Option<Cond> {
+    let (mut seen, mut found) = (0, None);
+    let mut copy = program.clone();
+    visit_conds_mut(&mut copy, &mut |c| {
+        if seen == index {
+            found = Some(c.clone());
+        }
+        seen += 1;
+    });
+    found
+}
+
 fn expr_edits(
     program: &JavaProgram,
     replacements: &dyn Fn(&Expr) -> Option<Vec<Expr>>,
@@ -725,16 +801,37 @@ fn block_length(program: &JavaProgram, index: usize) -> usize {
 /// then descends into the *replacement*. That is harmless — the caller has already stopped editing
 /// — and it keeps the numbering that [`nth_expr`] and [`expr_edits`] share identical between the
 /// counting pass and the editing pass, which is the only property that has to hold.
+/// Recorre las expresiones y nada mas. El envoltorio existe para que los pases que solo miran
+/// expresiones no tengan que decir que no les interesan las condiciones.
 fn visit_exprs_mut(program: &mut JavaProgram, f: &mut dyn FnMut(&mut Expr)) {
-    for method in &mut program.methods {
-        visit_block_exprs(&mut method.body, f);
-        visit_expr(&mut method.result, f);
-    }
-    visit_block_exprs(&mut program.entry.body, f);
-    visit_expr(&mut program.entry.result, f);
+    visit_mut(program, f, &mut |_| {});
 }
 
-fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
+/// Recorre las condiciones y nada mas. El gemelo del de arriba, y lo que le faltaba al reductor:
+/// una condicion tiene su **propio** arbol —`And`, `Or`, `Not`— que ningun pase tocaba, asi que se
+/// le encogian las hojas y nunca la forma.
+fn visit_conds_mut(program: &mut JavaProgram, g: &mut dyn FnMut(&mut Cond)) {
+    visit_mut(program, &mut |_| {}, g);
+}
+
+fn visit_mut(
+    program: &mut JavaProgram,
+    f: &mut dyn FnMut(&mut Expr),
+    g: &mut dyn FnMut(&mut Cond),
+) {
+    for method in &mut program.methods {
+        visit_block_exprs(&mut method.body, f, g);
+        visit_expr(&mut method.result, f, g);
+    }
+    visit_block_exprs(&mut program.entry.body, f, g);
+    visit_expr(&mut program.entry.result, f, g);
+}
+
+fn visit_block_exprs(
+    block: &mut Block,
+    f: &mut dyn FnMut(&mut Expr),
+    g: &mut dyn FnMut(&mut Cond),
+) {
     for stmt in block.iter_mut() {
         match stmt {
             // Neither holds an expression: they name locals and nothing else.
@@ -742,61 +839,65 @@ fn visit_block_exprs(block: &mut Block, f: &mut dyn FnMut(&mut Expr)) {
             | Stmt::TypeProbe { .. }
             | Stmt::NewMatrix { .. }
             | Stmt::ArrayNull { .. } => {}
-            Stmt::MatrixRowNull { row, .. } => visit_expr(row, f),
-            Stmt::NarrowLocal { value, .. } => visit_expr(value, f),
-            Stmt::BoolLocal { cond, .. } => visit_cond(cond, f),
+            Stmt::MatrixRowNull { row, .. } => visit_expr(row, f, g),
+            Stmt::NarrowLocal { value, .. } => visit_expr(value, f, g),
+            Stmt::BoolLocal { cond, .. } => visit_cond(cond, f, g),
             Stmt::MatrixStore { row, col, value, .. } => {
-                visit_expr(row, f);
-                visit_expr(col, f);
-                visit_expr(value, f);
+                visit_expr(row, f, g);
+                visit_expr(col, f, g);
+                visit_expr(value, f, g);
             }
-            Stmt::Declare { init, .. } => visit_expr(init, f),
-            Stmt::Assign { expr, .. } => visit_expr(expr, f),
+            Stmt::Declare { init, .. } => visit_expr(init, f, g),
+            Stmt::Assign { expr, .. } => visit_expr(expr, f, g),
             // Constructor arguments first, then the bodies, so the numbering the counting pass and
             // the editing pass share stays the order a reader would guess.
             Stmt::Fork { args, bodies, .. } => {
-                visit_expr(&mut args.0, f);
-                visit_expr(&mut args.1, f);
+                visit_expr(&mut args.0, f, g);
+                visit_expr(&mut args.1, f, g);
                 for worker in bodies.iter_mut() {
-                    visit_block_exprs(&mut worker.block, f);
-                    visit_expr(&mut worker.result, f);
+                    visit_block_exprs(&mut worker.block, f, g);
+                    visit_expr(&mut worker.result, f, g);
                 }
             }
             Stmt::If { cond, then, otherwise } => {
-                visit_cond(cond, f);
-                visit_block_exprs(then, f);
-                visit_block_exprs(otherwise, f);
+                visit_cond(cond, f, g);
+                visit_block_exprs(then, f, g);
+                visit_block_exprs(otherwise, f, g);
             }
             Stmt::Switch { selector, arms, default } => {
-                visit_expr(selector, f);
+                visit_expr(selector, f, g);
                 for arm in arms.iter_mut() {
-                    visit_block_exprs(&mut arm.body, f);
+                    visit_block_exprs(&mut arm.body, f, g);
                 }
                 if let Some(body) = default {
-                    visit_block_exprs(body, f);
+                    visit_block_exprs(body, f, g);
                 }
             }
             Stmt::While { cond, body, .. } => {
-                visit_cond(cond, f);
-                visit_block_exprs(body, f);
+                visit_cond(cond, f, g);
+                visit_block_exprs(body, f, g);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Throw(_) => {}
-            Stmt::For { body, .. } => visit_block_exprs(body, f),
+            Stmt::For { body, .. } => visit_block_exprs(body, f, g),
             Stmt::NewArray { .. } => {}
             Stmt::ArrayStore { index, value, .. } => {
-                visit_expr(index, f);
-                visit_expr(value, f);
+                visit_expr(index, f, g);
+                visit_expr(value, f, g);
             }
             // The constructor argument of a `null` is not emitted, so shrinking it is a step that
             // changes nothing — accepted, harmlessly, and the generator keeps it a literal zero so
             // there is normally nothing left to shrink.
-            Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => visit_expr(arg, f),
-            Stmt::FieldStore { value, .. } => visit_expr(value, f),
+            Stmt::NewObject { arg, .. } | Stmt::SetObject { arg, .. } => visit_expr(arg, f, g),
+            Stmt::FieldStore { value, .. } => visit_expr(value, f, g),
         }
     }
 }
 
-fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
+fn visit_expr(
+    expr: &mut Expr,
+    f: &mut dyn FnMut(&mut Expr),
+    g: &mut dyn FnMut(&mut Cond),
+) {
     f(expr);
     match expr {
         Expr::IntLit(_)
@@ -818,41 +919,49 @@ fn visit_expr(expr: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
         | Expr::ArrayLoad(_, _, a)
         | Expr::MatrixRowLength(_, a)
         | Expr::RawBitsHigh(a)
-        | Expr::Recurse(_, a) => visit_expr(a, f),
+        | Expr::Recurse(_, a) => visit_expr(a, f, g),
         Expr::NanLit(_) => {}
         Expr::MatrixLoad(_, _, row, col) => {
-            visit_expr(row, f);
-            visit_expr(col, f);
+            visit_expr(row, f, g);
+            visit_expr(col, f, g);
         }
         Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => {
-            visit_expr(a, f);
-            visit_expr(b, f);
+            visit_expr(a, f, g);
+            visit_expr(b, f, g);
         }
         Expr::Ternary(c, a, b) => {
-            visit_cond(c, f);
-            visit_expr(a, f);
-            visit_expr(b, f);
+            visit_cond(c, f, g);
+            visit_expr(a, f, g);
+            visit_expr(b, f, g);
         }
         Expr::Call(_, args, _) => {
             for arg in args.iter_mut() {
-                visit_expr(arg, f);
+                visit_expr(arg, f, g);
             }
         }
     }
 }
 
-fn visit_cond(cond: &mut Cond, f: &mut dyn FnMut(&mut Expr)) {
+fn visit_cond(
+    cond: &mut Cond,
+    f: &mut dyn FnMut(&mut Expr),
+    g: &mut dyn FnMut(&mut Cond),
+) {
+    // **Antes** de bajar a los hijos, igual que [`visit_expr`] con las expresiones: los dos pases
+    // que comparten esta numeracion —contar y editar— tienen que ver el mismo orden, y un padre
+    // numerado despues de sus hijos hace que reemplazarlo corra los indices de todo lo que sigue.
+    g(cond);
     match cond {
         Cond::BoolVar(_) => {}
         Cond::Cmp(_, a, b) => {
-            visit_expr(a, f);
-            visit_expr(b, f);
+            visit_expr(a, f, g);
+            visit_expr(b, f, g);
         }
         Cond::And(a, b) | Cond::Or(a, b) => {
-            visit_cond(a, f);
-            visit_cond(b, f);
+            visit_cond(a, f, g);
+            visit_cond(b, f, g);
         }
-        Cond::Not(a) => visit_cond(a, f),
+        Cond::Not(a) => visit_cond(a, f, g),
     }
 }
 
@@ -929,6 +1038,68 @@ mod tests {
     }
 
     /// A seed whose program contains the shape a test wants to plant a bug on.
+    /// El reductor se queda con **una rama** de una condicion compuesta.
+    ///
+    /// # Por que este test se arma a mano y no busca una semilla
+    ///
+    /// Porque una semilla no prueba el pase. El caso que abrio el hito bajaba de 275 nodos a 24 y
+    /// se quedaba ahi; despues del trabajo de `K6` la misma busqueda cae en **otra** semilla —el
+    /// grafo de clases consume sorteos al empezar el programa, asi que corrio el stream entero— y
+    /// esa baja a 6 con el pase y a 6 **sin** el. Medido: el A/B sobre esa semilla da lo mismo.
+    /// Un test que pasa por la semilla que le toco no dice nada del pase; este arma la forma que el
+    /// pase existe para minimizar y la mide directo.
+    ///
+    /// La condicion es `(<lo que el predicado necesita>) && ((ruido) || (ruido))`. El unico camino
+    /// para llegar a la de adentro es promover ramas: `ExprToConstant` baja las hojas a cero y deja
+    /// los dos operadores en pie, que es exactamente lo que hacia antes.
+    #[test]
+    fn el_reductor_se_queda_con_una_rama_de_una_condicion() {
+        let necesaria = Cond::Cmp(
+            crate::fuzz::gen::CmpOp::Eq,
+            Expr::Shift(
+                ShiftOp::Unsigned,
+                Box::new(Expr::IntLit(7)),
+                Box::new(Expr::IntLit(1)),
+            ),
+            Expr::IntLit(0),
+        );
+        let ruido = Cond::Cmp(crate::fuzz::gen::CmpOp::Lt, Expr::IntLit(1), Expr::IntLit(2));
+        let cond = Cond::And(
+            Box::new(necesaria),
+            Box::new(Cond::Or(Box::new(ruido.clone()), Box::new(Cond::Not(Box::new(ruido))))),
+        );
+        let entry = Method {
+            name: "m0".to_string(),
+            params: Vec::new(),
+            returns: Ty::Int,
+            body: vec![Stmt::If { cond, then: Vec::new(), otherwise: Vec::new() }],
+            result: Expr::IntLit(0),
+            cost: 4,
+        };
+        let program = JavaProgram {
+            class: "Fzc".to_string(),
+            methods: Vec::new(),
+            entry,
+            admissible: Vec::new(),
+            recursive_body: None,
+            warmup: 1,
+            hierarchy: Default::default(),
+            throw_channel: false,
+        };
+        assert!(program.well_formed().is_ok(), "{:?}", program.well_formed());
+
+        let mut reducer = StructuralReducer::default();
+        let reduced = reducer
+            .reduce(program, &mut |p: &JavaProgram| contains_shift(p, ShiftOp::Unsigned));
+
+        let source = reduced.to_java();
+        assert!(contains_shift(&reduced, ShiftOp::Unsigned), "se llevo puesto el `>>>`:\n{source}");
+        assert!(reduced.well_formed().is_ok(), "{:?}", reduced.well_formed());
+        // Las dos ramas que el predicado no necesita se fueron, y con ellas los dos operadores.
+        assert!(!source.contains("&&"), "quedo el `&&`:\n{source}");
+        assert!(!source.contains("||"), "quedo el `||`:\n{source}");
+    }
+
     fn seed_containing(predicate: impl Fn(&JavaProgram) -> bool) -> JavaProgram {
         (0..200)
             .map(program)
@@ -979,15 +1150,14 @@ mod tests {
         // shape, so how big the original happened to be is an accident of the RNG; what a finding
         // needs is a case small enough that somebody reads it.
         //
-        // La barra pasó de 20 a 25 cuando el stream del RNG se corrió y `seed_containing` cayó en
-        // otra semilla. No es que el reductor haya empeorado: el residuo es el hueco que `K7` ya
-        // tiene abierto, y ahora tiene un caso con nombre. El `>>>` que el predicado necesita vive
-        // adentro de la guarda de un `while`, y el reductor **encoge las hojas de una condición
-        // pero no su forma**: deja todas en `0.0` y conserva el `&&` y el `||` que las juntan,
-        // cuando quedarse con una rama sola alcanzaría. Lo demás son los dos métodos que la cadena
-        // de entrada obliga a mantener.
+        // Esta barra estuvo en 25 un rato, con el residuo anotado: el reductor encogía las hojas de
+        // una condición pero no su **forma**, así que dejaba el `&&` y el `||` en pie. Eso lo
+        // arregla [`Pass::PromoteCondition`]. Lo que este test no puede hacer es demostrarlo — la
+        // semilla que `seed_containing` elige depende del stream del RNG y se movió — así que la
+        // demostración vive en `el_reductor_se_queda_con_una_rama_de_una_condicion`, que arma la
+        // forma a mano.
         assert!(
-            reduced.size() <= 25 && reduced.size() * 4 < before,
+            reduced.size() <= 20 && reduced.size() * 4 < before,
             "{before} nodes down to {} is not a case a human will read",
             reduced.size()
         );

@@ -608,12 +608,7 @@ impl CmpOp {
 /// `S2` is the one that is easy to leave out and worth having: a vtable built by copying only the
 /// methods a class *declares* passes every test that uses `S0` and `S1`, and fails only here.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ObjClass {
-    Base,
-    S0,
-    S1,
-    S2,
-}
+pub struct ObjClass(pub usize);
 
 impl ObjClass {
     /// The suffix appended to the program's class name. The classes are named per program
@@ -621,12 +616,70 @@ impl ObjClass {
     /// program into the **same working directory**: a globally-named `B.class` from one seed would
     /// still be sitting there when the next seed ran, and the day the hierarchy stops being a
     /// constant that becomes a stale-class bug nobody would look for.
-    fn suffix(self) -> &'static str {
-        match self {
-            ObjClass::Base => "B",
-            ObjClass::S0 => "S0",
-            ObjClass::S1 => "S1",
-            ObjClass::S2 => "S2",
+    fn suffix(self) -> String {
+        match self.0 {
+            0 => "B".to_string(),
+            n => format!("S{}", n - 1),
+        }
+    }
+}
+
+/// Una clase del grafo, mas alla de la base.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ObjNode {
+    /// El indice de la clase de la que extiende. La base es `0` y no esta en esta lista.
+    pub parent: usize,
+    /// Si redeclara `int v()`. Una que **no** lo hace es la que rompe una vtable construida
+    /// copiando solo los metodos que cada clase declara, en vez de heredando los del padre.
+    pub overrides_v: bool,
+    /// Si redeclara `long w()`. Solo tiene sentido con la mitad ancha prendida.
+    pub overrides_w: bool,
+}
+
+/// El grafo de clases del programa: una base que implementa la interfaz, y `nodes` descendientes.
+///
+/// # Que se genera y que no
+///
+/// La **forma** sale de la semilla —cuantos niveles, cuantas hermanas por nivel, cual sobrescribe
+/// que— y lo que no se mueve son dos invariantes, porque las dos son la razon por la que la
+/// jerarquia fija estaba escrita como estaba:
+///
+/// - **alguna clase no sobrescribe nada**. Es la que falla contra una vtable construida copiando
+///   solo lo que cada clase declara y pasa todos los tests escritos con las otras. Sortearla podria
+///   dejarla afuera justo en la corrida que la necesitaba.
+/// - **alguna clase si sobrescribe `v()`**. Sin eso ningun sitio de llamada tiene mas de un destino
+///   posible y el cache en linea nunca falla su guarda, que es lo unico que estas clases existen
+///   para ejercitar.
+///
+/// Con profundidad 1 y ancho 3 y los overrides puestos a mano se recupera exactamente la jerarquia
+/// vieja, que es lo que hace comparable el censo de antes con el de ahora.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct Hierarchy {
+    pub nodes: Vec<ObjNode>,
+}
+
+impl Hierarchy {
+    /// Cuantas clases hay en total, contando la base.
+    fn len(&self) -> usize {
+        self.nodes.len() + 1
+    }
+
+    /// La profundidad del nodo `i`: `0` para la base.
+    fn depth_of(&self, i: usize) -> usize {
+        match i {
+            0 => 0,
+            n => 1 + self.depth_of(self.nodes[n - 1].parent),
+        }
+    }
+
+    /// La clase que realmente responde `v()` para el nodo `i`, subiendo hasta el primero que lo
+    /// declara. Es lo que hace que el resultado esperado de una llamada virtual sea calculable sin
+    /// mirar el bytecode.
+    fn v_owner(&self, i: usize) -> usize {
+        match i {
+            0 => 0,
+            n if self.nodes[n - 1].overrides_v => n,
+            n => self.v_owner(self.nodes[n - 1].parent),
         }
     }
 }
@@ -1313,6 +1366,13 @@ pub enum Stmt {
         /// One body per worker, over `k`, `a`, `b` and what it declares itself — never over the
         /// enclosing method's locals, which the worker object cannot see.
         bodies: Vec<ForkBody>,
+        /// Cual de las clases worker del programa usa este sitio: `…W0`, `…W1`, …
+        ///
+        /// Es lo unico que hacia falta para que un programa tenga mas de un sitio paralelo. La
+        /// clase lleva los cuerpos en un `switch` sobre `k`, asi que dos sitios con cuerpos
+        /// distintos no pueden compartirla — y antes el nombre era `…W` a secas, o sea uno solo por
+        /// programa. Numerarla no cambia nada de la forma: cambia de cuantas puede haber.
+        site: usize,
     },
     /// `<name> = new <class><cls>(<arg>);` — the same, on a name that already exists.
     ///
@@ -1347,13 +1407,23 @@ impl Stmt {
             // here; only a `continue` or a `throw` does. And without a `default` the whole
             // statement can be skipped.
             Stmt::Switch { arms, default, .. } => {
-                let leaves = |b: &Block| {
-                    matches!(b.last(), Some(Stmt::Continue(_) | Stmt::Throw(_)))
-                        || b.last().is_some_and(|s| {
-                            !matches!(s, Stmt::Break(None)) && s.completes_abruptly()
-                        })
+                // Un arm **sale del bloque**: termina abruptamente y no por un `break` pelado, que
+                // deja el `switch` y sigue abajo.
+                let sale = |b: &Block| {
+                    b.last().is_some_and(|s| {
+                        !matches!(s, Stmt::Break(None)) && s.completes_abruptly()
+                    })
                 };
-                default.as_ref().is_some_and(leaves) && arms.iter().all(|a| leaves(&a.body))
+                // Un arm **cae al siguiente**: no termina abruptamente, así que el control sigue en
+                // el arm de abajo. Esto es lo que faltaba, y `javac` lo encontró antes que yo: un
+                // arm que cae en un `default` que hace `continue` sale igual, aunque él mismo no
+                // salga. Mirando cada arm por su cuenta el predicado decía «no sale», se emitía la
+                // sentencia siguiente, y `javac` la rechazaba por inalcanzable — una semilla de
+                // 2000 en la corrida larga.
+                let cae = |b: &Block| !b.last().is_some_and(Stmt::completes_abruptly);
+                // El `default` se emite último, así que todo lo que cae termina llegando ahí.
+                default.as_ref().is_some_and(sale)
+                    && arms.iter().all(|a| sale(&a.body) || cae(&a.body))
             }
             _ => false,
         }
@@ -1500,6 +1570,10 @@ pub struct JavaProgram {
     /// How many times `run()` calls the entry method before returning. See [`GenConfig::warmup`] —
     /// this is what makes the JIT arm of a campaign actually be the JIT.
     pub warmup: i32,
+    /// La forma del grafo de clases de **este** programa. Ver [`Hierarchy`].
+    pub hierarchy: Hierarchy,
+    /// Si el envoltorio publica cuantas iteraciones lanzaron. Ver [`GenConfig::throw_channel`].
+    pub throw_channel: bool,
 }
 
 impl JavaProgram {
@@ -1517,11 +1591,32 @@ impl JavaProgram {
                 | Expr::Cast(_, a)
                 | Expr::Narrow(_, a)
                 | Expr::Classify(a)
-                | Expr::ArrayLoad(_, _, a) => in_expr(a),
+                | Expr::ArrayLoad(_, _, a)
+                | Expr::MatrixRowLength(_, a)
+                | Expr::RawBitsHigh(a)
+                | Expr::Recurse(_, a) => in_expr(a),
                 Expr::Bin(_, a, b) | Expr::Shift(_, a, b) => in_expr(a) || in_expr(b),
+                Expr::MatrixLoad(_, _, row, col) => in_expr(row) || in_expr(col),
                 Expr::Ternary(c, a, b) => in_cond(c) || in_expr(a) || in_expr(b),
                 Expr::Call(_, args, _) => args.iter().any(in_expr),
-                _ => false,
+                // **Sin comodín**, y ésa es la corrección de fondo. Acá había un `_ => false` que
+                // se tragaba `Expr::Recurse` —entre otros— así que un `ssame` adentro del cuerpo
+                // recursivo no se veía, el helper no se emitía, y `javac` rechazaba el programa con
+                // `cannot find symbol`. **252 de 1200 semillas** en la corrida larga.
+                //
+                // Un `match` exhaustivo habría roto la compilación el día que se agregó cada nodo
+                // nuevo, que es exactamente lo que uno quiere de un escáner: que la forma nueva no
+                // pueda entrar sin que alguien decida si la visita o no.
+                Expr::IntLit(_)
+                | Expr::LongLit(_)
+                | Expr::FloatLit(_)
+                | Expr::DoubleLit(_)
+                | Expr::NanLit(_)
+                | Expr::ArrayLength(_)
+                | Expr::Field(_, _)
+                | Expr::ThroughRef(_, _)
+                | Expr::Virtual(_, _)
+                | Expr::Var(_, _) => false,
             }
         }
         fn in_cond(c: &Cond) -> bool {
@@ -1579,26 +1674,38 @@ impl JavaProgram {
     /// once, like the dispatch probes. That is not a limitation waiting to be lifted: the worker
     /// class carries the bodies in a `switch` over `k`, so two forks would need two classes, and
     /// the reason to want a second one (more shapes) is served by more workers in the one there is.
-    fn fork_bodies(&self) -> Option<&[ForkBody]> {
-        fn find(block: &Block) -> Option<&[ForkBody]> {
+    fn fork_sites(&self) -> Vec<(usize, &[ForkBody])> {
+        fn find<'a>(block: &'a Block, out: &mut Vec<(usize, &'a [ForkBody])>) {
             for stmt in block {
-                let found = match stmt {
-                    Stmt::Fork { bodies, .. } => return Some(bodies),
-                    Stmt::If { then, otherwise, .. } => find(then).or_else(|| find(otherwise)),
-                    Stmt::For { body, .. } | Stmt::While { body, .. } => find(body),
-                    Stmt::Switch { arms, default, .. } => arms
-                        .iter()
-                        .find_map(|a| find(&a.body))
-                        .or_else(|| default.as_ref().and_then(|b| find(b))),
-                    _ => None,
-                };
-                if found.is_some() {
-                    return found;
+                match stmt {
+                    Stmt::Fork { bodies, site, .. } => out.push((*site, bodies)),
+                    Stmt::If { then, otherwise, .. } => {
+                        find(then, out);
+                        find(otherwise, out);
+                    }
+                    Stmt::For { body, .. } | Stmt::While { body, .. } => find(body, out),
+                    Stmt::Switch { arms, default, .. } => {
+                        for arm in arms {
+                            find(&arm.body, out);
+                        }
+                        if let Some(body) = default {
+                            find(body, out);
+                        }
+                    }
+                    _ => {}
                 }
             }
-            None
         }
-        find(&self.entry.body).or_else(|| self.methods.iter().find_map(|m| find(&m.body)))
+        // Todos y no el primero: cada sitio tiene su propia clase, y una que no se emita es un
+        // `NoClassDefFoundError` en vez de una divergencia.
+        let mut out = Vec::new();
+        find(&self.entry.body, &mut out);
+        for method in &self.methods {
+            find(&method.body, &mut out);
+        }
+        out.sort_by_key(|(site, _)| *site);
+        out.dedup_by_key(|(site, _)| *site);
+        out
     }
 
     /// Total AST nodes. The number a reduction test watches go down.
@@ -1907,7 +2014,23 @@ impl Program for JavaProgram {
         //
         // Property 4 (totality) is unchanged: every path out of the loop body is caught, and the
         // markers are the same ones.
+        // El campo y la sonda. La sonda corre el programa entero y devuelve el contador, así que
+        // **una** invocación alcanza para medirlo: sin consola, sin un segundo proceso, y sin tocar
+        // el valor que `run()` devuelve, que es lo que el oráculo compara.
+        if self.throw_channel {
+            let _ = writeln!(out, "    static int kjthrewField = 0;");
+            let _ = writeln!(out, "    static int kjthrew() {{ run(); return kjthrewField; }}");
+        }
         let _ = writeln!(out, "    static int run() {{");
+        // Un local del envoltorio y no un campo estatico: `run()` se invoca una vez por proceso en
+        // los dos caminos, asi que un local alcanza y no agrega estado que el JIT tenga que mirar.
+        let inc = match self.throw_channel {
+            true => {
+                let _ = writeln!(out, "        int kjthrew = 0;");
+                " kjthrew++;"
+            }
+            false => "",
+        };
         let _ = writeln!(out, "        int acc = 0;");
         let _ = writeln!(out, "        for (int w = 0; w < {}; w++) {{", self.warmup);
         let _ = writeln!(out, "            int r;");
@@ -1915,33 +2038,40 @@ impl Program for JavaProgram {
             writeln!(out, "            try {{ r = {}.{}(); }}", self.class, self.entry.name);
         let _ = writeln!(
             out,
-            "            catch (ArithmeticException e) {{ r = {}; }}",
+            "            catch (ArithmeticException e) {{ r = {};{inc} }}",
             marks::ARITHMETIC
         );
         let _ = writeln!(
             out,
-            "            catch (ArrayIndexOutOfBoundsException e) {{ r = {}; }}",
+            "            catch (ArrayIndexOutOfBoundsException e) {{ r = {};{inc} }}",
             marks::BOUNDS
         );
         let _ = writeln!(
             out,
-            "            catch (NegativeArraySizeException e) {{ r = {}; }}",
+            "            catch (NegativeArraySizeException e) {{ r = {};{inc} }}",
             marks::NEGATIVE_SIZE
         );
         let _ =
-            writeln!(out, "            catch (NullPointerException e) {{ r = {}; }}", marks::NULL);
+            writeln!(out, "            catch (NullPointerException e) {{ r = {};{inc} }}", marks::NULL);
         // `marks::CLASS_CAST` was written down long before anything could produce it: no node in
         // the grammar could fail a cast. `Stmt::TypeProbe` can, so the code stops being decoration
         // — and without this catch it would arrive as `OTHER`, which is the same answer a bug in
         // any other construct gives.
         let _ = writeln!(
             out,
-            "            catch (ClassCastException e) {{ r = {}; }}",
+            "            catch (ClassCastException e) {{ r = {};{inc} }}",
             marks::CLASS_CAST
         );
-        let _ = writeln!(out, "            catch (Throwable t) {{ r = {}; }}", marks::OTHER);
+        let _ = writeln!(out, "            catch (Throwable t) {{ r = {};{inc} }}", marks::OTHER);
         let _ = writeln!(out, "            acc = ((acc * 31) + r);");
         let _ = writeln!(out, "        }}");
+        // El contador se publica en el **campo**, no por consola. La consola era el diseño obvio
+        // y no sobrevivió al primer intento: `System.out.println` crashea esta VM (`FZ-010`), y
+        // con el canal encendido las 80 semillas se volvían divergencias. Un campo estático no
+        // necesita nada de `java.io`.
+        if self.throw_channel {
+            let _ = writeln!(out, "        kjthrewField = kjthrew;");
+        }
         let _ = writeln!(out, "        return acc;");
         let _ = writeln!(out, "    }}");
         // `main` exists because the two sides are invoked differently: `run-headless` calls `run`
@@ -1956,13 +2086,13 @@ impl Program for JavaProgram {
         // engines find them the same way.
         let used = self.obj_use();
         if used.any {
-            emit_hierarchy(&mut out, &self.class, used.wide, used.refs);
+            emit_hierarchy(&mut out, &self.class, used.wide, used.refs, &self.hierarchy);
         }
         if !self.admissible.is_empty() {
             emit_race_worker(&mut out, &self.class, RACE_SPIN);
         }
-        if let Some(bodies) = self.fork_bodies() {
-            emit_worker_class(&mut out, &self.class, bodies);
+        for (site, bodies) in self.fork_sites() {
+            emit_worker_class(&mut out, &self.class, site, bodies);
         }
         out
     }
@@ -1980,13 +2110,13 @@ impl Program for JavaProgram {
 /// **One class per program, with a `switch` over `k`**, because the workers differ only in what
 /// they compute. The `default` arm is not decoration: `javac` requires the local to be definitely
 /// assigned on every path, and a `switch` over `int` has no exhaustiveness to lean on.
-fn emit_worker_class(out: &mut String, prefix: &str, bodies: &[ForkBody]) {
-    let _ = writeln!(out, "class {prefix}W extends Thread {{");
+fn emit_worker_class(out: &mut String, prefix: &str, site: usize, bodies: &[ForkBody]) {
+    let _ = writeln!(out, "class {prefix}W{site} extends Thread {{");
     let _ = writeln!(out, "    int[] s;");
     let _ = writeln!(out, "    int k;");
     let _ = writeln!(out, "    int a;");
     let _ = writeln!(out, "    int b;");
-    let _ = writeln!(out, "    {prefix}W(int[] s, int k, int a, int b) {{");
+    let _ = writeln!(out, "    {prefix}W{site}(int[] s, int k, int a, int b) {{");
     let _ = writeln!(out, "        this.s = s; this.k = k; this.a = a; this.b = b;");
     let _ = writeln!(out, "    }}");
     let _ = writeln!(out, "    public void run() {{");
@@ -2046,7 +2176,7 @@ pub struct ForkBody {
 /// `wide` is [`ObjUse::wide`]: with it off there is no `long` anywhere in the hierarchy, including
 /// in the constructor, which is what keeps a `new` from taking its **caller** out of the JIT's
 /// subset along with it.
-fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool, refs: bool) {
+fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool, refs: bool, h: &Hierarchy) {
     // The interface exists for one opcode. `invokeinterface` walks the same inline cache as
     // `invokevirtual` but resolves differently: a virtual call takes a slot fixed at the call site
     // and indexes the receiver's vtable, while an interface call has no stable slot — each
@@ -2082,24 +2212,26 @@ fn emit_hierarchy(out: &mut String, prefix: &str, wide: bool, refs: bool) {
     }
     let _ = writeln!(out, "}}");
 
-    let _ = writeln!(out, "class {prefix}S0 extends {prefix}B {{");
-    let _ = writeln!(out, "    {prefix}S0(int s) {{ super(s); }}");
-    let _ = writeln!(out, "    public int v() {{ return (a * 3); }}");
-    let _ = writeln!(out, "}}");
-
-    let _ = writeln!(out, "class {prefix}S1 extends {prefix}B {{");
-    let _ = writeln!(out, "    {prefix}S1(int s) {{ super(s); }}");
-    let _ = writeln!(out, "    public int v() {{ return (a - 7); }}");
-    if wide {
-        let _ = writeln!(out, "    long w() {{ return (b * 2L); }}");
+    // Las subclases, en el orden en que se sortearon. El padre siempre se emitio antes: un nodo
+    // solo puede colgar de un nivel anterior, asi que el orden del vector ya es un orden topologico
+    // y no hace falta ordenar nada.
+    for (k, node) in h.nodes.iter().enumerate() {
+        let name = ObjClass(k + 1).suffix();
+        let parent = ObjClass(node.parent).suffix();
+        let _ = writeln!(out, "class {prefix}{name} extends {prefix}{parent} {{");
+        let _ = writeln!(out, "    {prefix}{name}(int s) {{ super(s); }}");
+        // Un cuerpo distinto por clase, y **con termino independiente**: `(a * m)` solo alcanza
+        // mientras `a` no sea cero, y con `a == 0` todas las clases devolverian lo mismo y un bug
+        // de despacho seria invisible justo en el objeto mas facil de construir.
+        let m = k + 3;
+        if node.overrides_v {
+            let _ = writeln!(out, "    public int v() {{ return ((a * {m}) + {m}); }}");
+        }
+        if wide && node.overrides_w {
+            let _ = writeln!(out, "    long w() {{ return ((b * {m}L) - {m}L); }}");
+        }
+        let _ = writeln!(out, "}}");
     }
-    let _ = writeln!(out, "}}");
-
-    // Overrides nothing. The one subclass that fails a vtable built by copying only the methods a
-    // class *declares*, and passes every test written with the other two.
-    let _ = writeln!(out, "class {prefix}S2 extends {prefix}B {{");
-    let _ = writeln!(out, "    {prefix}S2(int s) {{ super(s); }}");
-    let _ = writeln!(out, "}}");
 }
 
 /// The name of the classifier helper for a floating type. Not `m<k>`, so it cannot collide with a
@@ -2345,9 +2477,19 @@ fn emit_method(out: &mut String, method: &Method, prefix: &str) {
     for stmt in &method.body {
         emit_stmt(out, stmt, 2, prefix);
     }
-    let mut result = String::new();
-    emit_expr(&mut result, &method.result, prefix);
-    let _ = writeln!(out, "        return {result};");
+    // El `return` **sólo si se puede llegar**. Un cuerpo cuya última sentencia completa
+    // abruptamente —un `throw`, o un `if`/`else` con las dos ramas lanzando— deja el `return`
+    // inalcanzable, y `javac` rechaza el archivo. Un método que no puede completar normalmente es
+    // Java legal sin `return`: es la misma regla que hace legal a `while (true) {}`.
+    //
+    // Estuvo latente desde que existen los `throw` porque `throw_share` viene en cero: ninguna
+    // campaña lo prendía, así que ninguna semilla llegaba a la forma. La destapó el canal de
+    // lanzamientos de `K7`, que necesita una tasa alta justamente para tener qué contar.
+    if !method.body.last().is_some_and(Stmt::completes_abruptly) {
+        let mut result = String::new();
+        emit_expr(&mut result, &method.result, prefix);
+        let _ = writeln!(out, "        return {result};");
+    }
     let _ = writeln!(out, "    }}");
 }
 
@@ -2360,8 +2502,9 @@ fn indent(out: &mut String, depth: usize) {
 fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
     indent(out, depth);
     match stmt {
-        Stmt::Fork { slots, threads, counter, acc, args, bodies } => {
+        Stmt::Fork { slots, threads, counter, acc, args, bodies, site } => {
             let k = bodies.len();
+            let w = format!("{prefix}W{site}");
             let (mut a, mut b) = (String::new(), String::new());
             emit_expr(&mut a, &args.0, prefix);
             emit_expr(&mut b, &args.1, prefix);
@@ -2369,12 +2512,12 @@ fn emit_stmt(out: &mut String, stmt: &Stmt, depth: usize, prefix: &str) {
             // construction: nothing a worker runs can read a local that is still changing.
             let _ = writeln!(out, "int[] {slots} = new int[{k}];");
             indent(out, depth);
-            let _ = writeln!(out, "{prefix}W[] {threads} = new {prefix}W[{k}];");
+            let _ = writeln!(out, "{w}[] {threads} = new {w}[{k}];");
             indent(out, depth);
             let _ = writeln!(
                 out,
                 "for (int {counter} = 0; {counter} < {k}; {counter}++) {{ \
-                 {threads}[{counter}] = new {prefix}W({slots}, {counter}, {a}, {b}); \
+                 {threads}[{counter}] = new {w}({slots}, {counter}, {a}, {b}); \
                  {threads}[{counter}].start(); }}"
             );
             indent(out, depth);
@@ -3311,6 +3454,23 @@ pub struct GenConfig {
     /// mitad ancha de nuevo y no el cast. Con esta perilla la jerarquía queda igual y lo único que
     /// cambia es **por dónde** se llega al campo, que es lo que había que ponerle precio.
     pub wide_cast: bool,
+    /// Si el programa cuenta **cuantas iteraciones del calentamiento lanzaron** y lo publica.
+    ///
+    /// # Por que hace falta un canal aparte
+    ///
+    /// El envoltorio total pliega las `warmup` iteraciones en `acc = acc*31 + r`, y una iteracion
+    /// que lanza aporta una marca a ese polinomio. Con `warmup > 1` el valor final **nunca** es una
+    /// marca pelada, asi que [`Report::marked`] —que pregunta si el resultado *es* una marca— solo
+    /// detecta el caso degenerado de `warmup == 1`. Un programa que lanza en **todas** las
+    /// iteraciones y uno que lanza en **una** se reportan igual: cero.
+    ///
+    /// Eso no es contabilidad. FZ-005 fue exactamente esto con otro nombre —46% de las semillas
+    /// muriendo antes de que el JIT las mirara, invisible en un reporte que solo contaba semillas
+    /// usables— y la leccion era que lo que no se cuenta se supone.
+    ///
+    /// Apagado por defecto: prende un `println` por programa, que cuesta tiempo y ensucia el censo
+    /// del JIT. Es un instrumento, se enciende cuando se quiere el numero.
+    pub throw_channel: bool,
     /// Out of 100, how often an object `new` is a plain `null` instead.
     ///
     /// A `null` receiver is a genuinely valuable path — `getfield`, `putfield` and `invokevirtual`
@@ -3429,6 +3589,28 @@ pub struct GenConfig {
     /// earns its keep — and it is not worth paying for on every seed of every other campaign,
     /// where a thread is by far the most expensive thing the grammar can ask for.
     pub workers: usize,
+    /// Cuantos **sitios** paralelos lleva el programa. Cada uno arranca [`GenConfig::workers`]
+    /// hilos y tiene su propia clase worker.
+    ///
+    /// Separada de `workers` porque las dos cosas se rompen distinto: `workers` sube el ancho de un
+    /// sitio —mas hilos escribiendo el mismo arreglo de slots— y esto sube cuantas veces el
+    /// programa arranca y joinea una tanda entera. Un programa con dos sitios tiene dos clases
+    /// `Thread` distintas cargandose, dos tandas de `start()`/`join()` y un `switch` sobre `k` por
+    /// clase; con un solo sitio, todo eso ocurre una vez y una vez no distingue «funciona» de
+    /// «funciona la primera vez».
+    pub parallel_sites: usize,
+    /// Cuantos niveles puede tener el grafo de clases abajo de la base. Cada semilla sortea el suyo
+    /// entre `1` y esto.
+    ///
+    /// La profundidad es lo que separa «heredar de la base» de «heredar de algo que ya heredaba»:
+    /// con un solo nivel, la cadena que una vtable tiene que copiar hacia abajo tiene un eslabon, y
+    /// un eslabon no distingue copiar de copiar transitivamente.
+    pub max_class_depth: usize,
+    /// Cuantas hermanas puede tener un nivel. Cada nivel sortea el suyo entre `1` y esto.
+    ///
+    /// El ancho es lo que le da destinos a un sitio de llamada. Con ancho `1` todo sitio es
+    /// monomorfico por construccion y la guarda del cache en linea no puede fallar nunca.
+    pub max_class_width: usize,
     /// How many times `run()` calls the entry method before returning.
     ///
     /// # Why this is not 1
@@ -3488,6 +3670,7 @@ impl Default for GenConfig {
             object_share: 18,
             wide_fields: true,
             wide_cast: true,
+            throw_channel: false,
             null_share: 4,
             dispatch_probe: true,
             matrix_share: 0,
@@ -3506,6 +3689,9 @@ impl Default for GenConfig {
             // defecto conserve su mezcla; lo que cambió es que ahora el número dice lo que dice.
             cast_share: 5,
             workers: 0,
+            parallel_sites: 1,
+            max_class_depth: 3,
+            max_class_width: 3,
             warmup: 40,
         }
     }
@@ -3569,6 +3755,10 @@ struct Gen {
     /// porque una sentencia encolada que sobreviviera al cierre de llaves nombraría algo que ya no
     /// existe.
     pendientes: Vec<Stmt>,
+    /// El proximo numero de clase worker libre. Uno por sitio y por programa.
+    proximo_sitio: usize,
+    /// El grafo de clases de este programa, sorteado una vez y consultado por todo lo demas.
+    hierarchy: Hierarchy,
     /// The static cost of each already-generated method, indexed the same as
     /// [`JavaProgram::methods`]. A call is only emitted when the callee fits the remaining budget.
     costs: Vec<u64>,
@@ -3590,6 +3780,8 @@ impl Gen {
             loop_depth: 0,
             labels: Vec::new(),
             pendientes: Vec::new(),
+            proximo_sitio: 0,
+            hierarchy: Hierarchy::default(),
             costs: Vec::new(),
             signatures: Vec::new(),
             next_name: 0,
@@ -3631,6 +3823,9 @@ impl Gen {
     }
 
     fn program(&mut self, seed: Seed) -> JavaProgram {
+        // **Antes que nada**: todo lo que sortea una clase consulta este grafo, asi que tiene que
+        // existir antes del primer metodo.
+        self.hierarchy = self.build_hierarchy();
         let helper_count = self.rng.below(self.config.max_methods as u32 + 1) as usize;
         let mut methods = Vec::with_capacity(helper_count);
         for index in 0..helper_count {
@@ -3654,6 +3849,8 @@ impl Gen {
         if self.config.race_threads > 1 {
             let (entry, admissible) = self.race_entry();
             return JavaProgram {
+                hierarchy: self.hierarchy.clone(),
+                throw_channel: self.config.throw_channel,
                 class: format!("Fz{}", seed.0),
                 methods: Vec::new(),
                 entry,
@@ -3663,6 +3860,8 @@ impl Gen {
             };
         }
         JavaProgram {
+            hierarchy: self.hierarchy.clone(),
+            throw_channel: self.config.throw_channel,
             class: format!("Fz{}", seed.0),
             methods,
             entry,
@@ -3747,12 +3946,16 @@ impl Gen {
         let planting = plant && self.config.object_share > 0 && self.config.dispatch_probe;
         let (mut body, mut accumulators) =
             if planting { self.dispatch_shape(&mut scope) } else { (Vec::new(), Vec::new()) };
-        // The parallel site goes in the **entry** method only (`plant`), and once: the worker class
-        // carries the bodies in a `switch` over `k`, so a second site would need a second class.
+        // Los sitios paralelos van en el metodo de **entrada** (`plant`). Cuantos, lo dice
+        // `parallel_sites`: antes era siempre uno y la razon estaba escrita aca —la clase worker
+        // lleva los cuerpos en un `switch` sobre `k`, asi que un segundo sitio necesitaba una
+        // segunda clase—. Ahora cada sitio numera la suya y el limite se fue.
         if plant && self.config.workers > 0 {
-            let (stmts, acc) = self.parallel_site(&mut scope);
-            body.extend(stmts);
-            accumulators.push(acc);
+            for _ in 0..self.config.parallel_sites {
+                let (stmts, acc) = self.parallel_site(&mut scope);
+                body.extend(stmts);
+                accumulators.push(acc);
+            }
         }
         self.budget = self.budget.saturating_sub(self.block_cost(&body));
         body.extend(self.block(&mut scope, 0));
@@ -3856,14 +4059,16 @@ impl Gen {
             .collect();
 
         scope.locals.push(Local::scalar(acc.clone(), Ty::Int));
-        let stmt = Stmt::Fork { slots, threads, counter, acc: acc.clone(), args, bodies };
+        let site = self.proximo_sitio;
+        self.proximo_sitio += 1;
+        let stmt = Stmt::Fork { slots, threads, counter, acc: acc.clone(), args, bodies, site };
         (vec![stmt], (acc, Ty::Int))
     }
 
     /// A call site whose receiver never changes: the inline cache is filled on the first execution
     /// and its guard holds for every one after, so native code is never left.
     fn monomorphic_site(&mut self, scope: &mut Scope) -> (Vec<Stmt>, (String, Ty)) {
-        let class = *self.rng.pick(OBJ_CLASSES);
+        let class = self.any_class();
         let method = self.virtual_method();
         let ty = method.ty();
         let bound = 2 + self.rng.below(3) as i32;
@@ -3953,7 +4158,7 @@ impl Gen {
             ),
         };
         let stmts = vec![
-            Stmt::NewObject { name: obj, class: Some(ObjClass::Base), arg: initial, iface },
+            Stmt::NewObject { name: obj, class: Some(ObjClass(0)), arg: initial, iface },
             Stmt::Declare { name: acc.clone(), ty, init: Expr::zero(ty) },
             Stmt::For { var: counter, bound, body: vec![rotate, site], label: None },
         ];
@@ -3963,10 +4168,20 @@ impl Gen {
     /// Two **distinct** subclasses. Distinct is the whole point: the same class twice is a
     /// monomorphic site written the long way.
     fn two_classes(&mut self) -> (ObjClass, ObjClass) {
-        let subs = [ObjClass::S0, ObjClass::S1, ObjClass::S2];
-        let first = self.rng.below(3) as usize;
-        let second = (first + 1 + self.rng.below(2) as usize) % 3;
-        (subs[first], subs[second])
+        // Distintas **en el dueno de `v()`**, no sólo en el nombre. Dos clases que heredan el mismo
+        // cuerpo son un sitio monomorfico escrito largo: el cache en linea guarda la clase, así que
+        // su guarda falla, pero el valor que sale es el mismo y un bug de despacho no se ve.
+        // La invariante 2 de [`Gen::build_hierarchy`] es lo que garantiza que exista la segunda.
+        let todas: Vec<usize> = (1..self.hierarchy.len()).collect();
+        let first = todas[self.rng.below(todas.len() as u32) as usize];
+        let dueno = self.hierarchy.v_owner(first);
+        let otras: Vec<usize> =
+            todas.iter().copied().filter(|&c| self.hierarchy.v_owner(c) != dueno).collect();
+        let second = match otras.is_empty() {
+            true => first,
+            false => otras[self.rng.below(otras.len() as u32) as usize],
+        };
+        (ObjClass(first), ObjClass(second))
     }
 
     /// `v()` unless the hierarchy has a `long` half to call into.
@@ -3998,8 +4213,57 @@ impl Gen {
         if self.config.null_share > 0 && self.rng.below(100) < self.config.null_share {
             return (None, Expr::IntLit(0));
         }
-        let class = *self.rng.pick(OBJ_CLASSES);
+        let class = self.any_class();
         (Some(class), self.ctor_arg(scope))
+    }
+
+    /// Sortea la forma del grafo de clases, y despues **repara** las dos invariantes.
+    ///
+    /// La reparacion sólo **agrega** clases, nunca cambia una sorteada. Es a proposito: mutar la
+    /// que salio del azar para que cumpla una invariante deja el grafo dependiendo del orden en que
+    /// se revisan las invariantes, y una de ellas puede romper la otra. Agregar no tiene ese
+    /// problema — cada invariante se satisface con una clase nueva y ninguna toca lo que la otra
+    /// arreglo.
+    fn build_hierarchy(&mut self) -> Hierarchy {
+        let profundidad = 1 + self.rng.below(self.config.max_class_depth.max(1) as u32) as usize;
+        let mut nodes: Vec<ObjNode> = Vec::new();
+        // La base, que es la clase `0` y no vive en `nodes`.
+        let mut nivel_previo = vec![0usize];
+        for _ in 0..profundidad {
+            let ancho = 1 + self.rng.below(self.config.max_class_width.max(1) as u32) as usize;
+            let mut nivel = Vec::new();
+            for _ in 0..ancho {
+                let i = self.rng.below(nivel_previo.len() as u32) as usize;
+                nodes.push(ObjNode {
+                    parent: nivel_previo[i],
+                    overrides_v: self.rng.chance(2, 3),
+                    overrides_w: self.rng.chance(1, 2),
+                });
+                nivel.push(nodes.len());
+            }
+            nivel_previo = nivel;
+        }
+        let mut h = Hierarchy { nodes };
+
+        // **Invariante 1**: alguna clase hereda `v()` de la base sin tocarlo. Es la que falla contra
+        // una vtable construida copiando solo los metodos que cada clase declara, y pasa todos los
+        // tests escritos con las que si sobrescriben.
+        if !(1..h.len()).any(|i| h.v_owner(i) == 0) {
+            h.nodes.push(ObjNode { parent: 0, overrides_v: false, overrides_w: false });
+        }
+        // **Invariante 2**: al menos dos clases responden `v()` con cuerpos distintos. Sin eso todo
+        // sitio de llamada es monomorfico *de hecho* aunque tenga dos destinos nominales, y la
+        // guarda del cache en linea no puede fallar nunca.
+        let duenos: std::collections::BTreeSet<usize> = (1..h.len()).map(|i| h.v_owner(i)).collect();
+        if duenos.len() < 2 {
+            h.nodes.push(ObjNode { parent: 0, overrides_v: true, overrides_w: false });
+        }
+        h
+    }
+
+    /// Cualquier clase del grafo, la base incluida.
+    fn any_class(&mut self) -> ObjClass {
+        ObjClass(self.rng.below(self.hierarchy.len() as u32) as usize)
     }
 
     /// Un objeto recien construido, siempre real: ni `null` ni por interfaz.
@@ -4008,7 +4272,7 @@ impl Gen {
     /// un `null` es un sujeto legitimo de sonda —`null instanceof X` es `false` por JLS §15.20.2—
     /// pero fabricar uno para poder sondearlo seria fabricar el caso aburrido.
     fn fresh_object(&mut self, scope: &mut Scope) -> Stmt {
-        let class = *self.rng.pick(OBJ_CLASSES);
+        let class = self.any_class();
         let arg = self.ctor_arg(scope);
         let name = self.fresh("o");
         scope.locals.push(Local::object(name.clone()));
@@ -4041,7 +4305,7 @@ impl Gen {
     fn type_probe_over(&mut self, scope: &mut Scope) -> Option<Stmt> {
         let plain: Vec<String> = scope.objects().into_iter().map(str::to_string).collect();
         let obj = self.rng.pick(&plain).clone();
-        let class = *self.rng.pick(&[ObjClass::Base, ObjClass::S0, ObjClass::S1, ObjClass::S2]);
+        let class = self.any_class();
         // Half tests, half casts. The test can never fail and the cast can, and both are worth
         // generating: one exercises the guard, the other the guard *and* the path out of it.
         //
@@ -5186,11 +5450,6 @@ const FP_BIN_OPS: &[BinOp] =
 const SHIFT_OPS: &[ShiftOp] = &[ShiftOp::Left, ShiftOp::Right, ShiftOp::Unsigned];
 const CMP_OPS: &[CmpOp] =
     &[CmpOp::Lt, CmpOp::Le, CmpOp::Gt, CmpOp::Ge, CmpOp::Eq, CmpOp::Ne];
-/// The base included: a receiver that is exactly the declared type still goes through
-/// `invokevirtual` and still fills an inline cache, and a hierarchy whose base is never instantiated
-/// would never test that.
-const OBJ_CLASSES: &[ObjClass] =
-    &[ObjClass::Base, ObjClass::S0, ObjClass::S1, ObjClass::S2];
 
 // ---------------------------------------------------------------------------------------------
 // Well-formedness
@@ -6127,7 +6386,8 @@ mod tests {
             "NEGATIVE_INFINITY",
         ];
         for seed in 0..200 {
-            let source = program(seed).to_java();
+            let p = program(seed);
+            let source = p.to_java();
             for needle in banned {
                 assert!(
                     !source.contains(needle),
@@ -6152,8 +6412,8 @@ mod tests {
                 let ok = ["int[", "long[", "float[", "double["]
                     .iter()
                     .any(|k| allocation.starts_with(k))
-                    || OBJ_CLASSES.iter().any(|c| {
-                        allocation.starts_with(&format!("{class}{}(", c.suffix()))
+                    || (0..p.hierarchy.len()).any(|i| {
+                        allocation.starts_with(&format!("{class}{}(", ObjClass(i).suffix()))
                     });
                 assert!(
                     ok,
@@ -6681,7 +6941,9 @@ mod tests {
             let cls = program.class_name().to_string();
             // Sólo el cuerpo de la clase worker: una llamada en el método de entrada no dice nada
             // sobre lo que un worker puede escribir.
-            let Some((_, worker)) = source.split_once(&format!("class {cls}W extends Thread")) else {
+            // `class …W` sin el `extends`: la clase worker se numera por sitio desde que un
+            // programa puede tener mas de uno, asi que el nombre exacto es `…W0`.
+            let Some((_, worker)) = source.split_once(&format!("class {cls}W")) else {
                 continue;
             };
             let worker = worker.split_once("
@@ -6741,6 +7003,62 @@ mod tests {
         assert!(clasificador > 60, "clasificadores en {clasificador}/200");
         assert!(ssame > 100, "`ssame` en {ssame}/200");
         assert!(rec > 130, "recursión en {rec}/200");
+    }
+
+    /// Dos sitios paralelos coexisten, cada uno con su clase, y el censo ve los dos.
+    ///
+    /// Lo que hacia falta era numerar la clase. Los cuerpos viven en un `switch` sobre `k` adentro
+    /// de ella, asi que dos sitios con cuerpos distintos no pueden compartirla, y mientras el nombre
+    /// fue `…W` a secas hubo exactamente uno por programa.
+    ///
+    /// Los asertos, y por que cada uno:
+    ///
+    /// - **dos clases declaradas**: una sola querria decir que el segundo sitio esta usando la del
+    ///   primero, o sea corriendo cuerpos ajenos;
+    /// - **cada sitio construye la suya**: la declaracion sin el `new` correspondiente seria una
+    ///   clase muerta, y el `new` sin la declaracion un `NoClassDefFoundError` — que del lado de la
+    ///   VM se ve como una semilla inutilizable y no como una divergencia, o sea invisible;
+    /// - **los dos `switch` tienen sus arms**: dos clases con el mismo cuerpo serian dos sitios
+    ///   nominales y uno solo de verdad;
+    /// - **el programa sigue bien formado**, que es lo que dice que los dos acumuladores llegan al
+    ///   resultado en vez de quedar declarados y sin leer.
+    #[test]
+    fn dos_sitios_paralelos_coexisten_cada_uno_con_su_clase() {
+        const K: usize = 3;
+        let uno = GenConfig { workers: K, parallel_sites: 1, ..GenConfig::default() };
+        for seed in 0..80 {
+            let source = JavaGenerator::new(uno).generate(Seed(seed)).to_java();
+            assert!(!source.contains("W1 extends Thread"), "seed {seed}: sobra una clase\n{source}");
+        }
+
+        let dos = GenConfig { workers: K, parallel_sites: 2, ..GenConfig::default() };
+        for seed in 0..80 {
+            let program = JavaGenerator::new(dos).generate(Seed(seed));
+            assert!(program.well_formed().is_ok(), "seed {seed}: {:?}", program.well_formed());
+            let source = program.to_java();
+            let cls = program.class_name().to_string();
+            for n in 0..2 {
+                assert!(
+                    source.contains(&format!("class {cls}W{n} extends Thread")),
+                    "seed {seed}: falta la clase del sitio {n}\n{source}"
+                );
+                assert!(
+                    source.contains(&format!("new {cls}W{n}(")),
+                    "seed {seed}: el sitio {n} no construye su clase\n{source}"
+                );
+                // El `switch` de cada clase tiene un arm por worker: dos clases con el mismo cuerpo
+                // serian dos sitios de nombre y uno solo de verdad.
+                let (_, cuerpo) = source
+                    .split_once(&format!("class {cls}W{n} extends Thread"))
+                    .expect("la clase");
+                let cuerpo = cuerpo.split_once("\n}").map_or(cuerpo, |(c, _)| c);
+                assert_eq!(
+                    (0..K).filter(|i| cuerpo.contains(&format!("case {i}: {{"))).count(),
+                    K,
+                    "seed {seed}: el `switch` del sitio {n} no tiene sus {K} arms\n{cuerpo}"
+                );
+            }
+        }
     }
 
     /// "0 divergences" over a construct that never appeared is the failure this project has now
@@ -8264,22 +8582,126 @@ mod tests {
         }
     }
 
+    /// Las dos invariantes se sostienen **en el grafo mas angosto que la config permite**.
+    ///
+    /// Este test existe porque el otro no alcanzaba, y la diferencia importa. Con la config por
+    /// defecto el sorteo cumple las dos invariantes casi siempre por su cuenta —`overrides_v` sale
+    /// una de cada tres veces, y con varias clases alguna hereda igual—, asi que un test sobre 300
+    /// semillas *por defecto* comprueba la **muestra** y no la **garantia**: sacando la reparacion,
+    /// las 300 siguen pasando. Medido: el mutante sobrevivio.
+    ///
+    /// Con profundidad 1 y ancho 1 hay una sola clase sorteada, y entonces:
+    ///
+    /// - un tercio de las semillas no tendria ninguna que herede `v()` de la base;
+    /// - y **ninguna** tendria dos duenos distintos de `v()`, porque hay una sola clase.
+    ///
+    /// O sea que aca las dos reparaciones son lo unico que sostiene las invariantes, y sacar
+    /// cualquiera de las dos se ve en la primera semilla.
     #[test]
-    fn a_class_that_overrides_nothing_is_emitted_and_used() {
-        // `S2` declares no method at all, so a vtable built by copying only what a class declares
-        // leaves its slots empty. Every other subclass in the hierarchy hides that.
-        let mut used = 0;
+    fn las_invariantes_del_grafo_valen_en_el_caso_mas_angosto() {
+        let cfg = GenConfig { max_class_depth: 1, max_class_width: 1, ..GenConfig::default() };
         for seed in 0..300 {
-            let source = program(seed).to_java();
-            let s2 = format!("class Fz{seed}S2 extends Fz{seed}B");
-            assert!(source.contains(&s2), "seed {seed} has no S2");
-            let body = &source[source.find(&s2).unwrap()..];
-            let body = &body[..body.find("\n}").unwrap()];
-            assert!(!body.contains("int v()"), "seed {seed}: S2 overrides v()");
-            assert!(!body.contains("long w()"), "seed {seed}: S2 overrides w()");
-            used += usize::from(source.contains(&format!("new Fz{seed}S2(")));
+            let program = JavaGenerator::new(cfg).generate(Seed(seed));
+            let h = &program.hierarchy;
+            assert!(
+                (1..h.len()).any(|i| h.v_owner(i) == 0),
+                "seed {seed}: ninguna clase hereda `v()` de la base con el grafo mas angosto"
+            );
+            let duenos: std::collections::BTreeSet<usize> =
+                (1..h.len()).map(|i| h.v_owner(i)).collect();
+            assert!(
+                duenos.len() >= 2,
+                "seed {seed}: un solo dueno de `v()` ({duenos:?}): todo sitio seria monomorfico"
+            );
         }
-        assert!(used > 100, "only {used}/300 programs instantiate the class that overrides nothing");
+    }
+
+    /// La profundidad y el ancho del grafo de clases salen de la semilla.
+    ///
+    /// # Que se aserta, y por que cada cosa
+    ///
+    /// - **las dos varian**: si sólo variara el ancho, todo seguiria colgando de la base y la
+    ///   cadena que una vtable copia hacia abajo seguiria teniendo un eslabon. Se cuentan por
+    ///   separado porque se rompen por separado.
+    /// - **hay nietos**: una clase cuyo padre no es la base. Es la unica forma que distingue copiar
+    ///   los metodos del padre de copiarlos *transitivamente*, y con profundidad 1 no existe.
+    /// - **hay una clase que hereda `v()` a traves de un nivel intermedio**: el nieto que no
+    ///   sobrescribe, colgado de un padre que tampoco. Ahi el slot tiene que venir de dos niveles
+    ///   arriba, que es donde una vtable que copia un solo nivel se rompe.
+    /// - **el padre siempre se emite antes que el hijo**: el vector ya es un orden topologico
+    ///   porque un nodo sólo cuelga de un nivel anterior, y si eso dejara de valer `javac`
+    ///   rechazaria el archivo por una razon que no se parece en nada a la causa.
+    #[test]
+    fn la_forma_del_grafo_de_clases_sale_de_la_semilla() {
+        let mut profundidades = std::collections::BTreeSet::new();
+        let mut anchos = std::collections::BTreeSet::new();
+        let (mut nietos, mut heredado_transitivo) = (0, 0);
+
+        for seed in 0..300 {
+            let program = program(seed);
+            let h = &program.hierarchy;
+            let source = program.to_java();
+
+            let hondo = (1..h.len()).map(|i| h.depth_of(i)).max().unwrap_or(0);
+            profundidades.insert(hondo);
+            for nivel in 1..=hondo {
+                anchos.insert((1..h.len()).filter(|&i| h.depth_of(i) == nivel).count());
+            }
+
+            nietos += usize::from((1..h.len()).any(|i| h.depth_of(i) > 1));
+            heredado_transitivo +=
+                usize::from((1..h.len()).any(|i| h.depth_of(i) > 1 && h.v_owner(i) != i));
+
+            // El orden de emision: cada `extends` nombra una clase ya declarada.
+            for (k, node) in h.nodes.iter().enumerate() {
+                let hijo = format!("class Fz{seed}{} extends", ObjClass(k + 1).suffix());
+                let padre = format!("class Fz{seed}{} ", ObjClass(node.parent).suffix());
+                if let (Some(a), Some(b)) = (source.find(&hijo), source.find(&padre)) {
+                    assert!(b < a, "seed {seed}: {} se emite despues de su hijo", node.parent);
+                }
+            }
+        }
+        println!(
+            "profundidades {profundidades:?}, anchos {anchos:?}, con nietos {nietos}/300, \
+             herencia a traves de un nivel {heredado_transitivo}/300"
+        );
+        assert!(profundidades.len() > 1, "la profundidad no varia: {profundidades:?}");
+        assert!(anchos.len() > 1, "el ancho no varia: {anchos:?}");
+        assert!(nietos > 100, "programas con nietos: {nietos}/300");
+        assert!(heredado_transitivo > 50, "herencia a traves de un nivel: {heredado_transitivo}/300");
+    }
+
+    fn a_class_that_overrides_nothing_is_emitted_and_used() {
+        // La invariante sobrevivio al grafo generado; el nombre no. Antes esta clase se llamaba
+        // `S2` siempre y el test la buscaba por nombre; ahora es «alguna clase cuyo `v()` lo
+        // responde la base», que es lo que en realidad importa: una vtable construida copiando solo
+        // los metodos que cada clase declara le deja el slot vacio, y todas las demas lo tapan.
+        let (mut usada, mut heredan) = (0, 0);
+        for seed in 0..300 {
+            let program = program(seed);
+            let source = program.to_java();
+            let h = &program.hierarchy;
+
+            let sin_override: Vec<usize> = (1..h.len()).filter(|&i| h.v_owner(i) == 0).collect();
+            assert!(
+                !sin_override.is_empty(),
+                "seed {seed}: ninguna clase hereda `v()` de la base"
+            );
+            heredan += sin_override.len();
+
+            for i in &sin_override {
+                let nombre = format!("class Fz{seed}{} extends", ObjClass(*i).suffix());
+                let Some(desde) = source.find(&nombre) else { continue };
+                let cuerpo = &source[desde..];
+                let cuerpo = &cuerpo[..cuerpo.find("\n}").unwrap()];
+                assert!(!cuerpo.contains("int v()"), "seed {seed}: {i} sobrescribe v()");
+            }
+            usada += usize::from(sin_override.iter().any(|i| {
+                source.contains(&format!("new Fz{seed}{}(", ObjClass(*i).suffix()))
+            }));
+        }
+        println!("heredan v() de la base: {heredan} clases; instanciadas en {usada}/300 programas");
+        assert!(usada > 100, "solo {usada}/300 programas instancian la clase que no sobrescribe");
     }
 
     #[test]
@@ -8377,7 +8799,7 @@ mod tests {
         let mut p = program(7);
         p.entry.body.push(Stmt::SetObject {
             name: obj,
-            class: Some(ObjClass::S0),
+            class: Some(ObjClass(1)),
             arg: Expr::DoubleLit(0),
         });
         assert!(matches!(p.well_formed(), Err(Malformed::BadConstructorArgument(Ty::Double))));

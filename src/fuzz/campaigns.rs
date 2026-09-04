@@ -276,6 +276,56 @@ mod tests {
         );
     }
 
+    /// **La gramática entera**, y vive en una funcion por una razón de corrección y no de estilo:
+    /// la semilla nombra un programa **sólo junto a la config que la consumió**. Cambiar una
+    /// perilla corre el flujo del RNG y la semilla 725 pasa a ser otro programa, así que la
+    /// campaña que encuentra un hallazgo y el test que lo reproduce tienen que leer literalmente
+    /// la misma config o el segundo mide otra cosa creyendo que mide la primera.
+    fn wide() -> GenConfig {
+        GenConfig {
+            max_methods: 5,
+            max_params: 4,
+            max_stmts: 7,
+            max_expr_depth: 4,
+            max_block_depth: 3,
+            max_loop_bound: 6,
+            budget: 6_000,
+            // **Todas las perillas prendidas**, y esto es lo que la primera corrida larga corrigió.
+            //
+            // Acá decía que cada construcción nueva se sumaba sola «el día que aterriza, y no el día
+            // que alguien se acuerda de agregar un campo», porque heredaba su share por defecto. Es
+            // falso para cualquiera cuyo default sea **cero**, y lo son catorce: las de `K5` y media
+            // `K6` enteras. Medido: la corrida de 2000 semillas × 4 pareos dio 0 divergencias sin
+            // haber generado ni un string, ni una matriz, ni un NaN, ni una recursión, ni un hilo,
+            // ni una etiqueta, ni un local angosto, ni un campo de referencia.
+            //
+            // Un default en cero no es un descuido — cada uno tiene su razón, casi siempre cobertura
+            // compilada— pero heredarlo acá convierte la campaña larga en una campaña larga sobre un
+            // pedazo de la gramática, que es la forma FZ-004/FZ-005 aplicada al instrumento.
+            //
+            // Los valores no son los máximos de cada censo sino más bajos: con quince construcciones
+            // compitiendo por las mismas sentencias, los shares altos de un censo de una sola
+            // construcción se pisarían entre sí.
+            throw_share: 10,
+            narrowing_share: 25,
+            string_share: 30,
+            matrix_share: 25,
+            null_array_share: 20,
+            nan_share: 25,
+            recursion_share: 20,
+            narrow_local_share: 25,
+            do_while_share: 40,
+            label_share: 35,
+            ref_field_share: 30,
+            workers: 3,
+            // `race_threads` queda en cero y **no** por olvido: una carrera tiene más de una
+            // respuesta correcta, así que su oráculo es pertenencia y no igualdad. Metida acá, cada
+            // semilla sería una divergencia fabricada. Vive en su propia campaña.
+            race_threads: 0,
+            ..GenConfig::default()
+        }
+    }
+
     /// An afternoon's campaign rather than a smoke test: more seeds, a wider grammar, every
     /// pairing. `FUZZ_SEEDS` sets the count so the same test serves both a ten-minute run and an
     /// overnight one.
@@ -288,19 +338,7 @@ mod tests {
         // Wider than the default: more helpers to call, deeper expressions, more statements. The
         // budget goes up with them, because the point of a long campaign is to reach shapes the
         // smoke tests cannot.
-        let wide = GenConfig {
-            max_methods: 5,
-            max_params: 4,
-            max_stmts: 7,
-            max_expr_depth: 4,
-            max_block_depth: 3,
-            max_loop_bound: 6,
-            budget: 6_000,
-            // Everything the grammar gains from here on keeps its default share, so a new
-            // construct joins the long campaign the day it lands instead of the day somebody
-            // remembers to add a field.
-            ..GenConfig::default()
-        };
+        let wide = wide();
         let pairings = [
             (Path::Interpreter, Path::Jit),
             (Path::Jit, Path::ReferenceJdk),
@@ -335,6 +373,80 @@ mod tests {
                 paths.1,
                 share * 100.0
             );
+        }
+    }
+
+    /// **FZ-012 — cuál de los dos miente.**
+    ///
+    /// El pareo que lo encontró es intérprete contra JIT, y ese pareo dice que difieren y **no**
+    /// quién tiene razón: los dos son nuestros. El desempate es un tercero que no es nuestro, así
+    /// que esto corre la misma semilla por los cinco caminos y deja que el JDK de referencia diga
+    /// cuál de las dos respuestas es la de Java.
+    ///
+    /// La config sale de [`wide`] y no de una copia: la semilla nombra un programa sólo junto a la
+    /// config que la consumió.
+    ///
+    /// ```text
+    ///     cargo test --release --lib fz012_la_semilla -- --ignored --nocapture
+    ///     FZ_SEED=725 cargo test --release --lib fz012_la_semilla -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "repro: corre una semilla de la campaña larga por los cinco caminos"]
+    fn fz012_la_semilla_725_por_todos_los_caminos() {
+        use crate::fuzz::{Generator as _, Program as _, Runner as _};
+
+        let seed = Seed(
+            std::env::var("FZ_SEED").ok().and_then(|s| s.parse().ok()).unwrap_or(725),
+        );
+        let mut it =
+            Campaign::detect(workdir("fz012"), Duration::from_secs(60)).with_config(wide());
+        let program = it.generator.generate(seed);
+
+        println!("== semilla {} ==", seed.0);
+        println!("{}", program.to_java());
+        for path in [
+            Path::ReferenceJdk,
+            Path::Interpreter,
+            Path::Jit,
+            Path::OsGil,
+            Path::OsParallel,
+        ] {
+            let observed = it.runner.run(&program, path);
+            println!("  {:>13} -> {:?}", path.to_string(), observed.outcome);
+            if !observed.stdout.trim().is_empty() {
+                println!("                  stdout: {:?}", observed.stdout.trim());
+            }
+        }
+    }
+
+    /// **FZ-012, la minimización** — la misma semilla, pero pasada por el reductor con el pareo
+    /// que la encontró, para quedarse con el programa más chico que todavía diverge. Se imprime el
+    /// fuente entero porque lo que sigue —decidir *qué* construcción está mal compilada— se hace
+    /// leyéndolo, y el reductor es lo único que lo deja legible.
+    ///
+    /// ```text
+    ///     cargo test --release --lib fz012_minimizada -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "repro: reduce una semilla de la campaña larga"]
+    fn fz012_minimizada() {
+        let seed = Seed(
+            std::env::var("FZ_SEED").ok().and_then(|s| s.parse().ok()).unwrap_or(725),
+        );
+        let mut it =
+            Campaign::detect(workdir("fz012min"), Duration::from_secs(60)).with_config(wide());
+        let report = crate::fuzz::campaign(
+            &mut it.generator,
+            &mut it.runner,
+            &it.oracle,
+            &mut it.reducer,
+            (Path::Interpreter, Path::Jit),
+            [seed],
+            1,
+        );
+        assert!(!report.divergences.is_empty(), "la semilla {} ya no diverge", seed.0);
+        for d in &report.divergences {
+            println!("{d}");
         }
     }
 
@@ -516,6 +628,32 @@ mod tests {
         let mut it = Campaign::detect(workdir("campaign-wide-cast"), Duration::from_secs(25))
             .with_config(cfg);
         let report = it.run(paths, seed_count(80), 5);
+        println!("{}", describe(&report, paths));
+        assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
+        assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
+    }
+
+    /// **Dos sitios paralelos, contra el JDK de referencia y contra sí mismo.**
+    ///
+    /// Lo que un segundo sitio agrega no es más paralelismo: es una **segunda clase `Thread`** que
+    /// se carga, se resuelve y se instancia, y una segunda tanda de `start()`/`join()` después de
+    /// que la primera terminó. Con un solo sitio todo eso pasa una vez por programa, y una vez no
+    /// distingue «funciona» de «funciona la primera vez» — que es justo la clase de bug que vive en
+    /// una tabla de clases cargadas o en el estado que un `join()` deja atrás.
+    ///
+    /// El programa sigue siendo determinista por construcción —slots disjuntos, joins antes de las
+    /// lecturas, reducción en orden de índice— así que el oráculo sigue siendo igualdad y no hace
+    /// falta el conjunto admisible.
+    ///
+    /// `cargo test --release --lib two_parallel_sites -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn two_parallel_sites_agree_with_the_reference_jdk() {
+        let paths = (Path::OsParallel, Path::ReferenceJdk);
+        let cfg = GenConfig { workers: 3, parallel_sites: 2, ..GenConfig::default() };
+        let mut it = Campaign::detect(workdir("campaign-two-sites"), Duration::from_secs(30))
+            .with_config(cfg);
+        let report = it.run(paths, seed_count(60), 5);
         println!("{}", describe(&report, paths));
         assert!(report.divergences.is_empty(), "{}", describe(&report, paths));
         assert!(report.usable_fraction() > 0.9, "{}", describe(&report, paths));
@@ -795,6 +933,17 @@ mod jit_coverage {
 
     /// `run()` on the green engine with the JIT forced on or off, plus the JIT's counters.
     fn execute(class_file: &std::path::Path, jit: bool) -> (Option<i32>, usize, JitStats) {
+        execute_method(class_file, jit, "run")
+    }
+
+    /// El mismo motor, invocando el metodo que se le pida. Existe por el canal de lanzamientos:
+    /// la sonda `kjthrew()` corre el programa entero y devuelve el contador, asi que medirlo es
+    /// **una** invocacion mas y ni un proceso mas.
+    fn execute_method(
+        class_file: &std::path::Path,
+        jit: bool,
+        method: &str,
+    ) -> (Option<i32>, usize, JitStats) {
         let class = ClassFile::from_path(class_file.to_str().expect("utf-8 path")).expect("load");
         let name = class.class_name(class.this_class).unwrap().to_string();
         let mut metaspace = MetaspaceService::new(
@@ -802,7 +951,7 @@ mod jit_coverage {
             vec![class_file.parent().map(PathBuf::from).unwrap_or_default()],
         );
         metaspace.add(name.clone(), class);
-        let entry = metaspace.resolve_method(&name, "run", "()I").expect("run()I");
+        let entry = metaspace.resolve_method(&name, method, "()I").expect("()I");
         let max_locals = metaspace.max_locals(entry);
         let frame = Frame::new(entry, max_locals, Vec::new());
         let (value, steps, stats) =
@@ -812,6 +961,91 @@ mod jit_coverage {
             _ => None,
         };
         (value, steps, stats)
+    }
+
+    /// **Cuantas iteraciones del calentamiento lanzan**, que es lo que `marked` no puede decir.
+    ///
+    /// # Por que `marked` no alcanzaba
+    ///
+    /// Pregunta si el **resultado** es una marca. Desde que el envoltorio atrapa por iteracion, el
+    /// resultado es `((0*31 + r0)*31 + r1)*31 + …`, y eso solo es una marca pelada cuando
+    /// `warmup == 1`. Con el warmup de una campana de verdad —40— una semilla que lanza en las 40
+    /// iteraciones y una que no lanza nunca dan **el mismo cero**. Cobertura leida como cero por
+    /// construccion, que es FZ-005 con el envoltorio nuevo.
+    ///
+    /// # Por que el canal es un campo y no un `println`
+    ///
+    /// Porque la consola era el diseno obvio y no sobrevivio al primer intento: `System.out`
+    /// crashea esta VM (`FZ-010`), y con el canal encendido las 80 semillas se volvian
+    /// divergencias. Un campo estatico y una sonda que lo devuelve no necesitan nada de `java.io`.
+    ///
+    /// # Que se aserta, y lo que la medicion corrigio del enunciado
+    ///
+    /// El hito pedia distinguir «lanzo una vez» de «lanzo siempre». Medido, **«una vez» no existe**:
+    /// 31 semillas en cero, 29 en las 40, y ninguna en el medio. La razon es la propiedad 2. El
+    /// programa es determinista y cada iteracion del calentamiento es la **misma llamada sin
+    /// argumentos** a un metodo sin estado entre llamadas, asi que si una iteracion lanza, lanzan
+    /// todas. La distribucion es binaria por construccion.
+    ///
+    /// Eso no debilita el canal, lo aclara: lo que distingue no es *cuantas veces* lanzo sino si la
+    /// semilla **ejercito algo o no**, que es exactamente lo que `marked` no podia decir. Y el
+    /// numero que sale es el que importaba — con `throw_share: 25`, **29 de 60 semillas no calculan
+    /// nada** y la campana las reporta como acuerdo.
+    ///
+    /// Para que «una vez» fuera alcanzable haria falta que una iteracion cambie lo que la siguiente
+    /// hace: estado que sobreviva entre llamadas. La gramatica no lo tiene y no es un descuido —
+    /// seria estado mutable compartido entre iteraciones, o sea otra forma de no-determinismo.
+    ///
+    /// Se asertan **los dos modos**, cada uno por su lado: sin el de arriba el canal no estaria
+    /// midiendo nada, y sin el de abajo la tasa de lanzamiento estaria tan alta que la campana
+    /// entera seria basura.
+    ///
+    /// `cargo test --release --lib el_canal_de_lanzamientos -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn el_canal_de_lanzamientos_distingue_una_vez_de_siempre() {
+        const SEEDS: u64 = 60;
+        let dir = std::env::temp_dir().join("kaji-throw-channel");
+        let _ = std::fs::remove_dir_all(&dir);
+        let cfg = GenConfig { throw_channel: true, throw_share: 25, ..GenConfig::default() };
+        let warmup = cfg.warmup.max(0) as u32;
+        let mut generator = JavaGenerator::new(cfg);
+
+        let mut cuentas: Vec<u32> = Vec::new();
+        for seed in 0..SEEDS {
+            let program = generator.generate(Seed(seed));
+            let class_file = compile(&program, &dir);
+            // El resultado de `run()` no interesa aca: lo compara la campana. Lo que interesa es
+            // cuantas de sus iteraciones murieron antes de calcular nada.
+            let (valor, _, _) = execute_method(&class_file, true, "kjthrew");
+            if let Some(n) = valor {
+                cuentas.push(n.max(0) as u32);
+            }
+        }
+
+        let nunca = cuentas.iter().filter(|&&n| n == 0).count();
+        let una = cuentas.iter().filter(|&&n| n == 1).count();
+        let siempre = cuentas.iter().filter(|&&n| n >= warmup).count();
+        let total: u64 = cuentas.iter().map(|&n| u64::from(n)).sum();
+        println!(
+            "{} semillas con canal (warmup {warmup}): nunca {nunca}, una vez {una}, \
+             siempre {siempre}, {:.0}% de las iteraciones lanzaron",
+            cuentas.len(),
+            total as f64 / (cuentas.len().max(1) as u64 * u64::from(warmup)) as f64 * 100.0
+        );
+
+        assert!(!cuentas.is_empty(), "ninguna semilla publico el canal");
+        assert!(siempre > 0, "ninguna semilla lanzo en todas las iteraciones");
+        assert!(nunca > 0, "ninguna semilla corrio limpia: la tasa de lanzamiento esta muy alta");
+        // Y la forma de la distribucion, que es el hallazgo: binaria. Si apareciera una semilla en
+        // el medio, alguna iteracion estaria haciendo algo distinto de la anterior — o sea que la
+        // propiedad 2 dejo de valer, y eso hay que enterarse aca y no en una divergencia rara.
+        assert_eq!(
+            una + cuentas.iter().filter(|&&n| n > 0 && n < warmup).count(),
+            0,
+            "una semilla lanzo en algunas iteraciones y no en otras: el programa dejo de ser \
+             determinista entre llamadas"
+        );
     }
 
     /// The measurement. Prints the share of generated programs on which the JIT compiles anything
@@ -866,6 +1100,10 @@ mod jit_coverage {
         // return a0[<index>];`
         let at = |index: i32, class: &str| JavaProgram {
             class: class.to_string(),
+            // El caso mínimo de FZ-005 no aloca ningún objeto de la jerarquía, así que su grafo de
+            // clases es el vacío y nada se emite.
+            hierarchy: Default::default(),
+            throw_channel: false,
             methods: Vec::new(),
             entry: Method {
                 name: "m0".to_string(),
