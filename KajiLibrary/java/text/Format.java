@@ -21,12 +21,26 @@ import java.io.Serializable;
 // The convenience `format(Object)` is final precisely because it is the trivial wrapper: subclasses
 // override the three-argument form, and every entry point funnels there.
 //
-// A KajiLibrary subset: the PARSING half (`parseObject` in both forms) is omitted rather than
-// declared abstract — nothing in this package parses yet, and declaring it would force every
-// concrete formatter to ship a method that only throws. `formatToCharacterIterator` needs
-// AttributedCharacterIterator, whose API is built on the nested type `Attribute` (finding #101),
-// and `clone()` is omitted because it would depend on Object.clone().
+// La mitad de PARSEO ya no falta. `parseObject(String, ParsePosition)` es abstracto igual que en el
+// JDK: obliga a cada formateador concreto a decir cómo se lee lo que escribe, y la variante de un
+// solo argumento es el envoltorio que traduce "no avanzó el cursor" a ParseException.
 public abstract class Format implements Serializable, Cloneable {
+
+    /**
+     * La clave de atributo con la que un formateador marca los campos del texto que produce.
+     *
+     * <p>Es una clase vacía a propósito: no agrega comportamiento sobre
+     * {@link AttributedCharacterIterator.Attribute}, sólo un nivel de tipo. Ese nivel es lo que
+     * permite que {@code FieldPosition} pida "el campo entero" sin poder recibir por error una
+     * clave de idioma, y que cada subclase (NumberFormat.Field, DateFormat.Field) cuelgue de un
+     * ancestro común.
+     */
+    public static class Field extends AttributedCharacterIterator.Attribute {
+
+        protected Field(String name) {
+            super(name);
+        }
+    }
 
     protected Format() {
     }
@@ -38,4 +52,37 @@ public abstract class Format implements Serializable, Cloneable {
     }
 
     public abstract StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos);
+
+    /**
+     * Formatea y devuelve el resultado con los campos marcados como atributos.
+     *
+     * <p>La implementación de base no marca nada: devuelve el texto sin atributos, que es
+     * exactamente lo que el contrato manda para un formateador que no informa campos. No es un
+     * cuerpo de relleno — es la respuesta correcta para quien no tiene información de campos que
+     * dar, y las subclases que sí la tienen lo redefinen.
+     */
+    public AttributedCharacterIterator formatToCharacterIterator(Object obj) {
+        if (obj == null) {
+            throw new NullPointerException();
+        }
+        return new AttributedString(this.format(obj)).getIterator();
+    }
+
+    public abstract Object parseObject(String source, ParsePosition pos);
+
+    /**
+     * Parsea desde el principio del texto, y falla con excepción en lugar de con un cursor.
+     *
+     * <p>El criterio de fracaso es "el cursor no avanzó", no "devolvió null": un formateador puede
+     * parsear legítimamente a null, y distinguir los dos casos es justamente para lo que existe
+     * ParsePosition.
+     */
+    public Object parseObject(String source) throws ParseException {
+        ParsePosition pos = new ParsePosition(0);
+        Object result = this.parseObject(source, pos);
+        if (pos.getIndex() == 0) {
+            throw new ParseException("Format.parseObject(String) failed", pos.getErrorIndex());
+        }
+        return result;
+    }
 }

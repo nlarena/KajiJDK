@@ -7,16 +7,15 @@ package java.text;
 // That is why it is a separate abstraction rather than a use of the collections iterator.
 public interface CharacterIterator extends Cloneable {
 
-    // OMITTED: `char DONE = '￿'`, the value returned when the iterator moves past either end.
+    // Lo que devuelven first/last/next/previous/current cuando el iterador se pasa de cualquiera
+    // de los dos extremos. Vale U+FFFF, que Unicode reserva como no-carácter justamente para esto:
+    // ningún texto legal lo contiene, así que el centinela no puede confundirse con un dato.
     //
-    // Declaring it triggers finding #124: a field initializer in an interface is lowered as if it
-    // belonged to a class, so the compiler synthesizes a `default` CONSTRUCTOR on the interface
-    // (calling Object.<init> on a `this` that cannot exist) and puts the assignment there instead
-    // of in `<clinit>`. That is an EXTRA `<init>()V` on the public surface, which the API-shape
-    // gate rejects — correctly, since an interface has no constructor.
-    //
-    // A missing member is a legal subset; a spurious one is not. So the constant is left out and
-    // KajiLibrary's implementations use the literal '￿' directly. It returns once #124 is fixed.
+    // Estuvo omitida por el finding #124 (un inicializador de campo en una interfaz hacía que el
+    // compilador sintetizara un `<init>` sobre la interfaz, o sea un miembro público de más). #124
+    // está cerrado y verificado: hoy el campo sale como `public static final char` y sin
+    // constructor espurio.
+    char DONE = '\uffff';
 
     char first();
 

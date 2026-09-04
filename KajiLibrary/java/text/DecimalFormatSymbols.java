@@ -1,5 +1,6 @@
 package java.text;
 
+import java.util.Currency;
 import java.util.Locale;
 
 /**
@@ -19,17 +20,18 @@ import java.util.Locale;
  *           transcribed, and every non-ASCII character is written as a {@code \\uXXXX} escape so the
  *           source stays ASCII and cannot be corrupted by an encoding mishap.
  *
- * @implNote A KajiLibrary subset in two ways. {@code getCurrency}/{@code setCurrency} are omitted —
- *           they need {@code java.util.Currency}, which needs the ISO 4217 data tables. And the
- *           locale table covers six locales rather than the JDK's hundreds; an unknown locale falls
- *           back to ROOT, which is the same thing the JDK does for a locale it has no data for.
- *           Widening it is a matter of extracting more rows, not of new code.
+ * @implNote La superficie está completa. Lo que sigue siendo un subconjunto son los DATOS: la tabla
+ *           cubre seis locales y no los cientos del JDK, y un locale desconocido cae en ROOT — que
+ *           es lo mismo que hace el JDK con un locale del que no tiene datos. Ampliarla es extraer
+ *           más filas, no escribir código nuevo.
  */
 public class DecimalFormatSymbols implements Cloneable {
 
     // The supported locales, and the symbol table in parallel rows. Index 0 is ROOT, which is also
-    // the fallback. Methods rather than `static final` scalars because a static-final primitive
-    // reads back as 0 at runtime (finding #112); an array is an object and its `<clinit>` runs.
+    // the fallback. Se escribieron como métodos, y no como campos `static final`, cuando el finding
+    // #112 hacía que una constante primitiva se leyera como 0 en tiempo de ejecución. #112 está
+    // cerrado; la forma se conserva porque devolver un arreglo nuevo por llamada también impide que
+    // un llamador mute la tabla compartida, que es la razón por la que ahora vale la pena.
     private static String[] tags() {
         return new String[] {"und", "en-US", "es-AR", "de-DE", "fr-FR", "ja-JP"};
     }
@@ -111,6 +113,7 @@ public class DecimalFormatSymbols implements Cloneable {
     private String currencySymbol;
     private String internationalCurrencySymbol;
     private String exponentSeparator;
+    private Currency currency;
 
     /**
      * Creates symbols for the default locale.
@@ -142,12 +145,26 @@ public class DecimalFormatSymbols implements Cloneable {
         this.currencySymbol = DecimalFormatSymbols.currencySymbols()[i];
         this.internationalCurrencySymbol = DecimalFormatSymbols.currencyCodes()[i];
         this.exponentSeparator = DecimalFormatSymbols.exponents()[i];
+        // El símbolo NO se recalcula desde la moneda: la tabla ya trae el que corresponde a este
+        // locale, y Currency.getSymbol() de una moneda ajena al locale devolvería el código ISO.
+        // La moneda se deriva del código, y "XXX" (la de ROOT) deja el campo en null a propósito:
+        // ROOT no tiene moneda, y decir que tiene una sería inventarla.
+        this.currency = null;
+        try {
+            this.currency = Currency.getInstance(this.internationalCurrencySymbol);
+        } catch (IllegalArgumentException e) {
+            this.currency = null;
+        }
     }
 
     // Matches on "lang-COUNTRY" first, then on the language alone, then falls back to ROOT. That
     // ordering is what makes an unlisted country of a listed language (es-MX) still get Spanish
     // symbols rather than the root ones.
-    private static int indexOf(Locale locale) {
+    //
+    // De acceso de paquete y no privado porque PatronesLocales resuelve el locale con ESTA misma
+    // función: si las dos tablas se indexaran distinto, un locale podría terminar con los símbolos
+    // de uno y el patrón de otro, que es exactamente el tipo de mezcla que nadie encuentra mirando.
+    static int indexOf(Locale locale) {
         String lang = locale.getLanguage();
         String country = locale.getCountry();
         String full = lang;
@@ -468,6 +485,49 @@ public class DecimalFormatSymbols implements Cloneable {
      */
     public void setInternationalCurrencySymbol(String currencyCode) {
         this.internationalCurrencySymbol = currencyCode;
+        // El código ISO manda: si nombra una moneda conocida, la moneda y su símbolo se recalculan.
+        // Si no la nombra —o si es null— la moneda queda en null y el símbolo NO se toca, que es lo
+        // que hace el JDK: un código desconocido no es motivo para borrar un símbolo válido.
+        this.currency = null;
+        if (currencyCode != null) {
+            try {
+                Currency c = Currency.getInstance(currencyCode);
+                this.currency = c;
+                this.currencySymbol = c.getSymbol(this.locale);
+            } catch (IllegalArgumentException e) {
+                this.currency = null;
+            }
+        }
+    }
+
+    /**
+     * La moneda de estos símbolos, o {@code null} si el código internacional no nombra ninguna
+     * conocida.
+     *
+     * <p>Estuvo afuera mientras {@code java.util.Currency} no existía. Existe: hoy los símbolos y la
+     * moneda se mantienen sincronizados en las dos direcciones —{@link #setCurrency} reescribe los
+     * dos símbolos, {@link #setInternationalCurrencySymbol} reescribe la moneda—, que es la parte
+     * del contrato que se pierde si sólo se agrega el getter.
+     *
+     * @return la moneda, o {@code null}
+     */
+    public Currency getCurrency() {
+        return this.currency;
+    }
+
+    /**
+     * Fija la moneda y, con ella, el código ISO y el símbolo.
+     *
+     * @param currency la moneda
+     * @throws NullPointerException si {@code currency} es {@code null}
+     */
+    public void setCurrency(Currency currency) {
+        if (currency == null) {
+            throw new NullPointerException();
+        }
+        this.currency = currency;
+        this.internationalCurrencySymbol = currency.getCurrencyCode();
+        this.currencySymbol = currency.getSymbol(this.locale);
     }
 
     /**
@@ -547,6 +607,7 @@ public class DecimalFormatSymbols implements Cloneable {
         copy.nan = this.nan;
         copy.currencySymbol = this.currencySymbol;
         copy.internationalCurrencySymbol = this.internationalCurrencySymbol;
+        copy.currency = this.currency;
         copy.exponentSeparator = this.exponentSeparator;
         return copy;
     }

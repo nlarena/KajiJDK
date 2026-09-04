@@ -21,10 +21,13 @@ import java.util.Locale;
  *           Some of those escapes matter more than they look: Spanish am/pm contains {@code U+00A0},
  *           a NO-BREAK SPACE, not an ordinary one.
  *
- * @implNote A KajiLibrary subset. {@code getZoneStrings}/{@code setZoneStrings} are omitted: the
- *           time-zone display names are a {@code String[][]} covering every zone in every locale,
- *           which is CLDR data of the same order as tzdb — the wall this package keeps hitting. The
- *           locale table covers six locales; an unknown one falls back to ROOT.
+ * @implNote La superficie está completa. {@code getZoneStrings}/{@code setZoneStrings} estuvieron
+ *           afuera mientras se pensó que hacía falta una tabla propia de nombres de zona; no hace
+ *           falta: los nombres se piden a {@code java.util.TimeZone}, que es de donde salen también
+ *           en el JDK. Lo que sigue siendo corto son los DATOS — la tabla de locales cubre seis
+ *           filas y un locale desconocido cae en ROOT, y la base de zonas de esta biblioteca es
+ *           mínima, así que {@code getZoneStrings} devuelve pocas filas y con nombres de
+ *           desplazamiento. Es lo que la biblioteca sabe; decirlo así es el punto.
  */
 public class DateFormatSymbols implements Cloneable {
 
@@ -157,6 +160,9 @@ public class DateFormatSymbols implements Cloneable {
     private String[] shortWeekdays;
     private String[] amPmStrings;
     private String localPatternChars;
+    // null mientras nadie las haya fijado a mano: en ese caso se derivan de java.util.TimeZone al
+    // pedirlas. Guardar la tabla derivada sería guardar una copia de datos que viven en otro lado.
+    private String[][] zoneStrings;
 
     /**
      * Creates symbols for the default locale.
@@ -402,6 +408,92 @@ public class DateFormatSymbols implements Cloneable {
     }
 
     /**
+     * Los nombres de las zonas horarias, una fila por zona.
+     *
+     * <p>Cada fila es {@code {id, largo estándar, corto estándar, largo de verano, corto de
+     * verano}}. El javadoc pide al menos cinco columnas y define esas cinco; acá se devuelven
+     * exactamente cinco, sin las de nombre "genérico" que el JDK agrega, porque
+     * {@code java.util.TimeZone} no tiene de dónde sacarlas y rellenarlas con el nombre estándar
+     * sería presentar un dato como otro.
+     *
+     * <p><b>De dónde salen los nombres.</b> Si nadie llamó a {@link #setZoneStrings}, de
+     * {@code TimeZone.getDisplayName()} para cada ID que {@code TimeZone.getAvailableIDs()}
+     * declare. No hay una tabla propia: sería una segunda copia de los mismos datos, y las dos se
+     * separarían. Con la base de zonas reducida que trae esta biblioteca la tabla sale corta y con
+     * nombres de desplazamiento en vez de nombres traducidos — que es lo que la biblioteca sabe, y
+     * decirlo así es lo correcto; inventar "Hora Estándar del Este" cuando no hay tzdb detrás sería
+     * lo contrario.
+     *
+     * @return los nombres de zona
+     */
+    public String[][] getZoneStrings() {
+        if (this.zoneStrings != null) {
+            return DateFormatSymbols.copiar(this.zoneStrings);
+        }
+        String[] ids = java.util.TimeZone.getAvailableIDs();
+        String[][] out = new String[ids.length][];
+        for (int i = 0; i < ids.length; i = i + 1) {
+            java.util.TimeZone z = java.util.TimeZone.getTimeZone(ids[i]);
+            String[] fila = new String[5];
+            fila[0] = ids[i];
+            fila[1] = z.getDisplayName(false, java.util.TimeZone.LONG, this.locale);
+            fila[2] = z.getDisplayName(false, java.util.TimeZone.SHORT, this.locale);
+            fila[3] = z.getDisplayName(true, java.util.TimeZone.LONG, this.locale);
+            fila[4] = z.getDisplayName(true, java.util.TimeZone.SHORT, this.locale);
+            out[i] = fila;
+        }
+        return out;
+    }
+
+    /**
+     * Reemplaza los nombres de zona.
+     *
+     * <p>Lo que se fije acá lo usa de verdad {@link SimpleDateFormat} para las letras {@code z} y
+     * {@code zzzz}: un setter que no cambiara la salida sería peor que no tenerlo.
+     *
+     * @param newZoneStrings las filas, cada una con al menos cinco entradas
+     * @throws IllegalArgumentException si alguna fila tiene menos de cinco
+     */
+    public void setZoneStrings(String[][] newZoneStrings) {
+        if (newZoneStrings == null) {
+            throw new NullPointerException();
+        }
+        for (int i = 0; i < newZoneStrings.length; i = i + 1) {
+            if (newZoneStrings[i] == null || newZoneStrings[i].length < 5) {
+                throw new IllegalArgumentException("Row " + Integer.toString(i)
+                        + " of the input array does not have a length of at least 5");
+            }
+        }
+        this.zoneStrings = DateFormatSymbols.copiar(newZoneStrings);
+    }
+
+    // La fila de una zona, o null si no está. La usa SimpleDateFormat; devuelve null en vez de una
+    // fila vacía para que el llamador pueda distinguir "no hay" de "se llama así".
+    String[] filaDeZona(String id) {
+        if (this.zoneStrings == null) {
+            return null;
+        }
+        for (int i = 0; i < this.zoneStrings.length; i = i + 1) {
+            if (this.zoneStrings[i][0].equals(id)) {
+                return this.zoneStrings[i];
+            }
+        }
+        return null;
+    }
+
+    private static String[][] copiar(String[][] in) {
+        String[][] out = new String[in.length][];
+        for (int i = 0; i < in.length; i = i + 1) {
+            String[] fila = new String[in[i].length];
+            for (int k = 0; k < in[i].length; k = k + 1) {
+                fila[k] = in[i][k];
+            }
+            out[i] = fila;
+        }
+        return out;
+    }
+
+    /**
      * Returns the localized pattern characters.
      *
      * @return the pattern character alphabet
@@ -433,6 +525,9 @@ public class DateFormatSymbols implements Cloneable {
         out.shortWeekdays = DateFormatSymbols.copy(this.shortWeekdays);
         out.amPmStrings = DateFormatSymbols.copy(this.amPmStrings);
         out.localPatternChars = this.localPatternChars;
+        if (this.zoneStrings != null) {
+            out.zoneStrings = DateFormatSymbols.copiar(this.zoneStrings);
+        }
         return out;
     }
 
