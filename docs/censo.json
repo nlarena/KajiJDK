@@ -1,5 +1,12 @@
 [
  {
+  "pkg": "java.applet",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 45,
+  "miembrosJdk": 45
+ },
+ {
   "pkg": "java.awt",
   "clases": 109,
   "clasesJdk": 109,
@@ -85,9 +92,9 @@
  },
  {
   "pkg": "java.beans",
-  "clases": 40,
+  "clases": 41,
   "clasesJdk": 41,
-  "miembros": 272,
+  "miembros": 282,
   "miembrosJdk": 282
  },
  {
@@ -325,7 +332,7 @@
   "pkg": "java.text",
   "clases": 26,
   "clasesJdk": 26,
-  "miembros": 489,
+  "miembros": 491,
   "miembrosJdk": 491
  },
  {
@@ -721,6 +728,13 @@
   "miembrosJdk": 61
  },
  {
+  "pkg": "javax.security.auth.kerberos",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 98,
+  "miembrosJdk": 98
+ },
+ {
   "pkg": "javax.security.auth.login",
   "clases": 13,
   "clasesJdk": 13,
@@ -754,6 +768,13 @@
   "clasesJdk": 10,
   "miembros": 57,
   "miembrosJdk": 57
+ },
+ {
+  "pkg": "javax.smartcardio",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 85,
+  "miembrosJdk": 85
  },
  {
   "pkg": "javax.sound",

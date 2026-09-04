@@ -16,11 +16,13 @@ import java.io.ObjectInputStream;
  * punto de haberlo guardado— y construirlo de cero daría un objeto distinto del que se pidió, con
  * los valores por omisión en vez de los que alguien configuró.
  *
- * <h2>Lo que no está, y por qué</h2>
+ * <h2>La forma con `AppletInitializer`</h2>
  *
- * <p>Falta una de las cuatro formas de `instantiate`: la que además recibe un `AppletInitializer`.
- * Ese tipo tiene dos métodos que reciben un `java.applet.Applet`, y no hay paquete `java.applet` en
- * este árbol. No se puede declarar con otro tipo sin que la firma mienta, así que queda afuera.
+ * <p>La cuarta forma de `instantiate` existe para los beans que son applets: además de construirlos
+ * los prepara como lo haría un navegador, con {@link AppletInitializer#initialize} antes de entrar al
+ * contexto y {@link AppletInitializer#activate} después. Acá ese camino nunca se recorre, porque un
+ * {@link java.applet.Applet} no se puede construir sin pantalla; la forma está entera igual, y para
+ * un bean que no es applet hace exactamente lo mismo que la de tres argumentos.
  */
 public class Beans {
 
@@ -63,6 +65,40 @@ public class Beans {
         }
         if (beanContext != null) {
             beanContext.add(bean);
+        }
+        return bean;
+    }
+
+    /**
+     * Trae un bean por nombre, lo mete en ese contexto y, si es un applet, lo prepara.
+     *
+     * <p>El orden es el de un navegador: el applet se inicializa **antes** de entrar al contexto,
+     * para que al entrar ya tenga su representante puesto, y se activa **después**, porque activar
+     * es "arrancá", y arrancar sin estar alojado no tiene dónde mostrarse. Un bean que no es applet
+     * ignora al inicializador.
+     *
+     * @param initializer quien prepara al applet, o `null` para no prepararlo
+     * @throws IOException si el `.ser` existe y no se pudo leer
+     * @throws ClassNotFoundException si no se encontró la clase, o si no se pudo construir
+     */
+    public static Object instantiate(ClassLoader cls, String beanName, BeanContext beanContext,
+            AppletInitializer initializer) throws IOException, ClassNotFoundException {
+        if (beanName == null) {
+            throw new NullPointerException("beanName");
+        }
+        Object bean = Beans.fromSerializedForm(cls, beanName);
+        if (bean == null) {
+            bean = Beans.fromClass(cls, beanName);
+        }
+        boolean applet = bean instanceof java.applet.Applet && initializer != null;
+        if (applet) {
+            initializer.initialize((java.applet.Applet) bean, beanContext);
+        }
+        if (beanContext != null) {
+            beanContext.add(bean);
+        }
+        if (applet) {
+            initializer.activate((java.applet.Applet) bean);
         }
         return bean;
     }

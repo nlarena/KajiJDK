@@ -10063,13 +10063,20 @@ superclase en `null`, asi que el sintoma era un `NullPointerException` la primer
 **heredado** usaba `Component.this`: `getAccessibleStateSet()` sobre cualquier widget. Los metodos
 propios de la subclase andaban, que es lo que hacia el defecto tan confuso.
 
-**El detalle que costo.** El primer arreglo miraba el `owner` y el modificador `static` del simbolo
-de la superclase. Anda con un supertipo del **mismo round** y no con uno del classpath: un tipo
-anidado externo se registra en el scope de su envolvente por nombre, con `owner: None` y sin
+**El detalle que costo, dos veces.** El primer arreglo miraba el `owner` y el modificador `static`
+del simbolo de la superclase. Anda con un supertipo del **mismo round** y no con uno del classpath:
+un tipo anidado externo se registra en el scope de su envolvente por nombre, con `owner: None` y sin
 `static`. Y `Component$AccessibleAWTComponent` llega siempre del classpath, porque la biblioteca se
-compila de a un archivo. La version que quedo lo decide por la **firma de los constructores** de la
-superclase --si no tiene ninguno sin argumentos y el primer parametro de alguno es su envolvente--,
-que es informacion que esta tanto en el fuente como en el `.class`.
+compila de a un archivo. La segunda version lo decidia por la **firma de los constructores** --si no
+tiene ninguno sin argumentos y el primer parametro de alguno es su envolvente-- y con eso paso el
+caso del classpath... y **rompio el del mismo round**, que la primera version si cubria y que no se
+volvio a correr: la firma de un constructor del fuente puede no tener todavia el `this$0` cuando se
+emite la subclase, porque lo agrega el desugar por unidad y el orden entre unidades no esta
+garantizado. Se destapo al escribir el repro de #496, que pone `Outer` y `Sub` en la misma linea de
+comandos: `NoSuchMethodError: Base$Inner: method 'void <init>()' not found`, el mismo sintoma de
+origen. La version que quedo tiene **los dos caminos**: primero el simbolo (dueno, `static`,
+miembro de interfaz), que es lo que sabe un tipo del fuente; y solo si no hay dueno --un externo--
+la firma. `repros/finding_492/sep` se corre ahora de las dos formas, juntos y contra el `.class`.
 
 Arreglado en `super_enclosing_internal` + el `super()` implicito de `gen_method`
 (`src/javac/codegen.rs`).
@@ -10160,3 +10167,77 @@ devolvia un arreglo vacio en silencio. Ahora lo rechaza de verdad.
 
 Prueba: `java/ArrayReflTest.java`, que da -1 contra el JDK 25, contra `run-headless`, y compilado
 por nosotros corriendo en la JVM real con `-Xverify:all`.
+
+### #496 -- ✅ una clase anidada `protected` salia con acceso de paquete en sus `access_flags`
+
+```java
+package p;
+public class Outer {
+    protected class Inner { }
+}
+package q;
+public class Sub extends p.Outer {
+    class SubInner extends Inner { }     // legal: Sub es subclase de Outer
+}
+```
+
+Con el javac real anda. Con el nuestro, en la **JVM real**:
+
+```
+java.lang.IllegalAccessError: class q.Sub$SubInner cannot access its superclass p.Outer$Inner
+```
+
+**Donde estaba.** Los `access_flags` de clase (§4.1) no admiten `ACC_PROTECTED`: el acceso real de
+un tipo anidado vive en su entrada de `InnerClasses` (§4.7.6). Eso ya se sabia, y por eso el emisor
+le **sacaba** el bit a la anidada... y la dejaba con acceso de paquete:
+
+| | nosotros | JDK 25 |
+|---|---|---|
+| `access_flags` de `Outer$Inner` | `ACC_SUPER` | `ACC_PUBLIC, ACC_SUPER` |
+| `InnerClasses` de `Outer$Inner` | `protected` | `protected` |
+
+Lo que faltaba es lo que hace javac: un anidado `protected` sale **`ACC_PUBLIC`** a nivel clase. No
+es una aproximacion, es lo unico verificable: la JVM resuelve `protected` por la relacion de
+subclase entre las **envolventes**, y esa relacion no esta en los `access_flags` de la anidada. Con
+acceso de paquete, una subclase de la envolvente que viva en **otro paquete** no puede extender a
+la anidada, que es exactamente para lo que existe un anidado `protected`.
+
+**Lo que rompia.** Nada dentro de `java.awt`, y por eso no se vio antes: todos los
+`AccessibleAWTXxx` que extienden a `Component.AccessibleAWTComponent` estan en el mismo paquete, y
+ahi el acceso de paquete alcanza. Salio con el primer heredero **de afuera**: `java.applet.Applet.AccessibleApplet
+extends java.awt.Panel.AccessibleAWTPanel`, `IllegalAccessError` en la JVM real a la primera
+instancia. Nuestra VM no verifica acceso entre clases y lo dejaba pasar.
+
+Arreglado en el calculo de `class_level` de `class_file` (`src/javac/codegen.rs`): si los
+modificadores del fuente traen `protected`, se enciende `ACC_PUBLIC`. Se recompilaron los 27
+fuentes de la biblioteca con anidadas `protected` (23 de `java.awt`, `java.awt.dnd`,
+`java.beans.beancontext`, `java.applet`).
+
+Repro: `repros/finding_496/`. Prueba: `java/BeansAwtTest.java`, que da -1 contra el JDK 25, contra
+`run-headless`, y compilado por nosotros en la JVM real con `-Xverify:all`.
+
+### #497 ⬜ -- el constructor implicito de una clase `public` se reporta como de paquete
+
+```java
+package q;
+public class Sub { }               // sin constructor: el implicito es public (§8.8.9)
+
+// en otro paquete
+new q.Sub();                       // nuestro javac: "el metodo `Sub` es `de paquete` en `Sub`"
+```
+
+El JDK 25 compila. El nuestro lo rechaza en atribucion con *"el método `Sub` es `de paquete` en
+`Sub` y no es accesible desde ..."*. Poner `public Sub() { }` a mano lo arregla, asi que el
+sintoma es solo del constructor **implicito**.
+
+**Donde esta, a medias.** El emisor ya lo sabe: `default_ctor` toma el acceso de la clase (§8.8.9),
+y esta comentado como tal en `class_file`. Lo que no lo sabe es la **atribucion**: el simbolo del
+constructor sintetizado se registra sin el acceso de la clase, y el chequeo de acceso lo lee como
+de paquete. Es un desacuerdo entre dos pasadas sobre el mismo hecho.
+
+**Lo que rompe.** Cualquier `new` desde otro paquete sobre una clase publica sin constructor
+escrito. La biblioteca no lo sufre porque casi todas sus clases traen constructor explicito; salio
+en el repro de #496, que no lo traia. Mientras tanto: escribir el constructor.
+
+Repro: el `q/Sub.java` de `repros/finding_496/` sin su `public Sub() { }`.
+

@@ -87,6 +87,14 @@ class BeanInfoGenerico implements BeanInfo {
         return r;
     }
 
+    // El icono lo pone solo el explicito: no hay nada que deducir por reflexion sobre un dibujo.
+    public java.awt.Image getIcon(int iconKind) {
+        if (this.explicito != null) {
+            return this.explicito.getIcon(iconKind);
+        }
+        return null;
+    }
+
     public BeanInfo[] getAdditionalBeanInfo() {
         BeanInfo[] r = null;
         if (this.explicito != null) {

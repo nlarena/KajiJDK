@@ -326,6 +326,17 @@ fn gen_class(
     // rechaza (`Unmatched bit 0x8` para `static`). El nivel de acceso real de un anidado lo lleva
     // `InnerClasses`; a nivel clase, un anidado package-private queda solo con `ACC_SUPER`.
     let mut class_level = class_flags(&class.modifiers) & !(ACC_STATIC | ACC_PRIVATE | ACC_PROTECTED);
+    // Un anidado **`protected`** sale `ACC_PUBLIC` a nivel clase (#496). No es una aproximación: es
+    // lo único que la JVM puede verificar. El acceso `protected` lo resuelve el verificador por la
+    // relación de subclase entre las **envolventes**, y esa relación no está en los access_flags de
+    // la anidada; si acá se deja acceso de paquete, una subclase de la envolvente que viva en
+    // **otro paquete** no puede extender a la anidada —`Applet.AccessibleApplet extends
+    // Panel.AccessibleAWTPanel` daba `IllegalAccessError` en la JVM real—. javac hace exactamente
+    // esto, y el `protected` de verdad queda en la entrada de `InnerClasses`, que es donde la
+    // reflexión lo lee.
+    if class.modifiers.contains(&Modifier::Protected) {
+        class_level |= ACC_PUBLIC;
+    }
     // §9.5 — un tipo **miembro de una interfaz** es implícitamente `public` (y `static`; el `static`
     // va en la entrada de `InnerClasses`, no acá).
     if is_interface_member(table, cid) {
@@ -1206,12 +1217,27 @@ fn super_enclosing_internal(
     // → `java/awt/Container`. Sin `$` no hay anidamiento y no hay nada que pasar.
     let full = internal_name(table, sup);
     let outer_bin = full[..full.rfind('$')?].to_string();
-    // La confirmacion la dan sus **constructores**, no sus modificadores: un tipo anidado leido del
-    // classpath llega sin dueno ni `static` --se registra en el scope de la envolvente por nombre,
-    // y eso es todo--, asi que preguntar por `owner` funcionaba con un supertipo del mismo round y
-    // no con uno de afuera, que es el caso de todos los `AccessibleAWTXxx` heredados. La firma, en
-    // cambio, esta siempre: una interna de instancia **no tiene** `<init>()V`, y su primer parametro
-    // es su envolvente.
+    // Hay **dos** formas de saberlo y hacen falta las dos, porque cada una ve un caso que la otra no.
+    //
+    // Un supertipo **del fuente** (mismo round) trae su simbolo entero: dueno, modificadores, y si
+    // es miembro de una interfaz (implicitamente `static`, §9.5). Con eso la respuesta es directa.
+    // Su firma de constructores, en cambio, puede **no estar lista todavia** cuando se emite la
+    // subclase: el `this$0` lo agrega el desugar por unidad, y el orden entre unidades no esta
+    // garantizado. Decidir por la firma aca daba `<init>()V` para `Sub.SubInner extends
+    // Base.Inner` con `Base.java` en la misma linea de comandos (`NoSuchMethodError` en la JVM
+    // real): fue la regresion que dejo la primera version de este arreglo, que solo probo el caso
+    // del classpath.
+    let sym = table.symbol(sup);
+    if let Some(owner) = sym.owner {
+        if matches!(table.symbol(owner).kind, SymbolKind::Class { .. }) {
+            let estatica = sym.modifiers.contains(&Modifier::Static) || is_interface_member(table, sup);
+            return (!estatica).then_some(outer_bin);
+        }
+    }
+    // Un supertipo **del classpath** llega sin dueno ni `static` --se registra en el scope de la
+    // envolvente por nombre, y eso es todo--, asi que ahi la unica senal es la firma: una interna de
+    // instancia **no tiene** `<init>()V`, y su primer parametro es su envolvente. Es el caso de todos
+    // los `AccessibleAWTXxx` heredados, que se compilan de a un archivo contra el `.class` del padre.
     let mut pide_envolvente = false;
     for ctor in super::attribute::constructors(table, sup) {
         let Some(Resolved::Method { params, .. }) = table.resolved(ctor) else { continue };

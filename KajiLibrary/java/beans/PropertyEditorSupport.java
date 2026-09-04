@@ -9,11 +9,6 @@ import java.util.List;
 // El `source` existe porque un editor suele ser creado por una herramienta y no por el bean: los
 // eventos tienen que decir que el origen es el bean editado, no el editor. Por defecto es el editor
 // mismo, que es lo correcto cuando nadie dijo otra cosa.
-//
-// **Omitidos a proposito: `getCustomEditor()` y `paintValue(Graphics, Rectangle)`.** Sus tipos son
-// de java.awt, que no existe en este arbol. Las dos consultas que los acompanan —isPaintable() y
-// supportsCustomEditor()— si estan y contestan false, que es la verdad aca: este editor no puede
-// pintarse ni ofrecer un panel propio.
 public class PropertyEditorSupport implements PropertyEditor {
 
     private Object value;
@@ -54,13 +49,31 @@ public class PropertyEditorSupport implements PropertyEditor {
         this.firePropertyChange();
     }
 
-    // Sin java.awt no hay con que pintar; decir true seria prometer un paintValue que no existe.
+    // El de base no sabe dibujarse: la herramienta va a mostrar getAsText().
     public boolean isPaintable() {
         return false;
     }
 
+    /**
+     * Dibuja el valor.
+     *
+     * <p>El de base no hace nada, y es coherente con {@link #isPaintable}: dijo que no sabe. Una
+     * subclase que redefina esto tiene que redefinir también aquél, o nadie la va a llamar.
+     */
+    public void paintValue(java.awt.Graphics gfx, java.awt.Rectangle box) {
+    }
+
     public boolean supportsCustomEditor() {
         return false;
+    }
+
+    /**
+     * Un panel propio para editar el valor.
+     *
+     * @return `null`: el de base no tiene, como anticipa {@link #supportsCustomEditor}
+     */
+    public java.awt.Component getCustomEditor() {
+        return null;
     }
 
     public String getAsText() {

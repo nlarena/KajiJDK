@@ -3,18 +3,20 @@ package java.beans;
 // Lo que una clase puede declarar explicitamente sobre si misma como bean, en vez de dejar que
 // Introspector lo deduzca. Introspector busca una clase `<Bean>BeanInfo`, y lo que esta encuentre
 // pisa lo deducido.
-//
-// **Omitido a proposito: `java.awt.Image getIcon(int)`.** En este arbol no existe `java.awt`, asi
-// que el metodo no se puede declarar con su tipo real. Declararlo devolviendo otra cosa —Object,
-// o un Image propio— seria una firma que miente: quien compile contra el JDK real y corra contra
-// este no encontraria el metodo. Las cuatro constantes ICON_* si estan, porque son int y no
-// arrastran a awt: sirven para que el codigo que las nombra siga compilando.
 public interface BeanInfo {
 
     int ICON_COLOR_16x16 = 1;
     int ICON_COLOR_32x32 = 2;
     int ICON_MONO_16x16 = 3;
     int ICON_MONO_32x32 = 4;
+
+    /**
+     * El ícono con que una herramienta muestra al bean en su paleta.
+     *
+     * @param iconKind una de las cuatro constantes `ICON_*`: color o monocromo, 16 o 32 píxeles
+     * @return la imagen, o `null` si el bean no ofrece ícono de ese tipo
+     */
+    java.awt.Image getIcon(int iconKind);
 
     BeanDescriptor getBeanDescriptor();
 
