@@ -14,7 +14,10 @@ package java.awt;
  *
  * <h2>Lo que falta y por que</h2>
  *
- * <p>{@code toString()} y {@code paramString()} <b>no estan</b>. El JDK los arma con
+ * <p>{@code paramString()} si esta: contra lo que decia esta nota, no usa {@code KeyEvent} --arma
+ * la cadena con el codigo de tecla crudo-- y se puede escribir entero.
+ *
+ * <p>{@code toString()} <b>no esta</b>. El JDK lo arma con
  * {@code KeyEvent.getKeyModifiersText()} y {@code KeyEvent.getKeyText()} --que traducen un codigo
  * de tecla al nombre que le pone el sistema-- y ademas le preguntan al {@code Toolkit} cual es la
  * tecla modificadora de menu de la plataforma, que en macOS no es Ctrl. Ni {@code java.awt.event}
@@ -64,5 +67,20 @@ public class MenuShortcut implements java.io.Serializable {
 
     public int hashCode() {
         return (usesShift) ? (~key) : key;
+    }
+
+    /**
+     * La descripcion del atajo, sin el nombre de la clase.
+     *
+     * <p>Usa el **codigo** de la tecla y no su nombre, que es justamente lo que lo hace escribible
+     * sin {@code KeyEvent} ni {@code Toolkit}: el nombre legible lo pone {@code toString}, que es el
+     * que si los necesita.
+     */
+    protected String paramString() {
+        String salida = "key=" + this.getKey();
+        if (this.usesShiftModifier()) {
+            salida = salida + ",usesShiftModifier";
+        }
+        return salida;
     }
 }

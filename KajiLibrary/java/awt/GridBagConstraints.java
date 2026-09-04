@@ -109,6 +109,18 @@ public class GridBagConstraints implements Cloneable, java.io.Serializable {
 
     public Insets insets;
 
+    /**
+     * Lo que mide el componente, sin el relleno interno.
+     *
+     * <p>Es de paquete y lo llena {@link GridBagLayout#getLayoutInfo}: la distribución mide una vez
+     * y lo deja anotado acá para que {@link GridBagLayout#adjustForGravity} sepa de qué tamaño
+     * dejar al componente cuando la celda le queda grande y no pidió llenarla.
+     */
+    int minWidth;
+
+    /** Lo mismo de alto. */
+    int minHeight;
+
     public int ipadx;
 
     public int ipady;

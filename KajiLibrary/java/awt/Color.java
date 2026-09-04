@@ -24,11 +24,9 @@ package java.awt;
  * lo que hace que un color en escala de grises conserve su unico componente en vez de degradarse a
  * tres.
  *
- * <h2>Lo que falta y por que</h2>
- *
- * <p>Queda uno solo: {@code createContext(...)} --el de {@code Paint}-- necesita
- * {@code java.awt.image.ColorModel} y {@code java.awt.image.Raster}, que esta biblioteca todavia no
- * tiene. Los otros cuatro que faltaban eran por {@code java.awt.color.ColorSpace}, que ya existe.
+ * <p>Como {@link Paint}, es el caso degenerado: {@code createContext} devuelve un contexto que
+ * contesta el mismo color en todos los puntos. Eso es lo que hace que dibujar con un color y dibujar
+ * con un degrade sean la misma operacion para quien dibuja.
  */
 public class Color implements Paint, java.io.Serializable {
 
@@ -651,5 +649,17 @@ public class Color implements Paint, java.io.Serializable {
             f[i] = convertidos[i];
         }
         return f;
+    }
+
+    /**
+     * Arma la maquina que genera los pixeles: la mas simple de todas.
+     *
+     * <p>Un color plano contesta lo mismo en todos los puntos, asi que el contexto no necesita ni
+     * invertir la transformacion ni mirar las coordenadas.
+     */
+    public java.awt.PaintContext createContext(java.awt.image.ColorModel cm,
+            java.awt.Rectangle r, java.awt.geom.Rectangle2D r2d,
+            java.awt.geom.AffineTransform xform, java.awt.RenderingHints hints) {
+        return new ColorPaintContext(this.getRGB());
     }
 }

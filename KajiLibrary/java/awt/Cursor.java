@@ -13,11 +13,10 @@ package java.awt;
  *
  * <h2>Lo que falta y por que</h2>
  *
- * <p>{@code getSystemCustomCursor(String)} <b>no esta</b>. Busca el cursor en un archivo de
- * propiedades del escritorio a traves del {@code Toolkit}, y {@code Toolkit} no existe en
- * KajiLibrary. Devolver null --que la firma permite, porque significa "ese cursor no esta
- * definido"-- seria peor que no tener el metodo: diria que se busco y no se encontro cuando en
- * realidad no se busco nada.
+ * <p>{@code getSystemCustomCursor(String)} esta, y **tira**. Busca el cursor en un archivo de
+ * descriptores del escritorio, y esta biblioteca no trae ninguno. Devolver null diria "se busco y no
+ * estaba", que no es cierto; la {@code AWTException} que el propio metodo declara dice "no se pudo
+ * encontrar", que si lo es.
  *
  * <p>Los nombres de los predefinidos son los que el JDK usa cuando no encuentra el paquete de
  * recursos traducido, que es el caso aca: no hay traduccion que buscar, asi que el valor por
@@ -137,5 +136,16 @@ public class Cursor implements java.io.Serializable {
 
     public String toString() {
         return getClass().getName() + "[" + getName() + "]";
+    }
+
+    /**
+     * Un cursor definido por el escritorio, buscado por nombre.
+     *
+     * @throws AWTException siempre: no hay descriptores donde buscar. Los cursores predefinidos si
+     *     estan, en {@link #getPredefinedCursor}.
+     */
+    public static Cursor getSystemCustomCursor(String name) throws AWTException {
+        throw new AWTException("Cursor de sistema no encontrado: " + name
+                + " (esta biblioteca no trae los descriptores de cursor del escritorio)");
     }
 }

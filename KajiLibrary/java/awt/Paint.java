@@ -1,23 +1,32 @@
 package java.awt;
 
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.ColorModel;
+
 /**
- * Con que se rellena una figura: un color plano, un degrade o una textura.
+ * Con qué se rellena una figura: un color plano, un degradé o una textura.
  *
- * <h2>Interfaz vacia a proposito</h2>
+ * <p>Es la generalización de "el color con el que se dibuja". Un {@link Color} es un `Paint` que
+ * contesta lo mismo en todos los puntos; un degradé contesta distinto según dónde esté el punto. Al
+ * dibujado le da igual: le pide al `Paint` un {@link PaintContext} y le pide píxeles.
  *
- * <p>El JDK le declara un unico metodo,
- * {@code createContext(ColorModel, Rectangle, Rectangle2D, AffineTransform, RenderingHints)}, y
- * <b>no esta</b>: {@code java.awt.image.ColorModel} no existe en KajiLibrary y no se puede declarar
- * un metodo cuyo parametro no existe.
- *
- * <p>Inventar una firma con otro parametro seria peor que no tener el metodo: quien implemente
- * Paint contra esta interfaz compilaria y despues no encajaria con el JDK real. Un miembro que
- * falta es un subconjunto legal de la API; uno que miente no.
- *
- * <p>Lo que si sirve, y es la razon de escribirla igual, es el tipo: {@code Color} lo implementa,
- * los degrades lo implementan, y el {@code extends Transparency} --que si se puede declarar-- es la
- * parte del contrato que ya funciona. Cuando aparezca {@code java.awt.image}, el metodo es una
- * linea.
+ * <p>Extiende {@link Transparency} porque quien dibuja necesita saber, **antes** de empezar, si lo
+ * que va a pintar puede dejar ver lo de abajo: eso decide si puede escribir directo o tiene que
+ * componer.
  */
 public interface Paint extends Transparency {
+
+    /**
+     * Arma la máquina que va a generar los píxeles.
+     *
+     * @param cm el formato en el que el destino preferiría recibirlos, o `null` si le da igual;
+     *     es una sugerencia y el contexto puede devolver otro
+     * @param deviceBounds el rectángulo del dispositivo que se va a pintar
+     * @param userBounds el mismo rectángulo en coordenadas de usuario
+     * @param xform de coordenadas de usuario a coordenadas de dispositivo
+     * @param hints las pistas de calidad
+     */
+    PaintContext createContext(ColorModel cm, Rectangle deviceBounds, Rectangle2D userBounds,
+            AffineTransform xform, RenderingHints hints);
 }

@@ -1,23 +1,31 @@
 package java.awt;
 
+import java.awt.image.ColorModel;
+import java.awt.image.Raster;
+
 /**
- * El estado de un {@code Paint} mientras dura una operacion de dibujo: quien genera los pixeles.
+ * Quien genera los píxeles de un {@link Paint} durante una operación de dibujo.
  *
- * <h2>Superficie parcial</h2>
+ * <p>La separación entre `Paint` y su contexto es la que hace que un degradé se pueda describir una
+ * vez y dibujar muchas: el `Paint` es la **descripción** —dos puntos y dos colores— y el contexto es
+ * la máquina que, para una transformación y un modelo de color concretos, produce los píxeles.
  *
- * <p>De los tres metodos que declara el JDK solo esta {@code dispose()}. Los otros dos --
- * {@code getColorModel()} y {@code getRaster(int, int, int, int)}-- devuelven
- * {@code java.awt.image.ColorModel} y {@code java.awt.image.Raster}, que no existen en
- * KajiLibrary; un metodo cuyo tipo de retorno no existe no se puede declarar.
- *
- * <p>Se escribe igual porque {@code dispose()} es la mitad del contrato que importa a quien
- * implementa: un contexto de pintado tiene recursos vivos y hay que soltarlos.
+ * <p>Se pide de a rectángulos y no de a píxeles porque casi todo degradé se calcula mucho más barato
+ * por filas que punto por punto.
  */
 public interface PaintContext {
 
     /**
-     * Suelta los recursos del contexto. Se llama siempre, tambien cuando el dibujo fallo, asi que
-     * tiene que poder llamarse sobre un contexto que nunca genero un pixel.
+     * Suelta los recursos del contexto.
+     *
+     * <p>Se llama siempre, también cuando el dibujo falló, así que tiene que poder llamarse sobre un
+     * contexto que nunca generó un píxel.
      */
     void dispose();
+
+    /** En qué formato vienen los píxeles que genera. */
+    ColorModel getColorModel();
+
+    /** Los píxeles de ese rectángulo, en coordenadas de dispositivo. */
+    Raster getRaster(int x, int y, int w, int h);
 }

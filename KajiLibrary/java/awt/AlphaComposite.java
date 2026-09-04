@@ -12,12 +12,8 @@ package java.awt;
  * {@code SRC_ATOP}, {@code DST_ATOP} y {@code XOR} se agregaron en 1.4 y se numeraron a
  * continuacion. Renumerarlas romperia cualquier valor serializado.
  *
- * <h2>Lo que falta y por que</h2>
- *
- * <p>{@code createContext(ColorModel, ColorModel, RenderingHints)} --el metodo de
- * {@code Composite}-- no esta: sus dos primeros parametros son {@code java.awt.image.ColorModel},
- * que no existe en KajiLibrary. Es el unico miembro ausente y es el que mezcla pixeles de verdad;
- * todo lo que elige y describe la regla esta completo.
+ * <p>{@code createContext} devuelve quien mezcla de verdad. Trabaja en ARGB premultiplicado, que es
+ * donde las doce reglas son sumas y multiplicaciones en vez de doce casos especiales.
  */
 public final class AlphaComposite implements Composite {
 
@@ -170,5 +166,16 @@ public final class AlphaComposite implements Composite {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Arma la maquina que mezcla.
+     *
+     * <p>Los formatos que se le pasan son una pista: el contexto trabaja siempre en ARGB
+     * premultiplicado.
+     */
+    public CompositeContext createContext(java.awt.image.ColorModel srcColorModel,
+            java.awt.image.ColorModel dstColorModel, RenderingHints hints) {
+        return new AlphaCompositeContext(this.getRule(), this.getAlpha());
     }
 }
