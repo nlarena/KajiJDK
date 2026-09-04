@@ -11,6 +11,23 @@ import java.util.Map;
 // so no helper class is needed.
 public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
 
+    /**
+     * La clave null vive aparte de la tabla.
+     *
+     * <p>La tabla es de direccionamiento abierto y usa <b>null como marca de slot vacio</b>, asi que
+     * una clave null no se puede guardar ahi: ocuparia el slot y a la vez diria que esta libre. Y
+     * `null.hashCode()` tampoco existe, con lo cual ni siquiera hay bucket que calcular.
+     *
+     * <p>Aceptarla igual no es un capricho: que `HashMap` permita una clave null es lo que lo
+     * distingue de `Hashtable`, esta en su contrato, y hay codigo que lo usa a proposito --un mapa de
+     * configuracion donde null es "el valor por omision"--. Por eso va en dos campos al costado, que
+     * es la solucion habitual para una tabla abierta.
+     */
+    private boolean hasNullKey = false;
+
+    /** El valor de la clave null; solo significa algo con {@link #hasNullKey} en true. */
+    private V nullValue = null;
+
     private Object[] keys;
     private Object[] values;
     private int size;
@@ -110,16 +127,25 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     }
 
     public V get(Object key) {
+        if (key == null) {
+            return this.hasNullKey ? this.nullValue : null;
+        }
         return (V) this.values[this.slotFor(key)];
     }
 
     public boolean containsKey(Object key) {
+        if (key == null) {
+            return this.hasNullKey;
+        }
         return this.keys[this.slotFor(key)] != null;
     }
 
     // Direccionamiento abierto: las claves vivas son los slots no nulos de `keys` (finding #205).
     public Set<K> keySet() {
         HashSet<K> out = new HashSet<K>();
+        if (this.hasNullKey) {
+            out.add(null);
+        }
         int i = 0;
         while (i < this.keys.length) {
             if (this.keys[i] != null) {
@@ -139,6 +165,15 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     }
 
     public V put(K key, V value) {
+        if (key == null) {
+            V old = this.nullValue;
+            if (!this.hasNullKey) {
+                this.hasNullKey = true;
+                this.size = this.size + 1;
+            }
+            this.nullValue = value;
+            return old;
+        }
         if (this.size * 2 >= this.keys.length) {
             this.resize();
         }
@@ -153,6 +188,16 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     }
 
     public V remove(Object key) {
+        if (key == null) {
+            if (!this.hasNullKey) {
+                return null;
+            }
+            V old = this.nullValue;
+            this.hasNullKey = false;
+            this.nullValue = null;
+            this.size = this.size - 1;
+            return old;
+        }
         int cap = this.keys.length;
         int i = this.slotFor(key);
         if (this.keys[i] == null) {
@@ -177,6 +222,11 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     }
 
     public boolean containsValue(Object value) {
+        if (this.hasNullKey) {
+            if (value == null ? this.nullValue == null : value.equals(this.nullValue)) {
+                return true;
+            }
+        }
         for (int i = 0; i < this.values.length; i++) {
             if (this.keys[i] != null) {
                 Object v = this.values[i];
@@ -200,6 +250,8 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
             this.values[i] = null;
         }
         this.size = 0;
+        this.hasNullKey = false;
+        this.nullValue = null;
     }
 
     // Double the table and re-insert every live entry into the fresh, larger arrays.
@@ -209,7 +261,8 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
         int newCap = oldKeys.length * 2;
         this.keys = new Object[newCap];
         this.values = new Object[newCap];
-        this.size = 0;
+        // La entrada de clave null no esta en la tabla, asi que su +1 hay que conservarlo a mano.
+        this.size = this.hasNullKey ? 1 : 0;
         for (int i = 0; i < oldKeys.length; i++) {
             if (oldKeys[i] != null) {
                 this.put((K) oldKeys[i], (V) oldValues[i]);

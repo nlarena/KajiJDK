@@ -15,6 +15,18 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E> {
     Object[] table;
     private int size;
 
+    /**
+     * El elemento null vive aparte de la tabla.
+     *
+     * <p>Por lo mismo que en {@link HashMap}: la tabla es de direccionamiento abierto y usa null como
+     * marca de slot vacio, asi que un null adentro seria a la vez "ocupado" y "libre". Y aceptarlo
+     * hace falta: un `HashSet` permite <b>un</b> elemento null, y sin eso `keySet()` de un mapa con
+     * clave null no podria devolverla.
+     *
+     * <p>Paquete-privado porque el iterador tiene que verlo para emitirlo.
+     */
+    boolean hasNull = false;
+
     public HashSet() {
         this.table = new Object[16];
         this.size = 0;
@@ -98,10 +110,21 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E> {
     }
 
     public boolean contains(Object o) {
+        if (o == null) {
+            return this.hasNull;
+        }
         return this.table[this.slotFor(o)] != null;
     }
 
     public boolean add(E e) {
+        if (e == null) {
+            if (this.hasNull) {
+                return false;
+            }
+            this.hasNull = true;
+            this.size = this.size + 1;
+            return true;
+        }
         if (this.size * 2 >= this.table.length) {
             this.resize();
         }
@@ -115,6 +138,14 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E> {
     }
 
     public boolean remove(Object o) {
+        if (o == null) {
+            if (!this.hasNull) {
+                return false;
+            }
+            this.hasNull = false;
+            this.size = this.size - 1;
+            return true;
+        }
         int cap = this.table.length;
         int i = this.slotFor(o);
         if (this.table[i] == null) {
@@ -138,6 +169,7 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E> {
             this.table[i] = null;
         }
         this.size = 0;
+        this.hasNull = false;
     }
 
     public Iterator<E> iterator() {
@@ -149,7 +181,8 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E> {
         Object[] old = this.table;
         int newCap = old.length * 2;
         this.table = new Object[newCap];
-        this.size = 0;
+        // El null no esta en la tabla: su +1 hay que conservarlo a mano.
+        this.size = this.hasNull ? 1 : 0;
         for (int i = 0; i < old.length; i++) {
             if (old[i] != null) {
                 this.add((E) old[i]);
@@ -173,8 +206,12 @@ final class HashSetItr<E> implements Iterator<E> {
     private final HashSet<E> set;
     private int index = 0;
 
+    /** El null va primero, y una sola vez. Ver el campo homonimo de {@link HashSet}. */
+    private boolean nullPending;
+
     HashSetItr(HashSet<E> set) {
         this.set = set;
+        this.nullPending = set.hasNull;
         this.advance();
     }
 
@@ -186,10 +223,14 @@ final class HashSetItr<E> implements Iterator<E> {
     }
 
     public boolean hasNext() {
-        return this.index < this.set.table.length;
+        return this.nullPending || this.index < this.set.table.length;
     }
 
     public E next() {
+        if (this.nullPending) {
+            this.nullPending = false;
+            return null;
+        }
         E element = (E) this.set.table[this.index];
         this.index = this.index + 1;
         this.advance();
