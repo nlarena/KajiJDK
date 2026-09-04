@@ -470,7 +470,11 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
                 (Some(e), ret) => {
                     let p = e.pos;
                     let t = attrib_expr_to(env, e, Some(&ret)); // el retorno declarado es el target
-                    if !assignable(env.table, &t, &ret) {
+                    // `return` es un **contexto de asignación** (§14.17), así que le toca el
+                    // estrechamiento de constante igual que a `short s = 0;`. Sin esto,
+                    // `short f() { return 0; }` --que es Java válido y aparece en cuanto se
+                    // implementa una interfaz del DOM-- no compilaba. Ver #476.
+                    if !assignable(env.table, &t, &ret) && !constant_narrowing_ok(&ret, e) {
                         env.error(p, "tipo de retorno incompatible".into());
                     }
                 }
@@ -1371,10 +1375,48 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             }
             (RType::Prim(PrimType::Boolean), None)
         }
-        // `C.class` vale un `java.lang.Class` (se ignora el argumento genérico `<C>`, que la
-        // *erasure* borra igual).
-        ExprKind::ClassLit(_) => {
-            (resolve_rtype(env.table, env.class_scope, &Type::Class("Class".into())), None)
+        // `C.class` vale un `java.lang.Class<C>` — **con** su argumento (§15.8.2), finding #390.
+        //
+        // La nota anterior decía que el argumento se podía ignorar "porque la *erasure* lo borra
+        // igual". Eso es cierto para el **descriptor** que emite el generador y falso para la
+        // **atribución**, que es donde se infiere: un `Class` pelado hace que
+        // `<T extends Base> T leer(Class<T>)` infiera `T` por la cota en vez de por el argumento,
+        // así que `usa(leer(Sub.class))` fallaba con "no se encontró un método `usa(Base)`
+        // aplicable" — mientras que `Sub v = leer(Sub.class); usa(v);` andaba, porque ahí la
+        // inferencia la dirige el destino de la asignación y no el argumento.
+        //
+        // Delimitado en `scratchpad/zz405/Loc.java`: por valor, por genérico y con un `Class<Sub>`
+        // devuelto por un método, los tres andaban. Solo el **literal** perdía el argumento.
+        //
+        // Un primitivo va con su envoltorio: `int.class` es `Class<Integer>`, no `Class<int>` — un
+        // argumento de tipo no puede ser primitivo (§4.5.1). `void.class` es `Class<Void>`.
+        ExprKind::ClassLit(ty) => {
+            let clase = match resolve_rtype(env.table, env.class_scope, &Type::Class("Class".into())) {
+                RType::Class(id) => Some(id),
+                RType::Parameterized { base, .. } => Some(base),
+                _ => None,
+            };
+            let arg = match ty {
+                Type::Prim(p) => {
+                    let envoltorio = types::wrapper_of(*p);
+                    resolve_rtype(env.table, env.class_scope, &Type::Class(envoltorio.into()))
+                }
+                Type::Void => {
+                    resolve_rtype(env.table, env.class_scope, &Type::Class("java.lang.Void".into()))
+                }
+                otro => resolve_rtype(env.table, env.class_scope, otro),
+            };
+            let rt = match (clase, &arg) {
+                // Sin el argumento resuelto se cae al `Class` pelado de antes: es peor para inferir,
+                // pero es lo que había y no rompe nada que hoy funcione.
+                (Some(base), RType::Unresolved) | (Some(base), RType::Void) => RType::Class(base),
+                (Some(base), _) => RType::Parameterized {
+                    base,
+                    args: vec![RTypeArg::Type(arg.clone())],
+                },
+                (None, _) => RType::Unresolved,
+            };
+            (rt, None)
         }
         // `body` (una **clase anónima**) no se atribuye acá: sus miembros son un tipo aparte, y
         // entrarlos/tiparlos es de la fase de tipos —igual que la lambda—. Los **argumentos** sí se
@@ -1916,6 +1958,26 @@ fn widening_ok(from: PrimType, to: PrimType) -> bool {
     if matches!(from, PrimType::Boolean) || matches!(to, PrimType::Boolean) {
         return false;
     }
+    // `char` **no** entra en el orden de rangos, y por eso se decide antes de mirarlos.
+    //
+    // `prim_rank_of` le da a `char` el mismo rango que a `short` porque los dos ocupan 16 bits y
+    // porque para la promoción numérica binaria (§5.6) da igual cuál de los dos venga: los dos
+    // terminan en `int`. Pero la ampliación es otra lista, y la lista de §5.1.2 no tiene ni un solo
+    // renglón que **llegue** a `char`, ni el par `char` → `short`. La razón es que ninguna de esas
+    // conversiones conserva el valor: `char` no tiene signo y `short` sí, así que `(short) 40000`
+    // es negativo y `(char) -1` es 65535. Ampliar tiene que ser siempre sin pérdida; estas dos no
+    // lo son, y por eso Java exige el cast explícito.
+    //
+    // Compartir el rango hacía que `f(byte)` eligiera `f(char)` sobre `f(int)` —una sobrecarga que
+    // ni siquiera era aplicable— y que `char c = unByte;` compilara. Ver el finding #360.
+    if std::env::var_os("KAJI_ABLA_360").is_none() {
+        if matches!(to, PrimType::Char) {
+            return false;
+        }
+        if matches!(from, PrimType::Char) && matches!(to, PrimType::Short) {
+            return false;
+        }
+    }
     prim_rank_of(from) <= prim_rank_of(to)
 }
 
@@ -2001,10 +2063,41 @@ enum Phase {
 /// Usa el subtipado **estricto** a propósito: con la versión indulgente, cualquier par de tipos
 /// externos sería convertible y **todos** los candidatos resultarían aplicables.
 fn convertible(table: &SymbolTable, from: &RType, to: &RType, boxing: bool) -> bool {
-    if from == to || lenient(from) || lenient(to) {
+    // La indulgencia del **origen** vale para `Unresolved` --de un tipo que no cargamos no se puede
+    // afirmar nada-- pero NO para una variable de tipo: de esa sí sabemos algo, su cota, y esa cota
+    // es todo lo que el argumento puede ser (§4.4). Ver el arm de `TypeVar` más abajo.
+    if from == to || matches!(from, RType::Unresolved) || lenient(to) {
         return true;
     }
     match (from, to) {
+        // Un argumento de tipo **variable** es aplicable a lo que su COTA es aplicable, y a nada
+        // más (finding #341). Con la indulgencia vieja --todo aplicable-- las tres fases daban
+        // aplicables a *todas* las sobrecargas, y desempataba `more_specific`, que elige la más
+        // angosta: `String.valueOf(v)` con `v` de tipo `V` emitía
+        // `invokestatic String.valueOf([C)` en vez de `(Ljava/lang/Object;)`, porque `char[]` es
+        // más específico que `Object`.
+        //
+        // Eso no fallaba ruidoso: pasaba la compilación, pasaba la verificación de esta VM, y
+        // devolvía la cadena vacía en ejecución. `AbstractMap.toString` imprimía `{Cookie=}`.
+        //
+        // La cota se consulta con `bounds_of`, que da `Object` cuando no se declaró ninguna, así
+        // que el caso común queda exactamente en la sobrecarga de `Object`.
+        // Un destino que es la **captura de un `? super L`** acepta todo lo que `L` acepta: la
+        // captura designa *algún* supertipo de `L`, así que un valor de `L` --o de un subtipo suyo--
+        // le entra siempre (§4.10.2, §5.2).
+        //
+        // Va **antes** del arm de `TypeVar` de abajo, y ahí estaba el defecto que #341 introdujo sin
+        // querer: una captura no es un `TypeVar` sino un `RType::Capture`, así que `lenient` no la
+        // atajaba, y el arm de abajo terminaba preguntando si la cota **superior** del argumento
+        // --`Object`-- entra en la captura. No entra, y por eso `Comparator.thenComparing` dejó de
+        // compilar: `otro.compare(a, b)` con `otro : Comparator<? super T>` y `a, b : T`.
+        //
+        // Se cayeron con él `List`, `Map`, `Collection`, `Iterable`, `Collections` y todo lo que los
+        // nombra: veinticinco archivos en el recompile, en cascada desde uno.
+        (_, RType::Capture { lower: Some(l), .. }) => convertible(table, from, l, boxing),
+                (RType::TypeVar(v), _) => types::bounds_of(table, *v)
+            .iter()
+            .any(|b| convertible(table, b, to, boxing)),
         // El **tipo nulo** (§4.10.2): subtipo de todo tipo referencia, de ningún primitivo. Va
         // primero porque `is_reference` lo da por referencia --lo es-- y el arm genérico de más
         // abajo lo mandaría a `is_subtype_strict`, que no tiene con qué decidirlo.
@@ -2524,15 +2617,69 @@ pub(crate) fn enclosing_class(table: &SymbolTable, cid: SymbolId) -> Option<Symb
     matches!(table.symbol(owner).kind, SymbolKind::Class { .. }).then_some(owner)
 }
 
+/// El campo `name` visible sobre `class`, recorriendo **todo** el grafo de supertipos.
+///
+/// Las interfaces también cuentan (§8.2): una clase hereda las constantes de las interfaces que
+/// implementa, y por eso `class Impl implements Node { ... return ELEMENT_NODE; }` compila. Antes
+/// esto seguía sólo la cadena de superclases, así que ninguna constante de interfaz resolvía y el
+/// síntoma era un "no se encuentra el símbolo" sobre un nombre que estaba a la vista —y que el
+/// *did-you-mean* de al lado sí sabía enumerar, porque ese sí recorría las interfaces—. Ver #475.
+///
+/// El orden es el del JLS y no es cosmético: primero lo declarado en la clase, después la cadena de
+/// superclases, y recién al final las interfaces. Es lo que hace que un campo de una superclase
+/// **tape** a una constante homónima de una interfaz, en vez de que gane la que se encuentre antes.
 fn lookup_field(table: &SymbolTable, class: SymbolId, name: &str) -> Option<SymbolId> {
+    fn declared(table: &SymbolTable, c: SymbolId, name: &str) -> Option<SymbolId> {
+        table
+            .scope(member_scope(table, c))
+            .get(name)
+            .iter()
+            .copied()
+            .find(|&id| matches!(table.symbol(id).kind, SymbolKind::Field { .. }))
+    }
+
+    // La cadena de superclases primero, entera, guardando por dónde pasó para después mirar las
+    // interfaces de cada eslabón.
+    let mut chain: Vec<SymbolId> = Vec::new();
     let mut cur = Some(class);
     while let Some(c) = cur {
-        for &id in table.scope(member_scope(table, c)).get(name) {
-            if matches!(table.symbol(id).kind, SymbolKind::Field { .. }) {
-                return Some(id);
+        if let Some(id) = declared(table, c, name) {
+            return Some(id);
+        }
+        chain.push(c);
+        cur = table.super_class(c);
+    }
+    // Y ahora las interfaces, en anchura. `visited` es contra los diamantes, que en interfaces son
+    // la regla y no la excepción.
+    let mut visited: Vec<SymbolId> = chain.clone();
+    let mut queue: Vec<SymbolId> = Vec::new();
+    for &c in &chain {
+        for i in table.interfaces(c) {
+            if !visited.contains(&i) {
+                visited.push(i);
+                queue.push(i);
             }
         }
-        cur = table.super_class(c);
+    }
+    let mut head = 0;
+    while head < queue.len() {
+        let c = queue[head];
+        head += 1;
+        if let Some(id) = declared(table, c, name) {
+            return Some(id);
+        }
+        for i in table.interfaces(c) {
+            if !visited.contains(&i) {
+                visited.push(i);
+                queue.push(i);
+            }
+        }
+        if let Some(s) = table.super_class(c) {
+            if !visited.contains(&s) {
+                visited.push(s);
+                queue.push(s);
+            }
+        }
     }
     None
 }
@@ -2613,20 +2760,38 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         // `new` (`new java.lang.Object()`) quedaba `Unresolved` y el codegen no podía emitir el `new` +
         // `invokespecial` — finding #20. (En otras posiciones no se notaba: un `Unresolved` de un local
         // o retorno no rompe la emisión.)
-        if let Some(id) = source_class_named(table, simple) {
+        // Tipo **anidado** en posición de tipo (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`):
+        // se resuelve el `outer` y se baja a su miembro-tipo. Devuelve el `RType::Class` real (no
+        // `Unresolved`), de modo que un `Map.Entry<String,Integer>` en firma sale parametrizado.
+        //
+        // **Va primero, y ese orden es el arreglo.** Al revés, el último segmento se buscaba entre
+        // los externos --que se registran por nombre simple-- y ahí `java.lang.Double` contesta a
+        // todo `X.Double`. `new Rectangle2D.Double(...)` construía un `java.lang.Double`: se lo
+        // comprobó asignándolo a un `java.lang.Double`, que compilaba. El síntoma que se veía era
+        // "tipo incompatible" en la asignación, con las dos partes escritas igual en el fuente.
+        //
+        // Afecta a toda clase anidada cuyo nombre simple exista en `java.lang`: los `Double` y
+        // `Float` de `java.awt.geom` son el caso que lo destapó.
+        let anidado = match resolve_type_name(table, scope, outer) {
+            RType::Class(oid) | RType::Parameterized { base: oid, .. } => {
+                nested_type_in(table, oid, simple)
+            }
+            _ => None,
+        };
+        if let Some(id) = anidado {
+            RType::Class(id)
+        } else if let Some(id) = source_class_named(table, simple) {
+            RType::Class(id)
+        } else if let Some(id) = table.external_fqn(name) {
+            // El nombre **completo** manda sobre el simple. Va antes del último recurso porque ese
+            // busca por el último segmento, y ahí gana el homónimo que se haya cargado primero: con
+            // `java.sql.Array` importado, `java.lang.reflect.Array.getLength(x)` resolvía al de SQL
+            // y el error era "no se encuentra el método getLength" sobre una clase que sí lo tiene
+            // --pero era otra--. Escribir el nombre completo es justamente lo que se hace para
+            // desambiguar, así que tiene que ganar. Ver #478.
             RType::Class(id)
         } else if let Some(id) = table.external(simple) {
             RType::Class(id)
-        } else if let RType::Class(oid) | RType::Parameterized { base: oid, .. } =
-            resolve_type_name(table, scope, outer)
-        {
-            // Tipo **anidado** en posición de tipo (`Map.Entry`, `Diagnostic.Kind`, `Outer.Mid.Inner`):
-            // se resuelve el `outer` y se baja a su miembro-tipo. Devuelve el `RType::Class` real (no
-            // `Unresolved`), de modo que un `Map.Entry<String,Integer>` en firma sale parametrizado.
-            match nested_type_in(table, oid, simple) {
-                Some(id) => RType::Class(id),
-                None => RType::Unresolved,
-            }
         } else {
             RType::Unresolved
         }

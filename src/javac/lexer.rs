@@ -174,6 +174,63 @@ impl Lexer {
                     break;
                 }
             }
+            // **Coma flotante hexadecimal** (§3.10.2, finding #315): `0x1.8p3`, `0x1p-5`, `0x.8p0`.
+            //
+            // Solo para `0x`, nunca para `0b`: no existe el literal binario de coma flotante.
+            //
+            // El exponente en `p` es **obligatorio**, y esa es la parte de la gramática que explica
+            // toda la forma: sin él, `0x1.8` no se podría distinguir de un acceso a miembro
+            // (`0x1 . 8`), y el sufijo `d`/`f` chocaría con un dígito hexadecimal. Java lo resuelve
+            // exigiendo la `p`, así que un `0x1.8` suelto **no** es un literal — y acá tampoco, para
+            // que el error sea el mismo que da `javac`.
+            //
+            // La `p` cuenta potencias de **dos**, no de dieciséis: `0x1.0p64` es 2^64. Es la única
+            // notación que escribe un `double` sin redondeo, y por eso el JDK la usa para las
+            // constantes que tienen que ser exactas.
+            if radix_hex {
+                let hay_punto = self.peek() == Some('.')
+                    && self.peek_at(1).is_some_and(|d| d.is_ascii_hexdigit() || d == '_');
+                let hay_p = matches!(self.peek(), Some('p') | Some('P'));
+                // El punto solo se consume si después hay una `p`: sin ella no es un literal de
+                // coma flotante y el `.` es del programa (un acceso a miembro).
+                if hay_punto || hay_p {
+                    let mut tentativo = text.clone();
+                    let mut consumidos = 0usize;
+                    if hay_punto {
+                        tentativo.push('.');
+                        consumidos += 1;
+                        let mut i = 1;
+                        while let Some(c) = self.peek_at(i) {
+                            if c.is_ascii_hexdigit() || c == '_' {
+                                tentativo.push(c);
+                                consumidos += 1;
+                                i += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    if matches!(self.peek_at(consumidos), Some('p') | Some('P')) {
+                        for _ in 0..consumidos {
+                            self.bump();
+                        }
+                        text = tentativo;
+                        is_floating = true;
+                        text.push(self.bump().unwrap()); // p / P
+                        if matches!(self.peek(), Some('+') | Some('-')) {
+                            text.push(self.bump().unwrap());
+                        }
+                        while let Some(c) = self.peek() {
+                            if c.is_ascii_digit() || c == '_' {
+                                text.push(c);
+                                self.bump();
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             while let Some(c) = self.peek() {
                 if c.is_ascii_digit() || c == '_' {

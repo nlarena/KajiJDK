@@ -22,6 +22,10 @@ const ACC_PUBLIC: u16 = 0x0001;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_PRIVATE: u16 = 0x0002;
 const ACC_ABSTRACT: u16 = 0x0400;
+
+/// `ACC_NATIVE` (JVMS §4.6): el cuerpo lo pone la VM. Lo necesita el **polimorfismo de firma**
+/// (JLS §15.12.3), que solo aplica a métodos `native` de `MethodHandle`/`VarHandle`.
+const ACC_NATIVE: u16 = 0x0100;
 const ACC_INTERFACE: u16 = 0x0200;
 
 /// La info que el finder necesita de un `.class`. Los nombres vienen en forma *dotted*
@@ -45,6 +49,10 @@ pub struct ExternalClass {
     /// (`build_external`) filtra las que son **miembros directos** (`Outer$Inner`) para que
     /// `Outer.Inner` de una clase externa resuelva.
     pub nested: Vec<String>,
+    /// Si la declaracion lleva `@Retention(RUNTIME)`. Solo tiene sentido en un `@interface`, y lo
+    /// consume el emisor para decidir si una anotacion de este classpath se escribe en la clase que
+    /// la usa. Ver el finding #467.
+    pub runtime_retention: bool,
 }
 
 pub struct ExtField {
@@ -76,6 +84,8 @@ pub struct ExtMethod {
     /// otro nido (p. ej. el `private AssertionError(String)`, que no debe capturar `new
     /// AssertionError("...")`).
     pub is_private: bool,
+    /// `ACC_NATIVE`. Ver [`ACC_NATIVE`].
+    pub is_native: bool,
     /// `ACC_PUBLIC` — lo necesitan los **accesores sintéticos** de #268: una clase pública que
     /// hereda un método público de una superclase package-private **externa** (del classpath, como
     /// `AbstractStringBuilder`) tiene que sintetizarles el forwarder, y para saber que el método es
@@ -134,7 +144,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let fname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _, _) = read_attributes(&mut r, &pool)?;
+        let (sig, _, _, _) = read_attributes(&mut r, &pool)?;
         fields.push(ExtField {
             name: fname,
             ty: parse_field_desc(&desc)?,
@@ -148,7 +158,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let mname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _, throws) = read_attributes(&mut r, &pool)?;
+        let (sig, _, throws, _) = read_attributes(&mut r, &pool)?;
         let (params, ret) = parse_method_desc(&desc)?;
         methods.push(ExtMethod {
             name: mname,
@@ -158,13 +168,14 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
             is_abstract: access & ACC_ABSTRACT != 0,
             is_static: access & ACC_STATIC != 0,
             is_private: access & ACC_PRIVATE != 0,
+            is_native: access & ACC_NATIVE != 0,
             is_public: access & ACC_PUBLIC != 0,
             signature: sig.as_deref().and_then(parse_method_signature),
             throws,
         });
     }
 
-    let (class_sig, nested, _) = read_attributes(&mut r, &pool)?;
+    let (class_sig, nested, _, runtime_retention) = read_attributes(&mut r, &pool)?;
     Some(ExternalClass {
         name,
         is_interface: access_flags & ACC_INTERFACE != 0,
@@ -175,6 +186,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         methods,
         signature: class_sig.as_deref().and_then(parse_class_signature),
         nested,
+        runtime_retention,
     })
 }
 
@@ -275,10 +287,14 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
 /// Lee la tabla de atributos, devolviendo el valor del **`Signature`** si aparece (§4.7.9.1) y
 /// salteando todo lo demás. A diferencia de saltear a ciegas, acá hay que resolver el nombre de
 /// cada atributo contra el constant pool.
-fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<(Option<String>, Vec<String>, Vec<String>)> {
+fn read_attributes(
+    r: &mut Reader,
+    pool: &Pool,
+) -> Option<(Option<String>, Vec<String>, Vec<String>, bool)> {
     let mut signature = None;
     let mut nested = Vec::new();
     let mut throws = Vec::new();
+    let mut runtime_retention = false;
     for _ in 0..r.u2()? {
         let name = pool.utf8(r.u2()?);
         let len = r.u4()? as usize;
@@ -318,10 +334,17 @@ fn read_attributes(r: &mut Reader, pool: &Pool) -> Option<(Option<String>, Vec<S
                     }
                 }
             }
+            // `RuntimeVisibleAnnotations` (§4.7.16). Se mira **una sola cosa**: si la declaracion
+            // lleva `@Retention(RUNTIME)`. Es lo que decide si una anotacion de este classpath se
+            // tiene que emitir en la clase que la usa, y sin leerlo el compilador asumia `CLASS`
+            // —el default de la especificacion— y la descartaba en silencio. Ver el finding #467.
+            Some("RuntimeVisibleAnnotations") => {
+                runtime_retention = declares_runtime_retention(&data, pool);
+            }
             _ => {}
         }
     }
-    Some((signature, nested, throws))
+    Some((signature, nested, throws, runtime_retention))
 }
 
 // ---- descriptores → Type ----
@@ -576,4 +599,85 @@ fn parse_desc(b: &[u8], i: &mut usize) -> Option<Type> {
         }
         _ => return None,
     })
+}
+
+/// ¿El cuerpo de un `RuntimeVisibleAnnotations` contiene `@Retention(RetentionPolicy.RUNTIME)`?
+///
+/// Se recorren las anotaciones enteras —no alcanza con buscar la cadena "RUNTIME" en el pool, que
+/// aparecería también en una anotación que la mencione por otro motivo— y de cada una se mira solo
+/// su tipo y, si es `Retention`, el valor de su único elemento.
+fn declares_runtime_retention(data: &[u8], pool: &Pool) -> bool {
+    let mut r = Reader { b: data, pos: 0 };
+    let Some(count) = r.u2() else { return false };
+    for _ in 0..count {
+        let Some(type_index) = r.u2() else { return false };
+        let is_retention = pool
+            .utf8(type_index)
+            .is_some_and(|d| d == "Ljava/lang/annotation/Retention;");
+        let Some(pairs) = r.u2() else { return false };
+        for _ in 0..pairs {
+            let Some(_name) = r.u2() else { return false };
+            match read_element_value(&mut r, pool) {
+                Some(ElementValue::Enum { constant }) if is_retention => {
+                    if constant.as_deref() == Some("RUNTIME") {
+                        return true;
+                    }
+                }
+                Some(_) => {}
+                None => return false,
+            }
+        }
+    }
+    false
+}
+
+/// Lo que hace falta saber de un `element_value` (§4.7.16.1): si es una constante de enum, cuál. El
+/// resto se consume sin interpretarse — la única pregunta de este módulo es la retención.
+enum ElementValue {
+    Enum { constant: Option<String> },
+    Other,
+}
+
+/// Consume un `element_value` y devuelve lo poco que interesa. Devuelve `None` si el byte de
+/// etiqueta no es ninguno de los del formato, que es la señal de que el atributo está mal formado y
+/// no se puede seguir recorriendo.
+fn read_element_value(r: &mut Reader, pool: &Pool) -> Option<ElementValue> {
+    let tag = r.u1()?;
+    match tag {
+        // Primitivas y `String`: un índice al pool.
+        b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's' => {
+            r.u2()?;
+            Some(ElementValue::Other)
+        }
+        // `c`: un literal de clase, también un índice.
+        b'c' => {
+            r.u2()?;
+            Some(ElementValue::Other)
+        }
+        // `e`: constante de enum — el tipo y **el nombre de la constante**, que es lo que se busca.
+        b'e' => {
+            r.u2()?;
+            let constant = r.u2()?;
+            Some(ElementValue::Enum { constant: pool.utf8(constant) })
+        }
+        // `@`: una anotación anidada, con su misma forma.
+        b'@' => {
+            r.u2()?; // type_index
+            let pairs = r.u2()?;
+            for _ in 0..pairs {
+                r.u2()?; // element_name_index
+                read_element_value(r, pool)?;
+            }
+            Some(ElementValue::Other)
+        }
+        // `[`: un arreglo de valores.
+        b'[' => {
+            let n = r.u2()?;
+            for _ in 0..n {
+                read_element_value(r, pool)?;
+            }
+            Some(ElementValue::Other)
+        }
+        _ => None,
+    }
 }

@@ -82,6 +82,13 @@ impl ClassFinder {
         if self.missed.borrow().contains(internal) {
             return None;
         }
+        // Un nombre de dispositivo reservado de Windows **no se busca en disco**, y esto no es
+        // paranoia: `std::fs::read("KajiLibrary/con.class")` no falla, abre la **consola** y se
+        // queda leyendo para siempre. El compilador se colgaba, sin mensaje ni CPU.
+        if es_dispositivo_reservado(internal) {
+            self.missed.borrow_mut().insert(internal.to_string());
+            return None;
+        }
         for dir in &self.classpath {
             if let Ok(bytes) = std::fs::read(dir.join(format!("{internal}.class"))) {
                 return classfile::read(&bytes);
@@ -90,6 +97,38 @@ impl ClassFinder {
         self.missed.borrow_mut().insert(internal.to_string());
         None
     }
+}
+
+/// Si `internal` nombra un dispositivo reservado de Windows (`CON`, `AUX`, `COM1`, ...).
+///
+/// Windows los resuelve **con cualquier extensión y sin distinguir mayúsculas**: `con.class`,
+/// `CON.java` y `Con.class` abren los tres el mismo dispositivo. Los de entrada --`CON` (consola),
+/// `AUX` y `COM1`..`COM9` (puertos serie)-- **bloquean** al leerse; `NUL` da EOF y `PRN`/`LPT*` son
+/// de salida, así que ésos no colgaban. Se filtran todos igual: ninguno puede contener un `.class`.
+///
+/// Cómo aparecía: el compilador, al resolver `con.length()`, considera que `con` podría ser un tipo
+/// y lo busca en el classpath. Con una variable local llamada `con` --que en un código escrito en
+/// castellano es de lo más común-- eso alcanzaba para colgar la compilación entera. Repro de tres
+/// líneas en `scratchpad/zz332/Recep.java`.
+///
+/// Solo en Windows: en cualquier otro lado `Con.class` es un archivo común y saltearlo sería
+/// esconder una clase que existe de verdad.
+#[cfg(windows)]
+fn es_dispositivo_reservado(internal: &str) -> bool {
+    const RESERVADOS: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    // El nombre interno viene con `/`; lo que Windows mira es el último componente, y de él la parte
+    // anterior al primer punto.
+    let simple = internal.rsplit('/').next().unwrap_or(internal);
+    let base = simple.split('.').next().unwrap_or(simple);
+    RESERVADOS.iter().any(|r| base.eq_ignore_ascii_case(r))
+}
+
+#[cfg(not(windows))]
+fn es_dispositivo_reservado(_internal: &str) -> bool {
+    false
 }
 
 /// Carga desde el classpath los tipos externos **referenciados** en supertipos y firmas,
@@ -181,6 +220,23 @@ fn collect_type_names(class: &ClassDecl, out: &mut HashSet<String>) {
     }
     for c in &class.components {
         collect_from_type(&c.ty, out);
+    }
+    // Los **argumentos de las constantes de `enum`** (#326). Son las únicas expresiones de una
+    // declaración que no viven ni en un campo ni en un método, así que el recorrido de miembros no
+    // pasa por ellas — y un tipo que solo aparece ahí no se cargaba del classpath.
+    //
+    // Lo delator es que el **chequeo pasaba y la emisión fallaba**: la pasada 1 llega a ese nombre
+    // por otro camino, así que el desacuerdo aparecía recién en el generador, con un
+    // "no se encuentra el símbolo: variable Types" sobre un tipo que estaba escrito ahí mismo.
+    // `java.sql.JDBCType` es el caso natural: nombra a `java.sql.Types` **solo** dentro de los
+    // paréntesis de sus treinta y nueve constantes.
+    //
+    // `collect_annotation_names` ya recorría `enum_constants` para las anotaciones, lo cual deja ver
+    // que la omisión fue del recorrido de tipos y no de la representación.
+    for ec in &class.enum_constants {
+        for a in &ec.args {
+            collect_from_expr(a, out);
+        }
     }
     for member in &class.members {
         match member {
@@ -578,6 +634,27 @@ fn try_load(
     let mut candidates: Vec<String> = Vec::new();
     if name.contains('.') {
         candidates.extend(internal_candidates(name));
+        // Un nombre **parcialmente calificado** (`Format.Field`, `B2.Field`) — finding #356.
+        //
+        // `internal_candidates` parte por los puntos que hay, así que para `B2.Field` propone
+        // `B2$Field` y `B2/Field`: ninguno existe si `B2` vive en un paquete. Faltaba la misma regla
+        // de §6.5.5.1 que ya valía para el nombre simple —un tipo del paquete actual es visible sin
+        // `import`— y la del `import` de un solo tipo del **outer**, que es la forma más común de
+        // todas (`import java.text.Format;` y después `Format.Field`).
+        //
+        // Sin esto el tipo igual "resolvía", y ahí estaba lo insidioso: bajando al **tipo miembro**
+        // del outer en vez de cargando la clase anidada. Ese símbolo no trae constructores, así que
+        // el `extends` compilaba y el `super(...)` de adentro no encontraba a qué llamar. La pasada 1
+        // se callaba —es indulgente con los externos a propósito— y el que se plantaba era el
+        // generador, con "un `super(...)` que no resolvió a ningún constructor".
+        if let Some(p) = pkg {
+            candidates.extend(internal_candidates(&format!("{p}.{name}")));
+        }
+        if let Some((cabeza, resto)) = name.split_once('.') {
+            if let Some(fqn) = imports.single.get(cabeza) {
+                candidates.extend(internal_candidates(&format!("{fqn}.{resto}")));
+            }
+        }
     } else {
         candidates.push(format!("java/lang/{name}"));
         if let Some(fqn) = imports.single.get(name) {
@@ -711,6 +788,9 @@ fn build_external(
     });
     table.set_scope_owner(members, cid);
     table.register_external(&ext.name, cid);
+    if ext.runtime_retention {
+        table.mark_runtime_retained(&ext.name);
+    }
 
     // Los parámetros de tipo de la clase (`<E>` de `List<E>`): sin estos símbolos, las `E` de sus
     // firmas no resolverían a nada.
@@ -774,6 +854,12 @@ fn build_external(
         // inaccesibles desde otro nido (el `private AssertionError(String)` no captura un `new` externo).
         if m.is_private {
             mmods.push(Modifier::Private);
+        }
+        // `ACC_NATIVE`: sin esto, un `MethodHandle.invoke` **cargado del classpath** no se distinguía
+        // de un varargs cualquiera, y el polimorfismo de firma (JLS §15.12.3) no llegaba a aplicarse
+        // justo donde siempre hace falta — esas dos clases nunca son del fuente que se compila.
+        if m.is_native {
+            mmods.push(Modifier::Native);
         }
         // Un método de **interfaz** externa que no es ni `abstract` ni `static` es un `default` (§9.4):
         // lleva cuerpo, o sea **implementa**. Marcarlo evita que el chequeo de completitud de
@@ -918,6 +1004,22 @@ fn build_external(
                 collect_from_type(&m.ret, &mut referenced);
             }
         }
+        // Y las del `throws` (#316). Faltaban, y el efecto era un **falso negativo** del chequeo de
+        // excepciones comprobadas (§11.2), que es lo peor que puede fallar de esa forma: el programa
+        // compilaba y la excepción aparecía en tiempo de ejecución.
+        //
+        // El mecanismo: `is_checked` es indulgente a propósito cuando no puede resolver la jerarquía
+        // de una excepción —mejor no inventar un error que forzar uno dudoso—, y la excepción de un
+        // método del classpath **nunca se cargaba**, así que la indulgencia se aplicaba siempre.
+        // `sync.wait()` sin manejar `InterruptedException` compilaba.
+        //
+        // Lo que lo volvía desconcertante es que dependía del resto del round: si **otra** unidad
+        // nombraba `InterruptedException` en un `throws` suyo, el tipo se cargaba por ese camino y
+        // el error aparecía. Compilar `V1.java` sola pasaba; compilarla junto a otro archivo que
+        // mencionara la excepción, no.
+        m.throws.iter().for_each(|t| {
+            referenced.insert(t.replace('/', "."));
+        });
     }
     pending.extend(referenced);
 }
@@ -1367,19 +1469,31 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
         if let Some(id) = anidado_fuente
             .or_else(|| table.class(&dotted))
             .or_else(|| table.external_fqn(&dotted))
-            .or_else(|| table.external(simple))
         {
             return Some((id, false));
         }
         // Tipo **anidado** `Outer.Inner` (`Map.Entry`, `Outer.Mid.Inner`): se parte en el **último**
         // `.`, se resuelve el `outer` y se baja a su miembro-tipo. Es la misma bajada que hace el
         // path de expresión (`nested_type`), traída a la posición de tipo.
+        //
+        // **Va antes que el fallback al nombre simple, y ese orden es el arreglo.** Al revés,
+        // `Point2D.Double` tomaba el último segmento --`Double`-- y lo buscaba entre los externos,
+        // donde `java.lang.Double` contesta siempre. El síntoma era "tipo incompatible" en la
+        // asignación, con las dos partes escritas igual en el fuente, y afectaba a **toda** clase
+        // anidada cuyo nombre simple exista en `java.lang`: los `Double` y `Float` de `java.awt.geom`
+        // son el caso que lo destapó, pero también un `Entry.Integer` o cualquier `X.String`.
+        //
+        // El fallback al simple sigue existiendo abajo y sigue haciendo falta --un cualificado de
+        // subpaquete (`java.util.stream.Stream`) se registra por su nombre simple-- pero ahí el
+        // `outer` es un **paquete**, la bajada no resuelve, y se llega igual.
         if let Some((outer, inner)) = dotted.rsplit_once('.') {
             if let Some((oid, _)) = resolve_name_to_sym(table, scope, outer) {
-                return super::attribute::nested_type_in(table, oid, inner).map(|id| (id, false));
+                if let Some(id) = super::attribute::nested_type_in(table, oid, inner) {
+                    return Some((id, false));
+                }
             }
         }
-        return None;
+        return table.external(simple).map(|id| (id, false));
     }
     if let Some(id) = table.resolve_type(scope, name) {
         let is_var = matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. });
@@ -2057,6 +2171,7 @@ impl Hoister<'_> {
         // por **aridad**. Sin un constructor que encaje, no se baja (lo corta la barrera del emisor).
         let mut members = members;
         let mut fwd_resolved: Option<Vec<RType>> = None;
+        let mut fwd_varargs = false;
         if arity > 0 {
             let sup = ty_sym.filter(|_| !is_iface)?;
             let ctor = super::attribute::constructors(self.table, sup)
@@ -2070,13 +2185,19 @@ impl Hoister<'_> {
                         annotations: Vec::new(),
                         ty: p.ty.clone(),
                         name: format!("$a{i}"),
-                        varargs: false,
+                        // El `varargs` del supertipo se **hereda**: si `Base(String...)` es
+                        // variádico, el reenvío `$N(String... $a0)` también tiene que serlo. Con
+                        // `false` fijo, el `new $N("x")` que reemplaza al `new Base("x"){…}` pasaba
+                        // un `String` contra un parámetro `String[]` y no resolvía (finding #328).
+                        varargs: p.varargs,
                         is_final: false,
                         type_annos: Vec::new(),
                     })
                     .collect(),
                 _ => Vec::new(),
             };
+            fwd_varargs =
+                matches!(self.table.resolved(ctor), Some(Resolved::Method { varargs: true, .. }));
             fwd_resolved = Some(match self.table.resolved(ctor) {
                 Some(Resolved::Method { params, .. }) => params.clone(),
                 _ => vec![RType::Unresolved; arity],
@@ -2174,7 +2295,7 @@ impl Hoister<'_> {
             {
                 self.table.set_resolved(
                     ctor,
-                    Resolved::Method { params: rparams, ret: RType::Void, varargs: false, throws: Vec::new() },
+                    Resolved::Method { params: rparams, ret: RType::Void, varargs: fwd_varargs, throws: Vec::new() },
                 );
             }
         }

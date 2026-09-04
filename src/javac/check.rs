@@ -602,23 +602,30 @@ impl Checker<'_> {
             return;
         }
         let mods = sym.modifiers.clone();
-        if mods.contains(&Modifier::Public) {
+        // El nivel **efectivo**, no los modificadores escritos: en una interfaz, un miembro sin
+        // modificador es `public` (§9.4), y este chequeo lo trataba como de paquete. El síntoma era
+        // que un `default` de una interfaz pública no se podía llamar desde otro paquete --"el
+        // método X es `de paquete` en Y"-- aunque el `.class` que se emite sí lo marca `ACC_PUBLIC`.
+        // O sea que el chequeo y la emisión no estaban de acuerdo, y el que estaba mal era el chequeo.
+        // `access_level_in` ya existía con la regla puesta; lo que faltaba era usarla acá.
+        let level = self.access_level_in(&mods, owner);
+        if level == 3 {
             return;
         }
         let owner_bin = self.binary(owner);
         let from_bin = self.binary(from);
-        let ok = if mods.contains(&Modifier::Private) {
+        let ok = if level == 0 {
             // `private`: solo dentro del mismo **tipo top-level** (§6.6.1) — así una anidada ve los
             // privados de la que la encierra, y viceversa.
             top_level_of(&owner_bin) == top_level_of(&from_bin)
-        } else if mods.contains(&Modifier::Protected) {
+        } else if level == 2 {
             package_of(&owner_bin) == package_of(&from_bin) || self.is_subclass(from, owner)
         } else {
             // Acceso de paquete (sin modificador): mismo paquete.
             package_of(&owner_bin) == package_of(&from_bin)
         };
         if !ok {
-            let word = access_name(access_level(&mods));
+            let word = access_name(level);
             let kind = if matches!(sym.kind, SymbolKind::Method { .. }) { "el método" } else { "el campo" };
             let msg = format!(
                 "{kind} `{}` es `{word}` en `{}` y no es accesible desde `{}`",

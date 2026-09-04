@@ -259,7 +259,7 @@ impl Trans<'_> {
                 // El índice de un array es `int`: un `Integer` se desempaqueta.
                 self.coerce(index, &RType::Prim(PrimType::Int));
             }
-            ExprKind::Cast { expr, .. } => self.expr(expr, scope),
+            ExprKind::Cast { .. } => self.cast(e, scope),
             ExprKind::InstanceOf { expr, .. } => self.expr(expr, scope),
             ExprKind::NewArray { dims, init, .. } => {
                 for d in dims.iter_mut().flatten() {
@@ -333,6 +333,13 @@ impl Trans<'_> {
     /// Un parámetro de tipo genérico está **borrado** a referencia, así que un `int` se boxea.
     fn coerce_args(&self, e: &mut Expr) {
         let Some(Binding::Method(mid)) = e.binding else { return };
+        // Un método **polimórfico de firma** (JLS §15.12.3) no convierte sus argumentos: van al sitio
+        // con su tipo estático. Boxear el `int` de `mh.invokeExact(a)` contra el `Object` declarado
+        // producía `invokeExact:(Ljava/lang/Integer;)…`, que la JVM real rechaza — el sitio tiene que
+        // decir `(I)V` para que el handle ligue.
+        if super::codegen::signature_polymorphic(self.table, mid) {
+            return;
+        }
         let Some(Resolved::Method { params, varargs, .. }) = self.table.resolved(mid) else { return };
         let params = params.clone();
         let varargs = *varargs;
@@ -369,6 +376,28 @@ impl Trans<'_> {
                 }
             } else if let Some(elem) = &elem_varargs {
                 self.coerce(a, elem);
+                // Y la **ampliación primitiva** (§5.1.2) al empaquetar: `suma(3, 4)` contra un
+                // `long...` guarda tres `int` crudos en un `long[]`, y la VM corta con
+                // "expected a long, found Int(3)" (#316).
+                //
+                // Va acá y no en `coerce` a propósito: con un parámetro **fijo** la conversión ya la
+                // emite el generador contra el descriptor, y funciona. Lo que no tiene descriptor
+                // contra el cual convertir es el `astore` del arreglo de varargs — ahí el valor entra
+                // tal como está. Es el mismo hueco del #310 (que arregló el boxing) un escalón más
+                // abajo: aquel era primitivo→referencia, éste es primitivo→primitivo más ancho.
+                //
+                // Sólo cuando la **representación** cambia. Dentro de la familia del `int`
+                // (`byte`/`short`/`char`/`int`) el valor ya está en la pila como `int` y un cast
+                // sería ruido.
+                if let (Some(RType::Prim(desde)), RType::Prim(hasta)) = (&a.ty, elem) {
+                    let cambia = matches!(
+                        hasta,
+                        PrimType::Long | PrimType::Float | PrimType::Double
+                    );
+                    if cambia && desde != hasta {
+                        self.wrap_cast(a, *hasta);
+                    }
+                }
             }
         }
     }
@@ -405,6 +434,63 @@ impl Trans<'_> {
             }
             _ => {}
         }
+    }
+
+    /// Un cast **a primitivo desde una referencia** es un desempaquetado (§5.5), y hay que escribirlo.
+    ///
+    /// Antes el `Cast` solo bajaba a visitar su operando y no coercionaba nada, asi que `(int) o` con
+    /// `o` de tipo referencia dejaba la referencia en la pila y el codegen la guardaba en un local
+    /// `int`: `aload_0; istore_1`, sin `checkcast` ni `intValue()`. Nuestra VM entraba en panic y la
+    /// JVM real rechazaba la clase al verificarla. Le pegaba a cualquier `(int) mapa.get(k)`, que no
+    /// es un caso raro.
+    ///
+    /// Dos formas, y la diferencia se midio contra el `javac` real:
+    ///
+    /// - El operando **ya es el wrapper** (`Integer` a `int`, o `Integer` a `long`): se desempaqueta
+    ///   directo, sin `checkcast`, y si el destino es mas ancho se ensancha despues (`intValue(); i2l`).
+    ///   Eso ya lo sabe hacer `coerce`.
+    /// - El operando es `Object`, `Number`, una variable de tipo, cualquier otra cosa: primero un
+    ///   `checkcast` **al wrapper del destino** --no al del operando, que no se conoce-- y recien ahi
+    ///   el desempaquetado. `(long) unObject` es `checkcast Long; longValue()`, no `checkcast Integer`.
+    fn cast(&self, e: &mut Expr, scope: ScopeId) {
+        let ExprKind::Cast { ty, expr } = &mut e.kind else { return };
+        self.expr(expr, scope);
+        // `(int) vh.get(o, i)`: el cast sobre una llamada polimórfica de firma **no se materializa**.
+        // No es una conversión sino la forma de decirle al sitio qué retorno declarar, y el codegen
+        // lo pasa al descriptor (`get:(Ljava/lang/Object;J)I`). Meter acá el `checkcast Integer` +
+        // `intValue` dejaba el descriptor en `Object` y el desboxeo detrás — que es exactamente lo
+        // que el mecanismo existe para evitar.
+        if let Some(Binding::Method(mid)) = expr.binding {
+            if matches!(expr.kind, ExprKind::Call { .. })
+                && super::codegen::signature_polymorphic(self.table, mid)
+            {
+                return;
+            }
+        }
+        let Type::Prim(destino) = ty.clone() else { return };
+        let Some(src) = expr.ty.clone() else { return };
+        if !is_ref(&src) {
+            return; // primitivo a primitivo: lo baja el codegen con `i2l` y compania.
+        }
+        // `boolean` no participa de ningun ensanchamiento: solo `Boolean` lo puede dar.
+        let ya_es_el_wrapper = matches!(&src,
+            RType::Class(c) if types::unboxed(self.table, *c).is_some());
+        if !ya_es_el_wrapper {
+            self.wrap_checkcast(expr, types::wrapper_of(destino));
+        }
+        self.coerce(expr, &RType::Prim(destino));
+    }
+
+    /// Envuelve `e` en un `(Wrapper) e`, que el codegen baja a `checkcast`.
+    fn wrap_checkcast(&self, e: &mut Expr, wrapper: &str) {
+        let pos = e.pos;
+        let inner = std::mem::replace(e, Expr::new(pos, ExprKind::Null));
+        e.kind = ExprKind::Cast {
+            ty: Type::Class(wrapper.to_string()),
+            expr: Box::new(inner),
+        };
+        e.ty = self.table.external(wrapper).map(RType::Class);
+        e.binding = None;
     }
 
     fn wrap_cast(&self, e: &mut Expr, p: PrimType) {

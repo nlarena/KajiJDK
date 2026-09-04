@@ -199,6 +199,9 @@ pub struct SymbolTable {
     /// referencia por nombre simple es lo normal en el fuente; cuando hay ambigüedad la decide quien
     /// tiene el contexto (paquete e imports), que es `try_load`, no la tabla.
     externals_fqn: HashMap<String, SymbolId>,
+    /// Los `@interface` del classpath con `@Retention(RUNTIME)`, por nombre binario. Ver
+    /// `mark_runtime_retained`.
+    runtime_retained: std::collections::HashSet<String>,
     /// Posición de fuente de cada símbolo declarado (para errores de fases que trabajan sobre
     /// la tabla, como la detección de ciclos).
     positions: HashMap<SymbolId, (u32, u32)>,
@@ -251,6 +254,7 @@ impl SymbolTable {
             externals: HashMap::new(),
             source_aliases: HashMap::new(),
             externals_fqn: HashMap::new(),
+            runtime_retained: std::collections::HashSet::new(),
             positions: HashMap::new(),
             static_single: HashMap::new(),
             static_on_demand: Vec::new(),
@@ -457,6 +461,22 @@ impl SymbolTable {
         self.externals_fqn.insert(fqn.to_string(), id);
     }
 
+    /// Anota que ese tipo del classpath es un `@interface` con `@Retention(RUNTIME)`.
+    ///
+    /// Se guarda por **nombre binario** y no por nombre simple: dos anotaciones homónimas de
+    /// paquetes distintos pueden tener retenciones distintas, y la pregunta que el emisor hace es
+    /// sobre el tipo que resolvió, no sobre como se escribió.
+    pub fn mark_runtime_retained(&mut self, binary: &str) {
+        self.runtime_retained.insert(binary.to_string());
+    }
+
+    /// ¿Ese tipo del classpath es una anotación retenida en runtime? Ver el finding #467: sin esto
+    /// el emisor asumía `CLASS` para toda anotación que no estuviera declarada en la misma unidad,
+    /// y la descartaba sin decir nada.
+    pub fn is_runtime_retained(&self, binary: &str) -> bool {
+        self.runtime_retained.contains(binary)
+    }
+
     /// Registra un **alias** por nombre simple para un externo ya cargado.
     ///
     /// Lo usa un tipo **anidado** que el fuente nombra a secas porque lo importó
@@ -584,9 +604,98 @@ impl SymbolTable {
                     return Some(sid);
                 }
             }
+            // Los tipos miembro **heredados** (§8.1.5): un tipo anidado de la superclase esta en
+            // alcance por nombre simple dentro de la subclase, igual que un campo o un metodo
+            // heredado. Subir por los scopes lexicos no alcanza -- la superclase no encierra
+            // lexicamente a la subclase-- y sin esto `class S extends B { N campo; }` con `N`
+            // anidada en `B` daba "no se encuentra el simbolo: N", mientras que `B.N` compilaba.
+            if let Some(owner) = self.scopes[id].owner {
+                if let Some(hit) = self.inherited_member_type(owner, name) {
+                    return Some(hit);
+                }
+            }
             current = self.scopes[id].enclosing;
         }
         None
+    }
+
+    /// Un tipo miembro heredado por `cid`, buscado en su superclase y en sus superinterfaces.
+    ///
+    /// Se recorre en anchura y con marca de visitados: las interfaces forman un grafo, no un arbol,
+    /// y una jerarquia en diamante recorreria la misma dos veces --o daria vueltas para siempre si
+    /// alguien escribio un ciclo, que es justo cuando el compilador tiene que seguir en pie.
+    fn inherited_member_type(&self, cid: SymbolId, name: &str) -> Option<SymbolId> {
+        let mut visto: std::collections::HashSet<SymbolId> = std::collections::HashSet::new();
+        let mut cola: Vec<SymbolId> = self.supertipos_directos(cid);
+        while let Some(cur) = cola.pop() {
+            if !visto.insert(cur) {
+                continue;
+            }
+            if let SymbolKind::Class { members, .. } = &self.symbols[cur].kind {
+                for &sid in self.scopes[*members].get(name) {
+                    if matches!(self.symbols[sid].kind, SymbolKind::Class { .. }) {
+                        return Some(sid);
+                    }
+                }
+            }
+            cola.extend(self.supertipos_directos(cur));
+        }
+        None
+    }
+
+    /// La superclase y las superinterfaces **directas** de `cid`, ya como simbolos.
+    ///
+    /// Se miran las dos fuentes, y hace falta: la resuelta y la **sintactica**. `resolved_map` es lo
+    /// que deja la pasada 2, pero esta consulta tambien corre desde `enter`, o sea **antes** de que
+    /// esa pasada haya escrito nada. Mirando solo la resuelta, la busqueda daba vacio justo cuando se
+    /// la necesitaba y el arreglo quedaba en codigo muerto.
+    fn supertipos_directos(&self, cid: SymbolId) -> Vec<SymbolId> {
+        let mut out: Vec<SymbolId> = Vec::new();
+        if let Some(sup) = self.super_class(cid) {
+            out.push(sup);
+        }
+        if let Some(Resolved::Class { interface_types, .. }) = self.resolved(cid) {
+            for it in interface_types {
+                if let RType::Class(id) | RType::Parameterized { base: id, .. } = it {
+                    out.push(*id);
+                }
+            }
+        }
+        if let SymbolKind::Class { extends, implements, .. } = &self.symbols[cid].kind {
+            for ty in extends.iter().chain(implements.iter()) {
+                if let Some(id) = self.tipo_sintactico_a_simbolo(ty) {
+                    if !out.contains(&id) {
+                        out.push(id);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Un tipo **sintactico** de una clausula `extends`/`implements` llevado a simbolo, por nombre.
+    /// Solo hace lo evidente --clase del fuente por nombre completo o simple, o externo modelado--;
+    /// lo que no encuentra se deja pasar, porque esto es un respaldo y no la resolucion de verdad.
+    fn tipo_sintactico_a_simbolo(&self, ty: &Type) -> Option<SymbolId> {
+        let nombre = match ty {
+            Type::Class(n) => n.as_str(),
+            Type::Parameterized { base, .. } => base.as_str(),
+            _ => return None,
+        };
+        if let Some(id) = self.classes.get(nombre) {
+            return Some(*id);
+        }
+        let simple = nombre.rsplit('.').next().unwrap_or(nombre);
+        if let Some(id) = self.classes.get(simple) {
+            return Some(*id);
+        }
+        // Una clase del fuente se registra por su nombre cualificado: se prueba por sufijo.
+        for (fqn, id) in &self.classes {
+            if fqn.rsplit('.').next() == Some(simple) {
+                return Some(*id);
+            }
+        }
+        self.externals.get(simple).copied()
     }
 
     /// Los símbolos declarados con dueño `owner`, en orden de declaración (para volcados).

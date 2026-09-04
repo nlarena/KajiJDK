@@ -2546,13 +2546,64 @@ fn parse_negated_int_literal(text: &str) -> Option<i64> {
     if v == 1u64 << 63 { Some(i64::MIN) } else { None }
 }
 
+/// El valor de un literal hexadecimal de coma flotante (§3.10.2), o `None` si no lo es.
+///
+/// Rust no lo parsea: su `parse::<f64>()` no entiende hexadecimal. Se arma a mano, y sale exacto
+/// mientras el significando entre en la mantisa — que es el caso de todos los literales por los que
+/// alguien elige esta notación (potencias de dos, constantes de la biblioteca).
+///
+/// El significando se acumula como entero y la parte fraccionaria se cuenta en **dígitos**, no en
+/// bits: cada dígito hexadecimal son cuatro bits, así que el exponente final es el de la `p` menos
+/// cuatro por la cantidad de dígitos después del punto.
+fn parse_hex_float(text: &str) -> Option<f64> {
+    let t = text.trim_end_matches(['f', 'F', 'd', 'D']);
+    let sin_prefijo = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X"))?;
+    let (mantisa, exponente) = sin_prefijo.split_once(['p', 'P'])?;
+    let (entera, fraccion) = match mantisa.split_once('.') {
+        Some((a, b)) => (a, b),
+        None => (mantisa, ""),
+    };
+    if entera.is_empty() && fraccion.is_empty() {
+        return None;
+    }
+    let mut valor = 0.0f64;
+    for c in entera.chars().filter(|c| *c != '_') {
+        valor = valor * 16.0 + f64::from(c.to_digit(16)?);
+    }
+    let mut escala = 1.0f64;
+    for c in fraccion.chars().filter(|c| *c != '_') {
+        escala /= 16.0;
+        valor += f64::from(c.to_digit(16)?) * escala;
+    }
+    let exp: i32 = exponente.replace('_', "").parse().ok()?;
+    // `powi` sobre 2 es exacto mientras no desborde; para exponentes grandes se apoya en el
+    // escalado de a pasos para no pasar por infinito en el camino.
+    let mut resultado = valor;
+    let mut resta = exp;
+    while resta > 1000 {
+        resultado *= 2f64.powi(1000);
+        resta -= 1000;
+    }
+    while resta < -1000 {
+        resultado *= 2f64.powi(-1000);
+        resta += 1000;
+    }
+    Some(resultado * 2f64.powi(resta))
+}
+
 fn parse_float_literal(text: &str) -> Option<f32> {
     let clean: String = text.chars().filter(|&c| c != '_').collect();
+    if clean.starts_with("0x") || clean.starts_with("0X") {
+        return parse_hex_float(&clean).map(|v| v as f32);
+    }
     clean.trim_end_matches(['f', 'F']).parse().ok()
 }
 
 fn parse_double_literal(text: &str) -> Option<f64> {
     let clean: String = text.chars().filter(|&c| c != '_').collect();
+    if clean.starts_with("0x") || clean.starts_with("0X") {
+        return parse_hex_float(&clean);
+    }
     clean.trim_end_matches(['d', 'D']).parse().ok()
 }
 

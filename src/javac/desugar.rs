@@ -365,11 +365,15 @@ fn collect_const_fields<'a>(
         let fqn = qualify(enclosing, &class.name);
         if let Some(cid) = table.class(&fqn) {
             let scope = member_scope_id(table, cid);
+            // Los campos de una **interfaz** son implícitamente `static final` (§9.3) y el fuente no
+            // los escribe. Ver #477.
+            let implicit = matches!(class.kind, super::ast::TypeKind::Interface);
             for m in &class.members {
                 match m {
                     Member::Field(f)
-                        if f.modifiers.contains(&Modifier::Static)
-                            && f.modifiers.contains(&Modifier::Final)
+                        if (implicit
+                            || (f.modifiers.contains(&Modifier::Static)
+                                && f.modifiers.contains(&Modifier::Final)))
                             && matches!(
                                 f.ty,
                                 Type::Prim(
@@ -422,14 +426,30 @@ fn fold_const_int(
             binary_const(*op, a, b)
         }
         // Referencia **sin cualificar** a una constante de esta clase (o de un supertipo por scope).
-        ExprKind::Name(n) => consts.get(&field_symbol(table, scope, n)?).copied(),
+        ExprKind::Name(n) => {
+            let fid = field_symbol(table, scope, n)?;
+            consts.get(&fid).copied().or_else(|| from_table(table, fid))
+        }
         // `C.MAX`: se resuelve `C` a su clase y se busca `MAX` en su scope de miembros.
         ExprKind::Field { expr, name } => {
             let ExprKind::Name(cn) = &expr.kind else { return None };
             let cid = table.resolve_type(scope, cn)?;
             let fid = field_symbol(table, member_scope_id(table, cid), name)?;
-            consts.get(&fid).copied()
+            consts.get(&fid).copied().or_else(|| from_table(table, fid))
         }
+        _ => None,
+    }
+}
+
+/// El valor entero de una constante que **no** está en este mapa local, sacado del mapa de toda la
+/// compilación que arma el driver antes del desugar.
+///
+/// Hace falta para `case OtraClase.CONSTANTE:`: el mapa local solo tiene las constantes de **esta**
+/// unidad, y una etiqueta puede nombrar la de otro archivo del mismo round. Sin esto el plegado
+/// fallaba y el codegen rechazaba la etiqueta, que es Java válido (§15.29). Ver #477.
+fn from_table(table: &SymbolTable, fid: SymbolId) -> Option<i32> {
+    match table.const_fields().get(&fid)? {
+        super::codegen::ConstVal::Int(v) => Some(*v),
         _ => None,
     }
 }

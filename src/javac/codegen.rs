@@ -2259,8 +2259,37 @@ fn default_ctor(pool: &mut ConstantPool, super_internal: &str, access: u16) -> M
 /// `SOURCE`/`CLASS` (como `@Override`) no.
 fn runtime_retained_annotations(unit: &CompilationUnit) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
-    out.insert("Deprecated".to_string());
-    out.insert("FunctionalInterface".to_string());
+    // Las del JDK que **están retenidas en runtime**. Sin las cinco meta-anotaciones aquí, un
+    // `@interface` del fuente se emitía sin su propio `@Retention` — y entonces la unidad siguiente,
+    // que lee la retención del `.class`, concluía `CLASS` (el default) y descartaba la anotación en
+    // silencio. Era el finding #467, y la causa estaba en esta lista y no en el emisor.
+    for known in [
+        "Deprecated",
+        "FunctionalInterface",
+        "SafeVarargs",
+        "Documented",
+        "Inherited",
+        "Repeatable",
+        "Retention",
+        "Target",
+    ] {
+        out.insert(known.to_string());
+    }
+    // Una anotación **del fuente** con el mismo nombre simple que una del JDK gana: `rt` se indexa
+    // por nombre simple, así que sin esto un `@Target` propio con retención `SOURCE` se emitiría.
+    fn shadowed(class: &ClassDecl, out: &mut std::collections::HashSet<String>) {
+        if class.kind == TypeKind::Annotation && !is_runtime_retention(&class.annotations) {
+            out.remove(&class.name);
+        }
+        for m in &class.members {
+            if let Member::Type(nested) = m {
+                shadowed(nested, out);
+            }
+        }
+    }
+    for class in &unit.types {
+        shadowed(class, &mut out);
+    }
     fn scan(class: &ClassDecl, out: &mut std::collections::HashSet<String>) {
         if class.kind == TypeKind::Annotation && is_runtime_retention(&class.annotations) {
             out.insert(class.name.clone());
@@ -2309,7 +2338,11 @@ fn build_annotations(
     let mut encoded: Vec<Vec<u8>> = Vec::new();
     for a in annos {
         let simple = a.name.rsplit('.').next().unwrap_or(&a.name);
-        if !rt.contains(simple) {
+        // `rt` sabe de las anotaciones declaradas **en esta unidad** y de las conocidas del JDK. Una
+        // anotación propia compilada en otra invocación no está en ninguna de las dos listas, y
+        // antes se descartaba en silencio: ese era el daño real del finding #467. Ahora se le
+        // pregunta al tipo que resolvió, que trae su retención leída del `.class`.
+        if !rt.contains(simple) && !external_runtime_retained(table, scope, &a.name) {
             continue;
         }
         // Una anotación **solo** `@Target(TYPE_USE)` no es de declaración: va únicamente al
@@ -2330,6 +2363,21 @@ fn build_annotations(
         body.extend_from_slice(e);
     }
     Some(body)
+}
+
+/// ¿La anotación nombrada resuelve a un `@interface` **del classpath** con `@Retention(RUNTIME)`?
+///
+/// Es la mitad que faltaba del finding #467. La otra —emitir las meta-anotaciones sobre la propia
+/// declaración de un `@interface`— se arregló en `runtime_retained_annotations`; sin esta, un
+/// `@interface` propio compilado en una invocación anterior seguía perdiéndose, porque el emisor
+/// solo miraba la unidad que tenía delante.
+fn external_runtime_retained(table: &SymbolTable, scope: ScopeId, name: &str) -> bool {
+    let simple = name.rsplit('.').next().unwrap_or(name);
+    match resolve_type_id(table, scope, simple) {
+        // El nombre binario que guarda la tabla usa puntos; `internal_name` da la forma con barras.
+        Some(id) => table.is_runtime_retained(&internal_name(table, id).replace('/', ".")),
+        None => false,
+    }
 }
 
 /// El nombre **simple** de una anotación (`java.lang.Foo` → `Foo`).
@@ -3431,8 +3479,13 @@ pub(crate) fn collect_const_fields(
 ) -> ConstFieldMap {
     // Junta `(SymbolId, tipo, init)` de cada `static final` numérico de todas las clases de la unidad.
     let mut pending: Vec<(SymbolId, &Type, &Expr)> = Vec::new();
+    // El **paquete** va como envoltura inicial. Sin él, `fqn` quedaba en el nombre simple, la
+    // búsqueda `table.class(&fqn)` fallaba para toda clase con paquete, y el mapa de constantes de
+    // toda la compilación salía vacío --con lo cual `case OtraClase.CONSTANTE:` no plegaba fuera del
+    // paquete por omisión--. Ver #477.
+    let package = unit.package.as_deref().unwrap_or("");
     for class in &unit.types {
-        collect_static_final_fields(class, "", table, &mut pending);
+        collect_static_final_fields(class, package, table, &mut pending);
     }
     let mut map = ConstFieldMap::new();
     // Fixpoint: repetir mientras una pasada agregue algún campo nuevo. `const_field_value` pliega ya
@@ -3472,11 +3525,16 @@ fn collect_static_final_fields<'a>(
     };
     if let Some(cid) = table.class(&fqn) {
         let scope = member_scope(table, cid);
+        // En una **interfaz** todo campo es implícitamente `public static final` (§9.3), y el fuente
+        // no los escribe. Sin esto, `interface K { int A = 1; }` no entraba al mapa de constantes y
+        // `case K.A:` no plegaba. Ver #477.
+        let implicit = matches!(class.kind, super::ast::TypeKind::Interface);
         for member in &class.members {
             match member {
                 Member::Field(f)
-                    if f.modifiers.contains(&Modifier::Static)
-                        && f.modifiers.contains(&Modifier::Final) =>
+                    if implicit
+                        || (f.modifiers.contains(&Modifier::Static)
+                            && f.modifiers.contains(&Modifier::Final)) =>
                 {
                     if let (Some(init), Some(&sym)) =
                         (f.init.as_ref(), table.scope(scope).get(&f.name).first())
@@ -6098,10 +6156,16 @@ impl<'a> Emitter<'a> {
         self.code_type_annos(0x44, &off.to_be_bytes(), &e.type_annos);
 
         if let Some(es) = init {
+            // Cada elemento se **amplía** al tipo del arreglo antes de guardarlo, igual que en
+            // `a[i] = v`: `new float[] { unInt }` necesita el `i2f` que el `fastore` no hace
+            // (#487). Sin esto el verificador rechaza el método, y nuestra VM --que no verifica
+            // tipos de pila-- lo dejaba pasar leyendo el int como float.
+            let elem_cat = category(&elem);
             for (i, v) in es.iter().enumerate() {
                 self.dup1();
                 self.push_int(i as i32);
                 self.expr(v);
+                self.widen_cat(elem_cat);
                 self.op(IASTORE + kind);
                 self.pop(3); // arrayref, índice y valor
             }
