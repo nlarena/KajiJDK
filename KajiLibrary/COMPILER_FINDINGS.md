@@ -8393,7 +8393,7 @@ el arbol.
 
 Repro: `/tmp/rep/{Cap1..Cap5}.java`.
 
-### #466 ⬜ -- `Method.invoke` no redespacha: ejecuta el cuerpo del metodo **declarado**, no el del receptor
+### #466 -- ✅ `Method.invoke` no redespachaba: ejecutaba el cuerpo del metodo **declarado**, no el del receptor
 
 No es del compilador sino de la maquina virtual, y no es un error de compilacion sino un panico:
 
@@ -8656,7 +8656,7 @@ nombres o el chequeo de supertipos en `src/` no es un cambio chico. Queda con el
 
 Repro: `scratchpad/abl2/` (`pkgc/Foo.java`, `pkgd/Baz.java`, `pkgd/Uso.java`).
 
-### #467 ⬜ -- una declaracion `@interface` se emite **sin** sus meta-anotaciones, y eso borra `@Retention`
+### #467 -- ✅ una declaracion `@interface` se emitia **sin** sus meta-anotaciones, y eso borraba `@Retention`
 
 ```java
 // Ann.java, compilado solo
@@ -9489,3 +9489,674 @@ una clase del JDK que falta por un bug nuestro, no por una decision de diseno.
 
 Repro: `KajiLibrary/repros/finding_480/` (`Outer.java`, `Sub.java`; el JDK 25 compila los dos y emite
 el `aload_1` que falta).
+
+### #466, el arreglo
+
+`reflective_call.rs` resolvia el metodo **solo** sobre la clase que lo declara, con este comentario:
+
+> El método se resuelve sobre la clase que lo DECLARA. Un `invoke` no despacha virtualmente por su
+> cuenta: lo hace `call_java` si el callee tiene una entrada de vtable, y si no, la declarante es la
+> única respuesta posible.
+
+La segunda mitad no era cierta. `invokeinterface` ya tenia la respuesta: buscar la firma en la tabla
+**fusionada** del receptor con `vtable_method_at_mirror_by_signature`, que encuentra tanto un
+override de clase como un `default` heredado de una superinterfaz. `Method.invoke` ahora hace lo
+mismo, salvo para lo que la especificacion excluye --estaticos, privados y `<init>`--, que siguen
+ligados a lo declarado.
+
+| `Method` obtenido de | antes | ahora | JDK 25 |
+|---|---|---|---|
+| clase concreta | 3 | 3 | 3 |
+| interfaz, metodo abstracto | panico | **3** | 3 |
+| clase abstracta, metodo abstracto | panico | **5** | 5 |
+| interfaz, `default` con override | **1** (mal) | **3** | 3 |
+
+Repro: `java/Rf466.java`, los cuatro casos en un solo archivo. `cargo test` sigue en 1463/22, con la
+lista de fallos identica.
+
+### #481 -- ✅ un miembro de interfaz sin modificador se trataba como de paquete
+
+```java
+// java/lang/classfile/ClassFileTransform.java
+public interface ClassFileTransform<...> {
+    default void atStart(B builder) { }
+}
+
+// jdk/internal/classfile/impl/Transforms.java  -- otro paquete
+this.first.atStart(inner);
+```
+
+```
+error: el metodo `atStart` es `de paquete` en `ClassFileTransform`
+       y no es accesible desde `ChainedClass`
+```
+
+JLS §9.4: **todo miembro de una interfaz es implicitamente `public`**, escrito o no. La unica
+excepcion es un metodo de interfaz declarado `private` (Java 9+), que si es privado.
+
+Lo que hace interesante a este bug es que **el chequeo y la emision no estaban de acuerdo**: el
+`.class` que sale marca el metodo `ACC_PUBLIC` --se comprobo con `javap` sobre
+`AttributedElement`-- y el que se plantaba era el chequeo de acceso. O sea que el artefacto estaba
+bien y el error era imaginario.
+
+La funcion con la regla puesta ya existia: `access_level_in` en `check.rs`, escrita para otra cosa y
+con el comentario que dice exactamente esto. Lo que faltaba era que `check_access` la usara en vez
+de mirar `modifiers.contains(Public)` a mano.
+
+Por que no habia salido antes: hace falta que un miembro `default` sin `public` escrito se use
+**desde otro paquete**. Dentro del mismo paquete, "de paquete" y "publico" se comportan igual, y casi
+toda la biblioteca consume sus interfaces desde su propio paquete.
+
+Arreglo: `check_access` calcula el nivel con `access_level_in(&mods, owner)` y compara contra eso.
+
+Como salio: escribiendo `java.lang.classfile.ClassFileTransform`, cuyas implementaciones viven en
+`jdk.internal.classfile.impl`.
+
+### #482 ⬜ -- una clase anonima en el inicializador de un campo de interfaz
+
+```java
+public interface ClassTransform ... {
+    ClassTransform ACCEPT_ALL = new ClassTransform() {
+        public void accept(ClassBuilder b, ClassElement e) { b.with(e); }
+    };
+}
+```
+
+```
+error: el generador de bytecode todavia no soporta una clase anonima
+       (necesita una clase sintetica anidada)
+```
+
+Una anonima en el cuerpo de un metodo si anda; en el inicializador de un campo de una **interfaz**,
+no. **No able cual de las dos cosas es el disparador** --si el inicializador de campo o que el
+contenedor sea una interfaz-- y lo digo asi en vez de completar la explicacion.
+
+Rodeo aplicado: una clase de paquete con nombre al final del archivo. Ademas de compilar, se lee
+mejor en un volcado de pila que un `ClassTransform$1`.
+
+### #483 ⬜ -- un metodo declarado en una interfaz ANIDADA que redefine al de la que la encierra
+
+```java
+public interface ConstantInstruction extends Instruction {
+    ConstantDesc constantValue();
+
+    public interface ArgumentConstantInstruction extends ConstantInstruction {
+        Integer constantValue();          // estrecha el retorno
+    }
+}
+```
+
+```java
+Integer v = ((ArgumentConstantInstruction) ins).constantValue();
+// error: el generador de bytecode todavia no soporta una llamada
+//        que no resolvio a ningun metodo
+```
+
+Preguntando por el supertipo --`((ConstantInstruction) ins).constantValue()`-- resuelve. O sea que el
+metodo existe y se encuentra por la interfaz de afuera, pero no por la anidada que lo redefine.
+
+**Lo que no able:** si el disparador es la anidacion, el retorno covariante, o los dos juntos. Hay
+otros casos de retorno covariante en el arbol que si compilan, asi que la anidacion es sospechosa,
+pero no lo comprobe.
+
+Rodeo aplicado: preguntar por el supertipo y castear el resultado. Donde eso no alcanzaba
+--`LoadConstantInstruction.constantEntry()`, que no existe en el supertipo-- se puso un ayudante en
+`jdk.internal.classfile.impl.Instructions`, que esta en el mismo paquete que la implementacion y
+puede preguntarle directo.
+
+### #484 ⬜ -- un ternario cuyas ramas dan tipos distintos no calcula el supertipo comun
+
+```java
+MemberRefEntry ref = isInterface
+        ? pool.interfaceMethodRefEntry(owner, name, type)   // InterfaceMethodRefEntry
+        : pool.methodRefEntry(owner, name, type);           // MethodRefEntry
+// error: el generador de bytecode todavia no soporta una llamada
+//        que no resolvio a ningun metodo
+```
+
+Las dos ramas dan tipos distintos que comparten un supertipo (`MemberRefEntry`), y §15.25 dice que el
+tipo del ternario es ese supertipo. Nuestro javac no lo calcula.
+
+**No able** si el problema es el `lub` de dos tipos de referencia en general o algo particular de
+estas interfaces. `javac::types::tests::lub_of_types_sharing_several_supertypes_is_an_intersection`
+--que estaba fallando en HEAD antes de que yo tocara nada-- apunta a que el `lub` tiene sus propios
+problemas, pero no probe que sea el mismo.
+
+Rodeo aplicado: un `if`/`else` con el local declarado del tipo del supertipo. Ahi no hay nada que
+calcular.
+
+---
+
+## Hallazgo: la referencia adelantada a un campo estatico no se rechaza
+
+**Que pasa.** Un inicializador de campo estatico que usa, por su **nombre simple**, otro campo
+estatico declarado mas abajo en la misma clase es un error de compilacion (JLS 8.3.3). Nuestro javac
+lo acepta y produce una clase que lee el campo antes de que su inicializador haya corrido -- o sea,
+en null o en cero.
+
+```java
+public class FR {
+  static final int A = B;        // JDK 25: error: illegal forward reference
+  static final int B = 7;
+  static final int[] T = U;      // idem
+  static final int[] U = {1,2,3};
+}
+```
+
+| fuente | nuestro javac | JDK 25 |
+|---|---|---|
+| el de arriba | **compila** ✗ | dos errores |
+
+**Como aparecio.** Escribiendo `javax.imageio.plugins.jpeg.JPEGQTable`, cuyas cuatro constantes
+publicas se arman a partir de cuatro tablas privadas. El generador emitio primero las constantes:
+
+```java
+public static final JPEGQTable K1Luminance = new JPEGQTable(K1LUMINANCE_TABLE, false);
+// ...
+private static final int[] K1LUMINANCE_TABLE = { 16, 11, ... };
+```
+
+Con el JDK eso no compila. Con el nuestro compilo, y `K1Luminance` quedo envolviendo un `null` que
+recien exploto en tiempo de ejecucion, adentro de un `System.arraycopy` -- treinta lineas y una capa
+mas lejos del error real.
+
+**Por que importa mas de lo que parece.** No es permisividad como el hallazgo anterior: aca el
+programa que sale **hace otra cosa** que lo que el fuente aparenta decir. Y el sintoma llega tarde y
+disfrazado, que es exactamente lo que la regla del JLS existe para evitar.
+
+**Donde estaria.** En el chequeo de inicializadores de campo, comparando la posicion de la
+declaracion que se referencia contra la del inicializador que la usa, con las tres excepciones de
+la regla: el nombre cualificado (`FR.B`), el lado izquierdo de una asignacion, y el uso adentro de
+una clase anidada.
+
+**Efecto colateral bueno.** Buscando el sintoma aparecio un bug de la maquina virtual: ver abajo.
+
+## Hallazgo (VM): `System.arraycopy` entraba en panico con un origen nulo
+
+**Que pasaba.** `System.arraycopy(null, 0, dst, 0, n)` no lanzaba `NullPointerException`: hacia
+`expect` sobre el nombre de clase del origen y se llevaba puesta la maquina virtual entera.
+
+```
+thread 'main' panicked at src\jvm\interpreter
+atives.rs:
+System.arraycopy: el origen no es un array conocido
+```
+
+Un panico es la respuesta correcta para un invariante roto de la VM. No lo es para un programa Java
+que paso un null: JLS 11.5 define eso como `NullPointerException`, y como tal se puede atrapar.
+
+**El arreglo.** `NativeOutcome` no tenia forma de pedir que se lanzara una excepcion: sus tres
+variantes eran "corrio", "corrio y hay que inicializar", y "no hay puente". Se agrego `Lanza(String)`
+y los cuatro sitios de despacho la traducen a `throw_exception`. Con eso, `arraycopy` lanza
+`NullPointerException` si el origen o el destino son nulos, y `ArrayStoreException` si lo que llega
+no es un array.
+
+La variante sirve para cualquier otro nativo con la misma necesidad; hasta ahora la unica salida era
+el panico.
+
+## Sobre el JDK 25.0.2 (no es un hallazgo de nuestro compilador)
+
+`java.lang.constant.ClassDesc.ofDescriptor("I")` **como primer uso del paquete** tira
+`ExceptionInInitializerError`: `PrimitiveClassDescImpl.<clinit>` llama por dentro a
+`MethodTypeDescImpl` antes de que ese termine de inicializarse, y a partir de ahi
+`java.lang.constant` queda inutilizable en ese proceso
+(`NoClassDefFoundError: Could not initialize class ConstantDescs`).
+
+Ablado con dos programas de cuatro lineas corridos con `java` de verdad:
+
+| primer uso | resultado |
+|---|---|
+| `ClassDesc.ofDescriptor("I")` | **falla** |
+| `MethodTypeDesc.of(ClassDesc.of("java.lang.Object"))` y despues el primitivo, dentro de `main` | anda |
+| `ConstantDescs.CD_int` | anda |
+
+Queda anotado porque nos afecta de una forma concreta: `java/CfBuildTest.java` usa el JDK como
+oraculo, asi que **tiene que poder correr alla**. Por eso toma los descriptores de primitivos de
+`ConstantDescs` y no de `ClassDesc.ofDescriptor`, con la explicacion escrita en el propio archivo
+para que nadie lo "simplifique" de vuelta.
+
+### #467, el arreglo -- y las dos mitades que faltaban
+
+El bug tenia **tres** partes, no una, y solo la primera estaba en el titulo.
+
+**1. La lista de anotaciones conocidas.** `runtime_retained_annotations` sembraba el conjunto con dos
+nombres --`Deprecated` y `FunctionalInterface`-- y le agregaba los `@interface` **de la unidad**.
+`Retention`, `Target` y `Documented` no estaban en ninguno de los dos grupos, asi que las
+meta-anotaciones de un `@interface` se filtraban y no llegaban al `.class`. El arreglo es la lista
+completa de las del JDK que estan retenidas en runtime, con una salvaguarda: si el fuente declara
+una anotacion **con el mismo nombre simple** y retencion menor, gana la del fuente.
+
+**2. Nunca se leia la retencion de una anotacion del classpath.** Esta era la mitad que hacia el
+daño de verdad. Aun con `Ann.class` bien emitido, al compilar la unidad que **usa** `@Ann` el emisor
+seguia sin saber su retencion --solo miraba la unidad que tenia delante-- y la descartaba en
+silencio. Ahora `read_attributes` mira el `RuntimeVisibleAnnotations` de la clase externa,
+`ExternalClass` lleva el dato, la tabla de simbolos lo indexa por nombre binario, y
+`build_annotations` le pregunta al tipo que resolvio.
+
+Se lee con un recorrido de verdad del `element_value` (§4.7.16.1) y no buscando la cadena `RUNTIME`
+en el pool: esa cadena aparece tambien en una anotacion que la mencione por otro motivo.
+
+**3. `Method.getAnnotation` devolvia null siempre.** Con las dos mitades de arriba, el `.class` ya
+llevaba las anotaciones del metodo -- y la biblioteca seguia sin poder leerlas. El stub decia, con
+razon en su momento, "un metodo sin anotaciones en runtime, que es el caso comun, recibe la
+respuesta vacia correcta"; dejo de ser cierto en el momento en que el compilador empezo a emitirlas.
+Se agrego el native `Method.declaredAnnotations0`, que hace lo mismo que el de `Class` pero busca el
+atributo en el `method_info`.
+
+**Repro de punta a punta** (`scratchpad/a467/`): `Ann.java` con `@Retention(RUNTIME)` compilado
+solo, y `Usa.java` compilado **despues** contra el `.class` del primero.
+
+| | antes | ahora |
+|---|---|---|
+| `Ann.class` trae `RuntimeVisibleAnnotations` | no | **si** |
+| `Usa.class` trae la anotacion de clase | no | **si** |
+| `Usa.class` trae la anotacion de metodo | no | **si** |
+| `Usa.class.getAnnotation(Ann.class)` | null | **`hola`** |
+| `Usa.class.getMethod("m").getAnnotation(...)` | null | **`metodo`** |
+
+`cargo test`: 1462 ok / 22 fallan, la lista identica a la de antes.
+
+### #485 ⬜ -- la resolucion de sobrecargas no descarta lo que no se puede ver
+
+`new DatagramSocket(null)` desde otro paquete no compila: *"la referencia a `DatagramSocket` es
+ambigua"*. `java.net.DatagramSocket` tiene dos constructores de un argumento --el `public` que toma
+`SocketAddress` y el `protected` que toma `DatagramSocketImpl`-- y `null` le entra a los dos, asi que
+sin mas informacion son igual de aplicables y ninguno es mas especifico que el otro.
+
+Pero desde otro paquete el `protected` **no se puede ver**, y la JLS resuelve eso antes de comparar:
+§15.12.2.1 arma el conjunto de metodos aplicables solo con los **accesibles** desde el sitio de la
+llamada. Con uno solo adentro no hay nada que comparar y no hay ambiguedad. El JDK 25 compila la
+misma linea sin una queja.
+
+Nuestro compilador junta todos los candidatos por aridad y compatibilidad, y recien despues --si
+queda uno-- chequea el acceso. Lo que hay que mover es el filtro de accesibilidad **antes** del
+descarte por especificidad, no despues.
+
+Se nota en cualquier clase con un miembro `protected` sobrecargado contra uno `public`, que es un
+patron comun en `java.net` y en `java.io`: la implementacion que una subclase puede traer, al lado
+de la que usa todo el mundo.
+
+Rodeo: escribir el tipo, `new DatagramSocket((SocketAddress) null)`. Es lo que hace `UdpTest`.
+
+
+### #489 ⬜ -- una constante `static final` no se estrecha en contexto de asignación
+
+`byte getBaselineFor(char)` con `return ROMAN_BASELINE;`, donde `ROMAN_BASELINE` es un
+`static final int = 0`, da **error: tipo de retorno incompatible**. El javac real lo acepta: §5.2
+permite el estrechamiento primitivo cuando la expresión es una **constante** de tipo `byte`, `short`,
+`char` o `int` y el valor entra en el destino, y el contexto de `return` es contexto de asignación.
+
+Ablación (`/tmp/narrow/N.java`):
+
+| código | javac real | el nuestro |
+|---|---|---|
+| `static byte f() { return 0; }` | compila | compila |
+| `static byte f() { return K; }` con `static final int K = 0` | compila | **error** |
+| `byte b = K;` | compila | **error** |
+
+La causa está anotada en el propio código: `constant_narrowing_ok` llama a `const_eval_int` con un
+`ConstFieldMap::new()` **vacío**, porque el atributado corre antes de plegar las constantes de la
+unidad. Pliega literales y aritmética entre literales; no pliega referencias a otra `final`.
+
+O sea que no alcanza con agregar `constant_narrowing_ok` al camino de `return` --que también falta--:
+hay que poder resolver las constantes de la propia clase durante el atributado.
+
+Rodeo: conversión explícita, `return (byte) ROMAN_BASELINE;`. Es lo que hace `java/awt/Font.java`.
+
+### #490 -- ✅ un inicializador de arreglo no ampliaba sus elementos al tipo del arreglo
+
+`new float[] { unInt }` emitía `iload` + `fastore` **sin** el `i2f`. Nuestra VM no verifica los tipos
+de la pila y lo dejaba pasar leyendo el `int` como si fuera un `float`; la JVM real lo rechaza:
+
+```
+java/awt/image/ComponentColorModel.getRGB(I)I @12: fastore
+Reason: Type integer (current frame, stack[5]) is not assignable to float
+```
+
+Es el noveno bug que sólo se ve corriendo nuestras clases en la JVM real con `-Xverify:all`.
+
+Ablación (`/tmp/abl/A.java`), mirando el bytecode emitido:
+
+| código | antes | después | javac real |
+|---|---|---|---|
+| `new float[] { p }` con `int p` | `iload_0; fastore` | `iload_0; i2f; fastore` | `iload_0; i2f; fastore` |
+| `new float[] { 1 }` | `iconst_1; fastore` | `iconst_1; i2f; fastore` | `fconst_1; fastore` |
+| `new long[] { p }` con `int p` | `iload_0; lastore` | `iload_0; i2l; lastore` | `iload_0; i2l; lastore` |
+| `float[] a = new float[1]; a[0] = p;` | correcto | correcto | correcto |
+
+La última fila es la que señala dónde estaba el agujero: el camino de `a[i] = v` en `assign` ya
+llamaba a `widen_cat`, y el del **inicializador** no. Eran dos caminos distintos al mismo `IASTORE`.
+
+Con el literal seguimos emitiendo una instrucción de más (`iconst_1; i2f` donde el javac real pliega a
+`fconst_1`). Es correcto y no lo arreglamos acá: plegar la constante al tipo del arreglo es otra cosa
+y no cambia lo que hace el programa.
+
+Arreglo: en `codegen.rs`, `self.widen_cat(elem_cat)` después de emitir cada elemento del
+inicializador.
+
+### #486 ⬜ -- las constantes de una interfaz implementada no resuelven sin calificar
+
+```java
+public interface If1 { short ELEMENT_NODE = 1; short tipo(); }
+public class Uso implements If1 { public short tipo() { return ELEMENT_NODE; } }
+```
+
+*"no se encuentra el simbolo: ELEMENT_NODE"*. El JDK compila las dos lineas sin una queja: una clase
+hereda los campos de las interfaces que implementa (JLS 8.1.5, y 6.5.6.1 para el nombre simple).
+
+**Lo interesante es que el arreglo #475 ya esta hecho y no alcanza.** `lookup_field`
+(`src/javac/attribute.rs`) recorre las interfaces en anchura y hasta lo documenta; lo que falla son
+los otros dos caminos, que no pasan por ahi. Las tres formas dan tres resultados distintos, y esa es
+toda la pista:
+
+| se escribe | resultado | mensaje |
+|---|---|---|
+| `If1.ELEMENT_NODE` | **compila** | -- |
+| `this.ELEMENT_NODE` | falla | `no se encuentra el campo` |
+| `ELEMENT_NODE` | falla | `no se encuentra el simbolo` |
+
+Dos mensajes distintos son dos caminos distintos: el del campo sobre un receptor y el del nombre
+simple en el ambito. Que la forma calificada ande descarta que el simbolo de la interfaz no
+resuelva --resuelve-- asi que lo que sospechar es que la lista de interfaces de la **clase** este
+vacia cuando esos dos caminos preguntan, o que directamente no la miren.
+
+Se descarto que sea un problema de herencia en general: el mismo programa con una **superclase**
+--`class Uso2 extends Base` usando `OTRO_NODE` de `Base`-- compila, tanto con `Base` del classpath
+como compilada en la misma invocacion. Es especifico de las interfaces.
+
+Tampoco es del classpath: falla igual compilando `If1.java` y `Uso.java` en una sola invocacion.
+
+Repro: `scratchpad/zz486/{If1,Uso,Uso2,Uso3,Uso4,Base}.java`.
+
+Se ve en cualquier interfaz de constantes, que es un patron viejo pero muy usado en las APIs que este
+arbol copia: `org.w3c.dom.Node` y sus doce tipos de nodo son el caso que lo destapo.
+
+Rodeo: calificar con el nombre de la interfaz.
+
+### #487 -- ✅ `Class.forName` no corria el inicializador estatico (VM, no compilador)
+
+```java
+class Marca { static boolean visto = false; }
+class Cargada { static { Marca.visto = true; } }
+...
+Class.forName("Cargada");                                   // Marca.visto sigue en false
+Class.forName("Cargada2", true, unCargador());              // tambien false
+```
+
+Las dos formas cargan la clase y **ninguna corre su `<clinit>`**. El JLS 12.4.1 es explicito: cargar
+no es inicializar, pero `Class.forName(String)` inicializa siempre, y la de tres argumentos
+inicializa cuando el segundo es `true`. Es la unica diferencia entre las dos, y es toda la razon de
+que la de tres argumentos exista.
+
+**Por que importa mas de lo que parece.** Es el mecanismo con el que una clase se **registra sola**
+al ser nombrada, y sobre eso se apoyan varios idiomas centrales de la plataforma: el driver de JDBC
+que se anota en el `DriverManager`, un proveedor de `spi` que se instala al cargarse, cualquier
+tabla que se llene desde bloques `static`. Todos compilan, corren, y **no hacen nada**, sin un solo
+error que mirar -- que es la peor forma de fallar.
+
+Lo destapo la adopcion de sockets de `java.nio.channels`: `jdk.internal.net.Adopcion` cargaba
+`java.net.Socket` por nombre para que su bloque `static` registrara la fabrica, y la fabrica nunca
+aparecia. El rodeo fue forzar la inicializacion desde el unico lado que puede nombrar la clase sin
+volver circular la dependencia --los canales, que ya la nombran en la firma de `socket()`-- con un
+`new java.net.Socket()` que no abre nada. Esta escrito ahi y aca porque es un rodeo, no un arreglo.
+
+**El arreglo.** El problema no era que faltara el mecanismo --`ensure_initialized` existe y hace
+exactamente lo que hay que hacer: empuja el marco del `<clinit>` y lo drivea hasta el final-- sino
+que **un nativo no lo alcanza**: recibe el metaspace y el heap, no el `&mut self` del interprete. El
+nativo cargaba y ahi se le acababan las manos.
+
+Se resolvio dandole al nativo una forma de **pedir** lo que no puede hacer:
+`NativeOutcome::RanEInicializa(valor, clase)`. El nativo devuelve eso, y el sitio de despacho --que
+si tiene el interprete-- corre la inicializacion antes de empujar el valor a la pila. La alternativa
+era darle al nativo acceso al interprete entero, que es muchisimo mas de lo que necesita para esto.
+
+`forName0` paso a tomar la bandera --`forName0(String, boolean)`-- porque las tres sobrecargas
+publicas piden cosas distintas, y se comprobo contra el JDK 25 cual pide cual:
+
+| forma | inicializa |
+|---|---|
+| `forName(String)` | **si** |
+| `forName(String, true, ClassLoader)` | **si** |
+| `forName(String, false, ClassLoader)` | no |
+| `forName(Module, String)` | no |
+
+Las dos ultimas antes delegaban en la primera, asi que ademas de no inicializar cuando debian,
+habrian inicializado cuando no debian en cuanto se arreglara la primera. Las cuatro estan ahora
+sobre `forName0` con la bandera que les toca.
+
+Repro y prueba: `java/ClinitProbe.java`, que da -1 contra el JDK 25 y contra `run-headless`.
+
+### #488 -- ✅ la entrada `InnerClasses` de un tipo anidado perdia sus modificadores implicitos
+
+```java
+public class P {
+    public enum Color { ROJO, VERDE }
+}
+```
+
+Compilado por nosotros y corrido en la **JVM real**: `Color.class.isEnum()` daba `false` y
+`getEnumConstants()` daba `null`. En nuestra VM daba `true`, y esa diferencia es toda la pista.
+
+**Donde estaba.** Los `access_flags` de clase (§4.1) salian bien --`javap` mostraba
+`ACC_PUBLIC, ACC_FINAL, ACC_SUPER, ACC_ENUM`-- pero para un tipo **anidado**
+`Class.getModifiers()` no los lee de ahi: lee su entrada del atributo `InnerClasses` (§4.7.6). Y esa
+entrada la armaba `inner_entry` con los modificadores **escritos en el fuente** mas
+`ACC_INTERFACE|ACC_ABSTRACT` para interfaces, y nada mas:
+
+| | nosotros | JDK 25 |
+|---|---|---|
+| `InnerClasses` de un enum anidado | `public` | `public static final` |
+
+Faltaban los implicitos: `ACC_ENUM` y `ACC_STATIC` de un enum (§8.9), su `ACC_FINAL` cuando no
+declara metodos abstractos (§8.9.1), el `ACC_STATIC` de una interfaz o `@interface` miembro (§8.1.3,
+§9.5), el `ACC_ANNOTATION`, y el `ACC_FINAL|ACC_STATIC` de un record anidado (§8.10). El codigo que
+los pone para los access_flags de clase estaba unas lineas mas arriba, correcto y completo; lo que
+faltaba era el mismo criterio en la otra mitad.
+
+**Lo que rompia.** Todo lo que introspecciona un tipo anidado corriendo en una JVM de verdad. Se
+destapo con el introspector de MXBean del JDK, que rechazaba nuestra interfaz entera con *"has
+parameter or return type that cannot be translated into an open type"* porque el `enum` que
+mencionaba no era, para el, un enum. Nuestra propia VM no lo notaba porque no consulta
+`InnerClasses` para `getModifiers`, asi que la unica forma de verlo era correr nuestro `.class` en
+la JVM real -- que es exactamente para lo que sirve ese cruce.
+
+Arreglado en `inner_entry` (`src/javac/codegen.rs`), con el mismo criterio que los access_flags de
+clase.
+
+Repro y prueba: `java/MXBeanProxyTest.java`, que da -1 contra el JDK 25, contra `run-headless`, y
+--lo que importa aca-- compilado por nosotros y corrido en la JVM real con `-Xverify:all`.
+
+**Queda una consecuencia por atender:** los `.class` que ya estan en `KajiLibrary` se emitieron con
+la entrada vieja, asi que **cualquier tipo anidado de la biblioteca sigue mintiendo sus
+modificadores en una JVM real** hasta que se recompile. Adentro de nuestra VM no cambia nada.
+
+### #491 ⬜ -- un tipo del classpath se vuelve visible sin importar, con solo haberse cargado
+
+```java
+public class B {
+    java.awt.Container c;                        // basta con nombrarlo una vez
+    public int f() { return MouseEvent.MOUSE_WHEEL; }  // sin ningun import: compila
+}
+```
+
+`MouseEvent` no esta importado, no esta en `java.lang` y no esta en el paquete de `B`. El javac real
+lo rechaza; el nuestro lo acepta.
+
+**La ablacion.** El disparador es que **algo** haya obligado a cargar la clase, no de donde se
+hereda ni que se importe:
+
+| fuente | nuestro javac | JDK 25 |
+|---|---|---|
+| `class A { int f(){ return MouseEvent.MOUSE_WHEEL; } }` | error ✓ | error |
+| lo mismo + un campo `java.awt.Container c;` | **compila** ✗ | error |
+| `class ZZP2 extends CheckboxGroup` (su unidad no importa nada de eventos) | **compila** ✗ | error |
+| `class ZZP3 extends Container` usando `NumericShaper` (fuera de la clausura de `Container`) | error ✓ | error |
+
+O sea: no fugan los `import` de la superclase --`CheckboxGroup` solo importa `Serializable`-- ni hay
+un `java.awt.event.*` implicito --`NumericShaper`, que esta en `java.awt.font`, sigue fallando--.
+Fuga **la clausura de carga**: nombrar `Container` carga `Component`, que menciona `MouseEvent` en
+sus firmas, y con eso el nombre queda disponible. Pasa igual en el paquete por omision, asi que no es
+cosa de estar dentro de `java.awt`.
+
+**Donde esta.** `SymbolTable::externals` (`src/javac/symbol.rs`) es un mapa plano de **nombre
+simple** a simbolo, que se llena con todo lo que la carga toca. `resolve_class_name`
+(`src/javac/enter.rs`) consulta:
+
+```rust
+if table.external(name).is_some() {
+    return true; // java.lang, auto-importado
+}
+```
+
+El comentario dice `java.lang`, pero el mapa hace rato que tiene mucho mas que `java.lang`. La
+disciplina correcta ya esta escrita al lado, para los tipos **del fuente**, en `alias_source`: *"un
+nombre que nadie importo no se vuelve visible por estar en el round"*. Lo que falta es la misma regla
+para los externos.
+
+**Lo que puede romper.** Hoy es permisividad --acepta programas que el javac real rechaza, y eso solo
+muerde cuando el fuente se lleva a otro compilador--. Pero el propio `external` avisa que *"con dos
+homonimos de paquetes distintos, aca esta el que se cargo primero"*, asi que en cuanto dos paquetes
+tengan el mismo nombre simple, un nombre sin importar puede resolver al **equivocado**, y eso ya no
+es permisividad sino compilar otra cosa.
+
+Repro: `repros/finding_491/`.
+
+### #492 -- ✅ el `super()` implicito no pasaba la instancia envolvente
+
+```java
+class Base {
+    int valor = 7;
+    class Inner { int leer() { return Base.this.valor; } }
+}
+class Sub extends Base {
+    class SubInner extends Inner { }        // sin constructor: el `super()` lo pone el compilador
+    Inner armar() { return new SubInner(); }
+}
+```
+
+`s.armar().leer()` da 7 con el javac real. Con el nuestro, corrido en la **JVM real**:
+
+```
+java.lang.NoSuchMethodError: Base$Inner: method 'void <init>()' not found
+    at Sub$SubInner.<init>(Sub.java)
+```
+
+**Donde estaba.** Una clase interna de instancia no tiene un `<init>()V`: tiene
+`<init>(LEnvolvente;)V`, porque su instancia envolvente es parte de su identidad (§8.1.3). El
+`super()` implicito de `SubInner` es en realidad `super(this$0)`, y nosotros lo emitiamos siempre
+con descriptor `()V`:
+
+| | nosotros | JDK 25 |
+|---|---|---|
+| `Sub$SubInner.<init>` | `aload_0; invokespecial Base$Inner."<init>":()V` | `aload_0; aload_1; invokespecial Base$Inner."<init>":(LBase;)V` |
+
+El desugar ya le ponia a cada constructor su parametro de cabecera `this$0`, y el `new SubInner(...)`
+ya lo pasaba; lo unico que no lo reenviaba era el `super()` que el emisor sintetiza cuando el cuerpo
+no arranca con `super(...)`/`this(...)` --que es justamente el caso de una interna sin constructor
+escrito--.
+
+**Lo que rompia.** Todo el patron `AccessibleAWTXxx` de AWT, que es la forma en que la accesibilidad
+esta escrita en la biblioteca entera: `Panel.AccessibleAWTPanel extends Container.AccessibleAWTContainer
+extends Component.AccessibleAWTComponent`. En la JVM real, `NoSuchMethodError` al construir. En la
+nuestra --que resuelve mas suelto y deja pasar la llamada-- el objeto quedaba con el `this$0` de la
+superclase en `null`, asi que el sintoma era un `NullPointerException` la primera vez que un metodo
+**heredado** usaba `Component.this`: `getAccessibleStateSet()` sobre cualquier widget. Los metodos
+propios de la subclase andaban, que es lo que hacia el defecto tan confuso.
+
+**El detalle que costo.** El primer arreglo miraba el `owner` y el modificador `static` del simbolo
+de la superclase. Anda con un supertipo del **mismo round** y no con uno del classpath: un tipo
+anidado externo se registra en el scope de su envolvente por nombre, con `owner: None` y sin
+`static`. Y `Component$AccessibleAWTComponent` llega siempre del classpath, porque la biblioteca se
+compila de a un archivo. La version que quedo lo decide por la **firma de los constructores** de la
+superclase --si no tiene ninguno sin argumentos y el primer parametro de alguno es su envolvente--,
+que es informacion que esta tanto en el fuente como en el `.class`.
+
+Arreglado en `super_enclosing_internal` + el `super()` implicito de `gen_method`
+(`src/javac/codegen.rs`).
+
+Repro: `repros/finding_492/`. Prueba: `java/AwtWidgetTest.java`, que da -1 contra el JDK 25 y contra
+`run-headless`.
+
+**El barrido, ya hecho.** Los `.class` emitidos antes de esto tienen el `super()` sin argumento, asi
+que toda interna que extiende a otra interna quedaba rota hasta recompilar su archivo. Se recorrio
+`KajiLibrary` entera comparando cada `Methodref` a un `<init>` contra los constructores que la clase
+apuntada **realmente tiene**: los 22 casos eran los `AccessibleAWTXxx` de `java.awt`, y ya estan
+recompilados. Las otras internas-que-heredan-de-internas de la biblioteca --`Format.Field`,
+`Control.Type`, `Line.Info`, las de `AttributeSetUtilities`-- son anidadas `static` o traen un
+`super(...)` escrito, asi que nunca pasaron por este camino.
+
+### #493 ⬜ -- un `import` de un solo tipo pierde contra el homonimo del paquete, y se filtra entre unidades
+
+Son dos sintomas del mismo lugar: la resolucion de un nombre de tipo simple no distingue **de que
+unidad de compilacion** viene cada candidato. El JLS ordena los candidatos en cuatro escalones
+(§6.5.5, §7.5.1): tipos de **la propia unidad**, `import` de un solo tipo, tipos del **paquete**,
+`import` on demand. Nosotros juntamos el primero y el tercero en un solo "scope" y lo consultamos
+**antes** del import.
+
+**Sintoma A -- el import pierde contra el paquete.**
+
+```java
+package p;
+import java.util.ArrayList;
+import java.util.List;          // tapa a p.List (JLS 7.5.1)
+
+public class Uso {
+    private final List<String> xs = new ArrayList<String>();
+}
+```
+
+Con un `p/List.java` en el mismo round, el JDK 25 compila y nosotros damos
+*"tipo incompatible en el inicializador de `xs`"*: `List` resolvio a `p.List`.
+
+**Sintoma B -- el import de una unidad se filtra a la otra.** Dos archivos del paquete por omision,
+cada uno con su `import` del mismo nombre simple:
+
+| fuente | nuestro javac | JDK 25 |
+|---|---|---|
+| `UnaUtil.java` (`import java.util.List`) sola | compila ✓ | compila |
+| `OtraAwt.java` (`import java.awt.List`) sola | compila ✓ | compila |
+| **las dos juntas** | error en `UnaUtil` ✗ | compila |
+
+El `import` de una gana la clave para las dos, y cual gana depende del orden en la linea de comandos.
+
+**Donde esta.** `resolve_class_name` (`src/javac/enter.rs`) consulta `table.resolve_type(scope, name)`
+--que ya trae los tipos del paquete-- antes que `imports.single`, y los alias del fuente
+(`alias_source`, `src/javac/symbol.rs`) viven en un mapa **plano por nombre simple**, sin unidad. Es
+la misma raiz que #491, que es la variante con los tipos del classpath.
+
+**Lo que rompe.** Solo una compilacion **multi-unidad**; la biblioteca se compila de a un archivo y
+ahi no se ve. Salio al agregar `java.awt.List`, que le puso un homonimo del paquete al
+`import java.util.List` de siete archivos de `java.awt`. Mientras tanto: compilar de a un archivo, y
+escribir `java.util.List` entero donde convivan los dos (`CardLayout`).
+
+Repro: `repros/finding_493/`.
+
+### #494 -- ✅ `java.lang.reflect.Array` medía completo y no servía para nada (VM)
+
+Los diecisiete accesores --`getLength`, `get`, `set` y las catorce variantes tipadas-- estaban
+declarados `native` y **ninguno tenia puente en la VM**: todos tiraban `UnsatisfiedLinkError`.
+Tampoco lo tenia `multiNewArray`, asi que `newInstance(Class, int...)` moria igual. El unico que
+funcionaba era `newArray`.
+
+`java.lang.reflect` medía 318/318. Es el caso que la regla de la casa no cubre: un miembro que no
+falta y no miente en su firma, pero que no se puede llamar.
+
+**Como se destapo.** Escribiendo el mapeo de tipos abiertos de MXBean, que necesitaba recorrer un
+arreglo de tipo desconocido. Lo primero fue esquivarlo --si la conversion no es la identidad el
+componente es siempre de referencia, asi que alcanza con castear a `Object[]`-- y despues arreglarlo.
+
+**El arreglo.** Cinco puertas internas en la VM (`getInt0`, `getLong0`, `getFloat0`, `getDouble0`,
+`getRef0` y sus simetricas, mas `length0` y `multiNewArray`) y los diecisiete accesores publicos
+reescritos **en Java** encima. Son cinco y no diecisiete porque el **ancho** de un elemento lo
+decide el tipo del arreglo, que la VM ya conoce; lo que elige quien llama es la **forma** en que
+quiere el valor.
+
+Y los chequeos quedaron del lado Java: el nulo, el indice fuera de rango, el tipo que no
+corresponde y las conversiones de ensanchamiento, que no son simetricas y son lo que se equivoca
+facil --un `byte` entra en un `short[]`, un `char` no; un `byte[]` se lee como `int`, un `int[]` no
+se lee como `byte`--. Es la decision que ya estaba tomada para `newArray`, cuyo comentario decia que
+el largo negativo lo rechazaba el lado Java; **no lo rechazaba**, y un `newInstance(int.class, -1)`
+devolvia un arreglo vacio en silencio. Ahora lo rechaza de verdad.
+
+Prueba: `java/ArrayReflTest.java`, que da -1 contra el JDK 25, contra `run-headless`, y compilado
+por nosotros corriendo en la JVM real con `-Xverify:all`.

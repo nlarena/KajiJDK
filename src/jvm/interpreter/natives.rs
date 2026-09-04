@@ -1677,10 +1677,19 @@ pub fn dispatch(
             let (src, src_pos) = (reference(&args[0]), int(&args[1]) as usize);
             let (dst, dst_pos) = (reference(&args[2]), int(&args[3]) as usize);
             let length = int(&args[4]) as usize;
-            let class = metaspace
-                .class_name_at_mirror(heap.read_u32(src) as usize)
-                .map(str::to_string)
-                .expect("System.arraycopy: el origen no es un array conocido");
+            // Un origen o un destino nulos son un `NullPointerException` (JLS §11.5), no un
+            // invariante roto de la VM: hasta acá esto entraba en pánico y se llevaba puesto el
+            // programa entero por un null que Java define como atrapable.
+            if src == 0 || dst == 0 {
+                return NativeOutcome::Lanza("java/lang/NullPointerException".to_string());
+            }
+            let Some(class) =
+                metaspace.class_name_at_mirror(heap.read_u32(src) as usize).map(str::to_string)
+            else {
+                // Lo que llegó no es un array. `ArrayStoreException` es lo que la especificación
+                // pide para eso, y sigue siendo un error del programa y no de la máquina.
+                return NativeOutcome::Lanza("java/lang/ArrayStoreException".to_string());
+            };
             let width = array_element_width(&class);
             let from = src + ARRAY_HEADER_SIZE + src_pos * width;
             let to = dst + ARRAY_HEADER_SIZE + dst_pos * width;
@@ -2890,6 +2899,152 @@ pub fn dispatch(
             Some(Value::Reference(offset))
         }
 
+        // El hermano de `newArray` para varias dimensiones. Mismo motivo para existir: no hay
+        // opcode que aloque "un arreglo de N dimensiones de la clase que dice este mirror" --
+        // `multianewarray` lleva la clase en el constant pool--, y `newInstance(Class, int...)` es
+        // justamente el que la conoce recien corriendo.
+        //
+        // Las dimensiones ya vienen validadas del lado Java --ni cero ni mas de 255, ninguna
+        // negativa-- igual que en `newArray`.
+        ("java/lang/reflect/Array", "multiNewArray", "(Ljava/lang/Class;[I)Ljava/lang/Object;") => {
+            let component = mirror_name(metaspace, reference(&args[0]));
+            let dims = reference(&args[1]);
+            let cuantas = heap.read_u32(dims + array_operations::LENGTH_OFFSET) as usize;
+            let mut counts: Vec<usize> = Vec::with_capacity(cuantas);
+            for i in 0..cuantas {
+                let at = dims + array_operations::ARRAY_HEADER_SIZE + i * 4;
+                counts.push(heap.read_u32(at) as i32 as usize);
+            }
+            // Un `[` por dimension: `newInstance(int.class, 2, 3)` es un `[[I`.
+            let mut array_class = String::new();
+            for _ in 0..cuantas {
+                array_class.push('[');
+            }
+            array_class.push_str(&descriptor_of(&component));
+            let offset = array_operations::allocate_multi(metaspace, heap, &array_class, &counts)
+                .expect("Array.multiNewArray: el heap no alcanza");
+            Some(Value::Reference(offset))
+        }
+
+        // --- `java.lang.reflect.Array`: leer y escribir un elemento -------------------------
+        //
+        // `newArray` (arriba) sabia **crear** un arreglo cuyo tipo se conoce recien en tiempo de
+        // ejecucion, y no habia con que leerlo ni escribirlo: `getLength`, `get`, `set` y sus doce
+        // variantes tipadas estaban declaradas `native` y sin puente, o sea que tiraban
+        // `UnsatisfiedLinkError`. Un paquete que mide completo con miembros que no funcionan.
+        //
+        // **Los chequeos no estan aca sino del lado Java**, y es a proposito: el nulo, el indice
+        // fuera de rango y el tipo que no corresponde tienen cada uno su excepcion con su mensaje, y
+        // armarlas en Rust seria mover el diagnostico al lugar donde peor se lee. Es la misma
+        // decision que ya estaba tomada en `newArray` ("esta puerta interna solo ve pedidos bien
+        // formados"). Estas cinco puertas leen y escriben, nada mas.
+        //
+        // Son cinco y no diecisiete porque el **ancho** lo decide el tipo del arreglo, que la VM ya
+        // sabe: un `getInt0` sobre un `byte[]` lee un byte y lo extiende con signo, sobre un
+        // `char[]` lee dos sin signo. Lo que el lado Java elige es la **forma** en que quiere el
+        // valor, y para eso alcanzan `int`, `long`, `float`, `double` y referencia.
+        ("java/lang/reflect/Array", "length0", "(Ljava/lang/Object;)I") => {
+            // -1 es "no es un arreglo": el lado Java lo convierte en `IllegalArgumentException`.
+            let arr = reference(&args[0]);
+            Some(Value::Int(match clase_de_arreglo(metaspace, heap, arr) {
+                Some(_) => heap.read_u32(arr + array_operations::LENGTH_OFFSET) as i32,
+                None => -1,
+            }))
+        }
+        ("java/lang/reflect/Array", "getInt0", "(Ljava/lang/Object;I)I") => {
+            let (arr, at, comp) = match posicion(metaspace, heap, &args) {
+                Some(t) => t,
+                None => return NativeOutcome::Ran(Some(Value::Int(0))),
+            };
+            let _ = arr;
+            Some(Value::Int(match comp {
+                // `boolean` y `byte` ocupan un byte; el primero es 0/1 y el segundo tiene signo.
+                b'Z' => i32::from(heap.read_u8(at) != 0),
+                b'B' => heap.read_u8(at) as i8 as i32,
+                b'C' => heap.read_u16(at) as i32,
+                b'S' => heap.read_u16(at) as i16 as i32,
+                _ => heap.read_u32(at) as i32,
+            }))
+        }
+        ("java/lang/reflect/Array", "getLong0", "(Ljava/lang/Object;I)J") => {
+            let (_, at, _) = match posicion(metaspace, heap, &args) {
+                Some(t) => t,
+                None => return NativeOutcome::Ran(Some(Value::Long(0))),
+            };
+            Some(Value::Long(heap.read_u64(at) as i64))
+        }
+        ("java/lang/reflect/Array", "getFloat0", "(Ljava/lang/Object;I)F") => {
+            let (_, at, _) = match posicion(metaspace, heap, &args) {
+                Some(t) => t,
+                None => return NativeOutcome::Ran(Some(Value::Float(0.0))),
+            };
+            Some(Value::Float(f32::from_bits(heap.read_u32(at))))
+        }
+        ("java/lang/reflect/Array", "getDouble0", "(Ljava/lang/Object;I)D") => {
+            let (_, at, _) = match posicion(metaspace, heap, &args) {
+                Some(t) => t,
+                None => return NativeOutcome::Ran(Some(Value::Double(0.0))),
+            };
+            Some(Value::Double(f64::from_bits(heap.read_u64(at))))
+        }
+        ("java/lang/reflect/Array", "getRef0", "(Ljava/lang/Object;I)Ljava/lang/Object;") => {
+            let (_, at, _) = match posicion(metaspace, heap, &args) {
+                Some(t) => t,
+                None => return NativeOutcome::Ran(Some(Value::Reference(0))),
+            };
+            Some(Value::Reference(heap.read_u32(at) as usize))
+        }
+        ("java/lang/reflect/Array", "setInt0", "(Ljava/lang/Object;II)V") => {
+            let v = entero(&args[2]);
+            if let Some((_, at, comp)) = posicion(metaspace, heap, &args) {
+                match comp {
+                    b'Z' => heap.write_u8(at, u8::from(v != 0)),
+                    b'B' => heap.write_u8(at, v as u8),
+                    b'C' | b'S' => heap.write_u16(at, v as u16),
+                    _ => heap.write_u32(at, v as u32),
+                }
+            }
+            None
+        }
+        ("java/lang/reflect/Array", "setLong0", "(Ljava/lang/Object;IJ)V") => {
+            let Value::Long(v) = args[2] else {
+                return NativeOutcome::Ran(None);
+            };
+            if let Some((_, at, _)) = posicion(metaspace, heap, &args) {
+                heap.write_u64(at, v as u64);
+            }
+            None
+        }
+        ("java/lang/reflect/Array", "setFloat0", "(Ljava/lang/Object;IF)V") => {
+            let Value::Float(v) = args[2] else {
+                return NativeOutcome::Ran(None);
+            };
+            if let Some((_, at, _)) = posicion(metaspace, heap, &args) {
+                heap.write_u32(at, v.to_bits());
+            }
+            None
+        }
+        ("java/lang/reflect/Array", "setDouble0", "(Ljava/lang/Object;ID)V") => {
+            let Value::Double(v) = args[2] else {
+                return NativeOutcome::Ran(None);
+            };
+            if let Some((_, at, _)) = posicion(metaspace, heap, &args) {
+                heap.write_u64(at, v.to_bits());
+            }
+            None
+        }
+        ("java/lang/reflect/Array", "setRef0", "(Ljava/lang/Object;ILjava/lang/Object;)V") => {
+            let v = reference(&args[2]);
+            let arr = reference(&args[0]);
+            if let Some((_, at, _)) = posicion(metaspace, heap, &args) {
+                // Por `store_reference` y no `write_u32`: el heap tiene que enterarse de que una
+                // referencia vieja pasa a apuntar a un objeto nuevo, o el recolector generacional
+                // pierde el rastro.
+                heap.store_reference(arr, at, v);
+            }
+            None
+        }
+
         // Un `native` sin puente **no puede voltear el proceso**. Antes esto era un `panic!`, que
         // convertía "esta biblioteca declara un método que la VM todavía no implementa" —una
         // ausencia perfectamente normal mientras se construye un JDK— en la muerte del intérprete,
@@ -2929,6 +3084,16 @@ pub enum NativeOutcome {
     /// [`mirror_de_clase`] recién cuando la inicialización terminó, que es el único momento en que
     /// ya no queda nada por correr en el medio.
     RanEInicializa(String),
+    /// El nativo detectó una condición que en Java **es una excepción**, y pide lanzarla.
+    ///
+    /// El sitio de despacho la lanza con `throw_exception`, así que se ve desde Java como cualquier
+    /// otra: se puede atrapar, y no se lleva puesta la máquina virtual.
+    ///
+    /// Existe porque un nativo tiene condiciones de error que la especificación define como
+    /// excepciones —un `arraycopy` con un origen nulo es un `NullPointerException` (JLS §11.5)— y
+    /// hasta acá lo único que podía hacer era entrar en pánico. Un pánico es correcto para un
+    /// invariante roto de la VM; no lo es para un programa Java que pasó un null.
+    Lanza(String),
     /// No hay puente nativo para ese método.
     Unimplemented,
 }
@@ -3584,6 +3749,45 @@ pub fn mirror_de_clase(
     name: &str,
 ) -> usize {
     mirror_for(metaspace, heap, name)
+}
+
+/// El nombre de clase de `arr` si es un arreglo, o `None` (null, o no es un arreglo).
+fn clase_de_arreglo(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    arr: usize,
+) -> Option<String> {
+    if arr == 0 {
+        return None;
+    }
+    let nombre = metaspace.class_name_at_mirror(heap.read_u32(arr) as usize)?;
+    if nombre.starts_with('[') {
+        Some(nombre.to_string())
+    } else {
+        None
+    }
+}
+
+/// Donde vive el elemento `args[1]` del arreglo `args[0]`, y de que tipo es su componente.
+///
+/// Devuelve `(arreglo, offset del elemento, primer byte del descriptor del componente)`. `None` si
+/// el arreglo es nulo, no es un arreglo, o el indice esta fuera de rango -- los tres casos que el
+/// lado Java ya chequeo, asi que aca solo evitan leer memoria que no es.
+fn posicion(
+    metaspace: &MetaspaceService,
+    heap: &HeapService,
+    args: &[Value],
+) -> Option<(usize, usize, u8)> {
+    let arr = reference(&args[0]);
+    let idx = entero(&args[1]);
+    let clase = clase_de_arreglo(metaspace, heap, arr)?;
+    let largo = heap.read_u32(arr + array_operations::LENGTH_OFFSET) as i32;
+    if idx < 0 || idx >= largo {
+        return None;
+    }
+    let ancho = array_operations::array_element_width(&clase);
+    let comp = clase.as_bytes()[1];
+    Some((arr, arr + array_operations::ARRAY_HEADER_SIZE + idx as usize * ancho, comp))
 }
 
 fn mirror_for(metaspace: &mut MetaspaceService, heap: &mut HeapService, name: &str) -> usize {

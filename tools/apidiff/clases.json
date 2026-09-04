@@ -1,0 +1,664 @@
+[
+ {
+  "pkg": "java.awt",
+  "tengo": 29,
+  "total": 109,
+  "faltan": [
+   "AWTEvent",
+   "AWTEventMulticaster",
+   "AWTKeyStroke",
+   "ActiveEvent",
+   "Adjustable",
+   "BasicStroke",
+   "BorderLayout",
+   "Button",
+   "Canvas",
+   "CardLayout",
+   "Checkbox",
+   "CheckboxGroup",
+   "CheckboxMenuItem",
+   "Choice",
+   "Component",
+   "Container",
+   "ContainerOrderFocusTraversalPolicy",
+   "DefaultFocusTraversalPolicy",
+   "DefaultKeyboardFocusManager",
+   "Desktop",
+   "Dialog",
+   "EventQueue",
+   "FileDialog",
+   "FlowLayout",
+   "FocusTraversalPolicy",
+   "Font",
+   "FontMetrics",
+   "Frame",
+   "GradientPaint",
+   "Graphics",
+   "Graphics2D",
+   "GraphicsConfigTemplate",
+   "GraphicsConfiguration",
+   "GraphicsDevice",
+   "GraphicsEnvironment",
+   "GridBagLayout",
+   "GridBagLayoutInfo",
+   "GridLayout",
+   "Image",
+   "ItemSelectable",
+   "JobAttributes",
+   "KeyEventDispatcher",
+   "KeyEventPostProcessor",
+   "KeyboardFocusManager",
+   "Label",
+   "LayoutManager",
+   "LayoutManager2",
+   "LinearGradientPaint",
+   "List",
+   "MediaTracker",
+   "Menu",
+   "MenuBar",
+   "MenuComponent",
+   "MenuContainer",
+   "MenuItem",
+   "MouseInfo",
+   "MultipleGradientPaint",
+   "PageAttributes",
+   "Panel",
+   "PointerInfo",
+   "PopupMenu",
+   "PrintGraphics",
+   "PrintJob",
+   "RadialGradientPaint",
+   "Robot",
+   "ScrollPane",
+   "ScrollPaneAdjustable",
+   "Scrollbar",
+   "SecondaryLoop",
+   "SplashScreen",
+   "SystemColor",
+   "SystemTray",
+   "Taskbar",
+   "TextArea",
+   "TextComponent",
+   "TextField",
+   "TexturePaint",
+   "Toolkit",
+   "TrayIcon",
+   "Window"
+  ]
+ },
+ {
+  "pkg": "java.awt.geom",
+  "tengo": 18,
+  "total": 18,
+  "faltan": []
+ },
+ {
+  "pkg": "java.beans",
+  "tengo": 40,
+  "total": 41,
+  "faltan": [
+   "AppletInitializer"
+  ]
+ },
+ {
+  "pkg": "java.io",
+  "tengo": 81,
+  "total": 81,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang",
+  "tengo": 108,
+  "total": 108,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.annotation",
+  "tengo": 12,
+  "total": 12,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.classfile",
+  "tengo": 35,
+  "total": 46,
+  "faltan": [
+   "ClassBuilder",
+   "ClassFileBuilder",
+   "ClassFileTransform",
+   "ClassHierarchyResolver",
+   "ClassTransform",
+   "CodeBuilder",
+   "CodeTransform",
+   "FieldBuilder",
+   "FieldTransform",
+   "MethodBuilder",
+   "MethodTransform"
+  ]
+ },
+ {
+  "pkg": "java.lang.classfile.attribute",
+  "tengo": 50,
+  "total": 50,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.classfile.constantpool",
+  "tengo": 26,
+  "total": 26,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.classfile.instruction",
+  "tengo": 32,
+  "total": 32,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.constant",
+  "tengo": 11,
+  "total": 11,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.foreign",
+  "tengo": 14,
+  "total": 14,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.invoke",
+  "tengo": 19,
+  "total": 19,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.module",
+  "tengo": 9,
+  "total": 9,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.ref",
+  "tengo": 6,
+  "total": 6,
+  "faltan": []
+ },
+ {
+  "pkg": "java.lang.reflect",
+  "tengo": 33,
+  "total": 33,
+  "faltan": []
+ },
+ {
+  "pkg": "java.math",
+  "tengo": 4,
+  "total": 4,
+  "faltan": []
+ },
+ {
+  "pkg": "java.net",
+  "tengo": 61,
+  "total": 64,
+  "faltan": [
+   "IDN",
+   "JarURLConnection",
+   "SecureCacheResponse"
+  ]
+ },
+ {
+  "pkg": "java.nio",
+  "tengo": 14,
+  "total": 14,
+  "faltan": []
+ },
+ {
+  "pkg": "java.nio.channels",
+  "tengo": 53,
+  "total": 53,
+  "faltan": []
+ },
+ {
+  "pkg": "java.nio.channels.spi",
+  "tengo": 6,
+  "total": 6,
+  "faltan": []
+ },
+ {
+  "pkg": "java.nio.charset",
+  "tengo": 12,
+  "total": 12,
+  "faltan": []
+ },
+ {
+  "pkg": "java.nio.file",
+  "tengo": 44,
+  "total": 44,
+  "faltan": []
+ },
+ {
+  "pkg": "java.nio.file.attribute",
+  "tengo": 24,
+  "total": 24,
+  "faltan": []
+ },
+ {
+  "pkg": "java.nio.file.spi",
+  "tengo": 2,
+  "total": 2,
+  "faltan": []
+ },
+ {
+  "pkg": "java.security",
+  "tengo": 75,
+  "total": 81,
+  "faltan": [
+   "AuthProvider",
+   "PEMDecoder",
+   "PEMEncoder",
+   "SecureRandom",
+   "SecureRandomSpi",
+   "SignedObject"
+  ]
+ },
+ {
+  "pkg": "java.security.cert",
+  "tengo": 49,
+  "total": 49,
+  "faltan": []
+ },
+ {
+  "pkg": "java.security.interfaces",
+  "tengo": 18,
+  "total": 19,
+  "faltan": [
+   "DSAKeyPairGenerator"
+  ]
+ },
+ {
+  "pkg": "java.security.spec",
+  "tengo": 35,
+  "total": 35,
+  "faltan": []
+ },
+ {
+  "pkg": "java.sql",
+  "tengo": 55,
+  "total": 55,
+  "faltan": []
+ },
+ {
+  "pkg": "java.text",
+  "tengo": 26,
+  "total": 26,
+  "faltan": []
+ },
+ {
+  "pkg": "java.time",
+  "tengo": 19,
+  "total": 19,
+  "faltan": []
+ },
+ {
+  "pkg": "java.time.chrono",
+  "tengo": 21,
+  "total": 21,
+  "faltan": []
+ },
+ {
+  "pkg": "java.time.format",
+  "tengo": 8,
+  "total": 8,
+  "faltan": []
+ },
+ {
+  "pkg": "java.time.temporal",
+  "tengo": 16,
+  "total": 16,
+  "faltan": []
+ },
+ {
+  "pkg": "java.time.zone",
+  "tengo": 5,
+  "total": 5,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util",
+  "tengo": 109,
+  "total": 109,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.concurrent",
+  "tengo": 62,
+  "total": 62,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.concurrent.atomic",
+  "tengo": 16,
+  "total": 16,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.concurrent.locks",
+  "tengo": 10,
+  "total": 10,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.function",
+  "tengo": 43,
+  "total": 43,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.jar",
+  "tengo": 7,
+  "total": 7,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.logging",
+  "tengo": 16,
+  "total": 17,
+  "faltan": [
+   "SocketHandler"
+  ]
+ },
+ {
+  "pkg": "java.util.prefs",
+  "tengo": 9,
+  "total": 9,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.random",
+  "tengo": 2,
+  "total": 2,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.regex",
+  "tengo": 4,
+  "total": 4,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.stream",
+  "tengo": 10,
+  "total": 10,
+  "faltan": []
+ },
+ {
+  "pkg": "java.util.zip",
+  "tengo": 21,
+  "total": 21,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.annotation.processing",
+  "tengo": 13,
+  "total": 13,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.lang.model",
+  "tengo": 3,
+  "total": 3,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.lang.model.element",
+  "tengo": 21,
+  "total": 21,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.lang.model.type",
+  "tengo": 18,
+  "total": 18,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.lang.model.util",
+  "tengo": 57,
+  "total": 57,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.management",
+  "tengo": 73,
+  "total": 73,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.naming",
+  "tengo": 41,
+  "total": 41,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.print.attribute",
+  "tengo": 26,
+  "total": 26,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.print.attribute.standard",
+  "tengo": 72,
+  "total": 72,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.script",
+  "tengo": 12,
+  "total": 12,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.security.auth",
+  "tengo": 8,
+  "total": 8,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.security.auth.x500",
+  "tengo": 2,
+  "total": 2,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.sql",
+  "tengo": 19,
+  "total": 19,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.tools",
+  "tengo": 17,
+  "total": 17,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.transaction.xa",
+  "tengo": 3,
+  "total": 3,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml",
+  "tengo": 1,
+  "total": 1,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.datatype",
+  "tengo": 5,
+  "total": 5,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.namespace",
+  "tengo": 2,
+  "total": 2,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.stream",
+  "tengo": 15,
+  "total": 15,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.stream.events",
+  "tengo": 14,
+  "total": 14,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.stream.util",
+  "tengo": 4,
+  "total": 4,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.transform",
+  "tengo": 12,
+  "total": 12,
+  "faltan": []
+ },
+ {
+  "pkg": "javax.xml.transform.stream",
+  "tengo": 2,
+  "total": 2,
+  "faltan": []
+ },
+ {
+  "pkg": "jdk.internal.classfile.impl",
+  "tengo": 14,
+  "total": 69,
+  "faltan": [
+   "AbstractAttributeMapper",
+   "AbstractBoundLocalVariable",
+   "AbstractDirectBuilder",
+   "AbstractElement",
+   "AbstractPseudoInstruction",
+   "AbstractUnboundModel",
+   "AnnotationReader",
+   "AttributeHolder",
+   "BlockCodeBuilderImpl",
+   "BoundAttribute",
+   "BoundCharacterRange",
+   "BoundLocalVariable",
+   "BoundLocalVariableType",
+   "BoundRecordComponentInfo",
+   "BufWriterImpl",
+   "BufferedCodeBuilder",
+   "BufferedFieldBuilder",
+   "BufferedMethodBuilder",
+   "BytecodeHelpers",
+   "CatchBuilderImpl",
+   "ChainedClassBuilder",
+   "ChainedCodeBuilder",
+   "ChainedFieldBuilder",
+   "ChainedMethodBuilder",
+   "ClassHierarchyImpl",
+   "ClassImpl",
+   "ClassPrinterImpl",
+   "ClassRemapperImpl",
+   "CodeImpl",
+   "CodeLocalsShifterImpl",
+   "CodeRelabelerImpl",
+   "CodeStackTrackerImpl",
+   "DirectClassBuilder",
+   "DirectCodeBuilder",
+   "DirectFieldBuilder",
+   "DirectMethodBuilder",
+   "EntryMap",
+   "LabelContext",
+   "MethodImpl",
+   "MethodInfo",
+   "ModuleAttributeBuilderImpl",
+   "NonterminalCodeBuilder",
+   "RawBytecodeHelper",
+   "SignaturesImpl",
+   "SplitConstantPool",
+   "StackCounter",
+   "StackMapDecoder",
+   "StackMapGenerator",
+   "TargetInfoImpl",
+   "TerminalCodeBuilder",
+   "TerminalFieldBuilder",
+   "TerminalMethodBuilder",
+   "TransformImpl",
+   "UnboundAttribute",
+   "Util"
+  ]
+ },
+ {
+  "pkg": "jdk.internal.io",
+  "tengo": 3,
+  "total": 3,
+  "faltan": []
+ },
+ {
+  "pkg": "jdk.internal.random",
+  "tengo": 10,
+  "total": 10,
+  "faltan": []
+ },
+ {
+  "pkg": "jdk.internal.reflect",
+  "tengo": 6,
+  "total": 9,
+  "faltan": [
+   "AccessorUtils",
+   "CallerSensitive",
+   "CallerSensitiveAdapter"
+  ]
+ },
+ {
+  "pkg": "jdk.internal.util.random",
+  "tengo": 1,
+  "total": 1,
+  "faltan": []
+ },
+ {
+  "pkg": "jdk.internal.vm",
+  "tengo": 15,
+  "total": 15,
+  "faltan": []
+ },
+ {
+  "pkg": "org.w3c.dom",
+  "tengo": 29,
+  "total": 29,
+  "faltan": []
+ },
+ {
+  "pkg": "org.w3c.dom.html",
+  "tengo": 56,
+  "total": 56,
+  "faltan": []
+ },
+ {
+  "pkg": "org.xml.sax",
+  "tengo": 17,
+  "total": 17,
+  "faltan": []
+ },
+ {
+  "pkg": "org.xml.sax.ext",
+  "tengo": 8,
+  "total": 8,
+  "faltan": []
+ },
+ {
+  "pkg": "org.xml.sax.helpers",
+  "tengo": 10,
+  "total": 10,
+  "faltan": []
+ }
+]

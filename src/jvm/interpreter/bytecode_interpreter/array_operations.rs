@@ -158,7 +158,7 @@ pub fn multianewarray(
 /// Returns the offset of the level it allocated. `Err(OUT_OF_MEMORY)` if the heap
 /// can't fit a level; a partially-built outer array is simply abandoned (never
 /// pushed → unreachable → garbage for the next collection).
-fn allocate_multi(
+pub fn allocate_multi(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
     array_class: &str,

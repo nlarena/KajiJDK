@@ -355,6 +355,11 @@ fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg) -> bool {
         RTypeArg::Extends(tb) => match s {
             RTypeArg::Type(st) => is_subtype(table, st, tb),
             RTypeArg::Extends(sb) => is_subtype(table, sb, tb),
+            // `?` **es** `? extends Object` (§4.5.1), así que lo contiene un `? extends T` con `T`
+            // igual a `Object` y solo ese. Sin esta rama, pasar un `Map<String,?>` a un parámetro
+            // `Map<? extends K, ? extends V>` con `V = Object` no resolvía: el segundo argumento
+            // caía al `_ => false` y el constructor quedaba inaplicable. Ver #479.
+            RTypeArg::Wildcard => is_object(table, tb),
             _ => false,
         },
         RTypeArg::Super(tb) => match s {
@@ -408,6 +413,12 @@ pub fn bounds_of(table: &SymbolTable, tv: SymbolId) -> Vec<RType> {
 
 fn object_id(table: &SymbolTable) -> Option<SymbolId> {
     well_known(table, "java.lang.Object")
+}
+
+/// ¿`t` es exactamente `java.lang.Object`? Sin subtipado: aquí importa la **igualdad**, porque es la
+/// cota que hace de `? extends T` un sinónimo de `?`.
+fn is_object(table: &SymbolTable, t: &RType) -> bool {
+    matches!(t, RType::Class(id) if Some(*id) == object_id(table))
 }
 
 /// Un tipo de la plataforma por su nombre **cualificado**, con el nombre simple como red: el índice

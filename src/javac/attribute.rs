@@ -3073,6 +3073,28 @@ mod tests {
     }
 
     #[test]
+    fn an_unbounded_wildcard_is_contained_by_extends_object() {
+        // `?` **es** `? extends Object` (§4.5.1). Sin esta regla, el segundo argumento caía a `false`
+        // y un constructor `Map<? extends K, ? extends V>` con `V = Object` quedaba inaplicable
+        // frente a un `Map<String,?>`. Ver #479.
+        let errs = check(
+            "class Mp<K, V> { Mp(Mp<? extends K, ? extends V> m) {} } \
+             class C { Mp<String, Object> m(Mp<String, ?> e) { return new Mp<String, Object>(e); } }",
+        );
+        assert!(errs.is_empty(), "{errs:?}");
+    }
+
+    #[test]
+    fn an_unbounded_wildcard_is_not_contained_by_a_narrower_extends() {
+        // Y solo la cota `Object` lo contiene: `? extends String` no acepta un `?`, porque el
+        // argumento podría ser cualquier cosa.
+        let errs = check(
+            "class Lst<T> {} class C { void m(Lst<?> s) { Lst<? extends String> u = s; } }",
+        );
+        assert!(!errs.is_empty(), "esperaba un error de asignación");
+    }
+
+    #[test]
     fn decorates_a_local_with_its_parameterized_type() {
         // El tipo decorado tiene que conservar los argumentos, no ser el crudo.
         let unit = attrib("class Lst<T> {} class C { void m(Lst<String> s) { Lst<String> x = s; } }");

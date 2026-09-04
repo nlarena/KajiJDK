@@ -86,7 +86,8 @@ public final class TIFFField implements Cloneable {
      * @param data el arreglo de la clase que corresponde al tipo
      * @throws NullPointerException si la etiqueta o los datos son null
      * @throws IllegalArgumentException si el tipo no existe, si no sirve para esa etiqueta, si la
-     *     cantidad es negativa, o si el arreglo no es de la clase o el largo que el tipo pide
+     *     cantidad es negativa, si el tipo es un puntero y la cantidad no es uno, o si el arreglo no
+     *     es de la clase o el largo que el tipo pide
      */
     public TIFFField(TIFFTag tag, int type, int count, Object data) {
         if (tag == null) {
@@ -101,6 +102,9 @@ public final class TIFFField implements Cloneable {
         }
         if (count < 0) {
             throw new IllegalArgumentException("count < 0!");
+        }
+        if (type == TIFFTag.TIFF_IFD_POINTER && count != 1) {
+            throw new IllegalArgumentException("Type is TIFF_IFD_POINTER and count != 1");
         }
         if (data == null) {
             throw new NullPointerException("data == null!");
@@ -242,11 +246,16 @@ public final class TIFFField implements Cloneable {
     /**
      * Un arreglo vacio de la clase que ese tipo pide. Ver la nota de la clase.
      *
-     * @throws IllegalArgumentException si el tipo no es uno de los trece o la cantidad es negativa
+     * @throws IllegalArgumentException si el tipo no es uno de los trece, si la cantidad es negativa,
+     *     o si el tipo es un puntero y la cantidad no es uno
      */
     public static Object createArrayForType(int dataType, int count) {
         if (count < 0) {
             throw new IllegalArgumentException("count < 0!");
+        }
+        // Un puntero apunta a un directorio, no a varios: la cantidad es siempre uno.
+        if (dataType == TIFFTag.TIFF_IFD_POINTER && count != 1) {
+            throw new IllegalArgumentException("Type is TIFF_IFD_POINTER and count != 1");
         }
         if (dataType == TIFFTag.TIFF_BYTE || dataType == TIFFTag.TIFF_SBYTE
             || dataType == TIFFTag.TIFF_UNDEFINED) {

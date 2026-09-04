@@ -1,5 +1,6 @@
 import java.util.concurrent.DelayQueue;
 import java.util.concurrent.Delayed;
+import java.util.concurrent.TimeUnit;
 
 // H6 volume: DelayQueue. Ten items get ABSOLUTE expirations `base + (id+1)*gap` from a single base
 // time — so the expiration order is *exactly* by id regardless of any jitter between the puts (the
@@ -15,8 +16,10 @@ class DqItem implements Delayed {
         this.expire = expire;
     }
 
-    public long getDelay() {
-        return expire - System.nanoTime();
+    // Lleva la unidad porque `Delayed.getDelay` la lleva: el que pregunta elige en que escala quiere
+    // la respuesta. El plazo se mide en nanosegundos, asi que se convierte desde ahi.
+    public long getDelay(TimeUnit unit) {
+        return unit.convert(expire - System.nanoTime(), TimeUnit.NANOSECONDS);
     }
 
     public int compareTo(Delayed o) {

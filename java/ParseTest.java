@@ -9,6 +9,14 @@
  * pass through a file.
  *
  * <p>The same source compiles against the JDK 25, where {@code main} prints the same counts.
+ *
+ * <p><strong>Ojo: {@code main} no termina en nuestra VM, y no es esta prueba la que esta mal.</strong>
+ * {@code Double.toString} crece de forma cuadratica con la cantidad de llamadas --50 tardan 1 s y 250
+ * tardan 28 s, siempre con el mismo valor-- asi que los dos metodos que barren de a miles,
+ * {@code ida_y_vuelta} y {@code dobleRedondeo}, no llegan. Los otros cinco ({@code basicos},
+ * {@code dificiles}, {@code hexadecimal}, {@code flotantes}, {@code malos}) dan <strong>0</strong> en
+ * segundos y se pueden correr sueltos. Esta medido y con repro en {@code COMPILER_FINDINGS.md} y
+ * {@code scratchpad/zz324/}.
  */
 public class ParseTest {
 

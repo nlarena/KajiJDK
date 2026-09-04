@@ -1,5 +1,7 @@
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
 
 // H6 volume: submit() + Future.get(). A submitted task sets out[0]=42; the main thread blocks in
 // future.get() until the pool has actually run it, then reads the result → 42. Exercises the
@@ -14,7 +16,8 @@ class SetTask implements Runnable {
 
 public class PoolFutureTest {
     static int run() {
-        ThreadPoolExecutor pool = new ThreadPoolExecutor(2);
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
         int[] out = new int[1];
         SetTask t = new SetTask();
         t.out = out;
@@ -25,7 +28,7 @@ public class PoolFutureTest {
         }
         pool.shutdown();
         try {
-            pool.awaitTermination();
+            pool.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return out[0]; // 42

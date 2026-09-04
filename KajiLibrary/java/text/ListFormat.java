@@ -17,18 +17,17 @@ import java.util.Locale;
  * agregando, y {@code end} pega el último. Las de dos y de tres tienen patrón propio porque en
  * varios idiomas no son un caso particular de la fórmula general.
  *
- * @implNote <b>Sólo está la fábrica de patrones explícitos.</b> {@code getInstance()} y
- *           {@code getInstance(Locale, Type, Style)} quedaron afuera: los patrones por locale son
- *           datos del CLDR y traen texto traducido —la "y", la "o", la coma que en japonés es
- *           {@code U+3001}— que esta biblioteca no tiene. Poner "and"/"or" para todos los locales
- *           daría un resultado plausible y falso en la mayoría. {@link #getInstance(String[])} sí
- *           está, porque el llamador aporta los patrones y no hay nada que inventar; y
- *           {@link #getAvailableLocales()} devuelve un arreglo VACÍO, que es la verdad: no hay
- *           ningún locale para el que se pueda devolver una instancia localizada.
+ * @implNote Las tres fábricas están. Esta nota decía que las dos localizadas quedaban afuera porque
+ *           los patrones por locale son datos del CLDR —la "y", la "o", la coma que en japonés es
+ *           {@code U+3001}— y poner "and"/"or" para todos daría un resultado plausible y falso en la
+ *           mayoría. Sigue siendo cierto lo segundo; lo que cambió es que los datos ya no se
+ *           inventan: la tabla trae los patrones <b>exactos</b> de los mismos seis locales que cubre
+ *           {@link DecimalFormatSymbols}, extraídos del JDK 25 y no transcriptos a mano, y un locale
+ *           desconocido cae en ROOT — que es lo que hace el JDK con un locale del que no tiene
+ *           datos.
  *
- * @implNote Los enums {@link ListFormat.Type} y {@link ListFormat.Style} están aunque hoy ninguna
- *           fábrica los reciba: son parte de la forma pública del tipo, y sacarlos rompería el
- *           código que los nombra sin ganar nada.
+ * @implNote Lo que sigue siendo un subconjunto son los DATOS, no la superficie: seis locales y no
+ *           los cientos del JDK. Ampliarlo es agregar filas a la tabla, no escribir código.
  */
 public final class ListFormat extends Format {
 
@@ -61,14 +60,139 @@ public final class ListFormat extends Format {
     }
 
     /**
-     * Los locales con datos propios: ninguno.
+     * Los locales con datos propios.
      *
-     * <p>Un arreglo vacío no es un hueco sin llenar, es la respuesta correcta al contrato — "los
-     * locales para los que se pueden obtener instancias localizadas". Sin datos del CLDR de listas,
-     * no hay ninguno.
+     * <p>Son <b>los mismos</b> que los de {@link DecimalFormatSymbols}, y no por casualidad: esta
+     * clase lee su tabla con el mismo índice, así que las dos cubren exactamente el mismo conjunto.
+     * Atarlas es lo que evita el estado incómodo de tener símbolos de un locale y patrones de otro.
      */
     public static Locale[] getAvailableLocales() {
-        return new Locale[0];
+        return DecimalFormatSymbols.getAvailableLocales();
+    }
+
+    /**
+     * El formateador de listas del locale por omisión, en la forma estándar y larga.
+     *
+     * <p>Es {@code getInstance(Locale.getDefault(FORMAT), Type.STANDARD, Style.FULL)}, que es lo
+     * que el contrato define. La categoría es {@code FORMAT} y no el default a secas: en una máquina
+     * donde el locale de presentación y el de formato difieren --pasa, y se vio contra el JDK 25--
+     * son dos respuestas distintas, y la que este método promete es la de formato.
+     */
+    public static ListFormat getInstance() {
+        return ListFormat.getInstance(Locale.getDefault(Locale.Category.FORMAT), Type.STANDARD,
+                                      Style.FULL);
+    }
+
+    /**
+     * El formateador de listas de ese locale, tipo y estilo.
+     *
+     * <p>Un locale sin datos propios cae en ROOT, que es lo mismo que hace el JDK con un locale del
+     * que no tiene datos — no una aproximación de esta biblioteca.
+     *
+     * @throws NullPointerException si alguno de los tres es null
+     */
+    public static ListFormat getInstance(Locale locale, Type type, Style style) {
+        if (locale == null || type == null || style == null) {
+            throw new NullPointerException();
+        }
+        String[] fila = ListFormat.tabla(type, style)[DecimalFormatSymbols.indexOf(locale)];
+        String[] copia = new String[5];
+        for (int i = 0; i < 5; i = i + 1) {
+            copia[i] = fila[i];
+        }
+        return new ListFormat(locale, copia);
+    }
+
+    // Los patrones del CLDR, en el orden [start, middle, end, two, three] y con una fila por locale,
+    // en el mismo orden que la tabla de `DecimalFormatSymbols`: und, en-US, es-AR, de-DE, fr-FR,
+    // ja-JP. Index 0 es ROOT, que además es la caída.
+    //
+    // **No están transcriptos a mano.** Se extrajeron del JDK 25 formateando listas con marcadores
+    // únicos y mirando qué quedó entre ellos: un patrón de lista del CLDR siempre tiene la forma
+    // `{0}<literal>{1}`, así que el literal es exactamente el texto que separa dos marcadores. Se
+    // hizo así porque estos datos son texto traducido y una coma de más en el locale equivocado no
+    // la ve nadie hasta que la ve un usuario.
+    //
+    // Todo carácter no ASCII va como escape `\uXXXX`, por la misma razón que en
+    // `DecimalFormatSymbols`: la fuente queda ASCII y no la puede corromper un percance de
+    // codificación.
+    private static String[][] tabla(Type type, Style style) {
+        if (type == Type.STANDARD) {
+            if (style == Style.FULL) {
+                return new String[][] {
+                    {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0}, and {1}", "{0} and {1}",
+                     "{0}, {1}, and {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0} y {1}", "{0} y {1}", "{0}, {1} y {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0} und {1}", "{0} und {1}", "{0}, {1} und {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0} et {1}", "{0} et {1}", "{0}, {1} et {2}"},
+                    {"{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}",
+                     "{0}\u3001{1}\u3001{2}"},
+                };
+            }
+            if (style == Style.SHORT) {
+                return new String[][] {
+                    {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0}, & {1}", "{0} & {1}", "{0}, {1}, & {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0} y {1}", "{0} y {1}", "{0}, {1} y {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0} und {1}", "{0} und {1}", "{0}, {1} und {2}"},
+                    {"{0}, {1}", "{0}, {1}", "{0} et {1}", "{0} et {1}", "{0}, {1} et {2}"},
+                    {"{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}",
+                     "{0}\u3001{1}\u3001{2}"},
+                };
+            }
+            return new String[][] {
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} y {1}", "{0} y {1}", "{0}, {1} y {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} und {1}", "{0} und {1}", "{0}, {1} und {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}",
+                 "{0}\u3001{1}\u3001{2}"},
+            };
+        }
+        if (type == Type.OR) {
+            // Las tres formas de OR coinciden en los cinco locales latinos; la japonesa usa
+            // "\u307e\u305f\u306f" (mataha) en las tres.
+            return new String[][] {
+                {"{0}, {1}", "{0}, {1}", "{0}, or {1}", "{0} or {1}", "{0}, {1}, or {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0}, or {1}", "{0} or {1}", "{0}, {1}, or {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} o {1}", "{0} o {1}", "{0}, {1} o {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} oder {1}", "{0} oder {1}", "{0}, {1} oder {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} ou {1}", "{0} ou {1}", "{0}, {1} ou {2}"},
+                {"{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001\u307e\u305f\u306f{1}",
+                 "{0}\u307e\u305f\u306f{1}", "{0}\u3001{1}\u3001\u307e\u305f\u306f{2}"},
+            };
+        }
+        if (style == Style.FULL) {
+            return new String[][] {
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} y {1}", "{0} y {1}", "{0}, {1} y {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} und {1}", "{0} und {1}", "{0}, {1} und {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} et {1}", "{0} et {1}", "{0}, {1} et {2}"},
+                {"{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}", "{0}\u3001{1}",
+                 "{0}\u3001{1}\u3001{2}"},
+            };
+        }
+        if (style == Style.SHORT) {
+            return new String[][] {
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0} y {1}", "{0}, {1}, {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} und {1}", "{0}, {1}", "{0}, {1} und {2}"},
+                {"{0}, {1}", "{0}, {1}", "{0} et {1}", "{0} et {1}", "{0}, {1} et {2}"},
+                {"{0} {1}", "{0} {1}", "{0} {1}", "{0} {1}", "{0} {1} {2}"},
+            };
+        }
+        return new String[][] {
+            {"{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}", "{0}, {1}, {2}"},
+            {"{0} {1}", "{0} {1}", "{0} {1}", "{0} {1}", "{0} {1} {2}"},
+            {"{0} {1}", "{0} {1}", "{0} {1}", "{0} {1}", "{0} {1} {2}"},
+            {"{0}, {1}", "{0}, {1}", "{0} und {1}", "{0} und {1}", "{0}, {1} und {2}"},
+            {"{0} {1}", "{0} {1}", "{0} {1}", "{0} {1}", "{0} {1} {2}"},
+            {"{0}{1}", "{0}{1}", "{0}{1}", "{0}{1}", "{0}{1}{2}"},
+        };
     }
 
     /**

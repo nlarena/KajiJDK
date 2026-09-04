@@ -3971,6 +3971,9 @@ impl Exec<'_> {
                         &clase,
                     )))
                 }
+                // Este camino es el de las llamadas iniciadas por la VM: no hay marco Java al
+                // que devolverle la excepcion, asi que la condicion se traga y se devuelve `None`.
+                crate::jvm::interpreter::natives::NativeOutcome::Lanza(_) => None,
                 crate::jvm::interpreter::natives::NativeOutcome::Unimplemented => None,
             };
         }

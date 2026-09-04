@@ -1,0 +1,1129 @@
+[
+ {
+  "pkg": "java.awt",
+  "clases": 109,
+  "clasesJdk": 109,
+  "miembros": 2464,
+  "miembrosJdk": 2464
+ },
+ {
+  "pkg": "java.awt.color",
+  "clases": 7,
+  "clasesJdk": 7,
+  "miembros": 197,
+  "miembrosJdk": 197
+ },
+ {
+  "pkg": "java.awt.datatransfer",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 96,
+  "miembrosJdk": 96
+ },
+ {
+  "pkg": "java.awt.desktop",
+  "clases": 29,
+  "clasesJdk": 29,
+  "miembros": 39,
+  "miembrosJdk": 39
+ },
+ {
+  "pkg": "java.awt.dnd",
+  "clases": 22,
+  "clasesJdk": 22,
+  "miembros": 215,
+  "miembrosJdk": 215
+ },
+ {
+  "pkg": "java.awt.event",
+  "clases": 43,
+  "clasesJdk": 43,
+  "miembros": 515,
+  "miembrosJdk": 515
+ },
+ {
+  "pkg": "java.awt.font",
+  "clases": 18,
+  "clasesJdk": 18,
+  "miembros": 374,
+  "miembrosJdk": 374
+ },
+ {
+  "pkg": "java.awt.geom",
+  "clases": 18,
+  "clasesJdk": 18,
+  "miembros": 399,
+  "miembrosJdk": 399
+ },
+ {
+  "pkg": "java.awt.im",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 42,
+  "miembrosJdk": 42
+ },
+ {
+  "pkg": "java.awt.image",
+  "clases": 55,
+  "clasesJdk": 55,
+  "miembros": 867,
+  "miembrosJdk": 867
+ },
+ {
+  "pkg": "java.awt.image.renderable",
+  "clases": 7,
+  "clasesJdk": 7,
+  "miembros": 101,
+  "miembrosJdk": 101
+ },
+ {
+  "pkg": "java.awt.print",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 74,
+  "miembrosJdk": 74
+ },
+ {
+  "pkg": "java.beans",
+  "clases": 40,
+  "clasesJdk": 41,
+  "miembros": 272,
+  "miembrosJdk": 282
+ },
+ {
+  "pkg": "java.beans.beancontext",
+  "clases": 16,
+  "clasesJdk": 18,
+  "miembros": 177,
+  "miembrosJdk": 179
+ },
+ {
+  "pkg": "java.io",
+  "clases": 81,
+  "clasesJdk": 81,
+  "miembros": 912,
+  "miembrosJdk": 912
+ },
+ {
+  "pkg": "java.lang",
+  "clases": 108,
+  "clasesJdk": 108,
+  "miembros": 1683,
+  "miembrosJdk": 1683
+ },
+ {
+  "pkg": "java.lang.annotation",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 35,
+  "miembrosJdk": 35
+ },
+ {
+  "pkg": "java.lang.classfile",
+  "clases": 46,
+  "clasesJdk": 46,
+  "miembros": 854,
+  "miembrosJdk": 854
+ },
+ {
+  "pkg": "java.lang.classfile.attribute",
+  "clases": 50,
+  "clasesJdk": 50,
+  "miembros": 219,
+  "miembrosJdk": 219
+ },
+ {
+  "pkg": "java.lang.classfile.constantpool",
+  "clases": 26,
+  "clasesJdk": 26,
+  "miembros": 128,
+  "miembrosJdk": 128
+ },
+ {
+  "pkg": "java.lang.classfile.instruction",
+  "clases": 32,
+  "clasesJdk": 32,
+  "miembros": 123,
+  "miembrosJdk": 123
+ },
+ {
+  "pkg": "java.lang.constant",
+  "clases": 11,
+  "clasesJdk": 11,
+  "miembros": 163,
+  "miembrosJdk": 163
+ },
+ {
+  "pkg": "java.lang.foreign",
+  "clases": 14,
+  "clasesJdk": 14,
+  "miembros": 246,
+  "miembrosJdk": 246
+ },
+ {
+  "pkg": "java.lang.instrument",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 28,
+  "miembrosJdk": 28
+ },
+ {
+  "pkg": "java.lang.invoke",
+  "clases": 19,
+  "clasesJdk": 19,
+  "miembros": 241,
+  "miembrosJdk": 241
+ },
+ {
+  "pkg": "java.lang.management",
+  "clases": 20,
+  "clasesJdk": 20,
+  "miembros": 172,
+  "miembrosJdk": 172
+ },
+ {
+  "pkg": "java.lang.module",
+  "clases": 9,
+  "clasesJdk": 9,
+  "miembros": 69,
+  "miembrosJdk": 69
+ },
+ {
+  "pkg": "java.lang.ref",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 21,
+  "miembrosJdk": 21
+ },
+ {
+  "pkg": "java.lang.reflect",
+  "clases": 33,
+  "clasesJdk": 33,
+  "miembros": 331,
+  "miembrosJdk": 331
+ },
+ {
+  "pkg": "java.math",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 177,
+  "miembrosJdk": 177
+ },
+ {
+  "pkg": "java.net",
+  "clases": 62,
+  "clasesJdk": 64,
+  "miembros": 741,
+  "miembrosJdk": 757
+ },
+ {
+  "pkg": "java.net.spi",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 6,
+  "miembrosJdk": 6
+ },
+ {
+  "pkg": "java.nio",
+  "clases": 14,
+  "clasesJdk": 14,
+  "miembros": 473,
+  "miembrosJdk": 473
+ },
+ {
+  "pkg": "java.nio.channels",
+  "clases": 53,
+  "clasesJdk": 53,
+  "miembros": 257,
+  "miembrosJdk": 280
+ },
+ {
+  "pkg": "java.nio.channels.spi",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 47,
+  "miembrosJdk": 47
+ },
+ {
+  "pkg": "java.nio.charset",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 107,
+  "miembrosJdk": 107
+ },
+ {
+  "pkg": "java.nio.charset.spi",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 3,
+  "miembrosJdk": 3
+ },
+ {
+  "pkg": "java.nio.file",
+  "clases": 44,
+  "clasesJdk": 44,
+  "miembros": 250,
+  "miembrosJdk": 250
+ },
+ {
+  "pkg": "java.nio.file.attribute",
+  "clases": 24,
+  "clasesJdk": 24,
+  "miembros": 116,
+  "miembrosJdk": 116
+ },
+ {
+  "pkg": "java.nio.file.spi",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 33,
+  "miembrosJdk": 33
+ },
+ {
+  "pkg": "java.rmi",
+  "clases": 20,
+  "clasesJdk": 20,
+  "miembros": 43,
+  "miembrosJdk": 43
+ },
+ {
+  "pkg": "java.security",
+  "clases": 77,
+  "clasesJdk": 81,
+  "miembros": 572,
+  "miembrosJdk": 593
+ },
+ {
+  "pkg": "java.security.cert",
+  "clases": 49,
+  "clasesJdk": 49,
+  "miembros": 403,
+  "miembrosJdk": 403
+ },
+ {
+  "pkg": "java.security.interfaces",
+  "clases": 19,
+  "clasesJdk": 19,
+  "miembros": 58,
+  "miembrosJdk": 58
+ },
+ {
+  "pkg": "java.security.spec",
+  "clases": 35,
+  "clasesJdk": 35,
+  "miembros": 172,
+  "miembrosJdk": 172
+ },
+ {
+  "pkg": "java.sql",
+  "clases": 55,
+  "clasesJdk": 55,
+  "miembros": 1245,
+  "miembrosJdk": 1245
+ },
+ {
+  "pkg": "java.text",
+  "clases": 26,
+  "clasesJdk": 26,
+  "miembros": 489,
+  "miembrosJdk": 491
+ },
+ {
+  "pkg": "java.text.spi",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 21,
+  "miembrosJdk": 21
+ },
+ {
+  "pkg": "java.time",
+  "clases": 19,
+  "clasesJdk": 19,
+  "miembros": 892,
+  "miembrosJdk": 892
+ },
+ {
+  "pkg": "java.time.chrono",
+  "clases": 21,
+  "clasesJdk": 21,
+  "miembros": 538,
+  "miembrosJdk": 538
+ },
+ {
+  "pkg": "java.time.format",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 124,
+  "miembrosJdk": 141
+ },
+ {
+  "pkg": "java.time.temporal",
+  "clases": 16,
+  "clasesJdk": 16,
+  "miembros": 173,
+  "miembrosJdk": 173
+ },
+ {
+  "pkg": "java.time.zone",
+  "clases": 5,
+  "clasesJdk": 5,
+  "miembros": 60,
+  "miembrosJdk": 60
+ },
+ {
+  "pkg": "java.util",
+  "clases": 109,
+  "clasesJdk": 109,
+  "miembros": 2097,
+  "miembrosJdk": 2097
+ },
+ {
+  "pkg": "java.util.concurrent",
+  "clases": 62,
+  "clasesJdk": 62,
+  "miembros": 1224,
+  "miembrosJdk": 1224
+ },
+ {
+  "pkg": "java.util.concurrent.atomic",
+  "clases": 16,
+  "clasesJdk": 16,
+  "miembros": 319,
+  "miembrosJdk": 319
+ },
+ {
+  "pkg": "java.util.concurrent.locks",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 163,
+  "miembrosJdk": 163
+ },
+ {
+  "pkg": "java.util.function",
+  "clases": 43,
+  "clasesJdk": 43,
+  "miembros": 79,
+  "miembrosJdk": 79
+ },
+ {
+  "pkg": "java.util.jar",
+  "clases": 7,
+  "clasesJdk": 7,
+  "miembros": 71,
+  "miembrosJdk": 71
+ },
+ {
+  "pkg": "java.util.logging",
+  "clases": 17,
+  "clasesJdk": 17,
+  "miembros": 202,
+  "miembrosJdk": 202
+ },
+ {
+  "pkg": "java.util.prefs",
+  "clases": 9,
+  "clasesJdk": 9,
+  "miembros": 109,
+  "miembrosJdk": 109
+ },
+ {
+  "pkg": "java.util.random",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 53,
+  "miembrosJdk": 53
+ },
+ {
+  "pkg": "java.util.regex",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 82,
+  "miembrosJdk": 82
+ },
+ {
+  "pkg": "java.util.spi",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 33,
+  "miembrosJdk": 33
+ },
+ {
+  "pkg": "java.util.stream",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 287,
+  "miembrosJdk": 287
+ },
+ {
+  "pkg": "java.util.zip",
+  "clases": 21,
+  "clasesJdk": 21,
+  "miembros": 240,
+  "miembrosJdk": 240
+ },
+ {
+  "pkg": "javax.accessibility",
+  "clases": 28,
+  "clasesJdk": 28,
+  "miembros": 349,
+  "miembrosJdk": 349
+ },
+ {
+  "pkg": "javax.annotation.processing",
+  "clases": 13,
+  "clasesJdk": 13,
+  "miembros": 55,
+  "miembrosJdk": 55
+ },
+ {
+  "pkg": "javax.crypto",
+  "clases": 1,
+  "clasesJdk": 30,
+  "miembros": 1,
+  "miembrosJdk": 247
+ },
+ {
+  "pkg": "javax.crypto.interfaces",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 13,
+  "miembrosJdk": 13
+ },
+ {
+  "pkg": "javax.crypto.spec",
+  "clases": 17,
+  "clasesJdk": 17,
+  "miembros": 83,
+  "miembrosJdk": 83
+ },
+ {
+  "pkg": "javax.imageio",
+  "clases": 11,
+  "clasesJdk": 11,
+  "miembros": 334,
+  "miembrosJdk": 334
+ },
+ {
+  "pkg": "javax.imageio.event",
+  "clases": 5,
+  "clasesJdk": 5,
+  "miembros": 24,
+  "miembrosJdk": 24
+ },
+ {
+  "pkg": "javax.imageio.metadata",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 196,
+  "miembrosJdk": 196
+ },
+ {
+  "pkg": "javax.imageio.plugins.bmp",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 4,
+  "miembrosJdk": 4
+ },
+ {
+  "pkg": "javax.imageio.plugins.jpeg",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 36,
+  "miembrosJdk": 36
+ },
+ {
+  "pkg": "javax.imageio.plugins.tiff",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 478,
+  "miembrosJdk": 478
+ },
+ {
+  "pkg": "javax.imageio.spi",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 104,
+  "miembrosJdk": 104
+ },
+ {
+  "pkg": "javax.imageio.stream",
+  "clases": 11,
+  "clasesJdk": 11,
+  "miembros": 209,
+  "miembrosJdk": 209
+ },
+ {
+  "pkg": "javax.lang.model",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 41,
+  "miembrosJdk": 41
+ },
+ {
+  "pkg": "javax.lang.model.element",
+  "clases": 21,
+  "clasesJdk": 21,
+  "miembros": 160,
+  "miembrosJdk": 160
+ },
+ {
+  "pkg": "javax.lang.model.type",
+  "clases": 18,
+  "clasesJdk": 18,
+  "miembros": 70,
+  "miembrosJdk": 70
+ },
+ {
+  "pkg": "javax.lang.model.util",
+  "clases": 57,
+  "clasesJdk": 57,
+  "miembros": 276,
+  "miembrosJdk": 276
+ },
+ {
+  "pkg": "javax.management",
+  "clases": 73,
+  "clasesJdk": 73,
+  "miembros": 510,
+  "miembrosJdk": 510
+ },
+ {
+  "pkg": "javax.management.loading",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 6,
+  "miembrosJdk": 6
+ },
+ {
+  "pkg": "javax.management.modelmbean",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 125,
+  "miembrosJdk": 125
+ },
+ {
+  "pkg": "javax.management.monitor",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 153,
+  "miembrosJdk": 153
+ },
+ {
+  "pkg": "javax.management.openmbean",
+  "clases": 25,
+  "clasesJdk": 25,
+  "miembros": 228,
+  "miembrosJdk": 228
+ },
+ {
+  "pkg": "javax.management.remote",
+  "clases": 18,
+  "clasesJdk": 18,
+  "miembros": 88,
+  "miembrosJdk": 88
+ },
+ {
+  "pkg": "javax.management.timer",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 59,
+  "miembrosJdk": 59
+ },
+ {
+  "pkg": "javax.naming",
+  "clases": 41,
+  "clasesJdk": 41,
+  "miembros": 309,
+  "miembrosJdk": 309
+ },
+ {
+  "pkg": "javax.naming.directory",
+  "clases": 18,
+  "clasesJdk": 18,
+  "miembros": 175,
+  "miembrosJdk": 175
+ },
+ {
+  "pkg": "javax.naming.event",
+  "clases": 7,
+  "clasesJdk": 7,
+  "miembros": 35,
+  "miembrosJdk": 35
+ },
+ {
+  "pkg": "javax.naming.ldap.spi",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 5,
+  "miembrosJdk": 5
+ },
+ {
+  "pkg": "javax.naming.spi",
+  "clases": 11,
+  "clasesJdk": 11,
+  "miembros": 32,
+  "miembrosJdk": 32
+ },
+ {
+  "pkg": "javax.net",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 13,
+  "miembrosJdk": 13
+ },
+ {
+  "pkg": "javax.print",
+  "clases": 18,
+  "clasesJdk": 18,
+  "miembros": 95,
+  "miembrosJdk": 95
+ },
+ {
+  "pkg": "javax.print.attribute",
+  "clases": 26,
+  "clasesJdk": 26,
+  "miembros": 143,
+  "miembrosJdk": 143
+ },
+ {
+  "pkg": "javax.print.attribute.standard",
+  "clases": 72,
+  "clasesJdk": 72,
+  "miembros": 585,
+  "miembrosJdk": 585
+ },
+ {
+  "pkg": "javax.print.event",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 32,
+  "miembrosJdk": 32
+ },
+ {
+  "pkg": "javax.script",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 136,
+  "miembrosJdk": 136
+ },
+ {
+  "pkg": "javax.security.auth",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 41,
+  "miembrosJdk": 41
+ },
+ {
+  "pkg": "javax.security.auth.callback",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 61,
+  "miembrosJdk": 61
+ },
+ {
+  "pkg": "javax.security.auth.login",
+  "clases": 13,
+  "clasesJdk": 13,
+  "miembros": 44,
+  "miembrosJdk": 44
+ },
+ {
+  "pkg": "javax.security.auth.spi",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 5,
+  "miembrosJdk": 5
+ },
+ {
+  "pkg": "javax.security.auth.x500",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 21,
+  "miembrosJdk": 21
+ },
+ {
+  "pkg": "javax.security.cert",
+  "clases": 7,
+  "clasesJdk": 7,
+  "miembros": 32,
+  "miembrosJdk": 32
+ },
+ {
+  "pkg": "javax.security.sasl",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 57,
+  "miembrosJdk": 57
+ },
+ {
+  "pkg": "javax.sound",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 6,
+  "miembrosJdk": 6
+ },
+ {
+  "pkg": "javax.sound.midi",
+  "clases": 26,
+  "clasesJdk": 26,
+  "miembros": 255,
+  "miembrosJdk": 255
+ },
+ {
+  "pkg": "javax.sound.midi.spi",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 22,
+  "miembrosJdk": 22
+ },
+ {
+  "pkg": "javax.sound.sampled",
+  "clases": 22,
+  "clasesJdk": 22,
+  "miembros": 183,
+  "miembrosJdk": 183
+ },
+ {
+  "pkg": "javax.sound.sampled.spi",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 29,
+  "miembrosJdk": 29
+ },
+ {
+  "pkg": "javax.sql",
+  "clases": 19,
+  "clasesJdk": 19,
+  "miembros": 198,
+  "miembrosJdk": 198
+ },
+ {
+  "pkg": "javax.sql.rowset.serial",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 135,
+  "miembrosJdk": 135
+ },
+ {
+  "pkg": "javax.swing",
+  "clases": 2,
+  "clasesJdk": 134,
+  "miembros": 60,
+  "miembrosJdk": 3642
+ },
+ {
+  "pkg": "javax.swing.text",
+  "clases": 1,
+  "clasesJdk": 63,
+  "miembros": 11,
+  "miembrosJdk": 1144
+ },
+ {
+  "pkg": "javax.tools",
+  "clases": 17,
+  "clasesJdk": 17,
+  "miembros": 149,
+  "miembrosJdk": 149
+ },
+ {
+  "pkg": "javax.transaction.xa",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 55,
+  "miembrosJdk": 55
+ },
+ {
+  "pkg": "javax.xml",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 16,
+  "miembrosJdk": 16
+ },
+ {
+  "pkg": "javax.xml.catalog",
+  "clases": 5,
+  "clasesJdk": 5,
+  "miembros": 18,
+  "miembrosJdk": 18
+ },
+ {
+  "pkg": "javax.xml.crypto",
+  "clases": 14,
+  "clasesJdk": 14,
+  "miembros": 64,
+  "miembrosJdk": 64
+ },
+ {
+  "pkg": "javax.xml.crypto.dom",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 22,
+  "miembrosJdk": 22
+ },
+ {
+  "pkg": "javax.xml.crypto.dsig",
+  "clases": 17,
+  "clasesJdk": 17,
+  "miembros": 153,
+  "miembrosJdk": 153
+ },
+ {
+  "pkg": "javax.xml.crypto.dsig.dom",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 12,
+  "miembrosJdk": 12
+ },
+ {
+  "pkg": "javax.xml.crypto.dsig.keyinfo",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 41,
+  "miembrosJdk": 41
+ },
+ {
+  "pkg": "javax.xml.crypto.dsig.spec",
+  "clases": 11,
+  "clasesJdk": 11,
+  "miembros": 21,
+  "miembrosJdk": 21
+ },
+ {
+  "pkg": "javax.xml.datatype",
+  "clases": 5,
+  "clasesJdk": 5,
+  "miembros": 134,
+  "miembrosJdk": 134
+ },
+ {
+  "pkg": "javax.xml.namespace",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 13,
+  "miembrosJdk": 13
+ },
+ {
+  "pkg": "javax.xml.parsers",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 90,
+  "miembrosJdk": 90
+ },
+ {
+  "pkg": "javax.xml.stream",
+  "clases": 15,
+  "clasesJdk": 15,
+  "miembros": 224,
+  "miembrosJdk": 224
+ },
+ {
+  "pkg": "javax.xml.stream.events",
+  "clases": 14,
+  "clasesJdk": 14,
+  "miembros": 59,
+  "miembrosJdk": 59
+ },
+ {
+  "pkg": "javax.xml.stream.util",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 66,
+  "miembrosJdk": 66
+ },
+ {
+  "pkg": "javax.xml.transform",
+  "clases": 12,
+  "clasesJdk": 12,
+  "miembros": 85,
+  "miembrosJdk": 85
+ },
+ {
+  "pkg": "javax.xml.transform.dom",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 22,
+  "miembrosJdk": 22
+ },
+ {
+  "pkg": "javax.xml.transform.sax",
+  "clases": 5,
+  "clasesJdk": 5,
+  "miembros": 37,
+  "miembrosJdk": 37
+ },
+ {
+  "pkg": "javax.xml.transform.stax",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 15,
+  "miembrosJdk": 15
+ },
+ {
+  "pkg": "javax.xml.transform.stream",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 31,
+  "miembrosJdk": 31
+ },
+ {
+  "pkg": "javax.xml.validation",
+  "clases": 7,
+  "clasesJdk": 7,
+  "miembros": 56,
+  "miembrosJdk": 56
+ },
+ {
+  "pkg": "javax.xml.xpath",
+  "clases": 13,
+  "clasesJdk": 13,
+  "miembros": 65,
+  "miembrosJdk": 65
+ },
+ {
+  "pkg": "jdk.internal.classfile.impl",
+  "clases": 26,
+  "clasesJdk": 69,
+  "miembros": 293,
+  "miembrosJdk": 1071
+ },
+ {
+  "pkg": "jdk.internal.io",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 25,
+  "miembrosJdk": 25
+ },
+ {
+  "pkg": "jdk.internal.random",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 73,
+  "miembrosJdk": 73
+ },
+ {
+  "pkg": "jdk.internal.reflect",
+  "clases": 7,
+  "clasesJdk": 9,
+  "miembros": 62,
+  "miembrosJdk": 83
+ },
+ {
+  "pkg": "jdk.internal.util.random",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 38,
+  "miembrosJdk": 38
+ },
+ {
+  "pkg": "jdk.internal.vm",
+  "clases": 15,
+  "clasesJdk": 15,
+  "miembros": 83,
+  "miembrosJdk": 92
+ },
+ {
+  "pkg": "org.ietf.jgss",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 150,
+  "miembrosJdk": 150
+ },
+ {
+  "pkg": "org.w3c.dom",
+  "clases": 29,
+  "clasesJdk": 29,
+  "miembros": 225,
+  "miembrosJdk": 225
+ },
+ {
+  "pkg": "org.w3c.dom.bootstrap",
+  "clases": 1,
+  "clasesJdk": 1,
+  "miembros": 5,
+  "miembrosJdk": 5
+ },
+ {
+  "pkg": "org.w3c.dom.css",
+  "clases": 22,
+  "clasesJdk": 22,
+  "miembros": 345,
+  "miembrosJdk": 345
+ },
+ {
+  "pkg": "org.w3c.dom.events",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 44,
+  "miembrosJdk": 44
+ },
+ {
+  "pkg": "org.w3c.dom.html",
+  "clases": 56,
+  "clasesJdk": 56,
+  "miembros": 581,
+  "miembrosJdk": 581
+ },
+ {
+  "pkg": "org.w3c.dom.ls",
+  "clases": 11,
+  "clasesJdk": 11,
+  "miembros": 70,
+  "miembrosJdk": 70
+ },
+ {
+  "pkg": "org.w3c.dom.ranges",
+  "clases": 3,
+  "clasesJdk": 3,
+  "miembros": 33,
+  "miembrosJdk": 33
+ },
+ {
+  "pkg": "org.w3c.dom.stylesheets",
+  "clases": 5,
+  "clasesJdk": 5,
+  "miembros": 18,
+  "miembrosJdk": 18
+ },
+ {
+  "pkg": "org.w3c.dom.traversal",
+  "clases": 4,
+  "clasesJdk": 4,
+  "miembros": 39,
+  "miembrosJdk": 39
+ },
+ {
+  "pkg": "org.w3c.dom.views",
+  "clases": 2,
+  "clasesJdk": 2,
+  "miembros": 2,
+  "miembrosJdk": 2
+ },
+ {
+  "pkg": "org.w3c.dom.xpath",
+  "clases": 6,
+  "clasesJdk": 6,
+  "miembros": 30,
+  "miembrosJdk": 30
+ },
+ {
+  "pkg": "org.xml.sax",
+  "clases": 17,
+  "clasesJdk": 17,
+  "miembros": 122,
+  "miembrosJdk": 122
+ },
+ {
+  "pkg": "org.xml.sax.ext",
+  "clases": 8,
+  "clasesJdk": 8,
+  "miembros": 55,
+  "miembrosJdk": 55
+ },
+ {
+  "pkg": "org.xml.sax.helpers",
+  "clases": 10,
+  "clasesJdk": 10,
+  "miembros": 162,
+  "miembrosJdk": 162
+ }
+]

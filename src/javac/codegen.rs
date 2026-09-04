@@ -309,6 +309,8 @@ fn gen_class(
     let this_internal = internal_name(table, cid);
     cf.this_class = cf.pool.class(&this_internal);
     let super_internal = super_internal(table, cid, class, scope);
+    // Si la superclase es una interna **de instancia**, su `<init>` pide la instancia envolvente.
+    let super_enclosing = super_enclosing_internal(table, cid, class, scope);
     // `java.lang.Object` es la **única** clase sin superclase (JVMS §4.1): su `super_class` es `0`.
     // Cualquier otra —incluida una que por defecto extiende Object— lleva el índice `Class`. Sin este
     // caso, Object salía con `super_class` apuntándose a sí mismo y el intérprete entraba en bucle al
@@ -454,6 +456,7 @@ fn gen_class(
                     m,
                     &this_internal,
                     &super_internal,
+                    super_enclosing.as_deref(),
                     is_interface,
                     class.kind == TypeKind::Enum,
                     rt,
@@ -573,6 +576,7 @@ fn gen_class(
             &clinit,
             &this_internal,
             &super_internal,
+            super_enclosing.as_deref(),
             false,
             class.kind == TypeKind::Enum,
             rt,
@@ -1172,6 +1176,55 @@ fn super_internal(
         }
         _ => "java/lang/Object".to_string(),
     }
+}
+
+/// Si la superclase es una clase interna **de instancia**, el nombre interno de su envolvente.
+///
+/// Es lo que decide si el `super()` implícito lleva argumento. Una interna de instancia no tiene un
+/// `<init>()V`: tiene `<init>(LEnvolvente;)V`, porque su instancia envolvente es parte de su
+/// identidad (§8.1.3). Una clase que la extiende **tiene que** pasarla, y el `super()` implícito es
+/// exactamente el lugar donde nadie la escribe (§8.8.7.1).
+fn super_enclosing_internal(
+    table: &SymbolTable,
+    cid: SymbolId,
+    class: &super::ast::ClassDecl,
+    scope: ScopeId,
+) -> Option<String> {
+    let sup = match table.super_class(cid) {
+        Some(id) => id,
+        None => match &class.extends {
+            Some(Type::Class(name)) | Some(Type::Parameterized { base: name, .. }) => {
+                resolve_type_id(table, scope, name)?
+            }
+            _ => return None,
+        },
+    };
+    if !matches!(table.symbol(sup).kind, SymbolKind::Class { .. }) {
+        return None;
+    }
+    // La envolvente **candidata** sale del nombre binario: `java.awt.Container$AccessibleAWTContainer`
+    // → `java/awt/Container`. Sin `$` no hay anidamiento y no hay nada que pasar.
+    let full = internal_name(table, sup);
+    let outer_bin = full[..full.rfind('$')?].to_string();
+    // La confirmacion la dan sus **constructores**, no sus modificadores: un tipo anidado leido del
+    // classpath llega sin dueno ni `static` --se registra en el scope de la envolvente por nombre,
+    // y eso es todo--, asi que preguntar por `owner` funcionaba con un supertipo del mismo round y
+    // no con uno de afuera, que es el caso de todos los `AccessibleAWTXxx` heredados. La firma, en
+    // cambio, esta siempre: una interna de instancia **no tiene** `<init>()V`, y su primer parametro
+    // es su envolvente.
+    let mut pide_envolvente = false;
+    for ctor in super::attribute::constructors(table, sup) {
+        let Some(Resolved::Method { params, .. }) = table.resolved(ctor) else { continue };
+        if params.is_empty() {
+            return None; // tiene un ctor sin argumentos: no pide envolvente
+        }
+        if let Some(RType::Class(first)) = params.first() {
+            if internal_name(table, *first) == outer_bin {
+                pide_envolvente = true;
+            }
+        }
+    }
+    pide_envolvente.then_some(outer_bin)
 }
 
 fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<SymbolId> {
@@ -1852,8 +1905,33 @@ fn inner_entry(pool: &mut ConstantPool, table: &SymbolTable, id: SymbolId) -> In
     for m in &sym.modifiers {
         flags |= modifier_flag(*m);
     }
-    if matches!(sym.kind, SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }) {
-        flags |= ACC_INTERFACE | ACC_ABSTRACT;
+    // Los flags **implícitos** del tipo, que el fuente no escribe y §4.7.6 exige igual. Van acá y
+    // no sólo en los access_flags de clase porque, para un tipo anidado, `Class.getModifiers()` lee
+    // **esta** entrada y no aquéllos (JVMS §4.7.6, y es lo que hace HotSpot). Sin esto un `enum`
+    // anidado no es un enum para la reflexión: `Class.isEnum()` da `false` —exige `ACC_ENUM` en los
+    // modificadores— y con eso se cae todo lo que introspecciona enums, desde un `EnumMap` armado
+    // por reflexión hasta el introspector de MXBean del JDK. Ver #488.
+    if let SymbolKind::Class { kind, .. } = &sym.kind {
+        match kind {
+            TypeKind::Interface => flags |= ACC_INTERFACE | ACC_ABSTRACT | ACC_STATIC,
+            TypeKind::Annotation => {
+                flags |= ACC_INTERFACE | ACC_ABSTRACT | ACC_ANNOTATION | ACC_STATIC
+            }
+            // Un enum anidado es implícitamente `static` (§8.9) y `final` salvo que declare un
+            // método abstracto, que es lo que obliga a cuerpos de constante (§8.9.1). Mismo
+            // criterio que los access_flags de clase, unas líneas más arriba.
+            TypeKind::Enum => {
+                flags |= ACC_ENUM | ACC_STATIC;
+                let abstracto = table.members_of(id).into_iter().any(|m| {
+                    matches!(table.symbol(m).kind, SymbolKind::Method { .. })
+                        && table.symbol(m).modifiers.contains(&Modifier::Abstract)
+                });
+                flags |= if abstracto { ACC_ABSTRACT } else { ACC_FINAL };
+            }
+            // Un record es implícitamente `final` (§8.10) y, anidado, `static`.
+            TypeKind::Record => flags |= ACC_FINAL | ACC_STATIC,
+            _ => {}
+        }
     }
     // §9.5, la otra mitad: acá sí van el `public` **y** el `static` implícitos. El javac real emite
     // `public static` para los tres casos (interfaz, clase y enum miembros de una interfaz).
@@ -1953,6 +2031,7 @@ fn gen_method(
     m: &MethodDecl,
     this_internal: &str,
     super_internal: &str,
+    super_enclosing: Option<&str>,
     is_interface: bool,
     is_enum: bool,
     rt: &std::collections::HashSet<String>,
@@ -2125,11 +2204,36 @@ fn gen_method(
             // El `super()` implícito va en pc 0: se le mapea la línea de la declaración del
             // constructor, así el `LineNumberTable` no deja el arranque sin línea (como javac).
             e.mark_line(m.pos.line);
-            let super_init = e.pool.methodref(super_internal, "<init>", "()V");
+            // **Si la superclase es una interna de instancia**, su `<init>` toma la envolvente y hay
+            // que pasarla: el `super()` implícito de una interna que extiende a otra interna
+            // (`Sub.SubInner extends Base.Inner`, con `Sub extends Base`) es en realidad
+            // `super(this$0)`. Emitirlo sin argumento apunta a un `<init>()V` que **no existe**, y
+            // el error no sale en la compilación sino al construir: un `NoSuchMethodError` en la JVM
+            // real, y en la nuestra --que resuelve mas suelto-- un objeto con el `this$0` de la
+            // superclase en `null`, o sea un `NullPointerException` a la primera vez que la interna
+            // heredada usa `Envolvente.this`. Ese es el patron de todos los `AccessibleAWTXxx` de
+            // AWT (#492).
+            //
+            // La envolvente que se pasa es el `this$0` **propio**, el parametro de cabecera que el
+            // desugar le puso al constructor. Vale porque la envolvente de esta clase es subtipo de
+            // la que pide la superclase --es lo que hace legal la herencia entre internas--. Si esta
+            // clase no lo tiene (no es interna de instancia), no hay nada que pasar y queda el
+            // `()V` de siempre: ese caso solo es legal con un `super()` **cualificado**, que es
+            // explicito y no pasa por aca.
+            let toma_envolvente =
+                super_enclosing.filter(|_| m.params.first().is_some_and(|p| p.name == "this$0"));
+            let desc = match toma_envolvente {
+                Some(outer) => format!("(L{outer};)V"),
+                None => "()V".to_string(),
+            };
+            let super_init = e.pool.methodref(super_internal, "<init>", &desc);
             e.load_this(); // todavía `UninitThis`
+            if toma_envolvente.is_some() {
+                e.load(4, 1); // el `this$0` propio, categoria de referencia
+            }
             e.op(INVOKESPECIAL);
             e.u16(super_init);
-            e.pop(1);
+            e.pop(if toma_envolvente.is_some() { 2 } else { 1 });
             e.init_this(); // ya inicializado
         }
     }
@@ -6158,7 +6262,7 @@ impl<'a> Emitter<'a> {
         if let Some(es) = init {
             // Cada elemento se **amplía** al tipo del arreglo antes de guardarlo, igual que en
             // `a[i] = v`: `new float[] { unInt }` necesita el `i2f` que el `fastore` no hace
-            // (#487). Sin esto el verificador rechaza el método, y nuestra VM --que no verifica
+            // (#490). Sin esto el verificador rechaza el método, y nuestra VM --que no verifica
             // tipos de pila-- lo dejaba pasar leyendo el int como float.
             let elem_cat = category(&elem);
             for (i, v) in es.iter().enumerate() {

@@ -410,6 +410,7 @@ impl Exec<'_> {
                         &clase,
                     )))
                 }
+                natives::NativeOutcome::Lanza(clase) => return self.throw_exception(&clase),
                 natives::NativeOutcome::Unimplemented => {
                     return self.throw_exception("java/lang/UnsatisfiedLinkError")
                 }

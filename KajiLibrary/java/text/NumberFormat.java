@@ -20,13 +20,19 @@ import java.util.Map;
 // porque es la parte del contrato que un llamador puede ajustar sin saber qué implementación tiene
 // enfrente.
 //
-// Lo que NO está, y por qué: `getCompactNumberInstance()` y `getCompactNumberInstance(Locale,
-// Style)`. Un formateador compacto necesita la tabla de patrones compactos del CLDR —"0 mil",
-// "0 millones", "0万", "0億"— que es texto traducido por locale y por regla de plural, y esta
-// biblioteca no trae datos del CLDR. Rellenarla con "K/M/B" para todos los locales daría un
-// resultado plausible y falso en la mayoría, así que las dos fábricas quedan afuera. La CLASE
-// {@link CompactNumberFormat} sí está: sus constructores reciben los patrones del llamador, así que
-// puede funcionar honestamente sin tabla.
+// Sobre `getCompactNumberInstance()` y `getCompactNumberInstance(Locale, Style)`: esta nota decía
+// que quedaban afuera porque la tabla de patrones compactos del CLDR —"0 mil", "0 millones", "0万",
+// "0億"— es texto traducido por locale y por regla de plural, y rellenarla con "K/M/B" para todos
+// daría un resultado plausible y falso en la mayoría. Lo segundo sigue siendo cierto; lo que cambió
+// es que los datos ya no se inventan.
+//
+// La tabla de abajo trae los patrones **exactos** de los mismos seis locales que cubre
+// `DecimalFormatSymbols`, y no están transcriptos a mano: se leyeron del JDK 25 por reflexión sobre
+// el campo `compactPatterns` de su propio `CompactNumberFormat`. Un locale desconocido cae en ROOT,
+// que es lo que hace el JDK con un locale del que no tiene datos.
+//
+// `CompactNumberFormat` ya sabía leerlos: evalúa las variantes `{one:... other:...}` contra las
+// reglas de plural del locale. Lo único que le faltaba era de dónde sacarlas.
 public abstract class NumberFormat extends Format {
 
     /**
@@ -364,5 +370,155 @@ public abstract class NumberFormat extends Format {
                 && this.minimumFractionDigits == other.minimumFractionDigits
                 && this.groupingUsed == other.groupingUsed
                 && this.parseIntegerOnly == other.parseIntegerOnly;
+    }
+
+    // ---- los formateadores compactos ---------------------------------------------------------
+
+    /**
+     * El formateador compacto del locale por omisión, en estilo corto.
+     *
+     * <p>Es {@code getCompactNumberInstance(Locale.getDefault(FORMAT), Style.SHORT)}, que es lo
+     * que el contrato define. La categoría es {@code FORMAT} y no el default a secas: en una máquina
+     * donde el locale de presentación y el de formato difieren son dos respuestas distintas, y la
+     * que este método promete es la de formato. Se vio contra el JDK 25.
+     */
+    public static NumberFormat getCompactNumberInstance() {
+        return NumberFormat.getCompactNumberInstance(Locale.getDefault(Locale.Category.FORMAT),
+                                                     NumberFormat.Style.SHORT);
+    }
+
+    /**
+     * El formateador compacto de ese locale y estilo.
+     *
+     * <p>Un locale sin datos propios cae en ROOT. Ver la nota de la cabecera sobre de dónde salen
+     * los patrones.
+     *
+     * @throws NullPointerException si alguno de los dos es null
+     */
+    public static NumberFormat getCompactNumberInstance(Locale locale,
+                                                        NumberFormat.Style formatStyle) {
+        if (locale == null || formatStyle == null) {
+            throw new NullPointerException();
+        }
+        int i = DecimalFormatSymbols.indexOf(locale);
+        String[] fila = formatStyle == NumberFormat.Style.SHORT
+                ? NumberFormat.compactosCortos()[i]
+                : NumberFormat.compactosLargos()[i];
+        String[] copia = new String[fila.length];
+        for (int k = 0; k < fila.length; k = k + 1) {
+            copia[k] = fila[k];
+        }
+        return new CompactNumberFormat(NumberFormat.PATRON_DECIMAL,
+                                       new DecimalFormatSymbols(locale), copia,
+                                       NumberFormat.reglasDePlural()[i]);
+    }
+
+    // El patrón decimal de base es el mismo en los seis locales; lo que cambia entre ellos son los
+    // símbolos, y esos los trae `DecimalFormatSymbols`.
+    private static final String PATRON_DECIMAL = "#,##0.###";
+
+    // Las reglas de plural del locale, en la sintaxis del CLDR. Vacías donde el idioma no distingue
+    // --japonés no tiene plural gramatical-- y ahí `CompactNumberFormat` usa `other`, que es la
+    // categoría que el CLDR garantiza en todos.
+    private static String[] reglasDePlural() {
+        return new String[] {
+            "",
+            "one:i = 1 and v = 0",
+            "one:n = 1;many:e = 0 and i != 0 and i % 1000000 = 0 and v = 0 or e != 0..5",
+            "one:i = 1 and v = 0",
+            "one:i = 0,1;many:e = 0 and i != 0 and i % 1000000 = 0 and v = 0 or e != 0..5",
+            "",
+        };
+    }
+
+    // Una fila por locale, en el mismo orden que la tabla de `DecimalFormatSymbols`: und, en-US,
+    // es-AR, de-DE, fr-FR, ja-JP. Cada entrada es la potencia de diez de su índice, y las primeras
+    // tres están vacías porque abajo de mil no se compacta nada.
+    //
+    // La fila japonesa es más larga que las demás: su sistema de miradas agrupa de a diez mil
+    // (万, 億, 兆, 京) y el CLDR le da entradas hasta 10^18. No es un descuido de las otras.
+    private static String[][] compactosCortos() {
+        return new String[][] {
+            {"", "", "", "{other:0K}", "{other:00K}", "{other:000K}", "{other:0M}", "{other:00M}",
+             "{other:000M}", "{other:0G}", "{other:00G}", "{other:000G}", "{other:0T}",
+             "{other:00T}", "{other:000T}"},
+            {"", "", "", "{one:0K other:0K}", "{one:00K other:00K}", "{one:000K other:000K}",
+             "{one:0M other:0M}", "{one:00M other:00M}", "{one:000M other:000M}",
+             "{one:0B other:0B}", "{one:00B other:00B}", "{one:000B other:000B}",
+             "{one:0T other:0T}", "{one:00T other:00T}", "{one:000T other:000T}"},
+            {"", "", "", "{one:0\u00a0K other:0\u00a0K}", "{one:00\u00a0k other:00\u00a0k}",
+             "{one:000\u00a0k other:000\u00a0k}", "{one:0\u00a0M other:0\u00a0M}",
+             "{one:00\u00a0M other:00\u00a0M}", "{one:000\u00a0M other:000\u00a0M}",
+             "{one:0000\u00a0M other:0000\u00a0M}",
+             "{one:00\u00a0mil\u00a0M other:00\u00a0mil\u00a0M}",
+             "{one:000\u00a0mil\u00a0M other:000\u00a0mil\u00a0M}",
+             "{one:0\u00a0B other:0\u00a0B}", "{one:00\u00a0B other:00\u00a0B}",
+             "{one:000\u00a0B other:000\u00a0B}"},
+            {"", "", "", "{one:0 other:0}", "{one:0 other:0}", "{one:0 other:0}",
+             "{one:0\u00a0Mio'.' other:0\u00a0Mio'.'}",
+             "{one:00\u00a0Mio'.' other:00\u00a0Mio'.'}",
+             "{one:000\u00a0Mio'.' other:000\u00a0Mio'.'}",
+             "{one:0\u00a0Mrd'.' other:0\u00a0Mrd'.'}",
+             "{one:00\u00a0Mrd'.' other:00\u00a0Mrd'.'}",
+             "{one:000\u00a0Mrd'.' other:000\u00a0Mrd'.'}",
+             "{one:0\u00a0Bio'.' other:0\u00a0Bio'.'}",
+             "{one:00\u00a0Bio'.' other:00\u00a0Bio'.'}",
+             "{one:000\u00a0Bio'.' other:000\u00a0Bio'.'}"},
+            {"", "", "", "{one:0\u00a0k other:0\u00a0k}", "{one:00\u00a0k other:00\u00a0k}",
+             "{one:000\u00a0k other:000\u00a0k}", "{one:0\u00a0M other:0\u00a0M}",
+             "{one:00\u00a0M other:00\u00a0M}", "{one:000\u00a0M other:000\u00a0M}",
+             "{one:0\u00a0Md other:0\u00a0Md}", "{one:00\u00a0Md other:00\u00a0Md}",
+             "{one:000\u00a0Md other:000\u00a0Md}", "{one:0\u00a0Bn other:0\u00a0Bn}",
+             "{one:00\u00a0Bn other:00\u00a0Bn}", "{one:000\u00a0Bn other:000\u00a0Bn}"},
+            {"", "", "", "{other:0}", "{other:0\u4e07}", "{other:00\u4e07}", "{other:000\u4e07}",
+             "{other:0000\u4e07}", "{other:0\u5104}", "{other:00\u5104}", "{other:000\u5104}",
+             "{other:0000\u5104}", "{other:0\u5146}", "{other:00\u5146}", "{other:000\u5146}",
+             "{other:0000\u5146}", "{other:0\u4eac}", "{other:00\u4eac}", "{other:000\u4eac}",
+             "{other:0000\u4eac}"},
+        };
+    }
+
+    private static String[][] compactosLargos() {
+        return new String[][] {
+            {"", "", "", "{other:0K}", "{other:00K}", "{other:000K}", "{other:0M}", "{other:00M}",
+             "{other:000M}", "{other:0G}", "{other:00G}", "{other:000G}", "{other:0T}",
+             "{other:00T}", "{other:000T}"},
+            {"", "", "", "{one:0' 'thousand other:0' 'thousand}",
+             "{one:00' 'thousand other:00' 'thousand}", "{one:000' 'thousand other:000' 'thousand}",
+             "{one:0' 'million other:0' 'million}", "{one:00' 'million other:00' 'million}",
+             "{one:000' 'million other:000' 'million}", "{one:0' 'billion other:0' 'billion}",
+             "{one:00' 'billion other:00' 'billion}", "{one:000' 'billion other:000' 'billion}",
+             "{one:0' 'trillion other:0' 'trillion}", "{one:00' 'trillion other:00' 'trillion}",
+             "{one:000' 'trillion other:000' 'trillion}"},
+            {"", "", "", "{one:0\u00a0K other:0\u00a0K}", "{one:00\u00a0k other:00\u00a0k}",
+             "{one:000\u00a0k other:000\u00a0k}", "{one:0\u00a0M other:0\u00a0M}",
+             "{one:00\u00a0M other:00\u00a0M}", "{one:000\u00a0M other:000\u00a0M}",
+             "{one:0000\u00a0M other:0000\u00a0M}",
+             "{one:00\u00a0mil\u00a0M other:00\u00a0mil\u00a0M}",
+             "{one:000\u00a0mil\u00a0M other:000\u00a0mil\u00a0M}",
+             "{one:0\u00a0B other:0\u00a0B}", "{one:00\u00a0B other:00\u00a0B}",
+             "{one:000\u00a0B other:000\u00a0B}"},
+            {"", "", "", "{one:0' 'Tausend other:0' 'Tausend}",
+             "{one:00' 'Tausend other:00' 'Tausend}", "{one:000' 'Tausend other:000' 'Tausend}",
+             "{one:0' 'Million other:0' 'Millionen}", "{one:00' 'Millionen other:00' 'Millionen}",
+             "{one:000' 'Millionen other:000' 'Millionen}",
+             "{one:0' 'Milliarde other:0' 'Milliarden}",
+             "{one:00' 'Milliarden other:00' 'Milliarden}",
+             "{one:000' 'Milliarden other:000' 'Milliarden}",
+             "{one:0' 'Billion other:0' 'Billionen}", "{one:00' 'Billionen other:00' 'Billionen}",
+             "{one:000' 'Billionen other:000' 'Billionen}"},
+            {"", "", "", "{1:mille one:0' 'millier other:0' 'mille}",
+             "{one:00' 'mille other:00' 'mille}", "{one:000' 'mille other:000' 'mille}",
+             "{one:0' 'million other:0' 'millions}", "{one:00' 'million other:00' 'millions}",
+             "{one:000' 'million other:000' 'millions}", "{one:0' 'milliard other:0' 'milliards}",
+             "{one:00' 'milliard other:00' 'milliards}",
+             "{one:000' 'milliard other:000' 'milliards}", "{one:0' 'billion other:0' 'billions}",
+             "{one:00' 'billion other:00' 'billions}", "{one:000' 'billion other:000' 'billions}"},
+            {"", "", "", "{other:0}", "{other:0\u4e07}", "{other:00\u4e07}", "{other:000\u4e07}",
+             "{other:0000\u4e07}", "{other:0\u5104}", "{other:00\u5104}", "{other:000\u5104}",
+             "{other:0000\u5104}", "{other:0\u5146}", "{other:00\u5146}", "{other:000\u5146}",
+             "{other:0000\u5146}", "{other:0\u4eac}", "{other:00\u4eac}", "{other:000\u4eac}",
+             "{other:0000\u4eac}"},
+        };
     }
 }

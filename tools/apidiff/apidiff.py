@@ -53,30 +53,137 @@ def run(cmd):
     return (proc.stdout or "").replace("\r", "")
 
 
-def normalize(line):
+def _grupo_balanceado(s, inicio):
+    """El `<...>` balanceado que empieza en `inicio`. Devuelve (contenido, indice_despues)."""
+    if inicio >= len(s) or s[inicio] != "<":
+        return None, inicio
+    nivel, i = 0, inicio
+    while i < len(s):
+        if s[i] == "<":
+            nivel += 1
+        elif s[i] == ">":
+            nivel -= 1
+            if nivel == 0:
+                return s[inicio + 1:i], i + 1
+        i += 1
+    return None, inicio
+
+
+def _partir_en_comas(s):
+    """Parte por las comas de **nivel cero**: `A, B<C, D>` son dos, no tres."""
+    partes, nivel, actual = [], 0, []
+    for c in s:
+        if c == "<":
+            nivel += 1
+        elif c == ">":
+            nivel -= 1
+        if c == "," and nivel == 0:
+            partes.append("".join(actual))
+            actual = []
+        else:
+            actual.append(c)
+    if actual:
+        partes.append("".join(actual))
+    return [p.strip() for p in partes if p.strip()]
+
+
+def type_params(raw):
+    """Los parametros de tipo declarados en `raw`, mapeados a su **borrado** (JLS 4.6).
+
+    Una variable de tipo borra a su **primera cota**, o a `Object` si no tiene ninguna. Es lo que
+    hace `javac` al emitir el descriptor, asi que es lo que hay que comparar: el JDK imprime
+    `public default D toLocalDate()` y una implementacion correcta declara `ChronoLocalDate`.
+
+    Sin esto, cada miembro cuyo tipo es una variable contaba como **faltante** aunque estuviera
+    escrito bien. Es un error del medidor, no de la biblioteca -- y de los peores, porque empuja a
+    "arreglar" codigo que no esta roto.
+    """
+    s = raw.strip()
+    i = 0
+    # Saltear los modificadores para encontrar un `<...>` que sea una **declaracion** de parametros
+    # y no una lista de argumentos: `static <R> Foo<R> of(R)` declara `R`, pero
+    # `public List<String> f()` no declara nada.
+    while True:
+        m = re.match(r"([\w$.]+)\s+", s[i:])
+        if not m:
+            break
+        if m.group(1) not in MODS and not (s[i:].startswith("class ")
+                                           or s[i:].startswith("interface ")
+                                           or s[i:].startswith("enum ")
+                                           or s[i:].startswith("record ")):
+            break
+        i += m.end()
+    # En una declaracion de tipo, el `<...>` viene pegado al nombre: `class Foo<D extends X>`.
+    if i < len(s) and s[i] != "<":
+        m = re.match(r"[\w$.]+", s[i:])
+        if m:
+            i += m.end()
+    contenido, _ = _grupo_balanceado(s, i)
+    if contenido is None:
+        return {}
+    fuera = {}
+    for parte in _partir_en_comas(contenido):
+        m = re.match(r"([\w$]+)(?:\s+extends\s+(.+))?$", parte.strip())
+        if not m:
+            continue
+        nombre = m.group(1)
+        cota = m.group(2)
+        if cota:
+            # `T extends A & B` borra a `A`, la primera.
+            cota = cota.split("&")[0].strip()
+            cota = GENERIC.sub("", cota).strip()
+        fuera[nombre] = cota or "java.lang.Object"
+    return fuera
+
+
+def _sustituir(s, tvars):
+    """Reemplaza cada variable de tipo por su borrado, como palabra entera."""
+    if not tvars:
+        return s
+    for nombre in sorted(tvars, key=len, reverse=True):
+        s = re.sub(r"\b" + re.escape(nombre) + r"\b", tvars[nombre], s)
+    return s
+
+
+def normalize(line, tvars=None):
     s = line.strip()
     if not s or s == "}":
         return None
     s = s.split(" throws ")[0]
+    # Los parametros del **propio** miembro se suman a los de la clase: un
+    # `static <R extends X> Foo<R> of(R)` declara su `R` y hay que borrarlo igual.
+    propios = type_params(s)
     prev = None
     while prev != s:                       # genericos anidados
         prev = s
         s = GENERIC.sub("", s)
     s = re.sub(r"\s+", " ", s.rstrip(";").strip())
-    return s or None
+    if not s:
+        return None
+    todos = dict(tvars or {})
+    todos.update(propios)
+    return _sustituir(s, todos) or None
 
 
 def parse(text):
-    """Primera linea util = declaracion de la clase; el resto, miembros."""
+    """Primera linea util = declaracion de la clase; el resto, miembros.
+
+    Los parametros de tipo **de la clase** se leen de esa primera linea y se aplican a todos los
+    miembros: en `javap` un miembro los nombra pelados (`D toLocalDate()`) y solo la declaracion
+    dice a que borran.
+    """
     decl, members = None, set()
+    tvars = {}
     for line in text.splitlines():
         if line.startswith("Compiled from"):
             continue
-        n = normalize(line)
-        if n is None or n == "{":
+        crudo = line.strip()
+        if decl is None and DECL.match(normalize(line) or ""):
+            tvars = type_params(crudo)
+            decl = _sustituir(normalize(line), tvars).rstrip("{").strip()
             continue
-        if decl is None and DECL.match(n):
-            decl = n.rstrip("{").strip()
+        n = normalize(line, tvars)
+        if n is None or n == "{":
             continue
         members.add(n.rstrip("{").strip())
     return decl, members

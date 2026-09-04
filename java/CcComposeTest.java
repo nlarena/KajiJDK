@@ -2,6 +2,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
 
 // H6 volume: CompletableFuture.thenCompose — flattens CF<CF<U>> → CF<U>. supplyAsync produces
 // CcBox(21); thenCompose maps it to ANOTHER async future (on the pool) that doubles it to CcBox(42);
@@ -42,7 +44,8 @@ class CcAsyncDoubler implements Function<CcBox, CompletableFuture<CcBox>> {
 
 public class CcComposeTest {
     static int run() {
-        ThreadPoolExecutor pool = new ThreadPoolExecutor(2);
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
         CcAsyncDoubler dbl = new CcAsyncDoubler();
         dbl.pool = pool;
         CompletableFuture<CcBox> cf = CompletableFuture.supplyAsync(new CcSupply21(), pool);
@@ -55,7 +58,7 @@ public class CcComposeTest {
         }
         pool.shutdown();
         try {
-            pool.awaitTermination();
+            pool.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return result; // 42

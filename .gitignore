@@ -25,3 +25,31 @@
 # Stray artifacts (not part of the project)
 /out.txt
 /bootout/
+
+# El scratchpad: pruebas de una sola vez, repros a medio reducir, salidas de medicion. Es donde se
+# trabaja, no lo que queda. Mismo argumento que `bin/*.exe`: lo que hay que guardar es la receta, y
+# la receta de cada hallazgo ya vive en COMPILER_FINDINGS.md con su repro minimo en `repros/`.
+/scratchpad/
+
+# Lo que dejan las pruebas al correr. NO son artefactos "por si acaso": son directorios y archivos
+# que las propias pruebas crean con un nombre al azar --`Files.walk` sobre un arbol de mentira, una
+# tuberia con nombre-- y que no siempre alcanzan a borrar cuando la prueba falla a mitad de camino.
+# Cada corrida deja unos cuantos, asi que sin esto `git status` se vuelve ilegible en una tarde.
+/kajiwalk*/
+/kajiw*/
+/kaji-pipe*.tmp
+
+# Sondas sueltas en la raiz. Nacieron para mirar una cosa puntual desde la linea de comandos y se
+# quedaron; ninguna la corre la suite --que solo mira `java/*Test.java`-- asi que no prueban nada
+# para nadie mas. Se ignoran en vez de borrarse porque siguen siendo utiles para quien las escribio.
+/Smoke*.java
+/Smoke*.class
+/Dbg2.java
+/Dbg2.class
+/LongArr.java
+/LongArr.class
+
+# El grafico de completitud: es una FOTO, no fuente. Se regenera con `python tools/grafico.py` a
+# partir de la medicion, cambia entero en cada tanda y no se puede diffear -- el mismo argumento por
+# el que `bin/*.exe` tampoco se commitea. Lo que hace falta guardar es el generador, que si esta.
+/docs/completitud.html

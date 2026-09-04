@@ -2,6 +2,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
 
 // H6 volume: CompletableFuture.thenCombine — two independent futures run on the pool (CkBox(20) and
 // CkBox(22)); thenCombine waits for BOTH and merges their results with a BiFunction that sums them.
@@ -35,7 +37,8 @@ class CkSum implements BiFunction<CkBox, CkBox, CkBox> {
 
 public class CkTest {
     static int run() {
-        ThreadPoolExecutor pool = new ThreadPoolExecutor(2);
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
         CompletableFuture<CkBox> a = CompletableFuture.supplyAsync(new CkSupply20(), pool);
         CompletableFuture<CkBox> b = CompletableFuture.supplyAsync(new CkSupply22(), pool);
         CompletableFuture<CkBox> both = a.thenCombine(b, new CkSum());
@@ -47,7 +50,7 @@ public class CkTest {
         }
         pool.shutdown();
         try {
-            pool.awaitTermination();
+            pool.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return result; // 42

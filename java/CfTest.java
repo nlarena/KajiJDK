@@ -2,6 +2,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
 
 // H6 volume: CompletableFuture pipeline on a ThreadPoolExecutor. supplyAsync runs Supply21 on the
 // pool (completes with CfBox(21)); thenApply chains Doubler (→ CfBox(42)); get() blocks until the whole
@@ -29,7 +31,8 @@ class Doubler implements Function<CfBox, CfBox> {
 
 public class CfTest {
     static int run() {
-        ThreadPoolExecutor pool = new ThreadPoolExecutor(2);
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
         CompletableFuture<CfBox> cf = CompletableFuture.supplyAsync(new Supply21(), pool);
         CompletableFuture<CfBox> cf2 = cf.thenApply(new Doubler());
         int result = 0;
@@ -40,7 +43,7 @@ public class CfTest {
         }
         pool.shutdown();
         try {
-            pool.awaitTermination();
+            pool.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return result; // 42

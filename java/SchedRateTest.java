@@ -1,6 +1,7 @@
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
 
 // H6 volume: ScheduledThreadPoolExecutor.scheduleAtFixedRate(). One periodic task fires repeatedly;
 // it increments a counter but CAPS it at `max` (so the exact count is deterministic regardless of
@@ -38,14 +39,14 @@ public class SchedRateTest {
         t.max = 10;
         t.lock = lock;
         t.latch = latch;
-        sched.scheduleAtFixedRate(t, 0, 2); // initial 0, period 2 ms
+        sched.scheduleAtFixedRate(t, 0, 2, TimeUnit.MILLISECONDS); // initial 0, period 2 ms
         try {
             latch.await(); // returns once the task has fired 10 times
         } catch (InterruptedException e) {
         }
         sched.shutdown();
         try {
-            sched.awaitTermination();
+            sched.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return counter[0]; // 10 (capped)

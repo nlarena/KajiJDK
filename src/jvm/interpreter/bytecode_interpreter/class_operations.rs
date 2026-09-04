@@ -281,8 +281,13 @@ pub fn try_static_reference(
 /// exists (`load_class`), then offsets past the header by the field's index among
 /// that class's own static fields. Each class keeps its own statics — no flattening.
 pub(crate) fn static_slot(metaspace: &mut MetaspaceService, heap: &mut HeapService, named_class: &str, field: &str) -> usize {
-    let declaring = static_declaring_class(metaspace, named_class, field)
-        .expect("getstatic/putstatic: static field not found in the class or its superclasses");
+    // El mensaje nombra la clase y el campo: sin eso, un descuadre entre un `.class` viejo y el
+    // codigo que lo usa deja un panico que no dice de donde salio, y encontrarlo cuesta una tarde.
+    let declaring = static_declaring_class(metaspace, named_class, field).unwrap_or_else(|| {
+        panic!(
+            "getstatic/putstatic: el campo estatico {named_class}.{field} no esta en la clase ni en sus superclases"
+        )
+    });
 
     // Ensure the declaring class's mirror is allocated (Preparation), then locate it.
     load_class(metaspace, heap, &declaring);

@@ -1,5 +1,7 @@
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
 
 // H6 volume: a fixed ThreadPoolExecutor(4) runs 300 tasks that each do one guarded increment of a
 // shared int. The pool must run *every* task exactly once on its 4 worker threads (no task lost or
@@ -20,7 +22,8 @@ class IncTask implements Runnable {
 
 public class PoolTest {
     static int run() {
-        ThreadPoolExecutor pool = new ThreadPoolExecutor(4);
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>());
         int[] counter = new int[1];
         ReentrantLock lock = new ReentrantLock();
         for (int i = 0; i < 300; i++) {
@@ -31,7 +34,7 @@ public class PoolTest {
         }
         pool.shutdown();
         try {
-            pool.awaitTermination();
+            pool.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return counter[0]; // 300

@@ -1,6 +1,7 @@
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
 
 // H6 volume: ScheduledThreadPoolExecutor one-shot schedule(). Five tasks are scheduled with a small
 // delay; each does one guarded increment and counts down a latch. main awaits the latch (so all
@@ -32,7 +33,7 @@ public class SchedTest {
             t.counter = counter;
             t.lock = lock;
             t.latch = latch;
-            sched.schedule(t, 5); // 5 ms delay → exercises the delayed heap
+            sched.schedule(t, 5, TimeUnit.MILLISECONDS); // 5 ms delay → exercises the delayed heap
         }
         try {
             latch.await();
@@ -40,7 +41,7 @@ public class SchedTest {
         }
         sched.shutdown();
         try {
-            sched.awaitTermination();
+            sched.awaitTermination(10L, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
         }
         return counter[0]; // 5

@@ -147,6 +147,17 @@ public final class CompactNumberFormat extends NumberFormat {
         if (patron == null || patron.length() == 0) {
             return this.base.format(valor, out, pos);
         }
+        // Un patron sin prefijo ni sufijo --"{one:0 other:0}"-- **no es una forma compacta**: es
+        // como el CLDR escribe "esta magnitud no se compacta en este locale". El aleman no compacta
+        // por debajo del millon y el japones no compacta el millar, y los dos lo dicen asi.
+        // Compactarlo igual daria "1" donde corresponde "1.000", que es exactamente el numero
+        // equivocado por tres ordenes de magnitud.
+        //
+        // Se mira antes del bucle y no despues porque el bucle solo puede subir de magnitud --
+        // redondear agranda-- y las entradas sin afijos son siempre las de abajo.
+        if (CompactNumberFormat.sinAfijos(patron)) {
+            return this.base.format(valor, out, pos);
+        }
 
         BigDecimal dividido = valor;
         int vueltas = 0;
@@ -254,6 +265,14 @@ public final class CompactNumberFormat extends NumberFormat {
             return 1;
         }
         return n;
+    }
+
+    // Si el patron no aporta ni prefijo ni sufijo. Se mira sobre UNA variante, como `cerosDe`: las
+    // variantes de un patron se diferencian en el texto del plural, no en tener o no tenerlo.
+    private static boolean sinAfijos(String patron) {
+        String p = CompactNumberFormat.variante(patron, null);
+        return CompactNumberFormat.afijo(p, true).length() == 0
+                && CompactNumberFormat.afijo(p, false).length() == 0;
     }
 
     private static String afijo(String patron, boolean prefijo) {

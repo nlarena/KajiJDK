@@ -65,15 +65,27 @@ def main(out_dir, report_path):
         wrote = os.path.exists(expected) and (
             before is None or os.path.getmtime(expected) != before
         )
-        results.append({"file": rel, "wrote": wrote, "exit": proc.returncode, "out": out})
+        # Que no aparezca `<nombre del archivo>.class` NO quiere decir que la compilacion fallo. Un
+        # archivo puede tener solo clases de paquete con otros nombres --Java lo permite mientras
+        # ninguna sea publica-- y entonces lo que se escribe se llama distinto. Tres archivos del
+        # arbol son asi (`GrupoLayouts`, `ValorLayouts`, `PiezaZona`), y aparecian como falla en cada
+        # corrida. Una herramienta que grita en falso tres veces es una herramienta a la que se le
+        # deja de mirar la salida, que es como una falla de verdad pasa desapercibida.
+        #
+        # El veredicto real es lo que el javac **dijo**: si escribio algo, y si se quejo.
+        escribio_algo = "javac: escrito" in out
+        se_quejo = any(": error" in l or "error:" in l for l in out.splitlines())
+        ok = (wrote or escribio_algo) and not se_quejo
+        results.append({"file": rel, "wrote": wrote, "ok": ok, "exit": proc.returncode,
+                        "out": out})
         if (i + 1) % 100 == 0:
             print(f"  {i + 1}/{len(sources)}", flush=True)
 
     with open(report_path, "w", encoding="utf-8") as fh:
         json.dump(results, fh, ensure_ascii=False, indent=1)
 
-    bad = [r for r in results if not r["wrote"]]
-    print(f"compiladas: {len(results) - len(bad)}   sin .class: {len(bad)}")
+    bad = [r for r in results if not r["ok"]]
+    print(f"compiladas: {len(results) - len(bad)}   con error: {len(bad)}")
     for r in bad:
         first = next((l for l in r["out"].splitlines() if l.strip()), "")
         print(f"  FALLA {r['file']}: {first[-160:]}")
