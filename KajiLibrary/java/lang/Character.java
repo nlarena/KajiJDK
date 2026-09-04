@@ -29,8 +29,7 @@ import java.io.Serializable;
  * can. When they disagree, the {@code int} form is the one telling the truth.
  *
  * @implNote A KajiLibrary subset. Absent are the classification families that need their own
- *           tables — {@code getType}, {@code getDirectionality}, {@code isMirrored},
- *           {@code UnicodeBlock}, {@code UnicodeScript} and the Java-identifier predicates —
+ *           tables — {@code UnicodeBlock}, {@code UnicodeScript} and the Java-identifier predicates —
  *           and the {@code Constable} interface. The name lookups {@code getName} and
  *           {@code codePointOf} are present in shape but throw {@code UnsupportedOperationException}
  *           for the same reason: they need the Unicode name table ({@code uniName.dat}), not carried
@@ -3795,4 +3794,47 @@ public final class Character implements Comparable<Character>, Serializable {
                 "la tabla de nombres Unicode (uniName.dat) no esta en KajiLibrary");
     }
 
+
+    /**
+     * A named range of characters, compared by identity.
+     *
+     * <p>The point of the class is what it does <em>not</em> do: {@code equals} is final and is
+     * reference equality, and {@code hashCode} is the identity hash. Two subsets with the same name
+     * are two different subsets. That is deliberate — a subset is a singleton defined by whoever
+     * declares it, and letting two of them compare equal because their names collide would silently
+     * merge unrelated ranges.
+     *
+     * <p>Subclasses supply the constants; this class carries only the name, for {@code toString}.
+     */
+    public static class Subset {
+
+        private final String name;
+
+        /**
+         * Creates a subset with the given name.
+         *
+         * @throws NullPointerException if the name is {@code null}
+         */
+        protected Subset(String name) {
+            if (name == null) {
+                throw new NullPointerException("name");
+            }
+            this.name = name;
+        }
+
+        /** Reference equality; final, so no subclass can loosen it. */
+        public final boolean equals(Object obj) {
+            return this == obj;
+        }
+
+        /** The identity hash, to match {@link #equals}. */
+        public final int hashCode() {
+            return super.hashCode();
+        }
+
+        /** The name this subset was created with. */
+        public final String toString() {
+            return this.name;
+        }
+    }
 }

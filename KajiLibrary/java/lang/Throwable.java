@@ -85,7 +85,32 @@ public class Throwable {
         return this.cause;
     }
 
+    /**
+     * Fija la causa, y **solo una vez**.
+     *
+     * <p>Las dos guardas son parte del contrato y no adornos. La primera --no se puede pisar una
+     * causa ya puesta-- existe porque la cadena de causas es lo que explica un error, y dejarla
+     * reescribir permitiria borrar el motivo original desde cualquier `catch` de por medio. Por eso
+     * tampoco se puede usar sobre una excepcion construida **con** causa: ahi ya se fijo.
+     *
+     * <p>La segunda evita que una excepcion sea su propia causa, que dejaria a `printStackTrace` en
+     * un bucle infinito.
+     *
+     * <p>El centinela de "sin fijar" es `cause == this`, igual que en el JDK. Es lo que permite
+     * distinguir "todavia no se fijo" de "se fijo en null", que son dos estados distintos: el
+     * segundo tambien queda cerrado a futuras llamadas.
+     *
+     * @throws IllegalStateException si la causa ya se habia fijado
+     * @throws IllegalArgumentException si se pasa a si misma
+     */
     public synchronized Throwable initCause(Throwable cause) {
+        if (this.cause != this) {
+            throw new IllegalStateException(
+                "Can't overwrite cause with " + (cause == null ? "a null" : cause.toString()));
+        }
+        if (cause == this) {
+            throw new IllegalArgumentException("Self-causation not permitted");
+        }
         this.cause = cause;
         return this;
     }
