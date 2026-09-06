@@ -4,18 +4,21 @@ package java.security;
 // que venia escrito antes del "-----BEGIN".
 //
 // ===============================================================================================
-// POR QUE ESTA CLASE SI Y PEMDecoder / PEMEncoder NO
+// POR QUE ESTA CLASE LLEGO PRIMERO
 // ===============================================================================================
 //
-// Las tres llegaron juntas al JDK 25, pero no piden lo mismo. Un `PEMDecoder` tiene que convertir
-// los bytes en una `PrivateKey` o un `Certificate`, y para eso necesita una `KeyFactory` o una
-// `CertificateFactory` que sepan el algoritmo. **En esta biblioteca no hay ningun proveedor
-// registrado**, asi que todo `decode` terminaria tirando; y `withDecryption` ademas necesitaria
-// cifrado simetrico, que tampoco hay. Un `PEMEncoder` arrastra lo mismo por el lado de
-// `withEncryption`.
+// Las tres llegaron juntas al JDK 25, pero no piden lo mismo. Este registro **no decodifica nada**:
+// guarda el texto tal cual, asi que se podia cumplir entero desde el primer dia. `PEMDecoder` y
+// `PEMEncoder`, en cambio, tienen que convertir los bytes en una `PrivateKey` o un `Certificate`, y
+// para eso necesitan una `KeyFactory` o una `CertificateFactory` que sepan el algoritmo; en esta
+// biblioteca no hay ninguna registrada.
 //
-// Este registro, en cambio, **no decodifica nada**: guarda el texto tal cual. Es la unica parte de
-// la API de PEM que se puede cumplir entera y de verdad, asi que es la unica que esta.
+// **Ese argumento dejo de alcanzar y las dos estan.** Lo que cambio es que aparecio una etiqueta
+// cuyo objeto si se puede construir sin proveedores: `ENCRYPTED PRIVATE KEY` da un
+// `javax.crypto.EncryptedPrivateKeyInfo`, que lee su propio DER. Con eso, y con los bloques de
+// etiqueta desconocida --que vuelven como este registro--, la mayor parte de la API se cumple de
+// verdad; lo que necesita una fabrica hace la busqueda igual y falla con la misma excepcion que
+// tira el JDK cuando no encuentra con que construir. Ver la nota de `PEMDecoder`.
 //
 // ===============================================================================================
 // DOS COSAS QUE SORPRENDEN Y SON CORRECTAS
