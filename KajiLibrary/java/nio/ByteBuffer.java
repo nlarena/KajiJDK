@@ -117,7 +117,14 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      *
      * @return the new buffer
      */
-    public abstract ByteBuffer slice();
+
+    public ByteBuffer slice() {
+        ByteBuffer b = newBuffer(offset + position(), remaining());
+        b.isReadOnly = isReadOnly;
+        b.bigEndian = bigEndian;
+        b.nativeByteOrder = nativeByteOrder;
+        return b;
+    }
 
     /**
      * Creates a buffer over the given range of this one, sharing the backing array.
@@ -126,21 +133,43 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @param length the number of bytes in the slice
      * @return the new buffer
      */
-    public abstract ByteBuffer slice(int index, int length);
+
+    public ByteBuffer slice(int index, int length) {
+        checkIndex(index, length);
+        ByteBuffer b = newBuffer(offset + index, length);
+        b.isReadOnly = isReadOnly;
+        b.bigEndian = bigEndian;
+        b.nativeByteOrder = nativeByteOrder;
+        return b;
+    }
 
     /**
      * Creates a buffer sharing this one's array but with its own position, limit and mark.
      *
      * @return the new buffer
      */
-    public abstract ByteBuffer duplicate();
+
+    public ByteBuffer duplicate() {
+        ByteBuffer b = newBuffer(offset, capacity());
+        b.position(position());
+        b.limit(limit());
+        b.isReadOnly = isReadOnly;
+        b.bigEndian = bigEndian;
+        b.nativeByteOrder = nativeByteOrder;
+        return b;
+    }
 
     /**
      * Creates a read-only view sharing this buffer's contents.
      *
      * @return the new buffer, whose writes throw {@link ReadOnlyBufferException}
      */
-    public abstract ByteBuffer asReadOnlyBuffer();
+
+    public ByteBuffer asReadOnlyBuffer() {
+        ByteBuffer b = duplicate();
+        b.isReadOnly = true;
+        return b;
+    }
 
     /**
      * Reads the byte at the current position and advances it.
@@ -148,7 +177,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the byte read
      * @throws BufferUnderflowException if the position is at the limit
      */
-    public abstract byte get();
+
+    public byte get() {
+        return _get(nextGetIndex());
+    }
 
     /**
      * Writes a byte at the current position and advances it.
@@ -158,7 +190,12 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if the position is at the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer put(byte b);
+
+    public ByteBuffer put(byte b) {
+        checkWritable();
+        _put(nextPutIndex(), b);
+        return this;
+    }
 
     /**
      * Reads the byte at the given index without moving the position.
@@ -167,7 +204,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the byte at {@code index}
      * @throws IndexOutOfBoundsException if {@code index} is outside the limit
      */
-    public abstract byte get(int index);
+
+    public byte get(int index) {
+        return _get(checkIndex(index));
+    }
 
     /**
      * Writes a byte at the given index without moving the position.
@@ -178,7 +218,12 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if {@code index} is outside the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer put(int index, byte b);
+
+    public ByteBuffer put(int index, byte b) {
+        checkWritable();
+        _put(checkIndex(index), b);
+        return this;
+    }
 
     /**
      * Copies bytes from this buffer into part of an array, advancing the position.
@@ -390,7 +435,20 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return this buffer
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer compact();
+
+    public ByteBuffer compact() {
+        checkWritable();
+        int n = remaining();
+        int from = position();
+        int i = 0;
+        while (i < n) {
+            at(ix(i), at(ix(from + i)));
+            i = i + 1;
+        }
+        position(n);
+        limit(capacity());
+        return this;
+    }
 
     /**
      * Tells whether this buffer's memory lives outside the Java heap.
@@ -615,7 +673,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the char read
      * @throws BufferUnderflowException if fewer than two bytes remain
      */
-    public abstract char getChar();
+
+    public char getChar() {
+        return (char) readBits(nextGetIndex(2), 2);
+    }
 
     /**
      * Writes a char as two bytes at the current position, advancing it.
@@ -625,7 +686,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if fewer than two bytes of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putChar(char value);
+
+    public ByteBuffer putChar(char value) {
+        writeBits(nextPutIndex(2), 2, (long) value);
+        return this;
+    }
 
     /**
      * Reads two bytes as a char at the given index.
@@ -634,7 +699,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the char read
      * @throws IndexOutOfBoundsException if the two bytes are not within the limit
      */
-    public abstract char getChar(int index);
+
+    public char getChar(int index) {
+        return (char) readBits(checkIndex(index, 2), 2);
+    }
 
     /**
      * Writes a char as two bytes at the given index.
@@ -645,7 +713,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if the two bytes are not within the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putChar(int index, char value);
+
+    public ByteBuffer putChar(int index, char value) {
+        writeBits(checkIndex(index, 2), 2, (long) value);
+        return this;
+    }
 
     /**
      * Creates a char view of this buffer's remaining bytes.
@@ -653,7 +725,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return a buffer of {@code remaining() / 2} chars sharing these bytes, with this buffer's
      *         current order frozen in
      */
-    public abstract CharBuffer asCharBuffer();
+
+    public CharBuffer asCharBuffer() {
+        return new ByteViewCharBuffer(this, offset + position(), remaining() / 2, bigEndian,
+                isReadOnly);
+    }
 
     /**
      * Reads two bytes as a short at the current position, advancing it.
@@ -661,7 +737,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the short read
      * @throws BufferUnderflowException if fewer than two bytes remain
      */
-    public abstract short getShort();
+
+    public short getShort() {
+        return (short) readBits(nextGetIndex(2), 2);
+    }
 
     /**
      * Writes a short as two bytes at the current position, advancing it.
@@ -671,7 +750,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if fewer than two bytes of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putShort(short value);
+
+    public ByteBuffer putShort(short value) {
+        writeBits(nextPutIndex(2), 2, (long) value);
+        return this;
+    }
 
     /**
      * Reads two bytes as a short at the given index.
@@ -680,7 +763,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the short read
      * @throws IndexOutOfBoundsException if the two bytes are not within the limit
      */
-    public abstract short getShort(int index);
+
+    public short getShort(int index) {
+        return (short) readBits(checkIndex(index, 2), 2);
+    }
 
     /**
      * Writes a short as two bytes at the given index.
@@ -691,14 +777,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if the two bytes are not within the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putShort(int index, short value);
+
+    public ByteBuffer putShort(int index, short value) {
+        writeBits(checkIndex(index, 2), 2, (long) value);
+        return this;
+    }
 
     /**
      * Creates a short view of this buffer's remaining bytes.
      *
      * @return a buffer of {@code remaining() / 2} shorts sharing these bytes
      */
-    public abstract ShortBuffer asShortBuffer();
+
+    public ShortBuffer asShortBuffer() {
+        return new ByteViewShortBuffer(this, offset + position(), remaining() / 2, bigEndian,
+                isReadOnly);
+    }
 
     /**
      * Reads four bytes as an int at the current position, advancing it.
@@ -706,7 +800,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the int read
      * @throws BufferUnderflowException if fewer than four bytes remain
      */
-    public abstract int getInt();
+
+    public int getInt() {
+        return (int) readBits(nextGetIndex(4), 4);
+    }
 
     /**
      * Writes an int as four bytes at the current position, advancing it.
@@ -716,7 +813,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if fewer than four bytes of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putInt(int value);
+
+    public ByteBuffer putInt(int value) {
+        writeBits(nextPutIndex(4), 4, (long) value);
+        return this;
+    }
 
     /**
      * Reads four bytes as an int at the given index.
@@ -725,7 +826,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the int read
      * @throws IndexOutOfBoundsException if the four bytes are not within the limit
      */
-    public abstract int getInt(int index);
+
+    public int getInt(int index) {
+        return (int) readBits(checkIndex(index, 4), 4);
+    }
 
     /**
      * Writes an int as four bytes at the given index.
@@ -736,14 +840,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if the four bytes are not within the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putInt(int index, int value);
+
+    public ByteBuffer putInt(int index, int value) {
+        writeBits(checkIndex(index, 4), 4, (long) value);
+        return this;
+    }
 
     /**
      * Creates an int view of this buffer's remaining bytes.
      *
      * @return a buffer of {@code remaining() / 4} ints sharing these bytes
      */
-    public abstract IntBuffer asIntBuffer();
+
+    public IntBuffer asIntBuffer() {
+        return new ByteViewIntBuffer(this, offset + position(), remaining() / 4, bigEndian,
+                isReadOnly);
+    }
 
     /**
      * Reads eight bytes as a long at the current position, advancing it.
@@ -751,7 +863,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the long read
      * @throws BufferUnderflowException if fewer than eight bytes remain
      */
-    public abstract long getLong();
+
+    public long getLong() {
+        return readBits(nextGetIndex(8), 8);
+    }
 
     /**
      * Writes a long as eight bytes at the current position, advancing it.
@@ -761,7 +876,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if fewer than eight bytes of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putLong(long value);
+
+    public ByteBuffer putLong(long value) {
+        writeBits(nextPutIndex(8), 8, value);
+        return this;
+    }
 
     /**
      * Reads eight bytes as a long at the given index.
@@ -770,7 +889,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the long read
      * @throws IndexOutOfBoundsException if the eight bytes are not within the limit
      */
-    public abstract long getLong(int index);
+
+    public long getLong(int index) {
+        return readBits(checkIndex(index, 8), 8);
+    }
 
     /**
      * Writes a long as eight bytes at the given index.
@@ -781,14 +903,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if the eight bytes are not within the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putLong(int index, long value);
+
+    public ByteBuffer putLong(int index, long value) {
+        writeBits(checkIndex(index, 8), 8, value);
+        return this;
+    }
 
     /**
      * Creates a long view of this buffer's remaining bytes.
      *
      * @return a buffer of {@code remaining() / 8} longs sharing these bytes
      */
-    public abstract LongBuffer asLongBuffer();
+
+    public LongBuffer asLongBuffer() {
+        return new ByteViewLongBuffer(this, offset + position(), remaining() / 8, bigEndian,
+                isReadOnly);
+    }
 
     /**
      * Reads four bytes as a float at the current position, advancing it.
@@ -800,7 +930,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the float read
      * @throws BufferUnderflowException if fewer than four bytes remain
      */
-    public abstract float getFloat();
+
+    public float getFloat() {
+        return ByteCodec.bitsToFloat((int) readBits(nextGetIndex(4), 4));
+    }
 
     /**
      * Writes a float as four bytes at the current position, advancing it.
@@ -810,7 +943,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if fewer than four bytes of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putFloat(float value);
+
+    public ByteBuffer putFloat(float value) {
+        writeBits(nextPutIndex(4), 4, (long) ByteCodec.floatToBits(value));
+        return this;
+    }
 
     /**
      * Reads four bytes as a float at the given index.
@@ -819,7 +956,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the float read
      * @throws IndexOutOfBoundsException if the four bytes are not within the limit
      */
-    public abstract float getFloat(int index);
+
+    public float getFloat(int index) {
+        return ByteCodec.bitsToFloat((int) readBits(checkIndex(index, 4), 4));
+    }
 
     /**
      * Writes a float as four bytes at the given index.
@@ -830,14 +970,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if the four bytes are not within the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putFloat(int index, float value);
+
+    public ByteBuffer putFloat(int index, float value) {
+        writeBits(checkIndex(index, 4), 4, (long) ByteCodec.floatToBits(value));
+        return this;
+    }
 
     /**
      * Creates a float view of this buffer's remaining bytes.
      *
      * @return a buffer of {@code remaining() / 4} floats sharing these bytes
      */
-    public abstract FloatBuffer asFloatBuffer();
+
+    public FloatBuffer asFloatBuffer() {
+        return new ByteViewFloatBuffer(this, offset + position(), remaining() / 4, bigEndian,
+                isReadOnly);
+    }
 
     /**
      * Reads eight bytes as a double at the current position, advancing it.
@@ -845,7 +993,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the double read
      * @throws BufferUnderflowException if fewer than eight bytes remain
      */
-    public abstract double getDouble();
+
+    public double getDouble() {
+        return ByteCodec.bitsToDouble(readBits(nextGetIndex(8), 8));
+    }
 
     /**
      * Writes a double as eight bytes at the current position, advancing it.
@@ -855,7 +1006,11 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws BufferOverflowException if fewer than eight bytes of room remain
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putDouble(double value);
+
+    public ByteBuffer putDouble(double value) {
+        writeBits(nextPutIndex(8), 8, ByteCodec.doubleToBits(value));
+        return this;
+    }
 
     /**
      * Reads eight bytes as a double at the given index.
@@ -864,7 +1019,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @return the double read
      * @throws IndexOutOfBoundsException if the eight bytes are not within the limit
      */
-    public abstract double getDouble(int index);
+
+    public double getDouble(int index) {
+        return ByteCodec.bitsToDouble(readBits(checkIndex(index, 8), 8));
+    }
 
     /**
      * Writes a double as eight bytes at the given index.
@@ -875,14 +1033,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      * @throws IndexOutOfBoundsException if the eight bytes are not within the limit
      * @throws ReadOnlyBufferException if this buffer is read-only
      */
-    public abstract ByteBuffer putDouble(int index, double value);
+
+    public ByteBuffer putDouble(int index, double value) {
+        writeBits(checkIndex(index, 8), 8, ByteCodec.doubleToBits(value));
+        return this;
+    }
 
     /**
      * Creates a double view of this buffer's remaining bytes.
      *
      * @return a buffer of {@code remaining() / 8} doubles sharing these bytes
      */
-    public abstract DoubleBuffer asDoubleBuffer();
+
+    public DoubleBuffer asDoubleBuffer() {
+        return new ByteViewDoubleBuffer(this, offset + position(), remaining() / 8, bigEndian,
+                isReadOnly);
+    }
 
     /**
      * Returns the array this buffer's bytes live in, or {@code null} for a buffer that owns none.
@@ -1010,6 +1176,110 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
     public String toString() {
         return "ByteBuffer[pos=" + position() + " lim=" + limit() + " cap=" + capacity() + "]";
     }
+
+    // ---- storage hooks ---------------------------------------------------------------------------
+    //
+    // Everything above this line works in terms of these four, and that is the whole point of them
+    // being here: a buffer whose bytes are a memory mapping is not backed by an array, and until
+    // this implementation was lifted out of `HeapByteBuffer` there was no way to write one. See
+    // `java.nio.channels.KajiMappedByteBuffer`.
+    //
+    // They are indexed by STORAGE position, not by buffer position: `ix` is what turns one into the
+    // other, and it is separate because a slice shares its parent's storage and starts partway in.
+
+    /**
+     * Translates a buffer index into an index in whatever backs this buffer.
+     *
+     * @param i the buffer index
+     * @return the storage index
+     */
+    int ix(int i) {
+        return offset + i;
+    }
+
+    /**
+     * Reads one byte by storage index, with no bounds check and no read-only check.
+     *
+     * @param p the storage index
+     * @return the byte there
+     */
+    abstract byte at(int p);
+
+    /**
+     * Writes one byte by storage index, with no bounds check and no read-only check.
+     *
+     * @param p the storage index
+     * @param b the byte to write
+     */
+    abstract void at(int p, byte b);
+
+    /**
+     * Reads {@code count} bytes at a storage index, in the order asked for.
+     *
+     * <p>Written on the byte hooks so that it works for any backing. A buffer that can do better --
+     * one over an array can go straight to {@link ByteCodec} -- overrides it.
+     *
+     * @param p the storage index
+     * @param count how many bytes
+     * @param be true for big-endian
+     * @return the value, zero-extended
+     */
+    long peek(int p, int count, boolean be) {
+        long v = 0;
+        for (int k = 0; k < count; k++) {
+            final long b = at(p + (be ? k : count - 1 - k)) & 0xffL;
+            v = (v << 8) | b;
+        }
+        return v;
+    }
+
+    /**
+     * Writes {@code count} bytes at a storage index, in the order asked for.
+     *
+     * @param p the storage index
+     * @param count how many bytes
+     * @param be true for big-endian
+     * @param value the value; only its low {@code count} bytes are used
+     */
+    void poke(int p, int count, boolean be, long value) {
+        for (int k = 0; k < count; k++) {
+            final int shift = 8 * (be ? count - 1 - k : k);
+            at(p + k, (byte) ((value >>> shift) & 0xffL));
+        }
+    }
+
+    /**
+     * A buffer of this same kind over the same storage.
+     *
+     * <p>What {@code slice} and {@code duplicate} need and cannot write for themselves: the result
+     * has to be backed the same way this one is.
+     *
+     * @param storageOffset where the new buffer's element zero sits in the storage
+     * @param capacity how many bytes it spans
+     * @return the new buffer
+     */
+    abstract ByteBuffer newBuffer(int storageOffset, int capacity);
+
+    /** Reads {@code count} bytes at buffer index {@code at}, in this buffer's order. */
+    private long readBits(int index, int count) {
+        return peek(ix(index), count, bigEndian);
+    }
+
+    /** Writes {@code count} bytes at buffer index {@code at}, in this buffer's order. */
+    private void writeBits(int index, int count, long value) {
+        checkWritable();
+        poke(ix(index), count, bigEndian, value);
+    }
+
+    /** Reads one byte by buffer index. */
+    private byte _get(int i) {
+        return at(ix(i));
+    }
+
+    /** Writes one byte by buffer index. */
+    private void _put(int i, byte b) {
+        at(ix(i), b);
+    }
 }
 
 /**
@@ -1021,6 +1291,7 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
  * place; the {@code asXBuffer} factories hand out a {@code ByteViewXBuffer} over the same array.
  */
 class HeapByteBuffer extends ByteBuffer {
+
 
     /**
      * El constructor **completo**: el arreglo, los cuatro indices, el desplazamiento, y el segmento
@@ -1065,7 +1336,8 @@ class HeapByteBuffer extends ByteBuffer {
      * @param i the buffer index
      * @return the corresponding index in {@code hb}
      */
-    protected int ix(int i) {
+    @Override
+    int ix(int i) {
         return offset + i;
     }
 
@@ -1088,8 +1360,9 @@ class HeapByteBuffer extends ByteBuffer {
      * @param i the buffer index
      * @return the byte at {@code i}
      */
-    byte _get(int i) {
-        return hb[ix(i)];
+    @Override
+    byte at(int p) {
+        return hb[p];
     }
 
     /**
@@ -1098,52 +1371,25 @@ class HeapByteBuffer extends ByteBuffer {
      * @param i the buffer index
      * @param b the byte to write
      */
-    void _put(int i, byte b) {
-        hb[ix(i)] = b;
+    @Override
+    void at(int p, byte b) {
+        hb[p] = b;
     }
 
     /** Reads {@code count} bytes at buffer index {@code at}, in this buffer's order. */
-    private long readBits(int at, int count) {
-        return ByteCodec.read(hb, ix(at), count, bigEndian);
+    @Override
+    long peek(int p, int count, boolean be) {
+        return ByteCodec.read(hb, p, count, be);
     }
 
     /** Writes {@code count} bytes at buffer index {@code at}, in this buffer's order. */
-    private void writeBits(int at, int count, long value) {
-        checkWritable();
-        ByteCodec.write(hb, ix(at), count, bigEndian, value);
+    @Override
+    void poke(int p, int count, boolean be, long value) {
+        ByteCodec.write(hb, p, count, be, value);
     }
 
-    public ByteBuffer slice() {
-        HeapByteBuffer b = new HeapByteBuffer(hb, offset + position(), remaining());
-        b.isReadOnly = isReadOnly;
-        b.bigEndian = bigEndian;
-        b.nativeByteOrder = nativeByteOrder;
-        return b;
-    }
-
-    public ByteBuffer slice(int index, int length) {
-        checkIndex(index, length);
-        HeapByteBuffer b = new HeapByteBuffer(hb, offset + index, length);
-        b.isReadOnly = isReadOnly;
-        b.bigEndian = bigEndian;
-        b.nativeByteOrder = nativeByteOrder;
-        return b;
-    }
-
-    public ByteBuffer duplicate() {
-        HeapByteBuffer b = new HeapByteBuffer(hb, offset, capacity());
-        b.position(position());
-        b.limit(limit());
-        b.isReadOnly = isReadOnly;
-        b.bigEndian = bigEndian;
-        b.nativeByteOrder = nativeByteOrder;
-        return b;
-    }
-
-    public ByteBuffer asReadOnlyBuffer() {
-        HeapByteBuffer b = (HeapByteBuffer) duplicate();
-        b.isReadOnly = true;
-        return b;
+    public boolean isDirect() {
+        return false;
     }
 
     /**
@@ -1157,30 +1403,6 @@ class HeapByteBuffer extends ByteBuffer {
      */
     public boolean isReadOnly() {
         return isReadOnly;
-    }
-
-    public boolean isDirect() {
-        return false;
-    }
-
-    public byte get() {
-        return _get(nextGetIndex());
-    }
-
-    public byte get(int index) {
-        return _get(checkIndex(index));
-    }
-
-    public ByteBuffer put(byte b) {
-        checkWritable();
-        _put(nextPutIndex(), b);
-        return this;
-    }
-
-    public ByteBuffer put(int index, byte b) {
-        checkWritable();
-        _put(checkIndex(index), b);
-        return this;
     }
 
     public ByteBuffer get(byte[] dst, int off, int length) {
@@ -1295,155 +1517,8 @@ class HeapByteBuffer extends ByteBuffer {
         return this;
     }
 
-    public ByteBuffer compact() {
-        checkWritable();
-        int n = remaining();
-        int from = position();
-        int i = 0;
-        while (i < n) {
-            hb[offset + i] = hb[offset + from + i];
-            i = i + 1;
-        }
-        position(n);
-        limit(capacity());
-        return this;
-    }
-
-    public char getChar() {
-        return (char) readBits(nextGetIndex(2), 2);
-    }
-
-    public ByteBuffer putChar(char value) {
-        writeBits(nextPutIndex(2), 2, (long) value);
-        return this;
-    }
-
-    public char getChar(int index) {
-        return (char) readBits(checkIndex(index, 2), 2);
-    }
-
-    public ByteBuffer putChar(int index, char value) {
-        writeBits(checkIndex(index, 2), 2, (long) value);
-        return this;
-    }
-
-    public CharBuffer asCharBuffer() {
-        return new ByteViewCharBuffer(hb, offset + position(), remaining() / 2, bigEndian,
-                isReadOnly);
-    }
-
-    public short getShort() {
-        return (short) readBits(nextGetIndex(2), 2);
-    }
-
-    public ByteBuffer putShort(short value) {
-        writeBits(nextPutIndex(2), 2, (long) value);
-        return this;
-    }
-
-    public short getShort(int index) {
-        return (short) readBits(checkIndex(index, 2), 2);
-    }
-
-    public ByteBuffer putShort(int index, short value) {
-        writeBits(checkIndex(index, 2), 2, (long) value);
-        return this;
-    }
-
-    public ShortBuffer asShortBuffer() {
-        return new ByteViewShortBuffer(hb, offset + position(), remaining() / 2, bigEndian,
-                isReadOnly);
-    }
-
-    public int getInt() {
-        return (int) readBits(nextGetIndex(4), 4);
-    }
-
-    public ByteBuffer putInt(int value) {
-        writeBits(nextPutIndex(4), 4, (long) value);
-        return this;
-    }
-
-    public int getInt(int index) {
-        return (int) readBits(checkIndex(index, 4), 4);
-    }
-
-    public ByteBuffer putInt(int index, int value) {
-        writeBits(checkIndex(index, 4), 4, (long) value);
-        return this;
-    }
-
-    public IntBuffer asIntBuffer() {
-        return new ByteViewIntBuffer(hb, offset + position(), remaining() / 4, bigEndian,
-                isReadOnly);
-    }
-
-    public long getLong() {
-        return readBits(nextGetIndex(8), 8);
-    }
-
-    public ByteBuffer putLong(long value) {
-        writeBits(nextPutIndex(8), 8, value);
-        return this;
-    }
-
-    public long getLong(int index) {
-        return readBits(checkIndex(index, 8), 8);
-    }
-
-    public ByteBuffer putLong(int index, long value) {
-        writeBits(checkIndex(index, 8), 8, value);
-        return this;
-    }
-
-    public LongBuffer asLongBuffer() {
-        return new ByteViewLongBuffer(hb, offset + position(), remaining() / 8, bigEndian,
-                isReadOnly);
-    }
-
-    public float getFloat() {
-        return ByteCodec.bitsToFloat((int) readBits(nextGetIndex(4), 4));
-    }
-
-    public ByteBuffer putFloat(float value) {
-        writeBits(nextPutIndex(4), 4, (long) ByteCodec.floatToBits(value));
-        return this;
-    }
-
-    public float getFloat(int index) {
-        return ByteCodec.bitsToFloat((int) readBits(checkIndex(index, 4), 4));
-    }
-
-    public ByteBuffer putFloat(int index, float value) {
-        writeBits(checkIndex(index, 4), 4, (long) ByteCodec.floatToBits(value));
-        return this;
-    }
-
-    public FloatBuffer asFloatBuffer() {
-        return new ByteViewFloatBuffer(hb, offset + position(), remaining() / 4, bigEndian,
-                isReadOnly);
-    }
-
-    public double getDouble() {
-        return ByteCodec.bitsToDouble(readBits(nextGetIndex(8), 8));
-    }
-
-    public ByteBuffer putDouble(double value) {
-        writeBits(nextPutIndex(8), 8, ByteCodec.doubleToBits(value));
-        return this;
-    }
-
-    public double getDouble(int index) {
-        return ByteCodec.bitsToDouble(readBits(checkIndex(index, 8), 8));
-    }
-
-    public ByteBuffer putDouble(int index, double value) {
-        writeBits(checkIndex(index, 8), 8, ByteCodec.doubleToBits(value));
-        return this;
-    }
-
-    public DoubleBuffer asDoubleBuffer() {
-        return new ByteViewDoubleBuffer(hb, offset + position(), remaining() / 8, bigEndian,
-                isReadOnly);
+    @Override
+    ByteBuffer newBuffer(int storageOffset, int capacity) {
+        return new HeapByteBuffer(hb, storageOffset, capacity);
     }
 }

@@ -2,6 +2,8 @@ package java.nio.channels;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.MappedBuffers;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -467,9 +469,234 @@ final class KajiFileChannel extends FileChannel {
         return this.volcar(position, bb.array(), 0, (int) leidos);
     }
 
+    // ---- locks -----------------------------------------------------------------------------------
+
+    /**
+     * Takes a lock over that region, waiting if it has to.
+     *
+     * <p>See the note on {@code FileLockRegistry} for why an overlap with another lock of this same
+     * VM is an error and not a wait.
+     *
+     * @param position the first byte
+     * @param size how many bytes
+     * @param shared true for a lock other readers may share
+     * @return the lock
+     * @throws IOException if it cannot be taken
+     */
+    public FileLock lock(long position, long size, boolean shared) throws IOException {
+        return acquire(position, size, shared, true);
+    }
+
+    /**
+     * The same without waiting: returns {@code null} when another process holds the region.
+     *
+     * @param position the first byte
+     * @param size how many bytes
+     * @param shared true for a lock other readers may share
+     * @return the lock, or {@code null}
+     * @throws IOException if it cannot be taken
+     */
+    public FileLock tryLock(long position, long size, boolean shared) throws IOException {
+        return acquire(position, size, shared, false);
+    }
+
+    /**
+     * The same acquisition on behalf of an asynchronous channel wrapped around this one.
+     *
+     * <p>The owner matters for {@link FileLock#acquiredBy}, which has to name the channel the caller
+     * asked on: whoever holds an {@link AsynchronousFileChannel} never saw this one and could not
+     * recognise it.
+     */
+    FileLock acquireFor(AsynchronousFileChannel owner, long position, long size, boolean shared,
+            boolean wait) throws IOException {
+        final KajiFileLock l = reserveFor(owner, position, size, shared);
+        return complete(l, wait) ? l : null;
+    }
+
+    /**
+     * Claims the region for an asynchronous channel without taking the system lock yet.
+     *
+     * <p>The claim happens on the caller's thread on purpose: an asynchronous `lock` throws
+     * {@link OverlappingFileLockException} rather than delivering it through the future, so the
+     * check cannot wait for the pool. See {@code KajiFileLock.RESERVED}.
+     */
+    KajiFileLock reserveFor(AsynchronousFileChannel owner, long position, long size,
+            boolean shared) throws IOException {
+        final String key = checkRequest(position, size, shared);
+        final KajiFileLock l =
+                new KajiFileLock(owner, key, position, size, shared, KajiFileLock.RESERVED);
+        FileLockRegistry.add(l);
+        return l;
+    }
+
+    /**
+     * Takes the system lock a reservation was standing in for.
+     *
+     * <p>Returns false when the region was held by another process and the caller asked not to
+     * wait; the reservation is dropped either way it fails.
+     */
+    boolean complete(KajiFileLock l, boolean wait) throws IOException {
+        final int t;
+        try {
+            t = takeSystemLock(l.position(), l.size(), l.isShared(), wait);
+        } catch (IOException e) {
+            l.release();
+            throw e;
+        }
+        if (t < 0) {
+            l.release();
+            return false;
+        }
+        l.confirm(t);
+        return true;
+    }
+
+    private FileLock acquire(long position, long size, boolean shared, boolean wait)
+            throws IOException {
+        final String key = checkRequest(position, size, shared);
+        final KajiFileLock l =
+                new KajiFileLock(this, key, position, size, shared, KajiFileLock.RESERVED);
+        FileLockRegistry.add(l);
+        return complete(l, wait) ? l : null;
+    }
+
+    /**
+     * Checks the request and claims nothing yet.
+     *
+     * @return the canonical path the lock would be taken on
+     */
+    private String checkRequest(long position, long size, boolean shared) throws IOException {
+        if (!this.isOpen()) {
+            throw new ClosedChannelException();
+        }
+        if (position < 0 || size < 0) {
+            throw new IllegalArgumentException("Negative position or size");
+        }
+        if (shared && !this.leer) {
+            throw new NonReadableChannelException();
+        }
+        if (!shared && !this.escribir && !this.anexar) {
+            throw new NonWritableChannelException();
+        }
+        final String canonical = Fs.canonical(this.ruta);
+        final String key = canonical == null ? this.ruta : canonical;
+        FileLockRegistry.check(key, position, size);
+        return key;
+    }
+
+    /**
+     * Asks the system for the lock.
+     *
+     * @return the token, or -1 when the region was held and the caller asked not to wait
+     */
+    private int takeSystemLock(long position, long size, boolean shared, boolean wait)
+            throws IOException {
+        // `Long.MAX_VALUE` is how Java says "everything still to come"; the VM says it with a zero.
+        final long count = size == Long.MAX_VALUE ? 0L : size;
+        final int t = Fs.lock(this.ruta, position, count, shared, wait);
+        if (t == -2) {
+            throw new IOException("this system has no file locks");
+        }
+        if (t < 0 && wait) {
+            throw new IOException("could not take the lock on " + this.ruta);
+        }
+        return t;
+    }
+
+    // ---- mapping ---------------------------------------------------------------------------------
+
+    /**
+     * Maps a region of the file into memory.
+     *
+     * <p>The buffer that comes back is not a copy: it reads and writes the file's own pages. That is
+     * the whole reason this method waited for a native, and the reason it is worth the wait -- a
+     * mapping that took writes and dropped them would be the quietest kind of wrong.
+     */
+    @Override
+    public MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
+        if (size > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Size exceeds Integer.MAX_VALUE");
+        }
+        if (mode == null) {
+            throw new NullPointerException("Mode is null");
+        }
+        if (position < 0L) {
+            throw new IllegalArgumentException("Negative position");
+        }
+        if (size < 0L) {
+            throw new IllegalArgumentException("Negative size");
+        }
+        if (!this.isOpen()) {
+            throw new ClosedChannelException();
+        }
+        // A mode that is not one of the three is refused, and that is the point of refusing it: the
+        // two in `jdk.nio.mapmode` ask for non-volatile memory, and treating one of those as a
+        // plain READ_WRITE would hand back a mapping that looks like what was asked for and is not.
+        // The JDK on this platform answers the same way.
+        final int mapMode;
+        if (mode == MapMode.READ_ONLY) {
+            mapMode = Fs.MAP_READ_ONLY;
+        } else if (mode == MapMode.READ_WRITE) {
+            mapMode = Fs.MAP_READ_WRITE;
+        } else if (mode == MapMode.PRIVATE) {
+            mapMode = Fs.MAP_PRIVATE;
+        } else {
+            throw new UnsupportedOperationException("Unsupported map mode: " + mode);
+        }
+        final boolean readOnly = mode == MapMode.READ_ONLY;
+        if (!this.leer) {
+            throw new NonReadableChannelException();
+        }
+        if (!readOnly && !this.escribir) {
+            // PRIVATE lands here too, and on purpose: its writes never reach the file, but the
+            // system still hands out writable pages, and a channel opened for reading alone has no
+            // business asking for those.
+            throw new NonWritableChannelException();
+        }
+        // A zero-length mapping is a buffer with nothing in it, not a call to the system: `mmap`
+        // refuses a length of zero, and there would be nothing to look at anyway.
+        if (size == 0L) {
+            return MappedBuffers.of(-1, 0, readOnly);
+        }
+        growTo(position + size);
+        final int token = Fs.mapOpen(this.ruta, mapMode, position, (int) size);
+        if (token == -2) {
+            throw new IOException("this system cannot map files into memory");
+        }
+        if (token < 0) {
+            throw new IOException("could not map " + this.ruta);
+        }
+        return MappedBuffers.of(token, (int) size, readOnly);
+    }
+
+    /**
+     * Makes sure the file reaches at least this far before it is mapped.
+     *
+     * <p>Mapping past the end of a file is not a bigger mapping, it is a fault: Unix raises SIGBUS
+     * when the page is touched. So the file grows first, with zeros, which is what the JDK does and
+     * what {@link #map} documents by not mentioning it.
+     */
+    private void growTo(long end) throws IOException {
+        final long have = Fs.size(this.ruta);
+        if (have >= end) {
+            return;
+        }
+        if (!this.escribir) {
+            throw new IOException("Channel not open for writing - cannot extend file to required"
+                    + " size");
+        }
+        final byte[] zeros = new byte[(int) (end - have)];
+        if (!Fs.writeAllBytes(this.ruta, zeros, true)) {
+            throw new IOException("could not extend " + this.ruta);
+        }
+    }
+
     // ---- cierre ----------------------------------------------------------------------------------
 
     protected void implCloseChannel() throws IOException {
+        // Closing the channel invalidates its locks. It goes first: if `DELETE_ON_CLOSE` removed the
+        // file while a lock was still held, the descriptor holding it would outlive the file.
+        FileLockRegistry.releaseAllOn(this);
         if (this.borrarAlCerrar) {
             // Sin `throws` si falla: `DELETE_ON_CLOSE` es una limpieza, y hacer fallar el cierre
             // porque no se pudo limpiar convierte un descuido en un error del programa.

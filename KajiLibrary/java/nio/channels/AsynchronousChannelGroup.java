@@ -2,6 +2,8 @@ package java.nio.channels;
 
 import java.io.IOException;
 import java.nio.channels.spi.AsynchronousChannelProvider;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -27,14 +29,12 @@ import java.util.concurrent.TimeUnit;
  *
  * <h2>Estado en esta biblioteca</h2>
  *
- * <p>Los tres estaticos --{@code withFixedThreadPool}, {@code withCachedThreadPool},
- * {@code withThreadPool}-- <strong>no estan</strong>. Los tres piden el grupo al proveedor del
- * sistema, y no hay proveedor del sistema: esta VM no tiene nativos de red. Ver
- * {@link AsynchronousChannelProvider}.
- *
- * <p>Se podria haber armado un grupo sobre un `ExecutorService` de verdad --eso si existe en esta
- * biblioteca-- pero seria un grupo sin un solo canal que meterle, y su `awaitTermination` seria una
- * ceremonia sobre nada. El resto de la clase queda como contrato.
+ * <p><strong>Los tres estaticos ya estan.</strong> Esta nota decia que no, con dos argumentos: que
+ * no habia proveedor del sistema porque la VM no tenia nativos de red, y que un grupo sin canales
+ * que meterle seria una ceremonia sobre nada. Los dos dejaron de valer al mismo tiempo: la VM tiene
+ * nativos de red --{@code jdk.internal.net.Net}-- asi que {@link AsynchronousSocketChannel} y
+ * {@link AsynchronousServerSocketChannel} se abren de verdad, y con canales adentro el grupo hace
+ * exactamente lo que promete. Ver {@code KajiAsyncChannelProvider}, que es el proveedor de fabrica.
  */
 public abstract class AsynchronousChannelGroup {
 
@@ -42,6 +42,56 @@ public abstract class AsynchronousChannelGroup {
 
     protected AsynchronousChannelGroup(AsynchronousChannelProvider provider) {
         this.proveedor = provider;
+    }
+
+    /**
+     * Un grupo con un pool de tamano fijo.
+     *
+     * @param nThreads cuantos hilos
+     * @param threadFactory con que fabrica de hilos armarlos
+     * @return el grupo
+     * @throws IOException si no se puede armar
+     * @throws IllegalArgumentException si `nThreads` no es positivo
+     * @throws NullPointerException si la fabrica es nula
+     */
+    public static AsynchronousChannelGroup withFixedThreadPool(int nThreads,
+            ThreadFactory threadFactory) throws IOException {
+        return AsynchronousChannelProvider.provider()
+                .openAsynchronousChannelGroup(nThreads, threadFactory);
+    }
+
+    /**
+     * Un grupo sobre un pool que crece segun haga falta.
+     *
+     * <p>`initialSize` es una sugerencia sobre cuantos hilos arrancar; esta implementacion no
+     * necesita ninguno esperando, asi que la acepta y no la usa. Ver `KajiAsyncChannelProvider`.
+     *
+     * @param executor el pool
+     * @param initialSize cuantos hilos arrancar, como sugerencia
+     * @return el grupo
+     * @throws IOException si no se puede armar
+     * @throws NullPointerException si el pool es nulo
+     */
+    public static AsynchronousChannelGroup withCachedThreadPool(ExecutorService executor,
+            int initialSize) throws IOException {
+        return AsynchronousChannelProvider.provider()
+                .openAsynchronousChannelGroup(executor, initialSize);
+    }
+
+    /**
+     * Un grupo sobre ese pool.
+     *
+     * <p>El pool viene de afuera y **no se apaga solo** cuando el grupo termina: quien lo presto
+     * puede estar usandolo para otra cosa. Apagarlo es de quien lo armo.
+     *
+     * @param executor el pool
+     * @return el grupo
+     * @throws IOException si no se puede armar
+     * @throws NullPointerException si el pool es nulo
+     */
+    public static AsynchronousChannelGroup withThreadPool(ExecutorService executor)
+            throws IOException {
+        return AsynchronousChannelProvider.provider().openAsynchronousChannelGroup(executor, 0);
     }
 
     /** El proveedor que lo fabrico. */

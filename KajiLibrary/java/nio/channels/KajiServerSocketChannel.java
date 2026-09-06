@@ -160,4 +160,16 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
         // Nada que decirle al sistema: el socket de la VM siempre es no bloqueante, y el modo lo
         // decide `accept()` al elegir si insiste. Ver la nota de la clase.
     }
+
+    /**
+     * The VM handle of the server socket underneath, or -1 when there is none open.
+     *
+     * <p>Package-private and only for the selector: it is the one thing `poll` needs and the one
+     * thing no public method of a channel hands out.
+     *
+     * @return the handle
+     */
+    int pollHandle() {
+        return this.handle;
+    }
 }

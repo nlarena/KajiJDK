@@ -11,8 +11,10 @@ import java.nio.channels.FileChannel;
  * diferencia vive del lado de `map()`, no aca: un `MapMode` es una etiqueta, y estas dos son las
  * etiquetas.
  *
- * <p>Que `map()` las acepte depende del `FileChannel` concreto; el nuestro no mapea todavia, asi
- * que hoy las constantes existen y son distinguibles, pero no hay quien las honre.
+ * <p>Que `map()` las acepte depende del `FileChannel` concreto. El nuestro ya mapea, pero **estas
+ * dos las rechaza** con `UnsupportedOperationException`: pedir memoria no volatil y recibir un
+ * mapeo comun seria justamente la clase de respuesta que miente. El JDK 25 sobre Windows contesta
+ * lo mismo, por la misma razon.
  *
  * @since 14
  */

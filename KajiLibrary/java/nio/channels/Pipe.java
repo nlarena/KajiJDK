@@ -1,5 +1,6 @@
 package java.nio.channels;
 
+import java.io.IOException;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 
@@ -32,6 +33,16 @@ import java.nio.channels.spi.SelectorProvider;
 public abstract class Pipe {
 
     protected Pipe() {
+    }
+
+    /**
+     * Opens a pipe.
+     *
+     * @return the pipe
+     * @throws IOException if it cannot be opened
+     */
+    public static Pipe open() throws IOException {
+        return SelectorProvider.provider().openPipe();
     }
 
     /** La punta por la que se lee. */

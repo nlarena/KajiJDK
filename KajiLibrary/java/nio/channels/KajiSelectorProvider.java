@@ -25,7 +25,7 @@ import java.util.ServiceConfigurationError;
  *
  * <h2>Lo que este proveedor no puede dar, y por que lo dice en vez de fingirlo</h2>
  *
- * <p>{@link #openSelector()} y {@link #openPipe()} tiran {@link UnsupportedOperationException}.
+ * <p>{@link #openSelector()} y {@link #openPipe()} ya funcionan: ver `KajiSelector`.
  *
  * <p>Un selector multiplexa: espera sobre **muchos** canales a la vez y despierta con los que estan
  * listos. Los canales de esta biblioteca saben decir "todavia no" --de ahi que el modo no bloqueante
@@ -51,18 +51,27 @@ final class KajiSelectorProvider extends SelectorProvider {
     }
 
     /**
-     * El proveedor que corresponde usar: el instalado si lo hay, el de la casa si no.
+     * The provider to use: the installed one if there is one, this one otherwise.
      *
-     * <p>El {@link ServiceConfigurationError} que tira {@code provider()} cuando no hay ninguno no es
-     * un fallo: es la ausencia de configuracion, y esta clase es la respuesta a esa ausencia. Ese
-     * metodo no cachea el fallo, asi que instalar un proveedor mas tarde sigue funcionando.
+     * <p>Which is now simply what {@link SelectorProvider#provider()} answers. It used to catch the
+     * {@link ServiceConfigurationError} that method threw when nothing was installed, because this
+     * class was the answer to that absence; now it *is* the last tier of that method, so the error
+     * cannot happen and catching it would be catching nothing.
      */
     static SelectorProvider actual() {
-        try {
-            return SelectorProvider.provider();
-        } catch (ServiceConfigurationError e) {
-            return PROPIO;
-        }
+        return SelectorProvider.provider();
+    }
+
+    /**
+     * This provider, without asking {@link SelectorProvider#provider()} first.
+     *
+     * <p>It exists to break a loop: `provider()` falls back to this class, so a `provider()` call
+     * from in here would call itself forever. Only the fallback uses it.
+     *
+     * @return the built-in provider
+     */
+    static SelectorProvider builtin() {
+        return PROPIO;
     }
 
     // Las familias que la costura sabe abrir. `INET6` no queda afuera por capricho: el nativo ata y
@@ -105,11 +114,10 @@ final class KajiSelectorProvider extends SelectorProvider {
     }
 
     public Pipe openPipe() throws IOException {
-        throw new UnsupportedOperationException("no hay pipes en esta VM: ver la nota de la clase");
+        return new KajiPipe(this);
     }
 
     public AbstractSelector openSelector() throws IOException {
-        throw new UnsupportedOperationException(
-                "no hay selector en esta VM: ver la nota de la clase");
+        return new KajiSelector(this);
     }
 }

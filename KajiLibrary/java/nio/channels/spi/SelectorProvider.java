@@ -93,11 +93,11 @@ public abstract class SelectorProvider {
                 p = deServiceLoader();
             }
             if (p == null) {
-                // El escalon 3, que aca no existe. El mensaje nombra la propiedad porque es lo
-                // unico que quien lea esto puede hacer al respecto.
-                throw new ServiceConfigurationError(
-                        CLAVE + ": no hay proveedor del sistema en esta VM (no tiene nativos de red);"
-                                + " instale uno con la propiedad de sistema " + CLAVE);
+                // Tier 3: the built-in provider. This used to throw, on the grounds that the VM had
+                // no network natives. It has them --`jdk.internal.net.Net`-- and since it also has
+                // `poll`, the one call a selector cannot do without, the provider can open
+                // selectors and pipes for real. See `KajiSelectorProvider`.
+                p = java.nio.channels.AsyncChannelFactory.selectorProvider();
             }
             encontrado = p;
             return p;

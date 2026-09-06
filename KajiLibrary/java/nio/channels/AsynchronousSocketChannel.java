@@ -29,9 +29,10 @@ import java.util.concurrent.TimeUnit;
  *
  * <h2>Estado en esta biblioteca</h2>
  *
- * <p>Los dos {@code open()} <strong>no estan</strong>: esta VM no tiene nativos de red, y una firma
- * que promete un canal no puede cumplirse con una excepcion. Ver {@link SocketChannel}, donde esta
- * el razonamiento completo. Todo el resto de la clase esta, como contrato.
+ * <p><strong>Los dos {@code open()} ya estan.</strong> Esta nota decia que la VM no tenia nativos de
+ * red; los tiene, y {@link SocketChannel} conecta de verdad. Abajo hay ese canal bloqueante y un pool
+ * de hilos --ver {@code AsyncSocketChannelImpl}--, que es como el JDK implementa esta clase en las
+ * plataformas sin entrada y salida asincronica del sistema.
  */
 public abstract class AsynchronousSocketChannel implements AsynchronousByteChannel, NetworkChannel {
 
@@ -39,6 +40,30 @@ public abstract class AsynchronousSocketChannel implements AsynchronousByteChann
 
     protected AsynchronousSocketChannel(AsynchronousChannelProvider provider) {
         this.proveedor = provider;
+    }
+
+    /**
+     * Uno del grupo de omision.
+     *
+     * @return el canal
+     * @throws IOException si no se puede abrir
+     */
+    public static AsynchronousSocketChannel open() throws IOException {
+        return open(null);
+    }
+
+    /**
+     * Uno de ese grupo.
+     *
+     * @param group el grupo, o {@code null} para el de omision
+     * @return el canal
+     * @throws IOException si no se puede abrir
+     * @throws ShutdownChannelGroupException si el grupo ya no acepta canales
+     */
+    public static AsynchronousSocketChannel open(AsynchronousChannelGroup group) throws IOException {
+        final AsynchronousChannelProvider p = group == null
+                ? AsynchronousChannelProvider.provider() : group.provider();
+        return p.openAsynchronousSocketChannel(group);
     }
 
     /** El proveedor que lo fabrico. */

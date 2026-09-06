@@ -46,6 +46,16 @@ public abstract class Selector implements Closeable {
     }
 
     /** Si el selector sigue abierto. */
+    /**
+     * Opens a selector.
+     *
+     * @return the selector
+     * @throws IOException if it cannot be opened
+     */
+    public static Selector open() throws IOException {
+        return SelectorProvider.provider().openSelector();
+    }
+
     public abstract boolean isOpen();
 
     /** El proveedor que lo fabrico. */

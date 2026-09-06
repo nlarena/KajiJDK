@@ -410,4 +410,16 @@ final class KajiDatagramChannel extends DatagramChannel {
     protected void implConfigureBlocking(boolean block) throws IOException {
         // Nada que decirle al sistema; ver la nota de `KajiSocketChannel`.
     }
+
+    /**
+     * The VM handle of the datagram socket underneath, or -1 when there is none open.
+     *
+     * <p>Package-private and only for the selector: it is the one thing `poll` needs and the one
+     * thing no public method of a channel hands out.
+     *
+     * @return the handle
+     */
+    int pollHandle() {
+        return this.handle;
+    }
 }

@@ -183,4 +183,33 @@ public final class Net {
      * un camino aparte.
      */
     public static native boolean sendUrgent(int handle, int b);
+
+    /** {@link #poll} bit: the socket has something to read, or a connection to accept. */
+    public static final int POLL_READ = 1;
+
+    /** {@link #poll} bit: the socket can be written to, or a connect has finished. */
+    public static final int POLL_WRITE = 2;
+
+    /** {@link #poll} bit: the socket has an error or the peer hung up. */
+    public static final int POLL_ERROR = 4;
+
+    /**
+     * Asks which of those sockets are ready, waiting up to `timeoutMs`.
+     *
+     * <p>This is the one call a selector cannot do without. Its whole job is to answer "which of
+     * these has something" **without reading**, and every other way of finding out consumes: a read
+     * that returns data has taken it, and a read that returns nothing has told you about one socket
+     * only.
+     *
+     * <p>Three parallel arrays and not a list of objects because a selector makes this call on every
+     * turn of its loop, and one object per registered channel per turn is the cost that gives
+     * selectors a bad name.
+     *
+     * @param handles the sockets to ask about
+     * @param events what to watch for on each, as {@link #POLL_READ} and {@link #POLL_WRITE}
+     * @param revents filled in with what each one has; also carries {@link #POLL_ERROR}
+     * @param timeoutMs how long to wait, 0 to ask and return, negative to wait as long as it takes
+     * @return how many sockets reported something, or -1 when this platform has no poll
+     */
+    public static native int poll(int[] handles, int[] events, int[] revents, int timeoutMs);
 }

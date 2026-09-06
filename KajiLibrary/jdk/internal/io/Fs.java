@@ -137,4 +137,121 @@ public final class Fs {
      * raiz, y una lista cacheada estaria vieja justo cuando alguien la mira para ver que hay.
      */
     public static native String[] roots();
+
+    /**
+     * Takes a system lock over that region of the file.
+     *
+     * <p>It is a lock **between processes**, which is what a file lock is for: two different
+     * virtual machines over the same file exclude each other. It is not a lock between the threads
+     * of one machine; `java.util.concurrent` is where those live.
+     *
+     * <p>The region may run past the end of the file, and it may be open-ended: a `size` of zero
+     * means "from `position` to wherever the file grows", which is how the JDK spells a lock over
+     * everything still to come.
+     *
+     * @param path the file
+     * @param position the first byte
+     * @param size how many bytes, or 0 for however far the file grows
+     * @param shared true for a lock other readers may share
+     * @param wait true to wait until the region frees up, false to return at once
+     * @return the lock token, zero or greater; -1 when the lock could not be taken, and -2 when
+     *     this system has no file locks
+     */
+    public static native int lock(String path, long position, long size, boolean shared,
+            boolean wait);
+
+    /**
+     * Releases a lock.
+     *
+     * @param token the identifier {@link #lock} returned
+     * @return whether there was a lock to release
+     */
+    public static native boolean unlock(int token);
+
+    /** {@link #mapOpen} mode: read only. */
+    public static final int MAP_READ_ONLY = 0;
+
+    /** {@link #mapOpen} mode: writes reach the file and other mappers. */
+    public static final int MAP_READ_WRITE = 1;
+
+    /** {@link #mapOpen} mode: writes stay in this process, copy-on-write. */
+    public static final int MAP_PRIVATE = 2;
+
+    /**
+     * Maps a region of a file into memory.
+     *
+     * <p>The region may start anywhere; the system can only begin a mapping at a multiple of its
+     * allocation granularity, so the base is rounded down and the difference added back. What comes
+     * out addresses exactly the region that was asked for.
+     *
+     * @param path the file
+     * @param mode one of {@link #MAP_READ_ONLY}, {@link #MAP_READ_WRITE}, {@link #MAP_PRIVATE}
+     * @param position the first byte of the file to map
+     * @param size how many bytes
+     * @return the mapping token, zero or greater; -1 when it could not be mapped, -2 when this
+     *     platform cannot map at all
+     */
+    public static native int mapOpen(String path, int mode, long position, int size);
+
+    /**
+     * Writes the mapped bytes back to the file and waits for them to land.
+     *
+     * @param token the mapping
+     * @return whether it worked
+     */
+    public static native boolean mapForce(int token);
+
+    /**
+     * Takes the mapping down, flushing a writable one first.
+     *
+     * @param token the mapping
+     * @return whether there was a mapping to close
+     */
+    public static native boolean mapClose(int token);
+
+    /**
+     * One byte of the mapping.
+     *
+     * @param token the mapping
+     * @param index the byte, counted from the start of the mapped region
+     * @return the byte, 0 to 255, or -1 if the token or the index is not right
+     */
+    public static native int mapGet(int token, int index);
+
+    /**
+     * Writes one byte of the mapping.
+     *
+     * @param token the mapping
+     * @param index the byte, counted from the start of the mapped region
+     * @param value the byte to write; only its low eight bits are used
+     * @return whether it was written
+     */
+    public static native boolean mapPut(int token, int index, int value);
+
+    /**
+     * Copies a run of the mapping into an array.
+     *
+     * <p>It exists so that reading a mapped file is one native call per buffer instead of one per
+     * byte, which is the whole cost of {@link #mapGet} in a loop.
+     *
+     * @param token the mapping
+     * @param index the first byte of the mapping to read
+     * @param dst where to put them
+     * @param off the first element of `dst` to write
+     * @param len how many bytes
+     * @return whether it worked
+     */
+    public static native boolean mapRead(int token, int index, byte[] dst, int off, int len);
+
+    /**
+     * Copies a run of an array into the mapping.
+     *
+     * @param token the mapping
+     * @param index the first byte of the mapping to write
+     * @param src where to take them from
+     * @param off the first element of `src` to read
+     * @param len how many bytes
+     * @return whether it worked
+     */
+    public static native boolean mapWrite(int token, int index, byte[] src, int off, int len);
 }

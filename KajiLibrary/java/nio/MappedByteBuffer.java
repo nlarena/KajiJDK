@@ -8,13 +8,11 @@ package java.nio;
  * kernel pages content in and out on demand. That is a capability of the OS reached through the
  * VM, not something a library can synthesise.
  *
- * <p><strong>KajiLibrary cannot map anything.</strong> There is no {@code java.nio.channels},
- * no {@code FileChannel} and no file descriptors, so no instance of this class can be created —
- * the only constructor is package-private and nothing calls it. What is declared here is the
- * surface a caller compiles against; the methods describe what they would do.
- *
- * <p>This is the same shape as {@code ZipFile} in {@code java.util.zip}: an honest hole is better
- * than a class that pretends to hold something it does not.
+ * <p><strong>KajiLibrary maps for real now.</strong> This note used to say it could not: there was
+ * no {@code FileChannel} that opened, no file descriptors, and no way to build a buffer that was not
+ * backed by an array. All three changed -- the VM grew {@code Fs.mapOpen}, and the buffer
+ * implementation moved up out of {@code HeapByteBuffer} so that a buffer over something else could
+ * exist. See {@code MappedBuffer}.
  *
  * <p>Note what the class does <em>not</em> hide. Everything about the indices is re-declared here
  * only to narrow the return type to {@code MappedByteBuffer}, and every one of those overrides is
@@ -54,6 +52,10 @@ public abstract class MappedByteBuffer extends ByteBuffer {
      * @return {@code false}; without a mapping there is nothing resident
      */
     public final boolean isLoaded() {
+        // Whether the pages are resident is a question only the system can answer, and neither
+        // Windows nor Unix offers a cheap way to ask for a whole region. The JDK is allowed to
+        // guess here and its own note says the answer is a hint; `false` is the safe hint, and it is
+        // what a caller that acts on it -- by calling `load()` -- handles correctly.
         return false;
     }
 
@@ -63,6 +65,15 @@ public abstract class MappedByteBuffer extends ByteBuffer {
      * @return this buffer, unchanged
      */
     public final MappedByteBuffer load() {
+        // Touching one byte per page is how the JDK asks the system to page a mapping in, and it
+        // works here for the same reason: the read faults the page and the system keeps it.
+        final int t = mapToken();
+        if (t >= 0) {
+            final int step = 4096;
+            for (int i = 0; i < capacity(); i += step) {
+                jdk.internal.io.Fs.mapGet(t, ix(i));
+            }
+        }
         return this;
     }
 
@@ -72,6 +83,10 @@ public abstract class MappedByteBuffer extends ByteBuffer {
      * @return this buffer, unchanged
      */
     public final MappedByteBuffer force() {
+        final int t = mapToken();
+        if (t >= 0) {
+            jdk.internal.io.Fs.mapForce(t);
+        }
         return this;
     }
 
@@ -89,7 +104,10 @@ public abstract class MappedByteBuffer extends ByteBuffer {
         if (index < 0 || length < 0 || index + length > capacity()) {
             throw new IndexOutOfBoundsException("range out of bounds for capacity " + capacity());
         }
-        return this;
+        // The range is checked and then ignored: neither `FlushViewOfFile` nor `msync` is asked for
+        // less than the whole mapping. Writing back more than was asked is allowed -- the method
+        // promises that the range reaches the file, not that nothing else does.
+        return force();
     }
 
     /**
@@ -197,5 +215,18 @@ public abstract class MappedByteBuffer extends ByteBuffer {
     public final MappedByteBuffer rewind() {
         rewindIndices();
         return this;
+    }
+
+    /**
+     * The VM token of the mapping behind this buffer, or -1 when there is none.
+     *
+     * <p>It is what {@link #force()} and {@link #load()} reach through. It lives here rather than on
+     * the implementation because those two are {@code final} -- the JDK declares them so -- and a
+     * final method cannot ask a subclass anything except through a hook like this one.
+     *
+     * @return the token, or -1
+     */
+    int mapToken() {
+        return -1;
     }
 }

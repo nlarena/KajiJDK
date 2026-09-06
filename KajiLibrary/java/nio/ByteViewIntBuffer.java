@@ -23,8 +23,14 @@ package java.nio;
  */
 class ByteViewIntBuffer extends IntBuffer {
 
-    /** The byte buffer's array — shared, never copied. */
-    private final byte[] bytes;
+    /**
+     * The byte buffer this is a view of — shared, never copied.
+     *
+     * <p>It used to be that buffer's array. It is the buffer itself now, because a byte buffer need
+     * not have an array: one over a memory mapping does not, and a view of it has to read the same
+     * bytes it does. See the storage hooks at the end of {@link ByteBuffer}.
+     */
+    private final ByteBuffer bytes;
 
     /** The index in {@link #bytes} of this view's element zero. */
     private final int byteOffset;
@@ -32,7 +38,7 @@ class ByteViewIntBuffer extends IntBuffer {
     /** The order this view was created with; it does not follow the byte buffer afterwards. */
     private final boolean bigEndian;
 
-    ByteViewIntBuffer(byte[] bytes, int byteOffset, int capacity, boolean bigEndian,
+    ByteViewIntBuffer(ByteBuffer bytes, int byteOffset, int capacity, boolean bigEndian,
                       boolean isReadOnly) {
         super(null, 0, capacity);
         this.bytes = bytes;
@@ -43,12 +49,12 @@ class ByteViewIntBuffer extends IntBuffer {
 
     /** Reads one element from the byte at index {@code at}. */
     private int decode(int at) {
-        return (int) ByteCodec.read(bytes, at, 4, bigEndian);
+        return (int) bytes.peek(at, 4, bigEndian);
     }
 
     /** Writes one element into the bytes starting at index {@code at}. */
     private void encode(int at, int value) {
-        ByteCodec.write(bytes, at, 4, bigEndian, (long) value);
+        bytes.poke(at, 4, bigEndian, (long) value);
     }
 
     public boolean isReadOnly() {

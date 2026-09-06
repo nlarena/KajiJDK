@@ -47,28 +47,22 @@ import java.util.Set;
  *
  * <h2>Lo que quedo afuera a proposito</h2>
  *
- * <p>Tres metodos del JDK no estan, y ninguno por olvido. Los tres prometen algo que solo el sistema
- * operativo puede dar, y esta VM no tiene el nativo. Un {@code map()} que devolviera una copia en
- * memoria, o un {@code lock()} que solo excluyera a los hilos de esta VM, **compilarian igual y
- * fallarian en produccion**, que es exactamente el error que este arbol prefiere no cometer:
+ * <p><strong>Locking is in, mapping is not.</strong> This note used to say that both were out
+ * because the VM had no native for them, and that the only lock implementable here would exclude
+ * the threads of this VM and nobody else -- the same name with the opposite guarantee. That was
+ * true of the argument, not of the limit: the VM now has {@code Fs.lock}, which goes to
+ * {@code LockFileEx} on Windows and {@code fcntl} on Unix, so the lock excludes **other processes**,
+ * which is what a file lock is for.
  *
- * <ul>
- *   <li>{@code map(MapMode, long, long)} — mapear en memoria. Un {@link java.nio.MappedByteBuffer}
- *       que fuera una copia haria que escribirle no llegara nunca al archivo, en silencio.
- *   <li>{@code lock(long, long, boolean)} y {@code lock()} — el candado del JDK se toma **a nombre
- *       de toda la VM** y su proposito es excluir a **otros procesos**. Lo unico implementable aca
- *       seria lo contrario exacto: excluir a los hilos de esta VM y a nadie mas. Mismo nombre,
- *       garantia opuesta.
- *   <li>{@code tryLock(long, long, boolean)} y {@code tryLock()} — idem.
- * </ul>
+ * <p><strong>And mapping is in too.</strong> The reason it was out is worth keeping: a
+ * {@link java.nio.MappedByteBuffer} that was a copy would mean writes to it never reached the file,
+ * silently. What it took to not do that was two things -- the VM grew {@code Fs.mapOpen}, and
+ * {@link java.nio.ByteBuffer} grew storage hooks so that a buffer need not be backed by an array.
+ * Before the second one there was nowhere to put a buffer that reads a mapping.
  *
- * <p>{@link MapMode} si esta, porque es un valor y no una promesa: sus tres constantes se pueden
- * nombrar, comparar y guardar sin que nada mienta. Que no haya {@code map()} al que pasarselas es
- * una carencia visible en compilacion, no una trampa en ejecucion.
- *
- * <p>{@link java.nio.channels.FileLock} tambien esta declarada, por lo mismo: es una clase abstracta
- * cuyo contrato se entiende solo, y sin {@code lock()} nadie puede obtener una instancia y creerse
- * protegido.
+ * <p>{@link MapMode} siempre estuvo, porque es un valor y no una promesa: sus tres constantes se
+ * pueden nombrar, comparar y guardar sin que nada mienta. Ahora ademas hay un {@code map()} al que
+ * pasarselas.
  */
 public abstract class FileChannel extends AbstractInterruptibleChannel
         implements SeekableByteChannel, GatheringByteChannel, ScatteringByteChannel {
@@ -96,6 +90,108 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
      * @throws java.nio.file.NoSuchFileException si no existe y no se pidio crearlo
      * @throws java.nio.file.FileAlreadyExistsException con `CREATE_NEW` si ya estaba
      */
+    // ---- mapping ---------------------------------------------------------------------------------
+
+    /**
+     * Maps a region of this channel's file into memory.
+     *
+     * <p>The bytes are the file's, not a copy of them: in {@link MapMode#READ_WRITE} a write to the
+     * buffer reaches the file and every other mapper of it, and that is the whole point. In
+     * {@link MapMode#PRIVATE} it does not -- the mapping is copy-on-write and the changes stay in
+     * this process.
+     *
+     * <p>The mapping outlives the channel. Closing the channel does not take it down, and neither
+     * does anything else a caller can say: the JDK is explicit that there is no way to ask for an
+     * unmap, and this behaves the same.
+     *
+     * @param mode how the mapping may be used
+     * @param position the first byte of the file to map
+     * @param size how many bytes
+     * @return the mapped buffer
+     * @throws IOException if the region cannot be mapped
+     * @throws NonReadableChannelException if the channel was not opened for reading
+     * @throws NonWritableChannelException if {@code READ_WRITE} is asked of a read-only channel
+     * @throws IllegalArgumentException if the position or the size is negative, or the size is
+     *     larger than an {@code int}
+     */
+    public abstract java.nio.MappedByteBuffer map(MapMode mode, long position, long size)
+            throws IOException;
+
+    /**
+     * The same region as a {@link java.lang.foreign.MemorySegment} tied to that arena.
+     *
+     * @param mode how the mapping may be used
+     * @param offset the first byte of the file to map
+     * @param size how many bytes
+     * @param arena the arena whose lifetime the segment follows
+     * @return the segment
+     * @throws IOException if the region cannot be mapped
+     * @throws UnsupportedOperationException always in this library: a segment over a mapping needs
+     *     the foreign-memory machinery, and {@code java.lang.foreign} here has no way to name an
+     *     address that is not in the heap. {@link #map(MapMode, long, long)} is the way to a mapping
+     */
+    public java.lang.foreign.MemorySegment map(MapMode mode, long offset, long size,
+            java.lang.foreign.Arena arena) throws IOException {
+        throw new UnsupportedOperationException(
+                "a MemorySegment over a mapping needs foreign memory, which this library does not"
+                        + " have; use map(MapMode, long, long)");
+    }
+
+    // ---- locks -----------------------------------------------------------------------------------
+
+    /**
+     * Takes an exclusive lock over the whole file, waiting if it has to.
+     *
+     * @return the lock
+     * @throws IOException if it cannot be taken
+     */
+    public final FileLock lock() throws IOException {
+        return lock(0L, Long.MAX_VALUE, false);
+    }
+
+    /**
+     * Takes a lock over that region, waiting if it has to.
+     *
+     * <p>The lock belongs to the whole virtual machine and its point is to exclude **other
+     * processes**. It is not the way to keep the threads of one program apart.
+     *
+     * @param position the first byte
+     * @param size how many bytes
+     * @param shared true for a lock other readers may share
+     * @return the lock
+     * @throws IOException if it cannot be taken
+     * @throws OverlappingFileLockException if this VM already holds an overlapping region
+     */
+    public abstract FileLock lock(long position, long size, boolean shared) throws IOException;
+
+    /**
+     * Takes an exclusive lock over the whole file without waiting.
+     *
+     * @return the lock, or {@code null} when another process holds it
+     * @throws IOException if it cannot be taken
+     */
+    public final FileLock tryLock() throws IOException {
+        return tryLock(0L, Long.MAX_VALUE, false);
+    }
+
+    /**
+     * Takes a lock over that region without waiting.
+     *
+     * <p>Returning {@code null} and throwing mean different things: {@code null} is "somebody else
+     * has it", and {@link OverlappingFileLockException} is "you already have it", which is a bug in
+     * the caller and not a race.
+     *
+     * @param position the first byte
+     * @param size how many bytes
+     * @param shared true for a lock other readers may share
+     * @return the lock, or {@code null} when another process holds it
+     * @throws IOException if it cannot be taken
+     * @throws OverlappingFileLockException if this VM already holds an overlapping region
+     */
+    public abstract FileLock tryLock(long position, long size, boolean shared) throws IOException;
+
+    // ---- apertura --------------------------------------------------------------------------------
+
     public static FileChannel open(Path path, OpenOption... options) throws IOException {
         if (options == null) {
             throw new NullPointerException();
@@ -227,7 +323,7 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
     /**
      * Los modos de un mapeo en memoria.
      *
-     * <p>Esta aunque {@code map()} no este; ver la nota de la clase. No es un `enum` --tampoco en el
+     * <p>No es un `enum` --tampoco en el
      * JDK-- porque la lista queda abierta: un proveedor de sistema de archivos puede agregar modos
      * propios, y un `enum` lo impediria para siempre.
      */

@@ -66,9 +66,12 @@ public abstract class AsynchronousChannelProvider {
                 p = deServiceLoader();
             }
             if (p == null) {
-                throw new ServiceConfigurationError(
-                        CLAVE + ": no hay proveedor del sistema en esta VM (no tiene nativos de red);"
-                                + " instale uno con la propiedad de sistema " + CLAVE);
+                // El escalon 3: el proveedor de fabrica. La version anterior tiraba aca, con el
+                // argumento de que esta VM no tenia nativos de red. Los tiene --`jdk.internal.net.Net`--
+                // y con ellos `SocketChannel` y `ServerSocketChannel` funcionan, asi que hay sobre
+                // que armar canales asincronicos: un pool de hilos y esos canales bloqueantes. Ver
+                // `KajiAsyncChannelProvider`.
+                p = new KajiAsyncChannelProvider();
             }
             encontrado = p;
             return p;

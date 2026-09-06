@@ -32,6 +32,30 @@ public abstract class AsynchronousServerSocketChannel
         this.proveedor = provider;
     }
 
+    /**
+     * Uno del grupo de omision.
+     *
+     * @return el canal
+     * @throws IOException si no se puede abrir
+     */
+    public static AsynchronousServerSocketChannel open() throws IOException {
+        return open(null);
+    }
+
+    /**
+     * Uno de ese grupo.
+     *
+     * @param group el grupo, o {@code null} para el de omision
+     * @return el canal
+     * @throws IOException si no se puede abrir
+     * @throws ShutdownChannelGroupException si el grupo ya no acepta canales
+     */
+    public static AsynchronousServerSocketChannel open(AsynchronousChannelGroup group) throws IOException {
+        final AsynchronousChannelProvider p = group == null
+                ? AsynchronousChannelProvider.provider() : group.provider();
+        return p.openAsynchronousServerSocketChannel(group);
+    }
+
     /** El proveedor que lo fabrico. */
     public final AsynchronousChannelProvider provider() {
         return this.proveedor;
