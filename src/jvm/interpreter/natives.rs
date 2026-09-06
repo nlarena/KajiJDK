@@ -320,6 +320,574 @@ enum SockState {
     },
 }
 
+/// What `Net.poll` reports back, as bits, and what it takes as a request.
+///
+/// They are this library's own names and not the system's: `POLLRDNORM` is `0x0100` on Windows and
+/// `POLLIN` is `0x001` on Unix, and having the Java side know which is which would tie it to the
+/// build. Three bits are enough for what a selector asks.
+const POLL_READ: i32 = 1;
+const POLL_WRITE: i32 = 2;
+const POLL_ERROR: i32 = 4;
+
+/// The raw system socket behind a handle, or `None` when the handle names nothing.
+///
+/// Taken with the table locked and used after it is released: polling blocks, and holding the table
+/// across it would shut every other socket in the VM out for the duration.
+#[cfg(windows)]
+fn raw_socket(h: i32) -> Option<usize> {
+    use std::os::windows::io::AsRawSocket;
+    let t = SOCKETS.lock().unwrap();
+    match t.get(h as usize).and_then(|e| e.as_ref()) {
+        Some(SockState::Stream(s)) => Some(s.as_raw_socket() as usize),
+        Some(SockState::Listener(l)) => Some(l.as_raw_socket() as usize),
+        Some(SockState::Datagram { sock, .. }) => Some(sock.as_raw_socket() as usize),
+        None => None,
+    }
+}
+
+#[cfg(unix)]
+fn raw_socket(h: i32) -> Option<usize> {
+    use std::os::unix::io::AsRawFd;
+    let t = SOCKETS.lock().unwrap();
+    match t.get(h as usize).and_then(|e| e.as_ref()) {
+        Some(SockState::Stream(s)) => Some(s.as_raw_fd() as usize),
+        Some(SockState::Listener(l)) => Some(l.as_raw_fd() as usize),
+        Some(SockState::Datagram { sock, .. }) => Some(sock.as_raw_fd() as usize),
+        None => None,
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn raw_socket(_h: i32) -> Option<usize> {
+    None
+}
+
+/// The longest this native will ever wait inside one call.
+///
+/// **No native here blocks**, and this one is no exception. The reason is the one written a few
+/// hundred lines below, under the TCP natives: the Java threads of this VM share one interpreter,
+/// and a native that sits waiting stops every other Java thread, including the one that was going to
+/// make the event happen. A `select()` that parked in here for its whole timeout would be a
+/// deadlock, not a slow call -- and the thread that would call `wakeup()` is exactly one of the ones
+/// it would be holding down.
+///
+/// So the wait is sliced: the caller asks for what it wants, this waits for at most a slice, and the
+/// Java side loops until its own deadline. Fifty milliseconds is short enough that a `wakeup` from
+/// another thread lands promptly and long enough that an idle selector is not a spin.
+const POLL_SLICE_MS: i32 = 50;
+
+/// The timeout this call will really use: what was asked, capped at one slice. See
+/// [`POLL_SLICE_MS`].
+fn slice(timeout_ms: i32) -> i32 {
+    if timeout_ms < 0 || timeout_ms > POLL_SLICE_MS {
+        POLL_SLICE_MS
+    } else {
+        timeout_ms
+    }
+}
+
+/// Asks the system which of those sockets are ready, waiting up to `timeout_ms`.
+///
+/// ===============================================================================================
+/// WHY THIS IS THE ONE THING A SELECTOR CANNOT DO WITHOUT
+/// ===============================================================================================
+///
+/// A selector's whole job is to answer "which of these has something" **without reading**. Every
+/// other way of finding out consumes: a read that returns data has taken it, and a read that returns
+/// nothing has told you only about that one socket. `poll` is the system call that answers for the
+/// whole set at once and takes nothing.
+///
+/// Returns the number of sockets with something to report, or -1 when this platform has no `poll`.
+#[cfg(windows)]
+fn poll_sockets(raw: &[usize], events: &[i32], revents: &mut [i32], timeout_ms: i32) -> i32 {
+    const POLLRDNORM: i16 = 0x0100;
+    const POLLWRNORM: i16 = 0x0010;
+    const POLLERR: i16 = 0x0001;
+    const POLLHUP: i16 = 0x0002;
+    const POLLNVAL: i16 = 0x0004;
+
+    #[repr(C)]
+    struct WsaPollFd {
+        fd: usize,
+        events: i16,
+        revents: i16,
+    }
+
+    #[link(name = "ws2_32")]
+    extern "system" {
+        fn WSAPoll(fds: *mut WsaPollFd, count: u32, timeout: i32) -> i32;
+    }
+
+    let mut fds: Vec<WsaPollFd> = Vec::with_capacity(raw.len());
+    for i in 0..raw.len() {
+        let mut want = 0i16;
+        if events[i] & POLL_READ != 0 {
+            want |= POLLRDNORM;
+        }
+        if events[i] & POLL_WRITE != 0 {
+            want |= POLLWRNORM;
+        }
+        fds.push(WsaPollFd { fd: raw[i], events: want, revents: 0 });
+    }
+    let n = unsafe { WSAPoll(fds.as_mut_ptr(), fds.len() as u32, slice(timeout_ms)) };
+    if n < 0 {
+        return -1;
+    }
+    for i in 0..fds.len() {
+        let r = fds[i].revents;
+        let mut out = 0i32;
+        if r & POLLRDNORM != 0 {
+            out |= POLL_READ;
+        }
+        if r & POLLWRNORM != 0 {
+            out |= POLL_WRITE;
+        }
+        if r & (POLLERR | POLLHUP | POLLNVAL) != 0 {
+            out |= POLL_ERROR;
+        }
+        revents[i] = out;
+    }
+    n
+}
+
+/// The same through `poll`, which is where the Windows call took its shape from.
+///
+/// `struct pollfd` belongs to the system ABI, so it is written out by hand; unlike `struct flock`
+/// its layout is the same on every Unix worth naming --an `int` and two `short`s-- so this one is
+/// not restricted to one architecture.
+#[cfg(unix)]
+fn poll_sockets(raw: &[usize], events: &[i32], revents: &mut [i32], timeout_ms: i32) -> i32 {
+    const POLLIN: i16 = 0x001;
+    const POLLOUT: i16 = 0x004;
+    const POLLERR: i16 = 0x008;
+    const POLLHUP: i16 = 0x010;
+    const POLLNVAL: i16 = 0x020;
+
+    #[repr(C)]
+    struct PollFd {
+        fd: i32,
+        events: i16,
+        revents: i16,
+    }
+
+    extern "C" {
+        fn poll(fds: *mut PollFd, nfds: u64, timeout: i32) -> i32;
+    }
+
+    let mut fds: Vec<PollFd> = Vec::with_capacity(raw.len());
+    for i in 0..raw.len() {
+        let mut want = 0i16;
+        if events[i] & POLL_READ != 0 {
+            want |= POLLIN;
+        }
+        if events[i] & POLL_WRITE != 0 {
+            want |= POLLOUT;
+        }
+        fds.push(PollFd { fd: raw[i] as i32, events: want, revents: 0 });
+    }
+    let n = unsafe { poll(fds.as_mut_ptr(), fds.len() as u64, slice(timeout_ms)) };
+    if n < 0 {
+        return -1;
+    }
+    for i in 0..fds.len() {
+        let r = fds[i].revents;
+        let mut out = 0i32;
+        if r & POLLIN != 0 {
+            out |= POLL_READ;
+        }
+        if r & POLLOUT != 0 {
+            out |= POLL_WRITE;
+        }
+        if r & (POLLERR | POLLHUP | POLLNVAL) != 0 {
+            out |= POLL_ERROR;
+        }
+        revents[i] = out;
+    }
+    n
+}
+
+#[cfg(not(any(windows, unix)))]
+fn poll_sockets(_raw: &[usize], _events: &[i32], _revents: &mut [i32], _timeout_ms: i32) -> i32 {
+    -1
+}
+
+/// One live memory mapping.
+///
+/// The address is kept as a `usize` and not as a pointer so the table can be a plain `Mutex`: a raw
+/// pointer is not `Send`, and what makes this safe is not the type but the invariant -- the region
+/// stays mapped for as long as the entry lives, and only `mapClose` unmaps it.
+struct Mapping {
+    /// Where the caller's byte zero is. Not the base: see `base`.
+    addr: usize,
+    /// What was actually handed back by the system, which has to be aligned.
+    base: usize,
+    /// How many bytes were mapped from `base`, which is `len` plus the alignment slack.
+    mapped: usize,
+    /// How many bytes the caller asked for.
+    len: usize,
+    /// Windows only: the file-mapping object, which has to outlive nothing but be closed.
+    handle: usize,
+    /// Whether writes are allowed to reach the file.
+    writable: bool,
+}
+
+/// The live mappings, indexed by token.
+///
+/// **Entries are never recycled**, for the same reason as in [`SOCKETS`] and [`FILE_LOCKS`]: an old
+/// token points at `None` or at the mapping it always was, never at a new one. A stale token that
+/// silently addressed somebody else's memory would be the worst bug in this file.
+static MAPPINGS: std::sync::Mutex<Vec<Option<Mapping>>> = std::sync::Mutex::new(Vec::new());
+
+/// The three modes, matching `FileChannel.MapMode`.
+const MAP_READ_ONLY: i32 = 0;
+const MAP_READ_WRITE: i32 = 1;
+const MAP_PRIVATE: i32 = 2;
+
+/// Maps a region of a file into memory.
+///
+/// ===============================================================================================
+/// WHY THE OFFSET GETS ROUNDED DOWN
+/// ===============================================================================================
+///
+/// Both systems can only start a mapping at a multiple of their allocation granularity -- 64 KB on
+/// Windows, a page on Unix. A caller asking to map from byte 100 is not asking about granularity, so
+/// the base is rounded down and the difference is added back to the address handed out. The caller
+/// sees exactly the region it asked for; the slack before it is mapped and never mentioned.
+///
+/// Returns `Some(mapping)` on success, `None` when this platform cannot map.
+#[cfg(windows)]
+fn map_file(path: &str, mode: i32, position: u64, len: usize) -> Option<Option<Mapping>> {
+    use std::os::windows::io::AsRawHandle;
+
+    const PAGE_READONLY: u32 = 0x02;
+    const PAGE_READWRITE: u32 = 0x04;
+    const PAGE_WRITECOPY: u32 = 0x08;
+    const FILE_MAP_COPY: u32 = 0x0001;
+    const FILE_MAP_WRITE: u32 = 0x0002;
+    const FILE_MAP_READ: u32 = 0x0004;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateFileMappingW(
+            file: *mut core::ffi::c_void,
+            attrs: *mut core::ffi::c_void,
+            protect: u32,
+            max_high: u32,
+            max_low: u32,
+            name: *const u16,
+        ) -> *mut core::ffi::c_void;
+        fn MapViewOfFile(
+            mapping: *mut core::ffi::c_void,
+            access: u32,
+            offset_high: u32,
+            offset_low: u32,
+            bytes: usize,
+        ) -> *mut core::ffi::c_void;
+        fn CloseHandle(h: *mut core::ffi::c_void) -> i32;
+    }
+
+    // 64 KB, which is the allocation granularity every Windows on x86-64 reports. Asking the system
+    // for it would mean another call and another struct; the figure has not moved in thirty years.
+    const GRANULARITY: u64 = 65536;
+
+    let opened = if mode == MAP_READ_ONLY {
+        std::fs::File::options().read(true).open(path)
+    } else {
+        std::fs::File::options().read(true).write(true).open(path)
+    };
+    let f = match opened {
+        Ok(f) => f,
+        Err(_) => return Some(None),
+    };
+    let (protect, access) = match mode {
+        MAP_READ_ONLY => (PAGE_READONLY, FILE_MAP_READ),
+        MAP_PRIVATE => (PAGE_WRITECOPY, FILE_MAP_COPY),
+        _ => (PAGE_READWRITE, FILE_MAP_WRITE),
+    };
+    let base_off = position / GRANULARITY * GRANULARITY;
+    let slack = (position - base_off) as usize;
+    let total = slack + len;
+    let end = position + len as u64;
+    let mapping = unsafe {
+        CreateFileMappingW(
+            f.as_raw_handle(),
+            std::ptr::null_mut(),
+            protect,
+            (end >> 32) as u32,
+            end as u32,
+            std::ptr::null(),
+        )
+    };
+    if mapping.is_null() {
+        return Some(None);
+    }
+    let view = unsafe {
+        MapViewOfFile(mapping, access, (base_off >> 32) as u32, base_off as u32, total)
+    };
+    if view.is_null() {
+        unsafe { CloseHandle(mapping) };
+        return Some(None);
+    }
+    Some(Some(Mapping {
+        addr: view as usize + slack,
+        base: view as usize,
+        mapped: total,
+        len,
+        handle: mapping as usize,
+        writable: mode == MAP_READ_WRITE,
+    }))
+}
+
+/// The same through `mmap`.
+#[cfg(unix)]
+fn map_file(path: &str, mode: i32, position: u64, len: usize) -> Option<Option<Mapping>> {
+    use std::os::unix::io::AsRawFd;
+
+    const PROT_READ: i32 = 1;
+    const PROT_WRITE: i32 = 2;
+    const MAP_SHARED: i32 = 1;
+    const MAP_PRIVATE_FLAG: i32 = 2;
+
+    extern "C" {
+        fn mmap(
+            addr: *mut core::ffi::c_void,
+            len: usize,
+            prot: i32,
+            flags: i32,
+            fd: i32,
+            offset: i64,
+        ) -> *mut core::ffi::c_void;
+        fn getpagesize() -> i32;
+    }
+
+    let opened = if mode == MAP_READ_ONLY {
+        std::fs::File::options().read(true).open(path)
+    } else {
+        std::fs::File::options().read(true).write(true).open(path)
+    };
+    let f = match opened {
+        Ok(f) => f,
+        Err(_) => return Some(None),
+    };
+    let page = unsafe { getpagesize() } as u64;
+    let base_off = position / page * page;
+    let slack = (position - base_off) as usize;
+    let total = slack + len;
+    let prot = if mode == MAP_READ_ONLY { PROT_READ } else { PROT_READ | PROT_WRITE };
+    let flags = if mode == MAP_PRIVATE { MAP_PRIVATE_FLAG } else { MAP_SHARED };
+    let view = unsafe {
+        mmap(std::ptr::null_mut(), total, prot, flags, f.as_raw_fd(), base_off as i64)
+    };
+    // `mmap` reports failure as -1, not as null.
+    if view as isize == -1 {
+        return Some(None);
+    }
+    Some(Some(Mapping {
+        addr: view as usize + slack,
+        base: view as usize,
+        mapped: total,
+        len,
+        handle: 0,
+        writable: mode == MAP_READ_WRITE,
+    }))
+}
+
+#[cfg(not(any(windows, unix)))]
+fn map_file(_path: &str, _mode: i32, _position: u64, _len: usize) -> Option<Option<Mapping>> {
+    None
+}
+
+/// Writes the mapped bytes back to the file and waits for them to land.
+#[cfg(windows)]
+fn flush_mapping(m: &Mapping) -> bool {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn FlushViewOfFile(addr: *const core::ffi::c_void, bytes: usize) -> i32;
+    }
+    unsafe { FlushViewOfFile(m.base as *const core::ffi::c_void, m.mapped) != 0 }
+}
+
+#[cfg(unix)]
+fn flush_mapping(m: &Mapping) -> bool {
+    const MS_SYNC: i32 = 4;
+    extern "C" {
+        fn msync(addr: *mut core::ffi::c_void, len: usize, flags: i32) -> i32;
+    }
+    unsafe { msync(m.base as *mut core::ffi::c_void, m.mapped, MS_SYNC) == 0 }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn flush_mapping(_m: &Mapping) -> bool {
+    false
+}
+
+/// Takes the mapping down. Flushing first is the caller's business, not this one's.
+#[cfg(windows)]
+fn unmap(m: &Mapping) {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn UnmapViewOfFile(addr: *const core::ffi::c_void) -> i32;
+        fn CloseHandle(h: *mut core::ffi::c_void) -> i32;
+    }
+    unsafe {
+        UnmapViewOfFile(m.base as *const core::ffi::c_void);
+        CloseHandle(m.handle as *mut core::ffi::c_void);
+    }
+}
+
+#[cfg(unix)]
+fn unmap(m: &Mapping) {
+    extern "C" {
+        fn munmap(addr: *mut core::ffi::c_void, len: usize) -> i32;
+    }
+    unsafe {
+        munmap(m.base as *mut core::ffi::c_void, m.mapped);
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn unmap(_m: &Mapping) {}
+
+/// The file locks this VM holds, indexed by token.
+///
+/// A system file lock lives as long as the descriptor that took it, so what is stored is the open
+/// `File`: releasing the lock is dropping it. That is why `unlock` takes the entry out and lets it
+/// fall, and why that `File` is shared with nothing else.
+///
+/// **Entries are never recycled**, for the same reason as in [`SOCKETS`]: an old token points at
+/// `None` or at the lock it always was, never at a new one.
+static FILE_LOCKS: std::sync::Mutex<Vec<Option<std::fs::File>>> = std::sync::Mutex::new(Vec::new());
+
+/// Takes a lock over a region of an already-open file.
+///
+/// Returns `Some(true)` when it took the lock, `Some(false)` when the region was already held, and
+/// `None` when this platform has no file locks at all. The three are different and the Java side
+/// tells them apart: the second is a `tryLock` that failed, the third is an `IOException`.
+#[cfg(windows)]
+fn take_file_lock(
+    f: &std::fs::File,
+    position: u64,
+    length: u64,
+    shared: bool,
+    wait: bool,
+) -> Option<bool> {
+    use std::os::windows::io::AsRawHandle;
+
+    // `LOCKFILE_FAIL_IMMEDIATELY` returns at once instead of waiting; `LOCKFILE_EXCLUSIVE_LOCK`
+    // asks for the lock that also excludes readers.
+    const LOCKFILE_FAIL_IMMEDIATELY: u32 = 0x0000_0001;
+    const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x0000_0002;
+
+    // Windows carries the offset in two fields of `OVERLAPPED`. The struct is declared whole --with
+    // the fields nobody here uses-- because the system reads all of it, and a trimmed version would
+    // hand it garbage where it expects pointers.
+    #[repr(C)]
+    struct Overlapped {
+        internal: usize,
+        internal_high: usize,
+        offset: u32,
+        offset_high: u32,
+        event: *mut core::ffi::c_void,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn LockFileEx(
+            file: *mut core::ffi::c_void,
+            flags: u32,
+            reserved: u32,
+            bytes_low: u32,
+            bytes_high: u32,
+            overlapped: *mut Overlapped,
+        ) -> i32;
+    }
+
+    // A length of zero means "however far the file grows". Windows has no such form, so everything
+    // left from the position is requested instead, which is what the JDK does too.
+    let count: u64 = if length == 0 { u64::MAX - position } else { length };
+    let mut flags = 0u32;
+    if !shared {
+        flags |= LOCKFILE_EXCLUSIVE_LOCK;
+    }
+    if !wait {
+        flags |= LOCKFILE_FAIL_IMMEDIATELY;
+    }
+    let mut ov = Overlapped {
+        internal: 0,
+        internal_high: 0,
+        offset: position as u32,
+        offset_high: (position >> 32) as u32,
+        event: std::ptr::null_mut(),
+    };
+    let ok = unsafe {
+        LockFileEx(f.as_raw_handle(), flags, 0, count as u32, (count >> 32) as u32, &mut ov)
+    };
+    Some(ok != 0)
+}
+
+/// The same operation through `fcntl`, which is how file locks are taken on Unix.
+///
+/// The layout of `struct flock` belongs to the system ABI and not to the language, so it is written
+/// out by hand and **only for x86-64**, the one architecture this VM is built for. On anything else
+/// the answer is "no file locks here" rather than a struct read as garbage.
+#[cfg(all(unix, target_arch = "x86_64"))]
+fn take_file_lock(
+    f: &std::fs::File,
+    position: u64,
+    length: u64,
+    shared: bool,
+    wait: bool,
+) -> Option<bool> {
+    use std::os::unix::io::AsRawFd;
+
+    const F_SETLK: i32 = 6;
+    const F_SETLKW: i32 = 7;
+    const F_RDLCK: i16 = 0;
+    const F_WRLCK: i16 = 1;
+    const SEEK_SET: i16 = 0;
+
+    #[repr(C)]
+    struct Flock {
+        l_type: i16,
+        l_whence: i16,
+        _pad: [u8; 4],
+        l_start: i64,
+        l_len: i64,
+        l_pid: i32,
+        _tail: [u8; 4],
+    }
+
+    extern "C" {
+        fn fcntl(fd: i32, cmd: i32, ...) -> i32;
+    }
+
+    let mut fl = Flock {
+        l_type: if shared { F_RDLCK } else { F_WRLCK },
+        l_whence: SEEK_SET,
+        _pad: [0; 4],
+        l_start: position as i64,
+        // Zero already means "to the end of the file" in `fcntl`, so Java's form passes through.
+        l_len: length as i64,
+        l_pid: 0,
+        _tail: [0; 4],
+    };
+    let cmd = if wait { F_SETLKW } else { F_SETLK };
+    let r = unsafe { fcntl(f.as_raw_fd(), cmd, &mut fl as *mut Flock) };
+    Some(r != -1)
+}
+
+/// Anywhere that is neither Windows nor 64-bit Unix there are no locks to take.
+#[cfg(not(any(windows, all(unix, target_arch = "x86_64"))))]
+fn take_file_lock(
+    _f: &std::fs::File,
+    _position: u64,
+    _length: u64,
+    _shared: bool,
+    _wait: bool,
+) -> Option<bool> {
+    None
+}
+
 /// Los sockets abiertos, indexados por handle.
 ///
 /// Es un `Mutex` global y **no** un `thread_local` como [`PROCS`], y la diferencia importa: un
@@ -824,6 +1392,202 @@ pub fn dispatch(
         }
 
 
+        // Maps a region of a file into memory. Returns the token, -1 when it could not be mapped,
+        // and -2 when this platform cannot map at all.
+        //
+        // Mode is 0 read-only, 1 read-write, 2 private (copy-on-write).
+        ("jdk/internal/io/Fs", "mapOpen", "(Ljava/lang/String;IJI)I") => {
+            let path = strings::read(heap, reference(&args[0]));
+            let mode = entero(&args[1]);
+            let position = match args[2] {
+                Value::Long(v) => v,
+                _ => 0,
+            };
+            let len = entero(&args[3]);
+            if position < 0 || len < 0 {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            }
+            match map_file(&path, mode, position as u64, len as usize) {
+                None => Some(Value::Int(-2)),
+                Some(None) => Some(Value::Int(-1)),
+                Some(Some(m)) => {
+                    let mut t = MAPPINGS.lock().unwrap();
+                    t.push(Some(m));
+                    Some(Value::Int((t.len() - 1) as i32))
+                }
+            }
+        }
+        // Writes the mapped bytes back and waits for them to land.
+        ("jdk/internal/io/Fs", "mapForce", "(I)Z") => {
+            let token = entero(&args[0]);
+            let t = MAPPINGS.lock().unwrap();
+            let ok = match t.get(token as usize).and_then(|e| e.as_ref()) {
+                Some(m) => flush_mapping(m),
+                None => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // Takes the mapping down. Flushes first: an unmap that dropped pending writes would lose
+        // them silently, which is the one thing a mapping must never do.
+        ("jdk/internal/io/Fs", "mapClose", "(I)Z") => {
+            let token = entero(&args[0]);
+            let mut t = MAPPINGS.lock().unwrap();
+            let had = match t.get_mut(token as usize) {
+                Some(e) => match e.take() {
+                    Some(m) => {
+                        if m.writable {
+                            flush_mapping(&m);
+                        }
+                        unmap(&m);
+                        true
+                    }
+                    None => false,
+                },
+                None => false,
+            };
+            Some(Value::Int(i32::from(had)))
+        }
+        // One byte, 0 to 255, or -1 when the token or the index is not right.
+        ("jdk/internal/io/Fs", "mapGet", "(II)I") => {
+            let token = entero(&args[0]);
+            let index = entero(&args[1]);
+            let t = MAPPINGS.lock().unwrap();
+            let v = match t.get(token as usize).and_then(|e| e.as_ref()) {
+                Some(m) if index >= 0 && (index as usize) < m.len => {
+                    unsafe { *((m.addr + index as usize) as *const u8) as i32 }
+                }
+                _ => -1,
+            };
+            Some(Value::Int(v))
+        }
+        // One byte in.
+        ("jdk/internal/io/Fs", "mapPut", "(III)Z") => {
+            let token = entero(&args[0]);
+            let index = entero(&args[1]);
+            let value = entero(&args[2]);
+            let t = MAPPINGS.lock().unwrap();
+            let ok = match t.get(token as usize).and_then(|e| e.as_ref()) {
+                Some(m) if index >= 0 && (index as usize) < m.len => {
+                    unsafe { *((m.addr + index as usize) as *mut u8) = value as u8 };
+                    true
+                }
+                _ => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // A run of bytes out of the mapping and into an array.
+        //
+        // It is here and not written as a loop over `mapGet` because that loop is the whole cost of
+        // reading a mapped file from Java: one native call per byte instead of one per buffer.
+        ("jdk/internal/io/Fs", "mapRead", "(II[BII)Z") => {
+            let token = entero(&args[0]);
+            let index = entero(&args[1]);
+            let arr = reference(&args[2]);
+            let off = entero(&args[3]);
+            let len = entero(&args[4]);
+            if arr == 0 || index < 0 || off < 0 || len < 0 {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let cap = heap.read_u32(arr + HEADER_SIZE) as i32;
+            if off + len > cap {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let t = MAPPINGS.lock().unwrap();
+            let ok = match t.get(token as usize).and_then(|e| e.as_ref()) {
+                Some(m) if (index + len) as usize <= m.len => {
+                    for i in 0..len as usize {
+                        let b = unsafe { *((m.addr + index as usize + i) as *const u8) };
+                        heap.write_u8(arr + array_operations::ARRAY_HEADER_SIZE + off as usize + i, b);
+                    }
+                    true
+                }
+                _ => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // A run of bytes from an array into the mapping.
+        ("jdk/internal/io/Fs", "mapWrite", "(II[BII)Z") => {
+            let token = entero(&args[0]);
+            let index = entero(&args[1]);
+            let arr = reference(&args[2]);
+            let off = entero(&args[3]);
+            let len = entero(&args[4]);
+            if arr == 0 || index < 0 || off < 0 || len < 0 {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let cap = heap.read_u32(arr + HEADER_SIZE) as i32;
+            if off + len > cap {
+                return NativeOutcome::Ran(Some(Value::Int(0)));
+            }
+            let t = MAPPINGS.lock().unwrap();
+            let ok = match t.get(token as usize).and_then(|e| e.as_ref()) {
+                Some(m) if (index + len) as usize <= m.len => {
+                    for i in 0..len as usize {
+                        let b = heap
+                            .read_u8(arr + array_operations::ARRAY_HEADER_SIZE + off as usize + i);
+                        unsafe { *((m.addr + index as usize + i) as *mut u8) = b };
+                    }
+                    true
+                }
+                _ => false,
+            };
+            Some(Value::Int(i32::from(ok)))
+        }
+        // Takes a system lock over a region of the file. Returns the token, -1 when the region is
+        // already held, and -2 when this platform has no file locks.
+        //
+        // The file is opened here and kept: **a lock lives as long as the descriptor that took
+        // it**, so there is no way to take one with a single-shot operation. It is the only part of
+        // `Fs` that holds state, and that is why.
+        ("jdk/internal/io/Fs", "lock", "(Ljava/lang/String;JJZZ)I") => {
+            let path = strings::read(heap, reference(&args[0]));
+            let position = match args[1] {
+                Value::Long(v) => v,
+                _ => 0,
+            };
+            let length = match args[2] {
+                Value::Long(v) => v,
+                _ => 0,
+            };
+            let shared = matches!(args[3], Value::Int(1));
+            let wait = matches!(args[4], Value::Int(1));
+            // A shared lock needs the file open for reading, an exclusive one for writing. Asking
+            // for less makes the system refuse the lock rather than hand back a weaker one, so the
+            // choice is not an optimisation.
+            let opened = if shared {
+                std::fs::File::options().read(true).open(&path)
+            } else {
+                std::fs::File::options().read(true).write(true).open(&path)
+            };
+            let f = match opened {
+                Ok(f) => f,
+                Err(_) => return NativeOutcome::Ran(Some(Value::Int(-1))),
+            };
+            match take_file_lock(&f, position as u64, length as u64, shared, wait) {
+                None => Some(Value::Int(-2)),
+                Some(false) => Some(Value::Int(-1)),
+                Some(true) => {
+                    let mut t = FILE_LOCKS.lock().unwrap();
+                    t.push(Some(f));
+                    Some(Value::Int((t.len() - 1) as i32))
+                }
+            }
+        }
+        // Releases a lock. Closing the descriptor frees it, so taking the entry out is enough.
+        ("jdk/internal/io/Fs", "unlock", "(I)Z") => {
+            let token = match args[0] {
+                Value::Int(v) => v,
+                _ => -1,
+            };
+            let mut t = FILE_LOCKS.lock().unwrap();
+            let had = match t.get_mut(token as usize) {
+                Some(e) => e.take().is_some(),
+                None => false,
+            };
+            Some(Value::Int(i32::from(had)))
+        }
+
+
         // --- TCP: `jdk/internal/net/Net` ------------------------------------------------------
         //
         // La costura que le faltaba a `java.net.Socket`, a `ServerSocket` y a todo lo que se apoya
@@ -993,6 +1757,56 @@ pub fn dispatch(
             Some(Value::Int(i32::from(ok)))
         }
         // Cierra. La entrada se saca de la tabla, y ahi Rust cierra el descriptor al soltarla.
+        // Asks which of those sockets are ready, waiting up to `timeoutMs` -- zero to ask and
+        // return, a negative to wait as long as it takes.
+        //
+        // `handles` names the sockets, `events` what to watch for on each --1 read, 2 write-- and
+        // `revents` is filled in with what each one has: the same two bits plus 4 for an error or a
+        // hangup. Returns how many sockets reported something, or -1 when this platform has no
+        // `poll`.
+        //
+        // It takes three parallel arrays and not a list of objects because this is the call a
+        // selector makes on **every** turn of its loop, and allocating one object per registered
+        // channel per turn is the cost that made people stop using selectors in the first place.
+        ("jdk/internal/net/Net", "poll", "([I[I[II)I") => {
+            let handles = reference(&args[0]);
+            let events = reference(&args[1]);
+            let revents = reference(&args[2]);
+            let timeout = entero(&args[3]);
+            if handles == 0 || events == 0 || revents == 0 {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            }
+            let n = heap.read_u32(handles + HEADER_SIZE) as usize;
+            if (heap.read_u32(events + HEADER_SIZE) as usize) < n
+                || (heap.read_u32(revents + HEADER_SIZE) as usize) < n
+            {
+                return NativeOutcome::Ran(Some(Value::Int(-1)));
+            }
+            let mut raw: Vec<usize> = Vec::with_capacity(n);
+            let mut want: Vec<i32> = Vec::with_capacity(n);
+            for i in 0..n {
+                let h = heap.read_u32(handles + array_operations::ARRAY_HEADER_SIZE + i * 4) as i32;
+                match raw_socket(h) {
+                    Some(s) => raw.push(s),
+                    // A handle that names nothing is reported as an error rather than dropped:
+                    // dropping it would shift every following index and the caller would read the
+                    // answers against the wrong channels.
+                    None => return NativeOutcome::Ran(Some(Value::Int(-1))),
+                }
+                want.push(heap.read_u32(events + array_operations::ARRAY_HEADER_SIZE + i * 4) as i32);
+            }
+            let mut out = vec![0i32; n];
+            let ready = poll_sockets(&raw, &want, &mut out, timeout);
+            if ready >= 0 {
+                for i in 0..n {
+                    heap.write_u32(
+                        revents + array_operations::ARRAY_HEADER_SIZE + i * 4,
+                        out[i] as u32,
+                    );
+                }
+            }
+            Some(Value::Int(ready))
+        }
         ("jdk/internal/net/Net", "close", "(I)V") => {
             let h = entero(&args[0]);
             let mut t = SOCKETS.lock().unwrap();
@@ -2744,11 +3558,22 @@ pub fn dispatch(
             // `Files.createTempFile`/`createTempDirectory` y a todo lo que se apoya en ellas: la
             // caída a `"."` que hacen no sirve, porque `user.dir` también faltaba y una ruta
             // relativa no se podía llevar a absoluta. Eran dos ausencias que se tapaban entre sí.
+            //
+            // `user.home` es la otra que no se puede derivar: `FileSystemView.getDefaultDirectory`
+            // la usa para saber dónde abrir un selector de archivos, y sin ella `new File(null)`
+            // revienta antes de mostrar nada. En Windows la trae `USERPROFILE`; en el resto,
+            // `HOME`. Se prueban las dos porque un entorno puede tener cualquiera de las dos.
             let del_entorno: Option<String> = match key.as_str() {
                 "java.io.tmpdir" => Some(std::env::temp_dir().to_string_lossy().into_owned()),
                 "user.dir" => std::env::current_dir()
                     .ok()
                     .map(|p| p.to_string_lossy().into_owned()),
+                "user.home" => std::env::var("USERPROFILE")
+                    .or_else(|_| std::env::var("HOME"))
+                    .ok(),
+                "user.name" => std::env::var("USERNAME")
+                    .or_else(|_| std::env::var("USER"))
+                    .ok(),
                 _ => None,
             };
             if let Some(text) = del_entorno {
