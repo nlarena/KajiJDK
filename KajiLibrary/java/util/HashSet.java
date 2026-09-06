@@ -1,6 +1,8 @@
 package java.util;
 
 // Compiled with `-cp KajiLibrary` so Set/Iterator bind to KajiLibrary's own (subset) types.
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Set;
 import java.util.Iterator;
 
@@ -9,7 +11,7 @@ import java.util.Iterator;
 // if the element is already present; `remove` re-inserts the trailing cluster to keep the
 // probe invariant. `iterator()` walks the table (see HashSetItr below). (The JDK's HashSet
 // delegates to a HashMap; ours holds its own table.)
-public class HashSet<E> extends AbstractSet<E> implements Set<E> {
+public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, Cloneable {
 
     // Package-private so HashSetItr can walk the table (still implementation, not API surface).
     Object[] table;
@@ -201,40 +203,74 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E> {
 // HashSet's iterator, as a same-file top-level class (compiler-generated enclosing capture is
 // broken for a class inside a generic one — finding #13 — so no inner/anonymous class). Walks
 // the backing table, skipping empty slots.
+// The iterator walks a SNAPSHOT of the elements, not the table.
+//
+// ===============================================================================================
+// WHY A SNAPSHOT, WHEN WALKING THE TABLE IS CHEAPER
+// ===============================================================================================
+//
+// Because of `remove()`. This set uses open addressing, and `HashSet.remove` closes the gap it
+// leaves by re-inserting the cluster that followed it -- see that method. Re-inserting can land an
+// element in a slot BEFORE the one the iterator is on, and an index-based walk would then skip it.
+// The bug would show up only on removals that happen to land in a probe cluster, which is the worst
+// kind to find.
+//
+// The snapshot costs one array per iteration and makes `remove()` correct by construction: the walk
+// is over a list that nothing reshuffles, and the removal goes to the set through its own `remove`.
+//
+// What it does not do is fail fast. This set keeps no modification count, so a change made behind
+// the iterator's back is invisible here as it was before; that is a separate gap and this does not
+// widen it.
 final class HashSetItr<E> implements Iterator<E> {
 
     private final HashSet<E> set;
-    private int index = 0;
-
-    /** El null va primero, y una sola vez. Ver el campo homonimo de {@link HashSet}. */
-    private boolean nullPending;
+    private final Object[] snapshot;
+    private int index;
+    private E last;
+    private boolean removable;
 
     HashSetItr(HashSet<E> set) {
         this.set = set;
-        this.nullPending = set.hasNull;
-        this.advance();
-    }
-
-    // Advance `index` to the next occupied slot (or past the end).
-    private void advance() {
-        while (this.index < this.set.table.length && this.set.table[this.index] == null) {
-            this.index = this.index + 1;
+        this.snapshot = new Object[set.size()];
+        int n = 0;
+        if (set.hasNull) {
+            // The null goes first, and once. See the field of the same name on `HashSet`.
+            this.snapshot[n] = null;
+            n = n + 1;
+        }
+        for (int i = 0; i < set.table.length && n < this.snapshot.length; i++) {
+            if (set.table[i] != null) {
+                this.snapshot[n] = set.table[i];
+                n = n + 1;
+            }
         }
     }
 
     public boolean hasNext() {
-        return this.nullPending || this.index < this.set.table.length;
+        return this.index < this.snapshot.length;
     }
 
     public E next() {
-        if (this.nullPending) {
-            this.nullPending = false;
-            return null;
+        if (this.index >= this.snapshot.length) {
+            throw new NoSuchElementException();
         }
-        E element = (E) this.set.table[this.index];
+        this.last = (E) this.snapshot[this.index];
         this.index = this.index + 1;
-        this.advance();
-        return element;
+        this.removable = true;
+        return this.last;
     }
 
+    /**
+     * Removes from the set the element {@link #next} last returned.
+     *
+     * @throws IllegalStateException if `next` has not been called, or if this is a second `remove`
+     *     for the same element
+     */
+    public void remove() {
+        if (!this.removable) {
+            throw new IllegalStateException();
+        }
+        this.removable = false;
+        this.set.remove(this.last);
+    }
 }
