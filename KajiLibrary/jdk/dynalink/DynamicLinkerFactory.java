@@ -18,175 +18,174 @@ import jdk.dynalink.linker.MethodTypeConversionStrategy;
 import jdk.dynalink.linker.support.CompositeGuardingDynamicLinker;
 
 /**
- * Arma un {@link DynamicLinker}.
+ * Puts a {@link DynamicLinker} together.
  *
- * <h2>El orden de los enlazadores es la configuracion</h2>
+ * <h2>The order of the linkers is the configuration</h2>
  *
- * <p>Un sitio se le ofrece a cada enlazador por turno y se queda con el primero que sepa atenderlo.
- * Eso hace que el orden sea lo unico que hay que decidir, y por eso hay tres grupos: los
- * prioritarios, que ven todo primero; los que se cargan solos; y los de ultimo recurso.
+ * <p>A site is offered to each linker in turn and goes to the first one that knows how to serve it.
+ * That makes the order the only thing to decide, and that is why there are three groups: the
+ * prioritized ones, which see everything first; the ones that load themselves; and the last resorts.
  *
- * <p>Los del medio se descubren por {@link GuardingDynamicLinkerExporter}: es como un lenguaje que
- * corre encima --o una biblioteca que se agrega al camino de clases-- entra en el sistema sin que
- * nadie lo nombre. {@link #getAutoLoadingErrors} es donde se ven los que no se pudieron cargar; se
- * juntan en vez de tirar porque un exportador roto de una biblioteca no tiene que impedir que el
- * lenguaje arranque.
+ * <p>The middle ones are discovered through {@link GuardingDynamicLinkerExporter}: it is how a
+ * language running on top -- or a library added to the class path -- gets into the system without
+ * anybody naming it. {@link #getAutoLoadingErrors} is where the ones that could not be loaded show
+ * up; they are collected rather than thrown because one library's broken exporter must not keep the
+ * language from starting.
  *
- * <p>El de ultimo recurso por omision es {@link BeansLinker}, que atiende objetos Java comunes.
- * Ponerlo al final y no al principio importa: si viera los sitios primero, atenderia los objetos
- * propios del lenguaje como si fueran objetos Java.
+ * <p>The default last resort is {@link BeansLinker}, which serves ordinary Java objects. Putting it
+ * at the end and not at the front matters: if it saw the sites first, it would serve the language's
+ * own objects as if they were Java objects.
  *
- * <h2>El umbral de inestabilidad</h2>
+ * <h2>The instability threshold</h2>
  *
- * <p>{@link #setUnstableRelinkThreshold} es cuantas veces se deja reenlazar un sitio antes de
- * declararlo inestable. Es una apuesta sobre el programa: la mayoria de los sitios ven un solo tipo,
- * unos pocos ven dos o tres, y muy pocos ven muchos. Encadenar sirve para los primeros y estorba
- * para los ultimos.
+ * <p>{@link #setUnstableRelinkThreshold} is how many times a site is allowed to be relinked before
+ * it is declared unstable. It is a bet about the program: most sites see a single type, a few see two
+ * or three, and very few see many. Chaining helps the first and hurts the last.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La fabrica funciona entera: el descubrimiento, la composicion y la configuracion. Lo que no
- * anda es enlazar, que es de {@link DynamicLinker} y necesita manijas de metodo.
+ * <p>The factory works in full: the discovery, the composition and the configuration. What does not
+ * work is linking, which belongs to {@link DynamicLinker} and needs method handles.
  *
  * @since 9
  */
 public final class DynamicLinkerFactory {
 
-    /** Cuantas reenlazadas antes de declarar inestable un sitio, si no se dice otra cosa. */
-    private static final int UMBRAL_POR_OMISION = 8;
+    /** How many relinks before a site is declared unstable, when nothing else is said. */
+    private static final int DEFAULT_THRESHOLD = 8;
 
-    private ClassLoader cargador;
-    private boolean cargadorPuesto;
-    private List<GuardingDynamicLinker> prioritarios;
-    private List<GuardingDynamicLinker> ultimoRecurso;
-    private boolean sincronizar;
-    private int umbralInestable = UMBRAL_POR_OMISION;
-    private GuardedInvocationTransformer preenlace;
+    private ClassLoader loader;
+    private boolean loaderSet;
+    private List<GuardingDynamicLinker> prioritized;
+    private List<GuardingDynamicLinker> lastResort;
+    private boolean synchronize;
+    private int unstableThreshold = DEFAULT_THRESHOLD;
+    private GuardedInvocationTransformer prelink;
     private MethodTypeConversionStrategy autoConversion;
-    private MethodHandleTransformer filtroInterno;
-    private List<ServiceConfigurationError> errores = Collections.emptyList();
+    private MethodHandleTransformer internalFilter;
+    private List<ServiceConfigurationError> errors = Collections.emptyList();
 
-    /** Una. */
+    /** One. */
     public DynamicLinkerFactory() {
     }
 
     /**
-     * Con que cargador de clases buscar los enlazadores que se cargan solos.
+     * Which class loader to look for the self-loading linkers with.
      *
-     * <p>Pasar {@code null} no vuelve al de omision: apaga el descubrimiento. Es la forma de armar
-     * un enlazador que solo tenga lo que se le puso a mano, que es lo que quiere un programa que no
-     * confia en lo que haya en el camino de clases.
+     * <p>Passing {@code null} does not go back to the default one: it turns discovery off. It is how
+     * a linker with nothing but what was set by hand is built, which is what a program that does not
+     * trust whatever is on the class path wants.
      *
-     * @param classLoader el cargador, o {@code null} para no descubrir nada
+     * @param classLoader the loader, or {@code null} to discover nothing
      */
     public void setClassLoader(final ClassLoader classLoader) {
-        this.cargador = classLoader;
-        this.cargadorPuesto = true;
+        this.loader = classLoader;
+        this.loaderSet = true;
     }
 
     /**
-     * Los enlazadores que ven los sitios antes que nadie.
+     * The linkers that see the sites before anybody else.
      *
-     * @param prioritizedLinkers los enlazadores, o {@code null} para que no haya ninguno
-     * @throws NullPointerException si la lista tiene algun elemento {@code null}
+     * @param prioritizedLinkers the linkers, or {@code null} for none
+     * @throws NullPointerException if the list has any {@code null} element
      */
     public void setPrioritizedLinkers(final List<? extends GuardingDynamicLinker>
             prioritizedLinkers) {
-        this.prioritarios = copiarSinNulos(prioritizedLinkers);
+        this.prioritized = copyWithoutNulls(prioritizedLinkers);
     }
 
     /**
-     * Lo mismo, sueltos.
+     * The same, loose.
      *
-     * @param prioritizedLinkers los enlazadores
-     * @throws NullPointerException si alguno es {@code null}
+     * @param prioritizedLinkers the linkers
+     * @throws NullPointerException if any of them is {@code null}
      */
     public void setPrioritizedLinkers(final GuardingDynamicLinker... prioritizedLinkers) {
-        setPrioritizedLinkers(comoLista(prioritizedLinkers));
+        setPrioritizedLinkers(asList(prioritizedLinkers));
     }
 
     /**
-     * Uno solo con prioridad.
+     * A single prioritized one.
      *
-     * @param prioritizedLinker el enlazador
-     * @throws NullPointerException si es {@code null}
+     * @param prioritizedLinker the linker
+     * @throws NullPointerException if it is {@code null}
      */
     public void setPrioritizedLinker(final GuardingDynamicLinker prioritizedLinker) {
         if (prioritizedLinker == null) {
             throw new NullPointerException("prioritizedLinker");
         }
-        final List<GuardingDynamicLinker> uno = new ArrayList<GuardingDynamicLinker>();
-        uno.add(prioritizedLinker);
-        this.prioritarios = uno;
+        final List<GuardingDynamicLinker> one = new ArrayList<GuardingDynamicLinker>();
+        one.add(prioritizedLinker);
+        this.prioritized = one;
     }
 
     /**
-     * Los enlazadores de ultimo recurso.
+     * The last-resort linkers.
      *
-     * <p>Pasar {@code null} restituye el de omision --un {@link BeansLinker}--; pasar una lista
-     * vacia deja al enlazador sin ultimo recurso, que es distinto: un sitio que nadie sepa atender
-     * va a fallar en vez de tratarse como un objeto Java.
+     * <p>Passing {@code null} restores the default one -- a {@link BeansLinker}; passing an empty
+     * list leaves the linker with no last resort, which is different: a site nobody knows how to
+     * serve will fail instead of being treated as a Java object.
      *
-     * @param fallbackLinkers los enlazadores, o {@code null} para el de omision
-     * @throws NullPointerException si la lista tiene algun elemento {@code null}
+     * @param fallbackLinkers the linkers, or {@code null} for the default one
+     * @throws NullPointerException if the list has any {@code null} element
      */
     public void setFallbackLinkers(final List<? extends GuardingDynamicLinker> fallbackLinkers) {
-        this.ultimoRecurso = copiarSinNulos(fallbackLinkers);
+        this.lastResort = copyWithoutNulls(fallbackLinkers);
     }
 
     /**
-     * Lo mismo, sueltos.
+     * The same, loose.
      *
-     * @param fallbackLinkers los enlazadores
-     * @throws NullPointerException si alguno es {@code null}
+     * @param fallbackLinkers the linkers
+     * @throws NullPointerException if any of them is {@code null}
      */
     public void setFallbackLinkers(final GuardingDynamicLinker... fallbackLinkers) {
-        setFallbackLinkers(comoLista(fallbackLinkers));
+        setFallbackLinkers(asList(fallbackLinkers));
     }
 
     /**
-     * Si hay que reenlazar bajo el candado del sitio.
+     * Whether relinking has to happen under the site's lock.
      *
-     * <p>Hace falta cuando el sitio guarda una cadena de invocaciones que dos hilos podrian estar
-     * modificando a la vez. Cuesta, asi que no esta prendido por omision.
+     * <p>It is needed when the site holds a chain of invocations two threads could be changing at
+     * once. It costs, so it is not on by default.
      *
-     * @param syncOnRelink cierto para sincronizar
+     * @param syncOnRelink true to synchronize
      */
     public void setSyncOnRelink(final boolean syncOnRelink) {
-        this.sincronizar = syncOnRelink;
+        this.synchronize = syncOnRelink;
     }
 
     /**
-     * Cuantas reenlazadas antes de declarar inestable un sitio.
+     * How many relinks before a site is declared unstable.
      *
-     * @param unstableRelinkThreshold cuantas; cero declara inestable desde la primera
-     * @throws IllegalArgumentException si es negativo
+     * @param unstableRelinkThreshold how many; zero declares it unstable from the first one
+     * @throws IllegalArgumentException if it is negative
      */
     public void setUnstableRelinkThreshold(final int unstableRelinkThreshold) {
         if (unstableRelinkThreshold < 0) {
             throw new IllegalArgumentException("unstableRelinkThreshold < 0");
         }
-        this.umbralInestable = unstableRelinkThreshold;
+        this.unstableThreshold = unstableRelinkThreshold;
     }
 
     /**
-     * Que hacerle a cada invocacion antes de instalarla.
+     * What to do to each invocation before installing it.
      *
-     * <p>Es donde un lenguaje mete lo suyo alrededor de toda invocacion: contar llamadas, revisar
-     * permisos, envolver excepciones.
+     * <p>It is where a language puts what it wants around every invocation: counting calls, checking
+     * permissions, wrapping exceptions.
      *
-     * @param prelinkTransformer que hacerle, o {@code null} para nada
+     * @param prelinkTransformer what to do to it, or {@code null} for nothing
      */
     public void setPrelinkTransformer(final GuardedInvocationTransformer prelinkTransformer) {
-        this.preenlace = prelinkTransformer;
+        this.prelink = prelinkTransformer;
     }
 
     /**
-     * Como convertir lo que el lenguaje de Java no sabe convertir.
+     * How to convert what the Java language does not know how to convert.
      *
-     * <p>Corre despues de la conversion de Java, no en su lugar.
+     * <p>It runs after Java's conversion, not in its place.
      *
-     * @param autoConversionStrategy la estrategia, o {@code null} para no tener ninguna
+     * @param autoConversionStrategy the strategy, or {@code null} for none
      */
     public void setAutoConversionStrategy(
             final MethodTypeConversionStrategy autoConversionStrategy) {
@@ -194,123 +193,123 @@ public final class DynamicLinkerFactory {
     }
 
     /**
-     * Que hacerle a los objetos internos del lenguaje que salgan hacia afuera.
+     * What to do to the language's internal objects when they leave for the outside.
      *
-     * <p>Un lenguaje que representa sus valores con clases propias no quiere que esas clases se
-     * filtren al codigo Java que lo hospeda; esto es donde se las envuelve o se las convierte.
+     * <p>A language that represents its values with classes of its own does not want those classes
+     * leaking into the Java code hosting it; this is where they are wrapped or converted.
      *
-     * @param internalObjectsFilter el filtro, o {@code null} para no filtrar nada
+     * @param internalObjectsFilter the filter, or {@code null} to filter nothing
      */
     public void setInternalObjectsFilter(final MethodHandleTransformer internalObjectsFilter) {
-        this.filtroInterno = internalObjectsFilter;
+        this.internalFilter = internalObjectsFilter;
     }
 
     /**
-     * Arma el enlazador con lo que se le dijo.
+     * Puts the linker together out of what it was told.
      *
-     * <p>Se puede llamar mas de una vez: cada llamada vuelve a descubrir y arma otro enlazador.
+     * <p>It may be called more than once: each call discovers again and builds another linker.
      *
-     * @return el enlazador
+     * @return the linker
      */
     public DynamicLinker createLinker() {
-        final List<ServiceConfigurationError> males = new ArrayList<ServiceConfigurationError>();
-        final List<GuardingDynamicLinker> todos = new ArrayList<GuardingDynamicLinker>();
-        if (this.prioritarios != null) {
-            todos.addAll(this.prioritarios);
+        final List<ServiceConfigurationError> bad = new ArrayList<ServiceConfigurationError>();
+        final List<GuardingDynamicLinker> all = new ArrayList<GuardingDynamicLinker>();
+        if (this.prioritized != null) {
+            all.addAll(this.prioritized);
         }
-        todos.addAll(descubrir(males));
-        if (this.ultimoRecurso == null) {
-            todos.add(new BeansLinker());
+        all.addAll(discover(bad));
+        if (this.lastResort == null) {
+            all.add(new BeansLinker());
         } else {
-            todos.addAll(this.ultimoRecurso);
+            all.addAll(this.lastResort);
         }
-        this.errores = Collections.unmodifiableList(males);
+        this.errors = Collections.unmodifiableList(bad);
 
-        // Las fabricas de conversion y los comparadores salen de los mismos enlazadores: un
-        // enlazador que sabe convertir lo dice implementando la interfaz, no registrandose aparte.
-        final List<GuardingTypeConverterFactory> fabricas =
+        // The conversion factories and the comparators come out of those same linkers: a linker that
+        // knows how to convert says so by implementing the interface, not by registering apart.
+        final List<GuardingTypeConverterFactory> factories =
                 new ArrayList<GuardingTypeConverterFactory>();
-        final List<ConversionComparator> comparadores = new ArrayList<ConversionComparator>();
-        for (int i = 0; i < todos.size(); i++) {
-            final GuardingDynamicLinker l = todos.get(i);
+        final List<ConversionComparator> comparators = new ArrayList<ConversionComparator>();
+        for (int i = 0; i < all.size(); i++) {
+            final GuardingDynamicLinker l = all.get(i);
             if (l instanceof GuardingTypeConverterFactory) {
-                fabricas.add((GuardingTypeConverterFactory) l);
+                factories.add((GuardingTypeConverterFactory) l);
             }
             if (l instanceof ConversionComparator) {
-                comparadores.add((ConversionComparator) l);
+                comparators.add((ConversionComparator) l);
             }
         }
-        final ServiciosDeEnlace servicios = new ServiciosDeEnlace(
-                new CompositeGuardingDynamicLinker(todos), fabricas, comparadores,
-                this.autoConversion, this.filtroInterno);
-        return new DynamicLinker(servicios, this.preenlace, this.sincronizar,
-                this.umbralInestable);
+        final LinkerServicesImpl services = new LinkerServicesImpl(
+                new CompositeGuardingDynamicLinker(all), factories, comparators,
+                this.autoConversion, this.internalFilter);
+        return new DynamicLinker(services, this.prelink, this.synchronize, this.unstableThreshold);
     }
 
     /**
-     * Los enlazadores que no se pudieron cargar en el ultimo {@link #createLinker}.
+     * The linkers that could not be loaded in the last {@link #createLinker}.
      *
-     * @return los errores, o una lista vacia si no hubo ninguno
+     * @return the errors, or an empty list if there were none
      */
     public List<ServiceConfigurationError> getAutoLoadingErrors() {
-        return this.errores;
+        return this.errors;
     }
 
     /**
-     * Los enlazadores que se anuncian solos.
+     * The linkers that announce themselves.
      *
-     * <p>Un exportador roto se anota y se sigue: la lista de enlazadores que si cargaron es mas
-     * util que un arranque fallido, y quien quiera enterarse tiene {@link #getAutoLoadingErrors}.
+     * <p>A broken exporter is written down and skipped: the list of linkers that did load is more
+     * useful than a failed startup, and whoever wants to hear about it has
+     * {@link #getAutoLoadingErrors}.
      */
-    private List<GuardingDynamicLinker> descubrir(final List<ServiceConfigurationError> males) {
+    private List<GuardingDynamicLinker> discover(final List<ServiceConfigurationError> bad) {
         final List<GuardingDynamicLinker> out = new ArrayList<GuardingDynamicLinker>();
-        if (this.cargadorPuesto && this.cargador == null) {
+        if (this.loaderSet && this.loader == null) {
             return out;
         }
-        final ClassLoader cl = this.cargadorPuesto ? this.cargador
+        final ClassLoader cl = this.loaderSet ? this.loader
                 : Thread.currentThread().getContextClassLoader();
-        final ServiceLoader<GuardingDynamicLinkerExporter> cargados =
+        final ServiceLoader<GuardingDynamicLinkerExporter> loaded =
                 ServiceLoader.load(GuardingDynamicLinkerExporter.class, cl);
-        final Iterator<GuardingDynamicLinkerExporter> it = cargados.iterator();
+        final Iterator<GuardingDynamicLinkerExporter> it = loaded.iterator();
         while (true) {
-            final GuardingDynamicLinkerExporter exportador;
+            final GuardingDynamicLinkerExporter exporter;
             try {
                 if (!it.hasNext()) {
                     return out;
                 }
-                exportador = it.next();
+                exporter = it.next();
             } catch (final ServiceConfigurationError e) {
-                males.add(e);
+                bad.add(e);
                 continue;
             }
-            final List<GuardingDynamicLinker> suyos = exportador.get();
-            if (suyos != null) {
-                for (int i = 0; i < suyos.size(); i++) {
-                    if (suyos.get(i) != null) {
-                        out.add(suyos.get(i));
+            final List<GuardingDynamicLinker> theirs = exporter.get();
+            if (theirs != null) {
+                for (int i = 0; i < theirs.size(); i++) {
+                    if (theirs.get(i) != null) {
+                        out.add(theirs.get(i));
                     }
                 }
             }
         }
     }
 
-    /** Una copia sin nulos, o {@code null} si la lista era {@code null}. */
-    private static List<GuardingDynamicLinker> copiarSinNulos(
-            final List<? extends GuardingDynamicLinker> lista) {
-        if (lista == null) {
+    /** A copy with no nulls, or {@code null} if the list was {@code null}. */
+    private static List<GuardingDynamicLinker> copyWithoutNulls(
+            final List<? extends GuardingDynamicLinker> list) {
+        if (list == null) {
             return null;
         }
         final List<GuardingDynamicLinker> out = new ArrayList<GuardingDynamicLinker>();
-        for (int i = 0; i < lista.size(); i++) {
-            if (lista.get(i) == null) {
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i) == null) {
                 throw new NullPointerException("List has at least one null element");
             }
-            out.add(lista.get(i));
+            out.add(list.get(i));
         }
         return out;
     }
 
-    private static List<GuardingDynamicLinker> comoLista(final GuardingDynamicLinker[] a) {
+    private static List<GuardingDynamicLinker> asList(final GuardingDynamicLinker[] a) {
         if (a == null) {
             return null;
         }

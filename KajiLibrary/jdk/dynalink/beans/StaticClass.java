@@ -4,27 +4,27 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * El objeto que representa a una clase como <strong>portadora de sus miembros estaticos</strong>.
+ * The object that stands for a class as the <strong>carrier of its static members</strong>.
  *
- * <h2>Por que no alcanza con {@code Class}</h2>
+ * <h2>Why {@code Class} is not enough</h2>
  *
- * <p>Porque un {@code Class} ya significa otra cosa: es una instancia de {@code java.lang.Class},
- * con sus propios metodos. Si un lenguaje dinamico escribiera {@code String.valueOf(1)} y el objeto
- * de la izquierda fuera {@code String.class}, buscar {@code valueOf} lo encontraria... en
- * {@code Class}, que no lo tiene, y nunca llegaria al de {@code String}.
+ * <p>Because a {@code Class} already means something else: it is an instance of
+ * {@code java.lang.Class}, with methods of its own. If a dynamic language wrote
+ * {@code String.valueOf(1)} and the object on the left were {@code String.class}, looking up
+ * {@code valueOf} would find it... in {@code Class}, which does not have it, and would never reach
+ * {@code String}'s.
  *
- * <p>Peor todavia: {@code String.class.getName()} contestaria {@code "java.lang.String"} cuando lo
- * que se quiso escribir era el metodo estatico {@code getName} de la clase. Los dos juegos de
- * miembros se pisan.
+ * <p>Worse still: {@code String.class.getName()} would answer {@code "java.lang.String"} when what
+ * was meant was the static {@code getName} method of the class. The two sets of members collide.
  *
- * <p>{@code StaticClass} separa las dos cosas. Un {@code StaticClass} de {@code String} expone los
- * miembros <strong>estaticos</strong> de {@code String} y el constructor; el {@code Class} de
- * {@code String} sigue exponiendo los suyos.
+ * <p>{@code StaticClass} separates the two. A {@code StaticClass} of {@code String} exposes
+ * {@code String}'s <strong>static</strong> members and its constructor; the {@code Class} of
+ * {@code String} goes on exposing its own.
  *
- * <h2>Es unico por clase</h2>
+ * <h2>There is one per class</h2>
  *
- * <p>{@link #forClass} devuelve siempre la misma instancia para la misma clase, asi que se pueden
- * comparar por identidad. No tiene constructor publico por eso mismo.
+ * <p>{@link #forClass} always returns the same instance for the same class, so they can be compared
+ * by identity. That is exactly why it has no public constructor.
  *
  * @since 9
  */
@@ -33,9 +33,9 @@ public final class StaticClass implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * La cache, con nombre en vez de anonima por #482: el generador de bytecode no emite una clase
-     * anonima que este en el inicializador de un campo. Ademas se lee mejor en un volcado de pila
-     * que un {@code StaticClass$1}.
+     * The cache, named rather than anonymous because of #482: the bytecode generator does not emit
+     * an anonymous class sitting in a field initializer. It also reads better in a stack dump than
+     * a {@code StaticClass$1}.
      */
     private static final class Cache extends ClassValue<StaticClass> {
         protected StaticClass computeValue(final Class<?> type) {
@@ -52,24 +52,24 @@ public final class StaticClass implements Serializable {
     }
 
     /**
-     * El representante de esa clase.
+     * The stand-in for that class.
      *
-     * <p>La cache es un {@link ClassValue} y no un mapa: queda colgada de la propia clase y se va
-     * con ella cuando se descarga. Un mapa comun impediria descargar cualquier clase que alguna vez
-     * hubiera pasado por aca, que en un lenguaje de scripting son muchas.
+     * <p>The cache is a {@link ClassValue} and not a map: it hangs off the class itself and goes
+     * away with it when it is unloaded. An ordinary map would keep any class that ever passed
+     * through here from being unloaded, and in a scripting language those are many.
      *
-     * @param clazz la clase
-     * @return su representante, siempre el mismo
-     * @throws NullPointerException si la clase es {@code null}
+     * @param clazz the class
+     * @return its stand-in, always the same one
+     * @throws NullPointerException if the class is {@code null}
      */
     public static StaticClass forClass(final Class<?> clazz) {
         return CACHE.get(Objects.requireNonNull(clazz));
     }
 
     /**
-     * La clase representada.
+     * The class being stood in for.
      *
-     * @return la clase
+     * @return the class
      */
     public Class<?> getRepresentedClass() {
         return clazz;

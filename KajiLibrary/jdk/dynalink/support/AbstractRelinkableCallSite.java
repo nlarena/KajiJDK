@@ -8,31 +8,30 @@ import jdk.dynalink.CallSiteDescriptor;
 import jdk.dynalink.RelinkableCallSite;
 
 /**
- * La base de un sitio de invocacion reenlazable: guarda el descriptor y hace la instalacion
- * inicial.
+ * The base of a relinkable call site: it holds the descriptor and does the initial installation.
  *
- * <h2>Que resuelve el {@code initialize}</h2>
+ * <h2>What {@code initialize} solves</h2>
  *
- * <p>El problema del huevo y la gallina de un sitio dinamico. Cuando la JVM llega por primera vez a
- * un {@code invokedynamic}, el sitio todavia no sabe a que llamar — para saberlo hace falta ver los
- * argumentos, y para ver los argumentos hace falta que la llamada ocurra.
+ * <p>The chicken-and-egg problem of a dynamic site. When the JVM first reaches an
+ * {@code invokedynamic}, the site does not yet know what to call — knowing means seeing the
+ * arguments, and seeing the arguments means the call has to happen.
  *
- * <p>La salida es instalar como destino inicial un metodo que <strong>enlaza y despues
- * invoca</strong>: la primera llamada entra ahi, ese metodo mira los argumentos, decide, se
- * reinstala como destino y recien entonces llama. De la segunda vez en adelante el sitio ya apunta
- * a lo que corresponde.
+ * <p>The way out is to install as the initial target a method that <strong>links and then
+ * invokes</strong>: the first call goes in there, that method looks at the arguments, decides,
+ * reinstalls itself as the target and only then calls. From the second time on the site already
+ * points at the right thing.
  *
- * <h2>Por que extiende {@link MutableCallSite}</h2>
+ * <h2>Why it extends {@link MutableCallSite}</h2>
  *
- * <p>Porque el destino tiene que poder cambiar despues de instalado, que es exactamente lo que
- * "reenlazable" significa. Un {@code ConstantCallSite} no serviria, y un {@code VolatileCallSite}
- * seria mas caro sin hacer falta: la carrera entre dos hilos que reenlazan el mismo sitio termina
- * con uno de los dos destinos puestos, y los dos son correctos.
+ * <p>Because the target has to be able to change after it is installed, which is exactly what
+ * "relinkable" means. A {@code ConstantCallSite} would not do, and a {@code VolatileCallSite} would
+ * cost more for no reason: the race between two threads relinking the same site ends with one of the
+ * two targets in place, and both are correct.
  *
- * <h2>Lo que no hace</h2>
+ * <h2>What it does not do</h2>
  *
- * <p>No implementa {@code relink} ni {@code resetAndRelink}: esa es la estrategia de cache y es lo
- * que distingue a {@link SimpleRelinkableCallSite} de {@link ChainedCallSite}.
+ * <p>It implements neither {@code relink} nor {@code resetAndRelink}: that is the caching strategy,
+ * and it is what tells {@link SimpleRelinkableCallSite} from {@link ChainedCallSite}.
  *
  * @since 9
  */
@@ -42,10 +41,10 @@ public abstract class AbstractRelinkableCallSite extends MutableCallSite
     private final CallSiteDescriptor descriptor;
 
     /**
-     * Un sitio con ese descriptor.
+     * A site with that descriptor.
      *
-     * @param descriptor el descriptor; su firma es la del sitio
-     * @throws NullPointerException si es {@code null}
+     * @param descriptor the descriptor; its signature is the site's
+     * @throws NullPointerException if it is {@code null}
      */
     protected AbstractRelinkableCallSite(final CallSiteDescriptor descriptor) {
         super(descriptor.getMethodType());
@@ -53,21 +52,21 @@ public abstract class AbstractRelinkableCallSite extends MutableCallSite
     }
 
     /**
-     * El descriptor, que no cambia en toda la vida del sitio.
+     * The descriptor, which does not change in the whole life of the site.
      *
-     * @return el descriptor
+     * @return the descriptor
      */
     public CallSiteDescriptor getDescriptor() {
         return descriptor;
     }
 
     /**
-     * Instala el metodo que enlaza y despues invoca.
+     * Installs the method that links and then invokes.
      *
-     * <p>Lo llama {@code DynamicLinker.link} una sola vez. Volver a llamarlo tirando lo que el
-     * sitio hubiera aprendido no esta previsto por el contrato.
+     * <p>{@code DynamicLinker.link} calls it exactly once. Calling it again, throwing away whatever
+     * the site had learnt, is not provided for by the contract.
      *
-     * @param relinkAndInvoke el metodo que enlaza y despues invoca
+     * @param relinkAndInvoke the method that links and then invokes
      */
     public void initialize(final MethodHandle relinkAndInvoke) {
         setTarget(Objects.requireNonNull(relinkAndInvoke));

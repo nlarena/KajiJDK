@@ -6,23 +6,23 @@ import jdk.dynalink.linker.LinkRequest;
 import jdk.dynalink.linker.LinkerServices;
 
 /**
- * Que hacer cuando se pide un miembro que la clase no tiene.
+ * What to do when a member the class does not have is asked for.
  *
- * <h2>Por que es configurable</h2>
+ * <h2>Why it is configurable</h2>
  *
- * <p>Porque cada lenguaje contesta distinto a {@code obj.noExiste}. Java no compila. JavaScript
- * devuelve {@code undefined}. Otro puede querer una excepcion con un mensaje en su propio idioma, o
- * consultar un objeto prototipo antes de rendirse.
+ * <p>Because each language answers {@code obj.doesNotExist} differently. Java does not compile.
+ * JavaScript returns {@code undefined}. Another may want an exception with a message in its own
+ * language, or to consult a prototype object before giving up.
  *
- * <p>Sin este enganche, {@link BeansLinker} tendria que elegir una de esas respuestas para todos, y
- * cualquiera que eligiera estaria mal para la mayoria.
+ * <p>Without this hook, {@link BeansLinker} would have to pick one of those answers for everybody,
+ * and whichever it picked would be wrong for most.
  *
- * <h2>Devolver {@code null} no es lo mismo que fallar</h2>
+ * <h2>Returning {@code null} is not the same as failing</h2>
  *
- * <p>{@code null} significa "no tengo nada que aportar para este caso", y el enlace sigue su curso
- * normal — que termina en un {@link jdk.dynalink.NoSuchDynamicMethodException}. Devolver un handle,
- * en cambio, hace que el sitio quede enlazado a el, y esa es la forma de que {@code obj.noExiste}
- * pase a valer algo en vez de reventar.
+ * <p>{@code null} means "I have nothing to contribute for this case", and linking carries on its
+ * normal course — which ends in a {@link jdk.dynalink.NoSuchDynamicMethodException}. Returning a
+ * handle, on the other hand, leaves the site linked to it, and that is how
+ * {@code obj.doesNotExist} comes to be worth something instead of blowing up.
  *
  * @since 9
  */
@@ -30,12 +30,12 @@ import jdk.dynalink.linker.LinkerServices;
 public interface MissingMemberHandlerFactory {
 
     /**
-     * El metodo con el que responder a un miembro que no existe.
+     * The method to answer a member that does not exist with.
      *
-     * @param linkRequest el pedido que no se pudo satisfacer
-     * @param linkerServices los servicios del que hospeda
-     * @return el metodo, o {@code null} para dejar que falle como siempre
-     * @throws Exception si la construccion falla
+     * @param linkRequest the request that could not be satisfied
+     * @param linkerServices the host's services
+     * @return the method, or {@code null} to let it fail as usual
+     * @throws Exception if the construction fails
      */
     MethodHandle createMissingMemberHandler(LinkRequest linkRequest, LinkerServices linkerServices)
             throws Exception;

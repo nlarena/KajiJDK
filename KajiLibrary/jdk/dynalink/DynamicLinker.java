@@ -11,172 +11,171 @@ import jdk.dynalink.linker.LinkerServices;
 import jdk.dynalink.linker.support.SimpleLinkRequest;
 
 /**
- * El enlazador: lo que decide, en cada invocacion, a que metodo va.
+ * The linker: what decides, at each invocation, where it goes.
  *
- * <h2>El problema que resuelve</h2>
+ * <h2>The problem it solves</h2>
  *
- * <p>En un lenguaje dinamico, {@code a.b(c)} no se puede compilar a una llamada: no se sabe que es
- * {@code a} hasta que el programa corre. La salida es dejar el lugar vacio --un sitio de
- * invocacion-- y llenarlo la primera vez que pasa por ahi, con una comprobacion barata que dice
- * "mientras {@code a} siga siendo de esta clase, esto sirve". Eso es una invocacion con guarda.
+ * <p>In a dynamic language, {@code a.b(c)} cannot be compiled into a call: what {@code a} is is not
+ * known until the program runs. The way out is to leave the place empty -- a call site -- and fill it
+ * in the first time control passes through, with a cheap check that says "as long as {@code a} stays
+ * of this class, this will do". That is a guarded invocation.
  *
- * <h2>Por que sirve enlazar y no simplemente buscar cada vez</h2>
+ * <h2>Why linking beats simply looking up every time</h2>
  *
- * <p>Porque casi siempre el mismo sitio ve siempre el mismo tipo. Un bucle que llama
- * {@code lista.tamano()} un millon de veces lo llama sobre la misma clase el millon de veces, asi
- * que la busqueda se hace una y las otras 999.999 son una comparacion de clase y un salto. Esa
- * apuesta es todo el rendimiento de un lenguaje dinamico sobre la maquina virtual.
+ * <p>Because nearly always the same site sees the same type. A loop calling {@code list.size()} a
+ * million times calls it on the same class all million times, so the lookup happens once and the
+ * other 999,999 are a class comparison and a jump. That bet is the whole performance of a dynamic
+ * language on the virtual machine.
  *
- * <h2>Cuando la apuesta falla</h2>
+ * <h2>When the bet fails</h2>
  *
- * <p>Un sitio que ve muchos tipos distintos --{@code megamorfico}-- acumula guardas que fallan una
- * tras otra, y encadenar mas lo empeora. Por eso hay un umbral: pasadas tantas reenlazadas, el sitio
- * se declara inestable y a partir de ahi se lo reemplaza entero en vez de encadenar.
- * {@link RelinkableCallSite#resetAndRelink} es como se le pide eso.
+ * <p>A site that sees many different types -- {@code megamorphic} -- piles up guards that fail one
+ * after another, and chaining more makes it worse. Hence a threshold: past so many relinks, the site
+ * is declared unstable and from then on it is replaced whole instead of chained.
+ * {@link RelinkableCallSite#resetAndRelink} is how that is asked for.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>{@link #getLinkerServices} funciona y con el la mitad del sistema que decide sobre tipos: si
- * una conversion es posible, cual de dos destinos conviene, que enlazador atiende que clase.
+ * <p>{@link #getLinkerServices} works, and with it the half of the system that decides about types:
+ * whether a conversion is possible, which of two targets is better, which linker serves which class.
  *
- * <p>{@link #link} no puede. Enlazar es armar una manija de metodo, y esta maquina virtual no tiene
- * manijas de metodo --ver {@code java.lang.invoke.MethodHandles}, que lo dice en su nota--. La
- * construccion esta escrita tal como va, asi que lo que sale es la
- * {@link UnsupportedOperationException} de la fabrica de manijas y no un error inventado aca.
+ * <p>{@link #link} cannot. Linking means building a method handle, and this virtual machine has no
+ * method handles -- see {@code java.lang.invoke.MethodHandles}, which says so in its note. The
+ * construction is written exactly as it goes, so what comes out is the
+ * {@link UnsupportedOperationException} from the handle factory and not an error invented here.
  *
  * @since 9
  */
 public final class DynamicLinker {
 
-    private final LinkerServices servicios;
-    private final GuardedInvocationTransformer preenlace;
-    private final boolean sincronizar;
-    private final int umbralInestable;
+    private final LinkerServices services;
+    private final GuardedInvocationTransformer prelink;
+    private final boolean synchronize;
+    private final int unstableThreshold;
 
-    DynamicLinker(final LinkerServices servicios, final GuardedInvocationTransformer preenlace,
-            final boolean sincronizar, final int umbralInestable) {
-        this.servicios = servicios;
-        this.preenlace = preenlace;
-        this.sincronizar = sincronizar;
-        this.umbralInestable = umbralInestable;
+    DynamicLinker(final LinkerServices services, final GuardedInvocationTransformer prelink,
+            final boolean synchronize, final int unstableThreshold) {
+        this.services = services;
+        this.prelink = prelink;
+        this.synchronize = synchronize;
+        this.unstableThreshold = unstableThreshold;
     }
 
     /**
-     * Enlaza ese sitio de invocacion.
+     * Links that call site.
      *
-     * <p>Le instala una manija que, la primera vez que se la invoque, busca a donde va, deja
-     * instalado el resultado, y sigue con la invocacion. De ahi en mas el sitio va directo mientras
-     * la guarda siga valiendo.
+     * <p>It installs a handle that, the first time it is invoked, looks up where the call goes,
+     * leaves the result installed, and carries on with the invocation. From then on the site goes
+     * straight through for as long as the guard holds.
      *
-     * @param <T> el tipo del sitio
-     * @param callSite el sitio
-     * @return el mismo sitio, para poder encadenar
-     * @throws NullPointerException si el sitio es {@code null}
-     * @throws UnsupportedOperationException si la maquina virtual no tiene manijas de metodo, que
-     *     es el caso de esta
+     * @param <T> the type of the site
+     * @param callSite the site
+     * @return the same site, so calls can be chained
+     * @throws NullPointerException if the site is {@code null}
+     * @throws UnsupportedOperationException if the virtual machine has no method handles, which is
+     *     the case for this one
      */
     public <T extends RelinkableCallSite> T link(final T callSite) {
-        final MethodType tipo = callSite.getDescriptor().getMethodType();
-        callSite.initialize(reenlazarEInvocar(callSite, tipo, 0));
+        final MethodType type = callSite.getDescriptor().getMethodType();
+        callSite.initialize(relinkAndInvoke(callSite, type, 0));
         return callSite;
     }
 
     /**
-     * Lo que el enlazador les presta a los enlazadores.
+     * What the linker lends to the linkers.
      *
-     * @return los servicios
+     * @return the services
      */
     public LinkerServices getLinkerServices() {
-        return this.servicios;
+        return this.services;
     }
 
     /**
-     * Donde esta el sitio que se esta reenlazando ahora.
+     * Where the site being relinked right now is.
      *
-     * <p>Sirve para que un lenguaje pueda decir "no encuentro el metodo {@code b}" nombrando la
-     * linea del programa del usuario y no la del enlazador.
+     * <p>It lets a language say "I cannot find method {@code b}" naming the line of the user's
+     * program and not the linker's.
      *
-     * @return siempre {@code null}: no puede haber un reenlace en curso, porque {@link #link} no
-     *     llega a instalar nada. El JDK devuelve {@code null} en la misma situacion
+     * @return always {@code null}: there can be no relink in progress, because {@link #link} never
+     *     gets as far as installing anything. The JDK returns {@code null} in the same situation
      */
     public static StackTraceElement getLinkedCallSiteLocation() {
         return null;
     }
 
     /**
-     * La manija que reenlaza el sitio y despues invoca lo que quedo enlazado.
+     * The handle that relinks the site and then invokes whatever ended up linked.
      *
-     * <p>Son cuatro combinadores y el orden importa: una que junta todos los argumentos en un
-     * arreglo y llama a {@link #reenlazar}, y {@code foldArguments} para que lo que esa devuelva
-     * --otra manija-- se invoque con los argumentos originales. Asi la primera invocacion paga la
-     * busqueda y las siguientes no.
+     * <p>It is four combinators and the order matters: one that gathers every argument into an array
+     * and calls {@link #relink}, and {@code foldArguments} so that what that returns -- another
+     * handle -- is invoked with the original arguments. That way the first invocation pays for the
+     * lookup and the following ones do not.
      */
-    private MethodHandle reenlazarEInvocar(final RelinkableCallSite callSite, final MethodType tipo,
-            final int cuenta) {
-        final MethodHandle reenlazar;
+    private MethodHandle relinkAndInvoke(final RelinkableCallSite callSite, final MethodType type,
+            final int count) {
+        final MethodHandle relink;
         try {
-            reenlazar = MethodHandles.lookup().findVirtual(DynamicLinker.class, "reenlazar",
+            relink = MethodHandles.lookup().findVirtual(DynamicLinker.class, "relink",
                     MethodType.methodType(MethodHandle.class, RelinkableCallSite.class, int.class,
                             Object[].class));
         } catch (final NoSuchMethodException e) {
-            // El metodo esta en esta misma clase: si no se lo encuentra, el archivo se corrompio.
+            // The method is in this very class: if it cannot be found, the file is corrupt.
             throw new AssertionError(e);
         } catch (final IllegalAccessException e) {
             throw new AssertionError(e);
         }
-        final MethodHandle atado =
-                MethodHandles.insertArguments(reenlazar, 0, this, callSite, Integer.valueOf(cuenta));
-        final MethodHandle juntando = atado.asCollector(Object[].class, tipo.parameterCount());
-        return MethodHandles.foldArguments(MethodHandles.exactInvoker(tipo),
-                juntando.asType(tipo.changeReturnType(MethodHandle.class)));
+        final MethodHandle bound =
+                MethodHandles.insertArguments(relink, 0, this, callSite, Integer.valueOf(count));
+        final MethodHandle gathering = bound.asCollector(Object[].class, type.parameterCount());
+        return MethodHandles.foldArguments(MethodHandles.exactInvoker(type),
+                gathering.asType(type.changeReturnType(MethodHandle.class)));
     }
 
     /**
-     * Busca a donde va el sitio para estos argumentos, lo deja instalado, y devuelve que invocar.
+     * Looks up where the site goes for these arguments, leaves it installed, and returns what to
+     * invoke.
      *
-     * <p>Es lo que corre la manija de {@link #reenlazarEInvocar}. Pasado el umbral el sitio se
-     * considera inestable: se le pide que reemplace todo en vez de encadenar, y ademas se le avisa
-     * al enlazador --por {@link LinkRequest#isCallSiteUnstable}-- porque un enlazador que sabe que
-     * el sitio es inestable puede devolver una invocacion mas general y sin guarda.
+     * <p>It is what the handle from {@link #relinkAndInvoke} runs. Past the threshold the site is
+     * taken to be unstable: it is asked to replace everything instead of chaining, and the linker is
+     * told as well -- through {@link LinkRequest#isCallSiteUnstable} -- because a linker that knows
+     * the site is unstable can return a more general invocation with no guard.
      *
-     * @param callSite el sitio
-     * @param cuenta cuantas veces se lo reenlazo
-     * @param argumentos los argumentos de esta invocacion
-     * @return la manija a invocar
-     * @throws Exception lo que tire el enlazador
-     * @throws NoSuchDynamicMethodException si ningun enlazador sabe atender la operacion
+     * @param callSite the site
+     * @param count how many times it has been relinked
+     * @param arguments the arguments of this invocation
+     * @return the handle to invoke
+     * @throws Exception whatever the linker throws
+     * @throws NoSuchDynamicMethodException if no linker knows how to serve the operation
      */
-    MethodHandle reenlazar(final RelinkableCallSite callSite, final int cuenta,
-            final Object[] argumentos) throws Exception {
+    MethodHandle relink(final RelinkableCallSite callSite, final int count,
+            final Object[] arguments) throws Exception {
         final CallSiteDescriptor descriptor = callSite.getDescriptor();
-        final boolean inestable = cuenta >= this.umbralInestable;
-        final LinkRequest pedido = new SimpleLinkRequest(descriptor, inestable, argumentos);
-        GuardedInvocation invocacion = this.servicios.getGuardedInvocation(pedido);
-        if (invocacion == null) {
+        final boolean unstable = count >= this.unstableThreshold;
+        final LinkRequest request = new SimpleLinkRequest(descriptor, unstable, arguments);
+        GuardedInvocation invocation = this.services.getGuardedInvocation(request);
+        if (invocation == null) {
             throw new NoSuchDynamicMethodException(descriptor.toString());
         }
-        if (this.preenlace != null) {
-            invocacion = this.preenlace.filter(invocacion, pedido, this.servicios);
+        if (this.prelink != null) {
+            invocation = this.prelink.filter(invocation, request, this.services);
         }
-        final MethodHandle siguiente = reenlazarEInvocar(callSite, descriptor.getMethodType(),
-                cuenta + 1);
-        if (this.sincronizar) {
+        final MethodHandle next = relinkAndInvoke(callSite, descriptor.getMethodType(), count + 1);
+        if (this.synchronize) {
             synchronized (callSite) {
-                instalar(callSite, invocacion, siguiente, inestable);
+                install(callSite, invocation, next, unstable);
             }
         } else {
-            instalar(callSite, invocacion, siguiente, inestable);
+            install(callSite, invocation, next, unstable);
         }
-        return invocacion.getInvocation();
+        return invocation.getInvocation();
     }
 
-    private static void instalar(final RelinkableCallSite callSite,
-            final GuardedInvocation invocacion, final MethodHandle siguiente,
-            final boolean inestable) {
-        if (inestable) {
-            callSite.resetAndRelink(invocacion, siguiente);
+    private static void install(final RelinkableCallSite callSite,
+            final GuardedInvocation invocation, final MethodHandle next, final boolean unstable) {
+        if (unstable) {
+            callSite.resetAndRelink(invocation, next);
         } else {
-            callSite.relink(invocacion, siguiente);
+            callSite.relink(invocation, next);
         }
     }
 }

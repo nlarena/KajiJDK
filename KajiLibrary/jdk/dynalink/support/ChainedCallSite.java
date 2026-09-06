@@ -9,78 +9,77 @@ import jdk.dynalink.CallSiteDescriptor;
 import jdk.dynalink.linker.GuardedInvocation;
 
 /**
- * Un sitio de invocacion que <strong>acumula</strong> invocaciones: la cache polimorfica.
+ * A call site that <strong>accumulates</strong> invocations: the polymorphic cache.
  *
- * <h2>Como queda armado el destino</h2>
+ * <h2>How the target ends up built</h2>
  *
- * <p>Las invocaciones se encadenan una adentro de la otra. Si la guarda de la primera falla se
- * prueba la segunda, si esa falla la tercera, y asi hasta que se acaban y recien ahi se vuelve a
- * enlazar. Un sitio que ve tres tipos de receptor termina con las tres invocaciones puestas y no
- * enlaza nunca mas.
+ * <p>The invocations are chained one inside the other. If the first one's guard fails the second is
+ * tried, if that one fails the third, and so on until they run out and only then is the site linked
+ * again. A site that sees three receiver types ends up with all three invocations in place and never
+ * links again.
  *
- * <p>Es la respuesta al caso que {@link SimpleRelinkableCallSite} hace patologico: dos tipos
- * alternandose, donde el sitio monomorfico reenlaza en cada llamada.
+ * <p>It is the answer to the case {@link SimpleRelinkableCallSite} makes pathological: two types
+ * alternating, where the monomorphic site relinks on every call.
  *
- * <h2>Por que la cadena tiene tope</h2>
+ * <h2>Why the chain has a cap</h2>
  *
- * <p>Porque encadenar deja de rendir. Cada eslabon es una guarda mas que se evalua antes de llegar
- * al que sirve, asi que una cadena de cincuenta es mas lenta que volver a enlazar. Y el JIT no
- * puede incorporar en linea una cadena arbitrariamente larga, con lo cual pasado cierto punto el
- * sitio se vuelve mas lento cuanto mas aprende.
+ * <p>Because chaining stops paying off. Every link is one more guard evaluated before reaching the
+ * one that serves, so a chain of fifty is slower than linking again. And the JIT cannot inline an
+ * arbitrarily long chain, so past a certain point the site gets slower the more it learns.
  *
- * <p>El tope es {@link #getMaxChainLength}, ocho por omision, y esta como metodo {@code protected}
- * para que una subclase lo cambie sabiendo lo que hace.
+ * <p>The cap is {@link #getMaxChainLength}, eight by default, and it is a {@code protected} method
+ * so that a subclass can change it knowing what it is doing.
  *
- * <h2>Que pasa al llegar al tope</h2>
+ * <h2>What happens on reaching the cap</h2>
  *
- * <p>Se descarta la invocacion mas vieja para hacerle lugar a la nueva. Es una cache por
- * antiguedad, no por frecuencia: no se lleva la cuenta de cual se usa mas porque contar en el
- * camino caliente costaria mas que lo que la mejor politica ahorraria.
+ * <p>The oldest invocation is dropped to make room for the new one. It is a cache by age, not by
+ * frequency: no count is kept of which one is used most because counting on the hot path would cost
+ * more than the better policy would save.
  *
- * <h2>Las invalidadas se limpian solas</h2>
+ * <h2>Invalidated ones clean themselves up</h2>
  *
- * <p>Antes de armar el destino se descartan las invocaciones cuyos switch points ya se bajaron. Es
- * el momento natural para hacerlo: ya se esta recorriendo la cadena entera, y una invocacion muerta
- * ocuparia un lugar del tope sin poder servir nunca.
+ * <p>Before the target is built, the invocations whose switch points have already been thrown are
+ * dropped. It is the natural moment for it: the whole chain is being walked anyway, and a dead
+ * invocation would take up one of the capped slots without ever being able to serve.
  *
  * @since 9
  */
 public class ChainedCallSite extends AbstractRelinkableCallSite {
 
     /**
-     * Las invocaciones vigentes, de la mas vieja a la mas nueva.
+     * The invocations in force, from the oldest to the newest.
      *
-     * <p>Es una lista enlazada porque las dos operaciones que se hacen son agregar al final y sacar
-     * del principio, y las dos son constantes ahi.
+     * <p>It is a linked list because the two operations performed are appending at the end and
+     * removing from the front, and both are constant time there.
      */
     private final List<GuardedInvocation> invocations = new LinkedList<GuardedInvocation>();
 
     /**
-     * Un sitio con ese descriptor.
+     * A site with that descriptor.
      *
-     * @param descriptor el descriptor
+     * @param descriptor the descriptor
      */
     public ChainedCallSite(final CallSiteDescriptor descriptor) {
         super(descriptor);
     }
 
     /**
-     * Cuantas invocaciones se guardan como maximo.
+     * How many invocations are kept at most.
      *
-     * <p>Ocho, como el JDK. Redefinirlo hacia arriba solo tiene sentido si se midio que el sitio ve
-     * mas tipos que eso y que la cadena larga sigue rindiendo.
+     * <p>Eight, like the JDK. Overriding it upwards only makes sense once it has been measured that
+     * the site sees more types than that and that the long chain still pays off.
      *
-     * @return el tope
+     * @return the cap
      */
     protected int getMaxChainLength() {
         return 8;
     }
 
     /**
-     * Agrega una invocacion a la cadena.
+     * Adds an invocation to the chain.
      *
-     * @param guardedInvocation la invocacion con su guarda
-     * @param relinkAndInvoke el camino de respaldo, que vuelve a enlazar
+     * @param guardedInvocation the invocation with its guard
+     * @param relinkAndInvoke the fallback path, which links again
      */
     public void relink(final GuardedInvocation guardedInvocation,
             final MethodHandle relinkAndInvoke) {
@@ -88,13 +87,13 @@ public class ChainedCallSite extends AbstractRelinkableCallSite {
     }
 
     /**
-     * Tira la cadena entera y arranca de nuevo con esta invocacion.
+     * Throws the whole chain away and starts over with this invocation.
      *
-     * <p>Lo pide el enlazador cuando decidio que el sitio es inestable: si el receptor cambia todo
-     * el tiempo, acumular invocaciones solo gasta memoria y agrega guardas que van a fallar.
+     * <p>The linker asks for it once it has decided the site is unstable: if the receiver keeps
+     * changing, accumulating invocations only wastes memory and adds guards that will fail.
      *
-     * @param guardedInvocation la invocacion con su guarda
-     * @param relinkAndInvoke el camino de respaldo, que vuelve a enlazar
+     * @param guardedInvocation the invocation with its guard
+     * @param relinkAndInvoke the fallback path, which links again
      */
     public void resetAndRelink(final GuardedInvocation guardedInvocation,
             final MethodHandle relinkAndInvoke) {
@@ -106,8 +105,8 @@ public class ChainedCallSite extends AbstractRelinkableCallSite {
         if (reset) {
             invocations.clear();
         } else {
-            // Sacar las muertas antes de contar: si no, una invalidada podria empujar afuera a una
-            // que todavia sirve.
+            // Take the dead ones out before counting: otherwise an invalidated one could push out
+            // one that still serves.
             final Iterator<GuardedInvocation> it = invocations.iterator();
             while (it.hasNext()) {
                 if (it.next().hasBeenInvalidated()) {
@@ -120,13 +119,13 @@ public class ChainedCallSite extends AbstractRelinkableCallSite {
         }
         invocations.add(invocation);
 
-        // El armado va del final hacia el principio: la ultima agregada queda mas adentro, con el
-        // respaldo real detras, y cada una anterior la envuelve. Asi la primera de la lista es la
-        // primera que se prueba.
-        MethodHandle destino = fallback;
+        // The building goes from the end towards the front: the last one added ends up innermost,
+        // with the real fallback behind it, and each earlier one wraps it. That way the first in the
+        // list is the first one tried.
+        MethodHandle target = fallback;
         for (int i = invocations.size() - 1; i >= 0; i--) {
-            destino = invocations.get(i).compose(destino);
+            target = invocations.get(i).compose(target);
         }
-        setTarget(destino);
+        setTarget(target);
     }
 }

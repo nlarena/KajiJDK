@@ -14,102 +14,100 @@ import jdk.dynalink.linker.LinkerServices;
 import jdk.dynalink.linker.TypeBasedGuardingDynamicLinker;
 
 /**
- * El enlazador de objetos Java comunes: propiedades, metodos, arreglos y colecciones.
+ * The linker of ordinary Java objects: properties, methods, arrays and collections.
  *
- * <h2>Que expone de un objeto</h2>
+ * <h2>What it exposes of an object</h2>
  *
- * <p>Lo que un lenguaje dinamico espera poder escribir. {@code obj.prop} busca un {@code getProp()}
- * o un campo {@code prop}; {@code obj.metodo(1)} busca un metodo; {@code arr[0]} y {@code lista[0]}
- * indexan.
+ * <p>What a dynamic language expects to be able to write. {@code obj.prop} looks for a
+ * {@code getProp()} or a field {@code prop}; {@code obj.method(1)} looks for a method; {@code arr[0]}
+ * and {@code list[0]} index.
  *
- * <p>La traduccion de nombres es la de JavaBeans, con su rareza incluida: {@code getURL()} da la
- * propiedad {@code URL} y no {@code uRL}, porque cuando las dos primeras letras son mayusculas el
- * nombre se deja como esta. Es lo que hace {@code Introspector.decapitalize} y esta clase lo
- * reproduce.
+ * <p>The name translation is JavaBeans's, oddity included: {@code getURL()} gives the property
+ * {@code URL} and not {@code uRL}, because when the first two letters are uppercase the name is left
+ * alone. That is what {@code Introspector.decapitalize} does and this class reproduces it.
  *
- * <h2>La faceta estatica y la de instancia no se miran igual</h2>
+ * <h2>The static facet and the instance facet are not looked at the same way</h2>
  *
- * <p>Es la asimetria menos obvia de esta clase, y esta verificada contra el JDK. La faceta de
- * <strong>instancia</strong> usa todos los miembros publicos, heredados incluidos: un campo del
- * padre es propiedad del hijo. La faceta <strong>estatica</strong> usa solo los
- * <strong>declarados</strong>: un campo estatico del padre no es propiedad estatica del hijo, y un
- * metodo estatico del padre no aparece entre los del hijo.
+ * <p>It is the least obvious asymmetry of this class, and it is verified against the JDK. The
+ * <strong>instance</strong> facet uses every public member, inherited ones included: a field of the
+ * parent is a property of the child. The <strong>static</strong> facet uses only the
+ * <strong>declared</strong> ones: a static field of the parent is not a static property of the
+ * child, and a static method of the parent does not turn up among the child's.
  *
- * <p>Tiene sentido: los miembros estaticos no se heredan de verdad —no hay despacho— y exponer los
- * del padre en el hijo sugeriria una relacion que no existe. Las clases anidadas son la excepcion y
- * si se heredan, que es por lo que {@code Point} expone {@code Double} y {@code Float}, que son de
- * {@code Point2D}.
+ * <p>It makes sense: static members are not really inherited —there is no dispatch— and exposing the
+ * parent's on the child would suggest a relationship that does not exist. Nested classes are the
+ * exception and are inherited, which is why {@code Point} exposes {@code Double} and {@code Float},
+ * which are {@code Point2D}'s.
  *
- * <h2>Reglas finas, todas comprobadas contra el JDK 25</h2>
+ * <h2>Fine rules, all checked against JDK 25</h2>
  *
- * <ul> <li>{@code getX()} es propiedad sin importar que devuelva: hasta {@code void getVoid()}
- * cuenta. Lo que importa es que no tome argumentos. <li>{@code isX()} solo cuenta si devuelve
- * {@code boolean} <strong>primitivo</strong>; con {@code Boolean} no. <li>{@code get()} e
- * {@code is()} pelados no son propiedades: no queda nombre despues del prefijo. <li>Un campo
- * {@code final} es legible y no escribible. <li>{@code class} siempre esta entre las propiedades
- * estaticas legibles, aunque la clase no tenga ningun miembro estatico. <li>Un arreglo tiene la
- * propiedad legible {@code length}, que no sale de la reflexion —{@code getFields()} de un arreglo
- * devuelve vacio— y se agrega a mano. </ul>
+ * <ul> <li>{@code getX()} is a property whatever it returns: even {@code void getVoid()} counts.
+ * What matters is that it takes no arguments. <li>{@code isX()} only counts if it returns a
+ * <strong>primitive</strong> {@code boolean}; with {@code Boolean} it does not. <li>Bare
+ * {@code get()} and {@code is()} are not properties: no name is left after the prefix. <li>A
+ * {@code final} field is readable and not writable. <li>{@code class} is always among the readable
+ * static properties, even when the class has no static member at all. <li>An array has the readable
+ * property {@code length}, which does not come out of reflection —{@code getFields()} of an array
+ * returns nothing— and is added by hand. </ul>
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>Where this VM stands</h2>
  *
- * <p>Los seis metodos de introspeccion son reales y estan verificados uno a uno contra el JDK. El
- * enlace propiamente dicho —{@link #getLinkerForClass} y {@link #getGuardedInvocation}— necesita
- * fabricar {@code MethodHandle}, que esta VM todavia no puede; llegan hasta ese punto y fallan
- * nombrandolo.
+ * <p>The six introspection methods are real and are verified one by one against the JDK. Linking
+ * proper —{@link #getLinkerForClass} and {@link #getGuardedInvocation}— needs {@code MethodHandle}
+ * built, which this VM cannot do yet; they get that far and fail naming it.
  *
  * @since 9
  */
 public class BeansLinker implements GuardingDynamicLinker {
 
-    private static final String NO_HAY_HANDLES =
-            "enlazar un bean necesita fabricar MethodHandle, que esta VM no soporta todavia";
+    private static final String NO_HANDLES =
+            "linking a bean needs MethodHandle built, which this VM does not support yet";
 
     private final MissingMemberHandlerFactory missingMemberFactory;
 
-    /** Un enlazador que deja fallar los miembros que no existen. */
+    /** A linker that lets members that do not exist fail. */
     public BeansLinker() {
         this(null);
     }
 
     /**
-     * Un enlazador con una respuesta propia para los miembros que no existen.
+     * A linker with an answer of its own for members that do not exist.
      *
-     * @param missingMemberHandlerFactory la fabrica, o {@code null} para el comportamiento comun
+     * @param missingMemberHandlerFactory the factory, or {@code null} for the usual behaviour
      */
     public BeansLinker(final MissingMemberHandlerFactory missingMemberHandlerFactory) {
         this.missingMemberFactory = missingMemberHandlerFactory;
     }
 
     /**
-     * El enlazador que le corresponde a esa clase.
+     * The linker that belongs to that class.
      *
-     * @param clazz la clase
-     * @return el enlazador
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @param clazz the class
+     * @return the linker
+     * @throws UnsupportedOperationException on this VM; see the class note
      */
     public TypeBasedGuardingDynamicLinker getLinkerForClass(final Class<?> clazz) {
-        throw new UnsupportedOperationException(NO_HAY_HANDLES);
+        throw new UnsupportedOperationException(NO_HANDLES);
     }
 
     /**
      * {@inheritDoc}
      *
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @throws UnsupportedOperationException on this VM; see the class note
      */
     public GuardedInvocation getGuardedInvocation(final LinkRequest linkRequest,
             final LinkerServices linkerServices) throws Exception {
-        throw new UnsupportedOperationException(NO_HAY_HANDLES);
+        throw new UnsupportedOperationException(NO_HANDLES);
     }
 
     /**
-     * Si ese objeto es uno de los metodos dinamicos que este enlazador produce.
+     * Whether that object is one of the dynamic methods this linker produces.
      *
-     * <p>Siempre {@code false}, y es la respuesta correcta: los metodos dinamicos son objetos que
-     * fabrica el propio enlazador, esta VM no llega a fabricar ninguno, y por lo tanto ningun
-     * objeto que alguien pueda pasar aca lo es.
+     * <p>Always {@code false}, and it is the right answer: dynamic methods are objects the linker
+     * itself builds, this VM never gets as far as building one, and therefore no object anybody can
+     * pass in here is one.
      *
-     * @param obj el objeto
+     * @param obj the object
      * @return {@code false}
      */
     public static boolean isDynamicMethod(final Object obj) {
@@ -117,11 +115,11 @@ public class BeansLinker implements GuardingDynamicLinker {
     }
 
     /**
-     * Si ese objeto es uno de los constructores dinamicos que este enlazador produce.
+     * Whether that object is one of the dynamic constructors this linker produces.
      *
-     * <p>Siempre {@code false}, por la misma razon que {@link #isDynamicMethod}.
+     * <p>Always {@code false}, for the same reason as {@link #isDynamicMethod}.
      *
-     * @param obj el objeto
+     * @param obj the object
      * @return {@code false}
      */
     public static boolean isDynamicConstructor(final Object obj) {
@@ -129,36 +127,36 @@ public class BeansLinker implements GuardingDynamicLinker {
     }
 
     /**
-     * El constructor de esa clase con esa firma, como objeto de metodo dinamico.
+     * That class's constructor with that signature, as a dynamic method object.
      *
-     * <p>Falla en vez de devolver {@code null}: {@code null} significa "esa clase no tiene un
-     * constructor con esa firma", que seria mentira para casi cualquier entrada.
+     * <p>It fails rather than returning {@code null}: {@code null} means "that class has no
+     * constructor with that signature", which would be a lie for nearly any input.
      *
-     * @param clazz la clase
-     * @param signature la firma, con los tipos separados por comas
-     * @return no vuelve
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @param clazz the class
+     * @param signature the signature, with the types separated by commas
+     * @return it does not return
+     * @throws UnsupportedOperationException on this VM; see the class note
      */
     public static Object getConstructorMethod(final Class<?> clazz, final String signature) {
         throw new UnsupportedOperationException(
-                "los objetos de metodo dinamico los fabrica el enlazador, y enlazar necesita "
-                + "MethodHandle, que esta VM no soporta todavia");
+                "dynamic method objects are built by the linker, and linking needs MethodHandle, "
+                + "which this VM does not support yet");
     }
 
-    // ---- introspeccion ----
+    // ---- introspection ----
 
     /**
-     * Las propiedades de instancia que se pueden leer.
+     * The instance properties that can be read.
      *
-     * @param clazz la clase
-     * @return los nombres
+     * @param clazz the class
+     * @return the names
      */
     public static Set<String> getReadableInstancePropertyNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
         if (clazz.isArray()) {
-            // El largo de un arreglo no es un Field: `getFields()` de un arreglo devuelve vacio, y
-            // sin embargo `arr.length` es justamente lo que un lenguaje dinamico escribe. Se agrega
-            // a mano, y solo como legible: el largo de un arreglo no se puede cambiar.
+            // An array's length is not a Field: `getFields()` of an array returns nothing, and yet
+            // `arr.length` is exactly what a dynamic language writes. It is added by hand, and only
+            // as readable: an array's length cannot be changed.
             out.add("length");
         }
         for (final Field f : clazz.getFields()) {
@@ -168,17 +166,17 @@ public class BeansLinker implements GuardingDynamicLinker {
         }
         for (final Method m : clazz.getMethods()) {
             if (!Modifier.isStatic(m.getModifiers())) {
-                agregarLectura(out, m);
+                addReader(out, m);
             }
         }
         return Collections.unmodifiableSet(out);
     }
 
     /**
-     * Las propiedades de instancia que se pueden escribir.
+     * The instance properties that can be written.
      *
-     * @param clazz la clase
-     * @return los nombres
+     * @param clazz the class
+     * @return the names
      */
     public static Set<String> getWritableInstancePropertyNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
@@ -190,20 +188,21 @@ public class BeansLinker implements GuardingDynamicLinker {
         }
         for (final Method m : clazz.getMethods()) {
             if (!Modifier.isStatic(m.getModifiers())) {
-                agregarEscritura(out, m);
+                addWriter(out, m);
             }
         }
         return Collections.unmodifiableSet(out);
     }
 
     /**
-     * Los nombres de los metodos de instancia.
+     * The names of the instance methods.
      *
-     * <p>Incluye a los que ademas son accesores: {@code getProp} aparece aca y {@code prop} aparece
-     * en las propiedades. Son dos formas de llegar a lo mismo y las dos estan expuestas.
+     * <p>It includes the ones that are also accessors: {@code getProp} turns up here and
+     * {@code prop} turns up among the properties. They are two ways to the same thing and both are
+     * exposed.
      *
-     * @param clazz la clase
-     * @return los nombres
+     * @param clazz the class
+     * @return the names
      */
     public static Set<String> getInstanceMethodNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
@@ -216,29 +215,29 @@ public class BeansLinker implements GuardingDynamicLinker {
     }
 
     /**
-     * Las propiedades estaticas que se pueden leer.
+     * The static properties that can be read.
      *
-     * <p>Incluye siempre {@code class}, y las clases anidadas por su nombre simple.
+     * <p>It always includes {@code class}, and the nested classes by their simple name.
      *
-     * @param clazz la clase
-     * @return los nombres
+     * @param clazz the class
+     * @return the names
      */
     public static Set<String> getReadableStaticPropertyNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
-        // La pseudo-propiedad que devuelve el Class representado. Esta siempre, incluso en una
-        // clase sin ningun miembro estatico.
+        // The pseudo-property that returns the Class being stood in for. It is always there, even on
+        // a class with no static member at all.
         out.add("class");
         for (final Field f : clazz.getDeclaredFields()) {
-            if (esEstaticoPublico(f.getModifiers())) {
+            if (isPublicStatic(f.getModifiers())) {
                 out.add(f.getName());
             }
         }
         for (final Method m : clazz.getDeclaredMethods()) {
-            if (esEstaticoPublico(m.getModifiers())) {
-                agregarLectura(out, m);
+            if (isPublicStatic(m.getModifiers())) {
+                addReader(out, m);
             }
         }
-        // Las clases anidadas si se heredan, a diferencia del resto de la faceta estatica.
+        // Nested classes are inherited, unlike the rest of the static facet.
         for (final Class<?> k : clazz.getClasses()) {
             out.add(k.getSimpleName());
         }
@@ -246,82 +245,82 @@ public class BeansLinker implements GuardingDynamicLinker {
     }
 
     /**
-     * Las propiedades estaticas que se pueden escribir.
+     * The static properties that can be written.
      *
-     * @param clazz la clase
-     * @return los nombres
+     * @param clazz the class
+     * @return the names
      */
     public static Set<String> getWritableStaticPropertyNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
         for (final Field f : clazz.getDeclaredFields()) {
             final int mod = f.getModifiers();
-            if (esEstaticoPublico(mod) && !Modifier.isFinal(mod)) {
+            if (isPublicStatic(mod) && !Modifier.isFinal(mod)) {
                 out.add(f.getName());
             }
         }
         for (final Method m : clazz.getDeclaredMethods()) {
-            if (esEstaticoPublico(m.getModifiers())) {
-                agregarEscritura(out, m);
+            if (isPublicStatic(m.getModifiers())) {
+                addWriter(out, m);
             }
         }
         return Collections.unmodifiableSet(out);
     }
 
     /**
-     * Los nombres de los metodos estaticos declarados por esa clase.
+     * The names of the static methods declared by that class.
      *
-     * @param clazz la clase
-     * @return los nombres
+     * @param clazz the class
+     * @return the names
      */
     public static Set<String> getStaticMethodNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
         for (final Method m : clazz.getDeclaredMethods()) {
-            if (esEstaticoPublico(m.getModifiers())) {
+            if (isPublicStatic(m.getModifiers())) {
                 out.add(m.getName());
             }
         }
         return Collections.unmodifiableSet(out);
     }
 
-    private static boolean esEstaticoPublico(final int mod) {
+    private static boolean isPublicStatic(final int mod) {
         return Modifier.isStatic(mod) && Modifier.isPublic(mod);
     }
 
-    /** Si el metodo es un accesor de lectura, agrega la propiedad que nombra. */
-    private static void agregarLectura(final Set<String> out, final Method m) {
+    /** If the method is a read accessor, adds the property it names. */
+    private static void addReader(final Set<String> out, final Method m) {
         if (m.getParameterTypes().length != 0) {
             return;
         }
         final String n = m.getName();
         if (n.length() > 3 && n.startsWith("get")) {
-            // Sin mirar el tipo de retorno: hasta un `void getVoid()` cuenta como propiedad.
-            out.add(decapitalizar(n.substring(3)));
+            // Without looking at the return type: even a `void getVoid()` counts as a property.
+            out.add(decapitalize(n.substring(3)));
         } else if (n.length() > 2 && n.startsWith("is") && m.getReturnType() == boolean.class) {
-            // Aca si importa, y tiene que ser el primitivo: con Boolean no cuenta.
-            out.add(decapitalizar(n.substring(2)));
+            // Here it does matter, and it has to be the primitive: with Boolean it does not count.
+            out.add(decapitalize(n.substring(2)));
         }
     }
 
-    /** Si el metodo es un accesor de escritura, agrega la propiedad que nombra. */
-    private static void agregarEscritura(final Set<String> out, final Method m) {
+    /** If the method is a write accessor, adds the property it names. */
+    private static void addWriter(final Set<String> out, final Method m) {
         if (m.getParameterTypes().length != 1) {
             return;
         }
         final String n = m.getName();
         if (n.length() > 3 && n.startsWith("set")) {
-            out.add(decapitalizar(n.substring(3)));
+            out.add(decapitalize(n.substring(3)));
         }
     }
 
     /**
-     * La regla de JavaBeans para pasar de {@code getURL} a {@code URL} y de {@code getX} a
+     * JavaBeans's rule for going from {@code getURL} to {@code URL} and from {@code getX} to
      * {@code x}.
      *
-     * <p>Si las dos primeras letras son mayusculas el nombre queda intacto. La razon es que esos
-     * nombres suelen ser siglas —{@code URL}, {@code HTTP}, {@code ID}— y bajarle la primera letra
-     * las volveria irreconocibles.
+     * <p>If the first two letters are uppercase the name is left untouched. The reason is that such
+     * names are usually acronyms —{@code URL}, {@code HTTP}, {@code ID}— and lowercasing the first
+     * letter would make them unrecognizable.
      */
-    private static String decapitalizar(final String s) {
+    private static String decapitalize(final String s) {
         if (s.length() > 1 && Character.isUpperCase(s.charAt(0))
                 && Character.isUpperCase(s.charAt(1))) {
             return s;
