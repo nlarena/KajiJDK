@@ -8,9 +8,9 @@
  },
  {
   "pkg": "com.sun.jdi",
-  "clases": 2,
+  "clases": 68,
   "clasesJdk": 68,
-  "miembros": 44,
+  "miembros": 358,
   "miembrosJdk": 358
  },
  {
@@ -29,16 +29,16 @@
  },
  {
   "pkg": "com.sun.jdi.event",
-  "clases": 0,
+  "clases": 24,
   "clasesJdk": 24,
-  "miembros": 0,
+  "miembros": 34,
   "miembrosJdk": 34
  },
  {
   "pkg": "com.sun.jdi.request",
-  "clases": 0,
+  "clases": 21,
   "clasesJdk": 21,
-  "miembros": 0,
+  "miembros": 120,
   "miembrosJdk": 120
  },
  {
@@ -423,7 +423,7 @@
   "pkg": "java.nio.channels",
   "clases": 53,
   "clasesJdk": 53,
-  "miembros": 257,
+  "miembros": 280,
   "miembrosJdk": 280
  },
  {
@@ -498,9 +498,9 @@
  },
  {
   "pkg": "java.security",
-  "clases": 79,
+  "clases": 81,
   "clasesJdk": 81,
-  "miembros": 582,
+  "miembros": 593,
   "miembrosJdk": 593
  },
  {
@@ -563,7 +563,7 @@
   "pkg": "java.time.format",
   "clases": 8,
   "clasesJdk": 8,
-  "miembros": 124,
+  "miembros": 141,
   "miembrosJdk": 141
  },
  {
@@ -687,9 +687,9 @@
  },
  {
   "pkg": "javax.crypto",
-  "clases": 1,
+  "clases": 30,
   "clasesJdk": 30,
-  "miembros": 1,
+  "miembros": 247,
   "miembrosJdk": 247
  },
  {
@@ -841,9 +841,9 @@
  },
  {
   "pkg": "javax.management.remote.rmi",
-  "clases": 0,
+  "clases": 9,
   "clasesJdk": 9,
-  "miembros": 0,
+  "miembros": 142,
   "miembrosJdk": 142
  },
  {
@@ -1079,9 +1079,9 @@
  },
  {
   "pkg": "javax.swing",
-  "clases": 30,
+  "clases": 134,
   "clasesJdk": 134,
-  "miembros": 685,
+  "miembros": 3642,
   "miembrosJdk": 3642
  },
  {
@@ -1114,16 +1114,16 @@
  },
  {
   "pkg": "javax.swing.plaf",
-  "clases": 10,
+  "clases": 42,
   "clasesJdk": 42,
-  "miembros": 36,
+  "miembros": 147,
   "miembrosJdk": 147
  },
  {
   "pkg": "javax.swing.plaf.basic",
-  "clases": 8,
+  "clases": 50,
   "clasesJdk": 59,
-  "miembros": 107,
+  "miembros": 980,
   "miembrosJdk": 1623
  },
  {
@@ -1135,65 +1135,65 @@
  },
  {
   "pkg": "javax.swing.plaf.multi",
-  "clases": 0,
+  "clases": 31,
   "clasesJdk": 31,
-  "miembros": 0,
+  "miembros": 476,
   "miembrosJdk": 476
  },
  {
   "pkg": "javax.swing.plaf.nimbus",
-  "clases": 0,
+  "clases": 4,
   "clasesJdk": 4,
-  "miembros": 0,
+  "miembros": 50,
   "miembrosJdk": 50
  },
  {
   "pkg": "javax.swing.plaf.synth",
-  "clases": 0,
+  "clases": 9,
   "clasesJdk": 51,
-  "miembros": 0,
+  "miembros": 270,
   "miembrosJdk": 806
  },
  {
   "pkg": "javax.swing.table",
-  "clases": 5,
+  "clases": 12,
   "clasesJdk": 12,
-  "miembros": 78,
+  "miembros": 243,
   "miembrosJdk": 243
  },
  {
   "pkg": "javax.swing.text",
-  "clases": 6,
+  "clases": 63,
   "clasesJdk": 63,
-  "miembros": 64,
+  "miembros": 1144,
   "miembrosJdk": 1144
  },
  {
   "pkg": "javax.swing.text.html",
-  "clases": 0,
+  "clases": 17,
   "clasesJdk": 17,
-  "miembros": 0,
+  "miembros": 242,
   "miembrosJdk": 242
  },
  {
   "pkg": "javax.swing.text.html.parser",
-  "clases": 0,
+  "clases": 10,
   "clasesJdk": 10,
-  "miembros": 0,
+  "miembros": 177,
   "miembrosJdk": 177
  },
  {
   "pkg": "javax.swing.text.rtf",
-  "clases": 0,
+  "clases": 1,
   "clasesJdk": 1,
-  "miembros": 0,
+  "miembros": 6,
   "miembrosJdk": 6
  },
  {
   "pkg": "javax.swing.tree",
-  "clases": 2,
+  "clases": 17,
   "clasesJdk": 17,
-  "miembros": 18,
+  "miembros": 386,
   "miembrosJdk": 386
  },
  {
@@ -1366,16 +1366,16 @@
  },
  {
   "pkg": "jdk.dynalink",
-  "clases": 10,
+  "clases": 12,
   "clasesJdk": 12,
-  "miembros": 56,
+  "miembros": 73,
   "miembrosJdk": 73
  },
  {
   "pkg": "jdk.dynalink.beans",
-  "clases": 0,
+  "clases": 3,
   "clasesJdk": 3,
-  "miembros": 0,
+  "miembros": 17,
   "miembrosJdk": 17
  },
  {
@@ -1401,9 +1401,9 @@
  },
  {
   "pkg": "jdk.incubator.vector",
-  "clases": 0,
+  "clases": 14,
   "clasesJdk": 14,
-  "miembros": 0,
+  "miembros": 1347,
   "miembrosJdk": 1347
  },
  {
@@ -1415,30 +1415,30 @@
  },
  {
   "pkg": "jdk.jfr",
-  "clases": 0,
+  "clases": 40,
   "clasesJdk": 40,
-  "miembros": 0,
+  "miembros": 160,
   "miembrosJdk": 160
  },
  {
   "pkg": "jdk.jfr.consumer",
-  "clases": 0,
+  "clases": 13,
   "clasesJdk": 13,
-  "miembros": 0,
+  "miembros": 109,
   "miembrosJdk": 109
  },
  {
   "pkg": "jdk.jshell",
-  "clases": 1,
+  "clases": 18,
   "clasesJdk": 18,
-  "miembros": 6,
+  "miembros": 71,
   "miembrosJdk": 71
  },
  {
   "pkg": "jdk.jshell.execution",
-  "clases": 0,
+  "clases": 12,
   "clasesJdk": 12,
-  "miembros": 0,
+  "miembros": 84,
   "miembrosJdk": 84
  },
  {
@@ -1464,9 +1464,9 @@
  },
  {
   "pkg": "jdk.management.jfr",
-  "clases": 0,
+  "clases": 6,
   "clasesJdk": 6,
-  "miembros": 0,
+  "miembros": 84,
   "miembrosJdk": 84
  },
  {
@@ -1499,9 +1499,9 @@
  },
  {
   "pkg": "jdk.swing.interop",
-  "clases": 0,
+  "clases": 6,
   "clasesJdk": 6,
-  "miembros": 0,
+  "miembros": 66,
   "miembrosJdk": 66
  },
  {
@@ -1618,9 +1618,9 @@
  },
  {
   "pkg": "sun.misc",
-  "clases": 0,
+  "clases": 3,
   "clasesJdk": 3,
-  "miembros": 0,
+  "miembros": 118,
   "miembrosJdk": 118
  },
  {
