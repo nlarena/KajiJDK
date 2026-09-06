@@ -20,28 +20,32 @@ import java.util.Map;
 // cadena a las **mismas piezas** que los `append*` producen, asi que las dos entradas no se pueden
 // desincronizar y el techo desaparecio.
 //
-// Lo que sigue afuera, y es todo lo mismo: **los doce miembros que necesitan datos de texto del
-// CLDR**, que esta biblioteca no trae.
+// **Ya no falta nada, y el camino por el que se cerro es el mismo tres veces: traer el dato, no
+// inventarlo.** Ocho miembros estuvieron afuera porque pedian tablas de *texto* del CLDR --nombres,
+// no formatos-- y un `appendZoneText(FULL)` que escriba `Europe/Paris` no esta incompleto, esta mal:
+// dice "este es el nombre" y no lo es. Asi se cerro cada uno:
 //
-//   - `appendLocalized(FormatStyle, FormatStyle)` y `appendLocalized(String)` piden el *patron* que
-//     un locale usa para una fecha corta o larga. No es un patron que se pueda deducir: `M/d/yy` en
-//     los Estados Unidos, `dd/MM/yyyy` en la Argentina, `yyyy/MM/dd` en el Japon. Devolver uno fijo
-//     seria dar una respuesta con la forma de la correcta para todos los locales menos uno.
-//   - `getLocalizedDateTimePattern` en sus dos formas es exactamente esa consulta, expuesta.
-//   - `appendZoneText` y `appendGenericZoneText` (dos formas cada uno) piden el *nombre* de la zona
-//     --"Pacific Standard Time", "hora estandar del Pacifico"--, que es una tabla del CLDR por zona y
-//     por idioma. El **id** si esta: `appendZoneId`.
-//   - `appendChronologyText` pide el nombre del calendario; `appendChronologyId` --que si esta-- da
-//     la clave.
-//   - `appendDayPeriodText` pide "in the morning" / "at night", que es dato del CLDR y ademas
-//     depende de reglas de corte propias de cada idioma.
-//   - `appendLocalizedOffset` escribe `GMT+8` con la palabra "GMT" traducida y el formato de la hora
-//     tomado del locale.
+//   - `appendLocalized(FormatStyle, FormatStyle)`, `getLocalizedDateTimePattern` en su forma de
+//     estilos y las cuatro `ofLocalized*` de `DateTimeFormatter`: el patron de una fecha corta
+//     --`M/d/yy` aca, `dd.MM.yy` alla-- aparecio en `java.text.PatronesLocales`. Ver
+//     `PiezaLocalizada`, donde esta la medicion que muestra que los dos caminos dan el mismo patron.
+//   - `ofLocalizedPattern(String)`, `getLocalizedDateTimePattern(String, ...)` y
+//     `appendLocalized(String)`: la lista de formatos disponibles de cada locale esta ahora en
+//     `PlantillasLocales`, extraida corriendo el JDK sobre las casi cuarenta y ocho mil plantillas
+//     que la gramatica admite. Lo que no esta en la tabla no se inventa: da `DateTimeException`,
+//     igual que alla.
+//   - `appendDayPeriodText`: los nombres y los cortes de cada idioma estan en `PeriodosDelDia`,
+//     extraidos pidiendole al JDK los 1440 minutos del dia en cada locale.
+//   - `appendZoneText` y `appendGenericZoneText` (dos formas cada uno): ver `PiezaZonaTexto`. No hizo
+//     falta tabla, y la razon es incomoda: `ZoneId.of` no construye ninguna zona con nombre en esta
+//     biblioteca, asi que la unica que un formateador puede recibir es un `ZoneOffset`, y para un
+//     desplazamiento el JDK escribe el identificador tal cual. **Eso es completo por lo que la
+//     biblioteca puede representar, no por lo que la API promete**: el dia que haya base de zonas,
+//     esos cuatro necesitan la tabla del CLDR y hoy quedarian mintiendo.
 //
-// La distincion que importa: **no es que falte el dato, es que inventarlo seria mentir**. Un
-// `appendZoneText(FULL)` que escriba `Europe/Paris` no esta incompleto, esta mal: dice "este es el
-// nombre" y no lo es. `appendText(TemporalField, Map)` --que si esta-- es la salida para el que
-// necesite nombres propios: pone los suyos y el resultado es cierto por construccion.
+// `appendText(TemporalField, Map)` sigue siendo la salida para el que necesite nombres propios: pone
+// los suyos y el resultado es cierto por construccion.
+
 public final class DateTimeFormatterBuilder {
 
     private final DateTimeFormatterBuilder padre;
@@ -236,6 +240,248 @@ public final class DateTimeFormatterBuilder {
 
     public DateTimeFormatterBuilder appendChronologyId() {
         return this.agregar(new PiezaCronologiaId());
+    }
+
+    /**
+     * El nombre del calendario.
+     *
+     * <p>Delega en {@link java.time.chrono.Chronology#getDisplayName}, como el JDK. Esa biblioteca
+     * no trae los nombres traducidos y cae siempre en su reserva --el id del calendario--; para el
+     * ISO coincide con el JDK.
+     *
+     * @throws NullPointerException si `textStyle` es nulo
+     */
+    public DateTimeFormatterBuilder appendChronologyText(TextStyle textStyle) {
+        if (textStyle == null) {
+            throw new NullPointerException("textStyle");
+        }
+        return this.agregar(new PiezaCronologiaTexto(textStyle));
+    }
+
+    /**
+     * Una fecha, una hora o las dos, pidiendo los campos por plantilla.
+     *
+     * <p>Una plantilla --`yMMMd`, `Hm`-- dice que campos se quieren y con cuanto detalle, y deja que
+     * el idioma decida el orden y los separadores. Es lo que hace falta cuando ninguno de los cuatro
+     * estilos sirve: pedir el mes y el dia sin el ano, por ejemplo.
+     *
+     * <p>El patron se resuelve al usar el formateador y no al armarlo, asi que un
+     * {@link DateTimeFormatter#withLocale} posterior cambia el formato.
+     *
+     * @param requestedTemplate la plantilla
+     * @return este armador
+     * @throws NullPointerException si la plantilla es nula
+     * @throws IllegalArgumentException si la plantilla esta mal escrita
+     * @since 19
+     */
+    public DateTimeFormatterBuilder appendLocalized(String requestedTemplate) {
+        if (requestedTemplate == null) {
+            throw new NullPointerException("requestedTemplate");
+        }
+        Plantilla.comprobar(requestedTemplate);
+        return this.agregar(new PiezaPlantilla(requestedTemplate));
+    }
+
+    /**
+     * El patron que ese idioma usa para esa plantilla.
+     *
+     * <p>Ver {@code PlantillasLocales}, de donde sale la tabla, y {@code Plantilla}, que explica por
+     * que hay dos formas distintas de fallar.
+     *
+     * @param requestedTemplate la plantilla
+     * @param chrono el calendario; no se usa para resolver la plantilla, pero no puede ser nulo
+     * @param locale en que idioma
+     * @return el patron
+     * @throws NullPointerException si alguno de los tres es nulo
+     * @throws IllegalArgumentException si la plantilla esta mal escrita
+     * @throws java.time.DateTimeException si ese idioma no tiene un patron para esa plantilla
+     * @since 19
+     */
+    public static String getLocalizedDateTimePattern(String requestedTemplate,
+            java.time.chrono.Chronology chrono, Locale locale) {
+        if (requestedTemplate == null) {
+            throw new NullPointerException("requestedTemplate");
+        }
+        if (chrono == null) {
+            throw new NullPointerException("chrono");
+        }
+        if (locale == null) {
+            throw new NullPointerException("locale");
+        }
+        Plantilla.comprobar(requestedTemplate);
+        String patron = PlantillasLocales.patron(requestedTemplate, locale);
+        if (patron == null) {
+            throw new java.time.DateTimeException("Requested template \"" + requestedTemplate
+                    + "\" cannot be resolved in the locale \"" + locale + "\"");
+        }
+        return patron;
+    }
+
+    /**
+     * El periodo del dia con palabras: "in the morning", "nachmittags", "madrugada".
+     *
+     * <p>No es AM/PM traducido: cada idioma parte el dia en los pedazos que nombra, que no son dos
+     * ni son parejos. Ver {@code PeriodosDelDia}, de donde salen los datos.
+     *
+     * <p>Al parsear se resuelve al punto medio del tramo, que es lo que hace el JDK: el nombre de un
+     * periodo no dice que hora es.
+     *
+     * @param textStyle el estilo
+     * @return este armador
+     * @throws NullPointerException si `textStyle` es nulo
+     * @since 16
+     */
+    public DateTimeFormatterBuilder appendDayPeriodText(TextStyle textStyle) {
+        if (textStyle == null) {
+            throw new NullPointerException("textStyle");
+        }
+        return this.agregar(new PiezaPeriodoDelDia(textStyle));
+    }
+
+    /**
+     * El nombre de la zona, como se lo escribe en ese idioma.
+     *
+     * <p>Ver {@code PiezaZonaTexto} para por que esto se puede cumplir sin la tabla de nombres del
+     * CLDR: la unica zona que un formateador puede recibir en esta biblioteca es un
+     * {@link java.time.ZoneOffset}, y para un desplazamiento el JDK escribe el identificador tal
+     * cual --`+05:30`, `Z`-- en cualquier idioma y en cualquier estilo.
+     *
+     * @param textStyle el estilo
+     * @return este armador
+     * @throws NullPointerException si `textStyle` es nulo
+     */
+    public DateTimeFormatterBuilder appendZoneText(TextStyle textStyle) {
+        if (textStyle == null) {
+            throw new NullPointerException("textStyle");
+        }
+        return this.agregar(new PiezaZonaTexto(textStyle, null, false));
+    }
+
+    /**
+     * Lo mismo, diciendo que zonas preferir cuando un nombre le corresponde a varias.
+     *
+     * <p>El conjunto no cambia nada mientras no haya nombres: solo sirve para desempatar.
+     *
+     * @param textStyle el estilo
+     * @param preferredZones las zonas a preferir
+     * @return este armador
+     * @throws NullPointerException si alguno de los dos es nulo
+     */
+    public DateTimeFormatterBuilder appendZoneText(TextStyle textStyle,
+            java.util.Set<java.time.ZoneId> preferredZones) {
+        if (textStyle == null) {
+            throw new NullPointerException("textStyle");
+        }
+        if (preferredZones == null) {
+            throw new NullPointerException("preferredZones");
+        }
+        return this.agregar(new PiezaZonaTexto(textStyle, preferredZones, false));
+    }
+
+    /**
+     * El nombre de la zona sin distinguir horario de verano.
+     *
+     * <p>"Hora del Pacifico" en vez de "hora estandar del Pacifico": es lo que se escribe cuando no
+     * hay un instante concreto que decida si el horario de verano esta puesto.
+     *
+     * @param textStyle el estilo
+     * @return este armador
+     * @throws NullPointerException si `textStyle` es nulo
+     */
+    public DateTimeFormatterBuilder appendGenericZoneText(TextStyle textStyle) {
+        if (textStyle == null) {
+            throw new NullPointerException("textStyle");
+        }
+        return this.agregar(new PiezaZonaTexto(textStyle, null, true));
+    }
+
+    /**
+     * Lo mismo, con zonas preferidas.
+     *
+     * <p>El conjunto no se comprueba: el JDK tampoco lo comprueba en esta forma, a diferencia de
+     * {@link #appendZoneText(TextStyle, java.util.Set)}. La asimetria es suya y se copia.
+     *
+     * @param textStyle el estilo
+     * @param preferredZones las zonas a preferir
+     * @return este armador
+     * @throws NullPointerException si `textStyle` es nulo
+     */
+    public DateTimeFormatterBuilder appendGenericZoneText(TextStyle textStyle,
+            java.util.Set<java.time.ZoneId> preferredZones) {
+        if (textStyle == null) {
+            throw new NullPointerException("textStyle");
+        }
+        return this.agregar(new PiezaZonaTexto(textStyle, preferredZones, true));
+    }
+
+    /**
+     * El desplazamiento de zona escrito con `GMT` adelante: `GMT+08:00`, `GMT+8`, `GMT`.
+     *
+     * <p>Solo admite {@link TextStyle#FULL} y {@link TextStyle#SHORT}. La palabra `GMT` es
+     * literal --tambien en el JDK, que tiene ahi un `TODO` sin resolver--, asi que las dos salidas
+     * coinciden en cualquier locale.
+     *
+     * @throws IllegalArgumentException si el estilo no es FULL ni SHORT
+     * @throws NullPointerException si `style` es nulo
+     */
+    public DateTimeFormatterBuilder appendLocalizedOffset(TextStyle style) {
+        if (style == null) {
+            throw new NullPointerException("style");
+        }
+        if (style != TextStyle.FULL && style != TextStyle.SHORT) {
+            throw new IllegalArgumentException("Style must be either full or short");
+        }
+        return this.agregar(new PiezaOffsetLocalizado(style));
+    }
+
+    /**
+     * Una fecha, una hora o las dos, con el formato que el locale usa para ese estilo.
+     *
+     * <p>El patron se resuelve al usar el formateador y no al armarlo, asi que un
+     * {@link DateTimeFormatter#withLocale} posterior cambia el formato. Ver
+     * {@link #getLocalizedDateTimePattern}.
+     *
+     * @throws IllegalArgumentException si los dos estilos son nulos
+     */
+    public DateTimeFormatterBuilder appendLocalized(FormatStyle dateStyle, FormatStyle timeStyle) {
+        if (dateStyle == null && timeStyle == null) {
+            throw new IllegalArgumentException("Either the date or time style must be non-null");
+        }
+        return this.agregar(new PiezaLocalizada(dateStyle, timeStyle));
+    }
+
+    /**
+     * El patron que ese locale usa para una fecha y/o una hora de ese estilo.
+     *
+     * <p><strong>De donde sale.</strong> De la misma tabla que
+     * {@code DateFormat.getDateInstance(estilo, locale)}, que esta biblioteca si trae. Se verifico
+     * contra el JDK real --cuatro estilos, tres combinaciones, siete locales-- que los dos devuelven
+     * exactamente el mismo patron; no es una equivalencia supuesta.
+     *
+     * <p>La cronologia se recibe y se exige no nula, como en el JDK, pero no cambia el resultado:
+     * los patrones que hay son los del calendario ISO.
+     *
+     * <p><strong>Un locale sin datos propios cae en el mas cercano que haya</strong>, que es como se
+     * comporta {@code java.text} en esta biblioteca: {@code en_GB} termina devolviendo los patrones
+     * de {@code en_US}. Cuales tienen datos propios lo dice
+     * {@link DecimalStyle#getAvailableLocales}. No es una respuesta inventada --sale de una tabla
+     * real-- pero tampoco es la del locale que se pidio, y conviene saberlo antes de creerle.
+     *
+     * @throws IllegalArgumentException si los dos estilos son nulos
+     * @throws NullPointerException si `chrono` o `locale` son nulos
+     */
+    public static String getLocalizedDateTimePattern(FormatStyle dateStyle, FormatStyle timeStyle,
+            java.time.chrono.Chronology chrono, Locale locale) {
+        if (chrono == null) {
+            throw new NullPointerException("chrono");
+        }
+        if (locale == null) {
+            throw new NullPointerException("locale");
+        }
+        if (dateStyle == null && timeStyle == null) {
+            throw new IllegalArgumentException("Either dateStyle or timeStyle must be non-null");
+        }
+        return PatronLocalizado.de(dateStyle, timeStyle, locale);
     }
 
     public DateTimeFormatterBuilder appendInstant() {

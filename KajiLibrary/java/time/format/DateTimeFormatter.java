@@ -139,6 +139,95 @@ public final class DateTimeFormatter {
         return new DateTimeFormatterBuilder().appendPattern(pattern).toFormatter(locale);
     }
 
+    // Las cuatro fabricas de formato localizado.
+    //
+    // **Aca si se toma el locale de la maquina**, y no `Locale.ROOT` como `toFormatter()`. No es una
+    // inconsistencia: lo que estas cuatro piden *es* el formato del locale, asi que ignorarlo seria
+    // no hacer lo que dicen. `toFormatter()` elige ROOT porque un patron escrito a mano no habla de
+    // ningun locale en particular. El JDK usa la misma categoria FORMAT que se usa aca.
+    //
+    // El patron sale del locale; los **nombres** que ese patron pida --`MMMM`, `EEEE`-- siguen
+    // saliendo del unico juego que hay, el ingles. Un `ofLocalizedDate(FULL)` bajo un locale no
+    // ingles se arma bien y tira al usarlo, diciendo cual es el nombre que falta.
+    private static DateTimeFormatter localizado(FormatStyle fecha, FormatStyle hora) {
+        return new DateTimeFormatterBuilder().appendLocalized(fecha, hora)
+                .toFormatter(Locale.getDefault(Locale.Category.FORMAT))
+                .withChronology(IsoChronology.INSTANCE);
+    }
+
+    /**
+     * El formato de fecha de ese estilo en el locale de la maquina.
+     *
+     * @throws NullPointerException si `dateStyle` es nulo
+     */
+    /**
+     * El formato que el locale de la maquina usa para esa plantilla.
+     *
+     * <p>Una plantilla --`yMMMd`, `Hm`-- dice que campos se quieren y con cuanto detalle, y deja que
+     * el idioma decida el orden y los separadores. Es lo que hace falta cuando ninguno de los cuatro
+     * estilos sirve; ver {@link DateTimeFormatterBuilder#appendLocalized(String)}.
+     *
+     * @param requestedTemplate la plantilla
+     * @return el formateador
+     * @throws NullPointerException si la plantilla es nula
+     * @throws IllegalArgumentException si la plantilla esta mal escrita
+     * @since 19
+     */
+    public static DateTimeFormatter ofLocalizedPattern(String requestedTemplate) {
+        if (requestedTemplate == null) {
+            throw new NullPointerException("requestedTemplate");
+        }
+        return new DateTimeFormatterBuilder().appendLocalized(requestedTemplate)
+                .toFormatter(Locale.getDefault(Locale.Category.FORMAT));
+    }
+
+    public static DateTimeFormatter ofLocalizedDate(FormatStyle dateStyle) {
+        if (dateStyle == null) {
+            throw new NullPointerException("dateStyle");
+        }
+        return localizado(dateStyle, null);
+    }
+
+    /**
+     * El formato de hora de ese estilo en el locale de la maquina.
+     *
+     * @throws NullPointerException si `timeStyle` es nulo
+     */
+    public static DateTimeFormatter ofLocalizedTime(FormatStyle timeStyle) {
+        if (timeStyle == null) {
+            throw new NullPointerException("timeStyle");
+        }
+        return localizado(null, timeStyle);
+    }
+
+    /**
+     * El formato de fecha y hora de ese estilo, el mismo para las dos.
+     *
+     * @throws NullPointerException si `dateTimeStyle` es nulo
+     */
+    public static DateTimeFormatter ofLocalizedDateTime(FormatStyle dateTimeStyle) {
+        if (dateTimeStyle == null) {
+            throw new NullPointerException("dateTimeStyle");
+        }
+        return localizado(dateTimeStyle, dateTimeStyle);
+    }
+
+    /**
+     * El formato de fecha y hora, con un estilo para cada una.
+     *
+     * @throws NullPointerException si alguno de los dos es nulo
+     */
+    public static DateTimeFormatter ofLocalizedDateTime(FormatStyle dateStyle,
+            FormatStyle timeStyle) {
+        if (dateStyle == null) {
+            throw new NullPointerException("dateStyle");
+        }
+        if (timeStyle == null) {
+            throw new NullPointerException("timeStyle");
+        }
+        return localizado(dateStyle, timeStyle);
+    }
+
     // Las dos consultas que solo tienen sentido sobre el resultado de un parseo. Devuelven **la misma
     // instancia siempre**: se comparan por identidad, y una nueva en cada llamada no coincidiria
     // nunca con la que el resultado reconoce (fue un bug real en `TemporalQueries`).
