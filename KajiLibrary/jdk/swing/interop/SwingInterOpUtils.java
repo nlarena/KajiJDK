@@ -6,85 +6,84 @@ import java.awt.Toolkit;
 import java.awt.Window;
 
 /**
- * Las cuatro cosas sueltas que el puente con otro juego de herramientas graficas necesita del
- * interior de AWT.
+ * The four loose things the bridge to another toolkit needs from inside AWT.
  *
- * <h2>Tomar el mouse</h2>
+ * <h2>Grabbing the mouse</h2>
  *
- * <p>{@link #grab} es lo que hace un menu emergente al abrirse: pide que todos los eventos del
- * mouse le lleguen a el, incluso los que caen sobre otra ventana. Sin eso, hacer clic afuera no
- * cerraria el menu, porque el clic se lo llevaria la ventana de abajo y el menu nunca se enteraria.
+ * <p>{@link #grab} is what a popup menu does when it opens: it asks for every mouse event to reach
+ * it, including the ones that land on another window. Without that, clicking outside would not close
+ * the menu, because the click would go to the window underneath and the menu would never hear about
+ * it.
  *
- * <p>{@link #isUngrabEvent} es la otra mitad: reconoce el evento con el que el sistema avisa que se
- * perdio esa toma, para que el menu se cierre solo.
+ * <p>{@link #isUngrabEvent} is the other half: it recognizes the event the system uses to say that
+ * grab was lost, so the menu closes by itself.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>{@link #postEvent} funciona: encola el evento en la cola del sistema. {@link #grab} y
- * {@link #ungrab} no hacen nada, que es exactamente lo que hacen en el JDK cuando el juego de
- * herramientas no es el de Sun --tomar el mouse es una operacion del sistema de ventanas, y no hay
- * ninguno--. {@link #isUngrabEvent} da siempre falso por la misma razon: ese evento lo fabrica el
- * sistema, y aca no lo fabrica nadie.
+ * <p>{@link #postEvent} works: it queues the event on the system queue. {@link #grab} and
+ * {@link #ungrab} do nothing, which is exactly what they do in the JDK when the toolkit is not
+ * Sun's -- grabbing the mouse is a windowing-system operation, and there is no windowing system
+ * here. {@link #isUngrabEvent} always answers false for the same reason: that event is made by the
+ * system, and here nobody makes it.
  *
  * @since 9
  */
 public class SwingInterOpUtils {
 
     /**
-     * La marca del evento con que el sistema avisa que se perdio la toma del mouse.
+     * The mark of the event the system uses to say the mouse grab was lost.
      *
-     * <p>Es el bit de arriba de todo del entero, el unico que quedaba libre: las mascaras de eventos
-     * de AWT se fueron repartiendo los demas.
+     * <p>It is the topmost bit of the integer, the only one still free: AWT's event masks took all
+     * the others.
      */
     public static final int GRAB_EVENT_MASK = 0x80000000;
 
-    /** Uno. */
+    /** One. */
     public SwingInterOpUtils() {
     }
 
     /**
-     * Encola el evento.
+     * Queues the event.
      *
-     * <p>El primer argumento es el contexto de aplicacion al que mandarlo. Esta implementacion tiene
-     * una sola cola de eventos, asi que no hay a que otro contexto mandarlo y el argumento se
-     * ignora.
+     * <p>The first argument is the application context to send it to. This implementation has a
+     * single event queue, so there is no other context to send it to and the argument is ignored.
      *
-     * @param targetAppContext a que contexto de aplicacion, o {@code null}
-     * @param event el evento, o {@code null} para no hacer nada
+     * @param targetAppContext which application context, or {@code null}
+     * @param event the event, or {@code null} to do nothing
      */
     public static void postEvent(Object targetAppContext, AWTEvent event) {
         if (event == null) {
             return;
         }
-        final EventQueue cola = Toolkit.getDefaultToolkit().getSystemEventQueue();
-        if (cola != null) {
-            cola.postEvent(event);
+        final EventQueue queue = Toolkit.getDefaultToolkit().getSystemEventQueue();
+        if (queue != null) {
+            queue.postEvent(event);
         }
     }
 
     /**
-     * Hace que todos los eventos del mouse vayan a esa ventana.
+     * Makes every mouse event go to that window.
      *
-     * @param toolkit el juego de herramientas
-     * @param w la ventana que se lleva los eventos
+     * @param toolkit the toolkit
+     * @param w the window that takes the events
      */
     public static void grab(Toolkit toolkit, Window w) {
     }
 
     /**
-     * Devuelve los eventos del mouse a quien corresponda.
+     * Gives the mouse events back to whoever they belong to.
      *
-     * @param toolkit el juego de herramientas
-     * @param w la ventana que los tenia
+     * @param toolkit the toolkit
+     * @param w the window that had them
      */
     public static void ungrab(Toolkit toolkit, Window w) {
     }
 
     /**
-     * Si ese es el evento con que el sistema avisa que se perdio la toma del mouse.
+     * Whether that is the event the system uses to say the mouse grab was lost.
      *
-     * @param ev el evento
-     * @return falso siempre: ese evento lo fabrica el sistema de ventanas, y no hay ninguno
+     * @param ev the event
+     * @return always false: that event is made by the windowing system, and there is none
      */
     public static boolean isUngrabEvent(AWTEvent ev) {
         return false;

@@ -13,32 +13,32 @@ import java.awt.event.InputEvent;
 import java.util.Map;
 
 /**
- * El lado del origen de un arrastre, visto desde otro juego de herramientas graficas.
+ * The source side of a drag, seen from another toolkit.
  *
- * <h2>Que hace</h2>
+ * <h2>What it does</h2>
  *
- * <p>Arrastrar algo fuera de la ventana es una conversacion con el sistema operativo, no con AWT.
- * Esta clase es la mitad de esa conversacion que corresponde al origen: le avisa al sistema que
- * empezo un arrastre, le cambia el cursor mientras dura, y espera a que termine.
+ * <p>Dragging something out of the window is a conversation with the operating system, not with AWT.
+ * This class is the half of that conversation that belongs to the source: it tells the system a drag
+ * started, changes the cursor while it lasts, and waits for it to finish.
  *
- * <h2>Por que un bucle de eventos propio</h2>
+ * <h2>Why an event loop of its own</h2>
  *
- * <p>{@link #startSecondaryEventLoop} y {@link #quitSecondaryEventLoop} existen porque en algunos
- * sistemas el arrastre es una llamada que no vuelve hasta que el usuario suelta. Durante todo ese
- * rato la interfaz tiene que seguir respondiendo, asi que hay que atender eventos desde adentro de
- * la llamada. Eso es un bucle secundario.
+ * <p>{@link #startSecondaryEventLoop} and {@link #quitSecondaryEventLoop} exist because on some
+ * systems the drag is a call that does not return until the user drops. The interface has to keep
+ * responding for all that time, so events must be served from inside the call. That is a secondary
+ * loop.
  *
  * <h2>{@link #convertModifiersToDropAction}</h2>
  *
- * <p>Es la unica parte que no depende del sistema: la regla de que Control copia, Mayusculas mueve y
- * los dos juntos enlazan, y que sin ninguna de las dos se elige la primera accion que el origen
- * permita, en el orden mover, copiar, enlazar. El resultado siempre se recorta a lo que el origen
- * permita, asi que pedir copiar donde solo se puede mover no da copiar sino nada.
+ * <p>It is the only part that does not depend on the system: the rule that Control copies, Shift
+ * moves and the two together link, and that with neither of them the first action the source allows
+ * is chosen, in the order move, copy, link. The result is always trimmed to what the source allows,
+ * so asking to copy where only moving is possible gives not a copy but nothing.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La regla de las teclas funciona de verdad y es lo unico de este paquete que se puede comprobar
- * contra el JDK sin una pantalla. Lo demas necesita el par nativo, que aca no existe: ver
+ * <p>The key rule really works, and it is the only thing in this package that can be checked against
+ * the JDK without a screen. The rest needs the native peer, which does not exist here: see
  * {@link #getDragSourceContext}.
  *
  * @since 9
@@ -48,112 +48,111 @@ public abstract class DragSourceContextWrapper {
     private final DragGestureEvent trigger;
 
     /**
-     * Uno para el arrastre que arranco ese gesto.
+     * One for the drag that gesture started.
      *
-     * @param dge el gesto que lo arranco
+     * @param dge the gesture that started it
      */
     public DragSourceContextWrapper(DragGestureEvent dge) {
         this.trigger = dge;
     }
 
     /**
-     * Que accion corresponde a esas teclas, recortada a lo que el origen permita.
+     * Which action those keys mean, trimmed to what the source allows.
      *
-     * <p>Control copia, Mayusculas mueve, los dos juntos enlazan. Sin ninguna de las dos se elige la
-     * primera que el origen permita, en el orden mover, copiar, enlazar --mover primero porque es lo
-     * que el usuario espera al arrastrar dentro de la misma aplicacion--. Cualquier otra tecla no
-     * cambia nada.
+     * <p>Control copies, Shift moves, the two together link. With neither of them the first action
+     * the source allows is chosen, in the order move, copy, link -- move first because that is what
+     * the user expects when dragging inside the same application. Any other key changes nothing.
      *
-     * @param modifiers las teclas apretadas, como las da {@link InputEvent#getModifiersEx}
-     * @param supportedActions las acciones que el origen permite
-     * @return la accion, o {@link DnDConstants#ACTION_NONE} si ninguna sirve
+     * @param modifiers the keys held down, as {@link InputEvent#getModifiersEx} gives them
+     * @param supportedActions the actions the source allows
+     * @return the action, or {@link DnDConstants#ACTION_NONE} if none fits
      */
     public static int convertModifiersToDropAction(int modifiers, int supportedActions) {
-        final int teclas = modifiers & (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK);
-        int accion;
-        if (teclas == (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK)) {
-            accion = DnDConstants.ACTION_LINK;
-        } else if (teclas == InputEvent.CTRL_DOWN_MASK) {
-            accion = DnDConstants.ACTION_COPY;
-        } else if (teclas == InputEvent.SHIFT_DOWN_MASK) {
-            accion = DnDConstants.ACTION_MOVE;
+        final int keys = modifiers & (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK);
+        int action;
+        if (keys == (InputEvent.SHIFT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK)) {
+            action = DnDConstants.ACTION_LINK;
+        } else if (keys == InputEvent.CTRL_DOWN_MASK) {
+            action = DnDConstants.ACTION_COPY;
+        } else if (keys == InputEvent.SHIFT_DOWN_MASK) {
+            action = DnDConstants.ACTION_MOVE;
         } else if ((supportedActions & DnDConstants.ACTION_MOVE) != 0) {
-            accion = DnDConstants.ACTION_MOVE;
+            action = DnDConstants.ACTION_MOVE;
         } else if ((supportedActions & DnDConstants.ACTION_COPY) != 0) {
-            accion = DnDConstants.ACTION_COPY;
+            action = DnDConstants.ACTION_COPY;
         } else if ((supportedActions & DnDConstants.ACTION_LINK) != 0) {
-            accion = DnDConstants.ACTION_LINK;
+            action = DnDConstants.ACTION_LINK;
         } else {
-            accion = DnDConstants.ACTION_NONE;
+            action = DnDConstants.ACTION_NONE;
         }
-        return accion & supportedActions;
+        return action & supportedActions;
     }
 
     /**
-     * Pone el cursor que corresponde a lo que va a pasar si el usuario suelta ahi.
+     * Sets the cursor that says what will happen if the user drops there.
      *
-     * @param c el cursor
-     * @param cursorType que cursor es, en los terminos del sistema
+     * @param c the cursor
+     * @param cursorType which cursor it is, in the system's terms
      */
     protected abstract void setNativeCursor(Cursor c, int cursorType);
 
     /**
-     * Le pide al sistema que arranque el arrastre.
+     * Asks the system to start the drag.
      *
-     * <p>Los formatos van por separado y no dentro de los datos porque el sistema los publica antes
-     * de que nadie pida nada: quien esta del otro lado tiene que poder decidir si acepta el arrastre
-     * sin transferir todavia.
+     * <p>The formats travel separately and not inside the data because the system publishes them
+     * before anyone asks for anything: whoever is on the other side has to be able to decide whether
+     * to accept the drag without transferring yet.
      *
-     * @param t los datos que se arrastran
-     * @param formats los formatos, en los terminos del sistema
-     * @param formatMap de cada formato del sistema al formato de AWT que le corresponde
+     * @param t the data being dragged
+     * @param formats the formats, in the system's terms
+     * @param formatMap from each system format to the AWT format it corresponds to
      */
     protected abstract void startDrag(Transferable t, long[] formats,
             Map<Long, DataFlavor> formatMap);
 
-    /** Atiende eventos hasta que el arrastre termine. */
+    /** Serves events until the drag finishes. */
     public abstract void startSecondaryEventLoop();
 
-    /** Corta el bucle que abrio {@link #startSecondaryEventLoop}. */
+    /** Cuts the loop {@link #startSecondaryEventLoop} opened. */
     public abstract void quitSecondaryEventLoop();
 
     /**
-     * Avisa que el arrastre termino y espera a que el aviso llegue.
+     * Says the drag finished and waits for the word to arrive.
      *
-     * <p>El aviso va por la cola de eventos y no directo porque quien lo escucha es codigo de la
-     * aplicacion, y ese corre en el hilo de eventos. Despues de encolarlo se entra en el bucle
-     * secundario, que es lo que le da al hilo de eventos la chance de atenderlo antes de que esta
-     * llamada vuelva.
+     * <p>The word goes through the event queue and not straight across because whoever listens for
+     * it is application code, and that runs on the event thread. After queueing it the secondary
+     * loop is entered, which is what gives the event thread a chance to serve it before this call
+     * returns.
      *
-     * @param success si el destino se quedo con los datos
-     * @param operations que se hizo con ellos
-     * @param x donde se solto, en pantalla
-     * @param y donde se solto, en pantalla
-     * @throws IllegalArgumentException si el arrastre nunca arranco, y por lo tanto no hay contexto
-     *     al que avisarle
+     * @param success whether the target kept the data
+     * @param operations what was done with them
+     * @param x where it was dropped, on screen
+     * @param y where it was dropped, on screen
+     * @throws IllegalArgumentException if the drag never started, and there is therefore no context
+     *     to tell
      */
     public void dragDropFinished(boolean success, int operations, int x, int y) {
         final DragSourceDropEvent ev = new DragSourceDropEvent(getDragSourceContext(),
-                operations & accionesDelOrigen(), success, x, y);
-        EventQueue.invokeLater(new Aviso(ev));
+                operations & sourceActions(), success, x, y);
+        EventQueue.invokeLater(new Notice(ev));
         startSecondaryEventLoop();
     }
 
     /**
-     * El contexto del arrastre en curso.
+     * The context of the drag in progress.
      *
-     * <p>Devuelve {@code null} mientras no haya un arrastre andando, que en esta biblioteca es
-     * siempre: el contexto lo llena {@code DragSource.startDrag} al llegar al par nativo, y par
-     * nativo no hay. El JDK devuelve lo mismo para un envoltorio recien creado.
+     * <p>It returns {@code null} while there is no drag running, which in this library is always:
+     * the context is filled in by {@code DragSource.startDrag} on reaching the native peer, and
+     * there is no native peer. The JDK returns the same for a freshly created wrapper.
      *
-     * @return el contexto, o {@code null}
+     * @return the context, or {@code null}
      */
     public DragSourceContext getDragSourceContext() {
         return null;
     }
 
-    /** Que acciones permite el origen del gesto, para recortar lo que se informa al soltar. */
-    private int accionesDelOrigen() {
+    /** Which actions the gesture's source allows, to trim what is reported on the drop. */
+    private int sourceActions() {
         if (this.trigger == null) {
             return DnDConstants.ACTION_NONE;
         }
@@ -161,12 +160,12 @@ public abstract class DragSourceContextWrapper {
         return r == null ? DnDConstants.ACTION_NONE : r.getSourceActions();
     }
 
-    /** El aviso de fin de arrastre, para correrlo en el hilo de eventos. */
-    private static final class Aviso implements Runnable {
+    /** The end-of-drag notice, to run it on the event thread. */
+    private static final class Notice implements Runnable {
 
         private final DragSourceDropEvent ev;
 
-        Aviso(DragSourceDropEvent ev) {
+        Notice(DragSourceDropEvent ev) {
             this.ev = ev;
         }
 

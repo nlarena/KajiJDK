@@ -16,82 +16,86 @@ import jdk.swing.interop.LightweightFrameWrapper;
 import jdk.swing.interop.SwingInterOpUtils;
 
 /**
- * Comprueba {@code jdk.swing.interop} contra el JDK 25.
+ * Checks {@code jdk.swing.interop} against JDK 25.
  *
- * <h2>Que se puede comparar</h2>
+ * <h2>What can be compared</h2>
  *
- * <p>La regla de teclas de {@code convertModifiersToDropAction}, que es aritmetica pura y no depende
- * de nada; la constante de la toma del mouse; que ceder el despacho de una cola de eventos tenga los
- * efectos que tiene que tener; y con que error falla cada cosa que necesita un sistema de ventanas.
+ * <p>The key rule of {@code convertModifiersToDropAction}, which is pure arithmetic and depends on
+ * nothing; the mouse-grab constant; that giving up an event queue's dispatching has the effects it
+ * has to have; and which error each thing that needs a windowing system fails with.
  *
- * <p>Lo que no se compara es dibujar ni arrastrar de verdad: para eso hace falta la mitad nativa,
- * que ni esta biblioteca ni el JDK sin pantalla tienen.
+ * <p>What is not compared is really drawing or really dragging: that needs the native half, which
+ * neither this library nor a JDK without a screen has.
  *
- * <p>{@link #donde()} devuelve el indice de la primera respuesta que no coincide, o -1.
+ * <p>On the JDK it has to be run with {@code -Djava.awt.headless=true}: three of the answers
+ * are the {@code HeadlessException} that a machine with a screen does not raise, and this VM
+ * has no screen either way.
+ *
+ * <p>{@link #where()} returns the index of the first answer that differs, or -1.
  */
 public class IOP1 {
 
-    static final String[] ESPERADO = {
-        "mascara|-2147483648",
-        "acciones|0;1;2;2;1073741824;2;2;2;0;0;2;2;0;2;2;2;0;1;0;1;0;1;1;1;0;0;0;0;1073741824;1073741824;1073741824;1073741824;0;1;2;2;1073741824;2;2;2;0;1;0;1;0;1;1;1;0;0;2;2;0;2;2;2;",
-        "ungrab-nulo|false",
-        "ungrab-otro|false",
+    static final String[] EXPECTED = {
+        "mask|-2147483648",
+        "actions|0;1;2;2;1073741824;2;2;2;0;0;2;2;0;2;2;2;0;1;0;1;0;1;1;1;0;0;0;0;1073741824;1073741824;1073741824;1073741824;0;1;2;2;1073741824;2;2;2;0;1;0;1;0;1;1;1;0;0;2;2;0;2;2;2;",
+        "ungrab-null|false",
+        "ungrab-other|false",
         "grab|ok",
-        "postEvent-nulo|ok",
-        "despacho|hilo;programa;",
-        "bucle|hilo;programa;bucle;|true",
-        "apilar|RuntimeException",
-        "instalar-nulo|NullPointerException",
-        "cola-nula|NullPointerException",
-        "origen|ok",
-        "contexto|null",
-        "fin-arrastre|IllegalArgumentException",
-        "atar-nulo|NullPointerException",
-        "reiniciar-nulo|NullPointerException",
-        "atar|HeadlessException",
-        "ventana|HeadlessException",
+        "post-null|ok",
+        "dispatch|thread;schedule;",
+        "loop|thread;schedule;loop;|true",
+        "push|RuntimeException",
+        "install-null|NullPointerException",
+        "null-queue|NullPointerException",
+        "source|ok",
+        "context|null",
+        "drag-end|IllegalArgumentException",
+        "bind-null|NullPointerException",
+        "reset-null|NullPointerException",
+        "bind|HeadlessException",
+        "frame|HeadlessException",
     };
 
-    /** Un evento cualquiera, que es lo unico que se puede fabricar sin componentes. */
+    /** Any event at all, which is the only thing that can be built without components. */
     static class Ev extends AWTEvent {
         private static final long serialVersionUID = 1L;
 
-        Ev(Object fuente, int id) {
-            super(fuente, id);
+        Ev(Object source, int id) {
+            super(source, id);
         }
     }
 
-    /** Una cola que deja llamar a {@code dispatchEvent}, que es protegido. */
-    static class Cola extends EventQueue {
-        void despachar(AWTEvent e) {
+    /** A queue that lets {@code dispatchEvent}, which is protected, be called. */
+    static class Queue extends EventQueue {
+        void dispatch(AWTEvent e) {
             dispatchEvent(e);
         }
     }
 
-    /** Un despachador que anota lo que le piden y no hace nada mas. */
-    static class Desp extends DispatcherWrapper {
+    /** A dispatcher that writes down what it is asked for and does nothing else. */
+    static class Disp extends DispatcherWrapper {
         final StringBuilder log = new StringBuilder();
 
         @Override
         public boolean isDispatchThread() {
-            log.append("hilo;");
+            log.append("thread;");
             return false;
         }
 
         @Override
         public void scheduleDispatch(Runnable r) {
-            log.append("programa;");
+            log.append("schedule;");
         }
 
         @Override
         public SecondaryLoop createSecondaryLoop() {
-            log.append("bucle;");
-            return new Bucle();
+            log.append("loop;");
+            return new Loop();
         }
     }
 
-    /** Un bucle secundario que no espera nada. */
-    static class Bucle implements SecondaryLoop {
+    /** A secondary loop that waits for nothing. */
+    static class Loop implements SecondaryLoop {
         public boolean enter() {
             return false;
         }
@@ -101,18 +105,18 @@ public class IOP1 {
         }
     }
 
-    /** Un origen de arrastre concreto, para poder instanciarlo. */
-    static class Origen extends DragSourceContextWrapper {
-        Origen(java.awt.dnd.DragGestureEvent e) {
+    /** A concrete drag source, so that one can be built. */
+    static class Source extends DragSourceContextWrapper {
+        Source(java.awt.dnd.DragGestureEvent e) {
             super(e);
         }
 
         @Override
-        protected void setNativeCursor(Cursor c, int tipo) {
+        protected void setNativeCursor(Cursor c, int type) {
         }
 
         @Override
-        protected void startDrag(Transferable t, long[] formatos, Map<Long, DataFlavor> mapa) {
+        protected void startDrag(Transferable t, long[] formats, Map<Long, DataFlavor> map) {
         }
 
         @Override
@@ -124,8 +128,8 @@ public class IOP1 {
         }
     }
 
-    /** Un destino de arrastre concreto, para poder instanciarlo. */
-    static class Destino extends DropTargetContextWrapper {
+    /** A concrete drop target, so that one can be built. */
+    static class Target extends DropTargetContextWrapper {
         public void setTargetActions(int a) {
         }
 
@@ -165,14 +169,14 @@ public class IOP1 {
         }
     }
 
-    /** Lo que hace el paquete, una linea por comprobacion. */
+    /** What the package does, one line per check. */
     static String[] actual() throws Exception {
         final java.util.List<String> a = new java.util.ArrayList<String>();
 
-        a.add("mascara|" + SwingInterOpUtils.GRAB_EVENT_MASK);
+        a.add("mask|" + SwingInterOpUtils.GRAB_EVENT_MASK);
 
-        // La regla de teclas, sobre toda la grilla que importa.
-        final int[] teclas = {
+        // The key rule, over the whole grid that matters.
+        final int[] keys = {
             0,
             InputEvent.SHIFT_DOWN_MASK,
             InputEvent.CTRL_DOWN_MASK,
@@ -181,52 +185,53 @@ public class IOP1 {
             InputEvent.ALT_DOWN_MASK | InputEvent.CTRL_DOWN_MASK,
             InputEvent.ALT_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK,
         };
-        final int[] permitidas = {0, 1, 2, 3, 1073741824, 1073741827, 1073741831, -1};
+        final int[] allowed = {0, 1, 2, 3, 1073741824, 1073741827, 1073741831, -1};
         final StringBuilder g = new StringBuilder();
-        for (int i = 0; i < teclas.length; i++) {
-            for (int j = 0; j < permitidas.length; j++) {
+        for (int i = 0; i < keys.length; i++) {
+            for (int j = 0; j < allowed.length; j++) {
                 g.append(DragSourceContextWrapper.convertModifiersToDropAction(
-                        teclas[i], permitidas[j])).append(';');
+                        keys[i], allowed[j])).append(';');
             }
         }
-        a.add("acciones|" + g);
+        a.add("actions|" + g);
 
-        // Tomar el mouse no existe sin sistema de ventanas, ni aca ni en un JDK sin pantalla.
-        a.add("ungrab-nulo|" + SwingInterOpUtils.isUngrabEvent(null));
-        a.add("ungrab-otro|" + SwingInterOpUtils.isUngrabEvent(new Ev(new Object(), 9999)));
-        a.add("grab|" + intentar(new Grab()));
-        a.add("postEvent-nulo|" + intentar(new PostNulo()));
+        // Grabbing the mouse does not exist without a windowing system, neither here nor in a JDK
+        // without a screen.
+        a.add("ungrab-null|" + SwingInterOpUtils.isUngrabEvent(null));
+        a.add("ungrab-other|" + SwingInterOpUtils.isUngrabEvent(new Ev(new Object(), 9999)));
+        a.add("grab|" + attempt(new Grab()));
+        a.add("post-null|" + attempt(new PostNull()));
 
-        // Ceder el despacho: la cola tiene que empezar a preguntarle al otro.
-        final Cola cola = new Cola();
-        final Desp d = new Desp();
-        DispatcherWrapper.setFwDispatcher(cola, d);
-        cola.despachar(new Ev(new Object(), 9999));
-        a.add("despacho|" + d.log);
-        final SecondaryLoop bucle = cola.createSecondaryLoop();
-        a.add("bucle|" + d.log + "|" + (bucle != null));
-        a.add("apilar|" + intentar(new Apilar(cola)));
-        a.add("instalar-nulo|" + intentar(new InstalarNulo(cola)));
-        a.add("cola-nula|" + intentar(new ColaNula(d)));
+        // Giving up dispatching: the queue has to start asking the other one.
+        final Queue queue = new Queue();
+        final Disp d = new Disp();
+        DispatcherWrapper.setFwDispatcher(queue, d);
+        queue.dispatch(new Ev(new Object(), 9999));
+        a.add("dispatch|" + d.log);
+        final SecondaryLoop loop = queue.createSecondaryLoop();
+        a.add("loop|" + d.log + "|" + (loop != null));
+        a.add("push|" + attempt(new Push(queue)));
+        a.add("install-null|" + attempt(new InstallNull(queue)));
+        a.add("null-queue|" + attempt(new NullQueue(d)));
 
-        // El origen de un arrastre que nunca arranco.
-        a.add("origen|" + intentar(new Construir()));
-        a.add("contexto|" + new Origen(null).getDragSourceContext());
-        a.add("fin-arrastre|" + intentar(new FinArrastre()));
+        // The source of a drag that never started.
+        a.add("source|" + attempt(new Build()));
+        a.add("context|" + new Source(null).getDragSourceContext());
+        a.add("drag-end|" + attempt(new DragEnd()));
 
-        // El destino.
-        a.add("atar-nulo|" + intentar(new AtarNulo()));
-        a.add("reiniciar-nulo|" + intentar(new ReiniciarNulo()));
-        a.add("atar|" + intentar(new Atar()));
+        // The target.
+        a.add("bind-null|" + attempt(new BindNull()));
+        a.add("reset-null|" + attempt(new ResetNull()));
+        a.add("bind|" + attempt(new Bind()));
 
-        // La ventana que no se ve necesita una pantalla que no hay.
-        a.add("ventana|" + intentar(new Ventana()));
+        // The window nobody sees needs a screen there is not.
+        a.add("frame|" + attempt(new Frame()));
 
         return a.toArray(new String[a.size()]);
     }
 
-    /** Corre eso y devuelve "ok" o el nombre simple de lo que haya tirado. */
-    static String intentar(Runnable r) {
+    /** Runs it and returns "ok" or the simple name of whatever it threw. */
+    static String attempt(Runnable r) {
         try {
             r.run();
             return "ok";
@@ -243,40 +248,40 @@ public class IOP1 {
         }
     }
 
-    static class PostNulo implements Runnable {
+    static class PostNull implements Runnable {
         public void run() {
             SwingInterOpUtils.postEvent(null, null);
         }
     }
 
-    static class Apilar implements Runnable {
-        private final EventQueue cola;
+    static class Push implements Runnable {
+        private final EventQueue queue;
 
-        Apilar(EventQueue cola) {
-            this.cola = cola;
+        Push(EventQueue queue) {
+            this.queue = queue;
         }
 
         public void run() {
-            cola.push(new EventQueue());
+            queue.push(new EventQueue());
         }
     }
 
-    static class InstalarNulo implements Runnable {
-        private final EventQueue cola;
+    static class InstallNull implements Runnable {
+        private final EventQueue queue;
 
-        InstalarNulo(EventQueue cola) {
-            this.cola = cola;
+        InstallNull(EventQueue queue) {
+            this.queue = queue;
         }
 
         public void run() {
-            DispatcherWrapper.setFwDispatcher(cola, null);
+            DispatcherWrapper.setFwDispatcher(queue, null);
         }
     }
 
-    static class ColaNula implements Runnable {
+    static class NullQueue implements Runnable {
         private final DispatcherWrapper d;
 
-        ColaNula(DispatcherWrapper d) {
+        NullQueue(DispatcherWrapper d) {
             this.d = d;
         }
 
@@ -285,62 +290,62 @@ public class IOP1 {
         }
     }
 
-    static class Construir implements Runnable {
+    static class Build implements Runnable {
         public void run() {
-            new Origen(null);
+            new Source(null);
         }
     }
 
-    static class FinArrastre implements Runnable {
+    static class DragEnd implements Runnable {
         public void run() {
-            new Origen(null).dragDropFinished(true, 3, 10, 20);
+            new Source(null).dragDropFinished(true, 3, 10, 20);
         }
     }
 
-    static class AtarNulo implements Runnable {
+    static class BindNull implements Runnable {
         public void run() {
-            new Destino().setDropTargetContext(null, null);
+            new Target().setDropTargetContext(null, null);
         }
     }
 
-    static class ReiniciarNulo implements Runnable {
+    static class ResetNull implements Runnable {
         public void run() {
-            new Destino().reset(null);
+            new Target().reset(null);
         }
     }
 
-    static class Atar implements Runnable {
+    static class Bind implements Runnable {
         public void run() {
             final DropTargetContext c = new DropTarget().getDropTargetContext();
-            final Destino t = new Destino();
+            final Target t = new Target();
             t.setDropTargetContext(c, t);
             t.reset(c);
         }
     }
 
-    static class Ventana implements Runnable {
+    static class Frame implements Runnable {
         public void run() {
             new LightweightFrameWrapper();
         }
     }
 
     /**
-     * El indice de la primera respuesta que no coincide con la del JDK, o -1.
+     * The index of the first answer that differs from the JDK's, or -1.
      *
-     * @return el indice, o -1
+     * @return the index, or -1
      */
-    public static int donde() {
+    public static int where() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        if (a.length != ESPERADO.length) {
+        if (a.length != EXPECTED.length) {
             return 8000 + a.length;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!a[i].equals(ESPERADO[i])) {
+            if (!a[i].equals(EXPECTED[i])) {
                 return i;
             }
         }
@@ -355,8 +360,8 @@ public class IOP1 {
             }
             return;
         }
-        final int i = donde();
-        System.out.println(i < 0 ? "sin diferencias"
-                : i + ":\n  nuestro=" + a[i] + "\n  jdk    =" + ESPERADO[i]);
+        final int i = where();
+        System.out.println(i < 0 ? "no differences"
+                : i + ":\n  ours=" + a[i] + "\n  jdk =" + EXPECTED[i]);
     }
 }

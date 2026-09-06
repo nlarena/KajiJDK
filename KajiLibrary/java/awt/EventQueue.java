@@ -33,6 +33,7 @@ public class EventQueue {
     private EventQueue nextQueue;
     private EventQueue previousQueue;
     private Thread dispatchThread;
+    private volatile DispatcherAccess.Dispatcher foreign;
     private volatile boolean detiene;
 
     private static AWTEvent currentEvent;
@@ -163,6 +164,18 @@ public class EventQueue {
      * @throws NullPointerException si el evento es `null`
      */
     protected void dispatchEvent(AWTEvent event) {
+        DispatcherAccess.Dispatcher d = this.foreign;
+        if (d != null && !this.isDispatchThreadImpl()) {
+            // Already on the other toolkit's thread: dispatch straight away. Scheduling it would be
+            // waiting for a thread that is this one, and that does not end.
+            d.scheduleDispatch(new Dispatch(this, event));
+            return;
+        }
+        this.dispatchHere(event);
+    }
+
+    /** The ordinary dispatch, the one that runs when there is nobody foreign to hand it to. */
+    private void dispatchHere(AWTEvent event) {
         Object src = event.getSource();
         if (event instanceof ActiveEvent) {
             ((ActiveEvent) event).dispatch();
@@ -171,6 +184,42 @@ public class EventQueue {
         } else if (src instanceof MenuComponent) {
             ((MenuComponent) src).dispatchEvent(event);
         }
+    }
+
+    /** One pending dispatch, to hand to the foreign dispatcher. */
+    private static final class Dispatch implements Runnable {
+
+        private final EventQueue queue;
+        private final AWTEvent event;
+
+        Dispatch(EventQueue queue, AWTEvent event) {
+            this.queue = queue;
+            this.event = event;
+        }
+
+        public void run() {
+            this.queue.dispatchHere(this.event);
+        }
+    }
+
+    /**
+     * Whether the current thread is the one serving this queue.
+     *
+     * <p>When there is a foreign dispatcher the answer is its own: the dispatch thread became that
+     * toolkit's. And the question always goes to the topmost queue, which is the one serving.
+     */
+    final boolean isDispatchThreadImpl() {
+        EventQueue q = this.laDeArriba();
+        DispatcherAccess.Dispatcher d = q.foreign;
+        if (d != null) {
+            return d.isDispatchThread();
+        }
+        return Thread.currentThread() == q.dispatchThread;
+    }
+
+    /** Stores the foreign dispatcher in the topmost queue, which is the one serving. */
+    final void installDispatcher(DispatcherAccess.Dispatcher d) {
+        this.laDeArriba().foreign = d;
     }
 
     /**
@@ -217,6 +266,7 @@ public class EventQueue {
      * haría desaparecer los repintados pendientes al abrirse.
      *
      * @throws NullPointerException si la cola es `null`
+     * @throws RuntimeException if this queue gave up dispatching to another toolkit
      */
     public void push(EventQueue newEventQueue) {
         if (newEventQueue == null) {
@@ -224,6 +274,12 @@ public class EventQueue {
         }
         EventQueue q = this.laDeArriba();
         synchronized (q) {
+            if (q.foreign != null) {
+                // Stacking another queue on top would cover the foreign dispatcher without taking
+                // it out: events would go to the new one and the other toolkit would stop seeing
+                // anything.
+                throw new RuntimeException("push() to queue with fwDispatcher");
+            }
             while (!q.queue.isEmpty()) {
                 newEventQueue.postEvent(q.queue.removeFirst());
             }
@@ -259,6 +315,10 @@ public class EventQueue {
      * @return el bucle, o `null` si no se puede crear
      */
     public SecondaryLoop createSecondaryLoop() {
+        DispatcherAccess.Dispatcher d = this.laDeArriba().foreign;
+        if (d != null) {
+            return d.secondaryLoop();
+        }
         return new BucleSecundario();
     }
 

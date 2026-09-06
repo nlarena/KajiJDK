@@ -11,176 +11,176 @@ import java.awt.dnd.InvalidDnDOperationException;
 import javax.swing.JComponent;
 
 /**
- * Lo que el otro juego de herramientas graficas tiene que saber hacer para hospedar a Swing.
+ * What the other toolkit has to know how to do in order to host Swing.
  *
- * <h2>Como se incrusta Swing en algo que no es AWT</h2>
+ * <h2>How Swing gets embedded into something that is not AWT</h2>
  *
- * <p>No se incrusta: se dibuja aparte y se copia. Swing pinta sobre una matriz de pixeles en memoria
- * --{@link #imageBufferReset} la entrega, {@link #imageUpdated} avisa que parte cambio-- y el otro
- * juego de herramientas la muestra donde quiera. Ninguna ventana del sistema cambia de dueno, que es
- * lo que hace que esto funcione en cualquier plataforma.
+ * <p>It does not get embedded: it is drawn apart and copied. Swing paints onto an array of pixels in
+ * memory -- {@link #imageBufferReset} hands it over, {@link #imageUpdated} says which part changed --
+ * and the other toolkit shows it wherever it likes. No system window changes owner, which is what
+ * makes this work on any platform.
  *
- * <p>{@link #paintLock} y {@link #paintUnlock} existen porque los dos lados tocan esa misma matriz
- * desde hilos distintos: uno la escribe cuando repinta, el otro la lee cuando muestra.
+ * <p>{@link #paintLock} and {@link #paintUnlock} exist because both sides touch that same array from
+ * different threads: one writes it when repainting, the other reads it when showing.
  *
- * <h2>Los tamanos</h2>
+ * <h2>The sizes</h2>
  *
- * <p>Un componente de Swing sabe cuanto quiere medir, pero quien decide es el contenedor, que aca es
- * del otro lado. Los tres avisos de tamano --{@link #preferredSizeChanged} y los otros dos-- son
- * como esa preferencia cruza la frontera.
+ * <p>A Swing component knows how big it wants to be, but the one who decides is the container, which
+ * here is on the other side. The three size notices -- {@link #preferredSizeChanged} and the other
+ * two -- are how that preference crosses the border.
  *
- * <h2>El foco</h2>
+ * <h2>Focus</h2>
  *
- * <p>{@link #focusGrabbed} y {@link #focusUngrabbed} son para los menus emergentes: mientras uno
- * esta abierto se lleva todos los eventos del mouse, incluso los que caen afuera, porque hacer clic
- * afuera tiene que cerrarlo.
+ * <p>{@link #focusGrabbed} and {@link #focusUngrabbed} are for popup menus: while one is open it
+ * takes every mouse event, including the ones that land outside, because clicking outside has to
+ * close it.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Todos los metodos son abstractos, tambien en el JDK: esta clase es lo que el hospedador
- * implementa, no lo que se le da hecho.
+ * <p>Every method is abstract, in the JDK too: this class is what the host implements, not what it
+ * is handed.
  *
  * @since 9
  */
 public abstract class LightweightContentWrapper {
 
-    /** Uno. */
+    /** One. */
     public LightweightContentWrapper() {
     }
 
     /**
-     * Entrega la matriz de pixeles sobre la que Swing va a pintar.
+     * Hands over the array of pixels Swing is going to paint onto.
      *
-     * @param data los pixeles
-     * @param width el ancho en pixeles
-     * @param height el alto en pixeles
-     * @param linestride cuantos enteros hay de una fila a la siguiente
-     * @param bufferWidth el ancho de la matriz, que puede ser mayor que el visible
-     * @param bufferHeight el alto de la matriz
+     * @param data the pixels
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param linestride how many ints there are from one row to the next
+     * @param bufferWidth the width of the array, which may be larger than the visible one
+     * @param bufferHeight the height of the array
      */
     public abstract void imageBufferReset(int[] data, int width, int height, int linestride,
             int bufferWidth, int bufferHeight);
 
     /**
-     * Lo mismo, con la escala de la pantalla.
+     * The same, with the screen's scale.
      *
-     * <p>La escala llega aparte porque el tamano en pixeles y el tamano en puntos dejaron de ser el
-     * mismo numero: en una pantalla al doble de densidad la matriz mide el doble que el componente.
+     * <p>The scale arrives separately because the size in pixels and the size in points stopped
+     * being the same number: on a screen at twice the density the array is twice the component.
      *
-     * @param data los pixeles
-     * @param width el ancho en pixeles
-     * @param height el alto en pixeles
-     * @param linestride cuantos enteros hay de una fila a la siguiente
-     * @param bufferWidth el ancho de la matriz
-     * @param bufferHeight el alto de la matriz
-     * @param scaleX la escala horizontal de la pantalla
-     * @param scaleY la escala vertical
+     * @param data the pixels
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param linestride how many ints there are from one row to the next
+     * @param bufferWidth the width of the array
+     * @param bufferHeight the height of the array
+     * @param scaleX the screen's horizontal scale
+     * @param scaleY the vertical scale
      */
     public abstract void imageBufferReset(int[] data, int width, int height, int linestride,
             int bufferWidth, int bufferHeight, double scaleX, double scaleY);
 
     /**
-     * El componente de Swing que se esta hospedando.
+     * The Swing component being hosted.
      *
-     * @return el componente
+     * @return the component
      */
     public abstract JComponent getComponent();
 
-    /** Toma la matriz de pixeles; nadie mas la toca hasta {@link #paintUnlock}. */
+    /** Takes the array of pixels; nobody else touches it until {@link #paintUnlock}. */
     public abstract void paintLock();
 
-    /** Suelta la matriz de pixeles. */
+    /** Releases the array of pixels. */
     public abstract void paintUnlock();
 
     /**
-     * Avisa que el componente cambio de tamano o de lugar.
+     * Says the component changed size or place.
      *
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param width el ancho
-     * @param height el alto
+     * @param x the left corner
+     * @param y the top corner
+     * @param width the width
+     * @param height the height
      */
     public abstract void imageReshaped(int x, int y, int width, int height);
 
     /**
-     * Avisa que esa parte de la matriz cambio y hay que volver a mostrarla.
+     * Says that part of the array changed and has to be shown again.
      *
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param width el ancho
-     * @param height el alto
+     * @param x the left corner
+     * @param y the top corner
+     * @param width the width
+     * @param height the height
      */
     public abstract void imageUpdated(int x, int y, int width, int height);
 
-    /** Avisa que un menu emergente se llevo todos los eventos del mouse. */
+    /** Says a popup menu took every mouse event. */
     public abstract void focusGrabbed();
 
-    /** Avisa que los devolvio. */
+    /** Says it gave them back. */
     public abstract void focusUngrabbed();
 
     /**
-     * Avisa cuanto querria medir el componente.
+     * Says how big the component would like to be.
      *
-     * @param width el ancho preferido
-     * @param height el alto preferido
+     * @param width the preferred width
+     * @param height the preferred height
      */
     public abstract void preferredSizeChanged(int width, int height);
 
     /**
-     * Avisa cuanto es lo mas que puede medir.
+     * Says the most it can be.
      *
-     * @param width el ancho maximo
-     * @param height el alto maximo
+     * @param width the maximum width
+     * @param height the maximum height
      */
     public abstract void maximumSizeChanged(int width, int height);
 
     /**
-     * Avisa cuanto es lo menos que puede medir.
+     * Says the least it can be.
      *
-     * @param width el ancho minimo
-     * @param height el alto minimo
+     * @param width the minimum width
+     * @param height the minimum height
      */
     public abstract void minimumSizeChanged(int width, int height);
 
     /**
-     * Un reconocedor de gestos de arrastre del tipo pedido.
+     * A drag gesture recognizer of the requested kind.
      *
-     * <p>Lo fabrica el hospedador porque el gesto lo detecta el, con sus eventos de mouse: los de
-     * AWT nunca llegan.
+     * <p>The host makes it because the host is the one who detects the gesture, with its own mouse
+     * events: AWT's never arrive.
      *
-     * @param <T> el tipo de reconocedor
-     * @param abstractRecognizerClass que tipo de reconocedor se pide
-     * @param ds el origen de arrastre al que va a avisarle
-     * @param actor el componente que se vigila
-     * @param srcActions las acciones que el origen permite
-     * @param dgl a quien avisarle cuando el gesto ocurra
-     * @return el reconocedor
+     * @param <T> the kind of recognizer
+     * @param abstractRecognizerClass which kind of recognizer is asked for
+     * @param ds the drag source it will report to
+     * @param actor the component being watched
+     * @param srcActions the actions the source allows
+     * @param dgl whom to tell when the gesture happens
+     * @return the recognizer
      */
     public abstract <T extends DragGestureRecognizer> T createDragGestureRecognizer(
             Class<T> abstractRecognizerClass, DragSource ds, Component actor, int srcActions,
             DragGestureListener dgl);
 
     /**
-     * El lado del origen de un arrastre que arranco con ese gesto.
+     * The source side of a drag that started with that gesture.
      *
-     * @param dge el gesto
-     * @return el envoltorio del origen
-     * @throws InvalidDnDOperationException si ya hay un arrastre andando
+     * @param dge the gesture
+     * @return the source's wrapper
+     * @throws InvalidDnDOperationException if a drag is already running
      */
     public abstract DragSourceContextWrapper createDragSourceContext(DragGestureEvent dge)
             throws InvalidDnDOperationException;
 
     /**
-     * Registra un destino de arrastre.
+     * Registers a drop target.
      *
-     * @param dt el destino
+     * @param dt the target
      */
     public abstract void addDropTarget(DropTarget dt);
 
     /**
-     * Lo saca.
+     * Takes it out.
      *
-     * @param dt el destino
+     * @param dt the target
      */
     public abstract void removeDropTarget(DropTarget dt);
 }
