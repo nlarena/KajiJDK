@@ -8,7 +8,8 @@ import jdk.dynalink.CallSiteDescriptor;
 import jdk.dynalink.RelinkableCallSite;
 
 /**
- * La base de un sitio de invocacion reenlazable: guarda el descriptor y hace la instalacion inicial.
+ * La base de un sitio de invocacion reenlazable: guarda el descriptor y hace la instalacion
+ * inicial.
  *
  * <h2>Que resuelve el {@code initialize}</h2>
  *
@@ -16,9 +17,10 @@ import jdk.dynalink.RelinkableCallSite;
  * un {@code invokedynamic}, el sitio todavia no sabe a que llamar — para saberlo hace falta ver los
  * argumentos, y para ver los argumentos hace falta que la llamada ocurra.
  *
- * <p>La salida es instalar como destino inicial un metodo que <strong>enlaza y despues invoca</strong>:
- * la primera llamada entra ahi, ese metodo mira los argumentos, decide, se reinstala como destino y
- * recien entonces llama. De la segunda vez en adelante el sitio ya apunta a lo que corresponde.
+ * <p>La salida es instalar como destino inicial un metodo que <strong>enlaza y despues
+ * invoca</strong>: la primera llamada entra ahi, ese metodo mira los argumentos, decide, se
+ * reinstala como destino y recien entonces llama. De la segunda vez en adelante el sitio ya apunta
+ * a lo que corresponde.
  *
  * <h2>Por que extiende {@link MutableCallSite}</h2>
  *
@@ -62,8 +64,8 @@ public abstract class AbstractRelinkableCallSite extends MutableCallSite
     /**
      * Instala el metodo que enlaza y despues invoca.
      *
-     * <p>Lo llama {@code DynamicLinker.link} una sola vez. Volver a llamarlo tirando lo que el sitio
-     * hubiera aprendido no esta previsto por el contrato.
+     * <p>Lo llama {@code DynamicLinker.link} una sola vez. Volver a llamarlo tirando lo que el
+     * sitio hubiera aprendido no esta previsto por el contrato.
      *
      * @param relinkAndInvoke el metodo que enlaza y despues invoca
      */

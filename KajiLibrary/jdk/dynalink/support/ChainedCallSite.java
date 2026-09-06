@@ -13,10 +13,10 @@ import jdk.dynalink.linker.GuardedInvocation;
  *
  * <h2>Como queda armado el destino</h2>
  *
- * <p>Las invocaciones se encadenan una adentro de la otra. Si la guarda de la primera falla se prueba
- * la segunda, si esa falla la tercera, y asi hasta que se acaban y recien ahi se vuelve a enlazar.
- * Un sitio que ve tres tipos de receptor termina con las tres invocaciones puestas y no enlaza nunca
- * mas.
+ * <p>Las invocaciones se encadenan una adentro de la otra. Si la guarda de la primera falla se
+ * prueba la segunda, si esa falla la tercera, y asi hasta que se acaban y recien ahi se vuelve a
+ * enlazar. Un sitio que ve tres tipos de receptor termina con las tres invocaciones puestas y no
+ * enlaza nunca mas.
  *
  * <p>Es la respuesta al caso que {@link SimpleRelinkableCallSite} hace patologico: dos tipos
  * alternandose, donde el sitio monomorfico reenlaza en cada llamada.
@@ -24,18 +24,18 @@ import jdk.dynalink.linker.GuardedInvocation;
  * <h2>Por que la cadena tiene tope</h2>
  *
  * <p>Porque encadenar deja de rendir. Cada eslabon es una guarda mas que se evalua antes de llegar
- * al que sirve, asi que una cadena de cincuenta es mas lenta que volver a enlazar. Y el JIT no puede
- * incorporar en linea una cadena arbitrariamente larga, con lo cual pasado cierto punto el sitio se
- * vuelve mas lento cuanto mas aprende.
+ * al que sirve, asi que una cadena de cincuenta es mas lenta que volver a enlazar. Y el JIT no
+ * puede incorporar en linea una cadena arbitrariamente larga, con lo cual pasado cierto punto el
+ * sitio se vuelve mas lento cuanto mas aprende.
  *
  * <p>El tope es {@link #getMaxChainLength}, ocho por omision, y esta como metodo {@code protected}
  * para que una subclase lo cambie sabiendo lo que hace.
  *
  * <h2>Que pasa al llegar al tope</h2>
  *
- * <p>Se descarta la invocacion mas vieja para hacerle lugar a la nueva. Es una cache por antiguedad,
- * no por frecuencia: no se lleva la cuenta de cual se usa mas porque contar en el camino caliente
- * costaria mas que lo que la mejor politica ahorraria.
+ * <p>Se descarta la invocacion mas vieja para hacerle lugar a la nueva. Es una cache por
+ * antiguedad, no por frecuencia: no se lleva la cuenta de cual se usa mas porque contar en el
+ * camino caliente costaria mas que lo que la mejor politica ahorraria.
  *
  * <h2>Las invalidadas se limpian solas</h2>
  *
@@ -90,8 +90,8 @@ public class ChainedCallSite extends AbstractRelinkableCallSite {
     /**
      * Tira la cadena entera y arranca de nuevo con esta invocacion.
      *
-     * <p>Lo pide el enlazador cuando decidio que el sitio es inestable: si el receptor cambia todo el
-     * tiempo, acumular invocaciones solo gasta memoria y agrega guardas que van a fallar.
+     * <p>Lo pide el enlazador cuando decidio que el sitio es inestable: si el receptor cambia todo
+     * el tiempo, acumular invocaciones solo gasta memoria y agrega guardas que van a fallar.
      *
      * @param guardedInvocation la invocacion con su guarda
      * @param relinkAndInvoke el camino de respaldo, que vuelve a enlazar

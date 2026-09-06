@@ -32,11 +32,18 @@ public final class StaticClass implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private static final ClassValue<StaticClass> CACHE = new ClassValue<StaticClass>() {
+    /**
+     * La cache, con nombre en vez de anonima por #482: el generador de bytecode no emite una clase
+     * anonima que este en el inicializador de un campo. Ademas se lee mejor en un volcado de pila
+     * que un {@code StaticClass$1}.
+     */
+    private static final class Cache extends ClassValue<StaticClass> {
         protected StaticClass computeValue(final Class<?> type) {
             return new StaticClass(type);
         }
-    };
+    }
+
+    private static final Cache CACHE = new Cache();
 
     private final Class<?> clazz;
 

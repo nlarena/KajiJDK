@@ -10,12 +10,12 @@ import jdk.dynalink.linker.GuardedInvocation;
  *
  * <h2>La estrategia</h2>
  *
- * <p>Cada reenlace tira lo anterior. El destino queda siendo la invocacion nueva con su guarda, y el
- * camino de respaldo cuando la guarda falla vuelve a enlazar desde cero.
+ * <p>Cada reenlace tira lo anterior. El destino queda siendo la invocacion nueva con su guarda, y
+ * el camino de respaldo cuando la guarda falla vuelve a enlazar desde cero.
  *
- * <p>Es la cache monomorfica: rapidisima si el sitio siempre ve el mismo tipo de receptor —que es la
- * enorme mayoria de los sitios de cualquier programa— y patologica si ve dos alternandose, porque
- * entonces cada llamada tira el enlace de la anterior y vuelve a enlazar.
+ * <p>Es la cache monomorfica: rapidisima si el sitio siempre ve el mismo tipo de receptor —que es
+ * la enorme mayoria de los sitios de cualquier programa— y patologica si ve dos alternandose,
+ * porque entonces cada llamada tira el enlace de la anterior y vuelve a enlazar.
  *
  * <p>Para ese caso esta {@link ChainedCallSite}, que acumula. La eleccion entre uno y otro es la
  * unica decision que hay que tomar aca, y el criterio es cuantos tipos distintos se espera ver.

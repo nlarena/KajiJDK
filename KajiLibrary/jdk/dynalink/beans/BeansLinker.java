@@ -42,17 +42,14 @@ import jdk.dynalink.linker.TypeBasedGuardingDynamicLinker;
  *
  * <h2>Reglas finas, todas comprobadas contra el JDK 25</h2>
  *
- * <ul>
- *   <li>{@code getX()} es propiedad sin importar que devuelva: hasta {@code void getVoid()} cuenta.
- *       Lo que importa es que no tome argumentos.
- *   <li>{@code isX()} solo cuenta si devuelve {@code boolean} <strong>primitivo</strong>; con
- *       {@code Boolean} no.
- *   <li>{@code get()} e {@code is()} pelados no son propiedades: no queda nombre despues del
- *       prefijo.
- *   <li>Un campo {@code final} es legible y no escribible.
- *   <li>{@code class} siempre esta entre las propiedades estaticas legibles, aunque la clase no
- *       tenga ningun miembro estatico.
- * </ul>
+ * <ul> <li>{@code getX()} es propiedad sin importar que devuelva: hasta {@code void getVoid()}
+ * cuenta. Lo que importa es que no tome argumentos. <li>{@code isX()} solo cuenta si devuelve
+ * {@code boolean} <strong>primitivo</strong>; con {@code Boolean} no. <li>{@code get()} e
+ * {@code is()} pelados no son propiedades: no queda nombre despues del prefijo. <li>Un campo
+ * {@code final} es legible y no escribible. <li>{@code class} siempre esta entre las propiedades
+ * estaticas legibles, aunque la clase no tenga ningun miembro estatico. <li>Un arreglo tiene la
+ * propiedad legible {@code length}, que no sale de la reflexion —{@code getFields()} de un arreglo
+ * devuelve vacio— y se agrega a mano. </ul>
  *
  * <h2>Estado en esta VM</h2>
  *
@@ -109,8 +106,8 @@ public class BeansLinker implements GuardingDynamicLinker {
      * Si ese objeto es uno de los metodos dinamicos que este enlazador produce.
      *
      * <p>Siempre {@code false}, y es la respuesta correcta: los metodos dinamicos son objetos que
-     * fabrica el propio enlazador, esta VM no llega a fabricar ninguno, y por lo tanto ningun objeto
-     * que alguien pueda pasar aca lo es.
+     * fabrica el propio enlazador, esta VM no llega a fabricar ninguno, y por lo tanto ningun
+     * objeto que alguien pueda pasar aca lo es.
      *
      * @param obj el objeto
      * @return {@code false}
@@ -158,6 +155,12 @@ public class BeansLinker implements GuardingDynamicLinker {
      */
     public static Set<String> getReadableInstancePropertyNames(final Class<?> clazz) {
         final Set<String> out = new TreeSet<String>();
+        if (clazz.isArray()) {
+            // El largo de un arreglo no es un Field: `getFields()` de un arreglo devuelve vacio, y
+            // sin embargo `arr.length` es justamente lo que un lenguaje dinamico escribe. Se agrega
+            // a mano, y solo como legible: el largo de un arreglo no se puede cambiar.
+            out.add("length");
+        }
         for (final Field f : clazz.getFields()) {
             if (!Modifier.isStatic(f.getModifiers())) {
                 out.add(f.getName());
