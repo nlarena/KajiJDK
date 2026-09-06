@@ -1,6 +1,7 @@
 package java.awt.dnd;
 
 import java.awt.Component;
+import java.awt.GraphicsEnvironment;
 import java.awt.HeadlessException;
 import java.awt.Insets;
 import java.awt.Point;
@@ -58,6 +59,9 @@ public class DropTarget implements DropTargetListener, Serializable {
      */
     public DropTarget(Component dt, int ops, DropTargetListener dtl, boolean act, FlavorMap fm)
             throws HeadlessException {
+        if (GraphicsEnvironment.isHeadless()) {
+            throw new HeadlessException();
+        }
         this.component = dt;
         this.setDefaultActions(ops);
         this.dtListener = dtl;
