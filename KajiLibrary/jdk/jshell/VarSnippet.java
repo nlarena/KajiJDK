@@ -1,14 +1,14 @@
 package jdk.jshell;
 
 /**
- * La declaracion de una variable.
+ * The declaration of a variable.
  *
- * <h2>Las tres formas</h2>
+ * <h2>The three shapes</h2>
  *
- * <p>Declarada sin valor, declarada con valor, o inventada por el interprete para guardar el
- * resultado de una expresion suelta --{@link Snippet.SubKind#TEMP_VAR_EXPRESSION_SUBKIND}--. Las
- * tres son variables de verdad: la tercera tambien tiene nombre y se puede usar despues, que es lo
- * que hace que escribir una expresion suelta deje algo a lo que referirse.
+ * <p>Declared with no value, declared with a value, or invented by the interpreter to hold the
+ * result of a loose expression --{@link Snippet.SubKind#TEMP_VAR_EXPRESSION_SUBKIND}. All three are
+ * real variables: the third has a name too and can be used afterwards, which is what makes writing a
+ * loose expression leave something to refer to.
  *
  * @since 9
  */
@@ -22,9 +22,9 @@ public class VarSnippet extends DeclarationSnippet {
     }
 
     /**
-     * El tipo de la variable.
+     * The variable's type.
      *
-     * @return el nombre del tipo
+     * @return the type's name
      */
     public String typeName() {
         return this.typeName;

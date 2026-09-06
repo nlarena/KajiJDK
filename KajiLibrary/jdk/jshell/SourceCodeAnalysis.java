@@ -6,238 +6,237 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Lo que hace falta para que un editor entienda lo que el usuario esta escribiendo.
+ * What it takes for an editor to understand what the user is writing.
  *
- * <h2>Para que no alcanza con evaluar</h2>
+ * <h2>Why evaluating is not enough</h2>
  *
- * <p>Un interprete de linea de comandos tiene que decidir cosas antes de evaluar nada: si lo que se
- * escribio ya esta completo o el usuario va a seguir en la linea siguiente
- * ({@link #analyzeCompletion}), que puede venir despues del punto ({@link #completionSuggestions}),
- * que documentacion mostrar ({@link #documentation}), que colorear ({@link #highlights}). Ninguna de
- * esas preguntas se contesta ejecutando: se contestan analizando.
+ * <p>A command-line interpreter has to decide things before evaluating anything: whether what was
+ * written is already complete or the user will carry on on the next line
+ * ({@link #analyzeCompletion}), what may come after the dot ({@link #completionSuggestions}), which
+ * documentation to show ({@link #documentation}), what to colour ({@link #highlights}). None of
+ * those questions is answered by running: they are answered by analysing.
  *
- * <h2>Los envoltorios</h2>
+ * <h2>The wrappers</h2>
  *
- * <p>Un fragmento no se compila tal cual: el interprete lo mete adentro de una clase sintetica,
- * porque un metodo suelto no es un programa Java valido. {@link SnippetWrapper} deja ver ese codigo
- * armado, y sobre todo traducir posiciones entre uno y otro, que es lo que hace que el subrayado de
- * un error caiga donde el usuario escribio y no donde el compilador lo vio.
+ * <p>A snippet is not compiled as it stands: the interpreter puts it inside a synthetic class,
+ * because a loose method is not a valid Java program. {@link SnippetWrapper} lets that assembled
+ * code be seen, and above all lets positions be translated between the two, which is what makes an
+ * error's underline fall where the user wrote and not where the compiler saw it.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Los tipos estan completos y las dos enumeraciones funcionan de verdad. El analisis no: para
- * contestar cualquiera de estas preguntas hace falta el analizador de codigo del compilador, y en
- * esta biblioteca {@code javax.tools.ToolProvider.getSystemJavaCompiler()} devuelve {@code null}.
- * Los diez metodos son abstractos, asi que la clase no promete nada; lo que devuelve
- * {@link JShell#sourceCodeAnalysis} tira {@link UnsupportedOperationException} en vez de contestar
- * cualquier cosa.
+ * <p>The types are complete and the two enums really work. The analysis does not: answering any of
+ * these questions needs the compiler's code analyser, and in this library
+ * {@code javax.tools.ToolProvider.getSystemJavaCompiler()} returns {@code null}. The ten methods are
+ * abstract, so the class promises nothing; what {@link JShell#sourceCodeAnalysis} returns throws
+ * {@link UnsupportedOperationException} instead of answering just anything.
  *
  * @since 9
  */
 public abstract class SourceCodeAnalysis {
 
-    /** Uno. */
+    /** One. */
     protected SourceCodeAnalysis() {
     }
 
     /**
-     * Que tan completo esta lo que se escribio.
+     * How complete what was written is.
      *
-     * <p>Es lo que decide si el interprete evalua o pide otra linea.
+     * <p>It is what decides whether the interpreter evaluates or asks for another line.
      */
     public enum Completeness {
 
-        /** Esta completo tal cual. */
+        /** It is complete as it stands. */
         COMPLETE(true),
 
-        /** Esta completo pero le falta el punto y coma, que el interprete agrega solo. */
+        /** It is complete but missing the semicolon, which the interpreter adds itself. */
         COMPLETE_WITH_SEMI(true),
 
-        /** Seguro que falta: hay una llave o un parentesis sin cerrar. */
+        /** Definitely missing something: there is an unclosed brace or parenthesis. */
         DEFINITELY_INCOMPLETE(false),
 
         /**
-         * Podria ser valido, pero lo mas probable es que falte.
+         * It could be valid, but it is most likely missing something.
          *
-         * <p>Es el caso de un {@code if} sin cuerpo: {@code if (x)} solo es legal, pero nadie lo
-         * escribe a proposito. Pedir otra linea acierta casi siempre.
+         * <p>It is the case of an {@code if} with no body: {@code if (x)} alone is legal, but nobody
+         * writes it on purpose. Asking for another line is right nearly always.
          */
         CONSIDERED_INCOMPLETE(false),
 
-        /** No se escribio nada. */
+        /** Nothing was written. */
         EMPTY(false),
 
         /**
-         * No se pudo saber, casi siempre porque hay un error de sintaxis.
+         * It could not be told, nearly always because there is a syntax error.
          *
-         * <p>Cuenta como completo: si esta mal escrito, pedir otra linea no lo va a arreglar, y es
-         * mejor mostrar el error.
+         * <p>It counts as complete: if it is badly written, asking for another line will not fix it,
+         * and showing the error is better.
          */
         UNKNOWN(true);
 
-        private final boolean completo;
+        private final boolean complete;
 
-        Completeness(boolean completo) {
-            this.completo = completo;
+        Completeness(boolean complete) {
+            this.complete = complete;
         }
 
         /**
-         * Si el interprete puede evaluar ya.
+         * Whether the interpreter can evaluate already.
          *
-         * @return cierto si no hace falta pedir otra linea
+         * @return true if there is no need to ask for another line
          */
         public boolean isComplete() {
-            return this.completo;
+            return this.complete;
         }
     }
 
-    /** Como se ve un pedazo de codigo al colorearlo. */
+    /** How a piece of code looks when coloured. */
     public enum Attribute {
 
-        /** Es lo que se declara: el nombre de un metodo o de una variable donde se lo define. */
+        /** It is what is declared: a method's or a variable's name where it is defined. */
         DECLARATION,
 
-        /** Esta marcado como obsoleto. */
+        /** It is marked as deprecated. */
         DEPRECATED,
 
-        /** Es una palabra reservada. */
+        /** It is a reserved word. */
         KEYWORD
     }
 
     /**
-     * Un pedazo de codigo y como se ve.
+     * A piece of code and how it looks.
      *
-     * <p>Las posiciones van referidas al texto que el usuario escribio.
+     * <p>The positions refer to the text the user wrote.
      *
-     * @param start donde empieza
-     * @param end donde termina
-     * @param attributes como se ve
+     * @param start where it starts
+     * @param end where it ends
+     * @param attributes how it looks
      * @since 20
      */
     public record Highlight(int start, int end, Set<Attribute> attributes) {
     }
 
-    /** Que tan completo esta lo escrito, y que sobra. */
+    /** How complete what was written is, and what is left over. */
     public interface CompletionInfo {
 
         /**
-         * Que tan completo esta.
+         * How complete it is.
          *
-         * @return la respuesta
+         * @return the answer
          */
         Completeness completeness();
 
         /**
-         * Lo que sobro despues del primer fragmento.
+         * What was left over after the first snippet.
          *
-         * <p>Escribir dos sentencias en una linea da un fragmento y un resto; el resto se analiza
-         * despues, igual que si se hubiera escrito solo.
+         * <p>Writing two statements on one line gives a snippet and a remainder; the remainder is
+         * analysed afterwards, just as if it had been written on its own.
          *
-         * @return lo que sobra, o la cadena vacia
+         * @return what is left over, or the empty string
          */
         String remaining();
 
         /**
-         * El primer fragmento, con el punto y coma agregado si hacia falta.
+         * The first snippet, with the semicolon added if it was needed.
          *
-         * @return el codigo del fragmento
+         * @return the snippet's code
          */
         String source();
     }
 
-    /** Algo que se puede escribir en ese lugar. */
+    /** Something that can be written in that place. */
     public interface Suggestion {
 
         /**
-         * Lo que habria que escribir.
+         * What would have to be written.
          *
-         * @return el texto
+         * @return the text
          */
         String continuation();
 
         /**
-         * Si el tipo de lo sugerido es el que hace falta ahi.
+         * Whether the type of what is suggested is the one needed there.
          *
-         * <p>Sirve para ordenar las sugerencias: lo que encaja va primero.
+         * <p>It is for ordering the suggestions: what fits goes first.
          *
-         * @return cierto si encaja
+         * @return true if it fits
          */
         boolean matchesType();
     }
 
-    /** La documentacion de algo.
+    /** The documentation of something.
      *
      * @since 9
      */
     public interface Documentation {
 
         /**
-         * La firma de lo documentado.
+         * The signature of what is documented.
          *
-         * @return la firma
+         * @return the signature
          */
         String signature();
 
         /**
-         * El texto de la documentacion.
+         * The documentation's text.
          *
-         * @return el texto, o {@code null} si no hay
+         * @return the text, or {@code null} if there is none
          */
         String javadoc();
     }
 
-    /** El codigo que el interprete arma alrededor de un fragmento para poder compilarlo. */
+    /** The code the interpreter builds around a snippet in order to compile it. */
     public interface SnippetWrapper {
 
         /**
-         * El texto tal como se escribio.
+         * The text exactly as it was written.
          *
-         * @return el codigo del usuario
+         * @return the user's code
          */
         String source();
 
         /**
-         * El codigo armado, el que se le pasa al compilador.
+         * The assembled code, the one handed to the compiler.
          *
-         * @return el codigo completo
+         * @return the full code
          */
         String wrapped();
 
         /**
-         * El nombre de la clase sintetica.
+         * The synthetic class's name.
          *
-         * @return el nombre completo de la clase
+         * @return the class's full name
          */
         String fullClassName();
 
         /**
-         * De que clase de fragmento se trata.
+         * Which kind of snippet it is.
          *
-         * @return la clase
+         * @return the kind
          */
         Snippet.Kind kind();
 
         /**
-         * Donde cae, en el codigo armado, esa posicion del codigo del usuario.
+         * Where that position of the user's code falls in the assembled code.
          *
-         * @param pos la posicion en el codigo del usuario
-         * @return la posicion en el codigo armado
+         * @param pos the position in the user's code
+         * @return the position in the assembled code
          */
         int sourceToWrappedPosition(int pos);
 
         /**
-         * Donde cae, en el codigo del usuario, esa posicion del codigo armado.
+         * Where that position of the assembled code falls in the user's code.
          *
-         * <p>Es la traduccion que hace que el subrayado de un error del compilador caiga donde el
-         * usuario escribio.
+         * <p>It is the translation that makes a compiler error's underline fall where the user
+         * wrote.
          *
-         * @param pos la posicion en el codigo armado
-         * @return la posicion en el codigo del usuario, o {@code -1} si cae en el envoltorio
+         * @param pos the position in the assembled code
+         * @return the position in the user's code, or {@code -1} if it falls in the wrapper
          */
         int wrappedToSourcePosition(int pos);
     }
 
-    /** Los nombres completos que podrian corresponder a un nombre simple. */
+    /** The full names a simple name could stand for. */
     public static final class QualifiedNames {
 
         private final List<String> names;
@@ -254,39 +253,39 @@ public abstract class SourceCodeAnalysis {
         }
 
         /**
-         * Los nombres completos que podrian ser.
+         * The full names it could be.
          *
-         * @return los nombres, o una lista vacia si el nombre ya se resuelve o no se encontro nada
+         * @return the names, or an empty list if the name already resolves or nothing was found
          */
         public List<String> getNames() {
             return this.names;
         }
 
         /**
-         * Cuantos caracteres mide el nombre simple.
+         * How many characters the simple name is.
          *
-         * @return la longitud, para saber que reemplazar
+         * @return the length, so as to know what to replace
          */
         public int getSimpleNameLength() {
             return this.simpleNameLength;
         }
 
         /**
-         * Si el indice de clases estaba al dia cuando se contesto.
+         * Whether the class index was up to date when the answer was given.
          *
-         * <p>El indice se arma en segundo plano; si todavia no termino, la respuesta puede quedar
-         * corta y conviene volver a preguntar.
+         * <p>The index is built in the background; if it has not finished yet, the answer may fall
+         * short and it is worth asking again.
          *
-         * @return cierto si estaba al dia
+         * @return true if it was up to date
          */
         public boolean isUpToDate() {
             return this.upToDate;
         }
 
         /**
-         * Si el nombre ya se resuelve solo, sin agregar nada.
+         * Whether the name already resolves on its own, with nothing added.
          *
-         * @return cierto si ya se resuelve
+         * @return true if it already resolves
          */
         public boolean isResolvable() {
             return this.resolvable;
@@ -294,89 +293,89 @@ public abstract class SourceCodeAnalysis {
     }
 
     /**
-     * Que tan completo esta lo escrito, y que sobra.
+     * How complete what was written is, and what is left over.
      *
-     * @param input el codigo
-     * @return la respuesta
+     * @param input the code
+     * @return the answer
      */
     public abstract CompletionInfo analyzeCompletion(String input);
 
     /**
-     * Que se puede escribir en ese lugar.
+     * What can be written in that place.
      *
-     * @param input el codigo
-     * @param cursor donde esta el cursor
-     * @param anchor donde escribe la posicion desde la que reemplazar
-     * @return las sugerencias
+     * @param input the code
+     * @param cursor where the caret is
+     * @param anchor where the position to replace from is written
+     * @return the suggestions
      */
     public abstract List<Suggestion> completionSuggestions(String input, int cursor, int[] anchor);
 
     /**
-     * La documentacion de lo que hay en ese lugar.
+     * The documentation of what is in that place.
      *
-     * @param input el codigo
-     * @param cursor donde esta el cursor
-     * @param computeJavadoc si tambien hay que traer el texto y no solo la firma
-     * @return la documentacion
+     * @param input the code
+     * @param cursor where the caret is
+     * @param computeJavadoc whether the text has to be fetched too and not only the signature
+     * @return the documentation
      */
     public abstract List<Documentation> documentation(String input, int cursor,
             boolean computeJavadoc);
 
     /**
-     * El tipo de la expresion que termina ahi.
+     * The type of the expression that ends there.
      *
-     * @param code el codigo
-     * @param cursor donde termina la expresion
-     * @return el nombre del tipo, o {@code null} si no hay una expresion ahi
+     * @param code the code
+     * @param cursor where the expression ends
+     * @return the type's name, or {@code null} if there is no expression there
      */
     public abstract String analyzeType(String code, int cursor);
 
     /**
-     * Los nombres completos que podrian corresponder al nombre simple que termina ahi.
+     * The full names that could stand for the simple name ending there.
      *
-     * @param code el codigo
-     * @param cursor donde termina el nombre
-     * @return los candidatos
+     * @param code the code
+     * @param cursor where the name ends
+     * @return the candidates
      */
     public abstract QualifiedNames listQualifiedNames(String code, int cursor);
 
     /**
-     * El codigo armado alrededor de ese fragmento.
+     * The code assembled around that snippet.
      *
-     * @param snippet el fragmento
-     * @return el envoltorio
+     * @param snippet the snippet
+     * @return the wrapper
      */
     public abstract SnippetWrapper wrapper(Snippet snippet);
 
     /**
-     * Los codigos armados alrededor de los fragmentos que haya en ese codigo.
+     * The code assembled around the snippets in that code.
      *
-     * @param input el codigo
-     * @return los envoltorios
+     * @param input the code
+     * @return the wrappers
      */
     public abstract List<SnippetWrapper> wrappers(String input);
 
     /**
-     * Los fragmentos que hay en ese codigo, sin evaluarlos ni agregarlos al interprete.
+     * The snippets in that code, without evaluating them or adding them to the interpreter.
      *
-     * @param input el codigo
-     * @return los fragmentos
+     * @param input the code
+     * @return the snippets
      */
     public abstract List<Snippet> sourceToSnippets(String input);
 
     /**
-     * Que fragmentos dependen de ese.
+     * Which snippets depend on that one.
      *
-     * @param snippet el fragmento
-     * @return los que dependen de el
+     * @param snippet the snippet
+     * @return the ones that depend on it
      */
     public abstract Collection<Snippet> dependents(Snippet snippet);
 
     /**
-     * Como se ve cada pedazo de ese codigo al colorearlo.
+     * How each piece of that code looks when coloured.
      *
-     * @param input el codigo
-     * @return los pedazos con su aspecto
+     * @param input the code
+     * @return the pieces with their look
      * @since 20
      */
     public abstract List<Highlight> highlights(String input);

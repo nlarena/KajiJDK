@@ -5,65 +5,64 @@ import java.lang.reflect.Method;
 import jdk.jshell.spi.ExecutionControl;
 
 /**
- * Como {@link DirectExecutionControl}, pero el codigo del usuario corre en otro hilo.
+ * Like {@link DirectExecutionControl}, but the user's code runs on another thread.
  *
- * <h2>Para que el hilo</h2>
+ * <h2>What the thread is for</h2>
  *
- * <p>Para poder cortarlo. Un fragmento con un bucle infinito ejecutado en el hilo de JShell cuelga
- * JShell; ejecutado aparte, {@link #stop} lo interrumpe y la sesion sigue viva. Esa es toda la
- * diferencia con la clase de la que hereda, y es la razon por la que este es el motor por omision.
+ * <p>For being able to cut it short. A snippet with an infinite loop run on JShell's thread hangs
+ * JShell; run apart, {@link #stop} interrupts it and the session stays alive. That is the whole
+ * difference from the class it inherits from, and it is the reason this is the default engine.
  *
- * <h2>Como corta</h2>
+ * <h2>How it cuts short</h2>
  *
- * <p>Con {@link Thread#interrupt}, que es lo unico que se puede hacer sin arriesgar la consistencia
- * del proceso. Un fragmento que ignora la interrupcion no se detiene, y esta bien que sea asi:
- * matarlo dejaria a medio terminar cualquier cosa que estuviera haciendo, en un proceso donde
- * ademas vive JShell.
+ * <p>With {@link Thread#interrupt}, which is the only thing that can be done without risking the
+ * process's consistency. A snippet that ignores the interruption does not stop, and rightly so:
+ * killing it would leave whatever it was doing half done, in a process where JShell also lives.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Funciona, con el mismo limite que en el JDK: corta lo que se deja cortar.
+ * <p>It works, with the same limit as in the JDK: it cuts short what lets itself be cut short.
  *
  * @since 9
  */
 public class LocalExecutionControl extends DirectExecutionControl {
 
-    /** El hilo que esta corriendo codigo del usuario ahora, o {@code null}. */
-    private Thread corriendo;
+    /** The thread running the user's code right now, or {@code null}. */
+    private Thread running;
 
-    /** Si se pidio cortar y todavia no se atendio. */
-    private boolean cortando;
+    /** Whether a stop was asked for and has not been served yet. */
+    private boolean stopping;
 
     /**
-     * Un motor con ese cargador.
+     * An engine with that loader.
      *
-     * @param loaderDelegate quien instala las clases
+     * @param loaderDelegate whoever installs the classes
      */
     public LocalExecutionControl(LoaderDelegate loaderDelegate) {
         super(loaderDelegate);
     }
 
-    /** Un motor con el cargador por omision. */
+    /** An engine with the default loader. */
     public LocalExecutionControl() {
         super();
     }
 
     /**
-     * Un motor que instala las clases en ese cargador.
+     * An engine that installs the classes into that loader.
      *
-     * @param loader el cargador donde se definen las clases del usuario
+     * @param loader the loader the user's classes are defined in
      */
     public LocalExecutionControl(ClassLoader loader) {
-        super(new LoaderPropio(loader));
+        super(new GivenLoader(loader));
     }
 
     /**
-     * Instala esas clases.
+     * Installs those classes.
      *
-     * @param cbcs los nombres y el bytecode de cada una
-     * @throws ClassInstallException si alguna no se pudo instalar
-     * @throws NotImplementedException si el cargador no sabe instalar
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param cbcs the name and the bytecode of each one
+     * @throws ClassInstallException if any of them could not be installed
+     * @throws NotImplementedException if the loader does not know how to install
+     * @throws EngineTerminationException if the engine is gone
      */
     @Override
     public void load(ClassBytecodes[] cbcs)
@@ -72,105 +71,106 @@ public class LocalExecutionControl extends DirectExecutionControl {
     }
 
     /**
-     * Llama al metodo en un hilo aparte y espera el resultado.
+     * Calls the method on a thread of its own and waits for the result.
      *
-     * @param doitMethod el metodo
-     * @return la representacion del resultado
-     * @throws Exception lo que sea que haya fallado, o {@link ExecutionControl.StoppedException}
+     * @param doitMethod the method
+     * @return the representation of the result
+     * @throws Exception whatever failed, or {@link ExecutionControl.StoppedException}
      */
     @Override
     protected String invoke(Method doitMethod) throws Exception {
-        final Object[] resultado = new Object[1];
-        final Throwable[] falla = new Throwable[1];
+        final Object[] result = new Object[1];
+        final Throwable[] failure = new Throwable[1];
         final Thread t = new Thread(new Runnable() {
             public void run() {
                 try {
-                    resultado[0] = doitMethod.invoke(null, new Object[0]);
+                    result[0] = doitMethod.invoke(null, new Object[0]);
                 } catch (Throwable e) {
-                    falla[0] = e;
+                    failure[0] = e;
                 }
             }
         }, "JShell user code");
         synchronized (this) {
-            if (cortando) {
-                cortando = false;
+            if (stopping) {
+                stopping = false;
                 throw new StoppedException();
             }
-            corriendo = t;
+            running = t;
         }
         t.start();
         try {
             t.join();
         } finally {
             synchronized (this) {
-                corriendo = null;
+                running = null;
             }
         }
         synchronized (this) {
-            if (cortando) {
-                cortando = false;
+            if (stopping) {
+                stopping = false;
                 throw new StoppedException();
             }
         }
-        if (falla[0] instanceof Exception) {
-            throw (Exception) falla[0];
+        if (failure[0] instanceof Exception) {
+            throw (Exception) failure[0];
         }
-        if (falla[0] != null) {
-            throw new RuntimeException(falla[0]);
+        if (failure[0] != null) {
+            throw new RuntimeException(failure[0]);
         }
-        return valueString(resultado[0]);
+        return valueString(result[0]);
     }
 
     /**
-     * Interrumpe el hilo que este corriendo codigo del usuario.
+     * Interrupts whichever thread is running the user's code.
      *
-     * <p>Si no hay ninguno, deja la marca puesta: la peticion puede llegar justo entre que JShell
-     * decide ejecutar y el hilo arranca, y perderla ahi seria peor que atenderla tarde.
+     * <p>If there is none, it leaves the mark set: the request may arrive exactly between JShell
+     * deciding to execute and the thread starting, and losing it there would be worse than serving
+     * it late.
      *
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si no se pudo cortar
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if it could not be cut short
      */
     @Override
     public void stop() throws EngineTerminationException, InternalException {
         final Thread t;
         synchronized (this) {
-            cortando = true;
-            t = corriendo;
+            stopping = true;
+            t = running;
         }
         if (t != null) {
             t.interrupt();
         }
     }
 
-    /** Aviso de que se va a entrar al codigo del usuario. */
+    /** Notice that the user's code is about to be entered. */
     @Override
     protected void clientCodeEnter() {
     }
 
-    /** Aviso de que se salio del codigo del usuario. */
+    /** Notice that the user's code has been left. */
     @Override
     protected void clientCodeLeave() {
     }
 
     /**
-     * El cargador que se usa cuando a este motor le pasan uno ya hecho.
+     * The loader used when this engine is handed a ready-made one.
      *
-     * <p>No define nada: las clases del usuario se suponen ya instaladas del otro lado. Es el caso
-     * de quien embebe JShell dentro de su propia aplicacion y quiere que los fragmentos vean sus
-     * clases.
+     * <p>It defines nothing: the user's classes are taken to be installed on the other side already.
+     * It is the case of whoever embeds JShell inside their own application and wants the snippets to
+     * see their classes.
      */
-    private static final class LoaderPropio implements LoaderDelegate {
+    private static final class GivenLoader implements LoaderDelegate {
 
         private final ClassLoader loader;
 
-        LoaderPropio(ClassLoader loader) {
+        GivenLoader(ClassLoader loader) {
             this.loader = loader;
         }
 
         @Override
         public void load(ClassBytecodes[] cbcs)
                 throws ClassInstallException, NotImplementedException, EngineTerminationException {
-            throw new NotImplementedException("load: el cargador provisto no define clases");
+            throw new NotImplementedException("load: the given loader does not define classes");
         }
 
         @Override
@@ -180,7 +180,7 @@ public class LocalExecutionControl extends DirectExecutionControl {
         @Override
         public void addToClasspath(String path)
                 throws EngineTerminationException, InternalException {
-            throw new InternalException("addToClasspath: el cargador provisto no se puede ampliar");
+            throw new InternalException("addToClasspath: the given loader cannot be extended");
         }
 
         @Override

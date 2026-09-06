@@ -11,143 +11,143 @@ import java.util.function.Consumer;
 
 
 /**
- * El agente: el programa que corre en el <strong>otro</strong> proceso y ejecuta los fragmentos.
+ * The agent: the program that runs in the <strong>other</strong> process and executes the snippets.
  *
- * <h2>Como arranca</h2>
+ * <h2>How it starts</h2>
  *
- * <p>JShell lanza una maquina virtual cuya clase principal es esta. El {@link #main} se conecta al
- * puerto que le pasaron, arma el canal multiplexado, y se queda atendiendo comandos hasta que le
- * digan que cierre. Del otro lado del socket hay un {@link StreamingExecutionControl}.
+ * <p>JShell launches a virtual machine whose main class is this one. {@link #main} connects to the
+ * port it was given, builds the multiplexed channel, and stays serving commands until it is told to
+ * close. On the other side of the socket there is a {@link StreamingExecutionControl}.
  *
- * <h2>Por que redefine puede funcionar aca</h2>
+ * <h2>Why redefining can work here</h2>
  *
- * <p>Porque este proceso existe solo para ejecutar fragmentos: puede permitirse reemplazar el codigo
- * de una clase sin cuidar a nadie mas. En el motor local, la misma operacion tocaria clases que
- * JShell esta usando.
+ * <p>Because this process exists only to run snippets: it can afford to replace a class's code
+ * without minding anybody else. In the local engine, the same operation would touch classes JShell
+ * is using.
  *
- * <h2>Por que la salida del usuario esta desviada</h2>
+ * <h2>Why the user's output is redirected</h2>
  *
- * <p>{@code System.out} de este proceso no lo ve nadie: la consola es la de JShell, que esta del
- * otro lado. {@link #main} lo reemplaza por una corriente del canal multiplexado, y por eso un
- * {@code System.out.println} en un fragmento aparece donde el usuario lo espera.
+ * <p>Nobody sees this process's {@code System.out}: the console is JShell's, which is on the other
+ * side. {@link #main} replaces it with a stream of the multiplexed channel, and that is why a
+ * {@code System.out.println} in a snippet turns up where the user expects it.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La clase funciona --hereda de {@link DirectExecutionControl}, que anda-- salvo {@link #main},
- * que necesita conectarse por un socket. Esta VM no tiene ese transporte, asi que el agente no se
- * puede lanzar; el motor que si se puede usar es {@link LocalExecutionControl}.
+ * <p>The class works --it inherits from {@link DirectExecutionControl}, which does-- except for
+ * {@link #main}, which needs to connect over a socket. This VM does not have that transport, so the
+ * agent cannot be launched; the engine that can be used is {@link LocalExecutionControl}.
  *
  * @since 9
  */
 public class RemoteExecutionControl extends DirectExecutionControl {
 
-    /** Si se pidio cortar y todavia no se atendio. */
-    private volatile boolean cortando;
+    /** Whether a stop was asked for and has not been served yet. */
+    private volatile boolean stopping;
 
     /**
-     * Un agente con ese cargador.
+     * An agent with that loader.
      *
-     * @param loaderDelegate quien instala las clases
+     * @param loaderDelegate whoever installs the classes
      */
     public RemoteExecutionControl(LoaderDelegate loaderDelegate) {
         super(loaderDelegate);
     }
 
-    /** Un agente con el cargador por omision. */
+    /** An agent with the default loader. */
     public RemoteExecutionControl() {
         super();
     }
 
     /**
-     * El punto de entrada del proceso agente.
+     * The agent process's entry point.
      *
-     * <p>Se conecta al puerto que le pasan, desvia la salida y la entrada del usuario por el canal,
-     * y atiende hasta que le digan que cierre.
+     * <p>It connects to the port it is given, redirects the user's output and input over the
+     * channel, and serves until it is told to close.
      *
-     * @param args el puerto al que conectarse
-     * @throws Exception si no se pudo conectar o armar el canal
+     * @param args the port to connect to
+     * @throws Exception if it could not connect or build the channel
      */
     public static void main(String[] args) throws Exception {
-        final int puerto = Integer.parseInt(args[0]);
-        final Socket s = new Socket(InetAddress.getLoopbackAddress(), puerto);
-        final InputStream entrada = s.getInputStream();
-        final OutputStream salida = s.getOutputStream();
-        final Map<String, Consumer<OutputStream>> salidas =
+        final int port = Integer.parseInt(args[0]);
+        final Socket s = new Socket(InetAddress.getLoopbackAddress(), port);
+        final InputStream input = s.getInputStream();
+        final OutputStream output = s.getOutputStream();
+        final Map<String, Consumer<OutputStream>> outputs =
                 new HashMap<String, Consumer<OutputStream>>();
-        salidas.put("out", new Consumer<OutputStream>() {
+        outputs.put("out", new Consumer<OutputStream>() {
             public void accept(OutputStream os) {
                 System.setOut(new PrintStream(os, true));
             }
         });
-        salidas.put("err", new Consumer<OutputStream>() {
+        outputs.put("err", new Consumer<OutputStream>() {
             public void accept(OutputStream os) {
                 System.setErr(new PrintStream(os, true));
             }
         });
-        final Map<String, Consumer<InputStream>> entradas =
+        final Map<String, Consumer<InputStream>> inputs =
                 new HashMap<String, Consumer<InputStream>>();
-        entradas.put("in", new Consumer<InputStream>() {
+        inputs.put("in", new Consumer<InputStream>() {
             public void accept(InputStream is) {
                 System.setIn(is);
             }
         });
         try {
-            Util.forwardExecutionControlAndIO(new RemoteExecutionControl(), entrada, salida,
-                    salidas, entradas);
+            Util.forwardExecutionControlAndIO(new RemoteExecutionControl(), input, output,
+                    outputs, inputs);
         } finally {
             s.close();
         }
     }
 
     /**
-     * Reemplaza el codigo de esas clases.
+     * Replaces the code of those classes.
      *
-     * @param cbcs las clases y su bytecode nuevo
-     * @throws ClassInstallException si no se pudieron reemplazar
-     * @throws NotImplementedException si no se puede redefinir
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param cbcs the classes and their new bytecode
+     * @throws ClassInstallException if they could not be replaced
+     * @throws NotImplementedException if redefining is not possible
+     * @throws EngineTerminationException if the engine is gone
      */
     @Override
     public void redefine(ClassBytecodes[] cbcs)
             throws ClassInstallException, NotImplementedException, EngineTerminationException {
-        // Reemplazar el codigo de una clase ya cargada necesita la instrumentacion de la VM. Lo que
-        // se puede hacer sin ella es dejar la version nueva para las cargas que vengan, que es lo
-        // que hace el cargador; los objetos que ya existen conservan el comportamiento anterior.
+        // Replacing the code of an already loaded class needs the VM's instrumentation. What can be
+        // done without it is leaving the new version for the loads to come, which is what the loader
+        // does; the objects that already exist keep their previous behaviour.
         load(cbcs);
     }
 
     /**
-     * Corta lo que se este ejecutando.
+     * Cuts short whatever is running.
      *
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si no se pudo cortar
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if it could not be cut short
      */
     @Override
     public void stop() throws EngineTerminationException, InternalException {
-        cortando = true;
+        stopping = true;
     }
 
-    /** Aviso de que se va a entrar al codigo del usuario. */
+    /** Notice that the user's code is about to be entered. */
     @Override
     protected void clientCodeEnter() {
-        cortando = false;
+        stopping = false;
     }
 
     /**
-     * Aviso de que se salio del codigo del usuario.
+     * Notice that the user's code has been left.
      *
-     * <p>Si habia un corte pedido y el codigo termino igual, algo no funciono: la peticion se
-     * perdio, o el fragmento la ignoro. Se espera un poco --el corte y el retorno pueden cruzarse--
-     * y recien despues se lo reporta como problema interno, que es lo que hace el JDK.
+     * <p>If a stop had been asked for and the code finished all the same, something did not work:
+     * the request was lost, or the snippet ignored it. It waits a little --the stop and the return
+     * may cross-- and only then reports it as an internal problem, which is what the JDK does.
      *
-     * @throws InternalException si se pidio cortar y el corte no llego a ocurrir
+     * @throws InternalException if a stop was asked for and never happened
      */
     @Override
     protected void clientCodeLeave() throws InternalException {
-        if (!cortando) {
+        if (!stopping) {
             return;
         }
-        for (int i = 0; i < 10 && cortando; i++) {
+        for (int i = 0; i < 10 && stopping; i++) {
             try {
                 Thread.sleep(20);
             } catch (InterruptedException e) {
@@ -155,8 +155,8 @@ public class RemoteExecutionControl extends DirectExecutionControl {
                 break;
             }
         }
-        if (cortando) {
-            cortando = false;
+        if (stopping) {
+            stopping = false;
             throw new InternalException("Expected stop exception not encountered.");
         }
     }

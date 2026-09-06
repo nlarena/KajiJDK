@@ -12,90 +12,90 @@ import jdk.jshell.spi.ExecutionControl;
 import jdk.jshell.spi.ExecutionControl.ClassBytecodes;
 
 /**
- * Comprueba el protocolo de {@code jdk.jshell.execution} de punta a punta.
+ * Checks {@code jdk.jshell.execution}'s protocol end to end.
  *
- * <h2>Que arma</h2>
+ * <h2>What it puts together</h2>
  *
- * <p>Las dos puntas dentro del mismo proceso, unidas por dos tuberias. De un lado un
- * {@link StreamingExecutionControl}, que es lo que usa JShell; del otro un
- * {@link Util#forwardExecutionControl} atendiendo contra un {@link DirectExecutionControl}, que es
- * lo que corre en el proceso remoto. En el medio, el protocolo entero: la marca, los nombres de
- * comando, los codigos de resultado y las excepciones desarmadas.
+ * <p>Both ends inside the same process, joined by two pipes. On one side a
+ * {@link StreamingExecutionControl}, which is what JShell uses; on the other a
+ * {@link Util#forwardExecutionControl} serving against a {@link DirectExecutionControl}, which is
+ * what runs in the remote process. In between, the whole protocol: the mark, the command names, the
+ * result codes and the exceptions taken apart.
  *
- * <p>No hace falta un socket para probarlo, y por eso se puede probar: lo unico que el protocolo
- * necesita es un par de flujos.
+ * <p>No socket is needed to test it, and that is why it can be tested: all the protocol needs is a
+ * pair of streams.
  *
- * <h2>El orden en que se abren los flujos</h2>
+ * <h2>The order the streams are opened in</h2>
  *
- * <p>{@link ObjectOutputStream} escribe una cabecera al construirse y {@link ObjectInputStream} la
- * lee al construirse. Los dos lados crean primero su salida y la vacian; al reves, los dos quedan
- * esperando una cabecera que nadie escribio, sin ningun sintoma mas que dos hilos quietos.
+ * <p>{@link ObjectOutputStream} writes a header when built and {@link ObjectInputStream} reads it
+ * when built. Both sides create their output first and flush it; the other way round, both sit
+ * waiting for a header nobody wrote, with no symptom other than two still threads.
  */
 public class JSH2 {
 
 
 
-    static final String[] ESPERADO = {
+    static final String[] EXPECTED = {
         "load|ok",
         "invoke-f|42",
-        "invoke-g|\"eco\"",
-        "invoke-nulo|null",
+        "invoke-g|\"echo\"",
+        "invoke-nothing|null",
         "var-V|7",
-        "var-T|\"hola\"",
-        "excepcion|java.lang.IllegalStateException|a proposito|traza-no-nula=true",
+        "var-T|\"hello\"",
+        "exception|java.lang.IllegalStateException|on purpose|trace-not-null=true",
         "redefine|jdk.jshell.spi.ExecutionControl$NotImplementedException",
         "extension|jdk.jshell.spi.ExecutionControl$NotImplementedException",
         "classpath|ok",
-        "motor-termino|true",
-        "motor-sin-falla|true",
+        "engine-finished|true",
+        "engine-no-failure|true",
     };
 
-    static ClassBytecodes[] fragmento() throws Exception {
+    static ClassBytecodes[] snippet() throws Exception {
         final byte[] b = Files.readAllBytes(Paths.get("java/JSH1x.class"));
         return new ClassBytecodes[] {new ClassBytecodes("JSH1x", b)};
     }
 
-    /** Lo que contesta el motor del otro lado del protocolo, una linea por pregunta. */
+    /** What the engine on the far side of the protocol answers, one line per question. */
     static String[] actual() throws Exception {
-        final PipedInputStream haciaElMotor = new PipedInputStream();
-        final PipedOutputStream desdeJShell = new PipedOutputStream(haciaElMotor);
-        final PipedInputStream haciaJShell = new PipedInputStream();
-        final PipedOutputStream desdeElMotor = new PipedOutputStream(haciaJShell);
+        final PipedInputStream toTheEngine = new PipedInputStream();
+        final PipedOutputStream fromJShell = new PipedOutputStream(toTheEngine);
+        final PipedInputStream toJShell = new PipedInputStream();
+        final PipedOutputStream fromTheEngine = new PipedOutputStream(toJShell);
 
-        final Throwable[] fallaDelMotor = new Throwable[1];
-        final Thread motor = new Thread(new Runnable() {
+        final Throwable[] engineFailure = new Throwable[1];
+        final Thread engine = new Thread(new Runnable() {
             public void run() {
                 try {
-                    final ObjectOutputStream out = new ObjectOutputStream(desdeElMotor);
+                    final ObjectOutputStream out = new ObjectOutputStream(fromTheEngine);
                     out.flush();
-                    final ObjectInputStream in = new ObjectInputStream(haciaElMotor);
+                    final ObjectInputStream in = new ObjectInputStream(toTheEngine);
                     Util.forwardExecutionControl(new DirectExecutionControl(), in, out);
                 } catch (Throwable e) {
-                    fallaDelMotor[0] = e;
+                    engineFailure[0] = e;
                 }
             }
-        }, "motor");
-        motor.setDaemon(true);
-        motor.start();
+        }, "engine");
+        engine.setDaemon(true);
+        engine.start();
 
-        final ObjectOutputStream out = new ObjectOutputStream(desdeJShell);
+        final ObjectOutputStream out = new ObjectOutputStream(fromJShell);
         out.flush();
-        final ObjectInputStream in = new ObjectInputStream(haciaJShell);
+        final ObjectInputStream in = new ObjectInputStream(toJShell);
         final ExecutionControl ec = new StreamingExecutionControl(out, in);
 
         final java.util.List<String> a = new java.util.ArrayList<String>();
         try {
-            ec.load(fragmento());
+            ec.load(snippet());
             a.add("load|ok");
         } catch (Throwable e) {
             a.add("load|" + e.getClass().getName() + "|" + e.getMessage());
         }
-        final String[] metodos = {"f", "g", "nulo"};
-        for (int i = 0; i < metodos.length; i++) {
+        final String[] methods = {"f", "g", "nothing"};
+        for (int i = 0; i < methods.length; i++) {
             try {
-                a.add("invoke-" + metodos[i] + "|" + ec.invoke("JSH1x", metodos[i]));
+                a.add("invoke-" + methods[i] + "|" + ec.invoke("JSH1x", methods[i]));
             } catch (Throwable e) {
-                a.add("invoke-" + metodos[i] + "|" + e.getClass().getName());
+                a.add("invoke-" + methods[i] + "|" + e.getClass().getName());
             }
         }
         final String[] vars = {"V", "T"};
@@ -106,30 +106,30 @@ public class JSH2 {
                 a.add("var-" + vars[i] + "|" + e.getClass().getName());
             }
         }
-        // La excepcion del usuario tiene que cruzar el protocolo desarmada y llegar entera.
+        // The user's exception has to cross the protocol taken apart and arrive whole.
         try {
-            ec.invoke("JSH1x", "revienta");
-            a.add("excepcion|sin error");
+            ec.invoke("JSH1x", "blowUp");
+            a.add("exception|no error");
         } catch (ExecutionControl.UserException e) {
-            // La traza no entra en la comparacion: esta VM no captura la pila de forma nativa
-            // --esta dicho en `java/lang/Throwable.java`-- asi que aca sale vacia y en el JDK no.
-            // Que el arreglo viaje entero es lo que si depende de este paquete, y eso se comprueba
-            // en trazaViaja().
-            a.add("excepcion|" + e.causeExceptionClass() + "|" + e.getMessage()
-                    + "|traza-no-nula=" + (e.getStackTrace() != null));
+            // The stack trace is not part of the comparison: this VM does not capture the stack
+            // natively --it is said in `java/lang/Throwable.java`-- so here it comes out empty and
+            // in the JDK it does not. That the array travels whole is what does depend on this
+            // package, and that is checked in traceTravels().
+            a.add("exception|" + e.causeExceptionClass() + "|" + e.getMessage()
+                    + "|trace-not-null=" + (e.getStackTrace() != null));
         } catch (Throwable e) {
-            a.add("excepcion|" + e.getClass().getName() + "|" + e.getMessage());
+            a.add("exception|" + e.getClass().getName() + "|" + e.getMessage());
         }
-        // Y lo que el motor del otro lado declara no soportar.
+        // And what the engine on the far side declares it does not support.
         try {
-            ec.redefine(fragmento());
-            a.add("redefine|sin error");
+            ec.redefine(snippet());
+            a.add("redefine|no error");
         } catch (Throwable e) {
             a.add("redefine|" + e.getClass().getName());
         }
         try {
-            ec.extensionCommand("loQueSea", null);
-            a.add("extension|sin error");
+            ec.extensionCommand("whatever", null);
+            a.add("extension|no error");
         } catch (Throwable e) {
             a.add("extension|" + e.getClass().getName());
         }
@@ -140,29 +140,29 @@ public class JSH2 {
             a.add("classpath|" + e.getClass().getName());
         }
         ec.close();
-        motor.join(3000);
-        a.add("motor-termino|" + !motor.isAlive());
-        a.add("motor-sin-falla|" + (fallaDelMotor[0] == null));
+        engine.join(3000);
+        a.add("engine-finished|" + !engine.isAlive());
+        a.add("engine-no-failure|" + (engineFailure[0] == null));
         return a.toArray(new String[a.size()]);
     }
 
     /**
-     * El indice de la primera respuesta que no coincide con la del JDK, o -1.
+     * The index of the first answer that differs from the JDK's, or -1.
      *
-     * @return el indice, o -1
+     * @return the index, or -1
      */
-    public static int donde() {
+    public static int where() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        if (a.length != ESPERADO.length) {
+        if (a.length != EXPECTED.length) {
             return 8000 + a.length;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!a[i].equals(ESPERADO[i])) {
+            if (!a[i].equals(EXPECTED[i])) {
                 return i;
             }
         }
@@ -170,14 +170,14 @@ public class JSH2 {
     }
 
     /**
-     * Que el arreglo de la traza cruce el protocolo con el largo con que se mando.
+     * That the stack trace array crosses the protocol with the length it was sent with.
      *
-     * <p>Se manda uno armado a mano, para no depender de que la VM capture la pila. Lo que se esta
-     * probando es el protocolo, no la captura.
+     * <p>One built by hand is sent, so as not to depend on the VM capturing the stack. What is being
+     * tested is the protocol, not the capture.
      *
-     * @return 0 si llego igual, o el codigo de lo que fallo
+     * @return 0 if it arrived the same, or the code of what failed
      */
-    public static int trazaViaja() {
+    public static int traceTravels() {
         try {
             final StackTraceElement[] t = {
                 new StackTraceElement("A", "m", "A.java", 10),
@@ -203,23 +203,23 @@ public class JSH2 {
     }
 
     /**
-     * Ubica la diferencia con mas detalle: {@code indice * 100 + campo}.
+     * Locates the difference in more detail: {@code index * 100 + field}.
      *
-     * @return la ubicacion, o -1 si no hay diferencia
+     * @return the location, or -1 if there is no difference
      */
-    public static int detalle() {
+    public static int detail() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        for (int i = 0; i < ESPERADO.length && i < a.length; i++) {
-            if (a[i].equals(ESPERADO[i])) {
+        for (int i = 0; i < EXPECTED.length && i < a.length; i++) {
+            if (a[i].equals(EXPECTED[i])) {
                 continue;
             }
             final String[] x = a[i].split("[|]", -1);
-            final String[] y = ESPERADO[i].split("[|]", -1);
+            final String[] y = EXPECTED[i].split("[|]", -1);
             for (int j = 0; j < Math.max(x.length, y.length); j++) {
                 if (j >= x.length || j >= y.length || !x[j].equals(y[j])) {
                     return i * 100 + j;
@@ -237,8 +237,8 @@ public class JSH2 {
             }
             return;
         }
-        final int i = donde();
-        System.out.println(i < 0 ? "sin diferencias"
-                : i + ":\n  nuestro=" + a[i] + "\n  jdk    =" + ESPERADO[i]);
+        final int i = where();
+        System.out.println(i < 0 ? "no differences"
+                : i + ":\n  ours=" + a[i] + "\n  jdk =" + EXPECTED[i]);
     }
 }

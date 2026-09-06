@@ -18,41 +18,42 @@ import javax.tools.StandardJavaFileManager;
 import jdk.jshell.spi.ExecutionControlProvider;
 
 /**
- * El motor del interprete: guarda el estado de una sesion de Java interactivo.
+ * The interpreter's engine: it holds the state of an interactive Java session.
  *
- * <h2>Que es lo que guarda</h2>
+ * <h2>What it holds</h2>
  *
- * <p>La lista de fragmentos evaluados y en que situacion quedo cada uno. Eso es todo el estado de
- * una sesion: no hay archivo ni proyecto, solo la historia de lo que se escribio. De ahi salen
- * {@link #snippets}, {@link #status} y la posibilidad de deshacer con {@link #drop}.
+ * <p>The list of evaluated snippets and the state each one ended up in. That is the whole state of a
+ * session: there is no file and no project, only the history of what was written. That is where
+ * {@link #snippets}, {@link #status} and the ability to undo with {@link #drop} come from.
  *
- * <h2>Las dos mitades</h2>
+ * <h2>The two halves</h2>
  *
- * <p>Evaluar un fragmento son dos cosas distintas: compilarlo, que pasa en esta maquina virtual, y
- * ejecutarlo, que pasa en otra. La segunda esta afuera a proposito --{@code jdk.jshell.spi} y
- * {@code jdk.jshell.execution}-- porque el codigo del usuario no puede compartir maquina virtual con
- * el interprete: un {@code System.exit()} escrito en la sesion se llevaria puesto al interprete
- * entero, y una variable estatica del usuario podria pisar las del motor.
+ * <p>Evaluating a snippet is two different things: compiling it, which happens on this virtual
+ * machine, and running it, which happens on another. The second is outside on purpose
+ * --{@code jdk.jshell.spi} and {@code jdk.jshell.execution}-- because the user's code cannot share a
+ * virtual machine with the interpreter: a {@code System.exit()} written in the session would take
+ * the whole interpreter with it, and a static variable of the user's could clobber the engine's.
  *
- * <p>Compilar es lo que no se puede sacar afuera: el interprete tiene que meter el fragmento adentro
- * de una clase sintetica, compilarla, y despues traducir las posiciones de los errores de vuelta al
- * texto que el usuario escribio. Eso lo hace con el compilador que devuelve
- * {@code javax.tools.ToolProvider.getSystemJavaCompiler()}.
+ * <p>Compiling is what cannot be moved out: the interpreter has to put the snippet inside a
+ * synthetic class, compile it, and then translate the errors' positions back to the text the user
+ * wrote. It does that with the compiler {@code javax.tools.ToolProvider.getSystemJavaCompiler()}
+ * returns.
  *
- * <h2>Por que evaluar produce una lista</h2>
+ * <h2>Why evaluating produces a list</h2>
  *
- * <p>Porque un fragmento arrastra a los demas. Reescribir un metodo deja al anterior en
- * {@link Snippet.Status#OVERWRITTEN} y puede volver valido a un tercero que lo estaba esperando.
- * {@link SnippetEvent#causeSnippet} distingue el que se evaluo de los arrastrados.
+ * <p>Because one snippet drags the others along. Rewriting a method leaves the earlier one in
+ * {@link Snippet.Status#OVERWRITTEN} and may make valid a third one that was waiting for it.
+ * {@link SnippetEvent#causeSnippet} tells the one that was evaluated from the dragged ones.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>El estado de la sesion, los avisos, el ciclo de vida y toda la construccion funcionan de
- * verdad. Lo que no hay es el compilador: en esta biblioteca
- * {@code ToolProvider.getSystemJavaCompiler()} devuelve {@code null}, asi que no hay con que armar
- * la clase sintetica ni con que compilarla. {@link #eval} tira {@link IllegalStateException} y los
- * metodos de {@link #sourceCodeAnalysis} tiran {@link UnsupportedOperationException}. Todo lo demas
- * --que es la mayor parte-- anda: la sesion arranca vacia y se comporta como una sesion vacia.
+ * <p>The session's state, the notifications, the life cycle and the whole of the building really
+ * work. What is missing is the compiler: in this library
+ * {@code ToolProvider.getSystemJavaCompiler()} returns {@code null}, so there is nothing to build
+ * the synthetic class with and nothing to compile it with. {@link #eval} throws
+ * {@link IllegalStateException} and {@link #sourceCodeAnalysis}'s methods throw
+ * {@link UnsupportedOperationException}. Everything else --which is most of it-- works: the session
+ * starts empty and behaves like an empty session.
  *
  * @since 9
  */
@@ -73,12 +74,12 @@ public class JShell implements AutoCloseable {
 
     private final List<Snippet> snippets = new ArrayList<Snippet>();
     private final List<String> classpath = new ArrayList<String>();
-    private final Map<Subscription, Consumer<SnippetEvent>> oyentesDeFragmento =
+    private final Map<Subscription, Consumer<SnippetEvent>> snippetListeners =
             new LinkedHashMap<Subscription, Consumer<SnippetEvent>>();
-    private final Map<Subscription, Consumer<JShell>> oyentesDeCierre =
+    private final Map<Subscription, Consumer<JShell>> shutdownListeners =
             new LinkedHashMap<Subscription, Consumer<JShell>>();
 
-    private SourceCodeAnalysis analisis;
+    private SourceCodeAnalysis analysis;
     private boolean closed;
 
     JShell(Builder b) {
@@ -97,11 +98,11 @@ public class JShell implements AutoCloseable {
     }
 
     /**
-     * El identificador con el que se saca un aviso que se habia pedido.
+     * The token a requested notification is cancelled with.
      *
-     * <p>No tiene metodos a proposito: lo unico que se puede hacer con el es devolverlo a
-     * {@link JShell#unsubscribe}. Que sea un objeto opaco y no un numero evita que se lo confunda
-     * con el de otro interprete.
+     * <p>It has no methods on purpose: the only thing that can be done with it is handing it back to
+     * {@link JShell#unsubscribe}. That it is an opaque object and not a number keeps it from being
+     * confused with another interpreter's.
      */
     public static class Subscription {
 
@@ -110,11 +111,11 @@ public class JShell implements AutoCloseable {
     }
 
     /**
-     * Arma un interprete con opciones.
+     * Builds an interpreter with options.
      *
-     * <p>Todos los metodos devuelven el mismo constructor, para poder encadenarlos. Lo que no se
-     * diga toma su valor por omision: la entrada y la salida de la maquina virtual, el motor de
-     * ejecucion predeterminado, y ninguna opcion extra.
+     * <p>Every method returns the same builder, so calls can be chained. Whatever is not said takes
+     * its default value: the virtual machine's input and output, the default execution engine, and
+     * no extra options.
      */
     public static class Builder {
 
@@ -135,10 +136,10 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * De donde lee el codigo del usuario cuando pide entrada.
+         * Where the user's code reads from when it asks for input.
          *
-         * @param in la entrada
-         * @return este constructor
+         * @param in the input
+         * @return this builder
          */
         public Builder in(InputStream in) {
             this.in = in;
@@ -146,10 +147,10 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * A donde escribe el codigo del usuario.
+         * Where the user's code writes.
          *
-         * @param out la salida
-         * @return este constructor
+         * @param out the output
+         * @return this builder
          */
         public Builder out(PrintStream out) {
             this.out = out;
@@ -157,10 +158,10 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * A donde escribe sus errores el codigo del usuario.
+         * Where the user's code writes its errors.
          *
-         * @param err la salida de errores
-         * @return este constructor
+         * @param err the error output
+         * @return this builder
          */
         public Builder err(PrintStream err) {
             this.err = err;
@@ -168,14 +169,13 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Que consola ve el codigo del usuario.
+         * Which console the user's code sees.
          *
-         * <p>Es lo que hace que {@code System.console()} funcione dentro de la sesion: la consola de
-         * verdad la tiene el interprete, no el codigo del usuario, que corre en otra maquina
-         * virtual.
+         * <p>It is what makes {@code System.console()} work inside the session: the real console
+         * belongs to the interpreter, not to the user's code, which runs on another virtual machine.
          *
-         * @param console la consola, o {@code null} para que no haya
-         * @return este constructor
+         * @param console the console, or {@code null} for none
+         * @return this builder
          * @since 22
          */
         public Builder console(JShellConsole console) {
@@ -184,13 +184,13 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Con que nombres se llaman las variables que el interprete inventa.
+         * What the variables the interpreter invents are called.
          *
-         * <p>Son las que guardan el resultado de una expresion suelta. Por omision se llaman
-         * {@code $1}, {@code $2} y asi.
+         * <p>They are the ones holding the result of a loose expression. By default they are called
+         * {@code $1}, {@code $2} and so on.
          *
-         * @param generator de donde salen los nombres, o {@code null} para los de siempre
-         * @return este constructor
+         * @param generator where the names come from, or {@code null} for the usual ones
+         * @return this builder
          */
         public Builder tempVariableNameGenerator(Supplier<String> generator) {
             this.tempVariableNameGenerator = generator;
@@ -198,13 +198,13 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Con que identificadores se numeran los fragmentos.
+         * Which identifiers the snippets are numbered with.
          *
-         * <p>Recibe el fragmento y el numero que le tocaria. Sirve para que un programa que hospeda
-         * al interprete use su propia numeracion.
+         * <p>It is handed the snippet and the number it would get. It is for a program hosting the
+         * interpreter to use its own numbering.
          *
-         * @param generator de donde salen los identificadores, o {@code null} para los de siempre
-         * @return este constructor
+         * @param generator where the identifiers come from, or {@code null} for the usual ones
+         * @return this builder
          */
         public Builder idGenerator(BiFunction<Snippet, Integer, String> generator) {
             this.idGenerator = generator;
@@ -212,10 +212,10 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Opciones extra para la maquina virtual donde corre el codigo del usuario.
+         * Extra options for the virtual machine the user's code runs on.
          *
-         * @param options las opciones
-         * @return este constructor
+         * @param options the options
+         * @return this builder
          */
         public Builder remoteVMOptions(String... options) {
             for (int i = 0; i < options.length; i++) {
@@ -225,10 +225,10 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Opciones extra para el compilador.
+         * Extra options for the compiler.
          *
-         * @param options las opciones
-         * @return este constructor
+         * @param options the options
+         * @return this builder
          */
         public Builder compilerOptions(String... options) {
             for (int i = 0; i < options.length; i++) {
@@ -238,13 +238,13 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Que motor de ejecucion usar, nombrado.
+         * Which execution engine to use, by name.
          *
-         * <p>El nombre lleva los parametros adentro, separados por comas, porque asi se lo puede
-         * pasar por la linea de comandos: {@code "jdi:launch(true)"}.
+         * <p>The name carries the parameters inside it, separated by commas, so that it can be
+         * passed on the command line: {@code "jdi:launch(true)"}.
          *
-         * @param name el nombre del motor con sus parametros
-         * @return este constructor
+         * @param name the engine's name with its parameters
+         * @return this builder
          */
         public Builder executionEngine(String name) {
             this.executionControlSpec = name;
@@ -252,11 +252,11 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Que motor de ejecucion usar, dado directamente.
+         * Which execution engine to use, given directly.
          *
-         * @param executionControlProvider el motor
-         * @param executionControlParameters sus parametros, o {@code null} para los de omision
-         * @return este constructor
+         * @param executionControlProvider the engine
+         * @param executionControlParameters its parameters, or {@code null} for the default ones
+         * @return this builder
          */
         public Builder executionEngine(ExecutionControlProvider executionControlProvider,
                 Map<String, String> executionControlParameters) {
@@ -266,13 +266,13 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Como envolver el manejador de archivos del compilador.
+         * How to wrap the compiler's file manager.
          *
-         * <p>Sirve para que un programa que hospeda al interprete le dé al compilador sus propias
-         * fuentes: las de un editor que todavia no guardo, por ejemplo.
+         * <p>It is for a program hosting the interpreter to give the compiler its own sources: those
+         * of an editor that has not saved yet, for instance.
          *
-         * @param mapper que hacer con el manejador
-         * @return este constructor
+         * @param mapper what to do with the manager
+         * @return this builder
          * @since 15
          */
         public Builder fileManager(
@@ -282,10 +282,10 @@ public class JShell implements AutoCloseable {
         }
 
         /**
-         * Arma el interprete.
+         * Builds the interpreter.
          *
-         * @return el interprete, con la sesion vacia
-         * @throws IllegalStateException si no se lo pudo armar
+         * @return the interpreter, with an empty session
+         * @throws IllegalStateException if it could not be built
          */
         public JShell build() throws IllegalStateException {
             return new JShell(this);
@@ -293,83 +293,83 @@ public class JShell implements AutoCloseable {
     }
 
     /**
-     * Un interprete con todo por omision.
+     * An interpreter with everything left at its default.
      *
-     * @return el interprete
-     * @throws IllegalStateException si no se lo pudo armar
+     * @return the interpreter
+     * @throws IllegalStateException if it could not be built
      */
     public static JShell create() throws IllegalStateException {
         return builder().build();
     }
 
     /**
-     * Un constructor de interpretes.
+     * A builder of interpreters.
      *
-     * @return el constructor
+     * @return the builder
      */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * El analizador de codigo de este interprete.
+     * This interpreter's code analyser.
      *
-     * <p>En esta biblioteca no hay compilador, y sin compilador no hay analisis: el objeto que se
-     * devuelve tira {@link UnsupportedOperationException} en sus diez metodos en vez de contestar
-     * cualquier cosa. Ver la nota de {@link SourceCodeAnalysis}.
+     * <p>In this library there is no compiler, and without a compiler there is no analysis: the
+     * object returned throws {@link UnsupportedOperationException} from all ten of its methods
+     * instead of answering just anything. See {@link SourceCodeAnalysis}'s note.
      *
-     * @return el analizador
+     * @return the analyser
      */
     public SourceCodeAnalysis sourceCodeAnalysis() {
-        if (this.analisis == null) {
-            this.analisis = new SinCompilador();
+        if (this.analysis == null) {
+            this.analysis = new NoCompiler();
         }
-        return this.analisis;
+        return this.analysis;
     }
 
     /**
-     * Evalua ese codigo y devuelve lo que le paso a cada fragmento afectado.
+     * Evaluates that code and returns what happened to each affected snippet.
      *
-     * <p>En esta biblioteca no hay compilador --{@code ToolProvider.getSystemJavaCompiler()}
-     * devuelve {@code null}--, asi que no hay con que armar la clase sintetica ni con que
-     * compilarla, y esto tira siempre.
+     * <p>In this library there is no compiler --{@code ToolProvider.getSystemJavaCompiler()} returns
+     * {@code null}-- so there is nothing to build the synthetic class with and nothing to compile it
+     * with, and this always throws.
      *
-     * @param input el codigo
-     * @return los sucesos
-     * @throws IllegalStateException si el interprete esta cerrado, o si no hay compilador
+     * @param input the code
+     * @return the events
+     * @throws IllegalStateException if the interpreter is closed, or if there is no compiler
      */
     public List<SnippetEvent> eval(String input) throws IllegalStateException {
-        comprobarVivo();
+        checkAlive();
         throw new IllegalStateException(
-                "no hay compilador: ToolProvider.getSystemJavaCompiler() devuelve null");
+                "no compiler: ToolProvider.getSystemJavaCompiler() returns null");
     }
 
     /**
-     * Borra un fragmento de la sesion.
+     * Drops a snippet from the session.
      *
-     * <p>Los que dependian de el quedan sin resolver, y eso tambien viene en la lista.
+     * <p>The ones that depended on it are left unresolved, and that comes in the list too.
      *
-     * @param snippet el fragmento
-     * @return los sucesos
-     * @throws IllegalStateException si el interprete esta cerrado
-     * @throws NullPointerException si el fragmento es {@code null}
-     * @throws IllegalArgumentException si el fragmento no es de este interprete
+     * @param snippet the snippet
+     * @return the events
+     * @throws IllegalStateException if the interpreter is closed
+     * @throws NullPointerException if the snippet is {@code null}
+     * @throws IllegalArgumentException if the snippet is not from this interpreter
      */
     public List<SnippetEvent> drop(Snippet snippet) throws IllegalStateException {
-        comprobarVivo();
-        comprobarFragmento(snippet);
+        checkAlive();
+        checkSnippet(snippet);
         return new ArrayList<SnippetEvent>();
     }
 
     /**
-     * Agrega eso al camino de clases con el que se compila y se ejecuta.
+     * Adds that to the class path used to compile and to run.
      *
-     * @param path un archivo o directorio
-     * @throws IllegalStateException si el interprete esta cerrado
-     * @throws NullPointerException si el camino es {@code null}
+     * @param path a file or a directory
+     * @throws IllegalStateException if the interpreter is closed
+     * @throws NullPointerException if the path is {@code null}
      */
     public void addToClasspath(String path) {
-        comprobarVivo();
+        checkAlive();
         if (path == null) {
             throw new NullPointerException("path");
         }
@@ -377,18 +377,18 @@ public class JShell implements AutoCloseable {
     }
 
     /**
-     * Intenta cortar el codigo del usuario que este corriendo.
+     * Tries to cut short whatever of the user's code is running.
      *
-     * <p>Puede no lograrlo: si el codigo esta bloqueado esperando entrada o salida, o si atrapa lo
-     * que se le manda, sigue corriendo igual.
+     * <p>It may not manage it: if the code is blocked waiting for input or output, or if it catches
+     * what is sent to it, it goes on running all the same.
      */
     public void stop() {
     }
 
     /**
-     * Cierra el interprete y suelta lo que tenga tomado.
+     * Closes the interpreter and releases whatever it holds.
      *
-     * <p>Avisa una sola vez a los oyentes de cierre, aunque se lo llame de nuevo.
+     * <p>It tells the shutdown listeners once only, even when called again.
      */
     @Override
     public void close() {
@@ -396,258 +396,259 @@ public class JShell implements AutoCloseable {
             return;
         }
         this.closed = true;
-        final List<Consumer<JShell>> copia = new ArrayList<Consumer<JShell>>(
-                this.oyentesDeCierre.values());
-        for (int i = 0; i < copia.size(); i++) {
+        final List<Consumer<JShell>> copy = new ArrayList<Consumer<JShell>>(
+                this.shutdownListeners.values());
+        for (int i = 0; i < copy.size(); i++) {
             try {
-                copia.get(i).accept(this);
+                copy.get(i).accept(this);
             } catch (Throwable t) {
-                // Un oyente que tira no puede impedir que el interprete se cierre.
+                // A listener that throws cannot keep the interpreter from closing.
             }
         }
     }
 
     /**
-     * Todos los fragmentos, en orden de identificador.
+     * Every snippet, in identifier order.
      *
-     * @return los fragmentos
+     * @return the snippets
      */
     public Stream<Snippet> snippets() {
         return this.snippets.stream();
     }
 
     /**
-     * Las variables activas.
+     * The active variables.
      *
-     * @return las variables
+     * @return the variables
      */
     public Stream<VarSnippet> variables() {
-        return filtrar(VarSnippet.class);
+        return filter(VarSnippet.class);
     }
 
     /**
-     * Los metodos activos.
+     * The active methods.
      *
-     * @return los metodos
+     * @return the methods
      */
     public Stream<MethodSnippet> methods() {
-        return filtrar(MethodSnippet.class);
+        return filter(MethodSnippet.class);
     }
 
     /**
-     * Los tipos declarados activos.
+     * The active declared types.
      *
-     * @return los tipos
+     * @return the types
      */
     public Stream<TypeDeclSnippet> types() {
-        return filtrar(TypeDeclSnippet.class);
+        return filter(TypeDeclSnippet.class);
     }
 
     /**
-     * Los imports activos.
+     * The active imports.
      *
-     * @return los imports
+     * @return the imports
      */
     public Stream<ImportSnippet> imports() {
-        return filtrar(ImportSnippet.class);
+        return filter(ImportSnippet.class);
     }
 
     /**
-     * En que situacion esta ese fragmento.
+     * What state that snippet is in.
      *
-     * @param snippet el fragmento
-     * @return la situacion
-     * @throws NullPointerException si el fragmento es {@code null}
-     * @throws IllegalArgumentException si el fragmento no es de este interprete
+     * @param snippet the snippet
+     * @return the state
+     * @throws NullPointerException if the snippet is {@code null}
+     * @throws IllegalArgumentException if the snippet is not from this interpreter
      */
     public Snippet.Status status(Snippet snippet) {
-        comprobarFragmento(snippet);
+        checkSnippet(snippet);
         return Snippet.Status.NONEXISTENT;
     }
 
     /**
-     * Los errores y avisos de ese fragmento.
+     * That snippet's errors and warnings.
      *
-     * @param snippet el fragmento
-     * @return los diagnosticos
-     * @throws NullPointerException si el fragmento es {@code null}
-     * @throws IllegalArgumentException si el fragmento no es de este interprete
+     * @param snippet the snippet
+     * @return the diagnostics
+     * @throws NullPointerException if the snippet is {@code null}
+     * @throws IllegalArgumentException if the snippet is not from this interpreter
      */
     public Stream<Diag> diagnostics(Snippet snippet) {
-        comprobarFragmento(snippet);
+        checkSnippet(snippet);
         return new ArrayList<Diag>().stream();
     }
 
     /**
-     * Que le falta a ese fragmento para quedar resuelto.
+     * What that snippet is missing in order to be resolved.
      *
-     * @param snippet el fragmento
-     * @return los nombres de lo que le falta
-     * @throws NullPointerException si el fragmento es {@code null}
-     * @throws IllegalArgumentException si el fragmento no es de este interprete
+     * @param snippet the snippet
+     * @return the names of what it is missing
+     * @throws NullPointerException if the snippet is {@code null}
+     * @throws IllegalArgumentException if the snippet is not from this interpreter
      */
     public Stream<String> unresolvedDependencies(DeclarationSnippet snippet) {
-        comprobarFragmento(snippet);
+        checkSnippet(snippet);
         return new ArrayList<String>().stream();
     }
 
     /**
-     * El valor de esa variable, ya convertido a texto.
+     * That variable's value, already turned into text.
      *
-     * @param snippet la variable
-     * @return el valor
-     * @throws IllegalStateException si el interprete esta cerrado
-     * @throws NullPointerException si el fragmento es {@code null}
-     * @throws IllegalArgumentException si el fragmento no es de este interprete, o si la variable no
-     *     esta definida
+     * @param snippet the variable
+     * @return the value
+     * @throws IllegalStateException if the interpreter is closed
+     * @throws NullPointerException if the snippet is {@code null}
+     * @throws IllegalArgumentException if the snippet is not from this interpreter, or if the
+     *     variable is not defined
      */
     public String varValue(VarSnippet snippet) throws IllegalStateException {
-        comprobarVivo();
-        comprobarFragmento(snippet);
-        throw new IllegalArgumentException("la variable no esta definida: " + snippet);
+        checkAlive();
+        checkSnippet(snippet);
+        throw new IllegalArgumentException("the variable is not defined: " + snippet);
     }
 
     /**
-     * Pide que se avise cada vez que a un fragmento le pase algo.
+     * Asks to be told every time something happens to a snippet.
      *
-     * @param listener a quien avisarle
-     * @return con que sacar el aviso
-     * @throws IllegalStateException si el interprete esta cerrado
-     * @throws NullPointerException si el oyente es {@code null}
+     * @param listener whom to tell
+     * @return what to cancel the notification with
+     * @throws IllegalStateException if the interpreter is closed
+     * @throws NullPointerException if the listener is {@code null}
      */
     public Subscription onSnippetEvent(Consumer<SnippetEvent> listener)
             throws IllegalStateException {
-        comprobarVivo();
+        checkAlive();
         if (listener == null) {
             throw new NullPointerException("listener");
         }
         final Subscription s = new Subscription();
-        this.oyentesDeFragmento.put(s, listener);
+        this.snippetListeners.put(s, listener);
         return s;
     }
 
     /**
-     * Pide que se avise cuando el interprete se cierre.
+     * Asks to be told when the interpreter closes.
      *
-     * <p>Tambien avisa si la maquina virtual donde corre el codigo del usuario se muere sola, que es
-     * lo que pasa cuando alguien escribe {@code System.exit()} en la sesion.
+     * <p>It also tells when the virtual machine the user's code runs on dies by itself, which is
+     * what happens when somebody writes {@code System.exit()} in the session.
      *
-     * @param listener a quien avisarle
-     * @return con que sacar el aviso
-     * @throws IllegalStateException si el interprete esta cerrado
-     * @throws NullPointerException si el oyente es {@code null}
+     * @param listener whom to tell
+     * @return what to cancel the notification with
+     * @throws IllegalStateException if the interpreter is closed
+     * @throws NullPointerException if the listener is {@code null}
      */
     public Subscription onShutdown(Consumer<JShell> listener) throws IllegalStateException {
-        comprobarVivo();
+        checkAlive();
         if (listener == null) {
             throw new NullPointerException("listener");
         }
         final Subscription s = new Subscription();
-        this.oyentesDeCierre.put(s, listener);
+        this.shutdownListeners.put(s, listener);
         return s;
     }
 
     /**
-     * Saca un aviso que se habia pedido.
+     * Cancels a notification that had been asked for.
      *
-     * <p>Un identificador de otro interprete no hace nada: sacar algo que no esta no es un error.
+     * <p>A token from another interpreter does nothing: cancelling something that is not there is
+     * not an error.
      *
-     * @param token el identificador que devolvio el pedido
-     * @throws NullPointerException si el identificador es {@code null}
+     * @param token the token the request returned
+     * @throws NullPointerException if the token is {@code null}
      */
     public void unsubscribe(Subscription token) {
         if (token == null) {
             throw new NullPointerException("token");
         }
-        this.oyentesDeFragmento.remove(token);
-        this.oyentesDeCierre.remove(token);
+        this.snippetListeners.remove(token);
+        this.shutdownListeners.remove(token);
     }
 
-    /** Los fragmentos activos de esa clase. */
-    private <T extends Snippet> Stream<T> filtrar(Class<T> clase) {
+    /** The active snippets of that kind. */
+    private <T extends Snippet> Stream<T> filter(Class<T> type) {
         final List<T> out = new ArrayList<T>();
         for (int i = 0; i < this.snippets.size(); i++) {
             final Snippet s = this.snippets.get(i);
-            if (clase.isInstance(s) && status(s).isActive()) {
-                out.add(clase.cast(s));
+            if (type.isInstance(s) && status(s).isActive()) {
+                out.add(type.cast(s));
             }
         }
         return out.stream();
     }
 
-    private void comprobarVivo() {
+    private void checkAlive() {
         if (this.closed) {
             throw new IllegalStateException("JShell (" + this + ") has been closed.");
         }
     }
 
     /**
-     * Comprueba que el fragmento sea de este interprete.
+     * Checks that the snippet is from this interpreter.
      *
-     * <p>Nunca lo es: los fragmentos los fabrica {@link #eval}, y {@link #eval} no puede fabricar
-     * ninguno sin compilador. Cualquier fragmento que llegue aca viene de otro lado.
+     * <p>It never is: snippets are made by {@link #eval}, and {@link #eval} cannot make one without
+     * a compiler. Any snippet that gets here comes from somewhere else.
      */
-    private void comprobarFragmento(Snippet snippet) {
+    private void checkSnippet(Snippet snippet) {
         if (snippet == null) {
             throw new NullPointerException("snippet");
         }
-        throw new IllegalArgumentException("el fragmento no es de este interprete: " + snippet);
+        throw new IllegalArgumentException("the snippet is not from this interpreter: " + snippet);
     }
 
-    /** El analizador que no hay, porque no hay compilador con que analizar. */
-    private static final class SinCompilador extends SourceCodeAnalysis {
+    /** The analyser there is not, because there is no compiler to analyse with. */
+    private static final class NoCompiler extends SourceCodeAnalysis {
 
-        private static final String MOTIVO =
-                "no hay compilador: ToolProvider.getSystemJavaCompiler() devuelve null";
+        private static final String REASON =
+                "no compiler: ToolProvider.getSystemJavaCompiler() returns null";
 
         @Override
         public CompletionInfo analyzeCompletion(String input) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public List<Suggestion> completionSuggestions(String input, int cursor, int[] anchor) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public List<Documentation> documentation(String input, int cursor, boolean computeJavadoc) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public String analyzeType(String code, int cursor) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public QualifiedNames listQualifiedNames(String code, int cursor) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public SnippetWrapper wrapper(Snippet snippet) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public List<SnippetWrapper> wrappers(String input) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public List<Snippet> sourceToSnippets(String input) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public Collection<Snippet> dependents(Snippet snippet) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
 
         @Override
         public List<Highlight> highlights(String input) {
-            throw new UnsupportedOperationException(MOTIVO);
+            throw new UnsupportedOperationException(REASON);
         }
     }
 }

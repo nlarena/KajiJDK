@@ -1,10 +1,10 @@
 package jdk.jshell;
 
 /**
- * Una sentencia suelta.
+ * A loose statement.
  *
- * <p>Un {@code if}, un {@code for}, un {@code while}. Se ejecuta y no deja nada: ni nombre ni valor,
- * a diferencia de una expresion. Es el unico fragmento ejecutable que no produce algo para mostrar.
+ * <p>An {@code if}, a {@code for}, a {@code while}. It runs and leaves nothing: no name and no
+ * value, unlike an expression. It is the only executable snippet that produces nothing to show.
  *
  * @since 9
  */

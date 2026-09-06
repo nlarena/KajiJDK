@@ -1,10 +1,11 @@
 package jdk.jshell;
 
 /**
- * La declaracion de una clase, interfaz, enumeracion, registro o tipo de anotacion.
+ * The declaration of a class, interface, enum, record or annotation type.
  *
- * <p>Cual de esas cinco es lo dice {@link Snippet#subKind}. Las cinco se tratan igual en todo lo
- * demas: tienen nombre, quedan declaradas, y reemplazan a la anterior del mismo nombre.
+ * <p>Which of those five it is comes from {@link Snippet#subKind}. All five are treated alike in
+ * everything else: they have a name, they stay declared, and they replace the previous one of the
+ * same name.
  *
  * @since 9
  */

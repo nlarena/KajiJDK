@@ -1,14 +1,15 @@
 package jdk.jshell;
 
 /**
- * Un fragmento que no se pudo entender.
+ * A snippet that could not be understood.
  *
- * <h2>Por que existe en vez de tirar</h2>
+ * <h2>Why it exists instead of throwing</h2>
  *
- * <p>En un interprete, escribir algo mal es lo normal, y no puede costar el estado de la sesion. El
- * fragmento erroneo se guarda igual, con sus errores, y se puede listar y consultar como cualquier
- * otro. {@link #probableKind} es lo que el analizador cree que se estaba intentando escribir --sirve
- * para dar un mensaje util--, y puede ser {@link Snippet.Kind#ERRONEOUS} si no llego ni a eso.
+ * <p>In an interpreter, writing something wrong is the normal case, and it cannot cost the session
+ * its state. The erroneous snippet is kept all the same, with its errors, and can be listed and
+ * consulted like any other. {@link #probableKind} is what the analyser believes was being written
+ * --it is for giving a useful message-- and it may be {@link Snippet.Kind#ERRONEOUS} when it could
+ * not tell even that.
  *
  * @since 9
  */
@@ -22,9 +23,9 @@ public class ErroneousSnippet extends Snippet {
     }
 
     /**
-     * Que se estaba intentando escribir, hasta donde se pudo saber.
+     * What was being written, as far as could be told.
      *
-     * @return la clase probable
+     * @return the probable kind
      */
     public Kind probableKind() {
         return this.probableKind;

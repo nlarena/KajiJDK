@@ -7,61 +7,62 @@ import jdk.jshell.spi.ExecutionControl.InternalException;
 import jdk.jshell.spi.ExecutionControl.NotImplementedException;
 
 /**
- * Quien se encarga de meter las clases en la maquina virtual que ejecuta.
+ * Whoever takes care of getting the classes into the virtual machine that runs them.
  *
- * <h2>Por que es una interfaz aparte</h2>
+ * <h2>Why it is a separate interface</h2>
  *
- * <p>Un motor de ejecucion hace dos cosas bien distintas: instalar el codigo y correrlo. La segunda
- * es siempre igual --buscar el metodo y llamarlo--; la primera cambia por completo segun donde este
- * el codigo, si hay que aislarlo del resto, y si se lo puede reemplazar en caliente.
+ * <p>An execution engine does two quite different things: installing the code and running it. The
+ * second is always the same --find the method and call it; the first changes completely depending on
+ * where the code is, whether it has to be isolated from the rest, and whether it can be replaced
+ * while running.
  *
- * <p>Separarlas es lo que permite tener un solo {@link DirectExecutionControl} y cambiarle el
- * cargador: uno que define en un {@link ClassLoader} propio, otro que reusa el del programa, otro
- * que manda los bytes a la otra punta.
+ * <p>Separating them is what allows a single {@link DirectExecutionControl} whose loader can be
+ * swapped: one that defines into a {@link ClassLoader} of its own, another that reuses the program's,
+ * another that sends the bytes to the far end.
  *
- * <h2>{@link #classesRedefined} no lanza nada</h2>
+ * <h2>{@link #classesRedefined} throws nothing</h2>
  *
- * <p>Es un aviso, no una operacion: le dice al cargador que unas clases que el instalo acaban de
- * cambiar de contenido. Quien redefinio ya hizo el trabajo y no esta esperando permiso, asi que no
- * hay nada que el cargador pueda contestar.
+ * <p>It is a notice, not an operation: it tells the loader that some classes it installed have just
+ * changed content. Whoever redefined them has already done the work and is not waiting for
+ * permission, so there is nothing the loader could answer.
  *
  * @since 9
  */
 public interface LoaderDelegate {
 
     /**
-     * Instala esas clases.
+     * Installs those classes.
      *
-     * @param cbcs los nombres y el bytecode de cada una
-     * @throws ClassInstallException si alguna no se pudo instalar
-     * @throws NotImplementedException si este cargador no sabe instalar
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param cbcs the name and the bytecode of each one
+     * @throws ClassInstallException if any of them could not be installed
+     * @throws NotImplementedException if this loader does not know how to install
+     * @throws EngineTerminationException if the engine is gone
      */
     void load(ClassBytecodes[] cbcs)
             throws ClassInstallException, NotImplementedException, EngineTerminationException;
 
     /**
-     * Aviso de que esas clases cambiaron de contenido.
+     * Notice that those classes changed content.
      *
-     * @param cbcs las clases redefinidas
+     * @param cbcs the redefined classes
      */
     void classesRedefined(ClassBytecodes[] cbcs);
 
     /**
-     * Agrega una entrada al camino de busqueda de clases.
+     * Adds an entry to the class search path.
      *
-     * @param path la entrada
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si no se pudo agregar
+     * @param path the entry
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if it could not be added
      */
     void addToClasspath(String path) throws EngineTerminationException, InternalException;
 
     /**
-     * Busca una clase por nombre.
+     * Looks a class up by name.
      *
-     * @param name el nombre completo
-     * @return la clase
-     * @throws ClassNotFoundException si no esta
+     * @param name the full name
+     * @return the class
+     * @throws ClassNotFoundException if it is not there
      */
     Class<?> findClass(String name) throws ClassNotFoundException;
 }

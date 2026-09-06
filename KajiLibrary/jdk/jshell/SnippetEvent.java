@@ -1,19 +1,20 @@
 package jdk.jshell;
 
 /**
- * Lo que le paso a un fragmento.
+ * What happened to a snippet.
  *
- * <h2>Por que evaluar produce varios</h2>
+ * <h2>Why evaluating produces several</h2>
  *
- * <p>Porque un fragmento arrastra a los demas. Reescribir un metodo deja al anterior en
- * {@link Snippet.Status#OVERWRITTEN} y puede volver valido a un tercero que lo estaba esperando: son
- * tres sucesos por una sola evaluacion. {@link #causeSnippet} es lo que los distingue --el fragmento
- * que se evaluo tiene {@code null}, los arrastrados apuntan a el--.
+ * <p>Because one snippet drags the others along. Rewriting a method leaves the earlier one in
+ * {@link Snippet.Status#OVERWRITTEN} and may make valid a third one that was waiting for it: three
+ * events out of a single evaluation. {@link #causeSnippet} is what tells them apart --the snippet
+ * that was evaluated has {@code null}, the dragged ones point at it.
  *
  * <h2>{@link #isSignatureChange}</h2>
  *
- * <p>Dice si lo que cambio fue la forma de lo declarado y no solo su cuerpo. Importa porque un
- * cambio de firma obliga a recompilar todo lo que dependia, y un cambio de cuerpo no.
+ * <p>It says whether what changed was the shape of what is declared and not only its body. It
+ * matters because a signature change forces everything that depended on it to be recompiled, and a
+ * body change does not.
  *
  * @since 9
  */
@@ -40,75 +41,75 @@ public class SnippetEvent {
     }
 
     /**
-     * De que fragmento se trata.
+     * Which snippet this is about.
      *
-     * @return el fragmento
+     * @return the snippet
      */
     public Snippet snippet() {
         return this.snippet;
     }
 
     /**
-     * En que situacion estaba antes.
+     * What state it was in before.
      *
-     * @return la situacion anterior
+     * @return the previous state
      */
     public Snippet.Status previousStatus() {
         return this.previousStatus;
     }
 
     /**
-     * En que situacion quedo.
+     * What state it ended up in.
      *
-     * @return la situacion nueva
+     * @return the new state
      */
     public Snippet.Status status() {
         return this.status;
     }
 
     /**
-     * Si cambio la forma de lo declarado y no solo su cuerpo.
+     * Whether the shape of what is declared changed and not only its body.
      *
-     * @return cierto si cambio la firma
+     * @return true if the signature changed
      */
     public boolean isSignatureChange() {
         return this.isSignatureChange;
     }
 
     /**
-     * Que fragmento arrastro a este.
+     * Which snippet dragged this one along.
      *
-     * @return el fragmento que se evaluo, o {@code null} si este es el que se evaluo
+     * @return the snippet that was evaluated, or {@code null} if this is the one that was
      */
     public Snippet causeSnippet() {
         return this.causeSnippet;
     }
 
     /**
-     * Que excepcion tiro el codigo del usuario.
+     * Which exception the user's code threw.
      *
-     * @return la excepcion, o {@code null} si no tiro ninguna
+     * @return the exception, or {@code null} if it threw none
      */
     public JShellException exception() {
         return this.exception;
     }
 
     /**
-     * El valor que produjo, ya convertido a texto.
+     * The value it produced, already turned into text.
      *
-     * <p>Viene como texto y no como objeto porque el valor vive en la otra maquina virtual, y su
-     * clase puede no existir de este lado.
+     * <p>It comes as text and not as an object because the value lives on the other virtual machine,
+     * and its class may not exist on this side.
      *
-     * @return el valor, o {@code null} si el fragmento no produce ninguno
+     * @return the value, or {@code null} if the snippet produces none
      */
     public String value() {
         return this.value;
     }
 
     /**
-     * Para leer al depurar.
+     * For reading while debugging.
      *
-     * @return el fragmento, las dos situaciones y el valor
+     * @return the snippet, the two states and the value
      */
     @Override
     public String toString() {

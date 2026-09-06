@@ -8,30 +8,30 @@ import jdk.jshell.spi.ExecutionControlProvider;
 import jdk.jshell.spi.ExecutionEnv;
 
 /**
- * El proveedor del motor local: ejecuta los fragmentos en el mismo proceso que JShell.
+ * The local engine's provider: it runs the snippets in the same process as JShell.
  *
- * <h2>Cuando conviene</h2>
+ * <h2>When it is worth it</h2>
  *
- * <p>Cuando se quiere que los fragmentos vean lo que ya esta cargado --por ejemplo, al embeber
- * JShell dentro de una aplicacion para inspeccionarla desde adentro-- y cuando arrancar otro proceso
- * cuesta demasiado.
+ * <p>When the snippets are meant to see what is already loaded --for instance, when embedding JShell
+ * inside an application to inspect it from within-- and when starting another process costs too
+ * much.
  *
- * <h2>Cuando no</h2>
+ * <h2>When it is not</h2>
  *
- * <p>Cuando lo que se ejecuta puede no ser de confianza. Un fragmento local comparte el monton, los
- * hilos y los archivos abiertos con JShell: un {@code System.exit(0)} del usuario se lleva la sesion
- * puesta. Por eso el motor por omision de la herramienta {@code jshell} no es este sino el remoto.
+ * <p>When what is run may not be trusted. A local snippet shares the heap, the threads and the open
+ * files with JShell: a {@code System.exit(0)} of the user's takes the session with it. That is why
+ * the {@code jshell} tool's default engine is not this one but the remote one.
  *
  * @since 9
  */
 public class LocalExecutionControlProvider implements ExecutionControlProvider {
 
-    /** Un proveedor. */
+    /** One provider. */
     public LocalExecutionControlProvider() {
     }
 
     /**
-     * El nombre con el que se lo pide.
+     * The name it is asked for by.
      *
      * @return {@code "local"}
      */
@@ -41,9 +41,9 @@ public class LocalExecutionControlProvider implements ExecutionControlProvider {
     }
 
     /**
-     * Los parametros que admite.
+     * The parameters it accepts.
      *
-     * @return un mapa vacio: este motor no tiene nada que configurar
+     * @return an empty map: this engine has nothing to configure
      */
     @Override
     public Map<String, String> defaultParameters() {
@@ -51,11 +51,11 @@ public class LocalExecutionControlProvider implements ExecutionControlProvider {
     }
 
     /**
-     * Fabrica el motor.
+     * Builds the engine.
      *
-     * @param env el entorno de la sesion
-     * @param parameters los parametros; este motor no usa ninguno
-     * @return el motor
+     * @param env the session's environment
+     * @param parameters the parameters; this engine uses none
+     * @return the engine
      */
     @Override
     public ExecutionControl generate(ExecutionEnv env, Map<String, String> parameters) {
@@ -63,15 +63,15 @@ public class LocalExecutionControlProvider implements ExecutionControlProvider {
     }
 
     /**
-     * Lo mismo que {@link #generate}, sin declarar excepciones.
+     * The same as {@link #generate}, without declaring exceptions.
      *
-     * <p>Existe porque este proveedor no puede fallar al construir el motor --no abre puertos ni
-     * arranca procesos-- y quien lo usa directamente no tiene por que envolverlo en un
+     * <p>It exists because this provider cannot fail while building the engine --it opens no ports
+     * and starts no processes-- and whoever uses it directly should not have to wrap it in a
      * {@code try}.
      *
-     * @param env el entorno de la sesion
-     * @param parameters los parametros
-     * @return el motor
+     * @param env the session's environment
+     * @param parameters the parameters
+     * @return the engine
      */
     public ExecutionControl createExecutionControl(ExecutionEnv env,
             Map<String, String> parameters) {

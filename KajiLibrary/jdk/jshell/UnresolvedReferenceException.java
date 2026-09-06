@@ -1,17 +1,17 @@
 package jdk.jshell;
 
 /**
- * Se intento usar algo que quedo declarado a medias.
+ * Something left half declared was used.
  *
- * <h2>Cuando pasa</h2>
+ * <h2>When it happens</h2>
  *
- * <p>Escribir un metodo que llama a otro que todavia no existe se acepta: en una sesion interactiva
- * el orden en que se escriben las cosas no tiene por que ser el orden en que se usan. El metodo
- * queda en {@link Snippet.Status#RECOVERABLE_DEFINED} y esperando. Si se lo llama antes de que
- * aparezca lo que le falta, salta esto.
+ * <p>Writing a method that calls another that does not exist yet is accepted: in an interactive
+ * session the order things are written in need not be the order they are used in. The method is left
+ * in {@link Snippet.Status#RECOVERABLE_DEFINED} and waiting. If it is called before what it is
+ * missing turns up, this is thrown.
  *
- * <p>{@link #getSnippet} devuelve el fragmento incompleto, y de ahi
- * {@link JShell#unresolvedDependencies} dice que le falta.
+ * <p>{@link #getSnippet} returns the incomplete snippet, and from there
+ * {@link JShell#unresolvedDependencies} says what it is missing.
  *
  * @since 9
  */
@@ -27,9 +27,9 @@ public class UnresolvedReferenceException extends JShellException {
     }
 
     /**
-     * El fragmento que quedo declarado a medias.
+     * The snippet that was left half declared.
      *
-     * @return el fragmento
+     * @return the snippet
      */
     public DeclarationSnippet getSnippet() {
         return this.snippet;

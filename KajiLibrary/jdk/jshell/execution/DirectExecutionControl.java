@@ -8,37 +8,38 @@ import jdk.jshell.spi.ExecutionControl;
 import jdk.jshell.spi.SPIResolutionException;
 
 /**
- * El motor que ejecuta los fragmentos <strong>en esta misma maquina virtual</strong>, por reflexion.
+ * The engine that runs the snippets <strong>on this very virtual machine</strong>, by reflection.
  *
- * <h2>Que hace</h2>
+ * <h2>What it does</h2>
  *
- * <p>JShell compila cada fragmento a una clase con un metodo, se la manda a {@link #load}, y despues
- * pide {@link #invoke}. Este motor instala las clases con un {@link LoaderDelegate}, busca el metodo
- * y lo llama. No hay proceso aparte ni protocolo: es una llamada.
+ * <p>JShell compiles each snippet into a class with a method, sends it to {@link #load}, and then
+ * asks for {@link #invoke}. This engine installs the classes with a {@link LoaderDelegate}, finds
+ * the method and calls it. There is no separate process and no protocol: it is a call.
  *
- * <h2>Por que el resultado es un {@code String}</h2>
+ * <h2>Why the result is a {@code String}</h2>
  *
- * <p>Porque el motor puede estar del otro lado de un socket, y ahi devolver el objeto obligaria a
- * serializarlo --a el y a todo lo que cuelgue de el--. Se manda su representacion y listo. Que la
- * version local haga lo mismo no es desperdicio: es lo que garantiza que un fragmento se vea igual
- * corriendo local o remoto.
+ * <p>Because the engine may be on the other side of a socket, and there returning the object would
+ * mean serializing it --and everything hanging off it. Its representation is sent and that is that.
+ * That the local version does the same is not waste: it is what guarantees a snippet looks the same
+ * running locally or remotely.
  *
- * <h2>Las excepciones del usuario</h2>
+ * <h2>The user's exceptions</h2>
  *
- * <p>Una excepcion del codigo del usuario no es una falla de este motor, asi que no puede subir tal
- * cual: se la convierte en {@link ExecutionControl.UserException}, que lleva el nombre de la clase
- * original y la traza. La conversion pasa por {@link #throwConvertedInvocationException}, que esta
- * separada justamente para que un motor remoto pueda hacerla distinto.
+ * <p>An exception from the user's code is not a failure of this engine, so it cannot travel up as it
+ * is: it is turned into an {@link ExecutionControl.UserException}, which carries the original
+ * class's name and the stack trace. The conversion goes through
+ * {@link #throwConvertedInvocationException}, which is separate precisely so that a remote engine
+ * can do it differently.
  *
- * <p>El caso raro es {@link SPIResolutionException}: no es un error del programa sino la forma en
- * que JShell avisa que el fragmento uso algo que todavia no esta definido. Por eso se la reconoce y
- * se la convierte en {@link ExecutionControl.ResolutionException}, que JShell entiende.
+ * <p>The odd case is {@link SPIResolutionException}: it is not a mistake in the program but the way
+ * JShell says the snippet used something that is not defined yet. That is why it is recognized and
+ * turned into an {@link ExecutionControl.ResolutionException}, which JShell understands.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Funciona. Definir una clase desde su bytecode y llamarla por reflexion es todo lo que necesita,
- * y las dos cosas andan. Lo unico que no puede es {@link #stop}: cortar lo que se esta ejecutando
- * requiere que la ejecucion pase por otro hilo, y eso lo agrega {@link LocalExecutionControl}.
+ * <p>It works. Defining a class from its bytecode and calling it by reflection is all it needs, and
+ * both work. The only thing it cannot do is {@link #stop}: cutting short what is running requires
+ * the execution to go through another thread, and that is what {@link LocalExecutionControl} adds.
  *
  * @since 9
  */
@@ -47,26 +48,26 @@ public class DirectExecutionControl implements ExecutionControl {
     private final LoaderDelegate loaderDelegate;
 
     /**
-     * Un motor con ese cargador.
+     * An engine with that loader.
      *
-     * @param loaderDelegate quien instala las clases
+     * @param loaderDelegate whoever installs the classes
      */
     public DirectExecutionControl(LoaderDelegate loaderDelegate) {
         this.loaderDelegate = loaderDelegate;
     }
 
-    /** Un motor con el cargador por omision. */
+    /** An engine with the default loader. */
     public DirectExecutionControl() {
         this(new DefaultLoaderDelegate());
     }
 
     /**
-     * Instala esas clases.
+     * Installs those classes.
      *
-     * @param cbcs los nombres y el bytecode de cada una
-     * @throws ClassInstallException si alguna no se pudo instalar
-     * @throws NotImplementedException si el cargador no sabe instalar
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param cbcs the name and the bytecode of each one
+     * @throws ClassInstallException if any of them could not be installed
+     * @throws NotImplementedException if the loader does not know how to install
+     * @throws EngineTerminationException if the engine is gone
      */
     @Override
     public void load(ClassBytecodes[] cbcs)
@@ -76,12 +77,12 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Reemplaza el codigo de clases que ya estaban.
+     * Replaces the code of classes that were already there.
      *
-     * @param cbcs las clases y su bytecode nuevo
-     * @throws ClassInstallException si no se pudieron reemplazar
-     * @throws NotImplementedException si este motor no sabe redefinir
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param cbcs the classes and their new bytecode
+     * @throws ClassInstallException if they could not be replaced
+     * @throws NotImplementedException if this engine does not know how to redefine
+     * @throws EngineTerminationException if the engine is gone
      */
     @Override
     public void redefine(ClassBytecodes[] cbcs)
@@ -90,11 +91,11 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Aviso de que esas clases cambiaron de contenido.
+     * Notice that those classes changed content.
      *
-     * @param cbcs las clases redefinidas
-     * @throws NotImplementedException si este motor no lo soporta
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param cbcs the redefined classes
+     * @throws NotImplementedException if this engine does not support it
+     * @throws EngineTerminationException if the engine is gone
      */
     protected void classesRedefined(ClassBytecodes[] cbcs)
             throws NotImplementedException, EngineTerminationException {
@@ -102,14 +103,14 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Llama a ese metodo estatico sin argumentos y devuelve su resultado.
+     * Calls that static method with no arguments and returns its result.
      *
-     * @param className la clase
-     * @param methodName el metodo
-     * @return la representacion del resultado
-     * @throws RunException si el codigo del usuario fallo
-     * @throws InternalException si fallo el motor
-     * @throws EngineTerminationException si el motor ya no esta
+     * @param className the class
+     * @param methodName the method
+     * @return the representation of the result
+     * @throws RunException if the user's code failed
+     * @throws InternalException if the engine failed
+     * @throws EngineTerminationException if the engine is gone
      */
     @Override
     public String invoke(String className, String methodName)
@@ -134,14 +135,14 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * El valor de una variable estatica, como texto.
+     * A static variable's value, as text.
      *
-     * @param className la clase
-     * @param varName la variable
-     * @return la representacion del valor
-     * @throws RunException si el codigo del usuario fallo
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si fallo el motor
+     * @param className the class
+     * @param varName the variable
+     * @return the representation of the value
+     * @throws RunException if the user's code failed
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if the engine failed
      */
     @Override
     public String varValue(String className, String varName)
@@ -158,11 +159,11 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Agrega una entrada al camino de busqueda de clases.
+     * Adds an entry to the class search path.
      *
-     * @param path la entrada
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si no se pudo agregar
+     * @param path the entry
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if it could not be added
      */
     @Override
     public void addToClasspath(String path) throws EngineTerminationException, InternalException {
@@ -170,10 +171,10 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Corta lo que se este ejecutando.
+     * Cuts short whatever is running.
      *
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si no se pudo cortar
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if it could not be cut short
      */
     @Override
     public void stop() throws EngineTerminationException, InternalException {
@@ -181,14 +182,14 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Una operacion que no esta en la interfaz, para motores con capacidades propias.
+     * An operation that is not in the interface, for engines with capabilities of their own.
      *
-     * @param command el nombre de la operacion
-     * @param arg su argumento
-     * @return lo que devuelva
-     * @throws RunException si el codigo del usuario fallo
-     * @throws EngineTerminationException si el motor ya no esta
-     * @throws InternalException si fallo el motor
+     * @param command the operation's name
+     * @param arg its argument
+     * @return whatever it returns
+     * @throws RunException if the user's code failed
+     * @throws EngineTerminationException if the engine is gone
+     * @throws InternalException if the engine failed
      */
     @Override
     public Object extensionCommand(String command, Object arg)
@@ -196,44 +197,44 @@ public class DirectExecutionControl implements ExecutionControl {
         throw new NotImplementedException("extensionCommand: " + command);
     }
 
-    /** Cierra el motor. */
+    /** Closes the engine. */
     @Override
     public void close() {
     }
 
     /**
-     * Busca una clase instalada.
+     * Looks an installed class up.
      *
-     * @param className el nombre
-     * @return la clase
-     * @throws ClassNotFoundException si no esta
+     * @param className the name
+     * @return the class
+     * @throws ClassNotFoundException if it is not there
      */
     protected Class<?> findClass(String className) throws ClassNotFoundException {
         return loaderDelegate.findClass(className);
     }
 
     /**
-     * La llamada propiamente dicha.
+     * The call proper.
      *
-     * <p>Esta separada para que las subclases puedan envolverla: {@link LocalExecutionControl} la
-     * corre en otro hilo, que es lo que hace posible cortarla.
+     * <p>It is separate so that subclasses can wrap it: {@link LocalExecutionControl} runs it on
+     * another thread, which is what makes cutting it short possible.
      *
-     * @param doitMethod el metodo
-     * @return la representacion del resultado
-     * @throws Exception lo que sea que haya fallado
+     * @param doitMethod the method
+     * @return the representation of the result
+     * @throws Exception whatever failed
      */
     protected String invoke(Method doitMethod) throws Exception {
         return valueString(doitMethod.invoke(null, new Object[0]));
     }
 
     /**
-     * Como se ve un valor del lado de JShell.
+     * How a value looks on JShell's side.
      *
-     * <p>Los textos van entre comillas y el resto por su {@code toString}. Sin las comillas, el
-     * {@code null} y la cadena {@code "null"} se verian igual, y son cosas distintas.
+     * <p>Strings go in quotes and the rest through their {@code toString}. Without the quotes,
+     * {@code null} and the string {@code "null"} would look the same, and they are different things.
      *
-     * @param value el valor
-     * @return su representacion
+     * @param value the value
+     * @return its representation
      */
     protected static String valueString(Object value) {
         if (value == null) {
@@ -249,16 +250,16 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Convierte una excepcion que lanzo el codigo del usuario.
+     * Converts an exception the user's code threw.
      *
-     * <p>Nunca devuelve: siempre lanza. Devuelve {@code String} para poder escribirse como
-     * {@code return throwConverted...(e)} en el lugar donde hace falta un valor, que es una forma
-     * de que el compilador sepa que ese camino no sigue.
+     * <p>It never returns: it always throws. It returns {@code String} so that it can be written as
+     * {@code return throwConverted...(e)} where a value is needed, which is one way of letting the
+     * compiler know that path does not carry on.
      *
-     * @param ex lo que lanzo el usuario
-     * @return nunca
-     * @throws RunException la version convertida
-     * @throws InternalException si la conversion misma fallo
+     * @param ex what the user threw
+     * @return never
+     * @throws RunException the converted version
+     * @throws InternalException if the conversion itself failed
      */
     protected String throwConvertedInvocationException(Throwable ex)
             throws RunException, InternalException {
@@ -271,12 +272,12 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Convierte una excepcion que no vino del codigo del usuario.
+     * Converts an exception that did not come from the user's code.
      *
-     * @param ex lo que fallo
-     * @return nunca
-     * @throws RunException si igual corresponde tratarla como del usuario
-     * @throws InternalException lo habitual
+     * @param ex what failed
+     * @return never
+     * @throws RunException if it should be treated as the user's after all
+     * @throws InternalException the usual case
      */
     protected String throwConvertedOtherException(Throwable ex)
             throws RunException, InternalException {
@@ -284,17 +285,17 @@ public class DirectExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Aviso de que se va a entrar al codigo del usuario.
+     * Notice that the user's code is about to be entered.
      *
-     * @throws InternalException si el motor no esta en condiciones
+     * @throws InternalException if the engine is not in a fit state
      */
     protected void clientCodeEnter() throws InternalException {
     }
 
     /**
-     * Aviso de que se salio del codigo del usuario.
+     * Notice that the user's code has been left.
      *
-     * @throws InternalException si el motor no esta en condiciones
+     * @throws InternalException if the engine is not in a fit state
      */
     protected void clientCodeLeave() throws InternalException {
     }

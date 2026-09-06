@@ -8,33 +8,33 @@ import java.io.ObjectOutput;
 import jdk.jshell.spi.ExecutionControl;
 
 /**
- * El motor que no ejecuta nada: le pasa cada operacion a otro por un par de flujos.
+ * The engine that runs nothing: it hands every operation to another one over a pair of streams.
  *
- * <h2>Que es</h2>
+ * <h2>What it is</h2>
  *
- * <p>La punta de JShell del protocolo. Cada metodo escribe el nombre del comando y sus argumentos,
- * vacia el flujo, y lee la respuesta. Del otro lado hay un {@link ExecutionControlForwarder} que
- * hace lo inverso y termina llamando a un motor de verdad --normalmente un
- * {@link RemoteExecutionControl} en otro proceso--.
+ * <p>JShell's end of the protocol. Each method writes the command's name and its arguments, flushes
+ * the stream, and reads the answer. On the other side there is an {@link ExecutionControlForwarder}
+ * doing the reverse and ending up calling a real engine --usually a {@link RemoteExecutionControl}
+ * in another process.
  *
- * <h2>Por que cada respuesta empieza con una marca</h2>
+ * <h2>Why every answer starts with a mark</h2>
  *
- * <p>Porque por el mismo flujo viaja tambien lo que el programa del usuario imprime. Sin
- * {@code COMMAND_PREFIX} delante, un {@code System.out.println("CMD_LOAD")} del usuario seria
- * indistinguible de una respuesta. Ver {@link RemoteCodes}.
+ * <p>Because what the user's program prints travels over the same stream. Without
+ * {@code COMMAND_PREFIX} in front, a {@code System.out.println("CMD_LOAD")} of the user's would be
+ * indistinguishable from an answer. See {@link RemoteCodes}.
  *
- * <h2>El {@code null} que viaja como texto</h2>
+ * <h2>The {@code null} that travels as text</h2>
  *
- * <p>{@code writeUTF} no sabe escribir {@code null}, y los valores del usuario pueden serlo. El
- * protocolo usa una cadena centinela con caracteres de control, que ningun {@code toString} razonable
- * produce. Es un compromiso conocido y esta escrito asi en el JDK; se lo reproduce igual porque el
- * otro lado puede ser el agente del JDK.
+ * <p>{@code writeUTF} cannot write {@code null}, and the user's values may be one. The protocol uses
+ * a sentinel string with control characters, which no reasonable {@code toString} produces. It is a
+ * known compromise and it is written this way in the JDK; it is reproduced all the same because the
+ * other side may be the JDK's agent.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Funciona. El protocolo es lectura y escritura sobre flujos, y no necesita nada mas. La prueba
- * {@code java/JSH2.java} lo corre de punta a punta contra un {@link DirectExecutionControl} del
- * mismo proceso, con dos tuberias en el medio.
+ * <p>It works. The protocol is reading and writing over streams, and it needs nothing else. The test
+ * {@code java/JSH2.java} runs it end to end against a {@link DirectExecutionControl} in the same
+ * process, with two pipes in between.
  *
  * @since 9
  */
@@ -44,10 +44,10 @@ public class StreamingExecutionControl implements ExecutionControl {
     private final ObjectInput in;
 
     /**
-     * Un motor sobre ese par de flujos.
+     * An engine over that pair of streams.
      *
-     * @param out por donde se mandan los comandos
-     * @param in por donde llegan las respuestas
+     * @param out where the commands are sent
+     * @param in where the answers arrive
      */
     public StreamingExecutionControl(ObjectOutput out, ObjectInput in) {
         this.out = out;
@@ -55,12 +55,12 @@ public class StreamingExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Instala esas clases del otro lado.
+     * Installs those classes on the other side.
      *
-     * @param cbcs los nombres y el bytecode de cada una
-     * @throws ClassInstallException si alguna no se pudo instalar
-     * @throws NotImplementedException si el otro motor no sabe instalar
-     * @throws EngineTerminationException si se corto la comunicacion
+     * @param cbcs the name and the bytecode of each one
+     * @throws ClassInstallException if any of them could not be installed
+     * @throws NotImplementedException if the other engine does not know how to install
+     * @throws EngineTerminationException if the connection was cut
      */
     @Override
     public void load(ClassBytecodes[] cbcs)
@@ -69,19 +69,19 @@ public class StreamingExecutionControl implements ExecutionControl {
             writeCommand(RemoteCodes.CMD_LOAD);
             out.writeObject(cbcs);
             out.flush();
-            leerResultadoDeInstalacion();
+            readInstallResult();
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
         }
     }
 
     /**
-     * Reemplaza el codigo de esas clases del otro lado.
+     * Replaces the code of those classes on the other side.
      *
-     * @param cbcs las clases y su bytecode nuevo
-     * @throws ClassInstallException si no se pudieron reemplazar
-     * @throws NotImplementedException si el otro motor no sabe redefinir
-     * @throws EngineTerminationException si se corto la comunicacion
+     * @param cbcs the classes and their new bytecode
+     * @throws ClassInstallException if they could not be replaced
+     * @throws NotImplementedException if the other engine does not know how to redefine
+     * @throws EngineTerminationException if the connection was cut
      */
     @Override
     public void redefine(ClassBytecodes[] cbcs)
@@ -90,21 +90,21 @@ public class StreamingExecutionControl implements ExecutionControl {
             writeCommand(RemoteCodes.CMD_REDEFINE);
             out.writeObject(cbcs);
             out.flush();
-            leerResultadoDeInstalacion();
+            readInstallResult();
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
         }
     }
 
     /**
-     * Llama a ese metodo del otro lado.
+     * Calls that method on the other side.
      *
-     * @param className la clase
-     * @param methodName el metodo
-     * @return la representacion del resultado
-     * @throws RunException si el codigo del usuario fallo
-     * @throws EngineTerminationException si se corto la comunicacion
-     * @throws InternalException si fallo el otro motor
+     * @param className the class
+     * @param methodName the method
+     * @return the representation of the result
+     * @throws RunException if the user's code failed
+     * @throws EngineTerminationException if the connection was cut
+     * @throws InternalException if the other engine failed
      */
     @Override
     public String invoke(String className, String methodName)
@@ -114,7 +114,7 @@ public class StreamingExecutionControl implements ExecutionControl {
             out.writeUTF(className);
             out.writeUTF(methodName);
             out.flush();
-            leerResultadoDeEjecucion();
+            readRunResult();
             return in.readUTF();
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
@@ -122,14 +122,14 @@ public class StreamingExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Lee el valor de una variable del otro lado.
+     * Reads a variable's value on the other side.
      *
-     * @param className la clase
-     * @param varName la variable
-     * @return la representacion del valor, o {@code null}
-     * @throws RunException si el codigo del usuario fallo
-     * @throws EngineTerminationException si se corto la comunicacion
-     * @throws InternalException si fallo el otro motor
+     * @param className the class
+     * @param varName the variable
+     * @return the representation of the value, or {@code null}
+     * @throws RunException if the user's code failed
+     * @throws EngineTerminationException if the connection was cut
+     * @throws InternalException if the other engine failed
      */
     @Override
     public String varValue(String className, String varName)
@@ -139,19 +139,19 @@ public class StreamingExecutionControl implements ExecutionControl {
             out.writeUTF(className);
             out.writeUTF(varName);
             out.flush();
-            leerResultadoDeEjecucion();
-            return leerTextoONulo();
+            readRunResult();
+            return readTextOrNull();
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
         }
     }
 
     /**
-     * Agrega una entrada al camino de busqueda del otro lado.
+     * Adds an entry to the other side's search path.
      *
-     * @param path la entrada
-     * @throws EngineTerminationException si se corto la comunicacion
-     * @throws InternalException si no se pudo agregar
+     * @param path the entry
+     * @throws EngineTerminationException if the connection was cut
+     * @throws InternalException if it could not be added
      */
     @Override
     public void addToClasspath(String path) throws EngineTerminationException, InternalException {
@@ -159,20 +159,20 @@ public class StreamingExecutionControl implements ExecutionControl {
             writeCommand(RemoteCodes.CMD_ADD_CLASSPATH);
             out.writeUTF(path);
             out.flush();
-            leerResultadoSimple();
+            readSimpleResult();
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
         }
     }
 
     /**
-     * Le pide al otro lado que corte lo que este ejecutando.
+     * Asks the other side to cut short whatever it is running.
      *
-     * <p>Este comando se manda mientras el otro lado esta ocupado con un {@code invoke}, asi que no
-     * espera respuesta: la respuesta que va a llegar es la del {@code invoke} que se corto.
+     * <p>This command is sent while the other side is busy with an {@code invoke}, so it expects no
+     * answer: the answer that will arrive is the one from the {@code invoke} that was cut short.
      *
-     * @throws EngineTerminationException si se corto la comunicacion
-     * @throws InternalException si no se pudo mandar
+     * @throws EngineTerminationException if the connection was cut
+     * @throws InternalException if it could not be sent
      */
     @Override
     public void stop() throws EngineTerminationException, InternalException {
@@ -185,14 +185,14 @@ public class StreamingExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Una operacion propia del otro motor.
+     * An operation of the other engine's own.
      *
-     * @param command el nombre de la operacion
-     * @param arg su argumento
-     * @return lo que devuelva
-     * @throws RunException si el codigo del usuario fallo
-     * @throws EngineTerminationException si se corto la comunicacion
-     * @throws InternalException si fallo el otro motor
+     * @param command the operation's name
+     * @param arg its argument
+     * @return whatever it returns
+     * @throws RunException if the user's code failed
+     * @throws EngineTerminationException if the connection was cut
+     * @throws InternalException if the other engine failed
      */
     @Override
     public Object extensionCommand(String command, Object arg)
@@ -201,7 +201,7 @@ public class StreamingExecutionControl implements ExecutionControl {
             writeCommand(command);
             out.writeObject(arg);
             out.flush();
-            leerResultadoDeEjecucion();
+            readRunResult();
             return in.readObject();
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
@@ -211,10 +211,10 @@ public class StreamingExecutionControl implements ExecutionControl {
     }
 
     /**
-     * Cierra la comunicacion.
+     * Closes the connection.
      *
-     * <p>Manda el comando de cierre y no mira si llego: si el otro lado ya se murio, no hay nada que
-     * hacer con esa noticia, y {@code close} no puede fallar.
+     * <p>It sends the close command and does not look at whether it arrived: if the other side is
+     * already dead, there is nothing to do with that news, and {@code close} cannot fail.
      */
     @Override
     public void close() {
@@ -222,7 +222,7 @@ public class StreamingExecutionControl implements ExecutionControl {
             writeCommand(RemoteCodes.CMD_CLOSE);
             out.flush();
         } catch (IOException e) {
-            // El otro lado ya no esta. Es exactamente lo que se queria conseguir.
+            // The other side is already gone. That is exactly what was wanted.
         }
     }
 
@@ -231,53 +231,53 @@ public class StreamingExecutionControl implements ExecutionControl {
         out.writeUTF(cmd);
     }
 
-    /** Un texto que puede ser {@code null}; ver la nota de la clase. */
-    private String leerTextoONulo() throws IOException {
+    /** A text that may be {@code null}; see the class note. */
+    private String readTextOrNull() throws IOException {
         final String s = in.readUTF();
-        return RemoteCodes.NULO.equals(s) ? null : s;
+        return RemoteCodes.NULL_SENTINEL.equals(s) ? null : s;
     }
 
-    /** La respuesta de una operacion que no devuelve nada. */
-    private void leerResultadoSimple() throws EngineTerminationException, InternalException {
+    /** The answer to an operation that returns nothing. */
+    private void readSimpleResult() throws EngineTerminationException, InternalException {
         try {
-            final int codigo = in.readInt();
-            // Cadena de `if` y no un `switch`: las constantes vienen de otro archivo
-            // compilado, y ahi la etiqueta de un `case` no se pliega (hallazgo #503).
-            if (codigo == RemoteCodes.RESULT_SUCCESS) {
+            final int code = in.readInt();
+            // A chain of `if` and not a `switch`: the constants come from another compiled file,
+            // and there a `case` label does not fold (finding #503).
+            if (code == RemoteCodes.RESULT_SUCCESS) {
                 return;
             }
-            if (codigo == RemoteCodes.RESULT_INTERNAL_PROBLEM) {
+            if (code == RemoteCodes.RESULT_INTERNAL_PROBLEM) {
                 throw new InternalException(in.readUTF());
             }
-            if (codigo == RemoteCodes.RESULT_TERMINATED) {
+            if (code == RemoteCodes.RESULT_TERMINATED) {
                 throw new EngineTerminationException(in.readUTF());
             }
-            throw new EngineTerminationException("Bad remote result code: " + codigo);
+            throw new EngineTerminationException("Bad remote result code: " + code);
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
         }
     }
 
-    /** La respuesta de {@code load} y {@code redefine}. */
-    private void leerResultadoDeInstalacion()
+    /** The answer to {@code load} and {@code redefine}. */
+    private void readInstallResult()
             throws ClassInstallException, NotImplementedException, EngineTerminationException {
         try {
-            final int codigo = in.readInt();
-            // Cadena de `if` y no un `switch`: las constantes vienen de otro archivo
-            // compilado, y ahi la etiqueta de un `case` no se pliega (hallazgo #503).
-            if (codigo == RemoteCodes.RESULT_SUCCESS) {
+            final int code = in.readInt();
+            // A chain of `if` and not a `switch`: the constants come from another compiled file,
+            // and there a `case` label does not fold (finding #503).
+            if (code == RemoteCodes.RESULT_SUCCESS) {
                 return;
             }
-            if (codigo == RemoteCodes.RESULT_NOT_IMPLEMENTED) {
+            if (code == RemoteCodes.RESULT_NOT_IMPLEMENTED) {
                 throw new NotImplementedException(in.readUTF());
             }
-            if (codigo == RemoteCodes.RESULT_CLASS_INSTALL_EXCEPTION) {
+            if (code == RemoteCodes.RESULT_CLASS_INSTALL_EXCEPTION) {
                 throw new ClassInstallException(in.readUTF(), (boolean[]) in.readObject());
             }
-            if (codigo == RemoteCodes.RESULT_TERMINATED) {
+            if (code == RemoteCodes.RESULT_TERMINATED) {
                 throw new EngineTerminationException(in.readUTF());
             }
-            throw new EngineTerminationException("Bad remote result code: " + codigo);
+            throw new EngineTerminationException("Bad remote result code: " + code);
         } catch (IOException e) {
             throw new EngineTerminationException(String.valueOf(e));
         } catch (ClassNotFoundException e) {
@@ -286,44 +286,45 @@ public class StreamingExecutionControl implements ExecutionControl {
     }
 
     /**
-     * La respuesta de una operacion que ejecuta codigo del usuario.
+     * The answer to an operation that runs the user's code.
      *
-     * <p>El caso encadenado --{@code RESULT_USER_EXCEPTION_CHAINED}-- trae la excepcion y despues,
-     * una tras otra, sus causas, hasta un {@code RESULT_SUCCESS} que hace de terminador. Se las
-     * enlaza con {@code initCause} en el orden en que llegan; sin eso, del otro lado se veria la
-     * excepcion de arriba sin nada abajo, que es justo lo que no sirve para entender que paso.
+     * <p>The chained case --{@code RESULT_USER_EXCEPTION_CHAINED}-- brings the exception and then,
+     * one after another, its causes, up to a {@code RESULT_SUCCESS} acting as a terminator. They are
+     * linked with {@code initCause} in the order they arrive; without that, the other side would see
+     * the topmost exception with nothing underneath, which is exactly what is no use for
+     * understanding what happened.
      */
-    private void leerResultadoDeEjecucion()
+    private void readRunResult()
             throws RunException, EngineTerminationException, InternalException {
         try {
-            final int codigo = in.readInt();
-            // Cadena de `if` y no un `switch`: las constantes vienen de otro archivo
-            // compilado, y ahi la etiqueta de un `case` no se pliega (hallazgo #503).
-            if (codigo == RemoteCodes.RESULT_SUCCESS) {
+            final int code = in.readInt();
+            // A chain of `if` and not a `switch`: the constants come from another compiled file,
+            // and there a `case` label does not fold (finding #503).
+            if (code == RemoteCodes.RESULT_SUCCESS) {
                 return;
             }
-            if (codigo == RemoteCodes.RESULT_NOT_IMPLEMENTED) {
+            if (code == RemoteCodes.RESULT_NOT_IMPLEMENTED) {
                 throw new NotImplementedException(in.readUTF());
             }
-            if (codigo == RemoteCodes.RESULT_USER_EXCEPTION) {
-                throw leerExcepcionDeUsuario();
+            if (code == RemoteCodes.RESULT_USER_EXCEPTION) {
+                throw readUserException();
             }
-            if (codigo == RemoteCodes.RESULT_CORRALLED) {
-                throw leerExcepcionDeResolucion();
+            if (code == RemoteCodes.RESULT_CORRALLED) {
+                throw readResolutionException();
             }
-            if (codigo == RemoteCodes.RESULT_USER_EXCEPTION_CHAINED) {
-                throw leerCadena();
+            if (code == RemoteCodes.RESULT_USER_EXCEPTION_CHAINED) {
+                throw readChain();
             }
-            if (codigo == RemoteCodes.RESULT_INTERNAL_PROBLEM) {
+            if (code == RemoteCodes.RESULT_INTERNAL_PROBLEM) {
                 throw new InternalException(in.readUTF());
             }
-            if (codigo == RemoteCodes.RESULT_STOPPED) {
+            if (code == RemoteCodes.RESULT_STOPPED) {
                 throw new StoppedException();
             }
-            if (codigo == RemoteCodes.RESULT_TERMINATED) {
+            if (code == RemoteCodes.RESULT_TERMINATED) {
                 throw new EngineTerminationException(in.readUTF());
             }
-            throw new EngineTerminationException("Bad remote result code: " + codigo);
+            throw new EngineTerminationException("Bad remote result code: " + code);
         } catch (EOFException e) {
             throw new EngineTerminationException(String.valueOf(e));
         } catch (IOException e) {
@@ -333,35 +334,35 @@ public class StreamingExecutionControl implements ExecutionControl {
         }
     }
 
-    private RunException leerCadena() throws IOException, ClassNotFoundException,
+    private RunException readChain() throws IOException, ClassNotFoundException,
             EngineTerminationException {
         in.readInt();
-        final RunException primera = leerExcepcionDeUsuario();
-        RunException ultima = primera;
+        final RunException first = readUserException();
+        RunException last = first;
         while (true) {
             final int c = in.readInt();
-            final RunException causa;
+            final RunException cause;
             if (c == RemoteCodes.RESULT_USER_EXCEPTION) {
-                causa = leerExcepcionDeUsuario();
+                cause = readUserException();
             } else if (c == RemoteCodes.RESULT_CORRALLED) {
-                causa = leerExcepcionDeResolucion();
+                cause = readResolutionException();
             } else if (c == RemoteCodes.RESULT_SUCCESS) {
-                return primera;
+                return first;
             } else {
                 throw new EngineTerminationException("Bad chained remote result code: " + c);
             }
-            ultima.initCause(causa);
-            ultima = causa;
+            last.initCause(cause);
+            last = cause;
         }
     }
 
-    private UserException leerExcepcionDeUsuario() throws IOException, ClassNotFoundException {
-        final String mensaje = in.readUTF();
-        final String clase = in.readUTF();
-        return new UserException(mensaje, clase, (StackTraceElement[]) in.readObject());
+    private UserException readUserException() throws IOException, ClassNotFoundException {
+        final String message = in.readUTF();
+        final String type = in.readUTF();
+        return new UserException(message, type, (StackTraceElement[]) in.readObject());
     }
 
-    private ResolutionException leerExcepcionDeResolucion()
+    private ResolutionException readResolutionException()
             throws IOException, ClassNotFoundException {
         final int id = in.readInt();
         return new ResolutionException(id, (StackTraceElement[]) in.readObject());

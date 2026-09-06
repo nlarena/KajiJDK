@@ -1,14 +1,14 @@
 package jdk.jshell;
 
 /**
- * Una expresion suelta.
+ * A loose expression.
  *
- * <h2>Por que tiene nombre y tipo</h2>
+ * <h2>Why it has a name and a type</h2>
  *
- * <p>Una expresion no declara nada, pero produce un valor, y el interprete lo guarda para que se
- * pueda seguir usando. Si la expresion es solo el nombre de una variable, {@link #name} devuelve ese
- * nombre; si es cualquier otra cosa --{@link Snippet.SubKind#OTHER_EXPRESSION_SUBKIND}--, el valor
- * va a una variable temporal y el fragmento pasa a ser un {@link VarSnippet}, no este.
+ * <p>An expression declares nothing, but it produces a value, and the interpreter keeps it so that
+ * it can go on being used. If the expression is only a variable's name, {@link #name} returns that
+ * name; if it is anything else --{@link Snippet.SubKind#OTHER_EXPRESSION_SUBKIND}-- the value goes
+ * into a temporary variable and the snippet becomes a {@link VarSnippet}, not this.
  *
  * @since 9
  */
@@ -24,18 +24,18 @@ public class ExpressionSnippet extends Snippet {
     }
 
     /**
-     * El nombre de la variable, si la expresion es solo eso.
+     * The variable's name, if the expression is only that.
      *
-     * @return el nombre, o {@code null} si la expresion no es el nombre de una variable
+     * @return the name, or {@code null} if the expression is not a variable's name
      */
     public String name() {
         return this.name;
     }
 
     /**
-     * El tipo del valor que produce.
+     * The type of the value it produces.
      *
-     * @return el nombre del tipo
+     * @return the type's name
      */
     public String typeName() {
         return this.typeName;

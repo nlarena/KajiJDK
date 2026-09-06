@@ -16,21 +16,22 @@ import jdk.jshell.spi.ExecutionControl.StoppedException;
 import jdk.jshell.spi.ExecutionControl.UserException;
 
 /**
- * El otro extremo de {@link StreamingExecutionControl}: lee comandos y los ejecuta.
+ * The far end of {@link StreamingExecutionControl}: it reads commands and runs them.
  *
- * <h2>Que hace</h2>
+ * <h2>What it does</h2>
  *
- * <p>Un bucle: lee la marca, lee el nombre del comando, lee sus argumentos, se lo pide al motor de
- * verdad, y escribe la respuesta. Es el que corre dentro del proceso que ejecuta los fragmentos.
+ * <p>A loop: read the mark, read the command's name, read its arguments, ask the real engine for it,
+ * and write the answer. It is what runs inside the process that executes the snippets.
  *
- * <h2>Por que las excepciones viajan desarmadas</h2>
+ * <h2>Why exceptions travel taken apart</h2>
  *
- * <p>Una excepcion del usuario no se serializa: podria ser de una clase que el otro lado no conoce
- * --la acaba de escribir el usuario-- y deserializarla alla fallaria. Se manda el mensaje, el nombre
- * de la clase y la traza, que es lo que JShell necesita para mostrarla.
+ * <p>A user's exception is not serialized: it could be of a class the other side does not know
+ * --the user has just written it-- and deserializing it over there would fail. What is sent is the
+ * message, the class's name and the stack trace, which is what JShell needs in order to show it.
  *
- * <p>Las causas van encadenadas una tras otra, terminadas por un {@code RESULT_SUCCESS}. Sin eso,
- * del otro lado se veria la excepcion de arriba sin nada abajo, que es justo lo que no sirve.
+ * <p>The causes travel chained one after another, terminated by a {@code RESULT_SUCCESS}. Without
+ * that, the other side would see the topmost exception with nothing underneath, which is exactly
+ * what is no use.
  */
 final class ExecutionControlForwarder {
 
@@ -45,16 +46,16 @@ final class ExecutionControlForwarder {
     }
 
     /**
-     * Atiende comandos hasta que llegue el de cierre o se corte el flujo.
+     * Serves commands until the close one arrives or the stream is cut.
      *
-     * <p>No propaga nada: es el bucle principal del proceso que ejecuta, y no hay a quien contarle
-     * un problema. Lo que puede es dejar de atender, que es lo que hace.
+     * <p>It propagates nothing: it is the main loop of the process that executes, and there is
+     * nobody to tell about a problem. What it can do is stop serving, which is what it does.
      */
     void commandLoop() {
         try {
             while (true) {
                 if (in.readInt() != RemoteCodes.COMMAND_PREFIX) {
-                    // El flujo se desincronizo: seguir leyendo daria comandos inventados.
+                    // The stream lost sync: reading on would give invented commands.
                     return;
                 }
                 final String cmd = in.readUTF();
@@ -62,43 +63,44 @@ final class ExecutionControlForwarder {
                     ec.close();
                     return;
                 }
-                if (!atender(cmd)) {
+                if (!serve(cmd)) {
                     return;
                 }
             }
         } catch (IOException e) {
-            // El otro lado se fue. No hay nada que responder ni a quien.
+            // The other side left. There is nothing to answer and nobody to answer to.
         }
     }
 
-    /** Atiende un comando; devuelve falso si hay que dejar de atender. */
-    private boolean atender(String cmd) throws IOException {
+    /** Serves one command; returns false when serving has to stop. */
+    private boolean serve(String cmd) throws IOException {
         try {
             if (RemoteCodes.CMD_LOAD.equals(cmd)) {
                 ec.load((ClassBytecodes[]) in.readObject());
-                exito();
+                success();
             } else if (RemoteCodes.CMD_REDEFINE.equals(cmd)) {
                 ec.redefine((ClassBytecodes[]) in.readObject());
-                exito();
+                success();
             } else if (RemoteCodes.CMD_INVOKE.equals(cmd)) {
-                final String clase = in.readUTF();
-                final String metodo = in.readUTF();
-                final String valor = ec.invoke(clase, metodo);
+                final String type = in.readUTF();
+                final String method = in.readUTF();
+                final String value = ec.invoke(type, method);
                 out.writeInt(RemoteCodes.RESULT_SUCCESS);
-                out.writeUTF(valor == null ? "" : valor);
+                out.writeUTF(value == null ? "" : value);
                 out.flush();
             } else if (RemoteCodes.CMD_VAR_VALUE.equals(cmd)) {
-                final String clase = in.readUTF();
+                final String type = in.readUTF();
                 final String variable = in.readUTF();
-                final String valor = ec.varValue(clase, variable);
+                final String value = ec.varValue(type, variable);
                 out.writeInt(RemoteCodes.RESULT_SUCCESS);
-                out.writeUTF(valor == null ? RemoteCodes.NULO : valor);
+                out.writeUTF(value == null ? RemoteCodes.NULL_SENTINEL : value);
                 out.flush();
             } else if (RemoteCodes.CMD_ADD_CLASSPATH.equals(cmd)) {
                 ec.addToClasspath(in.readUTF());
-                exito();
+                success();
             } else if (RemoteCodes.CMD_STOP.equals(cmd)) {
-                // Llega mientras otro hilo esta atendiendo un invoke; no lleva respuesta propia.
+                // It arrives while another thread is serving an invoke; it carries no answer of its
+                // own.
                 ec.stop();
             } else {
                 final Object arg = in.readObject();
@@ -109,10 +111,10 @@ final class ExecutionControlForwarder {
             }
             return true;
         } catch (ClassNotFoundException e) {
-            escribir(RemoteCodes.RESULT_INTERNAL_PROBLEM, String.valueOf(e));
+            write(RemoteCodes.RESULT_INTERNAL_PROBLEM, String.valueOf(e));
             return true;
         } catch (NotImplementedException e) {
-            escribir(RemoteCodes.RESULT_NOT_IMPLEMENTED, String.valueOf(e.getMessage()));
+            write(RemoteCodes.RESULT_NOT_IMPLEMENTED, String.valueOf(e.getMessage()));
             return true;
         } catch (ClassInstallException e) {
             out.writeInt(RemoteCodes.RESULT_CLASS_INSTALL_EXCEPTION);
@@ -121,63 +123,63 @@ final class ExecutionControlForwarder {
             out.flush();
             return true;
         } catch (EngineTerminationException e) {
-            escribir(RemoteCodes.RESULT_TERMINATED, String.valueOf(e.getMessage()));
+            write(RemoteCodes.RESULT_TERMINATED, String.valueOf(e.getMessage()));
             return false;
         } catch (InternalException e) {
-            escribir(RemoteCodes.RESULT_INTERNAL_PROBLEM, String.valueOf(e.getMessage()));
+            write(RemoteCodes.RESULT_INTERNAL_PROBLEM, String.valueOf(e.getMessage()));
             return true;
         } catch (StoppedException e) {
             out.writeInt(RemoteCodes.RESULT_STOPPED);
             out.flush();
             return true;
         } catch (RunException e) {
-            escribirDeUsuario(e);
+            writeUserException(e);
             return true;
         }
     }
 
-    private void exito() throws IOException {
+    private void success() throws IOException {
         out.writeInt(RemoteCodes.RESULT_SUCCESS);
         out.flush();
     }
 
-    private void escribir(int codigo, String mensaje) throws IOException {
-        out.writeInt(codigo);
-        out.writeUTF(mensaje);
+    private void write(int code, String message) throws IOException {
+        out.writeInt(code);
+        out.writeUTF(message);
         out.flush();
     }
 
-    /** Manda la excepcion del usuario y, si tiene, su cadena de causas. */
-    private void escribirDeUsuario(RunException e) throws IOException {
-        final Throwable causa = e.getCause();
-        if (causa == null) {
-            out.writeInt(codigoDe(e));
-            cuerpoDe(e);
+    /** Sends the user's exception and, if it has one, its chain of causes. */
+    private void writeUserException(RunException e) throws IOException {
+        final Throwable cause = e.getCause();
+        if (cause == null) {
+            out.writeInt(codeOf(e));
+            bodyOf(e);
             out.flush();
             return;
         }
         out.writeInt(RemoteCodes.RESULT_USER_EXCEPTION_CHAINED);
         out.writeInt(0);
-        out.writeInt(codigoDe(e));
-        cuerpoDe(e);
-        Throwable t = causa;
+        out.writeInt(codeOf(e));
+        bodyOf(e);
+        Throwable t = cause;
         while (t instanceof RunException) {
             final RunException r = (RunException) t;
-            out.writeInt(codigoDe(r));
-            cuerpoDe(r);
+            out.writeInt(codeOf(r));
+            bodyOf(r);
             t = r.getCause();
         }
-        // El terminador de la cadena; sin el, el que lee sigue esperando otra causa.
+        // The chain's terminator; without it, the reader goes on waiting for another cause.
         out.writeInt(RemoteCodes.RESULT_SUCCESS);
         out.flush();
     }
 
-    private static int codigoDe(RunException e) {
+    private static int codeOf(RunException e) {
         return e instanceof ResolutionException
                 ? RemoteCodes.RESULT_CORRALLED : RemoteCodes.RESULT_USER_EXCEPTION;
     }
 
-    private void cuerpoDe(RunException e) throws IOException {
+    private void bodyOf(RunException e) throws IOException {
         if (e instanceof ResolutionException) {
             out.writeInt(((ResolutionException) e).id());
             out.writeObject(e.getStackTrace());

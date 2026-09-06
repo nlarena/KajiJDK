@@ -3,74 +3,74 @@ package jdk.jshell;
 import java.util.Locale;
 
 /**
- * Un error o un aviso sobre un fragmento.
+ * An error or a warning about a snippet.
  *
- * <h2>Las posiciones</h2>
+ * <h2>The positions</h2>
  *
- * <p>Van referidas al texto que el usuario escribio, no al codigo que el interprete arma alrededor
- * para poder compilarlo. Traducir de uno al otro es trabajo del interprete, y es lo que hace que el
- * subrayado caiga donde el usuario espera.
+ * <p>They refer to the text the user wrote, not to the code the interpreter builds around it in
+ * order to compile it. Translating from one to the other is the interpreter's job, and it is what
+ * makes the underline fall where the user expects.
  *
- * <p>{@link #getStartPosition} y {@link #getEndPosition} delimitan lo que hay que subrayar;
- * {@link #getPosition} es donde poner el cursor, que suele estar adentro pero no en el borde.
- * Cualquiera de las tres puede ser {@link #NOPOS} si el problema no es de un lugar en particular.
+ * <p>{@link #getStartPosition} and {@link #getEndPosition} delimit what has to be underlined;
+ * {@link #getPosition} is where to put the caret, which is usually inside but not at the edge. Any
+ * of the three may be {@link #NOPOS} when the problem does not belong to a particular place.
  *
  * <h2>{@link #getCode}</h2>
  *
- * <p>Es la clave del mensaje, no el mensaje. Sirve para reconocer un diagnostico sin depender del
- * idioma: un programa puede querer tratar distinto un error de tipos que uno de sintaxis, y comparar
- * el texto traducido seria fragil.
+ * <p>It is the message's key, not the message. It is for recognizing a diagnostic without depending
+ * on the language: a program may want to treat a type error differently from a syntax error, and
+ * comparing the translated text would be fragile.
  *
  * @since 9
  */
 public abstract class Diag {
 
-    /** Que no hay posicion. */
+    /** That there is no position. */
     public static final long NOPOS = -1;
 
     Diag() {
     }
 
     /**
-     * Si es un error y no un aviso.
+     * Whether it is an error and not a warning.
      *
-     * @return cierto si es un error
+     * @return true if it is an error
      */
     public abstract boolean isError();
 
     /**
-     * Donde poner el cursor.
+     * Where to put the caret.
      *
-     * @return la posicion, o {@link #NOPOS}
+     * @return the position, or {@link #NOPOS}
      */
     public abstract long getPosition();
 
     /**
-     * Donde empieza lo que hay que subrayar.
+     * Where what has to be underlined starts.
      *
-     * @return la posicion, o {@link #NOPOS}
+     * @return the position, or {@link #NOPOS}
      */
     public abstract long getStartPosition();
 
     /**
-     * Donde termina lo que hay que subrayar.
+     * Where what has to be underlined ends.
      *
-     * @return la posicion, o {@link #NOPOS}
+     * @return the position, or {@link #NOPOS}
      */
     public abstract long getEndPosition();
 
     /**
-     * La clave del mensaje, para reconocerlo sin depender del idioma.
+     * The message's key, for recognizing it without depending on the language.
      *
-     * @return la clave
+     * @return the key
      */
     public abstract String getCode();
 
     /**
-     * El mensaje, para mostrar.
+     * The message, to show.
      *
-     * @param locale en que idioma, o {@code null} para el de la maquina
-     * @return el mensaje
+     * @param locale in which language, or {@code null} for the machine's
+     * @return the message
      */
     public abstract String getMessage(Locale locale);
 }

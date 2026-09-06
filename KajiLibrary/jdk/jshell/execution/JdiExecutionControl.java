@@ -8,86 +8,86 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.VirtualMachine;
 
 /**
- * El motor remoto que ademas puede mirar la otra maquina virtual con JDI.
+ * The remote engine that can also look at the other virtual machine with JDI.
  *
- * <h2>Por que hacen falta las dos cosas</h2>
+ * <h2>Why both are needed</h2>
  *
- * <p>El protocolo por flujos alcanza para pedirle al agente que cargue y ejecute. No alcanza para
- * <strong>redefinir</strong>: reemplazar el codigo de una clase ya cargada es una operacion de la
- * maquina virtual, no del programa que corre adentro. Eso se hace desde afuera, con JDI.
+ * <p>The stream protocol is enough for asking the agent to load and to run. It is not enough for
+ * <strong>redefining</strong>: replacing the code of an already loaded class is an operation of the
+ * virtual machine, not of the program running inside it. That is done from outside, with JDI.
  *
- * <p>De ahi que esta clase herede el protocolo de {@link StreamingExecutionControl} y agregue un
- * {@link #vm()}: por el flujo van las ordenes, y por JDI la cirugia.
+ * <p>Hence this class inherits the protocol from {@link StreamingExecutionControl} and adds a
+ * {@link #vm()}: the orders go over the stream, and the surgery over JDI.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>{@link #redefine} y {@link #referenceType} necesitan una {@link VirtualMachine} conectada a
- * otro proceso, y conectarse es el transporte de JDI, que esta VM no tiene. El API de
- * {@code com.sun.jdi} esta completo y estas llamadas son las que corresponden; lo que falta esta
- * abajo, no aca.
+ * <p>{@link #redefine} and {@link #referenceType} need a {@link VirtualMachine} connected to another
+ * process, and connecting is JDI's transport, which this VM does not have. The
+ * {@code com.sun.jdi} API is complete and these calls are the right ones; what is missing is
+ * underneath, not here.
  *
  * @since 9
  */
 public abstract class JdiExecutionControl extends StreamingExecutionControl {
 
     /**
-     * Un motor sobre ese par de flujos.
+     * An engine over that pair of streams.
      *
-     * @param out por donde se mandan los comandos
-     * @param in por donde llegan las respuestas
+     * @param out where the commands are sent
+     * @param in where the answers arrive
      */
     protected JdiExecutionControl(ObjectOutput out, ObjectInput in) {
         super(out, in);
     }
 
     /**
-     * La maquina virtual donde corre el agente.
+     * The virtual machine the agent runs on.
      *
-     * @return la maquina
-     * @throws EngineTerminationException si ya no esta
+     * @return the machine
+     * @throws EngineTerminationException if it is gone
      */
     protected abstract VirtualMachine vm() throws EngineTerminationException;
 
     /**
-     * Reemplaza el codigo de esas clases en la otra maquina virtual.
+     * Replaces the code of those classes on the other virtual machine.
      *
-     * <p>Se hace con {@code VirtualMachine.redefineClasses}, que es la unica forma de cambiar una
-     * clase ya cargada. Tiene el limite conocido: se puede cambiar el cuerpo de un metodo y no la
-     * forma de la clase, y los marcos que ya estaban en la pila siguen con el codigo viejo.
+     * <p>It is done with {@code VirtualMachine.redefineClasses}, which is the only way to change an
+     * already loaded class. It has the known limit: a method's body can be changed and the class's
+     * shape cannot, and the frames already on the stack go on with the old code.
      *
-     * @param cbcs las clases y su bytecode nuevo
-     * @throws ClassInstallException si alguna no se pudo reemplazar
-     * @throws EngineTerminationException si la otra maquina ya no esta
+     * @param cbcs the classes and their new bytecode
+     * @throws ClassInstallException if any of them could not be replaced
+     * @throws EngineTerminationException if the other machine is gone
      */
     @Override
     public void redefine(ClassBytecodes[] cbcs)
             throws ClassInstallException, EngineTerminationException {
-        final VirtualMachine maquina = vm();
-        final java.util.Map<ReferenceType, byte[]> mapa =
+        final VirtualMachine machine = vm();
+        final java.util.Map<ReferenceType, byte[]> map =
                 new java.util.HashMap<ReferenceType, byte[]>();
-        final boolean[] puestas = new boolean[cbcs.length];
+        final boolean[] installed = new boolean[cbcs.length];
         for (int i = 0; i < cbcs.length; i++) {
-            final ReferenceType rt = referenceType(maquina, cbcs[i].name());
+            final ReferenceType rt = referenceType(machine, cbcs[i].name());
             if (rt == null) {
-                throw new ClassInstallException("redefine: no esta cargada " + cbcs[i].name(),
-                        puestas);
+                throw new ClassInstallException("redefine: not loaded " + cbcs[i].name(),
+                        installed);
             }
-            mapa.put(rt, cbcs[i].bytecodes());
-            puestas[i] = true;
+            map.put(rt, cbcs[i].bytecodes());
+            installed[i] = true;
         }
-        maquina.redefineClasses(mapa);
+        machine.redefineClasses(map);
     }
 
     /**
-     * El reflejo de esa clase en la otra maquina virtual.
+     * That class's reflection on the other virtual machine.
      *
-     * <p>Devuelve {@code null} si no hay ninguna con ese nombre, y tambien si hay mas de una: dos
-     * cargadores distintos pueden haber cargado clases del mismo nombre, y ahi no se puede elegir
-     * sin saber cual queria el que pregunta.
+     * <p>It returns {@code null} when there is none by that name, and also when there is more than
+     * one: two different loaders may have loaded classes of the same name, and there is no choosing
+     * between them without knowing which the asker meant.
      *
-     * @param vm la maquina
-     * @param name el nombre completo de la clase
-     * @return el reflejo, o {@code null}
+     * @param vm the machine
+     * @param name the class's full name
+     * @return the reflection, or {@code null}
      */
     protected ReferenceType referenceType(VirtualMachine vm, String name) {
         final List<ReferenceType> rts = vm.classesByName(name);

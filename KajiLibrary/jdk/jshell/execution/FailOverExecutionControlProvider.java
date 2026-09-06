@@ -8,43 +8,43 @@ import jdk.jshell.spi.ExecutionControlProvider;
 import jdk.jshell.spi.ExecutionEnv;
 
 /**
- * El proveedor que prueba varios en orden y se queda con el primero que ande.
+ * The provider that tries several in order and keeps the first one that works.
  *
- * <h2>Por que existe</h2>
+ * <h2>Why it exists</h2>
  *
- * <p>Arrancar el motor remoto puede fallar por razones que no dependen de JShell: un cortafuegos que
- * no deja abrir el puerto de escucha, una maquina sin la interfaz de bucle configurada, una politica
- * que prohibe lanzar procesos. Ninguna de esas es un error del usuario y en todas hay una salida
- * peor pero servible.
+ * <p>Starting the remote engine may fail for reasons that have nothing to do with JShell: a firewall
+ * that will not let the listening port be opened, a machine with no loopback interface configured, a
+ * policy forbidding processes to be launched. None of those is the user's mistake and in all of them
+ * there is a worse but serviceable way out.
  *
- * <p>Sin esto, JShell no arrancaria en esas maquinas y el mensaje hablaria de sockets. Con esto,
- * arranca con el motor que se pueda.
+ * <p>Without this, JShell would not start on those machines and the message would talk about
+ * sockets. With this, it starts with whichever engine it can.
  *
- * <h2>Los parametros</h2>
+ * <h2>The parameters</h2>
  *
- * <p>Se numeran: {@code 0}, {@code 1}, {@code 2}... y cada uno nombra un proveedor. Se prueban en el
- * orden de sus numeros. Por omision son el remoto por JDI con lanzamiento, el remoto por JDI
- * escuchando, y el local.
+ * <p>They are numbered: {@code 0}, {@code 1}, {@code 2}... and each one names a provider. They are
+ * tried in the order of their numbers. By default they are the remote one over JDI with launching,
+ * the remote one over JDI listening, and the local one.
  *
- * <p>Que el ultimo sea el local no es casualidad: es el unico que no puede fallar por el entorno,
- * asi que sirve de piso.
+ * <p>That the last is the local one is no accident: it is the only one that cannot fail because of
+ * the environment, so it serves as the floor.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Funciona, y hace exactamente lo que tiene que hacer: los dos primeros de la lista necesitan JDI
- * y fallan, y la sesion termina con el motor local, que anda. Es el unico caso de este paquete en
- * que la falta del transporte no se nota desde afuera.
+ * <p>It works, and it does exactly what it has to do: the first two on the list need JDI and fail,
+ * and the session ends up with the local engine, which works. It is the only case in this package
+ * where the missing transport does not show from outside.
  *
  * @since 9
  */
 public class FailOverExecutionControlProvider implements ExecutionControlProvider {
 
-    /** Un proveedor. */
+    /** One provider. */
     public FailOverExecutionControlProvider() {
     }
 
     /**
-     * El nombre con el que se lo pide.
+     * The name it is asked for by.
      *
      * @return {@code "failover"}
      */
@@ -54,13 +54,13 @@ public class FailOverExecutionControlProvider implements ExecutionControlProvide
     }
 
     /**
-     * Los proveedores a probar, en orden.
+     * The providers to try, in order.
      *
-     * <p>Son diez casillas numeradas y solo la primera viene llena. Las otras nueve estan vacias a
-     * proposito: son el lugar donde quien configura la sesion pone sus alternativas, y que existan
-     * con su numero es lo que le dice cuantas puede poner y como se llaman.
+     * <p>They are ten numbered slots and only the first comes filled. The other nine are empty on
+     * purpose: they are where whoever configures the session puts their alternatives, and that they
+     * exist with their number is what tells them how many they may put and what they are called.
      *
-     * @return el mapa de posicion a especificacion de proveedor
+     * @return the map from position to provider specification
      */
     @Override
     public Map<String, String> defaultParameters() {
@@ -73,19 +73,19 @@ public class FailOverExecutionControlProvider implements ExecutionControlProvide
     }
 
     /**
-     * Devuelve el motor del primer proveedor que no falle.
+     * Returns the engine of the first provider that does not fail.
      *
-     * @param env el entorno de la sesion
-     * @param parameters los proveedores a probar, numerados
-     * @return el motor
-     * @throws Throwable lo que fallo el ultimo, si fallaron todos
+     * @param env the session's environment
+     * @param parameters the providers to try, numbered
+     * @return the engine
+     * @throws Throwable whatever the last one failed with, if they all failed
      */
     @Override
     public ExecutionControl generate(ExecutionEnv env, Map<String, String> parameters)
             throws Throwable {
         final Map<String, String> ps = parameters == null || parameters.isEmpty()
                 ? defaultParameters() : parameters;
-        Throwable ultima = null;
+        Throwable last = null;
         for (int i = 0; i < ps.size(); i++) {
             final String spec = ps.get(Integer.toString(i));
             if (spec == null || spec.isEmpty()) {
@@ -97,13 +97,13 @@ public class FailOverExecutionControlProvider implements ExecutionControlProvide
                     return ec;
                 }
             } catch (Throwable e) {
-                // Que uno falle es lo esperado: para eso esta esta clase. Se guarda el ultimo
-                // motivo, porque si fallan todos es lo unico que se puede contar.
-                ultima = e;
+                // One failing is the expected case: that is what this class is for. The last reason
+                // is kept, because if they all fail it is the only thing that can be reported.
+                last = e;
             }
         }
-        if (ultima != null) {
-            throw ultima;
+        if (last != null) {
+            throw last;
         }
         throw new IllegalStateException("no execution control provider succeeded");
     }

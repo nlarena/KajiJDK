@@ -9,33 +9,32 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * El que reparte lo que llega por un canal compartido; ver {@link MultiplexingOutputStream}.
+ * The one that hands out what arrives over a shared channel; see {@link MultiplexingOutputStream}.
  *
- * <h2>Como funciona</h2>
+ * <h2>How it works</h2>
  *
- * <p>Es un hilo que lee bloque tras bloque, mira el nombre de cada uno y escribe sus datos en el
- * flujo que le corresponde. Un bloque cuyo nombre no esta en el mapa se descarta: puede venir de una
- * corriente que la otra punta abrio y esta no conoce, y cortar la conexion por eso seria perder
- * tambien las corrientes que si se entienden.
+ * <p>It is a thread that reads block after block, looks at each one's name and writes its data into
+ * the matching stream. A block whose name is not in the map is dropped: it may come from a stream the
+ * far end opened and this one does not know about, and cutting the connection for that would also
+ * lose the streams that are understood.
  *
- * <h2>El cierre</h2>
+ * <h2>The close</h2>
  *
- * <p>Cuando el canal se termina se cierra todo lo que se le encargo cerrar. Es lo que hace que el
- * lado que estaba esperando en un {@code read} se entere de que no viene nada mas, en vez de quedarse
- * colgado para siempre.
+ * <p>When the channel ends, everything it was asked to close is closed. That is what makes the side
+ * waiting in a {@code read} learn that nothing more is coming, instead of hanging forever.
  */
 final class DemultiplexInput extends Thread {
 
-    private final DataInputStream origen;
-    private final Map<String, OutputStream> destinos;
-    private final Iterable<? extends Closeable> alCerrar;
+    private final DataInputStream source;
+    private final Map<String, OutputStream> targets;
+    private final Iterable<? extends Closeable> onClose;
 
-    DemultiplexInput(InputStream origen, Map<String, OutputStream> destinos,
-            Iterable<? extends Closeable> alCerrar) {
+    DemultiplexInput(InputStream source, Map<String, OutputStream> targets,
+            Iterable<? extends Closeable> onClose) {
         super("output reader");
-        this.origen = new DataInputStream(origen);
-        this.destinos = destinos;
-        this.alCerrar = alCerrar;
+        this.source = new DataInputStream(source);
+        this.targets = targets;
+        this.onClose = onClose;
         setDaemon(true);
     }
 
@@ -43,32 +42,32 @@ final class DemultiplexInput extends Thread {
     public void run() {
         try {
             while (true) {
-                final int largoNombre = origen.read();
-                if (largoNombre == -1) {
+                final int nameLength = source.read();
+                if (nameLength == -1) {
                     break;
                 }
-                final byte[] nombre = new byte[largoNombre];
-                origen.readFully(nombre);
-                final int largoDatos = origen.read();
-                if (largoDatos == -1) {
+                final byte[] name = new byte[nameLength];
+                source.readFully(name);
+                final int dataLength = source.read();
+                if (dataLength == -1) {
                     break;
                 }
-                final byte[] datos = new byte[largoDatos];
-                origen.readFully(datos);
-                final OutputStream destino =
-                        destinos.get(new String(nombre, StandardCharsets.UTF_8));
-                if (destino != null) {
-                    destino.write(datos);
+                final byte[] data = new byte[dataLength];
+                source.readFully(data);
+                final OutputStream target =
+                        targets.get(new String(name, StandardCharsets.UTF_8));
+                if (target != null) {
+                    target.write(data);
                 }
             }
         } catch (IOException e) {
-            // El canal se corto. Es la unica forma normal de que este bucle termine.
+            // The channel was cut. It is the only normal way for this loop to end.
         } finally {
-            for (final Closeable c : alCerrar) {
+            for (final Closeable c : onClose) {
                 try {
                     c.close();
                 } catch (IOException e) {
-                    // Ya se esta cerrando todo; que uno se resista no cambia nada.
+                    // Everything is closing already; one refusing changes nothing.
                 }
             }
         }

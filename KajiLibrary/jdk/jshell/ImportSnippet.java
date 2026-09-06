@@ -1,14 +1,13 @@
 package jdk.jshell;
 
 /**
- * Un import.
+ * An import.
  *
- * <h2>Los dos nombres</h2>
+ * <h2>The two names</h2>
  *
- * <p>{@link #name} es el nombre simple --lo que se escribe despues para referirse al tipo-- y
- * {@link #fullname} es el nombre completo, con paquete. En un import con asterisco no hay nombre
- * simple que valga, asi que {@link #name} devuelve el ultimo segmento y el asterisco queda en
- * {@link #fullname}.
+ * <p>{@link #name} is the simple name --what is written afterwards to refer to the type-- and
+ * {@link #fullname} is the full name, with its package. In a star import there is no simple name to
+ * speak of, so {@link #name} returns the last segment and the star stays in {@link #fullname}.
  *
  * @since 9
  */
@@ -25,18 +24,18 @@ public class ImportSnippet extends PersistentSnippet {
     }
 
     /**
-     * El nombre completo de lo que se importa.
+     * The full name of what is imported.
      *
-     * @return el nombre con paquete
+     * @return the name with its package
      */
     public String fullname() {
         return this.fullname;
     }
 
     /**
-     * Si es un import estatico.
+     * Whether it is a static import.
      *
-     * @return cierto si lo es
+     * @return true if it is
      */
     public boolean isStatic() {
         return this.isStatic;

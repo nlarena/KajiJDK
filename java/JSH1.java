@@ -7,68 +7,68 @@ import jdk.jshell.spi.ExecutionControl;
 import jdk.jshell.spi.ExecutionControl.ClassBytecodes;
 
 /**
- * Comprueba {@code jdk.jshell.execution} contra el JDK 25.
+ * Checks {@code jdk.jshell.execution} against JDK 25.
  *
- * <p>Hace lo que hace JShell: le pasa a un motor el bytecode de una clase ya compilada, le pide que
- * llame a sus metodos y que lea sus variables, y compara cada respuesta con la del JDK real.
+ * <p>It does what JShell does: it hands an engine the bytecode of an already compiled class, asks it
+ * to call its methods and read its variables, and compares each answer with the real JDK's.
  *
- * <p>El bytecode sale de {@code java/JSH1x.class}, que es un fragmento de mentira compilado de
- * antemano. Compilar de verdad seria meter el compilador en la prueba, y lo que se esta probando es
- * el motor de ejecucion.
+ * <p>The bytecode comes from {@code java/JSH1x.class}, a pretend snippet compiled beforehand.
+ * Compiling for real would put the compiler into the test, and what is being tested is the execution
+ * engine.
  *
- * <p>{@link #donde()} devuelve el indice de la primera respuesta que no coincide, o -1: un entero
- * alcanza porque {@code run-headless} no vacia la consola.
+ * <p>{@link #where()} returns the index of the first answer that differs, or -1: an integer is
+ * enough because {@code run-headless} does not flush the console.
  */
 public class JSH1 {
 
 
-    static final String[] ESPERADO = {
+    static final String[] EXPECTED = {
         "load|ok",
         "invoke-f|42",
-        "invoke-g|\"eco\"",
-        "invoke-nulo|null",
+        "invoke-g|\"echo\"",
+        "invoke-nothing|null",
         "var-V|7",
-        "var-T|\"hola\"",
-        "excepcion|java.lang.IllegalStateException|a proposito",
-        "metodo-inexistente|jdk.jshell.spi.ExecutionControl$InternalException",
-        "var-inexistente|jdk.jshell.spi.ExecutionControl$InternalException",
-        "clase-inexistente|jdk.jshell.spi.ExecutionControl$InternalException",
+        "var-T|\"hello\"",
+        "exception|java.lang.IllegalStateException|on purpose",
+        "no-such-method|jdk.jshell.spi.ExecutionControl$InternalException",
+        "no-such-var|jdk.jshell.spi.ExecutionControl$InternalException",
+        "no-such-class|jdk.jshell.spi.ExecutionControl$InternalException",
         "extension|jdk.jshell.spi.ExecutionControl$NotImplementedException",
-        "stop-en-vacio|ok",
+        "stop-with-nothing|ok",
     };
 
-    static String falla(Throwable e) {
+    static String failure(Throwable e) {
         String m = e.getMessage();
-        // Las trazas llevan numeros de linea y nombres de archivo que no tienen por que coincidir
-        // entre las dos bibliotecas; lo que se compara es el tipo y el mensaje.
+        // Stack traces carry line numbers and file names that need not match between the two
+        // libraries; what is compared is the type and the message.
         return e.getClass().getName() + "|" + m;
     }
 
-    static ClassBytecodes[] fragmento() throws IOException {
+    static ClassBytecodes[] snippet() throws IOException {
         final byte[] b = Files.readAllBytes(Paths.get("java/JSH1x.class"));
         return new ClassBytecodes[] {new ClassBytecodes("JSH1x", b)};
     }
 
-    /** Lo que el motor contesta, una linea por pregunta. */
+    /** What the engine answers, one line per question. */
     static String[] actual() throws Exception {
         final java.util.List<String> a = new java.util.ArrayList<String>();
         final ExecutionControl ec = new LocalExecutionControl();
 
         try {
-            ec.load(fragmento());
+            ec.load(snippet());
             a.add("load|ok");
         } catch (Throwable e) {
-            a.add("load|" + falla(e));
+            a.add("load|" + failure(e));
         }
 
-        String[][] llamadas = {
-            {"f", "42"}, {"g", null}, {"nulo", null},
+        String[][] calls = {
+            {"f", "42"}, {"g", null}, {"nothing", null},
         };
-        for (int i = 0; i < llamadas.length; i++) {
+        for (int i = 0; i < calls.length; i++) {
             try {
-                a.add("invoke-" + llamadas[i][0] + "|" + ec.invoke("JSH1x", llamadas[i][0]));
+                a.add("invoke-" + calls[i][0] + "|" + ec.invoke("JSH1x", calls[i][0]));
             } catch (Throwable e) {
-                a.add("invoke-" + llamadas[i][0] + "|" + falla(e));
+                a.add("invoke-" + calls[i][0] + "|" + failure(e));
             }
         }
 
@@ -77,54 +77,54 @@ public class JSH1 {
             try {
                 a.add("var-" + vars[i] + "|" + ec.varValue("JSH1x", vars[i]));
             } catch (Throwable e) {
-                a.add("var-" + vars[i] + "|" + falla(e));
+                a.add("var-" + vars[i] + "|" + failure(e));
             }
         }
 
-        // Una excepcion del usuario tiene que llegar convertida, no cruda.
+        // An exception from the user has to arrive converted, not raw.
         try {
-            ec.invoke("JSH1x", "revienta");
-            a.add("excepcion|sin error");
+            ec.invoke("JSH1x", "blowUp");
+            a.add("exception|no error");
         } catch (ExecutionControl.UserException e) {
-            a.add("excepcion|" + e.causeExceptionClass() + "|" + e.getMessage());
+            a.add("exception|" + e.causeExceptionClass() + "|" + e.getMessage());
         } catch (Throwable e) {
-            a.add("excepcion|" + falla(e));
+            a.add("exception|" + failure(e));
         }
 
-        // Y las cosas que no existen.
+        // And the things that do not exist.
         try {
-            ec.invoke("JSH1x", "noExiste");
-            a.add("metodo-inexistente|sin error");
+            ec.invoke("JSH1x", "doesNotExist");
+            a.add("no-such-method|no error");
         } catch (Throwable e) {
-            a.add("metodo-inexistente|" + e.getClass().getName());
+            a.add("no-such-method|" + e.getClass().getName());
         }
         try {
-            ec.varValue("JSH1x", "noExiste");
-            a.add("var-inexistente|sin error");
+            ec.varValue("JSH1x", "doesNotExist");
+            a.add("no-such-var|no error");
         } catch (Throwable e) {
-            a.add("var-inexistente|" + e.getClass().getName());
+            a.add("no-such-var|" + e.getClass().getName());
         }
         try {
-            ec.invoke("NoHay", "f");
-            a.add("clase-inexistente|sin error");
+            ec.invoke("NotThere", "f");
+            a.add("no-such-class|no error");
         } catch (Throwable e) {
-            a.add("clase-inexistente|" + e.getClass().getName());
+            a.add("no-such-class|" + e.getClass().getName());
         }
 
-        // Lo que este motor declara no soportar.
+        // What this engine declares it does not support.
         try {
-            ec.extensionCommand("loQueSea", null);
-            a.add("extension|sin error");
+            ec.extensionCommand("whatever", null);
+            a.add("extension|no error");
         } catch (Throwable e) {
             a.add("extension|" + e.getClass().getName());
         }
 
-        // Cortar sin nada corriendo no puede fallar: la peticion puede llegar entre medio.
+        // Stopping with nothing running cannot fail: the request may arrive in between.
         try {
             ec.stop();
-            a.add("stop-en-vacio|ok");
+            a.add("stop-with-nothing|ok");
         } catch (Throwable e) {
-            a.add("stop-en-vacio|" + falla(e));
+            a.add("stop-with-nothing|" + failure(e));
         }
 
         ec.close();
@@ -132,22 +132,22 @@ public class JSH1 {
     }
 
     /**
-     * El indice de la primera respuesta que no coincide con la del JDK, o -1.
+     * The index of the first answer that differs from the JDK's, or -1.
      *
-     * @return el indice, o -1
+     * @return the index, or -1
      */
-    public static int donde() {
+    public static int where() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        if (a.length != ESPERADO.length) {
+        if (a.length != EXPECTED.length) {
             return 8000 + a.length;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!a[i].equals(ESPERADO[i])) {
+            if (!a[i].equals(EXPECTED[i])) {
                 return i;
             }
         }
@@ -162,8 +162,8 @@ public class JSH1 {
             }
             return;
         }
-        final int i = donde();
-        System.out.println(i < 0 ? "sin diferencias"
-                : i + ":\n  nuestro=" + a[i] + "\n  jdk    =" + ESPERADO[i]);
+        final int i = where();
+        System.out.println(i < 0 ? "no differences"
+                : i + ":\n  ours=" + a[i] + "\n  jdk =" + EXPECTED[i]);
     }
 }

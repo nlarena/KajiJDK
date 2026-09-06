@@ -1,103 +1,103 @@
 package jdk.jshell.execution;
 
 /**
- * El vocabulario del protocolo entre JShell y el motor que ejecuta.
+ * The vocabulary of the protocol between JShell and the engine that runs the code.
  *
- * <h2>Por que hay un protocolo y no llamadas</h2>
+ * <h2>Why there is a protocol and not calls</h2>
  *
- * <p>El motor puede estar en otra maquina virtual --de eso se trata {@link JdiExecutionControl}--,
- * asi que las operaciones de {@link jdk.jshell.spi.ExecutionControl} viajan como mensajes por un par
- * de flujos. Cada mensaje es un nombre de comando y sus argumentos; cada respuesta es un codigo y lo
- * que corresponda.
+ * <p>The engine may be on another virtual machine --that is what {@link JdiExecutionControl} is
+ * about-- so {@link jdk.jshell.spi.ExecutionControl}'s operations travel as messages over a pair of
+ * streams. Each message is a command name and its arguments; each answer is a code and whatever goes
+ * with it.
  *
- * <p>Los nombres de comando son el texto de su propia constante --{@code CMD_LOAD} vale
- * {@code "CMD_LOAD"}-- porque asi el volcado del flujo se lee sin tabla de traduccion. En un
- * protocolo que sirve para depurar un depurador, eso vale mas que los tres bytes que se ahorrarian
- * numerandolos.
+ * <p>The command names are the text of their own constant --{@code CMD_LOAD} is worth
+ * {@code "CMD_LOAD"}-- because that way a dump of the stream reads without a translation table. In a
+ * protocol whose job is to debug a debugger, that is worth more than the three bytes numbering them
+ * would save.
  *
  * <h2>{@link #COMMAND_PREFIX}</h2>
  *
- * <p>Va delante de cada respuesta. El flujo lleva mezcladas dos cosas --lo que el programa del
- * usuario imprime y las respuestas del motor-- y esta marca es lo que las separa: sin ella, un
- * {@code System.out.println} del usuario que dijera {@code "CMD_LOAD"} seria indistinguible de una
- * respuesta.
+ * <p>It goes in front of every answer. The stream carries two things mixed together --what the
+ * user's program prints and the engine's answers-- and this mark is what separates them: without it,
+ * a {@code System.out.println} of the user's saying {@code "CMD_LOAD"} would be indistinguishable
+ * from an answer.
  *
- * <p>Los valores son los del JDK 25 y no se pueden elegir: un motor de esta biblioteca tiene que
- * poder hablar con el agente del JDK y al reves.
+ * <p>The values are JDK 25's and cannot be chosen: an engine of this library has to be able to talk
+ * to the JDK's agent and the other way round.
  */
 final class RemoteCodes {
 
     /**
-     * La marca que precede a cada respuesta del motor.
+     * The mark preceding every answer from the engine.
      *
-     * <p>En hexadecimal es {@code 0xC03DC03D}, o sea "code" repetido dos veces. Que sea un patron
-     * reconocible a ojo no es coqueteria: cuando el flujo se desincroniza, es lo unico que permite
-     * ver donde volvio a engancharse.
+     * <p>In hexadecimal it is {@code 0xC03DC03D}, that is "code" twice over. That it is a pattern
+     * recognizable by eye is not vanity: when the stream loses sync, it is the only thing that shows
+     * where it caught up again.
      */
     static final int COMMAND_PREFIX = 0xC03DC03D;
 
     /**
-     * El texto con que viaja un {@code null}.
+     * The text a {@code null} travels as.
      *
-     * <p>{@code writeUTF} no sabe escribir {@code null} y los valores del usuario pueden serlo. Este
-     * centinela lleva caracteres de control justamente para que ningun {@code toString} razonable lo
-     * produzca por accidente. Es un compromiso conocido; esta escrito asi en el JDK y se lo copia
-     * porque el otro lado del flujo puede ser el agente del JDK.
+     * <p>{@code writeUTF} cannot write {@code null} and the user's values may be one. This sentinel
+     * carries control characters precisely so that no reasonable {@code toString} produces it by
+     * accident. It is a known compromise; it is written this way in the JDK and copied because the
+     * other side of the stream may be the JDK's agent.
      */
-    static final String NULO = "\u0002*?*NULL*?*\u0003";
+    static final String NULL_SENTINEL = "\u0002*?*NULL*?*\u0003";
 
-    /** Cerrar el motor. */
+    /** Close the engine. */
     static final String CMD_CLOSE = "CMD_CLOSE";
 
-    /** Instalar clases nuevas. */
+    /** Install new classes. */
     static final String CMD_LOAD = "CMD_LOAD";
 
-    /** Reemplazar el codigo de clases que ya estaban. */
+    /** Replace the code of classes that were already there. */
     static final String CMD_REDEFINE = "CMD_REDEFINE";
 
-    /** Llamar a un metodo. */
+    /** Call a method. */
     static final String CMD_INVOKE = "CMD_INVOKE";
 
-    /** Leer el valor de una variable. */
+    /** Read a variable's value. */
     static final String CMD_VAR_VALUE = "CMD_VAR_VALUE";
 
-    /** Agregar una entrada al classpath. */
+    /** Add an entry to the class path. */
     static final String CMD_ADD_CLASSPATH = "CMD_ADD_CLASSPATH";
 
-    /** Cortar lo que se este ejecutando. */
+    /** Cut short whatever is running. */
     static final String CMD_STOP = "CMD_STOP";
 
-    /** Salio bien. */
+    /** It went well. */
     static final int RESULT_SUCCESS = 100;
 
-    /** El motor se termino y no va a atender mas. */
+    /** The engine ended and will serve nothing more. */
     static final int RESULT_TERMINATED = 101;
 
-    /** Ese motor no implementa esa operacion. */
+    /** That engine does not implement that operation. */
     static final int RESULT_NOT_IMPLEMENTED = 102;
 
-    /** Fallo el motor, no el codigo del usuario. */
+    /** The engine failed, not the user's code. */
     static final int RESULT_INTERNAL_PROBLEM = 103;
 
-    /** El codigo del usuario lanzo una excepcion. */
+    /** The user's code threw an exception. */
     static final int RESULT_USER_EXCEPTION = 104;
 
     /**
-     * El codigo del usuario llamo a algo que todavia no esta definido.
+     * The user's code called something that is not defined yet.
      *
-     * <p>"Corralled" es como JShell llama al metodo de relleno que pone en lugar de uno que el
-     * usuario menciono pero aun no escribio. Ejecutarlo no es un error del programa: es la forma en
-     * que JShell avisa que falta esa definicion.
+     * <p>"Corralled" is what JShell calls the filler method it puts in place of one the user
+     * mentioned but has not written yet. Running it is not a mistake in the program: it is how
+     * JShell says that definition is missing.
      */
     static final int RESULT_CORRALLED = 105;
 
-    /** No se pudieron instalar las clases. */
+    /** The classes could not be installed. */
     static final int RESULT_CLASS_INSTALL_EXCEPTION = 106;
 
-    /** Se corto por un {@link #CMD_STOP}. */
+    /** It was cut short by a {@link #CMD_STOP}. */
     static final int RESULT_STOPPED = 107;
 
-    /** Como {@link #RESULT_USER_EXCEPTION}, y ademas viaja la cadena de causas. */
+    /** Like {@link #RESULT_USER_EXCEPTION}, and the chain of causes travels too. */
     static final int RESULT_USER_EXCEPTION_CHAINED = 108;
 
     private RemoteCodes() {

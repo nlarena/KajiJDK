@@ -1,9 +1,9 @@
-/** El fragmento de prueba: lo que JShell compilaria de lo que escribe el usuario. */
+/** The test snippet: what JShell would compile out of what the user writes. */
 public class JSH1x {
     public static int V = 7;
-    public static String T = "hola";
+    public static String T = "hello";
     public static int f() { return 42; }
-    public static String g() { return "eco"; }
-    public static Object nulo() { return null; }
-    public static int revienta() { throw new IllegalStateException("a proposito"); }
+    public static String g() { return "echo"; }
+    public static Object nothing() { return null; }
+    public static int blowUp() { throw new IllegalStateException("on purpose"); }
 }

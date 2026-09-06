@@ -27,54 +27,54 @@ import com.sun.jdi.event.VMDisconnectEvent;
 import jdk.jshell.spi.ExecutionControl;
 
 /**
- * Las piezas para armar un motor de ejecucion que vive del otro lado de un par de flujos.
+ * The pieces for building an execution engine that lives on the far side of a pair of streams.
  *
- * <h2>Los dos extremos</h2>
+ * <h2>The two ends</h2>
  *
- * <p>{@link #forwardExecutionControl} es el lado que <strong>ejecuta</strong>: se queda atendiendo
- * comandos hasta que le digan que cierre. {@link #remoteInputOutput} es el lado de
- * <strong>JShell</strong>: arma el par de flujos y devuelve el motor con el que hablarle.
+ * <p>{@link #forwardExecutionControl} is the side that <strong>executes</strong>: it stays serving
+ * commands until it is told to close. {@link #remoteInputOutput} is <strong>JShell</strong>'s side:
+ * it builds the pair of streams and returns the engine to talk to it with.
  *
- * <h2>Por que hay que multiplexar</h2>
+ * <h2>Why multiplexing is necessary</h2>
  *
- * <p>Entre las dos puntas hay una sola conexion y por ahi tienen que pasar varias corrientes: los
- * comandos, lo que el programa del usuario imprime, su salida de error, y su entrada. Mezclarlas sin
- * etiquetar seria imposible de separar; abrir una conexion por cada una multiplicaria por cuatro lo
- * que hay que atravesar en un cortafuegos. Ver {@link MultiplexingOutputStream}.
+ * <p>Between the two ends there is a single connection and several streams have to travel through
+ * it: the commands, what the user's program prints, its error output, and its input. Mixing them
+ * unlabelled would make them impossible to separate; opening one connection per stream would
+ * quadruple what has to get through a firewall. See {@link MultiplexingOutputStream}.
  *
- * <h2>El orden en que se abren los flujos</h2>
+ * <h2>The order the streams are opened in</h2>
  *
- * <p>{@link ObjectOutputStream} escribe una cabecera al construirse y {@link ObjectInputStream} la
- * lee al construirse. Si las dos puntas crean primero la entrada, las dos quedan esperando una
- * cabecera que nadie escribio. Por eso siempre se crea primero la salida y se la vacia.
+ * <p>{@link ObjectOutputStream} writes a header when built and {@link ObjectInputStream} reads it
+ * when built. If both ends create the input first, both sit waiting for a header nobody wrote. That
+ * is why the output is always created first and flushed.
  *
- * <p>Es el error clasico de este tipo de codigo y no da ningun sintoma util: los dos procesos quedan
- * vivos y quietos.
+ * <p>It is the classic mistake in this kind of code and it gives no useful symptom: both processes
+ * stay alive and still.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Los tres primeros metodos funcionan: son flujos y hilos. {@link #detectJdiExitEvent} necesita
- * la cola de eventos de una maquina virtual depurada, y esta VM no tiene el transporte de JDI; ver
+ * <p>The first three methods work: they are streams and threads. {@link #detectJdiExitEvent} needs
+ * the event queue of a debugged virtual machine, and this VM has no JDI transport; see
  * {@link JdiExecutionControl}.
  *
  * @since 9
  */
 public class Util {
 
-    /** El nombre de la corriente por la que viajan los comandos. */
-    private static final String COMANDOS = "$command";
+    /** The name of the stream the commands travel over. */
+    private static final String COMMANDS = "$command";
 
     private Util() {
     }
 
     /**
-     * Atiende comandos sobre ese par de flujos hasta que llegue el de cierre.
+     * Serves commands over that pair of streams until the close one arrives.
      *
-     * <p>No devuelve hasta entonces: es el bucle principal del lado que ejecuta.
+     * <p>It does not return until then: it is the main loop of the side that executes.
      *
-     * @param ec el motor que de verdad ejecuta
-     * @param inStream por donde llegan los comandos
-     * @param outStream por donde se contestan
+     * @param ec the engine that really executes
+     * @param inStream where the commands arrive
+     * @param outStream where they are answered
      */
     public static void forwardExecutionControl(ExecutionControl ec, ObjectInput inStream,
             ObjectOutput outStream) {
@@ -82,109 +82,111 @@ public class Util {
     }
 
     /**
-     * Arma los flujos del lado que ejecuta y se queda atendiendo.
+     * Builds the executing side's streams and stays serving.
      *
-     * <p>Antes de atender, redirige la salida y la entrada del programa del usuario por el canal
-     * compartido: sin eso, lo que el fragmento imprima se perderia en el proceso remoto.
+     * <p>Before serving, it redirects the user program's output and input over the shared channel:
+     * without that, what the snippet prints would be lost in the remote process.
      *
-     * @param ec el motor que de verdad ejecuta
-     * @param inStream la conexion de entrada
-     * @param outStream la conexion de salida
-     * @param outputStreamMap que hacer con cada corriente de salida que se quiera publicar
-     * @param inputStreamMap que hacer con cada corriente de entrada
-     * @throws IOException si no se pudieron armar los flujos
+     * @param ec the engine that really executes
+     * @param inStream the input connection
+     * @param outStream the output connection
+     * @param outputStreamMap what to do with each output stream to be published
+     * @param inputStreamMap what to do with each input stream
+     * @throws IOException if the streams could not be built
      */
     public static void forwardExecutionControlAndIO(ExecutionControl ec, InputStream inStream,
             OutputStream outStream, Map<String, Consumer<OutputStream>> outputStreamMap,
             Map<String, Consumer<InputStream>> inputStreamMap) throws IOException {
         for (final Map.Entry<String, Consumer<OutputStream>> e : outputStreamMap.entrySet()) {
-            e.getValue().accept(multiplexada(e.getKey(), outStream));
+            e.getValue().accept(multiplexed(e.getKey(), outStream));
         }
-        // La salida va primero y se vacia: la cabecera de ObjectOutputStream tiene que llegar antes
-        // de que el otro lado intente leer la suya. Ver la nota de la clase.
-        final ObjectOutputStream out = new ObjectOutputStream(multiplexada(COMANDOS, outStream));
+        // The output goes first and is flushed: ObjectOutputStream's header has to arrive before the
+        // other side tries to read its own. See the class note.
+        final ObjectOutputStream out = new ObjectOutputStream(multiplexed(COMMANDS, outStream));
         out.flush();
-        final Map<String, OutputStream> destinos = new HashMap<String, OutputStream>();
-        final List<Closeable> cerrar = new ArrayList<Closeable>();
-        final PipedInputStream comandosIn = new PipedInputStream();
-        final PipedOutputStream comandosOut = new PipedOutputStream(comandosIn);
-        destinos.put(COMANDOS, comandosOut);
-        cerrar.add(comandosOut);
+        final Map<String, OutputStream> targets = new HashMap<String, OutputStream>();
+        final List<Closeable> toClose = new ArrayList<Closeable>();
+        final PipedInputStream commandsIn = new PipedInputStream();
+        final PipedOutputStream commandsOut = new PipedOutputStream(commandsIn);
+        targets.put(COMMANDS, commandsOut);
+        toClose.add(commandsOut);
         for (final Map.Entry<String, Consumer<InputStream>> e : inputStreamMap.entrySet()) {
             final PipedInputStream pin = new PipedInputStream();
             final PipedOutputStream pout = new PipedOutputStream(pin);
-            destinos.put(e.getKey(), pout);
-            cerrar.add(pout);
+            targets.put(e.getKey(), pout);
+            toClose.add(pout);
             e.getValue().accept(pin);
         }
-        new DemultiplexInput(inStream, destinos, cerrar).start();
-        final ObjectInputStream in = new ObjectInputStream(comandosIn);
+        new DemultiplexInput(inStream, targets, toClose).start();
+        final ObjectInputStream in = new ObjectInputStream(commandsIn);
         forwardExecutionControl(ec, in, out);
     }
 
     /**
-     * Arma los flujos del lado de JShell y devuelve el motor con el que hablarle.
+     * Builds JShell's side's streams and returns the engine to talk to it with.
      *
-     * @param inStream la conexion de entrada
-     * @param outStream la conexion de salida
-     * @param outputStreamMap a donde mandar cada corriente que llegue
-     * @param inputStreamMap de donde sacar cada corriente que se mande
-     * @param factory como construir el motor sobre el par de flujos ya armado
-     * @return el motor
-     * @throws IOException si no se pudieron armar los flujos
+     * @param inStream the input connection
+     * @param outStream the output connection
+     * @param outputStreamMap where to send each stream that arrives
+     * @param inputStreamMap where to take each stream that is sent from
+     * @param factory how to build the engine over the assembled pair of streams
+     * @return the engine
+     * @throws IOException if the streams could not be built
      */
     public static ExecutionControl remoteInputOutput(InputStream inStream, OutputStream outStream,
             Map<String, OutputStream> outputStreamMap, Map<String, InputStream> inputStreamMap,
             BiFunction<ObjectInput, ObjectOutput, ExecutionControl> factory) throws IOException {
-        final Map<String, OutputStream> destinos =
+        final Map<String, OutputStream> targets =
                 new HashMap<String, OutputStream>(outputStreamMap);
-        final List<Closeable> cerrar = new ArrayList<Closeable>();
-        final PipedInputStream comandosIn = new PipedInputStream();
-        final PipedOutputStream comandosOut = new PipedOutputStream(comandosIn);
-        destinos.put(COMANDOS, comandosOut);
-        cerrar.add(comandosOut);
+        final List<Closeable> toClose = new ArrayList<Closeable>();
+        final PipedInputStream commandsIn = new PipedInputStream();
+        final PipedOutputStream commandsOut = new PipedOutputStream(commandsIn);
+        targets.put(COMMANDS, commandsOut);
+        toClose.add(commandsOut);
         for (final Map.Entry<String, InputStream> e : inputStreamMap.entrySet()) {
-            copiarEnSegundoPlano(e.getValue(), multiplexada(e.getKey(), outStream));
+            copyInBackground(e.getValue(), multiplexed(e.getKey(), outStream));
         }
-        final ObjectOutputStream out = new ObjectOutputStream(multiplexada(COMANDOS, outStream));
+        final ObjectOutputStream out = new ObjectOutputStream(multiplexed(COMMANDS, outStream));
         out.flush();
-        new DemultiplexInput(inStream, destinos, cerrar).start();
-        final ObjectInputStream in = new ObjectInputStream(comandosIn);
+        new DemultiplexInput(inStream, targets, toClose).start();
+        final ObjectInputStream in = new ObjectInputStream(commandsIn);
         return factory.apply(in, out);
     }
 
     /**
-     * Avisa cuando la maquina virtual depurada se termina.
+     * Tells when the debugged virtual machine ends.
      *
-     * <p>Se queda escuchando la cola de eventos en un hilo aparte y llama al informante cuando llega
-     * un {@link VMDeathEvent} o un {@link VMDisconnectEvent}. Los dos importan y no son lo mismo: el
-     * primero es la otra VM terminando de forma ordenada, el segundo es la conexion cayendose. Para
-     * JShell la consecuencia es la misma --no hay mas motor-- y por eso los dos avisan.
+     * <p>It stays listening to the event queue on a thread of its own and calls the reporter when a
+     * {@link VMDeathEvent} or a {@link VMDisconnectEvent} arrives. Both matter and they are not the
+     * same: the first is the other VM ending in an orderly way, the second is the connection falling
+     * over. For JShell the consequence is the same --there is no engine any more-- and that is why
+     * both report.
      *
-     * <p>El hilo es demonio: si lo unico que queda vivo es este vigilante, no hay nada que vigilar.
+     * <p>The thread is a daemon: if the only thing left alive is this watcher, there is nothing to
+     * watch.
      *
-     * <p>En esta VM la cola no se llena nunca, porque el transporte de JDI es lo que la alimenta y no
-     * lo hay. El hilo arranca igual y lo que pase depende de la maquina que le pasen; ver
+     * <p>On this VM the queue never fills, because JDI's transport is what feeds it and there is
+     * none. The thread starts all the same and what happens depends on the machine it is handed; see
      * {@link JdiExecutionControl}.
      *
-     * @param vm la maquina depurada
-     * @param reporter a quien avisarle
+     * @param vm the debugged machine
+     * @param reporter whom to tell
      */
     public static void detectJdiExitEvent(VirtualMachine vm, Consumer<String> reporter) {
-        final EventQueue cola = vm.eventQueue();
+        final EventQueue queue = vm.eventQueue();
         final Thread t = new Thread(new Runnable() {
             public void run() {
                 while (true) {
-                    final EventSet conjunto;
+                    final EventSet set;
                     try {
-                        conjunto = cola.remove();
+                        set = queue.remove();
                     } catch (InterruptedException e) {
                         return;
                     } catch (VMDisconnectedException e) {
                         reporter.accept("VM disconnected");
                         return;
                     }
-                    for (final Event ev : conjunto) {
+                    for (final Event ev : set) {
                         if (ev instanceof VMDeathEvent) {
                             reporter.accept("VM died");
                             return;
@@ -194,7 +196,7 @@ public class Util {
                             return;
                         }
                     }
-                    conjunto.resume();
+                    set.resume();
                 }
             }
         }, "JDI exit watcher");
@@ -202,26 +204,26 @@ public class Util {
         t.start();
     }
 
-    private static OutputStream multiplexada(String nombre, OutputStream destino) {
-        return new MultiplexingOutputStream(nombre, destino);
+    private static OutputStream multiplexed(String name, OutputStream target) {
+        return new MultiplexingOutputStream(name, target);
     }
 
-    /** Copia un flujo en otro, en un hilo aparte, hasta que se termine. */
-    private static void copiarEnSegundoPlano(InputStream de, OutputStream a) {
+    /** Copies one stream into another, on a thread of its own, until it ends. */
+    private static void copyInBackground(InputStream from, OutputStream to) {
         final Thread t = new Thread(new Runnable() {
             public void run() {
                 final byte[] buf = new byte[1024];
                 try {
                     while (true) {
-                        final int n = de.read(buf);
+                        final int n = from.read(buf);
                         if (n < 0) {
                             return;
                         }
-                        a.write(buf, 0, n);
-                        a.flush();
+                        to.write(buf, 0, n);
+                        to.flush();
                     }
                 } catch (IOException e) {
-                    // La corriente se termino; no hay a quien avisarle ni que hacer.
+                    // The stream ended; there is nobody to tell and nothing to do.
                 }
             }
         }, "input copier");

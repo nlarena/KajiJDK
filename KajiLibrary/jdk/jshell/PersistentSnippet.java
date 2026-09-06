@@ -1,12 +1,12 @@
 package jdk.jshell;
 
 /**
- * Un fragmento que queda declarado para los que vengan despues.
+ * A snippet that stays declared for the ones that come after.
  *
- * <p>Los imports y las declaraciones --tipos, metodos, variables-- siguen existiendo despues de
- * escribirlos; una expresion suelta se evalua y se termina. La diferencia esta en que estos tienen
- * nombre, y el nombre es lo que hace que un fragmento posterior pueda reemplazarlos: escribir de
- * nuevo un metodo con la misma firma deja al anterior en {@link Snippet.Status#OVERWRITTEN}.
+ * <p>Imports and declarations --types, methods, variables-- go on existing after being written; a
+ * loose expression is evaluated and done with. The difference is that these have a name, and the
+ * name is what lets a later snippet replace them: writing a method with the same signature again
+ * leaves the earlier one in {@link Snippet.Status#OVERWRITTEN}.
  *
  * @since 9
  */
@@ -20,9 +20,9 @@ public abstract class PersistentSnippet extends Snippet {
     }
 
     /**
-     * El nombre de lo que declara.
+     * The name of what it declares.
      *
-     * @return el nombre
+     * @return the name
      */
     public String name() {
         return this.name;

@@ -7,24 +7,24 @@ import jdk.jshell.Snippet;
 import jdk.jshell.SourceCodeAnalysis;
 
 /**
- * Comprueba {@code jdk.jshell} contra el JDK 25.
+ * Checks {@code jdk.jshell} against JDK 25.
  *
- * <h2>Que se puede comparar</h2>
+ * <h2>What can be compared</h2>
  *
- * <p>Las cinco enumeraciones enteras, con sus preguntas: cuales clases de fragmento son
- * persistentes, cuales situaciones cuentan como activas, cual subclase es ejecutable y cual deja un
- * valor. Eso es la mayor parte del paquete y es aritmetica sobre tablas, asi que da lo mismo tenga o
- * no la biblioteca un compilador.
+ * <p>All five enums in full, with their questions: which kinds of snippet are persistent, which
+ * states count as active, which subkind is executable and which leaves a value. That is most of the
+ * package and it is arithmetic over tables, so it answers the same whether or not the library has a
+ * compiler.
  *
- * <p>Del motor se compara el ciclo de vida: que una sesion recien creada este vacia, con que error
- * falla cada metodo con argumentos nulos, y que cambia despues de cerrar. Lo que no se compara es
- * evaluar, porque para eso hace falta un compilador en proceso que esta biblioteca no tiene.
+ * <p>Of the engine, the life cycle is compared: that a freshly created session is empty, which error
+ * each method fails with on null arguments, and what changes after closing. What is not compared is
+ * evaluating, because that needs an in-process compiler this library does not have.
  *
- * <p>{@link #donde()} devuelve el indice de la primera respuesta que no coincide, o -1.
+ * <p>{@link #where()} returns the index of the first answer that differs, or -1.
  */
 public class JSH3 {
 
-    static final String[] ESPERADO = {
+    static final String[] EXPECTED = {
         "Kind|IMPORT|0|true|true",
         "Kind|TYPE_DECL|1|true|true",
         "Kind|METHOD|2|true|true",
@@ -70,30 +70,30 @@ public class JSH3 {
         "NOPOS|-1",
         "Highlight|3|9|[KEYWORD]",
         "Highlight-eq|true|false",
-        "cadena|truetruetruetruetruetruetruetruetruetruetrue",
-        "creado|true",
-        "vacio|0|0|0|0|0",
+        "chaining|truetruetruetruetruetruetruetruetruetruetrue",
+        "created|true",
+        "empty|0|0|0|0|0",
         "sca|true",
-        "status-nulo|NullPointerException",
-        "drop-nulo|NullPointerException",
-        "varValue-nulo|NullPointerException",
-        "diag-nulo|NullPointerException",
-        "unres-nulo|NullPointerException",
-        "onEvent-nulo|NullPointerException",
-        "onShutdown-nulo|NullPointerException",
-        "unsub-nulo|NullPointerException",
-        "classpath-nulo|NullPointerException",
+        "status-null|NullPointerException",
+        "drop-null|NullPointerException",
+        "varValue-null|NullPointerException",
+        "diag-null|NullPointerException",
+        "unres-null|NullPointerException",
+        "onEvent-null|NullPointerException",
+        "onShutdown-null|NullPointerException",
+        "unsub-null|NullPointerException",
+        "classpath-null|NullPointerException",
         "stop|ok",
-        "unsub-ajena|ok",
-        "cierre|1",
-        "eval-cerrado|IllegalStateException",
-        "snippets-cerrado|ok",
-        "sca-cerrado|ok",
-        "sub-cerrado|IllegalStateException",
-        "classpath-cerrado|IllegalStateException",
+        "unsub-foreign|ok",
+        "shutdown|1",
+        "eval-closed|IllegalStateException",
+        "snippets-closed|ok",
+        "sca-closed|ok",
+        "sub-closed|IllegalStateException",
+        "classpath-closed|IllegalStateException",
     };
 
-    /** Lo que hace el paquete, una linea por comprobacion. */
+    /** What the package does, one line per check. */
     static String[] actual() throws Exception {
         final java.util.List<String> a = new java.util.ArrayList<String>();
 
@@ -127,68 +127,68 @@ public class JSH3 {
 
         a.add("NOPOS|" + Diag.NOPOS);
 
-        final Set<SourceCodeAnalysis.Attribute> uno =
+        final Set<SourceCodeAnalysis.Attribute> one =
                 new LinkedHashSet<SourceCodeAnalysis.Attribute>();
-        uno.add(SourceCodeAnalysis.Attribute.KEYWORD);
-        final SourceCodeAnalysis.Highlight h = new SourceCodeAnalysis.Highlight(3, 9, uno);
+        one.add(SourceCodeAnalysis.Attribute.KEYWORD);
+        final SourceCodeAnalysis.Highlight h = new SourceCodeAnalysis.Highlight(3, 9, one);
         a.add("Highlight|" + h.start() + "|" + h.end() + "|" + h.attributes());
-        final Set<SourceCodeAnalysis.Attribute> otro =
+        final Set<SourceCodeAnalysis.Attribute> other =
                 new LinkedHashSet<SourceCodeAnalysis.Attribute>();
-        otro.add(SourceCodeAnalysis.Attribute.KEYWORD);
-        a.add("Highlight-eq|" + h.equals(new SourceCodeAnalysis.Highlight(3, 9, otro))
-                + "|" + h.equals(new SourceCodeAnalysis.Highlight(4, 9, otro)));
+        other.add(SourceCodeAnalysis.Attribute.KEYWORD);
+        a.add("Highlight-eq|" + h.equals(new SourceCodeAnalysis.Highlight(3, 9, other))
+                + "|" + h.equals(new SourceCodeAnalysis.Highlight(4, 9, other)));
 
-        // El constructor: todo devuelve el mismo constructor, para encadenar.
+        // The builder: everything returns the same builder, so calls can be chained.
         final JShell.Builder b = JShell.builder();
-        a.add("cadena|" + (b.in(null) == b) + (b.out(null) == b) + (b.err(null) == b)
+        a.add("chaining|" + (b.in(null) == b) + (b.out(null) == b) + (b.err(null) == b)
                 + (b.console(null) == b) + (b.tempVariableNameGenerator(null) == b)
                 + (b.idGenerator(null) == b) + (b.remoteVMOptions() == b)
                 + (b.compilerOptions() == b) + (b.executionEngine("local") == b)
                 + (b.executionEngine(null, null) == b) + (b.fileManager(null) == b));
 
-        // Una sesion recien creada esta vacia.
+        // A freshly created session is empty.
         final JShell js = JShell.create();
-        a.add("creado|" + (js != null));
-        a.add("vacio|" + js.snippets().count() + "|" + js.variables().count()
+        a.add("created|" + (js != null));
+        a.add("empty|" + js.snippets().count() + "|" + js.variables().count()
                 + "|" + js.methods().count() + "|" + js.types().count()
                 + "|" + js.imports().count());
         a.add("sca|" + (js.sourceCodeAnalysis() != null));
 
-        a.add("status-nulo|" + intentar(new StatusNulo(js)));
-        a.add("drop-nulo|" + intentar(new DropNulo(js)));
-        a.add("varValue-nulo|" + intentar(new VarValueNulo(js)));
-        a.add("diag-nulo|" + intentar(new DiagNulo(js)));
-        a.add("unres-nulo|" + intentar(new UnresNulo(js)));
-        a.add("onEvent-nulo|" + intentar(new OnEventNulo(js)));
-        a.add("onShutdown-nulo|" + intentar(new OnShutdownNulo(js)));
-        a.add("unsub-nulo|" + intentar(new UnsubNulo(js)));
-        a.add("classpath-nulo|" + intentar(new ClasspathNulo(js)));
-        a.add("stop|" + intentar(new Parar(js)));
+        a.add("status-null|" + attempt(new StatusNull(js)));
+        a.add("drop-null|" + attempt(new DropNull(js)));
+        a.add("varValue-null|" + attempt(new VarValueNull(js)));
+        a.add("diag-null|" + attempt(new DiagNull(js)));
+        a.add("unres-null|" + attempt(new UnresNull(js)));
+        a.add("onEvent-null|" + attempt(new OnEventNull(js)));
+        a.add("onShutdown-null|" + attempt(new OnShutdownNull(js)));
+        a.add("unsub-null|" + attempt(new UnsubNull(js)));
+        a.add("classpath-null|" + attempt(new ClasspathNull(js)));
+        a.add("stop|" + attempt(new Stop(js)));
 
-        // Un identificador de otro interprete no hace nada.
-        final JShell otroJs = JShell.create();
-        final JShell.Subscription ajena = otroJs.onSnippetEvent(new Nada());
-        a.add("unsub-ajena|" + intentar(new UnsubAjena(js, ajena)));
+        // A token from another interpreter does nothing.
+        final JShell otherJs = JShell.create();
+        final JShell.Subscription foreign = otherJs.onSnippetEvent(new Nothing());
+        a.add("unsub-foreign|" + attempt(new UnsubForeign(js, foreign)));
 
-        // Los avisos de cierre llegan una sola vez.
-        final int[] cuenta = new int[1];
-        js.onShutdown(new Cuenta(cuenta));
+        // The shutdown notifications arrive once only.
+        final int[] count = new int[1];
+        js.onShutdown(new Count(count));
         js.close();
         js.close();
-        a.add("cierre|" + cuenta[0]);
+        a.add("shutdown|" + count[0]);
 
-        a.add("eval-cerrado|" + intentar(new EvalCerrado(js)));
-        a.add("snippets-cerrado|" + intentar(new SnippetsCerrado(js)));
-        a.add("sca-cerrado|" + intentar(new ScaCerrado(js)));
-        a.add("sub-cerrado|" + intentar(new SubCerrado(js)));
-        a.add("classpath-cerrado|" + intentar(new ClasspathCerrado(js)));
+        a.add("eval-closed|" + attempt(new EvalClosed(js)));
+        a.add("snippets-closed|" + attempt(new SnippetsClosed(js)));
+        a.add("sca-closed|" + attempt(new ScaClosed(js)));
+        a.add("sub-closed|" + attempt(new SubClosed(js)));
+        a.add("classpath-closed|" + attempt(new ClasspathClosed(js)));
 
-        otroJs.close();
+        otherJs.close();
         return a.toArray(new String[a.size()]);
     }
 
-    /** Corre eso y devuelve "ok" o el nombre simple de lo que haya tirado. */
-    static String intentar(Runnable r) {
+    /** Runs it and returns "ok" or the simple name of whatever it threw. */
+    static String attempt(Runnable r) {
         try {
             r.run();
             return "ok";
@@ -198,17 +198,17 @@ public class JSH3 {
         }
     }
 
-    /** Un oyente que no hace nada. */
-    static class Nada implements java.util.function.Consumer<jdk.jshell.SnippetEvent> {
+    /** A listener that does nothing. */
+    static class Nothing implements java.util.function.Consumer<jdk.jshell.SnippetEvent> {
         public void accept(jdk.jshell.SnippetEvent e) {
         }
     }
 
-    /** Un oyente de cierre que cuenta cuantas veces le avisaron. */
-    static class Cuenta implements java.util.function.Consumer<JShell> {
+    /** A shutdown listener that counts how many times it was told. */
+    static class Count implements java.util.function.Consumer<JShell> {
         private final int[] n;
 
-        Cuenta(int[] n) {
+        Count(int[] n) {
             this.n = n;
         }
 
@@ -217,17 +217,17 @@ public class JSH3 {
         }
     }
 
-    /** La base de las pruebas que necesitan el interprete. */
-    abstract static class Con implements Runnable {
+    /** The base of the checks that need the interpreter. */
+    abstract static class With implements Runnable {
         final JShell js;
 
-        Con(JShell js) {
+        With(JShell js) {
             this.js = js;
         }
     }
 
-    static class StatusNulo extends Con {
-        StatusNulo(JShell js) {
+    static class StatusNull extends With {
+        StatusNull(JShell js) {
             super(js);
         }
 
@@ -236,8 +236,8 @@ public class JSH3 {
         }
     }
 
-    static class DropNulo extends Con {
-        DropNulo(JShell js) {
+    static class DropNull extends With {
+        DropNull(JShell js) {
             super(js);
         }
 
@@ -246,8 +246,8 @@ public class JSH3 {
         }
     }
 
-    static class VarValueNulo extends Con {
-        VarValueNulo(JShell js) {
+    static class VarValueNull extends With {
+        VarValueNull(JShell js) {
             super(js);
         }
 
@@ -256,8 +256,8 @@ public class JSH3 {
         }
     }
 
-    static class DiagNulo extends Con {
-        DiagNulo(JShell js) {
+    static class DiagNull extends With {
+        DiagNull(JShell js) {
             super(js);
         }
 
@@ -266,8 +266,8 @@ public class JSH3 {
         }
     }
 
-    static class UnresNulo extends Con {
-        UnresNulo(JShell js) {
+    static class UnresNull extends With {
+        UnresNull(JShell js) {
             super(js);
         }
 
@@ -276,8 +276,8 @@ public class JSH3 {
         }
     }
 
-    static class OnEventNulo extends Con {
-        OnEventNulo(JShell js) {
+    static class OnEventNull extends With {
+        OnEventNull(JShell js) {
             super(js);
         }
 
@@ -286,8 +286,8 @@ public class JSH3 {
         }
     }
 
-    static class OnShutdownNulo extends Con {
-        OnShutdownNulo(JShell js) {
+    static class OnShutdownNull extends With {
+        OnShutdownNull(JShell js) {
             super(js);
         }
 
@@ -296,8 +296,8 @@ public class JSH3 {
         }
     }
 
-    static class UnsubNulo extends Con {
-        UnsubNulo(JShell js) {
+    static class UnsubNull extends With {
+        UnsubNull(JShell js) {
             super(js);
         }
 
@@ -306,8 +306,8 @@ public class JSH3 {
         }
     }
 
-    static class ClasspathNulo extends Con {
-        ClasspathNulo(JShell js) {
+    static class ClasspathNull extends With {
+        ClasspathNull(JShell js) {
             super(js);
         }
 
@@ -316,8 +316,8 @@ public class JSH3 {
         }
     }
 
-    static class Parar extends Con {
-        Parar(JShell js) {
+    static class Stop extends With {
+        Stop(JShell js) {
             super(js);
         }
 
@@ -326,10 +326,10 @@ public class JSH3 {
         }
     }
 
-    static class UnsubAjena extends Con {
+    static class UnsubForeign extends With {
         private final JShell.Subscription s;
 
-        UnsubAjena(JShell js, JShell.Subscription s) {
+        UnsubForeign(JShell js, JShell.Subscription s) {
             super(js);
             this.s = s;
         }
@@ -339,8 +339,8 @@ public class JSH3 {
         }
     }
 
-    static class EvalCerrado extends Con {
-        EvalCerrado(JShell js) {
+    static class EvalClosed extends With {
+        EvalClosed(JShell js) {
             super(js);
         }
 
@@ -349,8 +349,8 @@ public class JSH3 {
         }
     }
 
-    static class SnippetsCerrado extends Con {
-        SnippetsCerrado(JShell js) {
+    static class SnippetsClosed extends With {
+        SnippetsClosed(JShell js) {
             super(js);
         }
 
@@ -359,8 +359,8 @@ public class JSH3 {
         }
     }
 
-    static class ScaCerrado extends Con {
-        ScaCerrado(JShell js) {
+    static class ScaClosed extends With {
+        ScaClosed(JShell js) {
             super(js);
         }
 
@@ -369,18 +369,18 @@ public class JSH3 {
         }
     }
 
-    static class SubCerrado extends Con {
-        SubCerrado(JShell js) {
+    static class SubClosed extends With {
+        SubClosed(JShell js) {
             super(js);
         }
 
         public void run() {
-            js.onSnippetEvent(new Nada());
+            js.onSnippetEvent(new Nothing());
         }
     }
 
-    static class ClasspathCerrado extends Con {
-        ClasspathCerrado(JShell js) {
+    static class ClasspathClosed extends With {
+        ClasspathClosed(JShell js) {
             super(js);
         }
 
@@ -390,22 +390,22 @@ public class JSH3 {
     }
 
     /**
-     * El indice de la primera respuesta que no coincide con la del JDK, o -1.
+     * The index of the first answer that differs from the JDK's, or -1.
      *
-     * @return el indice, o -1
+     * @return the index, or -1
      */
-    public static int donde() {
+    public static int where() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        if (a.length != ESPERADO.length) {
+        if (a.length != EXPECTED.length) {
             return 8000 + a.length;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!a[i].equals(ESPERADO[i])) {
+            if (!a[i].equals(EXPECTED[i])) {
                 return i;
             }
         }
@@ -420,8 +420,8 @@ public class JSH3 {
             }
             return;
         }
-        final int i = donde();
-        System.out.println(i < 0 ? "sin diferencias"
-                : i + ":\n  nuestro=" + a[i] + "\n  jdk    =" + ESPERADO[i]);
+        final int i = where();
+        System.out.println(i < 0 ? "no differences"
+                : i + ":\n  ours=" + a[i] + "\n  jdk =" + EXPECTED[i]);
     }
 }

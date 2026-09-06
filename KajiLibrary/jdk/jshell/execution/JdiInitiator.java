@@ -9,30 +9,30 @@ import com.sun.jdi.connect.Connector;
 import com.sun.jdi.connect.ListeningConnector;
 
 /**
- * Quien pone en marcha la otra maquina virtual y se conecta a ella.
+ * Whoever starts the other virtual machine and connects to it.
  *
- * <h2>Las dos formas de encontrarse</h2>
+ * <h2>The two ways of meeting</h2>
  *
- * <p><strong>Lanzando</strong>: JDI arranca el proceso y se conecta. Es lo mas simple y necesita
- * poder lanzar procesos.
+ * <p><strong>Launching</strong>: JDI starts the process and connects. It is the simplest and it
+ * needs to be able to launch processes.
  *
- * <p><strong>Escuchando</strong>: se abre un puerto, se lanza el proceso por separado con la orden
- * de conectarse ahi, y se espera. Es mas trabajo y es lo que sirve cuando el proceso tiene que
- * arrancar de una manera particular --otra version de Java, otro usuario, un contenedor--.
+ * <p><strong>Listening</strong>: a port is opened, the process is launched separately with orders to
+ * connect there, and one waits. It is more work and it is what serves when the process has to start
+ * in a particular way --another Java version, another user, a container.
  *
- * <p>Este iniciador usa la segunda, que es la que da control sobre como se lanza.
+ * <p>This initiator uses the second, which is the one that gives control over how it is launched.
  *
- * <h2>El tiempo de espera</h2>
+ * <h2>The timeout</h2>
  *
- * <p>Existe porque el otro proceso puede no llegar nunca, y quedarse esperando para siempre a algo
- * que fallo al arrancar seria peor que rendirse.
+ * <p>It exists because the other process may never arrive, and waiting forever for something that
+ * failed to start would be worse than giving up.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Nada de esto puede funcionar: {@link Bootstrap#virtualMachineManager} necesita una
- * implementacion de JDI, que es codigo nativo mas el protocolo de depuracion, y esta VM no lo tiene.
- * El API de {@code com.sun.jdi} esta completo y las llamadas de aca son las que corresponden; lo que
- * falta esta abajo.
+ * <p>None of this can work: {@link Bootstrap#virtualMachineManager} needs an implementation of JDI,
+ * which is native code plus the debugging protocol, and this VM does not have it. The
+ * {@code com.sun.jdi} API is complete and the calls here are the right ones; what is missing is
+ * underneath.
  *
  * @since 9
  */
@@ -50,15 +50,15 @@ public class JdiInitiator {
     private Process process;
 
     /**
-     * Un iniciador con esa configuracion.
+     * An initiator with that configuration.
      *
-     * @param port el puerto por el que se van a encontrar
-     * @param remoteVMOptions las opciones con que arrancar la otra maquina
-     * @param remoteAgent la clase principal del agente
-     * @param isLaunch si JDI tiene que lanzar el proceso, en vez de esperarlo
-     * @param host la maquina a la que conectarse, o {@code null} para la local
-     * @param timeout cuanto esperar, en milisegundos
-     * @param connectorOptions opciones adicionales del conector
+     * @param port the port they will meet over
+     * @param remoteVMOptions the options to start the other machine with
+     * @param remoteAgent the agent's main class
+     * @param isLaunch whether JDI has to launch the process, instead of waiting for it
+     * @param host the machine to connect to, or {@code null} for the local one
+     * @param timeout how long to wait, in milliseconds
+     * @param connectorOptions the connector's additional options
      */
     public JdiInitiator(int port, List<String> remoteVMOptions, String remoteAgent,
             boolean isLaunch, String host, int timeout, Map<String, String> connectorOptions) {
@@ -69,89 +69,89 @@ public class JdiInitiator {
         this.host = host;
         this.timeout = timeout;
         this.connectorOptions = connectorOptions;
-        arrancar();
+        start();
     }
 
     /**
-     * La maquina virtual del otro lado.
+     * The virtual machine on the other side.
      *
-     * @return la maquina
+     * @return the machine
      */
     public VirtualMachine vm() {
         return vm;
     }
 
     /**
-     * El proceso que se lanzo, si se lanzo alguno.
+     * The process that was launched, if one was.
      *
-     * @return el proceso, o {@code null}
+     * @return the process, or {@code null}
      */
     public Process process() {
         return process;
     }
 
     /**
-     * Abre el puerto de escucha, lanza el proceso y espera a que se conecte.
+     * Opens the listening port, launches the process and waits for it to connect.
      *
-     * <p>El orden importa y no es intercambiable: primero se empieza a escuchar y despues se lanza.
-     * Al reves, el proceso podria intentar conectarse antes de que haya alguien escuchando y morirse
-     * en el intento.
+     * <p>The order matters and is not interchangeable: listening starts first and the launch comes
+     * after. The other way round, the process could try to connect before there was anybody
+     * listening and die in the attempt.
      *
-     * @param connectorName el nombre del conector de escucha
-     * @param remotePort el puerto
-     * @param remoteVMOptions las opciones de la otra maquina
-     * @param processStarted a quien avisarle cuando el proceso arranco
+     * @param connectorName the listening connector's name
+     * @param remotePort the port
+     * @param remoteVMOptions the other machine's options
+     * @param processStarted whom to tell when the process has started
      */
     protected void runListenProcess(String connectorName, int remotePort,
             List<String> remoteVMOptions, ProcessStarted processStarted) {
-        final ListeningConnector conector = escucha(connectorName);
-        final Map<String, Connector.Argument> args = conector.defaultArguments();
+        final ListeningConnector connector = listener(connectorName);
+        final Map<String, Connector.Argument> args = connector.defaultArguments();
         final Connector.Argument p = args.get("port");
         if (p != null) {
             p.setValue(Integer.toString(remotePort));
         }
         try {
-            conector.startListening(args);
-            final ProcessBuilder pb = new ProcessBuilder(comando(remoteVMOptions, remotePort));
+            connector.startListening(args);
+            final ProcessBuilder pb = new ProcessBuilder(command(remoteVMOptions, remotePort));
             process = pb.start();
             processStarted.processStarted(process);
-            vm = conector.accept(args);
+            vm = connector.accept(args);
         } catch (Throwable e) {
-            throw new IllegalStateException("no se pudo poner en marcha la otra maquina", e);
+            throw new IllegalStateException("could not start the other machine", e);
         }
     }
 
-    /** Arranca segun la forma configurada. */
-    private void arrancar() {
+    /** Starts in whichever way was configured. */
+    private void start() {
         if (isLaunch) {
-            throw new IllegalStateException("launch: esta VM no tiene el transporte de JDI");
+            throw new IllegalStateException("launch: this VM has no JDI transport");
         }
         runListenProcess("com.sun.jdi.SocketListen", port, remoteVMOptions,
                 new ProcessStarted() {
-                    public void processStarted(Process proceso) throws Throwable {
+                    public void processStarted(Process p) throws Throwable {
                     }
                 });
     }
 
-    /** El conector de escucha con ese nombre. */
-    private ListeningConnector escucha(String nombre) {
+    /** The listening connector with that name. */
+    private ListeningConnector listener(String name) {
         for (final ListeningConnector c
                 : Bootstrap.virtualMachineManager().listeningConnectors()) {
-            if (c.name().equals(nombre)) {
+            if (c.name().equals(name)) {
                 return c;
             }
         }
-        throw new IllegalStateException("no hay conector de escucha: " + nombre);
+        throw new IllegalStateException("no listening connector: " + name);
     }
 
-    /** La linea de comando con que se lanza la otra maquina. */
-    private List<String> comando(List<String> opciones, int remotePort) {
+    /** The command line the other machine is launched with. */
+    private List<String> command(List<String> options, int remotePort) {
         final List<String> out = new java.util.ArrayList<String>();
         out.add(System.getProperty("java.home") + "/bin/java");
         out.add("-agentlib:jdwp=transport=dt_socket,address="
                 + (host == null ? "" : host + ":") + remotePort + ",suspend=y");
-        if (opciones != null) {
-            out.addAll(opciones);
+        if (options != null) {
+            out.addAll(options);
         }
         if (connectorOptions != null) {
             for (final Map.Entry<String, String> e : connectorOptions.entrySet()) {
@@ -164,21 +164,21 @@ public class JdiInitiator {
     }
 
     /**
-     * A quien avisarle cuando el proceso arranco.
+     * Whom to tell when the process has started.
      *
-     * <p>Existe para que quien lanza pueda enganchar sus flujos de entrada y salida antes de que el
-     * proceso escriba nada. Si se esperara a que la conexion de JDI estuviera lista, lo que el
-     * proceso imprimio mientras tanto ya se habria perdido.
+     * <p>It exists so that whoever launches can hook up their input and output streams before the
+     * process writes anything. Waiting for JDI's connection to be ready would mean whatever the
+     * process printed meanwhile was already lost.
      *
      * @since 9
      */
     public interface ProcessStarted {
 
         /**
-         * El proceso ya arranco.
+         * The process has started.
          *
-         * @param process el proceso
-         * @throws Throwable si el que escucha no pudo hacer lo suyo
+         * @param process the process
+         * @throws Throwable if the listener could not do its part
          */
         void processStarted(Process process) throws Throwable;
     }

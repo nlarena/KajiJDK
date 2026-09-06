@@ -1,38 +1,38 @@
 package jdk.jshell;
 
 /**
- * Un pedazo de codigo Java que el interprete trata como una unidad.
+ * A piece of Java code the interpreter treats as one unit.
  *
- * <h2>Que es un fragmento</h2>
+ * <h2>What a snippet is</h2>
  *
- * <p>En un archivo, el codigo esta ordenado: declaraciones adentro de una clase, sentencias adentro
- * de un metodo. En un interprete no hay archivo, y lo que el usuario escribe puede ser cualquiera de
- * las dos cosas, o una expresion suelta, o un import. Un fragmento es esa unidad: lo que se escribio
- * de una vez, con el tipo de cosa que resulto ser.
+ * <p>In a file, code is ordered: declarations inside a class, statements inside a method. In an
+ * interpreter there is no file, and what the user writes may be either of those, or a loose
+ * expression, or an import. A snippet is that unit: what was written in one go, together with the
+ * kind of thing it turned out to be.
  *
- * <h2>Por que tiene identidad</h2>
+ * <h2>Why it has an identity</h2>
  *
- * <p>Un fragmento no cambia nunca: escribir de nuevo un metodo con la misma firma no modifica el
- * fragmento anterior, crea uno nuevo y deja al viejo en {@link Status#OVERWRITTEN}. Eso es lo que
- * permite deshacer, listar la historia, y saber que fragmentos dependian de cual --si se reescribe
- * un metodo, todo lo que lo llamaba tiene que recompilarse--.
+ * <p>A snippet never changes: writing a method with the same signature again does not modify the
+ * earlier snippet, it creates a new one and leaves the old in {@link Status#OVERWRITTEN}. That is
+ * what makes undoing, listing the history, and knowing which snippets depended on which possible
+ * --if a method is rewritten, everything that called it has to be recompiled.
  *
- * <p>{@link #id} identifica al fragmento dentro de su interprete, y {@link #source} guarda el texto
- * tal como se escribio, que es lo que se muestra al listar la historia.
+ * <p>{@link #id} identifies the snippet within its interpreter, and {@link #source} keeps the text
+ * exactly as it was written, which is what is shown when the history is listed.
  *
- * <h2>Los tres niveles</h2>
+ * <h2>The three levels</h2>
  *
- * <p>{@link #kind} dice de que clase de fragmento se trata --import, declaracion de tipo, metodo,
- * variable, expresion, sentencia, o algo que no compilo--. {@link #subKind} afina eso: dentro de
- * `VAR` distingue una declaracion sin valor de una con valor y de la variable temporal que el
- * interprete inventa para guardar el resultado de una expresion suelta. La distincion importa
- * porque de ahi sale si el fragmento produce un valor para mostrar.
+ * <p>{@link #kind} says which kind of snippet it is --import, type declaration, method, variable,
+ * expression, statement, or something that did not compile. {@link #subKind} sharpens that: within
+ * `VAR` it tells a declaration with no value from one with a value and from the temporary variable
+ * the interpreter invents to hold the result of a loose expression. The distinction matters because
+ * it is where "does this snippet produce a value to show" comes from.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Los fragmentos los fabrica el interprete al evaluar, y evaluar necesita un compilador en
- * proceso que esta biblioteca no tiene --ver {@link JShell#eval}--. Las clases estan completas y las
- * tres enumeraciones funcionan de verdad; lo que no hay es quien construya un fragmento.
+ * <p>Snippets are made by the interpreter while evaluating, and evaluating needs an in-process
+ * compiler this library does not have --see {@link JShell#eval}. The classes are complete and the
+ * three enums really work; what is missing is anybody to build a snippet.
  *
  * @since 9
  */
@@ -42,108 +42,108 @@ public abstract class Snippet {
     private final String source;
     private final SubKind subkind;
 
-    /** De que clase de fragmento se trata. */
+    /** Which kind of snippet it is. */
     public enum Kind {
 
-        /** Un `import`. */
+        /** An `import`. */
         IMPORT(true),
 
-        /** Una declaracion de clase, interfaz, enumeracion, registro o anotacion. */
+        /** A class, interface, enum, record or annotation declaration. */
         TYPE_DECL(true),
 
-        /** Una declaracion de metodo. */
+        /** A method declaration. */
         METHOD(true),
 
-        /** Una declaracion de variable. */
+        /** A variable declaration. */
         VAR(true),
 
-        /** Una expresion suelta. */
+        /** A loose expression. */
         EXPRESSION(false),
 
-        /** Una sentencia suelta. */
+        /** A loose statement. */
         STATEMENT(false),
 
-        /** Algo que no se pudo entender. */
+        /** Something that could not be understood. */
         ERRONEOUS(false);
 
-        private final boolean persistente;
+        private final boolean persistent;
 
-        Kind(boolean persistente) {
-            this.persistente = persistente;
+        Kind(boolean persistent) {
+            this.persistent = persistent;
         }
 
         /**
-         * Si un fragmento de esta clase queda declarado para los que vengan despues.
+         * Whether a snippet of this kind stays declared for the ones that come after.
          *
-         * <p>Un metodo o una variable siguen existiendo despues de escribirlos; una expresion se
-         * evalua y se termina. La diferencia decide que fragmentos hay que recompilar cuando algo
-         * cambia.
+         * <p>A method or a variable goes on existing after being written; an expression is evaluated
+         * and done with. The difference decides which snippets have to be recompiled when something
+         * changes.
          *
-         * @return cierto si queda declarado
+         * @return true if it stays declared
          */
         public boolean isPersistent() {
-            return this.persistente;
+            return this.persistent;
         }
     }
 
-    /** En que situacion esta un fragmento dentro del interprete. */
+    /** What state a snippet is in inside the interpreter. */
     public enum Status {
 
-        /** Compila y esta activo. */
+        /** It compiles and is active. */
         VALID(true, true),
 
         /**
-         * Le falta algo que todavia no se declaro, pero se lo pudo definir igual.
+         * It is missing something not declared yet, but it could be defined all the same.
          *
-         * <p>Es lo que pasa al escribir un metodo que llama a otro que todavia no existe: el
-         * interprete lo acepta y lo deja pendiente, porque en una sesion interactiva el orden en que
-         * se escriben las cosas no tiene por que ser el orden en que se usan.
+         * <p>It is what happens when a method calling another that does not exist yet is written:
+         * the interpreter accepts it and leaves it pending, because in an interactive session the
+         * order things are written in need not be the order they are used in.
          */
         RECOVERABLE_DEFINED(true, true),
 
-        /** Le falta algo y ademas no se lo pudo definir; sigue vivo pero no se puede usar. */
+        /** It is missing something and could not be defined either; still alive but unusable. */
         RECOVERABLE_NOT_DEFINED(true, false),
 
-        /** Lo borro el usuario. */
+        /** The user dropped it. */
         DROPPED(false, false),
 
-        /** Lo reemplazo otro fragmento posterior. */
+        /** A later snippet replaced it. */
         OVERWRITTEN(false, false),
 
-        /** No compilo y no hay forma de arreglarlo declarando otra cosa. */
+        /** It did not compile and no other declaration can fix it. */
         REJECTED(false, false),
 
-        /** No existe en este interprete. */
+        /** It does not exist in this interpreter. */
         NONEXISTENT(false, false);
 
-        private final boolean activo;
-        private final boolean definido;
+        private final boolean active;
+        private final boolean defined;
 
-        Status(boolean activo, boolean definido) {
-            this.activo = activo;
-            this.definido = definido;
+        Status(boolean active, boolean defined) {
+            this.active = active;
+            this.defined = defined;
         }
 
         /**
-         * Si el fragmento sigue formando parte del estado del interprete.
+         * Whether the snippet is still part of the interpreter's state.
          *
-         * @return cierto si sigue vivo
+         * @return true if it is still alive
          */
         public boolean isActive() {
-            return this.activo;
+            return this.active;
         }
 
         /**
-         * Si lo que el fragmento declara existe y se puede usar.
+         * Whether what the snippet declares exists and can be used.
          *
-         * @return cierto si esta definido
+         * @return true if it is defined
          */
         public boolean isDefined() {
-            return this.definido;
+            return this.defined;
         }
     }
 
-    /** La clase de fragmento, afinada. */
+    /** The kind of snippet, sharpened. */
     public enum SubKind {
 
         /** {@code import java.util.List;} */
@@ -161,92 +161,92 @@ public abstract class Snippet {
         /** {@code import module java.base;} */
         MODULE_IMPORT_SUBKIND(Kind.IMPORT),
 
-        /** Una clase. */
+        /** A class. */
         CLASS_SUBKIND(Kind.TYPE_DECL),
 
-        /** Una interfaz. */
+        /** An interface. */
         INTERFACE_SUBKIND(Kind.TYPE_DECL),
 
-        /** Una enumeracion. */
+        /** An enum. */
         ENUM_SUBKIND(Kind.TYPE_DECL),
 
-        /** Un registro. */
+        /** A record. */
         RECORD_SUBKIND(Kind.TYPE_DECL),
 
-        /** Un tipo de anotacion. */
+        /** An annotation type. */
         ANNOTATION_TYPE_SUBKIND(Kind.TYPE_DECL),
 
-        /** Un metodo. */
+        /** A method. */
         METHOD_SUBKIND(Kind.METHOD),
 
-        /** Una variable declarada sin valor. */
+        /** A variable declared with no value. */
         VAR_DECLARATION_SUBKIND(Kind.VAR, true, true),
 
-        /** Una variable declarada con valor. */
+        /** A variable declared with a value. */
         VAR_DECLARATION_WITH_INITIALIZER_SUBKIND(Kind.VAR, true, true),
 
         /**
-         * La variable que el interprete inventa para guardar el resultado de una expresion suelta.
+         * The variable the interpreter invents to hold the result of a loose expression.
          *
-         * <p>Es lo que hace que escribir {@code 1 + 1} deje algo con nombre a lo que referirse
-         * despues, en vez de un resultado que se pierde.
+         * <p>It is what makes writing {@code 1 + 1} leave something named to refer to afterwards,
+         * instead of a result that is lost.
          */
         TEMP_VAR_EXPRESSION_SUBKIND(Kind.VAR, true, true),
 
-        /** Una expresion que es solo el nombre de una variable. */
+        /** An expression that is only a variable's name. */
         VAR_VALUE_SUBKIND(Kind.EXPRESSION, true, true),
 
-        /** Una asignacion. */
+        /** An assignment. */
         ASSIGNMENT_SUBKIND(Kind.EXPRESSION, true, true),
 
-        /** Cualquier otra expresion. */
+        /** Any other expression. */
         OTHER_EXPRESSION_SUBKIND(Kind.EXPRESSION, true, true),
 
-        /** Una sentencia. */
+        /** A statement. */
         STATEMENT_SUBKIND(Kind.STATEMENT, true, false),
 
-        /** Algo que no se pudo entender. */
+        /** Something that could not be understood. */
         UNKNOWN_SUBKIND(Kind.ERRONEOUS);
 
         private final Kind kind;
-        private final boolean ejecutable;
-        private final boolean conValor;
+        private final boolean executable;
+        private final boolean withValue;
 
         SubKind(Kind kind) {
             this(kind, false, false);
         }
 
-        SubKind(Kind kind, boolean ejecutable, boolean conValor) {
+        SubKind(Kind kind, boolean executable, boolean withValue) {
             this.kind = kind;
-            this.ejecutable = ejecutable;
-            this.conValor = conValor;
+            this.executable = executable;
+            this.withValue = withValue;
         }
 
         /**
-         * Si evaluar un fragmento de esta clase hace correr codigo.
+         * Whether evaluating a snippet of this kind runs code.
          *
-         * <p>Declarar un metodo no corre nada; llamarlo si. La diferencia es la que decide si hace
-         * falta la maquina virtual de ejecucion o alcanza con compilar.
+         * <p>Declaring a method runs nothing; calling it does. The difference is what decides
+         * whether the execution virtual machine is needed or compiling is enough.
          *
-         * @return cierto si hace correr codigo
+         * @return true if it runs code
          */
         public boolean isExecutable() {
-            return this.ejecutable;
+            return this.executable;
         }
 
         /**
-         * Si evaluar un fragmento de esta clase deja un valor para mostrar.
+         * Whether evaluating a snippet of this kind leaves a value to show.
          *
-         * @return cierto si deja un valor
+         * @return true if it leaves a value
          */
         public boolean hasValue() {
-            return this.conValor;
+            return this.withValue;
         }
 
         /**
-         * De que clase de fragmento es una afinacion.
+         * Which kind of snippet it is a sharpening of.
          *
-         * @return la clase
+         * @return the kind
          */
         public Kind kind() {
             return this.kind;
@@ -260,48 +260,48 @@ public abstract class Snippet {
     }
 
     /**
-     * Que fragmento es, dentro de su interprete.
+     * Which snippet this is, within its interpreter.
      *
-     * <p>No es un numero de orden: el interprete puede generarlos como quiera, y de hecho se puede
-     * cambiar como con {@link JShell.Builder#idGenerator}.
+     * <p>It is not a sequence number: the interpreter may generate them however it likes, and in
+     * fact how it does can be changed with {@link JShell.Builder#idGenerator}.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public String id() {
         return this.id;
     }
 
     /**
-     * De que clase de fragmento se trata.
+     * Which kind of snippet it is.
      *
-     * @return la clase
+     * @return the kind
      */
     public Kind kind() {
         return this.subkind.kind();
     }
 
     /**
-     * La clase de fragmento, afinada.
+     * The kind of snippet, sharpened.
      *
-     * @return la subclase
+     * @return the subkind
      */
     public Snippet.SubKind subKind() {
         return this.subkind;
     }
 
     /**
-     * El texto tal como se escribio.
+     * The text exactly as it was written.
      *
-     * @return el codigo
+     * @return the code
      */
     public String source() {
         return this.source;
     }
 
     /**
-     * Para leer al depurar.
+     * For reading while debugging.
      *
-     * @return el identificador, la subclase y el codigo
+     * @return the identifier, the subkind and the code
      */
     @Override
     public String toString() {

@@ -1,15 +1,15 @@
 package jdk.jshell;
 
 /**
- * Un fragmento que declara algo: un tipo, un metodo o una variable.
+ * A snippet that declares something: a type, a method or a variable.
  *
- * <h2>Que lo separa de un import</h2>
+ * <h2>What sets it apart from an import</h2>
  *
- * <p>Los dos son persistentes, pero una declaracion puede quedar a medias. Un metodo que llama a
- * otro que todavia no existe se acepta igual --en una sesion interactiva el orden en que se escriben
- * las cosas no tiene por que ser el orden en que se usan-- y queda con referencias sin resolver,
- * que se pueden consultar con {@link JShell#unresolvedDependencies}. Un import no tiene ese estado
- * intermedio.
+ * <p>Both are persistent, but a declaration can be left half done. A method calling another that
+ * does not exist yet is accepted all the same --in an interactive session the order things are
+ * written in need not be the order they are used in-- and is left with unresolved references, which
+ * can be asked for with {@link JShell#unresolvedDependencies}. An import has no such in-between
+ * state.
  *
  * @since 9
  */

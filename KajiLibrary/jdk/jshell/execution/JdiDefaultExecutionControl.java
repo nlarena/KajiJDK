@@ -8,58 +8,58 @@ import com.sun.jdi.VirtualMachine;
 import jdk.jshell.spi.ExecutionEnv;
 
 /**
- * El motor por omision de la herramienta {@code jshell}: los fragmentos corren en otro proceso.
+ * The default engine of the {@code jshell} tool: the snippets run in another process.
  *
- * <h2>Por que otro proceso</h2>
+ * <h2>Why another process</h2>
  *
- * <p>Porque el codigo que se escribe en una sesion interactiva no es de confianza --ni siquiera para
- * quien lo escribe--. Un {@code System.exit(0)} tecleado sin pensar se lleva la sesion puesta si
- * corre en el mismo proceso; en otro, se lleva un proceso que JShell vuelve a levantar.
+ * <p>Because the code written in an interactive session is not to be trusted --not even by whoever
+ * writes it. A {@code System.exit(0)} typed without thinking takes the session with it if it runs in
+ * the same process; in another, it takes a process JShell brings back up.
  *
- * <p>Ademas deja la maquina de JShell limpia: los fragmentos no ensucian su monton, no le dejan
- * hilos vivos y no le cargan clases.
+ * <p>It also leaves JShell's machine clean: the snippets do not dirty its heap, leave it live threads
+ * or load classes into it.
  *
- * <h2>Como esta armado</h2>
+ * <h2>How it is put together</h2>
  *
- * <p>Dos canales al mismo proceso. Por el de flujos van las ordenes, heredado de
- * {@link StreamingExecutionControl}; por JDI va lo que solo se puede hacer desde afuera, que es
- * redefinir clases. Ver {@link JdiExecutionControl}.
+ * <p>Two channels to the same process. The orders go over the stream one, inherited from
+ * {@link StreamingExecutionControl}; what can only be done from outside, which is redefining
+ * classes, goes over JDI. See {@link JdiExecutionControl}.
  *
  * <h2>{@link JdiStarter}</h2>
  *
- * <p>Es el punto donde se decide como aparece el otro proceso. Separarlo permite lanzar la otra
- * maquina de una forma particular --otra version de Java, un contenedor, otro usuario-- sin tocar
- * nada del motor.
+ * <p>It is the point where how the other process turns up is decided. Separating it allows the other
+ * machine to be launched in a particular way --another Java version, a container, another user--
+ * without touching anything in the engine.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>No puede funcionar: hace falta una {@link VirtualMachine} conectada a otro proceso, y conectarse
- * es el transporte de JDI, que esta VM no tiene. El motor que si anda es
+ * <p>It cannot work: a {@link VirtualMachine} connected to another process is needed, and connecting
+ * is JDI's transport, which this VM does not have. The engine that does work is
  * {@link LocalExecutionControl}.
  *
  * @since 9
  */
 public class JdiDefaultExecutionControl extends JdiExecutionControl {
 
-    private final VirtualMachine maquina;
-    private final Process proceso;
+    private final VirtualMachine machine;
+    private final Process process;
 
-    JdiDefaultExecutionControl(ObjectOutput out, ObjectInput in, VirtualMachine maquina,
-            Process proceso) {
+    JdiDefaultExecutionControl(ObjectOutput out, ObjectInput in, VirtualMachine machine,
+            Process process) {
         super(out, in);
-        this.maquina = maquina;
-        this.proceso = proceso;
+        this.machine = machine;
+        this.process = process;
     }
 
     /**
-     * Llama a ese metodo en el otro proceso.
+     * Calls that method in the other process.
      *
-     * @param className la clase
-     * @param methodName el metodo
-     * @return la representacion del resultado
-     * @throws RunException si el codigo del usuario fallo
-     * @throws EngineTerminationException si el otro proceso ya no esta
-     * @throws InternalException si fallo el motor
+     * @param className the class
+     * @param methodName the method
+     * @return the representation of the result
+     * @throws RunException if the user's code failed
+     * @throws EngineTerminationException if the other process is gone
+     * @throws InternalException if the engine failed
      */
     @Override
     public String invoke(String className, String methodName)
@@ -68,10 +68,10 @@ public class JdiDefaultExecutionControl extends JdiExecutionControl {
     }
 
     /**
-     * Corta lo que se este ejecutando en el otro proceso.
+     * Cuts short whatever is running in the other process.
      *
-     * @throws EngineTerminationException si el otro proceso ya no esta
-     * @throws InternalException si no se pudo cortar
+     * @throws EngineTerminationException if the other process is gone
+     * @throws InternalException if it could not be cut short
      */
     @Override
     public void stop() throws EngineTerminationException, InternalException {
@@ -79,60 +79,60 @@ public class JdiDefaultExecutionControl extends JdiExecutionControl {
     }
 
     /**
-     * Cierra la conexion y termina el otro proceso.
+     * Closes the connection and ends the other process.
      *
-     * <p>Matar el proceso ademas de cerrar el canal no es exceso: un agente que dejo de atender
-     * pero sigue vivo es un proceso huerfano, y una sesion larga que abre y cierra motores dejaria
-     * uno por cada vez.
+     * <p>Killing the process as well as closing the channel is not excess: an agent that stopped
+     * serving but is still alive is an orphan process, and a long session opening and closing
+     * engines would leave one behind each time.
      */
     @Override
     public void close() {
         super.close();
-        if (proceso != null) {
-            proceso.destroy();
+        if (process != null) {
+            process.destroy();
         }
     }
 
     /**
-     * La maquina virtual donde corre el agente.
+     * The virtual machine the agent runs on.
      *
-     * @return la maquina
-     * @throws EngineTerminationException si ya no esta
+     * @return the machine
+     * @throws EngineTerminationException if it is gone
      */
     @Override
     protected synchronized VirtualMachine vm() throws EngineTerminationException {
-        if (maquina == null) {
+        if (machine == null) {
             throw new EngineTerminationException("VM closed");
         }
-        return maquina;
+        return machine;
     }
 
     /**
-     * Como se pone en marcha la otra maquina virtual.
+     * How the other virtual machine is started.
      *
      * @since 15
      */
     public interface JdiStarter {
 
         /**
-         * Arranca la otra maquina y devuelve con que hablarle.
+         * Starts the other machine and returns what to talk to it with.
          *
-         * @param env el entorno de la sesion
-         * @param parameters los parametros del proveedor
-         * @param port el puerto por el que se van a encontrar
-         * @return la maquina y el proceso
+         * @param env the session's environment
+         * @param parameters the provider's parameters
+         * @param port the port they will meet over
+         * @return the machine and the process
          */
         TargetDescription start(ExecutionEnv env, Map<String, String> parameters, int port);
 
         /**
-         * La maquina virtual que se puso en marcha y el proceso que la contiene.
+         * The virtual machine that was started and the process holding it.
          *
-         * <p>Van juntos y no por separado porque quien las recibe necesita las dos: la maquina para
-         * hablar por JDI, y el proceso para poder terminarlo. Tener una sin la otra deja o un canal
-         * sin forma de cerrarlo, o un proceso sin forma de usarlo.
+         * <p>They travel together and not apart because whoever receives them needs both: the
+         * machine to talk over JDI, and the process to be able to end it. Having one without the
+         * other leaves either a channel with no way to close it, or a process with no way to use it.
          *
-         * @param vm la maquina virtual
-         * @param process el proceso que la contiene
+         * @param vm the virtual machine
+         * @param process the process holding it
          * @since 15
          */
         final class TargetDescription {
@@ -141,10 +141,10 @@ public class JdiDefaultExecutionControl extends JdiExecutionControl {
             private final Process process;
 
             /**
-             * Con esa maquina y ese proceso.
+             * With that machine and that process.
              *
-             * @param vm la maquina virtual
-             * @param process el proceso
+             * @param vm the virtual machine
+             * @param process the process
              */
             public TargetDescription(VirtualMachine vm, Process process) {
                 this.vm = vm;
@@ -152,18 +152,18 @@ public class JdiDefaultExecutionControl extends JdiExecutionControl {
             }
 
             /**
-             * La maquina virtual.
+             * The virtual machine.
              *
-             * @return la maquina
+             * @return the machine
              */
             public VirtualMachine vm() {
                 return vm;
             }
 
             /**
-             * El proceso.
+             * The process.
              *
-             * @return el proceso
+             * @return the process
              */
             public Process process() {
                 return process;

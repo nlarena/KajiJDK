@@ -9,59 +9,59 @@ import jdk.jshell.spi.ExecutionControlProvider;
 import jdk.jshell.spi.ExecutionEnv;
 
 /**
- * El proveedor del motor remoto por JDI.
+ * The provider of the remote engine over JDI.
  *
- * <h2>Los cuatro parametros</h2>
+ * <h2>The four parameters</h2>
  *
- * <p>{@link #PARAM_REMOTE_AGENT} es la clase principal del proceso que ejecuta; se puede cambiar
- * para poner un agente propio. {@link #PARAM_TIMEOUT} es cuanto esperar a que aparezca.
- * {@link #PARAM_HOST_NAME} es a que interfaz atarse, y vacio quiere decir la de bucle.
- * {@link #PARAM_LAUNCH} elige entre que JDI lance el proceso o que lo espere.
+ * <p>{@link #PARAM_REMOTE_AGENT} is the main class of the process that executes; it can be changed
+ * to put an agent of one's own. {@link #PARAM_TIMEOUT} is how long to wait for it to turn up.
+ * {@link #PARAM_HOST_NAME} is which interface to bind to, and empty means the loopback one.
+ * {@link #PARAM_LAUNCH} chooses between JDI launching the process and JDI waiting for it.
  *
- * <p>Que el nombre de maquina venga vacio por omision es una decision de seguridad: un puerto de
- * depuracion abierto a la red es control total del proceso para cualquiera que llegue.
+ * <p>That the host name comes empty by default is a security decision: a debug port open to the
+ * network is total control of the process for anybody who reaches it.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Los parametros son reales y {@link #defaultParameters} contesta lo mismo que el JDK.
- * {@link #generate} no puede: poner en marcha la otra maquina es el transporte de JDI, que esta VM
- * no tiene. Quien quiera un motor que ande tiene {@link LocalExecutionControlProvider}, y
- * {@link FailOverExecutionControlProvider} llega a el solo.
+ * <p>The parameters are real and {@link #defaultParameters} answers the same as the JDK.
+ * {@link #generate} cannot: starting the other machine is JDI's transport, which this VM does not
+ * have. Whoever wants an engine that works has {@link LocalExecutionControlProvider}, and
+ * {@link FailOverExecutionControlProvider} reaches it by itself.
  *
  * @since 9
  */
 public class JdiExecutionControlProvider implements ExecutionControlProvider {
 
-    /** La clase principal del proceso que ejecuta. */
+    /** The main class of the process that executes. */
     public static final String PARAM_REMOTE_AGENT = "remoteAgent";
 
-    /** Cuanto esperar a que la otra maquina aparezca, en milisegundos. */
+    /** How long to wait for the other machine to turn up, in milliseconds. */
     public static final String PARAM_TIMEOUT = "timeout";
 
-    /** A que interfaz atarse; vacio es la de bucle. */
+    /** Which interface to bind to; empty is the loopback one. */
     public static final String PARAM_HOST_NAME = "hostname";
 
-    /** Si JDI tiene que lanzar el proceso en vez de esperarlo. */
+    /** Whether JDI has to launch the process instead of waiting for it. */
     public static final String PARAM_LAUNCH = "launch";
 
     private final JdiDefaultExecutionControl.JdiStarter starter;
 
-    /** Un proveedor que pone en marcha la otra maquina de la forma habitual. */
+    /** A provider that starts the other machine the usual way. */
     public JdiExecutionControlProvider() {
         this(null);
     }
 
     /**
-     * Un proveedor que delega en ese iniciador la puesta en marcha.
+     * A provider that leaves the starting to that starter.
      *
-     * @param starter como aparece la otra maquina, o {@code null} para la forma habitual
+     * @param starter how the other machine turns up, or {@code null} for the usual way
      */
     public JdiExecutionControlProvider(JdiDefaultExecutionControl.JdiStarter starter) {
         this.starter = starter;
     }
 
     /**
-     * El nombre con el que se lo pide.
+     * The name it is asked for by.
      *
      * @return {@code "jdi"}
      */
@@ -71,9 +71,9 @@ public class JdiExecutionControlProvider implements ExecutionControlProvider {
     }
 
     /**
-     * Los parametros y sus valores por omision.
+     * The parameters and their default values.
      *
-     * @return el mapa de parametros
+     * @return the map of parameters
      */
     @Override
     public Map<String, String> defaultParameters() {
@@ -86,12 +86,12 @@ public class JdiExecutionControlProvider implements ExecutionControlProvider {
     }
 
     /**
-     * Pone en marcha la otra maquina y devuelve el motor con el que hablarle.
+     * Starts the other machine and returns the engine to talk to it with.
      *
-     * @param env el entorno de la sesion
-     * @param parameters los parametros
-     * @return el motor
-     * @throws IOException si no se pudo poner en marcha
+     * @param env the session's environment
+     * @param parameters the parameters
+     * @return the engine
+     * @throws IOException if it could not be started
      */
     @Override
     public ExecutionControl generate(ExecutionEnv env, Map<String, String> parameters)
@@ -101,18 +101,18 @@ public class JdiExecutionControlProvider implements ExecutionControlProvider {
         final int timeout = Integer.parseInt(
                 ps.get(PARAM_TIMEOUT) == null ? "5000" : ps.get(PARAM_TIMEOUT));
         final String host = ps.get(PARAM_HOST_NAME);
-        final boolean lanzar = Boolean.parseBoolean(ps.get(PARAM_LAUNCH));
-        final String agente = ps.get(PARAM_REMOTE_AGENT);
+        final boolean launch = Boolean.parseBoolean(ps.get(PARAM_LAUNCH));
+        final String agent = ps.get(PARAM_REMOTE_AGENT);
         if (starter != null) {
-            // Con un iniciador propio, la puesta en marcha es problema suyo: puede lanzar la otra
-            // maquina como quiera. Lo que no puede darle esta biblioteca es la conexion de JDI.
+            // With a starter of one's own, the starting is its business: it may launch the other
+            // machine however it likes. What this library cannot give it is JDI's connection.
             starter.start(env, ps, 0);
         }
-        // Sin iniciador propio hay que hacerlo aca, y aca no se puede.
-        new JdiInitiator(0, env == null ? null : env.extraRemoteVMOptions(), agente, lanzar,
+        // With no starter of one's own it has to happen here, and here it cannot.
+        new JdiInitiator(0, env == null ? null : env.extraRemoteVMOptions(), agent, launch,
                 host == null || host.isEmpty() ? null : host, timeout,
                 new HashMap<String, String>());
-        throw new IOException("esta VM no tiene el transporte de JDI: no hay forma de conectarse "
-                + "a otra maquina virtual");
+        throw new IOException("this VM has no JDI transport: there is no way to connect to another "
+                + "virtual machine");
     }
 }

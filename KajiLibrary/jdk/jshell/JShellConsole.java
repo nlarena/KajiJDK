@@ -6,49 +6,49 @@ import java.io.Reader;
 import java.nio.charset.Charset;
 
 /**
- * La consola que ve el codigo escrito en `jshell`.
+ * The console the code written in `jshell` sees.
  *
- * <p>Cuando un fragmento llama a {@link java.lang.System#console()}, lo que le llega no es la
- * consola del proceso: es esta, que puede vivir del otro lado de una conexion --el codigo del
- * usuario corre en **otra VM**-- o dentro de la ventana de un IDE.
+ * <p>When a snippet calls {@link java.lang.System#console()}, what reaches it is not the process's
+ * console: it is this one, which may live on the other side of a connection --the user's code runs
+ * on **another VM**-- or inside an IDE's window.
  *
- * <p>Por eso {@link #charset()} esta: el que teclea y el que ejecuta pueden estar en maquinas con
- * codificaciones distintas, y el codigo del usuario tiene derecho a saber en cual esta leyendo.
+ * <p>That is why {@link #charset()} is here: whoever types and whoever executes may be on machines
+ * with different encodings, and the user's code has a right to know which one it is reading in.
  *
  * @since 22
  */
 public interface JShellConsole {
 
-    /** Por donde el codigo del usuario escribe. */
+    /** Where the user's code writes. */
     PrintWriter writer();
 
-    /** De donde el codigo del usuario lee. */
+    /** Where the user's code reads from. */
     Reader reader();
 
     /**
-     * Lee una linea, mostrando antes ese texto.
+     * Reads a line, showing that text first.
      *
-     * @param prompt lo que se muestra antes de leer, o `null` para nada
-     * @return la linea sin el salto, o `null` si se acabo la entrada
-     * @throws IOError si falla la lectura
+     * @param prompt what is shown before reading, or `null` for nothing
+     * @return the line without the break, or `null` if the input ran out
+     * @throws IOError if the read fails
      */
     String readLine(String prompt) throws IOError;
 
     /**
-     * Lee una linea sin mostrar lo que se teclea.
+     * Reads a line without showing what is typed.
      *
-     * <p>Devuelve `char[]` y no `String` por lo de siempre con las contrasenias: un arreglo se
-     * puede borrar en el acto, y una cadena se queda en el monton hasta que el recolector quiera.
+     * <p>It returns `char[]` and not `String` for the usual reason with passwords: an array can be
+     * wiped there and then, and a string stays in the heap until the collector feels like it.
      *
-     * @param prompt lo que se muestra antes de leer, o `null` para nada
-     * @return los caracteres, o `null` si se acabo la entrada
-     * @throws IOError si falla la lectura
+     * @param prompt what is shown before reading, or `null` for nothing
+     * @return the characters, or `null` if the input ran out
+     * @throws IOError if the read fails
      */
     char[] readPassword(String prompt) throws IOError;
 
-    /** Vacia lo que haya pendiente de escribir. */
+    /** Empties whatever is pending to be written. */
     void flush();
 
-    /** La codificacion con la que esta consola lee y escribe. */
+    /** The encoding this console reads and writes in. */
     Charset charset();
 }

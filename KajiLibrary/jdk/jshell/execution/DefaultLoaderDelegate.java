@@ -14,50 +14,50 @@ import jdk.jshell.spi.ExecutionControl.InternalException;
 import jdk.jshell.spi.ExecutionControl.NotImplementedException;
 
 /**
- * El cargador que usa {@link DirectExecutionControl} cuando no le dan otro.
+ * The loader {@link DirectExecutionControl} uses when it is not given another.
  *
- * <h2>Como instala</h2>
+ * <h2>How it installs</h2>
  *
- * <p>Guarda los bytes en un mapa y define la clase la primera vez que alguien la busca. Definirla en
- * el acto seria mas simple y estaria mal: JShell manda las clases de un fragmento juntas y en
- * cualquier orden, y una clase que hereda de otra del mismo lote fallaria si le toca ir primero.
- * Definiendo al buscar, la resolucion natural del cargador pide las que hagan falta.
+ * <p>It keeps the bytes in a map and defines the class the first time somebody looks it up. Defining
+ * it there and then would be simpler and would be wrong: JShell sends a snippet's classes together
+ * and in any order, and a class inheriting from another of the same batch would fail if it happened
+ * to go first. By defining on lookup, the loader's natural resolution asks for whichever are needed.
  *
- * <h2>Redefinir</h2>
+ * <h2>Redefining</h2>
  *
- * <p>Reemplazar el codigo de una clase ya cargada es algo que solo puede hacer la instrumentacion de
- * la VM. Aca la clase vieja se olvida y la nueva se define de cero, que es lo que se puede hacer
- * desde un cargador: el {@code Class} anterior sigue existiendo para quien lo tenga en la mano, pero
- * lo que se busque de ahora en mas es el nuevo.
+ * <p>Replacing the code of an already loaded class is something only the VM's instrumentation can
+ * do. Here the old class is forgotten and the new one is defined from scratch, which is what can be
+ * done from a loader: the previous {@code Class} goes on existing for whoever holds it, but what is
+ * looked up from now on is the new one.
  *
- * <p>Esa diferencia se nota en un solo caso y hay que decirla: un objeto creado con la version
- * anterior conserva su comportamiento anterior.
+ * <p>That difference shows in one case only and it has to be said: an object created with the
+ * previous version keeps its previous behaviour.
  */
 final class DefaultLoaderDelegate implements LoaderDelegate {
 
-    private final Cargador cargador;
-    private final Map<String, Class<?>> clases = new HashMap<String, Class<?>>();
+    private final Loader loader;
+    private final Map<String, Class<?>> classes = new HashMap<String, Class<?>>();
 
     DefaultLoaderDelegate() {
-        this.cargador = new Cargador();
-        Thread.currentThread().setContextClassLoader(cargador);
+        this.loader = new Loader();
+        Thread.currentThread().setContextClassLoader(loader);
     }
 
-    /** El cargador de verdad: guarda bytes y define recien cuando se los pide. */
-    private static final class Cargador extends URLClassLoader {
+    /** The real loader: it keeps bytes and defines only when asked for them. */
+    private static final class Loader extends URLClassLoader {
 
         private final Map<String, byte[]> bytes = new HashMap<String, byte[]>();
 
-        Cargador() {
+        Loader() {
             super(new URL[0]);
         }
 
-        synchronized void anotar(String nombre, byte[] b) {
-            bytes.put(nombre, b);
+        synchronized void note(String name, byte[] b) {
+            bytes.put(name, b);
         }
 
-        synchronized boolean tiene(String nombre) {
-            return bytes.containsKey(nombre);
+        synchronized boolean has(String name) {
+            return bytes.containsKey(name);
         }
 
         @Override
@@ -72,7 +72,7 @@ final class DefaultLoaderDelegate implements LoaderDelegate {
             return defineClass(name, b, 0, b.length);
         }
 
-        void agregar(URL u) {
+        void add(URL u) {
             addURL(u);
         }
     }
@@ -80,26 +80,26 @@ final class DefaultLoaderDelegate implements LoaderDelegate {
     @Override
     public void load(ClassBytecodes[] cbcs)
             throws ClassInstallException, NotImplementedException, EngineTerminationException {
-        final boolean[] puestas = new boolean[cbcs.length];
+        final boolean[] installed = new boolean[cbcs.length];
         try {
             for (int i = 0; i < cbcs.length; i++) {
-                cargador.anotar(cbcs[i].name(), cbcs[i].bytecodes());
-                puestas[i] = true;
+                loader.note(cbcs[i].name(), cbcs[i].bytecodes());
+                installed[i] = true;
             }
-            // Recien despues de anotarlas todas se las resuelve, para que una que hereda de otra del
-            // mismo lote encuentre a su padre sin importar en que orden vinieron.
+            // Only once they are all noted are they resolved, so that one inheriting from another of
+            // the same batch finds its parent whatever order they arrived in.
             for (int i = 0; i < cbcs.length; i++) {
-                clases.put(cbcs[i].name(), cargador.loadClass(cbcs[i].name()));
+                classes.put(cbcs[i].name(), loader.loadClass(cbcs[i].name()));
             }
         } catch (Throwable e) {
-            throw new ClassInstallException("load: " + e.getMessage(), puestas);
+            throw new ClassInstallException("load: " + e.getMessage(), installed);
         }
     }
 
     @Override
     public void classesRedefined(ClassBytecodes[] cbcs) {
         for (final ClassBytecodes cbc : cbcs) {
-            cargador.anotar(cbc.name(), cbc.bytecodes());
+            loader.note(cbc.name(), cbc.bytecodes());
         }
     }
 
@@ -108,7 +108,7 @@ final class DefaultLoaderDelegate implements LoaderDelegate {
         try {
             for (final String p : path.split(File.pathSeparator)) {
                 if (!p.isEmpty()) {
-                    cargador.agregar(new File(p).toURI().toURL());
+                    loader.add(new File(p).toURI().toURL());
                 }
             }
         } catch (MalformedURLException e) {
@@ -118,12 +118,12 @@ final class DefaultLoaderDelegate implements LoaderDelegate {
 
     @Override
     public Class<?> findClass(String name) throws ClassNotFoundException {
-        final Class<?> c = clases.get(name);
+        final Class<?> c = classes.get(name);
         if (c != null) {
             return c;
         }
-        if (cargador.tiene(name)) {
-            return cargador.loadClass(name);
+        if (loader.has(name)) {
+            return loader.loadClass(name);
         }
         throw new ClassNotFoundException(name + " not found");
     }

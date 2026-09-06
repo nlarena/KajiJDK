@@ -5,36 +5,37 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Un flujo que le pone una etiqueta a lo que escribe, para compartir un canal.
+ * A stream that labels what it writes, so a channel can be shared.
  *
- * <h2>Para que</h2>
+ * <h2>What for</h2>
  *
- * <p>Entre JShell y el proceso que ejecuta hay una sola conexion, y por ahi tienen que pasar varias
- * corrientes distintas: la salida del programa del usuario, su salida de error, y --en el otro
- * sentido-- su entrada. Cada una se envuelve en uno de estos con su nombre, y del otro lado
- * {@link DemultiplexInput} las reparte.
+ * <p>Between JShell and the process that runs the code there is a single connection, and several
+ * different streams have to travel through it: the user program's output, its error output, and --in
+ * the other direction-- its input. Each one is wrapped in one of these with its name, and on the
+ * other side {@link DemultiplexInput} hands them out.
  *
- * <h2>El formato</h2>
+ * <h2>The format</h2>
  *
- * <p>Cada bloque es: un byte con el largo del nombre, el nombre, un byte con el largo de los datos,
- * y los datos. Los largos entran en un byte, asi que un bloque nunca pasa de 127 bytes de datos y
- * una escritura larga se parte en varios. El nombre se repite en cada bloque: cuesta unos bytes y a
- * cambio el canal no tiene estado, que es lo que permite intercalar dos corrientes sin coordinarlas.
+ * <p>Each block is: one byte with the name's length, the name, one byte with the data's length, and
+ * the data. The lengths fit in a byte, so a block never carries more than 127 bytes of data and a
+ * long write is split into several. The name is repeated in every block: it costs a few bytes and in
+ * exchange the channel has no state, which is what allows two streams to be interleaved without
+ * coordinating them.
  *
- * <p>La escritura del bloque va sincronizada sobre el flujo de abajo. Sin eso, dos corrientes que
- * escriben a la vez entrelazarian sus bloques a medio armar y el que lee no podria separarlos.
+ * <p>Writing the block is synchronized on the stream underneath. Without that, two streams writing
+ * at once would interleave their half-built blocks and the reader could not tell them apart.
  */
 final class MultiplexingOutputStream extends OutputStream {
 
-    /** Lo mas grande que puede medir un bloque de datos: el largo va en un solo byte. */
-    private static final int MAXIMO = 127;
+    /** The largest a data block can be: the length goes in a single byte. */
+    private static final int MAX = 127;
 
-    private final byte[] nombre;
-    private final OutputStream destino;
+    private final byte[] name;
+    private final OutputStream target;
 
-    MultiplexingOutputStream(String nombre, OutputStream destino) {
-        this.nombre = nombre.getBytes(StandardCharsets.UTF_8);
-        this.destino = destino;
+    MultiplexingOutputStream(String name, OutputStream target) {
+        this.name = name.getBytes(StandardCharsets.UTF_8);
+        this.target = target;
     }
 
     @Override
@@ -46,23 +47,23 @@ final class MultiplexingOutputStream extends OutputStream {
     public void write(byte[] b, int off, int len) throws IOException {
         int i = 0;
         while (i < len) {
-            final int cuanto = Math.min(len - i, MAXIMO);
-            final byte[] bloque = new byte[nombre.length + cuanto + 2];
-            bloque[0] = (byte) nombre.length;
-            System.arraycopy(nombre, 0, bloque, 1, nombre.length);
-            bloque[nombre.length + 1] = (byte) cuanto;
-            System.arraycopy(b, off + i, bloque, nombre.length + 2, cuanto);
-            synchronized (destino) {
-                destino.write(bloque);
+            final int howMuch = Math.min(len - i, MAX);
+            final byte[] block = new byte[name.length + howMuch + 2];
+            block[0] = (byte) name.length;
+            System.arraycopy(name, 0, block, 1, name.length);
+            block[name.length + 1] = (byte) howMuch;
+            System.arraycopy(b, off + i, block, name.length + 2, howMuch);
+            synchronized (target) {
+                target.write(block);
             }
-            i += cuanto;
+            i += howMuch;
         }
     }
 
     @Override
     public void flush() throws IOException {
-        synchronized (destino) {
-            destino.flush();
+        synchronized (target) {
+            target.flush();
         }
     }
 }
