@@ -1,56 +1,56 @@
 package java.security;
 
-// Un bloque PEM tal como salio del archivo: su etiqueta, su cuerpo en base64 sin decodificar, y lo
-// que venia escrito antes del "-----BEGIN".
+// A PEM block exactly as it came out of the file: its label, its undecoded base64 body, and whatever
+// was written before the "-----BEGIN".
 //
 // ===============================================================================================
-// POR QUE ESTA CLASE LLEGO PRIMERO
+// WHY THIS CLASS ARRIVED FIRST
 // ===============================================================================================
 //
-// Las tres llegaron juntas al JDK 25, pero no piden lo mismo. Este registro **no decodifica nada**:
-// guarda el texto tal cual, asi que se podia cumplir entero desde el primer dia. `PEMDecoder` y
-// `PEMEncoder`, en cambio, tienen que convertir los bytes en una `PrivateKey` o un `Certificate`, y
-// para eso necesitan una `KeyFactory` o una `CertificateFactory` que sepan el algoritmo; en esta
-// biblioteca no hay ninguna registrada.
+// All three arrived together in JDK 25, but they do not ask for the same thing. This record
+// **decodes nothing**: it keeps the text as it is, so it could be met in full from day one.
+// `PEMDecoder` and `PEMEncoder`, on the other hand, have to turn the bytes into a `PrivateKey` or a
+// `Certificate`, and for that they need a `KeyFactory` or a `CertificateFactory` that knows the
+// algorithm; there is none registered in this library.
 //
-// **Ese argumento dejo de alcanzar y las dos estan.** Lo que cambio es que aparecio una etiqueta
-// cuyo objeto si se puede construir sin proveedores: `ENCRYPTED PRIVATE KEY` da un
-// `javax.crypto.EncryptedPrivateKeyInfo`, que lee su propio DER. Con eso, y con los bloques de
-// etiqueta desconocida --que vuelven como este registro--, la mayor parte de la API se cumple de
-// verdad; lo que necesita una fabrica hace la busqueda igual y falla con la misma excepcion que
-// tira el JDK cuando no encuentra con que construir. Ver la nota de `PEMDecoder`.
+// **That argument stopped being enough and both are here.** What changed is that a label turned up
+// whose object can be built without providers: `ENCRYPTED PRIVATE KEY` gives a
+// `javax.crypto.EncryptedPrivateKeyInfo`, which reads its own DER. With that, and with the blocks of
+// unknown label --which come back as this record-- most of the API is really met; what needs a
+// factory does the lookup all the same and fails with the same exception the JDK throws when it
+// finds nothing to build with. See `PEMDecoder`'s note.
 //
 // ===============================================================================================
-// DOS COSAS QUE SORPRENDEN Y SON CORRECTAS
+// TWO THINGS THAT SURPRISE AND ARE CORRECT
 // ===============================================================================================
 //
-// `content` **no** es el contenido decodificado: es el base64 crudo, sin los guiones ni los saltos.
-// Y `leadingData` guarda lo que hubiera antes del bloque --comentarios, la salida de una
-// herramienta-- que hay que conservar porque a veces esta firmado junto con el resto.
+// `content` is **not** the decoded content: it is the raw base64, without the dashes or the line
+// breaks. And `leadingData` keeps whatever was there before the block --comments, a tool's output--
+// which has to be preserved because it is sometimes signed along with the rest.
 //
-// Como todo `record` con un componente de arreglo, `equals` compara `leadingData` **por
-// referencia**, no por contenido, y ni el constructor ni {@link #leadingData()} lo copian. Se deja
-// asi porque es exactamente lo que hace el JDK: cambiarlo daria una clase con otra semantica y con
-// el mismo nombre, que es peor que la sorpresa.
+// Like every `record` with an array component, `equals` compares `leadingData` **by reference**, not
+// by content, and neither the constructor nor {@link #leadingData()} copies it. It is left that way
+// because it is exactly what the JDK does: changing it would give a class with different semantics
+// under the same name, which is worse than the surprise.
 public record PEMRecord(String type, String content, byte[] leadingData) implements DEREncodable {
 
-    // Cuantos caracteres de base64 entran en una linea. Es lo que fija el RFC 7468 y lo que espera
-    // cualquier herramienta que despues lea el archivo.
-    private static final int POR_LINEA = 64;
+    // How many base64 characters fit on a line. It is what RFC 7468 fixes and what any tool that
+    // later reads the file expects.
+    private static final int PER_LINE = 64;
 
     /**
-     * El `type` es **solo la etiqueta**: "CERTIFICATE", no la linea entera.
+     * The `type` is **the label alone**: "CERTIFICATE", not the whole line.
      *
-     * <p>Por eso se rechaza lo que parezca sintaxis de PEM ya armada. Sin ese control, un
-     * {@code new PEMRecord("BEGIN CERTIFICATE", ...)} produciria un
-     * {@code -----BEGIN BEGIN CERTIFICATE-----} que ningun lector acepta, y el error aparecceria
-     * recien al intentar leer el archivo. No se valida nada mas: mayusculas, minusculas o etiquetas
-     * inventadas pasan, porque el registro no es quien decide que etiquetas existen.
+     * <p>That is why anything that looks like already assembled PEM syntax is refused. Without that
+     * check, a {@code new PEMRecord("BEGIN CERTIFICATE", ...)} would produce a
+     * {@code -----BEGIN BEGIN CERTIFICATE-----} that no reader accepts, and the mistake would only
+     * turn up when the file was read. Nothing else is validated: upper case, lower case or invented
+     * labels all pass, because the record is not the one who decides which labels exist.
      *
-     * <p>Va escrito como constructor canonico completo y no en la forma compacta
-     * ({@code public PEMRecord { ... }}) porque **nuestro javac todavia no parsea la forma
-     * compacta**; ver el hallazgo #403 en COMPILER_FINDINGS.md. Las dos formas son equivalentes
-     * para el lenguaje: la compacta solo ahorra escribir las tres asignaciones finales.
+     * <p>It is written as a full canonical constructor and not in the compact form
+     * ({@code public PEMRecord { ... }}) because **our javac does not parse the compact form yet**;
+     * see finding #403 in COMPILER_FINDINGS.md. The two forms are equivalent for the language: the
+     * compact one only saves writing the three final assignments.
      */
     public PEMRecord(String type, String content, byte[] leadingData) {
         if (type == null) {
@@ -69,26 +69,26 @@ public record PEMRecord(String type, String content, byte[] leadingData) impleme
     }
 
     /**
-     * `leadingData` queda en `null`, que no es lo mismo que un arreglo vacio: significa "no habia
-     * nada antes del bloque", no "habia cero bytes".
+     * `leadingData` stays {@code null}, which is not the same as an empty array: it means "there was
+     * nothing before the block", not "there were zero bytes".
      */
     public PEMRecord(String type, String content) {
         this(type, content, null);
     }
 
     /**
-     * El bloque PEM armado, listo para escribir.
+     * The assembled PEM block, ready to write.
      *
-     * <p>Separa con {@link System#lineSeparator()} y no con un "\n" fijo porque es lo que hace el
-     * JDK: el resultado esta pensado para ir a un archivo de texto de la plataforma. Eso quiere
-     * decir que **el texto que sale depende del sistema**, y una prueba que lo compare tiene que
-     * armar lo esperado con el mismo separador en vez de escribirlo a mano.
+     * <p>It separates with {@link System#lineSeparator()} and not with a fixed "\n" because that is
+     * what the JDK does: the result is meant to go into a text file on the platform. That means
+     * **the text that comes out depends on the system**, and a test comparing it has to build what
+     * it expects with the same separator instead of writing it by hand.
      *
-     * <p>Siempre hay al menos una linea de contenido, aunque `content` sea vacio: un bloque sin
-     * ninguna linea en el medio no es lo que produce ninguna otra herramienta.
+     * <p>There is always at least one line of content, even when `content` is empty: a block with no
+     * line in the middle is not what any other tool produces.
      *
-     * <p>No incluye `leadingData`. Eso es lo que se guardo de **antes** del bloque; el bloque es
-     * esto.
+     * <p>It does not include `leadingData`. That is what was kept from **before** the block; the
+     * block is this.
      */
     @Override
     public String toString() {
@@ -97,9 +97,9 @@ public record PEMRecord(String type, String content, byte[] leadingData) impleme
         s.append("-----BEGIN ").append(type).append("-----").append(sep);
         int i = 0;
         do {
-            int fin = Math.min(i + POR_LINEA, content.length());
-            s.append(content, i, fin).append(sep);
-            i = fin;
+            int end = Math.min(i + PER_LINE, content.length());
+            s.append(content, i, end).append(sep);
+            i = end;
         } while (i < content.length());
         s.append("-----END ").append(type).append("-----").append(sep);
         return s.toString();
