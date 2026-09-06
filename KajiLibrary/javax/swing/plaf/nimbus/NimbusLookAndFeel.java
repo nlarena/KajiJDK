@@ -12,62 +12,62 @@ import javax.swing.plaf.synth.Region;
 import javax.swing.plaf.synth.SynthLookAndFeel;
 
 /**
- * El aspecto grafico Nimbus: dibujado con curvas, no con imagenes.
+ * The Nimbus look and feel: drawn with curves, not with images.
  *
- * <h2>Que lo distingue</h2>
+ * <h2>What sets it apart</h2>
  *
- * <p>Los demas aspectos estampan imagenes; Nimbus dibuja cada componente con curvas y degradados
- * calculados al vuelo. La consecuencia practica es que se ve bien en cualquier tamano y en cualquier
- * densidad de pantalla, y que se lo puede recolorear entero cambiando unos pocos colores.
+ * <p>Every other look and feel stamps images; Nimbus draws each component with curves and gradients
+ * worked out on the fly. The practical consequence is that it looks right at any size and any screen
+ * density, and that the whole of it can be recolored by changing a few colors.
  *
- * <p>Ese recoloreo es {@link #getDerivedColor}: casi todos los colores de Nimbus estan escritos como
- * desplazamientos de tono, saturacion y brillo sobre un puñado de colores base. Cambiar
- * {@code "nimbusBase"} cambia el aspecto entero.
+ * <p>That recoloring is {@link #getDerivedColor}: nearly every color in Nimbus is written as an
+ * offset in hue, saturation and brightness over a handful of base colors. Changing
+ * {@code "nimbusBase"} changes the entire look.
  *
- * <h2>Por que hereda de synth</h2>
+ * <h2>Why it extends synth</h2>
  *
- * <p>Porque el mecanismo es el mismo: una tabla que dice como se ve cada region y unas interfaces
- * graficas que la consultan. La diferencia es de donde sale la tabla. Synth la lee de un archivo;
- * Nimbus la trae escrita en codigo, generada de la herramienta de diseno.
+ * <p>Because the mechanism is the same: a table saying how each region looks and a set of UI classes
+ * that consult it. The difference is where the table comes from. Synth reads it from a file; Nimbus
+ * carries it written in code, generated from the design tool.
  *
  * <h2>{@link #register}</h2>
  *
- * <p>Sirve para que un componente propio participe de Nimbus: se registra su region con un prefijo,
- * y a partir de ahi sus valores se buscan en la tabla con las mismas reglas que los de un boton.
+ * <p>It is how a component of one's own takes part in Nimbus: its region is registered with a
+ * prefix, and from then on its values are looked up in the table by the same rules as a button's.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Los colores derivados y el registro de regiones funcionan de verdad. Lo que no hay es la tabla
- * de Nimbus --los mil valores que salieron de la herramienta-- ni los pintores concretos, que son
- * las noventa clases privadas del paquete. {@link #getDefaults} devuelve una tabla vacia en vez de
- * una inventada: un boton dibujado con colores que no son los de Nimbus no seria Nimbus.
+ * <p>Derived colors and region registration really work. What is missing is Nimbus's table -- the
+ * thousand values that came out of the tool -- and the concrete painters, which are the ninety
+ * private classes of the package. {@link #getDefaults} returns an empty table rather than an
+ * invented one: a button drawn in colors that are not Nimbus's would not be Nimbus.
  *
  * @since 1.7
  */
 public class NimbusLookAndFeel extends SynthLookAndFeel {
 
-    private final Map<Region, String> registradas = new HashMap<Region, String>();
+    private final Map<Region, String> registered = new HashMap<Region, String>();
 
-    /** Uno. */
+    /** One. */
     public NimbusLookAndFeel() {
     }
 
-    /** Se instala. */
+    /** Installs itself. */
     @Override
     public void initialize() {
         super.initialize();
     }
 
-    /** Se desinstala. */
+    /** Uninstalls itself. */
     @Override
     public void uninitialize() {
         super.uninitialize();
     }
 
     /**
-     * La tabla de valores de Nimbus.
+     * Nimbus's table of values.
      *
-     * @return la tabla
+     * @return the table
      */
     @Override
     public UIDefaults getDefaults() {
@@ -75,11 +75,11 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * El estilo de esa region de ese componente.
+     * The style of that region of that component.
      *
-     * @param c el componente
-     * @param r la region
-     * @return el estilo, o {@code null} si el que hay no es de Nimbus
+     * @param c the component
+     * @param r the region
+     * @return the style, or {@code null} if the one in place is not Nimbus's
      */
     public static NimbusStyle getStyle(JComponent c, Region r) {
         final Object s = SynthLookAndFeel.getStyle(c, r);
@@ -87,7 +87,7 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * El nombre para mostrar.
+     * The name to show.
      *
      * @return {@code "Nimbus"}
      */
@@ -97,7 +97,7 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * El identificador corto.
+     * The short identifier.
      *
      * @return {@code "Nimbus"}
      */
@@ -107,9 +107,9 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * Que es.
+     * What it is.
      *
-     * @return la descripcion
+     * @return the description
      */
     @Override
     public String getDescription() {
@@ -117,10 +117,10 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * Si hay que revisar el estilo cuando el componente cambia de contenedor.
+     * Whether the style has to be revisited when the component changes container.
      *
-     * @return cierto: en Nimbus un componente se ve distinto segun donde este --un boton dentro de
-     *     una barra de herramientas, por ejemplo-- asi que el cambio importa
+     * @return true: in Nimbus a component looks different depending on where it is -- a button
+     *     inside a toolbar, for instance -- so the change matters
      */
     @Override
     public boolean shouldUpdateStyleOnAncestorChanged() {
@@ -128,10 +128,10 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * Si ese cambio de propiedad obliga a revisar el estilo.
+     * Whether that property change forces the style to be revisited.
      *
-     * @param ev que cambio
-     * @return cierto si el estilo puede haber cambiado
+     * @param ev what changed
+     * @return true if the style may have changed
      */
     @Override
     protected boolean shouldUpdateStyleOnEvent(PropertyChangeEvent ev) {
@@ -143,25 +143,25 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * Registra una region para que participe de Nimbus.
+     * Registers a region so it takes part in Nimbus.
      *
-     * <p>El prefijo es con lo que se arman las claves de la tabla para esa region. Registrar la
-     * misma region dos veces con prefijos distintos reemplaza al anterior: no tendria sentido que
-     * una region tuviera dos juegos de valores.
+     * <p>The prefix is what the table's keys for that region are built from. Registering the same
+     * region twice with different prefixes replaces the earlier one: it would make no sense for one
+     * region to have two sets of values.
      *
-     * @param region la region
-     * @param prefix el prefijo de sus claves
+     * @param region the region
+     * @param prefix the prefix of its keys
      */
     public void register(Region region, String prefix) {
-        registradas.put(region, prefix);
+        registered.put(region, prefix);
     }
 
     /**
-     * Un icono en su version deshabilitada.
+     * An icon in its disabled version.
      *
-     * @param component el componente, o {@code null}
-     * @param icon el icono, o {@code null}
-     * @return el icono deshabilitado, o {@code null}
+     * @param component the component, or {@code null}
+     * @param icon the icon, or {@code null}
+     * @return the disabled icon, or {@code null}
      */
     @Override
     public Icon getDisabledIcon(JComponent component, Icon icon) {
@@ -169,73 +169,72 @@ public class NimbusLookAndFeel extends SynthLookAndFeel {
     }
 
     /**
-     * Un color corrido respecto de uno de la tabla de Nimbus.
+     * A color offset from one in Nimbus's table.
      *
-     * <p>Es el mecanismo por el que Nimbus se recolorea entero: casi todos sus colores estan
-     * escritos asi, como desplazamientos sobre un puñado de colores base.
+     * <p>It is the mechanism by which the whole of Nimbus is recolored: nearly all of its colors are
+     * written this way, as offsets over a handful of base colors.
      *
-     * @param uiDefaultParentName la clave del color base
-     * @param hOffset cuanto correr el tono
-     * @param sOffset cuanto correr la saturacion
-     * @param bOffset cuanto correr el brillo
-     * @param aOffset cuanto correr la transparencia, de -255 a 255
-     * @param uiResource si el color devuelto tiene que marcarse como puesto por el aspecto
-     * @return el color
+     * @param uiDefaultParentName the key of the base color
+     * @param hOffset how far to shift the hue
+     * @param sOffset how far to shift the saturation
+     * @param bOffset how far to shift the brightness
+     * @param aOffset how far to shift the transparency, from -255 to 255
+     * @param uiResource whether the returned color has to be marked as put there by the look and feel
+     * @return the color
      */
     public Color getDerivedColor(String uiDefaultParentName, float hOffset, float sOffset,
             float bOffset, int aOffset, boolean uiResource) {
         final Object v = javax.swing.UIManager.get(uiDefaultParentName);
         final Color base = v instanceof Color ? (Color) v : Color.GRAY;
-        final Color d = corrido(base, hOffset, sOffset, bOffset, aOffset);
+        final Color d = shifted(base, hOffset, sOffset, bOffset, aOffset);
         return uiResource ? new javax.swing.plaf.ColorUIResource(d) : d;
     }
 
     /**
-     * Un color entre dos, en esa proporcion, marcado como puesto por el aspecto.
+     * A color between two, at that proportion, marked as put there by the look and feel.
      *
-     * @param color1 el de un extremo
-     * @param color2 el del otro
-     * @param midPoint cuanto del segundo, entre cero y uno
-     * @param uiResource si tiene que marcarse como puesto por el aspecto
-     * @return el color intermedio
+     * @param color1 the one at one end
+     * @param color2 the one at the other
+     * @param midPoint how much of the second, between zero and one
+     * @param uiResource whether it has to be marked as put there by the look and feel
+     * @return the color in between
      */
     protected final Color getDerivedColor(Color color1, Color color2, float midPoint,
             boolean uiResource) {
-        // La transparencia se mezcla y despues se pierde: el color se arma empaquetado y se lo
-        // entrega por el constructor de un solo entero, que da siempre opaco. Es lo que hace el
-        // JDK y no un descuido de aca; cambiarlo daria colores distintos de los suyos.
-        final int argb = mezclar(color1.getAlpha(), color2.getAlpha(), midPoint) << 24
-                | mezclar(color1.getRed(), color2.getRed(), midPoint) << 16
-                | mezclar(color1.getGreen(), color2.getGreen(), midPoint) << 8
-                | mezclar(color1.getBlue(), color2.getBlue(), midPoint);
+        // Transparency is mixed and then lost: the color is assembled packed and handed over through
+        // the single-int constructor, which always gives an opaque one. That is what the JDK does
+        // and not a slip here; changing it would give colors different from its own.
+        final int argb = mix(color1.getAlpha(), color2.getAlpha(), midPoint) << 24
+                | mix(color1.getRed(), color2.getRed(), midPoint) << 16
+                | mix(color1.getGreen(), color2.getGreen(), midPoint) << 8
+                | mix(color1.getBlue(), color2.getBlue(), midPoint);
         return uiResource ? new javax.swing.plaf.ColorUIResource(argb) : new Color(argb);
     }
 
     /**
-     * Un color entre dos, en esa proporcion.
+     * A color between two, at that proportion.
      *
-     * @param color1 el de un extremo
-     * @param color2 el del otro
-     * @param midPoint cuanto del segundo, entre cero y uno
-     * @return el color intermedio
+     * @param color1 the one at one end
+     * @param color2 the one at the other
+     * @param midPoint how much of the second, between zero and one
+     * @return the color in between
      */
     protected final Color getDerivedColor(Color color1, Color color2, float midPoint) {
         return getDerivedColor(color1, color2, midPoint, false);
     }
 
-    private static Color corrido(Color base, float h, float s, float b, int a) {
+    private static Color shifted(Color base, float h, float s, float b, int a) {
         final float[] hsb = Color.RGBtoHSB(base.getRed(), base.getGreen(), base.getBlue(), null);
-        final Color c = Color.getHSBColor(acotar(hsb[0] + h), acotar(hsb[1] + s),
-                acotar(hsb[2] + b));
+        final Color c = Color.getHSBColor(clamp(hsb[0] + h), clamp(hsb[1] + s), clamp(hsb[2] + b));
         final int aa = Math.max(0, Math.min(255, base.getAlpha() + a));
         return new Color(c.getRed(), c.getGreen(), c.getBlue(), aa);
     }
 
-    private static float acotar(float v) {
+    private static float clamp(float v) {
         return v < 0f ? 0f : v > 1f ? 1f : v;
     }
 
-    private static int mezclar(int a, int b, float p) {
+    private static int mix(int a, int b, float p) {
         final int v = (int) (a + (b - a) * p + 0.5f);
         return v < 0 ? 0 : v > 255 ? 255 : v;
     }

@@ -3,25 +3,25 @@ package javax.swing.plaf.nimbus;
 import javax.swing.JComponent;
 
 /**
- * Un estado propio, para que un aspecto pueda dibujar algo que Swing no nombra.
+ * A state of one's own, so a look and feel can draw something Swing does not name.
  *
- * <h2>Para que</h2>
+ * <h2>What for</h2>
  *
- * <p>Los estados de {@code SynthConstants} --apretado, deshabilitado, con el foco-- son los que
- * Swing conoce. Un aspecto grafico puede querer distinguir mas: un boton dentro de una barra de
- * herramientas, una barra de progreso que ya termino, un campo de texto que no esta dentro de un
- * panel con desplazamiento. Ninguno de esos es un estado de Swing, y los tres cambian como se ve.
+ * <p>The states in {@code SynthConstants} -- pressed, disabled, focused -- are the ones Swing knows
+ * about. A look and feel may want to tell more apart: a button inside a toolbar, a progress bar that
+ * already finished, a text field that is not inside a scroll pane. None of those is a Swing state,
+ * and all three change how the thing looks.
  *
- * <p>Un estado propio se define heredando y contestando {@link #isInState}. Nimbus define una
- * veintena asi.
+ * <p>A state of one's own is defined by subclassing and answering {@link #isInState}. Nimbus defines
+ * a couple of dozen that way.
  *
- * <h2>Por que la pregunta y no una bandera</h2>
+ * <h2>Why a question and not a flag</h2>
  *
- * <p>Porque el estado no se guarda en ningun lado: se calcula mirando el componente en el momento de
- * dibujarlo. Guardarlo obligaria a mantenerlo al dia ante cada cambio, que es exactamente el tipo de
- * estado duplicado que se desincroniza.
+ * <p>Because the state is not stored anywhere: it is worked out by looking at the component at the
+ * moment of drawing it. Storing it would mean keeping it up to date on every change, which is
+ * exactly the kind of duplicated state that drifts.
  *
- * @param <T> el tipo de componente al que se le puede preguntar
+ * @param <T> the kind of component that can be asked
  * @since 1.7
  */
 public abstract class State<T extends JComponent> {
@@ -29,21 +29,21 @@ public abstract class State<T extends JComponent> {
     private final String name;
 
     /**
-     * Un estado con ese nombre.
+     * A state with that name.
      *
-     * <p>El nombre es lo que lo identifica en la descripcion del aspecto, y por eso no puede
-     * repetirse entre los estados de un mismo componente.
+     * <p>The name is what identifies it in the look and feel's description, and that is why it
+     * cannot repeat among the states of one component.
      *
-     * @param name como se llama
+     * @param name what it is called
      */
     protected State(String name) {
         this.name = name;
     }
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return como se llama
+     * @return what it is called
      */
     @Override
     public String toString() {
@@ -51,13 +51,13 @@ public abstract class State<T extends JComponent> {
     }
 
     /**
-     * Si el componente esta en este estado ahora.
+     * Whether the component is in this state right now.
      *
-     * <p>Se lo llama al dibujar, asi que tiene que ser barato: mirar propiedades del componente,
-     * no recorrer arboles ni consultar nada de afuera.
+     * <p>It is called while drawing, so it has to be cheap: look at the component's properties, do
+     * not walk trees or consult anything outside.
      *
-     * @param c el componente
-     * @return cierto si esta en este estado
+     * @param c the component
+     * @return true if it is in this state
      */
     protected abstract boolean isInState(T c);
 }

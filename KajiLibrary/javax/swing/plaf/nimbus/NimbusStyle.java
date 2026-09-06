@@ -12,63 +12,63 @@ import javax.swing.plaf.synth.SynthPainter;
 import javax.swing.plaf.synth.SynthStyle;
 
 /**
- * El estilo de Nimbus: lee de la tabla en vez de tener valores propios.
+ * Nimbus's style: it reads from the table instead of having values of its own.
  *
- * <h2>De donde saca todo</h2>
+ * <h2>Where it takes everything from</h2>
  *
- * <p>De {@link UIManager}, con claves armadas por convencion: el color de fondo de un boton
- * apretado esta bajo {@code "Button[Pressed].background"}. Nimbus no guarda una copia; consulta.
- * Eso es lo que hace que cambiar un valor de la tabla se vea inmediatamente en pantalla.
+ * <p>From {@link UIManager}, with keys built by convention: the background color of a pressed button
+ * lives under {@code "Button[Pressed].background"}. Nimbus keeps no copy; it asks. That is what makes
+ * a change to a value in the table show up on screen right away.
  *
- * <h2>Los tres tamanos</h2>
+ * <h2>The three sizes</h2>
  *
- * <p>Un componente puede pedir ser grande, chico o miniatura poniendose una propiedad
- * --{@link #LARGE_KEY} y las otras dos-- y Nimbus le escala la tipografia por el factor
- * correspondiente. Es lo que en otros aspectos habria que hacer a mano componente por componente.
+ * <p>A component can ask to be large, small or mini by setting a property -- {@link #LARGE_KEY} and
+ * the other two -- and Nimbus scales the font by the matching factor. It is what in other looks and
+ * feels would have to be done by hand, component by component.
  *
- * <p>Los factores no son redondos porque no son una eleccion de gusto: salen de las proporciones de
- * la guia de interfaz de la que Nimbus toma su tamano de referencia.
+ * <p>The factors are not round numbers because they are not a matter of taste: they come from the
+ * proportions of the interface guide Nimbus takes its reference size from.
  *
- * <h2>Los tres pintores</h2>
+ * <h2>The three painters</h2>
  *
- * <p>Fondo, primer plano y borde se piden por separado y cada uno puede faltar. Que sean
- * {@link Painter} y no un {@link SynthPainter} es la diferencia central entre Nimbus y el resto de
- * synth: un pintor recibe el tamano en cada llamada y dibuja una figura, en vez de estampar una
- * imagen.
+ * <p>Background, foreground and border are asked for separately and any of them may be missing. That
+ * they are {@link Painter} and not a {@link SynthPainter} is the central difference between Nimbus
+ * and the rest of synth: a painter is handed the size on every call and draws a shape, instead of
+ * stamping an image.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La busqueda en la tabla es real y funciona: se puede poner un color bajo la clave que
- * corresponde y este estilo lo devuelve. Lo que no hay son los pintores concretos de Nimbus, que
- * son las noventa clases privadas del paquete, asi que los tres {@code getPainter} devuelven lo que
- * haya en la tabla y {@code null} si no hay nada.
+ * <p>The table lookup is real and works: a color can be put under the matching key and this style
+ * returns it. What is missing are Nimbus's concrete painters, which are the ninety private classes
+ * of the package, so the three {@code getPainter} methods return whatever is in the table and
+ * {@code null} when there is nothing.
  *
  * @since 1.7
  */
 public final class NimbusStyle extends SynthStyle {
 
-    /** La propiedad con la que un componente pide ser grande. */
+    /** The property a component asks to be large with. */
     public static final String LARGE_KEY = "large";
 
-    /** La propiedad con la que pide ser chico. */
+    /** The property it asks to be small with. */
     public static final String SMALL_KEY = "small";
 
-    /** La propiedad con la que pide ser miniatura. */
+    /** The property it asks to be mini with. */
     public static final String MINI_KEY = "mini";
 
-    /** Cuanto se agranda la tipografia con {@link #LARGE_KEY}. */
+    /** How much the font grows with {@link #LARGE_KEY}. */
     public static final double LARGE_SCALE = 1.15;
 
-    /** Cuanto se achica con {@link #SMALL_KEY}. */
+    /** How much it shrinks with {@link #SMALL_KEY}. */
     public static final double SMALL_SCALE = 0.857;
 
-    /** Cuanto se achica con {@link #MINI_KEY}. */
+    /** How much it shrinks with {@link #MINI_KEY}. */
     public static final double MINI_SCALE = 0.714;
 
     /**
-     * Aplica el estilo al componente.
+     * Applies the style to the component.
      *
-     * @param ctx que se esta instalando
+     * @param ctx what is being installed
      */
     @Override
     public void installDefaults(SynthContext ctx) {
@@ -76,11 +76,11 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * Los margenes de la region.
+     * The region's margins.
      *
-     * @param ctx que se esta dibujando
-     * @param insets donde escribirlos, o {@code null} para uno nuevo
-     * @return los margenes
+     * @param ctx what is being drawn
+     * @param insets where to write them, or {@code null} for a new one
+     * @return the margins
      */
     @Override
     public Insets getInsets(SynthContext ctx, Insets insets) {
@@ -100,26 +100,26 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * El color que le toca en ese estado.
+     * The color it gets in that state.
      *
-     * @param ctx que se esta dibujando y en que estado
-     * @param type que color se pide
-     * @return el color, o {@code null}
+     * @param ctx what is being drawn and in which state
+     * @param type which color is asked for
+     * @return the color, or {@code null}
      */
     @Override
     protected Color getColorForState(SynthContext ctx, ColorType type) {
-        final Object v = get(ctx, nombreDe(type));
+        final Object v = get(ctx, nameOf(type));
         return v instanceof Color ? (Color) v : null;
     }
 
     /**
-     * La tipografia que le toca en ese estado.
+     * The font it gets in that state.
      *
-     * <p>Si el componente pidio un tamano con una de las tres propiedades, la tipografia sale
-     * escalada por el factor correspondiente.
+     * <p>If the component asked for a size with one of the three properties, the font comes out
+     * scaled by the matching factor.
      *
-     * @param ctx que se esta dibujando y en que estado
-     * @return la tipografia, o {@code null}
+     * @param ctx what is being drawn and in which state
+     * @return the font, or {@code null}
      */
     @Override
     protected Font getFontForState(SynthContext ctx) {
@@ -128,15 +128,15 @@ public final class NimbusStyle extends SynthStyle {
             return null;
         }
         final Font f = (Font) v;
-        final double escala = escalaDe(ctx);
-        return escala == 1.0 ? f : f.deriveFont((float) (f.getSize2D() * escala));
+        final double scale = scaleOf(ctx);
+        return scale == 1.0 ? f : f.deriveFont((float) (f.getSize2D() * scale));
     }
 
     /**
-     * Quien dibuja esta region.
+     * Who draws this region.
      *
-     * @param ctx que se esta dibujando
-     * @return el pintor
+     * @param ctx what is being drawn
+     * @return the painter
      */
     @Override
     public SynthPainter getPainter(SynthContext ctx) {
@@ -144,10 +144,10 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * Si la region tapa todo su rectangulo.
+     * Whether the region covers its whole rectangle.
      *
-     * @param ctx que se esta dibujando
-     * @return lo que diga la tabla, o falso
+     * @param ctx what is being drawn
+     * @return whatever the table says, or false
      */
     @Override
     public boolean isOpaque(SynthContext ctx) {
@@ -156,29 +156,29 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * Un valor cualquiera del estilo.
+     * Any value of the style.
      *
-     * <p>La clave se arma con la region, el estado y el nombre; ver la nota de la clase. Si no esta
-     * la version con estado se prueba la version sin el, que es como se escribe un valor que vale
-     * para todos los estados.
+     * <p>The key is built from the region, the state and the name; see the class note. If the version
+     * with the state is not there, the version without it is tried, which is how a value that holds
+     * for every state is written.
      *
-     * @param ctx que se esta dibujando
-     * @param key el nombre
-     * @return el valor, o {@code null}
+     * @param ctx what is being drawn
+     * @param key the name
+     * @return the value, or {@code null}
      */
     @Override
     public Object get(SynthContext ctx, Object key) {
         final String region = ctx.getRegion().getName();
-        final String nombre = String.valueOf(key);
-        final Object conEstado = UIManager.get(region + estadoDe(ctx) + "." + nombre);
-        return conEstado != null ? conEstado : UIManager.get(region + "." + nombre);
+        final String name = String.valueOf(key);
+        final Object withState = UIManager.get(region + stateOf(ctx) + "." + name);
+        return withState != null ? withState : UIManager.get(region + "." + name);
     }
 
     /**
-     * El pintor del fondo.
+     * The background painter.
      *
-     * @param ctx que se esta dibujando
-     * @return el pintor, o {@code null}
+     * @param ctx what is being drawn
+     * @return the painter, or {@code null}
      */
     @SuppressWarnings("unchecked")
     public Painter<Object> getBackgroundPainter(SynthContext ctx) {
@@ -187,10 +187,10 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * El pintor del primer plano.
+     * The foreground painter.
      *
-     * @param ctx que se esta dibujando
-     * @return el pintor, o {@code null}
+     * @param ctx what is being drawn
+     * @return the painter, or {@code null}
      */
     @SuppressWarnings("unchecked")
     public Painter<Object> getForegroundPainter(SynthContext ctx) {
@@ -199,10 +199,10 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * El pintor del borde.
+     * The border painter.
      *
-     * @param ctx que se esta dibujando
-     * @return el pintor, o {@code null}
+     * @param ctx what is being drawn
+     * @return the painter, or {@code null}
      */
     @SuppressWarnings("unchecked")
     public Painter<Object> getBorderPainter(SynthContext ctx) {
@@ -210,8 +210,8 @@ public final class NimbusStyle extends SynthStyle {
         return v instanceof Painter ? (Painter<Object>) v : null;
     }
 
-    /** El nombre con que un tipo de color aparece en la tabla. */
-    private static String nombreDe(ColorType type) {
+    /** The name a color type goes by in the table. */
+    private static String nameOf(ColorType type) {
         if (type == ColorType.BACKGROUND) {
             return "background";
         }
@@ -231,11 +231,11 @@ public final class NimbusStyle extends SynthStyle {
     }
 
     /**
-     * La parte de la clave que nombra el estado, como {@code "[Pressed]"}.
+     * The part of the key that names the state, like {@code "[Pressed]"}.
      *
-     * <p>Vacia para el estado normal: en la tabla, lo que vale siempre se escribe sin corchetes.
+     * <p>Empty for the normal state: in the table, what always holds is written without brackets.
      */
-    private static String estadoDe(SynthContext ctx) {
+    private static String stateOf(SynthContext ctx) {
         final int s = ctx.getComponentState();
         if ((s & javax.swing.plaf.synth.SynthConstants.DISABLED) != 0) {
             return "[Disabled]";
@@ -255,16 +255,16 @@ public final class NimbusStyle extends SynthStyle {
         return "";
     }
 
-    /** Por cuanto hay que multiplicar la tipografia, segun lo que el componente haya pedido. */
-    private static double escalaDe(SynthContext ctx) {
-        final Object tam = ctx.getComponent().getClientProperty("JComponent.sizeVariant");
-        if (LARGE_KEY.equals(tam)) {
+    /** What the font has to be multiplied by, according to what the component asked for. */
+    private static double scaleOf(SynthContext ctx) {
+        final Object size = ctx.getComponent().getClientProperty("JComponent.sizeVariant");
+        if (LARGE_KEY.equals(size)) {
             return LARGE_SCALE;
         }
-        if (SMALL_KEY.equals(tam)) {
+        if (SMALL_KEY.equals(size)) {
             return SMALL_SCALE;
         }
-        if (MINI_KEY.equals(tam)) {
+        if (MINI_KEY.equals(size)) {
             return MINI_SCALE;
         }
         return 1.0;

@@ -14,64 +14,63 @@ import javax.swing.JComponent;
 import javax.swing.Painter;
 
 /**
- * La base de los pintores de Nimbus: dibuja una region en coordenadas relativas.
+ * The base of Nimbus's painters: it draws a region in relative coordinates.
  *
- * <h2>El problema que resuelve</h2>
+ * <h2>The problem it solves</h2>
  *
- * <p>Un boton de Nimbus no es una imagen: es una figura descrita con curvas y degradados. Esa figura
- * tiene que verse igual midiendo veinte pixeles o doscientos, y sus esquinas redondeadas tienen que
- * conservar el radio en vez de estirarse.
+ * <p>A Nimbus button is not an image: it is a shape described with curves and gradients. That shape
+ * has to look the same at twenty pixels and at two hundred, and its rounded corners have to keep
+ * their radius instead of stretching.
  *
- * <p>De ahi los {@link #decodeX} y {@link #decodeY}: la figura se escribe en una grilla de tres
- * bandas por eje --nueve cuadrantes en total-- y esos metodos la traducen al tamano real. Las bandas
- * de los bordes son los margenes y no se estiran; la del medio absorbe toda la diferencia. Es lo que
- * hace que un borde redondeado siga teniendo el mismo radio cuando el componente crece.
+ * <p>Hence {@link #decodeX} and {@link #decodeY}: the shape is written on a grid of three bands per
+ * axis -- nine cells in all -- and those methods translate it to the real size. The edge bands are
+ * the margins and do not stretch; the middle one absorbs the whole difference. That is what makes a
+ * rounded border keep the same radius when the component grows.
  *
- * <h2>Los colores derivados</h2>
+ * <h2>Derived colors</h2>
  *
- * <p>{@link #decodeColor(String, float, float, float, int)} no devuelve un color: devuelve
- * <strong>uno corrido</strong> respecto de un color base de la tabla. Asi es como Nimbus se
- * recolorea entero cambiando un puñado de colores: todo lo demas esta escrito como desplazamientos
- * de tono, saturacion y brillo sobre esos pocos.
+ * <p>{@link #decodeColor(String, float, float, float, int)} does not return a color: it returns
+ * <strong>one offset</strong> from a base color in the table. That is how the whole of Nimbus is
+ * recolored by changing a handful of colors: everything else is written as offsets in hue,
+ * saturation and brightness over those few.
  *
- * <p>Sin eso, cambiarle el color a Nimbus significaria tocar los mil valores que salieron de la
- * herramienta de diseno.
+ * <p>Without it, recoloring Nimbus would mean touching the thousand values that came out of the
+ * design tool.
  *
- * <h2>{@link #paint} es final</h2>
+ * <h2>{@link #paint} is final</h2>
  *
- * <p>Lo que una subclase escribe es {@link #doPaint}. El {@code paint} se queda con lo que no debe
- * variar: preparar el suavizado, calcular la escala y --si el contexto lo pide-- guardar el
- * resultado en la memoria intermedia. Dejarlo redefinible haria que cada pintor tuviera que acordarse
- * de todo eso.
+ * <p>What a subclass writes is {@link #doPaint}. {@code paint} keeps what must not vary: setting up
+ * antialiasing, working out the scale and -- if the context asks for it -- storing the result in the
+ * cache. Leaving it overridable would mean every painter had to remember all of that.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Las cuentas son reales: la grilla de nueve cuadrantes, los colores derivados y los degradados
- * se calculan de verdad. Lo que no puede es dibujar, porque {@link #doPaint} lo escribe cada pintor
- * concreto y esta biblioteca no tiene ninguno --son las noventa clases privadas del paquete--.
+ * <p>The arithmetic is real: the nine-cell grid, the derived colors and the gradients are really
+ * worked out. What it cannot do is draw, because {@link #doPaint} is written by each concrete
+ * painter and this library has none -- they are the ninety private classes of the package.
  *
  * @since 1.7
  */
 public abstract class AbstractRegionPainter implements Painter<JComponent> {
 
-    /** El componente que se esta pintando ahora, para {@link #getComponentColor}. */
-    private JComponent actual;
+    /** The component being painted right now, for {@link #getComponentColor}. */
+    private JComponent current;
 
-    /** El tamano real del componente que se esta pintando; lo necesitan los {@code decode}. */
-    private int anchoActual;
-    private int altoActual;
+    /** The real size of the component being painted; the {@code decode} methods need it. */
+    private int currentWidth;
+    private int currentHeight;
 
-    /** Uno. */
+    /** One. */
     protected AbstractRegionPainter() {
     }
 
     /**
-     * Dibuja la region.
+     * Draws the region.
      *
-     * @param g donde dibujar
-     * @param c el componente
-     * @param w el ancho
-     * @param h el alto
+     * @param g where to draw
+     * @param c the component
+     * @param w the width
+     * @param h the height
      */
     public final void paint(Graphics2D g, JComponent c, int w, int h) {
         if (w <= 0 || h <= 0) {
@@ -81,168 +80,168 @@ public abstract class AbstractRegionPainter implements Painter<JComponent> {
         if (ctx == null) {
             return;
         }
-        actual = c;
-        anchoActual = w;
-        altoActual = h;
+        current = c;
+        currentWidth = w;
+        currentHeight = h;
         try {
             configureGraphics(g);
             doPaint(g, c, w, h, getExtendedCacheKeys(c));
         } finally {
-            actual = null;
-            anchoActual = 0;
-            altoActual = 0;
+            current = null;
+            currentWidth = 0;
+            currentHeight = 0;
         }
     }
 
     /**
-     * Lo que ademas del tamano distingue a este dibujo, para la memoria intermedia.
+     * What, besides the size, tells this drawing apart, for the cache.
      *
-     * <p>Un pintor que dibuja siempre igual devuelve {@code null}. Uno que mira un color del
-     * componente devuelve ese color: si no lo hiciera, dos componentes de distinto color
-     * compartirian la imagen guardada y el segundo saldria con el color del primero.
+     * <p>A painter that always draws the same thing returns {@code null}. One that looks at a color
+     * of the component returns that color: if it did not, two components of different colors would
+     * share the stored image and the second would come out in the first one's color.
      *
-     * @param c el componente
-     * @return lo que distingue, o {@code null}
+     * @param c the component
+     * @return what tells it apart, or {@code null}
      */
     protected Object[] getExtendedCacheKeys(JComponent c) {
         return null;
     }
 
     /**
-     * Como se dibuja esta region: sus margenes, su tamano de referencia y si se puede guardar.
+     * How this region is drawn: its margins, its reference size and whether it can be cached.
      *
-     * @return el contexto; {@code null} quiere decir que no se dibuja nada
+     * @return the context; {@code null} means nothing is drawn
      */
     protected abstract PaintContext getPaintContext();
 
     /**
-     * Prepara el contexto grafico antes de dibujar.
+     * Sets up the graphics context before drawing.
      *
-     * <p>Enciende el suavizado, que es lo que hace que las curvas de Nimbus no se vean escalonadas.
-     * Una subclase puede cambiarlo.
+     * <p>It turns on antialiasing, which is what keeps Nimbus's curves from looking stepped. A
+     * subclass may change it.
      *
-     * @param g el contexto grafico
+     * @param g the graphics context
      */
     protected void configureGraphics(Graphics2D g) {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     }
 
     /**
-     * El dibujo propiamente dicho.
+     * The drawing proper.
      *
-     * @param g donde dibujar
-     * @param c el componente
-     * @param width el ancho
-     * @param height el alto
-     * @param extendedCacheKeys lo que devolvio {@link #getExtendedCacheKeys}
+     * @param g where to draw
+     * @param c the component
+     * @param width the width
+     * @param height the height
+     * @param extendedCacheKeys what {@link #getExtendedCacheKeys} returned
      */
     protected abstract void doPaint(Graphics2D g, JComponent c, int width, int height,
             Object[] extendedCacheKeys);
 
     /**
-     * Traduce una coordenada horizontal de la grilla al tamano real.
+     * Translates a horizontal grid coordinate to the real size.
      *
-     * <p>La grilla va de cero a tres: la banda de cero a uno es el margen izquierdo, la de uno a dos
-     * el centro, y la de dos a tres el margen derecho. Los margenes miden lo mismo sea cual sea el
-     * tamano del componente; el centro absorbe la diferencia.
+     * <p>The grid runs from zero to three: the band from zero to one is the left margin, the one
+     * from one to two the centre, and the one from two to three the right margin. The margins
+     * measure the same whatever the component's size; the centre absorbs the difference.
      *
-     * @param x la coordenada en la grilla
-     * @return la coordenada en pixeles
+     * @param x the coordinate on the grid
+     * @return the coordinate in pixels
      */
     protected final float decodeX(float x) {
-        final Insets m = margenes();
-        return decodeEn(x, m.left, anchoActual - m.left - m.right, m.right);
+        final Insets m = margins();
+        return decodeOn(x, m.left, currentWidth - m.left - m.right, m.right);
     }
 
     /**
-     * Traduce una coordenada vertical de la grilla al tamano real.
+     * Translates a vertical grid coordinate to the real size.
      *
-     * @param y la coordenada en la grilla
-     * @return la coordenada en pixeles
+     * @param y the coordinate on the grid
+     * @return the coordinate in pixels
      */
     protected final float decodeY(float y) {
-        final Insets m = margenes();
-        return decodeEn(y, m.top, altoActual - m.top - m.bottom, m.bottom);
+        final Insets m = margins();
+        return decodeOn(y, m.top, currentHeight - m.top - m.bottom, m.bottom);
     }
 
     /**
-     * Como {@link #decodeX} pero corriendo el resultado unos pixeles.
+     * Like {@link #decodeX} but shifting the result by a few pixels.
      *
-     * <p>El corrimiento se aplica <strong>despues</strong> de traducir, asi que no se estira con el
-     * componente. Es lo que se usa para el grosor de una linea: un borde de un pixel tiene que
-     * seguir siendo de un pixel en un boton grande.
+     * <p>The shift is applied <strong>after</strong> translating, so it does not stretch with the
+     * component. It is what a line's thickness is done with: a one-pixel border has to stay one
+     * pixel on a large button.
      *
-     * @param x la coordenada en la grilla
-     * @param dx cuantos pixeles correrla
-     * @return la coordenada en pixeles
+     * @param x the coordinate on the grid
+     * @param dx how many pixels to shift it by
+     * @return the coordinate in pixels
      */
     protected final float decodeAnchorX(float x, float dx) {
         return decodeX(x) + dx;
     }
 
     /**
-     * Como {@link #decodeY} pero corriendo el resultado unos pixeles.
+     * Like {@link #decodeY} but shifting the result by a few pixels.
      *
-     * @param y la coordenada en la grilla
-     * @param dy cuantos pixeles correrla
-     * @return la coordenada en pixeles
+     * @param y the coordinate on the grid
+     * @param dy how many pixels to shift it by
+     * @return the coordinate in pixels
      */
     protected final float decodeAnchorY(float y, float dy) {
         return decodeY(y) + dy;
     }
 
     /**
-     * Un color corrido respecto de uno de la tabla.
+     * A color offset from one in the table.
      *
-     * <p>Los tres primeros corrimientos son de tono, saturacion y brillo, cada uno entre menos uno y
-     * uno; el cuarto es de transparencia, entre menos doscientos cincuenta y cinco y doscientos
-     * cincuenta y cinco. Es lo que permite recolorear Nimbus entero cambiando unos pocos colores
-     * base.
+     * <p>The first three offsets are hue, saturation and brightness, each between minus one and one;
+     * the fourth is transparency, between minus two hundred and fifty-five and two hundred and
+     * fifty-five. It is what allows the whole of Nimbus to be recolored by changing a few base
+     * colors.
      *
-     * @param key la clave del color base en la tabla
-     * @param hOffset cuanto correr el tono
-     * @param sOffset cuanto correr la saturacion
-     * @param bOffset cuanto correr el brillo
-     * @param aOffset cuanto correr la transparencia
-     * @return el color, o el base si la clave no esta
+     * @param key the key of the base color in the table
+     * @param hOffset how far to shift the hue
+     * @param sOffset how far to shift the saturation
+     * @param bOffset how far to shift the brightness
+     * @param aOffset how far to shift the transparency
+     * @return the color, or the base one if the key is not there
      */
     protected final Color decodeColor(String key, float hOffset, float sOffset, float bOffset,
             int aOffset) {
         final Object v = javax.swing.UIManager.get(key);
         final Color base = v instanceof Color ? (Color) v : Color.GRAY;
-        return corrido(base, hOffset, sOffset, bOffset, aOffset);
+        return shifted(base, hOffset, sOffset, bOffset, aOffset);
     }
 
     /**
-     * Un color entre dos, en esa proporcion.
+     * A color between two, at that proportion.
      *
-     * @param color1 el de un extremo
-     * @param color2 el del otro
-     * @param midPoint cuanto del segundo, entre cero y uno
-     * @return el color intermedio
+     * @param color1 the one at one end
+     * @param color2 the one at the other
+     * @param midPoint how much of the second, between zero and one
+     * @return the color in between
      */
     protected final Color decodeColor(Color color1, Color color2, float midPoint) {
         return new Color(
-                mezclar(color1.getRed(), color2.getRed(), midPoint),
-                mezclar(color1.getGreen(), color2.getGreen(), midPoint),
-                mezclar(color1.getBlue(), color2.getBlue(), midPoint),
-                mezclar(color1.getAlpha(), color2.getAlpha(), midPoint));
+                mix(color1.getRed(), color2.getRed(), midPoint),
+                mix(color1.getGreen(), color2.getGreen(), midPoint),
+                mix(color1.getBlue(), color2.getBlue(), midPoint),
+                mix(color1.getAlpha(), color2.getAlpha(), midPoint));
     }
 
     /**
-     * Un degradado lineal entre dos puntos.
+     * A linear gradient between two points.
      *
-     * <p>Si los dos puntos coinciden no hay degradado posible; se corre el segundo un cienmilesimo,
-     * que es lo que hace el JDK. Es feo y es mejor que lanzar una excepcion en medio de un
-     * repintado.
+     * <p>If the two points coincide no gradient is possible; the second is shifted by a
+     * hundred-thousandth, which is what the JDK does. It is ugly and it beats throwing an exception
+     * in the middle of a repaint.
      *
-     * @param x1 desde
-     * @param y1 desde
-     * @param x2 hasta
-     * @param y2 hasta
-     * @param midpoints en que proporcion va cada color, en orden creciente
-     * @param colors los colores
-     * @return el degradado
+     * @param x1 from
+     * @param y1 from
+     * @param x2 to
+     * @param y2 to
+     * @param midpoints at what proportion each color sits, in increasing order
+     * @param colors the colors
+     * @return the gradient
      */
     protected final LinearGradientPaint decodeGradient(float x1, float y1, float x2, float y2,
             float[] midpoints, Color[] colors) {
@@ -256,41 +255,41 @@ public abstract class AbstractRegionPainter implements Painter<JComponent> {
     }
 
     /**
-     * Un degradado radial desde un centro.
+     * A radial gradient out of a centre.
      *
-     * @param x el centro
-     * @param y el centro
-     * @param r el radio
-     * @param midpoints en que proporcion va cada color, en orden creciente
-     * @param colors los colores
-     * @return el degradado
+     * @param x the centre
+     * @param y the centre
+     * @param r the radius
+     * @param midpoints at what proportion each color sits, in increasing order
+     * @param colors the colors
+     * @return the gradient
      */
     protected final RadialGradientPaint decodeRadialGradient(float x, float y, float r,
             float[] midpoints, Color[] colors) {
-        final float radio = r == 0f ? 0.00001f : r;
-        return new RadialGradientPaint(new Point2D.Float(x, y), radio, midpoints, colors,
+        final float radius = r == 0f ? 0.00001f : r;
+        return new RadialGradientPaint(new Point2D.Float(x, y), radius, midpoints, colors,
                 MultipleGradientPaint.CycleMethod.NO_CYCLE);
     }
 
     /**
-     * Un color del propio componente, corrido.
+     * A color of the component itself, offset.
      *
-     * <p>Es lo que permite que un boton al que el programa le puso un color de fondo se dibuje con
-     * ese color y no con el de la tabla. Si el componente no tiene ese color, o si lo tiene puesto
-     * el aspecto y no el programa, se usa el que corresponda de la tabla.
+     * <p>It is what lets a button the program gave a background color be drawn in that color and not
+     * in the table's. If the component does not have that color, or has one put there by the look and
+     * feel rather than by the program, the matching one from the table is used.
      *
-     * @param c el componente
-     * @param property que color se pide: {@code "background"} o {@code "foreground"}
-     * @param defaultColor que usar si el componente no lo tiene
-     * @param saturationOffset cuanto correr la saturacion
-     * @param brightnessOffset cuanto correr el brillo
-     * @param alphaOffset cuanto correr la transparencia
-     * @return el color
+     * @param c the component
+     * @param property which color is asked for: {@code "background"} or {@code "foreground"}
+     * @param defaultColor what to use if the component does not have it
+     * @param saturationOffset how far to shift the saturation
+     * @param brightnessOffset how far to shift the brightness
+     * @param alphaOffset how far to shift the transparency
+     * @return the color
      */
     protected final Color getComponentColor(JComponent c, String property, Color defaultColor,
             float saturationOffset, float brightnessOffset, int alphaOffset) {
         Color base = defaultColor;
-        final JComponent comp = c == null ? actual : c;
+        final JComponent comp = c == null ? current : c;
         if (comp != null) {
             if ("background".equals(property)) {
                 base = comp.getBackground();
@@ -301,21 +300,21 @@ public abstract class AbstractRegionPainter implements Painter<JComponent> {
         if (base == null) {
             base = defaultColor;
         }
-        return base == null ? null : corrido(base, 0f, saturationOffset, brightnessOffset,
+        return base == null ? null : shifted(base, 0f, saturationOffset, brightnessOffset,
                 alphaOffset);
     }
 
     /**
-     * Dibuja la region.
+     * Draws the region.
      *
-     * <p>Es la version de {@link Painter} con el tipo sin concretar. Lo que no sea un
-     * {@link JComponent} no se dibuja: este pintor mira el componente para decidir sus colores, y
-     * sin componente no hay nada que mirar.
+     * <p>This is {@link Painter}'s version, with the type not narrowed. Anything that is not a
+     * {@link JComponent} is not drawn: this painter looks at the component to decide its colors, and
+     * without a component there is nothing to look at.
      *
-     * @param g donde dibujar
-     * @param object el componente
-     * @param width el ancho
-     * @param height el alto
+     * @param g where to draw
+     * @param object the component
+     * @param width the width
+     * @param height the height
      */
     public void paint(Graphics2D g, Object object, int width, int height) {
         if (object instanceof JComponent) {
@@ -323,71 +322,71 @@ public abstract class AbstractRegionPainter implements Painter<JComponent> {
         }
     }
 
-    /** El corrimiento en tono, saturacion, brillo y transparencia. */
-    private static Color corrido(Color base, float h, float s, float b, int a) {
+    /** The offset in hue, saturation, brightness and transparency. */
+    private static Color shifted(Color base, float h, float s, float b, int a) {
         final float[] hsb = Color.RGBtoHSB(base.getRed(), base.getGreen(), base.getBlue(), null);
-        final float hh = acotar(hsb[0] + h);
-        final float ss = acotar(hsb[1] + s);
-        final float bb = acotar(hsb[2] + b);
+        final float hh = clamp(hsb[0] + h);
+        final float ss = clamp(hsb[1] + s);
+        final float bb = clamp(hsb[2] + b);
         final int aa = Math.max(0, Math.min(255, base.getAlpha() + a));
         final Color c = Color.getHSBColor(hh, ss, bb);
         return new Color(c.getRed(), c.getGreen(), c.getBlue(), aa);
     }
 
-    private static float acotar(float v) {
+    private static float clamp(float v) {
         return v < 0f ? 0f : v > 1f ? 1f : v;
     }
 
-    private static int mezclar(int a, int b, float p) {
+    private static int mix(int a, int b, float p) {
         final int v = Math.round(a + (b - a) * p);
         return v < 0 ? 0 : v > 255 ? 255 : v;
     }
 
-    /** Los margenes que no se estiran, o todos en cero si no hay contexto. */
-    private Insets margenes() {
+    /** The margins that do not stretch, or all zeros when there is no context. */
+    private Insets margins() {
         final PaintContext ctx = getPaintContext();
-        final Insets m = ctx == null ? null : ctx.margenes();
-        return m == null ? SIN_MARGEN : m;
+        final Insets m = ctx == null ? null : ctx.margins();
+        return m == null ? NO_MARGIN : m;
     }
 
-    private static final Insets SIN_MARGEN = new Insets(0, 0, 0, 0);
+    private static final Insets NO_MARGIN = new Insets(0, 0, 0, 0);
 
     /**
-     * La coordenada de la grilla traducida al tamano real.
+     * The grid coordinate translated to the real size.
      *
-     * <p>La grilla tiene tres bandas y va de cero a tres. La primera y la tercera son los margenes y
-     * <strong>no se estiran</strong>: miden lo mismo en un boton chico que en uno grande. La del
-     * medio absorbe todo el resto, que es lo que hace que una esquina redondeada siga teniendo el
-     * mismo radio cuando el componente crece.
+     * <p>The grid has three bands and runs from zero to three. The first and the third are the
+     * margins and <strong>do not stretch</strong>: they measure the same on a small button as on a
+     * large one. The middle one absorbs all the rest, which is what makes a rounded corner keep the
+     * same radius when the component grows.
      *
-     * @throws IllegalArgumentException si la coordenada cae fuera de la grilla
+     * @throws IllegalArgumentException if the coordinate falls outside the grid
      */
-    private static float decodeEn(float v, int primera, int medio, int tercera) {
+    private static float decodeOn(float v, int first, int middle, int third) {
         if (v >= 0f && v <= 1f) {
-            return v * primera;
+            return v * first;
         }
         if (v > 1f && v < 2f) {
-            return (v - 1f) * medio + primera;
+            return (v - 1f) * middle + first;
         }
         if (v >= 2f && v <= 3f) {
-            return (v - 2f) * tercera + primera + medio;
+            return (v - 2f) * third + first + middle;
         }
-        throw new IllegalArgumentException("fuera de la grilla: " + v);
+        throw new IllegalArgumentException("outside the grid: " + v);
     }
 
     /**
-     * Como se dibuja una region: margenes, tamano de referencia y si se puede guardar el resultado.
+     * How a region is drawn: margins, reference size and whether the result can be cached.
      *
-     * <h2>El tamano de referencia</h2>
+     * <h2>The reference size</h2>
      *
-     * <p>Es el tamano para el que se dibujo la figura. Los {@code decode} traducen de esa grilla al
-     * tamano real, y sin el no habria desde donde traducir.
+     * <p>It is the size the shape was drawn for. The {@code decode} methods translate from that grid
+     * to the real size, and without it there would be nothing to translate from.
      *
-     * <h2>La memoria intermedia</h2>
+     * <h2>The cache</h2>
      *
-     * <p>Dibujar una figura con degradados y suavizado es caro, y un componente se repinta muchas
-     * veces sin cambiar. Guardar el resultado vale la pena, y cuando conviene depende de la figura:
-     * por eso el modo es parte del contexto y no una decision global.
+     * <p>Drawing a shape with gradients and antialiasing is expensive, and a component is repainted
+     * many times without changing. Storing the result is worth it, and when it is worth it depends on
+     * the shape: that is why the mode is part of the context and not a global decision.
      *
      * @since 1.7
      */
@@ -401,25 +400,25 @@ public abstract class AbstractRegionPainter implements Painter<JComponent> {
         private final double maxV;
 
         /**
-         * Un contexto sin guardar nada.
+         * A context that caches nothing.
          *
-         * @param insets los margenes que no se estiran
-         * @param canvasSize el tamano para el que se dibujo la figura
-         * @param inverted si la grilla se lee al reves
+         * @param insets the margins that do not stretch
+         * @param canvasSize the size the shape was drawn for
+         * @param inverted whether the grid is read the other way round
          */
         public PaintContext(Insets insets, Dimension canvasSize, boolean inverted) {
             this(insets, canvasSize, inverted, null, 1, 1);
         }
 
         /**
-         * Un contexto completo.
+         * A full context.
          *
-         * @param insets los margenes que no se estiran
-         * @param canvasSize el tamano para el que se dibujo la figura
-         * @param inverted si la grilla se lee al reves
-         * @param cacheMode como guardar el resultado, o {@code null} para no guardarlo
-         * @param maxH hasta cuanto se puede escalar horizontalmente lo guardado
-         * @param maxV hasta cuanto se puede escalar verticalmente lo guardado
+         * @param insets the margins that do not stretch
+         * @param canvasSize the size the shape was drawn for
+         * @param inverted whether the grid is read the other way round
+         * @param cacheMode how to store the result, or {@code null} not to store it
+         * @param maxH how far what is stored may be scaled horizontally
+         * @param maxV how far what is stored may be scaled vertically
          */
         public PaintContext(Insets insets, Dimension canvasSize, boolean inverted,
                 CacheMode cacheMode, double maxH, double maxV) {
@@ -431,30 +430,30 @@ public abstract class AbstractRegionPainter implements Painter<JComponent> {
             this.maxV = maxV;
         }
 
-        /** Los margenes que no se estiran; para el pintor que lo envuelve. */
-        Insets margenes() {
+        /** The margins that do not stretch; for the painter wrapping it. */
+        Insets margins() {
             return insets;
         }
 
         /**
-         * Como se guarda el resultado de dibujar.
+         * How the result of drawing is cached.
          *
          * @since 1.7
          */
         public static enum CacheMode {
 
-            /** No se guarda. */
+            /** Not cached. */
             NO_CACHING,
 
-            /** Se guarda una imagen por cada tamano que aparezca. */
+            /** One image is stored for each size that turns up. */
             FIXED_SIZES,
 
             /**
-             * Se guarda una sola imagen y se la estira por cuadrantes.
+             * A single image is stored and stretched by cells.
              *
-             * <p>Es lo que permite dibujar un boton de cualquier ancho a partir de una sola imagen
-             * sin que las esquinas se deformen: los cuatro cuadrantes de las esquinas se copian tal
-             * cual y solo se estiran los del medio.
+             * <p>It is what lets a button of any width be drawn from a single image without the
+             * corners deforming: the four corner cells are copied as they are and only the middle
+             * ones stretch.
              */
             NINE_SQUARE_SCALE,
         }
