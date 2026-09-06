@@ -4,7 +4,7 @@ package java.nio;
  * Builds the mapped byte buffers that {@code java.nio.channels.FileChannel.map} hands out.
  *
  * <p>Not a JDK class: it is scaffolding of ours, the same kind as
- * {@code java.nio.channels.FabricaMapMode}. The implementation is package-private because nobody
+ * {@code java.nio.channels.MapModes}. The implementation is package-private because nobody
  * outside builds one and a public name here would be a name {@code java.nio} does not have in the
  * JDK; but {@code FileChannel} lives in another package and cannot see it. This is the one bridge.
  */

@@ -6,16 +6,17 @@ import java.util.concurrent.ExecutorService;
 import java.nio.channels.spi.AsynchronousChannelProvider;
 
 /**
- * Fabrica de los canales asincronicos, para el provider que vive en {@code java.nio.channels.spi}.
+ * Factory of the asynchronous channels, for the provider that lives in
+ * {@code java.nio.channels.spi}.
  *
- * <p>No es una clase del JDK: es andamiaje nuestro, del mismo tipo que {@link FabricaMapMode}, que
- * vive en este mismo paquete y por la misma razon. Las implementaciones --el group y los tres
- * canales-- son de paquete a proposito: nadie de afuera las construye, y hacerlas publicas
- * agregaria a {@code java.nio.channels} nombres que el JDK no tiene. Pero el provider esta en
- * {@code java.nio.channels.spi}, que es otro paquete y no las ve.
+ * <p>Not a JDK class: it is scaffolding of ours, the same kind as {@link MapModes}, which lives in
+ * this very package and for the same reason. The implementations --the group and the three
+ * channels-- are package-private on purpose: nobody outside builds them, and making them public
+ * would add to {@code java.nio.channels} names the JDK does not have. But the provider is in
+ * {@code java.nio.channels.spi}, which is another package and does not see them.
  *
- * <p>Este es el unico puente entre los dos, y por eso lo unico publico de mas que hay: cuatro
- * metodos que devuelven tipos del JDK.
+ * <p>This is the only bridge between the two, and that is why it is the only extra public thing
+ * here: four methods returning JDK types.
  */
 public final class AsyncChannelFactory {
 
@@ -23,12 +24,12 @@ public final class AsyncChannelFactory {
     }
 
     /**
-     * Un group sobre ese pool.
+     * A group over that pool.
      *
-     * @param provider quien lo fabrica
-     * @param pool donde corren los manejadores
-     * @param ownsPool si el pool lo armo el group y no el que llama
-     * @return el group
+     * @param provider whoever builds it
+     * @param pool where the handlers run
+     * @param ownsPool whether the pool was built by the group and not by the caller
+     * @return the group
      */
     public static AsynchronousChannelGroup group(AsynchronousChannelProvider provider,
             ExecutorService pool, boolean ownsPool) {
@@ -36,12 +37,12 @@ public final class AsyncChannelFactory {
     }
 
     /**
-     * Un channel de socket asincronico de ese group.
+     * An asynchronous socket channel of that group.
      *
-     * @param provider quien lo fabrica
-     * @param group a que group pertenece
-     * @return el channel
-     * @throws IOException si no se puede abrir el socket de abajo
+     * @param provider whoever builds it
+     * @param group which group it belongs to
+     * @return the channel
+     * @throws IOException if the socket underneath cannot be opened
      */
     public static AsynchronousSocketChannel socket(AsynchronousChannelProvider provider,
             AsynchronousChannelGroup group) throws IOException {
@@ -49,12 +50,12 @@ public final class AsyncChannelFactory {
     }
 
     /**
-     * Un channel servidor asincronico de ese group.
+     * An asynchronous server channel of that group.
      *
-     * @param provider quien lo fabrica
-     * @param group a que group pertenece
-     * @return el channel
-     * @throws IOException si no se puede abrir el socket de abajo
+     * @param provider whoever builds it
+     * @param group which group it belongs to
+     * @return the channel
+     * @throws IOException if the socket underneath cannot be opened
      */
     public static AsynchronousServerSocketChannel serverSocket(AsynchronousChannelProvider provider,
             AsynchronousChannelGroup group) throws IOException {
@@ -62,11 +63,11 @@ public final class AsyncChannelFactory {
     }
 
     /**
-     * Un channel de archivo asincronico de ese group.
+     * An asynchronous file channel of that group.
      *
-     * @param channel el channel bloqueante de abajo
-     * @param group a que group pertenece
-     * @return el channel
+     * @param channel the blocking channel underneath
+     * @param group which group it belongs to
+     * @return the channel
      */
     public static AsynchronousFileChannel file(FileChannel channel,
             AsynchronousChannelGroup group) {

@@ -11,38 +11,37 @@ import java.util.concurrent.TimeUnit;
 
 import java.nio.channels.spi.AsynchronousChannelProvider;
 
-// Un `AsynchronousSocketChannel` sobre el `SocketChannel` bloqueante de esta biblioteca y un pool
-// de hilos.
+// An `AsynchronousSocketChannel` over this library's blocking `SocketChannel` and a thread pool.
 //
 // ===============================================================================================
-// LA REGLA DE UNA SOLA OPERACION EN VUELO
+// THE RULE OF ONE OPERATION IN FLIGHT
 // ===============================================================================================
 //
-// Una lectura y una escritura pendientes por channel, y ni una mas: pedir una segunda lectura sin que
-// la primera termine es `ReadPendingException`. No es una limitacion de esta implementacion, es la
-// regla de la API, y la razon es buena: con dos lecturas en vuelo sobre un mismo flujo de bytes, el
-// orden en que se completan decide donde caen los bytes, y eso no lo controla nadie.
+// One read and one write pending per channel, and not one more: asking for a second read before the
+// first finishes is `ReadPendingException`. It is not a limitation of this implementation, it is the
+// API's rule, and the reason is a good one: with two reads in flight over one byte stream, the order
+// they complete in decides where the bytes land, and nobody controls that.
 //
-// Aca ademas hace falta de verdad: abajo hay UN socket bloqueante, y dos hilos leyendolo a la vez se
-// repartirian el flujo al azar.
+// Here it is also genuinely necessary: underneath there is ONE blocking socket, and two threads
+// reading it at once would split the stream between them at random.
 //
 // ===============================================================================================
-// LOS TIEMPOS LIMITE
+// THE TIMEOUTS
 // ===============================================================================================
 //
-// Al agotarse, la operacion falla con `InterruptedByTimeoutException` y **el channel queda
-// inservible**: no se puede saber cuantos bytes alcanzo a mover el hilo que quedo adentro de la
-// lectura, asi que seguir usandolo seria seguir sobre un flujo desalineado. Se lo marca y las
-// operaciones siguientes fallan.
+// On running out, the operation fails with `InterruptedByTimeoutException` and **the channel is left
+// useless**: there is no telling how many bytes the thread stuck inside the read managed to move, so
+// going on using it would be going on over a misaligned stream. It is marked and the following
+// operations fail.
 //
-// De paquete a proposito: se llega por `AsynchronousSocketChannel.open`.
+// Package-private on purpose: it is reached through `AsynchronousSocketChannel.open`.
 final class AsyncSocketChannelImpl extends AsynchronousSocketChannel {
 
     private final SocketChannel channel;
     private final AsyncChannelGroup group;
-    private boolean leyendo;
-    private boolean escribiendo;
-    private boolean desalineado;
+    private boolean reading;
+    private boolean writing;
+    private boolean misaligned;
 
     AsyncSocketChannelImpl(AsynchronousChannelProvider provider, SocketChannel channel, AsyncChannelGroup group) {
         super(provider);
@@ -99,61 +98,61 @@ final class AsyncSocketChannelImpl extends AsynchronousSocketChannel {
     @Override
     public <A> void connect(SocketAddress remote, A attachment,
             CompletionHandler<Void, ? super A> handler) {
-        comprobarConexion(remote);
-        AsyncTask.notifying(this.group.pool(), new Conectar(this.channel, remote), attachment, handler);
+        checkConnection(remote);
+        AsyncTask.notifying(this.group.pool(), new Connect(this.channel, remote), attachment, handler);
     }
 
     @Override
     public Future<Void> connect(SocketAddress remote) {
-        comprobarConexion(remote);
-        return AsyncTask.future(this.group.pool(), new Conectar(this.channel, remote));
+        checkConnection(remote);
+        return AsyncTask.future(this.group.pool(), new Connect(this.channel, remote));
     }
 
     @Override
     public <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment,
             CompletionHandler<Integer, ? super A> handler) {
-        tomarLectura();
+        takeRead();
         AsyncTask.notifying(this.group.pool(),
-                new Mover(this, dst, timeout, unit, true), attachment, handler);
+                new Move(this, dst, timeout, unit, true), attachment, handler);
     }
 
     @Override
     public Future<Integer> read(ByteBuffer dst) {
-        tomarLectura();
+        takeRead();
         return AsyncTask.future(this.group.pool(),
-                new Mover(this, dst, 0L, TimeUnit.MILLISECONDS, true));
+                new Move(this, dst, 0L, TimeUnit.MILLISECONDS, true));
     }
 
     @Override
     public <A> void read(ByteBuffer[] dsts, int offset, int length, long timeout, TimeUnit unit,
             A attachment, CompletionHandler<Long, ? super A> handler) {
-        tomarLectura();
+        takeRead();
         AsyncTask.notifying(this.group.pool(),
-                new MoverLargo(this, dsts, offset, length, timeout, unit, true), attachment,
+                new MoveLong(this, dsts, offset, length, timeout, unit, true), attachment,
                 handler);
     }
 
     @Override
     public <A> void write(ByteBuffer src, long timeout, TimeUnit unit, A attachment,
             CompletionHandler<Integer, ? super A> handler) {
-        tomarEscritura();
+        takeWrite();
         AsyncTask.notifying(this.group.pool(),
-                new Mover(this, src, timeout, unit, false), attachment, handler);
+                new Move(this, src, timeout, unit, false), attachment, handler);
     }
 
     @Override
     public Future<Integer> write(ByteBuffer src) {
-        tomarEscritura();
+        takeWrite();
         return AsyncTask.future(this.group.pool(),
-                new Mover(this, src, 0L, TimeUnit.MILLISECONDS, false));
+                new Move(this, src, 0L, TimeUnit.MILLISECONDS, false));
     }
 
     @Override
     public <A> void write(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit,
             A attachment, CompletionHandler<Long, ? super A> handler) {
-        tomarEscritura();
+        takeWrite();
         AsyncTask.notifying(this.group.pool(),
-                new MoverLargo(this, srcs, offset, length, timeout, unit, false), attachment,
+                new MoveLong(this, srcs, offset, length, timeout, unit, false), attachment,
                 handler);
     }
 
@@ -168,7 +167,7 @@ final class AsyncSocketChannelImpl extends AsynchronousSocketChannel {
         this.channel.close();
     }
 
-    private void comprobarConexion(SocketAddress remote) {
+    private void checkConnection(SocketAddress remote) {
         if (remote == null) {
             throw new NullPointerException("remote");
         }
@@ -177,155 +176,155 @@ final class AsyncSocketChannelImpl extends AsynchronousSocketChannel {
         }
     }
 
-    private synchronized void tomarLectura() {
-        if (this.leyendo) {
+    private synchronized void takeRead() {
+        if (this.reading) {
             throw new ReadPendingException();
         }
-        this.leyendo = true;
+        this.reading = true;
     }
 
-    private synchronized void tomarEscritura() {
-        if (this.escribiendo) {
+    private synchronized void takeWrite() {
+        if (this.writing) {
             throw new WritePendingException();
         }
-        this.escribiendo = true;
+        this.writing = true;
     }
 
-    synchronized void soltar(boolean lectura) {
-        if (lectura) {
-            this.leyendo = false;
+    synchronized void release(boolean read) {
+        if (read) {
+            this.reading = false;
         } else {
-            this.escribiendo = false;
+            this.writing = false;
         }
     }
 
-    /** Marca que quedo un hilo adentro de una operacion y no se sabe cuanto movio. */
-    synchronized void desalinear() {
-        this.desalineado = true;
+    /** Marks that a thread was left inside an operation and how much it moved is unknown. */
+    synchronized void misalign() {
+        this.misaligned = true;
     }
 
-    synchronized void comprobarAlineado() throws IOException {
-        if (this.desalineado) {
-            throw new IOException("el channel quedo desalineado: una operacion agoto su tiempo");
+    synchronized void checkAligned() throws IOException {
+        if (this.misaligned) {
+            throw new IOException("the channel was left misaligned: an operation timed out");
         }
     }
 
-    SocketChannel bruto() {
+    SocketChannel raw() {
         return this.channel;
     }
 
-    /** La conexion, para correr en el pool. */
-    private static final class Conectar implements Callable<Void> {
+    /** The connection, to run on the pool. */
+    private static final class Connect implements Callable<Void> {
 
         private final SocketChannel channel;
-        private final SocketAddress remoto;
+        private final SocketAddress remote;
 
-        Conectar(SocketChannel channel, SocketAddress remoto) {
+        Connect(SocketChannel channel, SocketAddress remote) {
             this.channel = channel;
-            this.remoto = remoto;
+            this.remote = remote;
         }
 
         public Void call() throws IOException {
-            this.channel.connect(this.remoto);
+            this.channel.connect(this.remote);
             return null;
         }
     }
 
     /**
-     * Una lectura o escritura que devuelve cuantos bytes movio, como entero.
+     * A read or a write that returns how many bytes it moved, as an int.
      *
-     * <p>El tiempo limite se aplica aca adentro y no en el `Future`, porque quien tiene que enterarse
-     * de que se agoto es el channel --para marcarse desalineado-- y no solo el que espera.
+     * <p>The timeout is applied in here and not in the `Future`, because the one that has to learn
+     * it ran out is the channel --so it can mark itself misaligned-- and not only whoever waits.
      */
-    private static final class Mover implements Callable<Integer> {
+    private static final class Move implements Callable<Integer> {
 
-        private final AsyncSocketChannelImpl duenio;
+        private final AsyncSocketChannelImpl owner;
         private final ByteBuffer buffer;
-        private final long limite;
-        private final TimeUnit unidad;
-        private final boolean lectura;
+        private final long limit;
+        private final TimeUnit unit;
+        private final boolean read;
 
-        Mover(AsyncSocketChannelImpl duenio, ByteBuffer buffer, long limite, TimeUnit unidad,
-                boolean lectura) {
-            this.duenio = duenio;
+        Move(AsyncSocketChannelImpl owner, ByteBuffer buffer, long limit, TimeUnit unit,
+                boolean read) {
+            this.owner = owner;
             this.buffer = buffer;
-            this.limite = limite;
-            this.unidad = unidad;
-            this.lectura = lectura;
+            this.limit = limit;
+            this.unit = unit;
+            this.read = read;
         }
 
         public Integer call() throws IOException {
             try {
-                this.duenio.comprobarAlineado();
-                aplicarLimite(this.duenio, this.limite, this.unidad);
-                final SocketChannel c = this.duenio.bruto();
+                this.owner.checkAligned();
+                applyTimeout(this.owner, this.limit, this.unit);
+                final SocketChannel c = this.owner.raw();
                 try {
                     return Integer.valueOf(
-                            this.lectura ? c.read(this.buffer) : c.write(this.buffer));
+                            this.read ? c.read(this.buffer) : c.write(this.buffer));
                 } catch (java.net.SocketTimeoutException e) {
-                    this.duenio.desalinear();
+                    this.owner.misalign();
                     throw new InterruptedByTimeoutException();
                 }
             } finally {
-                this.duenio.soltar(this.lectura);
+                this.owner.release(this.read);
             }
         }
     }
 
-    /** Lo mismo con varios buffers, que devuelve un `long`. */
-    private static final class MoverLargo implements Callable<Long> {
+    /** The same with several buffers, returning a `long`. */
+    private static final class MoveLong implements Callable<Long> {
 
-        private final AsyncSocketChannelImpl duenio;
+        private final AsyncSocketChannelImpl owner;
         private final ByteBuffer[] buffers;
-        private final int desde;
-        private final int cuantos;
-        private final long limite;
-        private final TimeUnit unidad;
-        private final boolean lectura;
+        private final int from;
+        private final int count;
+        private final long limit;
+        private final TimeUnit unit;
+        private final boolean read;
 
-        MoverLargo(AsyncSocketChannelImpl duenio, ByteBuffer[] buffers, int desde, int cuantos,
-                long limite, TimeUnit unidad, boolean lectura) {
-            this.duenio = duenio;
+        MoveLong(AsyncSocketChannelImpl owner, ByteBuffer[] buffers, int from, int count,
+                long limit, TimeUnit unit, boolean read) {
+            this.owner = owner;
             this.buffers = buffers;
-            this.desde = desde;
-            this.cuantos = cuantos;
-            this.limite = limite;
-            this.unidad = unidad;
-            this.lectura = lectura;
+            this.from = from;
+            this.count = count;
+            this.limit = limit;
+            this.unit = unit;
+            this.read = read;
         }
 
         public Long call() throws IOException {
             try {
-                this.duenio.comprobarAlineado();
-                aplicarLimite(this.duenio, this.limite, this.unidad);
-                final SocketChannel c = this.duenio.bruto();
+                this.owner.checkAligned();
+                applyTimeout(this.owner, this.limit, this.unit);
+                final SocketChannel c = this.owner.raw();
                 try {
-                    return Long.valueOf(this.lectura
-                            ? c.read(this.buffers, this.desde, this.cuantos)
-                            : c.write(this.buffers, this.desde, this.cuantos));
+                    return Long.valueOf(this.read
+                            ? c.read(this.buffers, this.from, this.count)
+                            : c.write(this.buffers, this.from, this.count));
                 } catch (java.net.SocketTimeoutException e) {
-                    this.duenio.desalinear();
+                    this.owner.misalign();
                     throw new InterruptedByTimeoutException();
                 }
             } finally {
-                this.duenio.soltar(this.lectura);
+                this.owner.release(this.read);
             }
         }
     }
 
     /**
-     * Le pone al socket el tiempo limite de esta operacion.
+     * Sets this operation's timeout on the socket.
      *
-     * <p>Abajo hay un socket bloqueante, asi que el limite se cumple con el suyo: la lectura vuelve
-     * con {@code SocketTimeoutException} y aca se la traduce a la que la API declara, marcando el
-     * channel como desalineado.
+     * <p>Underneath there is a blocking socket, so the limit is met with its own: the read comes back
+     * with {@code SocketTimeoutException} and here it is translated into the one the API declares,
+     * marking the channel misaligned.
      */
-    private static void aplicarLimite(AsyncSocketChannelImpl duenio, long limite, TimeUnit unidad)
+    private static void applyTimeout(AsyncSocketChannelImpl owner, long limit, TimeUnit unit)
             throws IOException {
-        if (limite <= 0) {
+        if (limit <= 0) {
             return;
         }
-        final long ms = unidad.toMillis(limite);
-        duenio.bruto().socket().setSoTimeout(ms > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) ms);
+        final long ms = unit.toMillis(limit);
+        owner.raw().socket().setSoTimeout(ms > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) ms);
     }
 }

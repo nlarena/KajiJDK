@@ -9,27 +9,28 @@ import java.util.concurrent.Future;
 
 import java.nio.channels.spi.AsynchronousChannelProvider;
 
-// Un `AsynchronousServerSocketChannel` sobre el `ServerSocketChannel` bloqueante de esta biblioteca
-// y un pool de hilos.
+// An `AsynchronousServerSocketChannel` over this library's blocking `ServerSocketChannel` and a
+// thread pool.
 //
 // ===============================================================================================
-// UNA SOLA ACEPTACION EN VUELO
+// ONE ACCEPT IN FLIGHT
 // ===============================================================================================
 //
-// Como en el channel de socket, y por la misma clase de razon: abajo hay un `accept` bloqueante, y dos
-// hilos llamandolo a la vez se repartirian las conexiones entrantes de forma que ninguno de los dos
-// puede predecir. La API ya lo prohibe --`AcceptPendingException`-- asi que no hay nada que inventar.
+// As in the socket channel, and for the same kind of reason: underneath there is a blocking `accept`,
+// and two threads calling it at once would split the incoming connections between them in a way
+// neither can predict. The API already forbids it --`AcceptPendingException`-- so there is nothing to
+// invent.
 //
-// El channel aceptado se anota en el mismo group: es lo que hace que `shutdown()` del group espere
-// tambien por las conexiones que el servidor fue creando, y no solo por el servidor.
+// The accepted channel is registered in the same group: it is what makes the group's `shutdown()`
+// wait for the connections the server has been creating as well, and not only for the server.
 //
-// De paquete a proposito: se llega por `AsynchronousServerSocketChannel.open`.
+// Package-private on purpose: it is reached through `AsynchronousServerSocketChannel.open`.
 final class AsyncServerSocketChannelImpl extends AsynchronousServerSocketChannel {
 
     private final AsynchronousChannelProvider provider;
     private final ServerSocketChannel channel;
     private final AsyncChannelGroup group;
-    private boolean aceptando;
+    private boolean accepting;
 
     AsyncServerSocketChannelImpl(AsynchronousChannelProvider provider, ServerSocketChannel channel,
             AsyncChannelGroup group) {
@@ -67,14 +68,14 @@ final class AsyncServerSocketChannelImpl extends AsynchronousServerSocketChannel
     @Override
     public <A> void accept(A attachment,
             CompletionHandler<AsynchronousSocketChannel, ? super A> handler) {
-        tomar();
-        AsyncTask.notifying(this.group.pool(), new Aceptar(this), attachment, handler);
+        take();
+        AsyncTask.notifying(this.group.pool(), new Accept(this), attachment, handler);
     }
 
     @Override
     public Future<AsynchronousSocketChannel> accept() {
-        tomar();
-        return AsyncTask.future(this.group.pool(), new Aceptar(this));
+        take();
+        return AsyncTask.future(this.group.pool(), new Accept(this));
     }
 
     @Override
@@ -93,37 +94,37 @@ final class AsyncServerSocketChannelImpl extends AsynchronousServerSocketChannel
         this.channel.close();
     }
 
-    private synchronized void tomar() {
-        if (this.aceptando) {
+    private synchronized void take() {
+        if (this.accepting) {
             throw new AcceptPendingException();
         }
-        this.aceptando = true;
+        this.accepting = true;
     }
 
-    private synchronized void soltar() {
-        this.aceptando = false;
+    private synchronized void release() {
+        this.accepting = false;
     }
 
-    /** La aceptacion, para correr en el pool. */
-    private static final class Aceptar implements Callable<AsynchronousSocketChannel> {
+    /** The accept, to run on the pool. */
+    private static final class Accept implements Callable<AsynchronousSocketChannel> {
 
-        private final AsyncServerSocketChannelImpl duenio;
+        private final AsyncServerSocketChannelImpl owner;
 
-        Aceptar(AsyncServerSocketChannelImpl duenio) {
-            this.duenio = duenio;
+        Accept(AsyncServerSocketChannelImpl owner) {
+            this.owner = owner;
         }
 
         public AsynchronousSocketChannel call() throws IOException {
             try {
-                final SocketChannel entrante = this.duenio.channel.accept();
-                if (entrante == null) {
-                    // El channel de abajo es bloqueante, asi que esto no pasa; si pasara, devolver
-                    // null seria peor que decirlo.
-                    throw new IOException("accept() no devolvio ningun channel");
+                final SocketChannel incoming = this.owner.channel.accept();
+                if (incoming == null) {
+                    // The channel underneath is blocking, so this does not happen; if it did,
+                    // returning null would be worse than saying so.
+                    throw new IOException("accept() returned no channel");
                 }
-                return new AsyncSocketChannelImpl(this.duenio.provider, entrante, this.duenio.group);
+                return new AsyncSocketChannelImpl(this.owner.provider, incoming, this.owner.group);
             } finally {
-                this.duenio.soltar();
+                this.owner.release();
             }
         }
     }

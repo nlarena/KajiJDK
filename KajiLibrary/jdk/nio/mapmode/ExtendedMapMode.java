@@ -1,6 +1,6 @@
 package jdk.nio.mapmode;
 
-import java.nio.channels.FabricaMapMode;
+import java.nio.channels.MapModes;
 import java.nio.channels.FileChannel;
 
 /**
@@ -22,11 +22,11 @@ public class ExtendedMapMode {
 
     /** Mapeo de solo lectura sobre memoria no volatil. */
     public static final FileChannel.MapMode READ_ONLY_SYNC =
-            FabricaMapMode.nuevo("READ_ONLY_SYNC");
+            MapModes.of("READ_ONLY_SYNC");
 
     /** Mapeo de lectura y escritura sobre memoria no volatil. */
     public static final FileChannel.MapMode READ_WRITE_SYNC =
-            FabricaMapMode.nuevo("READ_WRITE_SYNC");
+            MapModes.of("READ_WRITE_SYNC");
 
     private ExtendedMapMode() {
     }

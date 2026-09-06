@@ -321,35 +321,34 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
     // ---- MapMode ---------------------------------------------------------------------------------
 
     /**
-     * Los modos de un mapeo en memoria.
+     * The modes of a memory mapping.
      *
-     * <p>No es un `enum` --tampoco en el
-     * JDK-- porque la lista queda abierta: un proveedor de sistema de archivos puede agregar modos
-     * propios, y un `enum` lo impediria para siempre.
+     * <p>It is not an `enum` --nor in the JDK-- because the list is left open: a file system
+     * provider may add modes of its own, and an `enum` would rule that out for ever.
      */
     public static class MapMode {
 
-        /** Mapeo de solo lectura. */
+        /** Read-only mapping. */
         public static final MapMode READ_ONLY = new MapMode("READ_ONLY");
 
-        /** Mapeo de lectura y escritura; los cambios llegan al archivo. */
+        /** Read-write mapping; the changes reach the file. */
         public static final MapMode READ_WRITE = new MapMode("READ_WRITE");
 
-        /** Copia al escribir: los cambios quedan en el mapeo y no tocan el archivo. */
+        /** Copy on write: the changes stay in the mapping and do not touch the file. */
         public static final MapMode PRIVATE = new MapMode("PRIVATE");
 
-        private final String nombre;
+        private final String name;
 
-        // De paquete y no privado --el JDK lo tiene privado-- para que `FabricaMapMode` pueda
-        // construir los modos de `jdk.nio.mapmode`. Ver el comentario de esa clase: es el mismo
-        // puente que el JDK hace con `SharedSecrets`, sin la maquinaria. No es API: no cambia
-        // ningun miembro publico ni protegido de `MapMode`.
-        MapMode(String nombre) {
-            this.nombre = nombre;
+        // Package-private and not private --the JDK has it private-- so that `MapModes` can build
+        // the modes of `jdk.nio.mapmode`. See that class's comment: it is the same bridge the JDK
+        // makes with `SharedSecrets`, without the machinery. It is not API: it changes no public or
+        // protected member of `MapMode`.
+        MapMode(String name) {
+            this.name = name;
         }
 
         public String toString() {
-            return this.nombre;
+            return this.name;
         }
     }
 }

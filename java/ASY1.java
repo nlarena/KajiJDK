@@ -15,174 +15,174 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Comprueba los nueve estaticos asincronicos de {@code java.nio.channels} contra el JDK 25.
+ * Checks the nine asynchronous statics of {@code java.nio.channels} against JDK 25.
  *
- * <h2>Que se compara</h2>
+ * <h2>What is compared</h2>
  *
- * <p>Que los grupos se armen, se apaguen en sus dos formas y esperen; que un canal de archivo
- * asincronico lea y escriba de verdad por las dos vias --{@code Future} y {@code CompletionHandler}--
- * y que su lectura vea lo que su escritura dejo; y que un servidor y un cliente asincronicos se
- * conecten sobre {@code localhost} y se pasen bytes.
+ * <p>That the groups get built, shut down in both their forms and wait; that an asynchronous file
+ * channel really reads and writes through both routes --{@code Future} and
+ * {@code CompletionHandler}-- and that its read sees what its write left; and that an asynchronous
+ * server and client connect over {@code localhost} and pass bytes to each other.
  *
- * <p>Lo que no se compara son los tiempos ni el paralelismo, ni cuando termina un grupo que quedo
- * con operaciones pedidas: ahi las dos implementaciones esperan cosas distintas --el JDK al sistema,
- * esta al pool-- y comparar eso seria comparar el modelo de espera y no la API. Abajo de esta biblioteca hay canales
- * bloqueantes en un pool de hilos --como el JDK en las plataformas sin entrada y salida asincronica
- * del sistema-- asi que las respuestas son las mismas pero el costo no. Eso esta documentado en las
- * clases, no medido aca.
+ * <p>What is not compared is timing or parallelism, nor when a group left with operations pending
+ * terminates: there the two implementations wait for different things --the JDK for the system, this
+ * one for the pool-- and comparing that would be comparing the waiting model and not the API.
+ * Underneath this library there are blocking channels on a thread pool --like the JDK on the
+ * platforms with no asynchronous I/O of their own-- so the answers are the same but the cost is not.
+ * That is documented in the classes, not measured here.
  *
- * <p>{@link #donde()} devuelve el indice de la primera respuesta que no coincide, o -1.
+ * <p>{@link #where()} returns the index of the first answer that differs, or -1.
  */
 public class ASY1 {
 
-    static final String[] ESPERADO = {
-        "fijo|true|false|false|true",
-        "cache|true|false",
+    static final String[] EXPECTED = {
+        "fixed|true|false|false|true",
+        "cached|true|false",
         "pool|true|false",
-        "mismo-proveedor|true|true",
-        "apagado|true|true|true",
-        "apagado-ya|true|true",
-        "malos|IllegalArgumentException|NullPointerException|NullPointerException|NullPointerException",
-        "escritura|8|8",
-        "lectura|8|0a141e28323c4650",
-        "lectura-parcial|3|3c4650",
-        "manejador|ok:4:true|1e28323c",
-        "mas-alla-del-fin|-1",
-        "posicion-negativa|IllegalArgumentException",
-        "truncar|4",
-        "cerrado|false",
-        "servidor|true|true",
-        "conectados|true|true",
-        "enviado|5",
-        "recibido|5|0102030405",
-        "dos-lecturas|ReadPendingException",
-        "dos-aceptaciones|AcceptPendingException",
-        "ya-conectado|AlreadyConnectedException",
-        "cerrados|false|false",
-        "grupo-limpio|true|true",
-        "grupo-apagado|ShutdownChannelGroupException",
+        "same-provider|true|true",
+        "shutdown|true|true|true",
+        "shutdown-now|true|true",
+        "bad-args|IllegalArgumentException|NullPointerException|NullPointerException|NullPointerException",
+        "write|8|8",
+        "read|8|0a141e28323c4650",
+        "partial-read|3|3c4650",
+        "handler|ok:4:true|1e28323c",
+        "past-the-end|-1",
+        "negative-position|IllegalArgumentException",
+        "truncate|4",
+        "closed|false",
+        "server|true|true",
+        "connected|true|true",
+        "sent|5",
+        "received|5|0102030405",
+        "two-reads|ReadPendingException",
+        "two-accepts|AcceptPendingException",
+        "already-connected|AlreadyConnectedException",
+        "both-closed|false|false",
+        "clean-group|true|true",
+        "grupo-shutdown|ShutdownChannelGroupException",
     };
 
-    /** Lo que hacen los nueve estaticos, una linea por comprobacion. */
+    /** What the nine statics do, one line per check. */
     static String[] actual() throws Exception {
         final java.util.List<String> a = new java.util.ArrayList<String>();
 
-        // Los tres grupos.
+        // The three groups.
         final AsynchronousChannelGroup g1 =
                 AsynchronousChannelGroup.withFixedThreadPool(2, Executors.defaultThreadFactory());
-        a.add("fijo|" + (g1 != null) + "|" + g1.isShutdown() + "|" + g1.isTerminated()
+        a.add("fixed|" + (g1 != null) + "|" + g1.isShutdown() + "|" + g1.isTerminated()
                 + "|" + (g1.provider() != null));
         final ExecutorService p2 = Executors.newCachedThreadPool();
         final AsynchronousChannelGroup g2 = AsynchronousChannelGroup.withCachedThreadPool(p2, 1);
-        a.add("cache|" + (g2 != null) + "|" + g2.isShutdown());
+        a.add("cached|" + (g2 != null) + "|" + g2.isShutdown());
         final ExecutorService p3 = Executors.newFixedThreadPool(2);
         final AsynchronousChannelGroup g3 = AsynchronousChannelGroup.withThreadPool(p3);
         a.add("pool|" + (g3 != null) + "|" + g3.isShutdown());
-        a.add("mismo-proveedor|" + (g1.provider() == g2.provider())
+        a.add("same-provider|" + (g1.provider() == g2.provider())
                 + "|" + (g2.provider() == g3.provider()));
 
-        // Un grupo vacio se apaga y termina.
+        // An empty group shuts down and terminates.
         g1.shutdown();
-        a.add("apagado|" + g1.isShutdown() + "|" + g1.awaitTermination(5, TimeUnit.SECONDS)
+        a.add("shutdown|" + g1.isShutdown() + "|" + g1.awaitTermination(5, TimeUnit.SECONDS)
                 + "|" + g1.isTerminated());
         g2.shutdownNow();
-        a.add("apagado-ya|" + g2.isShutdown() + "|" + g2.awaitTermination(5, TimeUnit.SECONDS));
+        a.add("shutdown-now|" + g2.isShutdown() + "|" + g2.awaitTermination(5, TimeUnit.SECONDS));
 
-        // Los argumentos que no sirven.
-        a.add("malos|" + intentar(new FijoCero()) + "|" + intentar(new FijoSinFabrica())
-                + "|" + intentar(new PoolNulo()) + "|" + intentar(new CacheNulo()));
+        // The arguments that are no good.
+        a.add("bad-args|" + attempt(new FixedZero()) + "|" + attempt(new FixedNoFactory())
+                + "|" + attempt(new NullPool()) + "|" + attempt(new NullCache()));
 
-        // Un canal de archivo asincronico.
+        // An asynchronous file channel.
         final Path tmp = Files.createTempFile("asy1", ".bin");
         try {
             final AsynchronousFileChannel af = AsynchronousFileChannel.open(tmp,
                     StandardOpenOption.READ, StandardOpenOption.WRITE);
-            final byte[] datos = {10, 20, 30, 40, 50, 60, 70, 80};
-            final Future<Integer> fw = af.write(ByteBuffer.wrap(datos), 0L);
-            a.add("escritura|" + fw.get(10, TimeUnit.SECONDS) + "|" + af.size());
-            final ByteBuffer leido = ByteBuffer.allocate(8);
-            final Future<Integer> fr = af.read(leido, 0L);
-            a.add("lectura|" + fr.get(10, TimeUnit.SECONDS) + "|" + hex(leido.array()));
-            final ByteBuffer parcial = ByteBuffer.allocate(3);
-            a.add("lectura-parcial|" + af.read(parcial, 5L).get(10, TimeUnit.SECONDS)
-                    + "|" + hex(parcial.array()));
+            final byte[] data = {10, 20, 30, 40, 50, 60, 70, 80};
+            final Future<Integer> fw = af.write(ByteBuffer.wrap(data), 0L);
+            a.add("write|" + fw.get(10, TimeUnit.SECONDS) + "|" + af.size());
+            final ByteBuffer readBuf = ByteBuffer.allocate(8);
+            final Future<Integer> fr = af.read(readBuf, 0L);
+            a.add("read|" + fr.get(10, TimeUnit.SECONDS) + "|" + hex(readBuf.array()));
+            final ByteBuffer partial = ByteBuffer.allocate(3);
+            a.add("partial-read|" + af.read(partial, 5L).get(10, TimeUnit.SECONDS)
+                    + "|" + hex(partial.array()));
 
-            // Por manejador, que corre en el pool y no en este hilo.
-            final Caja caja = new Caja();
-            final ByteBuffer otro = ByteBuffer.allocate(4);
-            af.read(otro, 2L, caja, new Anota(caja));
-            a.add("manejador|" + caja.esperar() + "|" + hex(otro.array()));
+            // Through a handler, which runs on the pool and not on this thread.
+            final Box box = new Box();
+            final ByteBuffer other = ByteBuffer.allocate(4);
+            af.read(other, 2L, box, new Note(box));
+            a.add("handler|" + box.await() + "|" + hex(other.array()));
 
-            a.add("mas-alla-del-fin|"
+            a.add("past-the-end|"
                     + af.read(ByteBuffer.allocate(4), 100L).get(10, TimeUnit.SECONDS));
-            a.add("posicion-negativa|" + intentar(new PosNegativa(af)));
-            a.add("truncar|" + af.truncate(4).size());
+            a.add("negative-position|" + attempt(new NegativePosition(af)));
+            a.add("truncate|" + af.truncate(4).size());
             af.force(true);
             af.close();
-            a.add("cerrado|" + af.isOpen());
+            a.add("closed|" + af.isOpen());
         } finally {
             Files.deleteIfExists(tmp);
         }
 
-        // Un servidor y un cliente asincronicos que se hablan.
+        // An asynchronous server and client talking to each other.
         final AsynchronousChannelGroup g4 =
                 AsynchronousChannelGroup.withFixedThreadPool(4, Executors.defaultThreadFactory());
         final AsynchronousServerSocketChannel srv = AsynchronousServerSocketChannel.open(g4);
         srv.bind(new InetSocketAddress("127.0.0.1", 0));
-        final int puerto = ((InetSocketAddress) srv.getLocalAddress()).getPort();
-        a.add("servidor|" + (puerto > 0) + "|" + srv.isOpen());
+        final int port = ((InetSocketAddress) srv.getLocalAddress()).getPort();
+        a.add("server|" + (port > 0) + "|" + srv.isOpen());
 
-        final Future<AsynchronousSocketChannel> entrante = srv.accept();
+        final Future<AsynchronousSocketChannel> incoming = srv.accept();
         final AsynchronousSocketChannel cli = AsynchronousSocketChannel.open(g4);
-        cli.connect(new InetSocketAddress("127.0.0.1", puerto)).get(10, TimeUnit.SECONDS);
-        final AsynchronousSocketChannel servidorLado = entrante.get(10, TimeUnit.SECONDS);
-        a.add("conectados|" + (servidorLado != null) + "|" + cli.isOpen());
+        cli.connect(new InetSocketAddress("127.0.0.1", port)).get(10, TimeUnit.SECONDS);
+        final AsynchronousSocketChannel serverSide = incoming.get(10, TimeUnit.SECONDS);
+        a.add("connected|" + (serverSide != null) + "|" + cli.isOpen());
 
-        final byte[] mensaje = {1, 2, 3, 4, 5};
-        a.add("enviado|" + cli.write(ByteBuffer.wrap(mensaje)).get(10, TimeUnit.SECONDS));
-        final ByteBuffer recibido = ByteBuffer.allocate(5);
+        final byte[] message = {1, 2, 3, 4, 5};
+        a.add("sent|" + cli.write(ByteBuffer.wrap(message)).get(10, TimeUnit.SECONDS));
+        final ByteBuffer received = ByteBuffer.allocate(5);
         int total = 0;
         while (total < 5) {
-            final int n = servidorLado.read(recibido).get(10, TimeUnit.SECONDS);
+            final int n = serverSide.read(received).get(10, TimeUnit.SECONDS);
             if (n < 0) {
                 break;
             }
             total = total + n;
         }
-        a.add("recibido|" + total + "|" + hex(recibido.array()));
-        a.add("dos-lecturas|" + intentar(new DosLecturas(servidorLado)));
-        a.add("dos-aceptaciones|" + intentar(new DosAceptaciones(srv)));
-        a.add("ya-conectado|" + intentar(new YaConectado(cli, puerto)));
+        a.add("received|" + total + "|" + hex(received.array()));
+        a.add("two-reads|" + attempt(new TwoReads(serverSide)));
+        a.add("two-accepts|" + attempt(new TwoAccepts(srv)));
+        a.add("already-connected|" + attempt(new AlreadyConnected(cli, port)));
 
         cli.close();
-        servidorLado.close();
+        serverSide.close();
         srv.close();
-        a.add("cerrados|" + cli.isOpen() + "|" + srv.isOpen());
+        a.add("both-closed|" + cli.isOpen() + "|" + srv.isOpen());
         g4.shutdown();
 
-        // Un grupo cuyo unico canal se cerro termina. No se comprueba `g4`, que quedo con las dos
-        // operaciones que `dos-lecturas` y `dos-aceptaciones` dejaron pedidas: ahi las dos
-        // implementaciones difieren por como esperan --el JDK por el sistema, esta por el pool-- y
-        // comparar eso seria comparar el modelo de espera y no la API.
+        // A group whose only channel was closed terminates. `g4` is not checked, having been left
+        // with the two operations `two-reads` and `two-accepts` asked for: there the two
+        // implementations differ in how they wait --the JDK through the system, this one through the
+        // pool-- and comparing that would be comparing the waiting model and not the API.
         final AsynchronousChannelGroup g6 =
                 AsynchronousChannelGroup.withFixedThreadPool(1, Executors.defaultThreadFactory());
-        final AsynchronousSocketChannel suelto = AsynchronousSocketChannel.open(g6);
-        suelto.close();
+        final AsynchronousSocketChannel loose = AsynchronousSocketChannel.open(g6);
+        loose.close();
         g6.shutdown();
-        a.add("grupo-limpio|" + g6.awaitTermination(10, TimeUnit.SECONDS)
+        a.add("clean-group|" + g6.awaitTermination(10, TimeUnit.SECONDS)
                 + "|" + g6.isTerminated());
 
-        // Un canal abierto en un grupo ya apagado no se acepta.
+        // A channel opened in an already shut down group is not accepted.
         final AsynchronousChannelGroup g5 =
                 AsynchronousChannelGroup.withFixedThreadPool(1, Executors.defaultThreadFactory());
         g5.shutdown();
-        a.add("grupo-apagado|" + intentar(new AbrirEnApagado(g5)));
+        a.add("grupo-shutdown|" + attempt(new OpenInShutdown(g5)));
 
         p3.shutdown();
         return a.toArray(new String[a.size()]);
     }
 
-    /** Los bytes en hexadecimal. */
+    /** The bytes in hexadecimal. */
     static String hex(byte[] b) {
         final StringBuilder s = new StringBuilder();
         for (int i = 0; i < b.length; i++) {
@@ -193,53 +193,53 @@ public class ASY1 {
         return s.toString();
     }
 
-    /** Donde el manejador deja lo que le avisaron. */
-    static class Caja {
-        private String valor;
+    /** Where the handler leaves what it was told. */
+    static class Box {
+        private String value;
 
-        synchronized void poner(String v) {
-            this.valor = v;
+        synchronized void put(String v) {
+            this.value = v;
             notifyAll();
         }
 
-        synchronized String esperar() throws InterruptedException {
-            long queda = 10000L;
-            while (this.valor == null && queda > 0) {
-                final long antes = System.currentTimeMillis();
-                wait(queda);
-                queda = queda - (System.currentTimeMillis() - antes);
+        synchronized String await() throws InterruptedException {
+            long left = 10000L;
+            while (this.value == null && left > 0) {
+                final long before = System.currentTimeMillis();
+                wait(left);
+                left = left - (System.currentTimeMillis() - before);
             }
-            return this.valor == null ? "sin aviso" : this.valor;
+            return this.value == null ? "no notice" : this.value;
         }
     }
 
-    /** Un manejador que anota lo que le pasaron. */
-    static class Anota implements CompletionHandler<Integer, Caja> {
-        private final Caja caja;
+    /** A handler that writes down what it was handed. */
+    static class Note implements CompletionHandler<Integer, Box> {
+        private final Box box;
 
-        Anota(Caja caja) {
-            this.caja = caja;
+        Note(Box box) {
+            this.box = box;
         }
 
-        public void completed(Integer resultado, Caja adjunto) {
-            this.caja.poner("ok:" + resultado + ":" + (adjunto == this.caja));
+        public void completed(Integer result, Box attachment) {
+            this.box.put("ok:" + result + ":" + (attachment == this.box));
         }
 
-        public void failed(Throwable t, Caja adjunto) {
+        public void failed(Throwable t, Box attachment) {
             final String n = t.getClass().getName();
-            this.caja.poner("falla:" + n.substring(n.lastIndexOf('.') + 1));
+            this.box.put("failed:" + n.substring(n.lastIndexOf('.') + 1));
         }
     }
 
-    /** Algo que se corre para ver con que falla. */
-    interface Tiro {
-        void correr() throws Exception;
+    /** Something run to see what it fails with. */
+    interface Throwing {
+        void run() throws Exception;
     }
 
-    /** Corre eso y devuelve "ok" o el nombre simple de lo que haya tirado. */
-    static String intentar(Tiro r) {
+    /** Runs it and returns "ok" or the simple name of whatever it threw. */
+    static String attempt(Throwing r) {
         try {
-            r.correr();
+            r.run();
             return "ok";
         } catch (Throwable t) {
             final String n = t.getClass().getName();
@@ -247,111 +247,111 @@ public class ASY1 {
         }
     }
 
-    static class FijoCero implements Tiro {
-        public void correr() throws Exception {
+    static class FixedZero implements Throwing {
+        public void run() throws Exception {
             AsynchronousChannelGroup.withFixedThreadPool(0, Executors.defaultThreadFactory());
         }
     }
 
-    static class FijoSinFabrica implements Tiro {
-        public void correr() throws Exception {
+    static class FixedNoFactory implements Throwing {
+        public void run() throws Exception {
             AsynchronousChannelGroup.withFixedThreadPool(1, null);
         }
     }
 
-    static class PoolNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullPool implements Throwing {
+        public void run() throws Exception {
             AsynchronousChannelGroup.withThreadPool(null);
         }
     }
 
-    static class CacheNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullCache implements Throwing {
+        public void run() throws Exception {
             AsynchronousChannelGroup.withCachedThreadPool(null, 1);
         }
     }
 
-    static class PosNegativa implements Tiro {
+    static class NegativePosition implements Throwing {
         private final AsynchronousFileChannel af;
 
-        PosNegativa(AsynchronousFileChannel af) {
+        NegativePosition(AsynchronousFileChannel af) {
             this.af = af;
         }
 
-        public void correr() throws Exception {
+        public void run() throws Exception {
             af.read(ByteBuffer.allocate(4), -1L);
         }
     }
 
-    static class DosLecturas implements Tiro {
+    static class TwoReads implements Throwing {
         private final AsynchronousSocketChannel c;
 
-        DosLecturas(AsynchronousSocketChannel c) {
+        TwoReads(AsynchronousSocketChannel c) {
             this.c = c;
         }
 
-        public void correr() throws Exception {
+        public void run() throws Exception {
             c.read(ByteBuffer.allocate(4));
             c.read(ByteBuffer.allocate(4));
         }
     }
 
-    static class DosAceptaciones implements Tiro {
+    static class TwoAccepts implements Throwing {
         private final AsynchronousServerSocketChannel s;
 
-        DosAceptaciones(AsynchronousServerSocketChannel s) {
+        TwoAccepts(AsynchronousServerSocketChannel s) {
             this.s = s;
         }
 
-        public void correr() throws Exception {
+        public void run() throws Exception {
             s.accept();
             s.accept();
         }
     }
 
-    static class YaConectado implements Tiro {
+    static class AlreadyConnected implements Throwing {
         private final AsynchronousSocketChannel c;
-        private final int puerto;
+        private final int port;
 
-        YaConectado(AsynchronousSocketChannel c, int puerto) {
+        AlreadyConnected(AsynchronousSocketChannel c, int port) {
             this.c = c;
-            this.puerto = puerto;
+            this.port = port;
         }
 
-        public void correr() throws Exception {
-            c.connect(new InetSocketAddress("127.0.0.1", this.puerto));
+        public void run() throws Exception {
+            c.connect(new InetSocketAddress("127.0.0.1", this.port));
         }
     }
 
-    static class AbrirEnApagado implements Tiro {
+    static class OpenInShutdown implements Throwing {
         private final AsynchronousChannelGroup g;
 
-        AbrirEnApagado(AsynchronousChannelGroup g) {
+        OpenInShutdown(AsynchronousChannelGroup g) {
             this.g = g;
         }
 
-        public void correr() throws Exception {
+        public void run() throws Exception {
             AsynchronousSocketChannel.open(this.g);
         }
     }
 
     /**
-     * El indice de la primera respuesta que no coincide con la del JDK, o -1.
+     * The index of the first answer that differs from the JDK's, or -1.
      *
-     * @return el indice, o -1
+     * @return the index, or -1
      */
-    public static int donde() {
+    public static int where() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        if (a.length != ESPERADO.length) {
+        if (a.length != EXPECTED.length) {
             return 8000 + a.length;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!a[i].equals(ESPERADO[i])) {
+            if (!a[i].equals(EXPECTED[i])) {
                 return i;
             }
         }
@@ -366,8 +366,8 @@ public class ASY1 {
             }
             return;
         }
-        final int i = donde();
-        System.out.println(i < 0 ? "sin diferencias"
-                : i + ":\n  nuestro=" + a[i] + "\n  jdk    =" + ESPERADO[i]);
+        final int i = where();
+        System.out.println(i < 0 ? "no differences"
+                : i + ":\n  ours=" + a[i] + "\n  jdk =" + EXPECTED[i]);
     }
 }

@@ -8,23 +8,24 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
-// El unico provider de canales asincronicos que esta biblioteca registra de fabrica.
+// The only asynchronous channel provider this library registers out of the box.
 //
 // ===============================================================================================
-// QUE PONE ABAJO
+// WHAT IT PUTS UNDERNEATH
 // ===============================================================================================
 //
-// Un pool de hilos y los canales bloqueantes que la biblioteca ya tenia: `SocketChannel` y
-// `ServerSocketChannel`, que hablan con la red de verdad por `jdk.internal.net.Net`. Cada operacion
-// asincronica es una bloqueante corriendo en un hilo del pool.
+// A thread pool and the blocking channels the library already had: `SocketChannel` and
+// `ServerSocketChannel`, which talk to the real network through `jdk.internal.net.Net`. Every
+// asynchronous operation is a blocking one running on a thread of the pool.
 //
-// **Esa es una implementacion legitima y no un atajo**: es la que el JDK usa en las plataformas que
-// no tienen entrada y salida asincronica del sistema. Lo que compra es lo que uno viene a buscar a
-// esta API --no atar un hilo del programa por operacion-- y lo que no compra es una operacion por
-// hilo del sistema, que es otra cosa.
+// **That is a legitimate implementation and not a shortcut**: it is the one the JDK uses on the
+// platforms that have no asynchronous I/O of their own. What it buys is what one comes to this API
+// for --not tying up a thread of the program per operation-- and what it does not buy is one
+// operation per system thread, which is a different thing.
 //
-// De paquete a proposito: no es API del JDK. Se llega a el por `AsynchronousChannelProvider.provider()`,
-// que lo devuelve cuando ni la propiedad de sistema ni el `ServiceLoader` nombraron otro.
+// Package-private on purpose: it is not JDK API. It is reached through
+// `AsynchronousChannelProvider.provider()`, which returns it when neither the system property nor
+// the `ServiceLoader` named another.
 final class KajiAsyncChannelProvider extends AsynchronousChannelProvider {
 
     KajiAsyncChannelProvider() {
@@ -48,9 +49,9 @@ final class KajiAsyncChannelProvider extends AsynchronousChannelProvider {
         if (executor == null) {
             throw new NullPointerException("executor");
         }
-        // `initialSize` es una sugerencia sobre cuantos hilos arrancar leyendo del pool. Aca no hay
-        // hilos leyendo de ningun lado --cada operacion se manda al pool cuando se la pide-- asi que
-        // no hay nada que dimensionar. Se acepta cualquier valor, como el JDK.
+        // `initialSize` is a hint about how many threads to start reading from the pool. Here there
+        // are no threads reading from anywhere --each operation is sent to the pool when it is asked
+        // for-- so there is nothing to size. Any value is accepted, as in the JDK.
         return group(executor, false);
     }
 
@@ -67,10 +68,10 @@ final class KajiAsyncChannelProvider extends AsynchronousChannelProvider {
     }
 
     /**
-     * El group de fallback, que se arma la primera vez que alguien abre un channel sin group.
+     * The fallback group, built the first time somebody opens a channel with no group.
      *
-     * <p>Es un pool que crece --`newCachedThreadPool`-- porque es lo que el JDK usa para el suyo: un
-     * group compartido por todo el programa no puede tener un tope elegido de antemano.
+     * <p>It is a pool that grows --`newCachedThreadPool`-- because that is what the JDK uses for its
+     * own: a group shared by the whole program cannot have a cap chosen in advance.
      */
     synchronized AsynchronousChannelGroup defaultGroup() {
         if (this.fallback == null) {
@@ -81,7 +82,7 @@ final class KajiAsyncChannelProvider extends AsynchronousChannelProvider {
 
     private AsynchronousChannelGroup fallback;
 
-    /** El group que se le pidio, o el de fallback si no se le pidio ninguno. */
+    /** The group it was given, or the fallback one when it was given none. */
     private AsynchronousChannelGroup groupOf(AsynchronousChannelGroup group) {
         return group == null ? defaultGroup() : group;
     }

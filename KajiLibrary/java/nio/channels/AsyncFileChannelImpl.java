@@ -5,27 +5,28 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 
-// Un `AsynchronousFileChannel` sobre el `FileChannel` de esta biblioteca y un pool de hilos.
+// An `AsynchronousFileChannel` over this library's `FileChannel` and a thread pool.
 //
 // ===============================================================================================
-// QUE COMPRA LO ASINCRONICO ACA, Y QUE NO
+// WHAT ASYNCHRONY BUYS HERE, AND WHAT IT DOES NOT
 // ===============================================================================================
 //
-// **Compra** lo que la API promete de verdad: pedir una lectura no bloquea al que la pide, se pueden
-// tener muchas en vuelo, y el resultado llega por un `Future` o por un manejador. Eso alcanza para
-// lo que uno elige esta API: no atar un hilo por operacion.
+// **It buys** what the API really promises: asking for a read does not block the asker, many can be
+// in flight, and the result arrives through a `Future` or a handler. That is enough for what one
+// chooses this API for: not tying up a thread per operation.
 //
-// **No compra** velocidad. Abajo no hay lectura asincronica del sistema: hay un `FileChannel`
-// bloqueante corriendo en otro hilo, y ese `FileChannel` --como explica su cabecera-- lee el archivo
-// entero en cada operacion. Ocho lecturas en vuelo son ocho hilos leyendo ocho veces el archivo.
-// El JDK hace lo mismo --un pool sobre lecturas bloqueantes-- en las plataformas sin `aio`, asi que
-// la forma es la suya; lo que cambia es el costo de la operacion de abajo, y ese esta documentado
-// donde corresponde.
+// **It does not buy** speed. Underneath there is no asynchronous read from the system: there is a
+// blocking `FileChannel` running on another thread, and that `FileChannel` --as its own header
+// explains-- reads the whole file on every operation. Eight reads in flight are eight threads
+// reading the file eight times. The JDK does the same --a pool over blocking reads-- on the
+// platforms with no `aio`, so the shape is its own; what changes is the cost of the operation
+// underneath, and that is documented where it belongs.
 //
-// **La cancelacion es la del JDK en esas mismas plataformas**: `Future.cancel(true)` interrumpe al
-// hilo que esta en la operacion. Si la operacion ya empezo a escribir, cancelarla no la deshace.
+// **Cancellation is the JDK's on those same platforms**: `Future.cancel(true)` interrupts the thread
+// that is in the operation. If the operation has already started writing, cancelling it does not
+// undo it.
 //
-// De paquete a proposito: se llega por `AsynchronousFileChannel.open`.
+// Package-private on purpose: it is reached through `AsynchronousFileChannel.open`.
 final class AsyncFileChannelImpl extends AsynchronousFileChannel {
 
     private final KajiFileChannel channel;
@@ -56,29 +57,29 @@ final class AsyncFileChannelImpl extends AsynchronousFileChannel {
     @Override
     public <A> void read(ByteBuffer dst, long position, A attachment,
             CompletionHandler<Integer, ? super A> handler) {
-        comprobar(dst, position);
-        AsyncTask.notifying(this.group.pool(), new Leer(this.channel, dst, position), attachment,
+        check(dst, position);
+        AsyncTask.notifying(this.group.pool(), new Read(this.channel, dst, position), attachment,
                 handler);
     }
 
     @Override
     public Future<Integer> read(ByteBuffer dst, long position) {
-        comprobar(dst, position);
-        return AsyncTask.future(this.group.pool(), new Leer(this.channel, dst, position));
+        check(dst, position);
+        return AsyncTask.future(this.group.pool(), new Read(this.channel, dst, position));
     }
 
     @Override
     public <A> void write(ByteBuffer src, long position, A attachment,
             CompletionHandler<Integer, ? super A> handler) {
-        comprobar(src, position);
-        AsyncTask.notifying(this.group.pool(), new Escribir(this.channel, src, position), attachment,
+        check(src, position);
+        AsyncTask.notifying(this.group.pool(), new Write(this.channel, src, position), attachment,
                 handler);
     }
 
     @Override
     public Future<Integer> write(ByteBuffer src, long position) {
-        comprobar(src, position);
-        return AsyncTask.future(this.group.pool(), new Escribir(this.channel, src, position));
+        check(src, position);
+        return AsyncTask.future(this.group.pool(), new Write(this.channel, src, position));
     }
 
     // ---- locks -----------------------------------------------------------------------------------
@@ -154,55 +155,56 @@ final class AsyncFileChannelImpl extends AsynchronousFileChannel {
     }
 
     /**
-     * Las comprobaciones que van en el hilo que llama y no en el pool.
+     * The checks that belong on the calling thread and not on the pool.
      *
-     * <p>Una posicion negativa es un error del programa y tiene que aparecer donde se lo cometio, no
-     * en un `Future` que alguien mire tres pasos despues.
+     * <p>A negative position is a mistake in the program and has to turn up where it was made, not
+     * in a `Future` somebody looks at three steps later.
      */
-    private void comprobar(ByteBuffer b, long position) {
+    private void check(ByteBuffer b, long position) {
         if (b == null) {
             throw new NullPointerException("buffer");
         }
         if (position < 0) {
             throw new IllegalArgumentException("Negative position");
         }
-        // El channel cerrado NO se comprueba aca: la API dice que esa falla llega por el `Future` o
-        // por `failed`, no por la llamada. Lo tira `FileChannel` adentro del pool, que es donde va.
+        // A closed channel is NOT checked here: the API says that failure arrives through the
+        // `Future` or through `failed`, not through the call. `FileChannel` throws it inside the
+        // pool, which is where it belongs.
     }
 
-    /** Una lectura, para correr en el pool. */
-    private static final class Leer implements Callable<Integer> {
+    /** A read, to run on the pool. */
+    private static final class Read implements Callable<Integer> {
 
         private final FileChannel channel;
-        private final ByteBuffer destino;
-        private final long posicion;
+        private final ByteBuffer dst;
+        private final long position;
 
-        Leer(FileChannel channel, ByteBuffer destino, long posicion) {
+        Read(FileChannel channel, ByteBuffer dst, long position) {
             this.channel = channel;
-            this.destino = destino;
-            this.posicion = posicion;
+            this.dst = dst;
+            this.position = position;
         }
 
         public Integer call() throws IOException {
-            return Integer.valueOf(this.channel.read(this.destino, this.posicion));
+            return Integer.valueOf(this.channel.read(this.dst, this.position));
         }
     }
 
-    /** Una escritura, para correr en el pool. */
-    private static final class Escribir implements Callable<Integer> {
+    /** A write, to run on the pool. */
+    private static final class Write implements Callable<Integer> {
 
         private final FileChannel channel;
-        private final ByteBuffer origen;
-        private final long posicion;
+        private final ByteBuffer src;
+        private final long position;
 
-        Escribir(FileChannel channel, ByteBuffer origen, long posicion) {
+        Write(FileChannel channel, ByteBuffer src, long position) {
             this.channel = channel;
-            this.origen = origen;
-            this.posicion = posicion;
+            this.src = src;
+            this.position = position;
         }
 
         public Integer call() throws IOException {
-            return Integer.valueOf(this.channel.write(this.origen, this.posicion));
+            return Integer.valueOf(this.channel.write(this.src, this.position));
         }
     }
 }
