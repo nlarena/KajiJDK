@@ -3,15 +3,15 @@ package javax.crypto;
 import java.security.GeneralSecurityException;
 
 /**
- * El relleno del bloque descifrado no es el que tendria que ser.
+ * The padding of the decrypted block is not what it should be.
  *
- * <p>Casi siempre significa que la clave esta mal. Un cifrado por bloques descifra cualquier cosa
- * --la operacion no puede fallar-- y lo que sale con la clave equivocada es ruido; el unico lugar
- * donde se nota es el relleno del final, que no cierra.
+ * <p>It nearly always means the key is wrong. A block cipher decrypts anything --the operation
+ * cannot fail-- and what comes out with the wrong key is noise; the only place it shows is the
+ * padding at the end, which does not close.
  *
- * <p>Por eso hay que tener cuidado con esta excepcion: contestarle distinto al que manda datos
- * segun si el relleno cerro o no es la fuga por la que se descifra un mensaje entero sin la clave.
- * Quien la atrapa deberia dar siempre el mismo error hacia afuera.
+ * <p>That is why this exception has to be handled with care: answering whoever sends the data
+ * differently depending on whether the padding closed is the leak through which a whole message is
+ * decrypted without the key. Whoever catches it should always give the same error outwards.
  *
  * @since 1.4
  */
@@ -19,15 +19,15 @@ public class BadPaddingException extends GeneralSecurityException {
 
     private static final long serialVersionUID = 1L;
 
-    /** Una sin mensaje. */
+    /** One with no message. */
     public BadPaddingException() {
         super();
     }
 
     /**
-     * Una con mensaje.
+     * One with a message.
      *
-     * @param msg que paso
+     * @param msg what happened
      */
     public BadPaddingException(String msg) {
         super(msg);

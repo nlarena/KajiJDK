@@ -8,103 +8,103 @@ import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que un proveedor tiene que escribir para ofrecer un mecanismo de encapsulacion de claves.
+ * What a provider has to write in order to offer a key encapsulation mechanism.
  *
- * <h2>Por que dos objetos y no dos metodos</h2>
+ * <h2>Why two objects and not two methods</h2>
  *
- * <p>Porque cada lado usa una clave distinta y hace la comprobacion una sola vez. Armar el
- * encapsulador valida la clave publica; despues se puede encapsular muchas veces sin volver a
- * validar nada. Lo mismo del otro lado con la privada.
+ * <p>Because each side uses a different key and does the checking once. Building the encapsulator
+ * validates the public key; after that it can encapsulate many times without validating anything
+ * again. The same on the other side with the private one.
  *
- * <p>Ademas los dos objetos saben los tamanos --{@code secretSize} y
- * {@code encapsulationSize}-- antes de hacer nada, que es lo que permite reservar memoria y armar
- * protocolos de tamano fijo.
+ * <p>The two objects also know the sizes --{@code secretSize} and {@code encapsulationSize}--
+ * before doing anything, which is what allows memory to be reserved and fixed-size protocols to be
+ * built.
  *
  * @since 21
  */
 public interface KEMSpi {
 
     /**
-     * Arma un encapsulador para esa clave publica.
+     * Builds an encapsulator for that public key.
      *
-     * @param publicKey la clave publica del otro
-     * @param spec los parametros, o {@code null}
-     * @param secureRandom de donde sacar el azar, o {@code null}
-     * @return el encapsulador
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws InvalidKeyException si la clave no sirve
+     * @param publicKey the other one's public key
+     * @param spec the parameters, or {@code null}
+     * @param secureRandom where to take the randomness from, or {@code null}
+     * @return the encapsulator
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws InvalidKeyException if the key is no good
      */
     EncapsulatorSpi engineNewEncapsulator(PublicKey publicKey, AlgorithmParameterSpec spec,
             SecureRandom secureRandom)
             throws InvalidAlgorithmParameterException, InvalidKeyException;
 
     /**
-     * Arma un desencapsulador para esa clave privada.
+     * Builds a decapsulator for that private key.
      *
-     * @param privateKey la clave privada propia
-     * @param spec los parametros, o {@code null}
-     * @return el desencapsulador
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws InvalidKeyException si la clave no sirve
+     * @param privateKey one's own private key
+     * @param spec the parameters, or {@code null}
+     * @return the decapsulator
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws InvalidKeyException if the key is no good
      */
     DecapsulatorSpi engineNewDecapsulator(PrivateKey privateKey, AlgorithmParameterSpec spec)
             throws InvalidAlgorithmParameterException, InvalidKeyException;
 
-    /** El lado que genera el secreto. */
+    /** The side that generates the secret. */
     interface EncapsulatorSpi {
 
         /**
-         * Genera un secreto y su encapsulacion.
+         * Generates a secret and its encapsulation.
          *
-         * @param from desde que byte del secreto
-         * @param to hasta que byte del secreto
-         * @param algorithm para que algoritmo es la clave que sale
-         * @return el secreto y la encapsulacion
+         * @param from from which byte of the secret
+         * @param to up to which byte of the secret
+         * @param algorithm which algorithm the resulting key is for
+         * @return the secret and the encapsulation
          */
         KEM.Encapsulated engineEncapsulate(int from, int to, String algorithm);
 
         /**
-         * Cuanto mide el secreto.
+         * How large the secret is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         int engineSecretSize();
 
         /**
-         * Cuanto mide la encapsulacion.
+         * How large the encapsulation is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         int engineEncapsulationSize();
     }
 
-    /** El lado que recupera el secreto. */
+    /** The side that recovers the secret. */
     interface DecapsulatorSpi {
 
         /**
-         * Recupera el secreto de una encapsulacion.
+         * Recovers the secret from an encapsulation.
          *
-         * @param encapsulation la encapsulacion
-         * @param from desde que byte del secreto
-         * @param to hasta que byte del secreto
-         * @param algorithm para que algoritmo es la clave que sale
-         * @return la clave
-         * @throws DecapsulateException si no se pudo recuperar
+         * @param encapsulation the encapsulation
+         * @param from from which byte of the secret
+         * @param to up to which byte of the secret
+         * @param algorithm which algorithm the resulting key is for
+         * @return the key
+         * @throws DecapsulateException if it could not be recovered
          */
         SecretKey engineDecapsulate(byte[] encapsulation, int from, int to, String algorithm)
                 throws DecapsulateException;
 
         /**
-         * Cuanto mide el secreto.
+         * How large the secret is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         int engineSecretSize();
 
         /**
-         * Cuanto mide la encapsulacion.
+         * How large the encapsulation is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         int engineEncapsulationSize();
     }

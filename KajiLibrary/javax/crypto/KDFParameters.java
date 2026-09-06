@@ -1,19 +1,20 @@
 package javax.crypto;
 
 /**
- * Los parametros con que se arma una funcion de derivacion de claves.
+ * The parameters a key derivation function is built with.
  *
- * <h2>Por que vacia</h2>
+ * <h2>Why it is empty</h2>
  *
- * <p>Marca, no describe. Cada funcion de derivacion tiene sus propios parametros de construccion y
- * no hay nada que las cinco tengan en comun, asi que la interfaz no puede pedir ningun metodo. Lo
- * que aporta es el tipo: {@link KDF#getInstance(String, KDFParameters)} no acepta cualquier objeto.
+ * <p>It marks, it does not describe. Every derivation function has its own construction parameters
+ * and there is nothing all five have in common, so the interface cannot demand any method. What it
+ * contributes is the type: {@link KDF#getInstance(String, KDFParameters)} does not accept just any
+ * object.
  *
- * <h2>Que no son</h2>
+ * <h2>What they are not</h2>
  *
- * <p>Estos son los parametros de la funcion, no los de una derivacion. Los de cada derivacion van en
- * {@link KDF#deriveKey}, y son un {@link java.security.spec.AlgorithmParameterSpec}. La diferencia
- * importa: la funcion se arma una vez y se usa muchas.
+ * <p>These are the function's parameters, not a derivation's. Each derivation's go in
+ * {@link KDF#deriveKey}, and they are an {@link java.security.spec.AlgorithmParameterSpec}. The
+ * difference matters: the function is built once and used many times.
  *
  * @since 24
  */

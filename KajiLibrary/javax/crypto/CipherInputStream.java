@@ -5,51 +5,51 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Descifra --o cifra-- lo que se lee de otro flujo.
+ * Decrypts --or encrypts-- whatever is read from another stream.
  *
- * <h2>Por que el desfasaje</h2>
+ * <h2>Why the lag</h2>
  *
- * <p>Un cifrado por bloques no entrega nada hasta tener un bloque entero, asi que este flujo tiene
- * que leer de mas para poder entregar algo. Lee de a 512 bytes, se los da al cifrador, y guarda lo
- * que salga hasta que alguien lo pida. Es la razon de que {@link #available} casi nunca coincida con
- * lo que queda en el flujo de abajo.
+ * <p>A block cipher hands nothing over until it has a whole block, so this stream has to read ahead
+ * in order to hand anything over. It reads 512 bytes at a time, gives them to the cipher, and keeps
+ * whatever comes out until somebody asks for it. It is the reason {@link #available} hardly ever
+ * matches what is left in the stream underneath.
  *
- * <h2>Cerrar no es optativo</h2>
+ * <h2>Closing is not optional</h2>
  *
- * <p>{@link #close} es lo que llama a {@code doFinal}, y {@code doFinal} es donde se comprueba el
- * relleno --y, en un cifrado autenticado, la etiqueta--. Un programa que lee hasta el final y no
- * cierra no se entera de que el mensaje estaba alterado.
+ * <p>{@link #close} is what calls {@code doFinal}, and {@code doFinal} is where the padding --and,
+ * in an authenticated cipher, the tag-- is checked. A program that reads to the end and does not
+ * close never learns that the message was altered.
  *
- * <p>Y hay algo peor, que es propio de esta clase: si {@code doFinal} falla, {@link #close} se come
- * la excepcion. Es lo que hace el JDK y no se puede cambiar sin romper a quien dependa de ello, pero
- * significa que para datos autenticados esta clase no sirve: hay que usar {@link Cipher}
- * directamente y mirar lo que tira.
+ * <p>And there is something worse, particular to this class: if {@code doFinal} fails,
+ * {@link #close} swallows the exception. It is what the JDK does and it cannot be changed without
+ * breaking whoever depends on it, but it means this class is no good for authenticated data: one has
+ * to use {@link Cipher} directly and look at what it throws.
  *
- * <h2>Sin marcas</h2>
+ * <h2>No marks</h2>
  *
- * <p>{@link #markSupported} da falso siempre. Volver atras obligaria a rebobinar el estado del
- * cifrador, que en un modo encadenado depende de todo lo que paso antes.
+ * <p>{@link #markSupported} always answers false. Going back would mean rewinding the cipher's
+ * state, which in a chained mode depends on everything that happened before.
  *
  * @since 1.4
  */
 public class CipherInputStream extends FilterInputStream {
 
-    private static final int TAM = 512;
+    private static final int SIZE = 512;
 
     private final Cipher cipher;
-    private final byte[] entrada = new byte[TAM];
+    private final byte[] input = new byte[SIZE];
 
-    private byte[] salida;
-    private int desde;
-    private int hasta;
-    private boolean terminado;
-    private boolean cerrado;
+    private byte[] output;
+    private int from;
+    private int to;
+    private boolean finished;
+    private boolean closed;
 
     /**
-     * Uno que pasa lo leido por ese cifrador.
+     * One that puts what is read through that cipher.
      *
-     * @param is de donde leer
-     * @param c el cifrador, ya configurado
+     * @param is where to read from
+     * @param c the cipher, already configured
      */
     public CipherInputStream(InputStream is, Cipher c) {
         super(is);
@@ -57,39 +57,39 @@ public class CipherInputStream extends FilterInputStream {
     }
 
     /**
-     * Uno que no cifra nada.
+     * One that encrypts nothing.
      *
-     * <p>Es protegido porque solo tiene sentido para una subclase que quiera el comportamiento de
-     * flujo sin la transformacion.
+     * <p>It is protected because it only makes sense for a subclass that wants the stream behaviour
+     * without the transformation.
      *
-     * @param is de donde leer
+     * @param is where to read from
      */
     protected CipherInputStream(InputStream is) {
         this(is, new NullCipher());
     }
 
     /**
-     * El byte siguiente.
+     * The next byte.
      *
-     * @return el byte, entre 0 y 255, o -1 si se termino
-     * @throws IOException si falla la lectura
+     * @return the byte, between 0 and 255, or -1 if it ended
+     * @throws IOException if the read fails
      */
     @Override
     public int read() throws IOException {
-        if (this.desde >= this.hasta && !llenar()) {
+        if (this.from >= this.to && !fill()) {
             return -1;
         }
-        final int b = this.salida[this.desde] & 0xff;
-        this.desde++;
+        final int b = this.output[this.from] & 0xff;
+        this.from++;
         return b;
     }
 
     /**
-     * Llena el arreglo.
+     * Fills the array.
      *
-     * @param b donde escribir
-     * @return cuantos bytes se leyeron, o -1 si se termino
-     * @throws IOException si falla la lectura
+     * @param b where to write
+     * @return how many bytes were read, or -1 if it ended
+     * @throws IOException if the read fails
      */
     @Override
     public int read(byte[] b) throws IOException {
@@ -97,122 +97,122 @@ public class CipherInputStream extends FilterInputStream {
     }
 
     /**
-     * Llena parte del arreglo.
+     * Fills part of the array.
      *
-     * @param b donde escribir
-     * @param off desde donde
-     * @param len cuantos como mucho
-     * @return cuantos bytes se leyeron, o -1 si se termino
-     * @throws IOException si falla la lectura
+     * @param b where to write
+     * @param off from where
+     * @param len how many at most
+     * @return how many bytes were read, or -1 if it ended
+     * @throws IOException if the read fails
      */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
-        if (this.desde >= this.hasta && !llenar()) {
+        if (this.from >= this.to && !fill()) {
             return -1;
         }
         if (len <= 0) {
             return 0;
         }
-        final int cuantos = Math.min(len, this.hasta - this.desde);
-        System.arraycopy(this.salida, this.desde, b, off, cuantos);
-        this.desde += cuantos;
-        return cuantos;
+        final int howMany = Math.min(len, this.to - this.from);
+        System.arraycopy(this.output, this.from, b, off, howMany);
+        this.from += howMany;
+        return howMany;
     }
 
     /**
-     * Descarta bytes.
+     * Discards bytes.
      *
-     * <p>Solo salta lo que ya esta descifrado y esperando: no tiene sentido leer y descifrar de mas
-     * para tirarlo.
+     * <p>It only skips what is already decrypted and waiting: there is no sense in reading and
+     * decrypting more just to throw it away.
      *
-     * @param n cuantos
-     * @return cuantos se saltaron
-     * @throws IOException si falla
+     * @param n how many
+     * @return how many were skipped
+     * @throws IOException if it fails
      */
     @Override
     public long skip(long n) throws IOException {
-        final long disponible = this.hasta - this.desde;
-        final long cuantos = n > disponible ? disponible : n;
-        if (cuantos <= 0) {
+        final long available = this.to - this.from;
+        final long howMany = n > available ? available : n;
+        if (howMany <= 0) {
             return 0;
         }
-        this.desde += (int) cuantos;
-        return cuantos;
+        this.from += (int) howMany;
+        return howMany;
     }
 
     /**
-     * Cuanto se puede leer sin bloquear.
+     * How much can be read without blocking.
      *
-     * @return lo que ya esta descifrado y esperando
-     * @throws IOException si falla
+     * @return what is already decrypted and waiting
+     * @throws IOException if it fails
      */
     @Override
     public int available() throws IOException {
-        return this.hasta - this.desde;
+        return this.to - this.from;
     }
 
     /**
-     * Cierra el flujo de abajo y termina el cifrador.
+     * Closes the stream underneath and finishes the cipher.
      *
-     * <p>Lo que {@code doFinal} tire se descarta: ver la nota de la clase.
+     * <p>Whatever {@code doFinal} throws is discarded: see the class note.
      *
-     * @throws IOException si falla el cierre del flujo de abajo
+     * @throws IOException if closing the stream underneath fails
      */
     @Override
     public void close() throws IOException {
-        if (this.cerrado) {
+        if (this.closed) {
             return;
         }
-        this.cerrado = true;
+        this.closed = true;
         this.in.close();
         try {
             this.cipher.doFinal();
         } catch (BadPaddingException e) {
-            // El JDK se la come, y cambiarlo romperia a quien dependa de eso.
+            // The JDK swallows it, and changing that would break whoever depends on it.
         } catch (IllegalBlockSizeException e) {
-            // Idem.
+            // Likewise.
         }
-        this.desde = 0;
-        this.hasta = 0;
+        this.from = 0;
+        this.to = 0;
     }
 
     /**
-     * Si se puede volver atras.
+     * Whether one can go back.
      *
-     * @return falso: rebobinar el cifrador no se puede
+     * @return false: rewinding the cipher is not possible
      */
     @Override
     public boolean markSupported() {
         return false;
     }
 
-    /** Lee del flujo de abajo y pasa lo leido por el cifrador; falso si ya no queda nada. */
-    private boolean llenar() throws IOException {
+    /** Reads from the stream underneath and puts it through the cipher; false when nothing is left. */
+    private boolean fill() throws IOException {
         while (true) {
-            if (this.terminado) {
+            if (this.finished) {
                 return false;
             }
-            final int leidos = this.in.read(this.entrada, 0, TAM);
-            byte[] salieron;
-            if (leidos == -1) {
-                this.terminado = true;
+            final int read = this.in.read(this.input, 0, SIZE);
+            byte[] came;
+            if (read == -1) {
+                this.finished = true;
                 try {
-                    salieron = this.cipher.doFinal();
+                    came = this.cipher.doFinal();
                 } catch (BadPaddingException e) {
-                    salieron = null;
+                    came = null;
                 } catch (IllegalBlockSizeException e) {
-                    salieron = null;
+                    came = null;
                 }
             } else {
-                salieron = this.cipher.update(this.entrada, 0, leidos);
+                came = this.cipher.update(this.input, 0, read);
             }
-            if (salieron != null && salieron.length > 0) {
-                this.salida = salieron;
-                this.desde = 0;
-                this.hasta = salieron.length;
+            if (came != null && came.length > 0) {
+                this.output = came;
+                this.from = 0;
+                this.to = came.length;
                 return true;
             }
-            if (this.terminado) {
+            if (this.finished) {
                 return false;
             }
         }

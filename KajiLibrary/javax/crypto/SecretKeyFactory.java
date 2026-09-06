@@ -9,26 +9,25 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 
 /**
- * Convierte entre las dos formas de una clave simetrica.
+ * Converts between the two shapes of a symmetric key.
  *
- * <h2>Las dos formas</h2>
+ * <h2>The two shapes</h2>
  *
- * <p>La opaca --{@link SecretKey}-- puede vivir adentro de un dispositivo y no dejarse mirar. La
- * transparente --{@link KeySpec}-- es material que el programa arma o lee de un archivo. Esta
- * fabrica es el unico camino entre las dos.
+ * <p>The opaque one --{@link SecretKey}-- may live inside a device and refuse to be looked at. The
+ * transparent one --{@link KeySpec}-- is material the program assembles or reads from a file. This
+ * factory is the only road between the two.
  *
- * <h2>El uso mas comun</h2>
+ * <h2>The commonest use</h2>
  *
- * <p>Derivar una clave de una contrasena: entra un
- * {@link javax.crypto.spec.PBEKeySpec} --contrasena, sal, cantidad de vueltas-- y sale una
- * {@link SecretKey}. La cantidad de vueltas es lo que hace que probar contrasenas cueste caro, y por
- * eso no se elige a ojo.
+ * <p>Deriving a key from a password: a {@link javax.crypto.spec.PBEKeySpec} goes in --password,
+ * salt, iteration count-- and a {@link SecretKey} comes out. The iteration count is what makes
+ * trying passwords expensive, and that is why it is not chosen by eye.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece fabricas de claves
- * simetricas, asi que {@link #getInstance} tira {@link NoSuchAlgorithmException} para cualquier
- * nombre. Registrar un proveedor propio lo hace andar.
+ * <p>The machinery works in full, but no registered provider offers symmetric key factories, so
+ * {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. Registering a provider
+ * of one's own makes it work.
  *
  * @since 1.4
  */
@@ -39,11 +38,11 @@ public class SecretKeyFactory {
     private final String algorithm;
 
     /**
-     * Una alrededor de esa implementacion.
+     * One around that implementation.
      *
-     * @param keyFacSpi la implementacion
-     * @param provider de quien es
-     * @param algorithm con que nombre se la pidio
+     * @param keyFacSpi the implementation
+     * @param provider whose it is
+     * @param algorithm the name it was asked for by
      */
     protected SecretKeyFactory(SecretKeyFactorySpi keyFacSpi, Provider provider,
             String algorithm) {
@@ -53,12 +52,12 @@ public class SecretKeyFactory {
     }
 
     /**
-     * Uno para ese algoritmo.
+     * One for that algorithm.
      *
-     * @param algorithm el algoritmo
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param algorithm the algorithm
+     * @return the engine
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public static final SecretKeyFactory getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -68,21 +67,21 @@ public class SecretKeyFactory {
         for (int i = 0; i < provs.length; i++) {
             final Provider.Service s = provs[i].getService("SecretKeyFactory", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " SecretKeyFactory not available");
     }
 
     /**
-     * Uno de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el algoritmo
-     * @param provider el nombre del proveedor
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param algorithm the algorithm
+     * @param provider the provider's name
+     * @return the engine
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public static final SecretKeyFactory getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -97,13 +96,13 @@ public class SecretKeyFactory {
     }
 
     /**
-     * Uno de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el algoritmo
-     * @param provider el proveedor
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws IllegalArgumentException si el proveedor es {@code null}
+     * @param algorithm the algorithm
+     * @param provider the provider
+     * @return the engine
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws IllegalArgumentException if the provider is {@code null}
      */
     public static final SecretKeyFactory getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -118,45 +117,45 @@ public class SecretKeyFactory {
             throw new NoSuchAlgorithmException(
                     "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el proveedor
+     * @return the provider
      */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Para que algoritmo fabrica claves.
+     * Which algorithm it makes keys for.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Arma una clave a partir de su descripcion.
+     * Assembles a key out of its description.
      *
-     * @param keySpec la descripcion
-     * @return la clave
-     * @throws InvalidKeySpecException si la descripcion no sirve para este algoritmo
+     * @param keySpec the description
+     * @return the key
+     * @throws InvalidKeySpecException if the description is no good for this algorithm
      */
     public final SecretKey generateSecret(KeySpec keySpec) throws InvalidKeySpecException {
         return this.spi.engineGenerateSecret(keySpec);
     }
 
     /**
-     * Describe una clave.
+     * Describes a key.
      *
-     * @param key la clave
-     * @param keySpec que descripcion se quiere
-     * @return la descripcion
-     * @throws InvalidKeySpecException si la clave no se puede describir asi
+     * @param key the key
+     * @param keySpec which description is wanted
+     * @return the description
+     * @throws InvalidKeySpecException if the key cannot be described that way
      */
     public final KeySpec getKeySpec(SecretKey key, Class<?> keySpec)
             throws InvalidKeySpecException {
@@ -164,17 +163,17 @@ public class SecretKeyFactory {
     }
 
     /**
-     * Convierte una clave de otro proveedor a una de este.
+     * Converts a key from another provider into one of this one's.
      *
-     * @param key la clave
-     * @return la clave equivalente de este proveedor
-     * @throws InvalidKeyException si no se la puede convertir
+     * @param key the key
+     * @return this provider's equivalent key
+     * @throws InvalidKeyException if it cannot be converted
      */
     public final SecretKey translateKey(SecretKey key) throws InvalidKeyException {
         return this.spi.engineTranslateKey(key);
     }
 
-    private static SecretKeyFactory armar(Provider.Service s, String algorithm)
+    private static SecretKeyFactory build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         final Object o = s.newInstance(null);
         if (!(o instanceof SecretKeyFactorySpi)) {

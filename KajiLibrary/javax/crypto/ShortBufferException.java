@@ -3,11 +3,11 @@ package javax.crypto;
 import java.security.GeneralSecurityException;
 
 /**
- * El arreglo que se dio para la salida no alcanza.
+ * The array given for the output is not big enough.
  *
- * <p>Las versiones que escriben en un arreglo dado existen para no reservar memoria en cada paso,
- * que en un flujo de datos importa. El precio es que hay que preguntar antes cuanto va a salir, con
- * {@link Cipher#getOutputSize}; esta excepcion es lo que pasa cuando no se pregunto.
+ * <p>The versions that write into a given array exist so as not to allocate on every step, which
+ * matters in a stream of data. The price is having to ask beforehand how much will come out, with
+ * {@link Cipher#getOutputSize}; this exception is what happens when nobody asked.
  *
  * @since 1.4
  */
@@ -15,15 +15,15 @@ public class ShortBufferException extends GeneralSecurityException {
 
     private static final long serialVersionUID = 1L;
 
-    /** Una sin mensaje. */
+    /** One with no message. */
     public ShortBufferException() {
         super();
     }
 
     /**
-     * Una con mensaje.
+     * One with a message.
      *
-     * @param msg que paso
+     * @param msg what happened
      */
     public ShortBufferException(String msg) {
         super(msg);

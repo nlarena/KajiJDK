@@ -5,61 +5,61 @@ import java.security.NoSuchAlgorithmException;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que un proveedor tiene que escribir para ofrecer una funcion de derivacion de claves.
+ * What a provider has to write in order to offer a key derivation function.
  *
- * <h2>Para que se deriva</h2>
+ * <h2>What deriving is for</h2>
  *
- * <p>Porque lo que se tiene casi nunca sirve como clave tal cual. El secreto que sale de un acuerdo
- * no tiene distribucion uniforme; una contrasena tiene poquisima entropia; y de un solo secreto
- * suelen hacer falta varias claves distintas --una para cada direccion, otra para el MAC--. Derivar
- * es lo que convierte una cosa en la otra sin que las claves derivadas se puedan relacionar entre
- * si.
+ * <p>Because what one has is nearly never usable as a key as it is. The secret that comes out of an
+ * agreement is not uniformly distributed; a password has very little entropy; and from a single
+ * secret several different keys are usually needed --one per direction, another for the MAC.
+ * Deriving is what turns one thing into the other without the derived keys being relatable to each
+ * other.
  *
- * <h2>Por que el constructor lleva parametros</h2>
+ * <h2>Why the constructor takes parameters</h2>
  *
- * <p>Porque los de la funcion se fijan una vez y valen para todas las derivaciones; los de cada
- * derivacion van en {@link #engineDeriveKey}. Separarlos es lo que permite armar la funcion una vez
- * y usarla muchas.
+ * <p>Because the function's are fixed once and hold for every derivation; each derivation's go in
+ * {@link #engineDeriveKey}. Separating them is what allows the function to be built once and used
+ * many times.
  *
  * @since 24
  */
 public abstract class KDFSpi {
 
     /**
-     * Uno con esos parametros.
+     * One with those parameters.
      *
-     * @param kdfParameters los parametros de la funcion, o {@code null}
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param kdfParameters the function's parameters, or {@code null}
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     protected KDFSpi(KDFParameters kdfParameters) throws InvalidAlgorithmParameterException {
     }
 
     /**
-     * Los parametros con que se lo armo.
+     * The parameters it was built with.
      *
-     * @return los parametros, o {@code null}
+     * @return the parameters, or {@code null}
      */
     protected abstract KDFParameters engineGetParameters();
 
     /**
-     * Deriva una clave.
+     * Derives a key.
      *
-     * @param alg para que algoritmo es la clave
-     * @param kdfParameterSpec los parametros de esta derivacion
-     * @return la clave
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws NoSuchAlgorithmException si no hay como armar una clave de ese algoritmo
+     * @param alg which algorithm the key is for
+     * @param kdfParameterSpec this derivation's parameters
+     * @return the key
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws NoSuchAlgorithmException if there is no way to assemble a key of that algorithm
      */
     protected abstract SecretKey engineDeriveKey(String alg,
             AlgorithmParameterSpec kdfParameterSpec)
             throws InvalidAlgorithmParameterException, NoSuchAlgorithmException;
 
     /**
-     * Deriva bytes.
+     * Derives bytes.
      *
-     * @param kdfParameterSpec los parametros de esta derivacion
-     * @return los bytes
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param kdfParameterSpec this derivation's parameters
+     * @return the bytes
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     protected abstract byte[] engineDeriveData(AlgorithmParameterSpec kdfParameterSpec)
             throws InvalidAlgorithmParameterException;

@@ -4,22 +4,23 @@ import java.security.Key;
 import javax.security.auth.Destroyable;
 
 /**
- * Una clave simetrica: la misma sirve para cifrar y para descifrar.
+ * A symmetric key: the same one serves to encrypt and to decrypt.
  *
- * <p>No agrega ningun metodo, y eso es exactamente lo que dice. Un `SecretKey` es un {@link Key}
- * --tiene algoritmo, formato y bytes-- que ademas se puede destruir. Lo que aporta como tipo propio
- * es la distincion: un metodo que pide `SecretKey` no acepta una clave publica, y esa comprobacion
- * la hace el compilador en vez de fallar en ejecucion.
+ * <p>It adds no method, and that is exactly what it says. A `SecretKey` is a {@link Key} --it has an
+ * algorithm, a format and bytes-- that can also be destroyed. What it contributes as a type of its
+ * own is the distinction: a method asking for a `SecretKey` does not accept a public key, and that
+ * check is made by the compiler instead of failing at run time.
  *
- * <p>Que extienda {@link Destroyable} no es decoracion: el material de una clave simetrica es un
- * secreto que conviene borrar de la memoria cuando no se usa mas, y sin ese supertipo no habria
- * forma de pedirlo por contrato.
+ * <p>That it extends {@link Destroyable} is not decoration: the material of a symmetric key is a
+ * secret worth wiping from memory once it is no longer used, and without that supertype there would
+ * be no way to ask for it by contract.
  */
 public interface SecretKey extends Key, Destroyable {
 
     /**
-     * @deprecated Un `serialVersionUID` en una interfaz no hace nada: solo cuenta el de la clase
-     *     que implementa. Esta declarado porque el JDK lo declara y sacarlo cambiaria la superficie.
+     * @deprecated A `serialVersionUID` in an interface does nothing: only the implementing class's
+     *     counts. It is declared because the JDK declares it, and removing it would change the
+     *     surface.
      */
     @Deprecated
     public static final long serialVersionUID = -4795878709595146952L;

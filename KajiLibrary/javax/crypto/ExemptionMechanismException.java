@@ -3,9 +3,9 @@ package javax.crypto;
 import java.security.GeneralSecurityException;
 
 /**
- * Algo salio mal en el mecanismo de exencion.
+ * Something went wrong in the exemption mechanism.
  *
- * <p>Ver {@link ExemptionMechanism} para que es un mecanismo de exencion.
+ * <p>See {@link ExemptionMechanism} for what an exemption mechanism is.
  *
  * @since 1.4
  */
@@ -13,15 +13,15 @@ public class ExemptionMechanismException extends GeneralSecurityException {
 
     private static final long serialVersionUID = 1L;
 
-    /** Una sin mensaje. */
+    /** One with no message. */
     public ExemptionMechanismException() {
         super();
     }
 
     /**
-     * Una con mensaje.
+     * One with a message.
      *
-     * @param msg que paso
+     * @param msg what happened
      */
     public ExemptionMechanismException(String msg) {
         super(msg);

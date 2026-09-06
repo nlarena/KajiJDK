@@ -8,32 +8,32 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Deriva claves de otro material.
+ * Derives keys from other material.
  *
- * <h2>Por que hay que derivar</h2>
+ * <h2>Why deriving is necessary</h2>
  *
- * <p>Porque lo que se tiene casi nunca sirve como clave tal cual. El secreto que sale de un acuerdo
- * no tiene distribucion uniforme --hay valores mas probables que otros--; una contrasena tiene
- * poquisima entropia; y de un solo secreto suelen hacer falta varias claves distintas, una para cada
- * direccion y otra para autenticar. Derivar convierte una cosa en la otra, y ademas hace que las
- * claves derivadas no se puedan relacionar entre si: tener una no ayuda a encontrar las demas.
+ * <p>Because what one has is nearly never usable as a key as it is. The secret that comes out of an
+ * agreement is not uniformly distributed --some values are likelier than others--; a password has
+ * very little entropy; and from a single secret several different keys are usually needed, one per
+ * direction and another to authenticate. Deriving turns one thing into the other, and it also makes
+ * the derived keys unrelatable to each other: having one does not help in finding the rest.
  *
- * <h2>Los dos juegos de parametros</h2>
+ * <h2>The two sets of parameters</h2>
  *
- * <p>Los de la funcion van en {@link #getInstance(String, KDFParameters)} y se fijan una vez; los de
- * cada derivacion van en {@link #deriveKey} y cambian en cada llamada. Separarlos es lo que permite
- * armar la funcion una vez y derivar muchas claves distintas de ella.
+ * <p>The function's go in {@link #getInstance(String, KDFParameters)} and are fixed once; each
+ * derivation's go in {@link #deriveKey} and change on every call. Separating them is what allows the
+ * function to be built once and many different keys derived from it.
  *
  * <h2>{@link #deriveData}</h2>
  *
- * <p>Devuelve bytes en vez de una clave, para lo que no es una clave: un vector de inicializacion,
- * una sal, un identificador. Sale del mismo lugar y con las mismas garantias.
+ * <p>It returns bytes instead of a key, for what is not a key: an initialization vector, a salt, an
+ * identifier. It comes from the same place and with the same guarantees.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece funciones de derivacion,
- * asi que {@link #getInstance} tira {@link NoSuchAlgorithmException} para cualquier nombre.
- * Registrar un proveedor propio lo hace andar.
+ * <p>The machinery works in full, but no registered provider offers derivation functions, so
+ * {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. Registering a provider
+ * of one's own makes it work.
  *
  * @since 24
  */
@@ -50,57 +50,57 @@ public final class KDF {
     }
 
     /**
-     * Con que nombre se la pidio.
+     * The name it was asked for by.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el nombre del proveedor
+     * @return the provider's name
      */
     public String getProviderName() {
         return this.provider.getName();
     }
 
     /**
-     * Los parametros con que se la armo.
+     * The parameters it was built with.
      *
-     * @return los parametros, o {@code null} si no se le dio ninguno
+     * @return the parameters, or {@code null} if it was given none
      */
     public KDFParameters getParameters() {
         return this.spi.engineGetParameters();
     }
 
     /**
-     * Una para ese algoritmo.
+     * One for that algorithm.
      *
-     * @param algorithm el algoritmo
-     * @return la funcion
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param algorithm the algorithm
+     * @return the function
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public static KDF getInstance(String algorithm) throws NoSuchAlgorithmException {
         try {
-            return conParametros(algorithm, null, null, null);
+            return withParameters(algorithm, null, null, null);
         } catch (InvalidAlgorithmParameterException e) {
-            // Sin parametros no hay parametros que rechazar.
+            // With no parameters there are no parameters to refuse.
             throw new NoSuchAlgorithmException(e.getMessage());
         }
     }
 
     /**
-     * Una de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el algoritmo
-     * @param provider el nombre del proveedor
-     * @return la funcion
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
+     * @param algorithm the algorithm
+     * @param provider the provider's name
+     * @return the function
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
      */
     public static KDF getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -112,12 +112,12 @@ public final class KDF {
     }
 
     /**
-     * Una de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el algoritmo
-     * @param provider el proveedor
-     * @return la funcion
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
+     * @param algorithm the algorithm
+     * @param provider the provider
+     * @return the function
+     * @throws NoSuchAlgorithmException if that provider does not have it
      */
     public static KDF getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -129,29 +129,29 @@ public final class KDF {
     }
 
     /**
-     * Una para ese algoritmo, con esos parametros.
+     * One for that algorithm, with those parameters.
      *
-     * @param algorithm el algoritmo
-     * @param kdfParameters los parametros de la funcion, o {@code null}
-     * @return la funcion
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param algorithm the algorithm
+     * @param kdfParameters the function's parameters, or {@code null}
+     * @return the function
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public static KDF getInstance(String algorithm, KDFParameters kdfParameters)
             throws NoSuchAlgorithmException, InvalidAlgorithmParameterException {
-        return conParametros(algorithm, kdfParameters, null, null);
+        return withParameters(algorithm, kdfParameters, null, null);
     }
 
     /**
-     * Una de ese proveedor, nombrado, con esos parametros.
+     * One from that provider, named, with those parameters.
      *
-     * @param algorithm el algoritmo
-     * @param kdfParameters los parametros de la funcion, o {@code null}
-     * @param provider el nombre del proveedor
-     * @return la funcion
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param algorithm the algorithm
+     * @param kdfParameters the function's parameters, or {@code null}
+     * @param provider the provider's name
+     * @return the function
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public static KDF getInstance(String algorithm, KDFParameters kdfParameters, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException,
@@ -167,32 +167,32 @@ public final class KDF {
     }
 
     /**
-     * Una de ese proveedor, con esos parametros.
+     * One from that provider, with those parameters.
      *
-     * @param algorithm el algoritmo
-     * @param kdfParameters los parametros de la funcion, o {@code null}
-     * @param provider el proveedor
-     * @return la funcion
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param algorithm the algorithm
+     * @param kdfParameters the function's parameters, or {@code null}
+     * @param provider the provider
+     * @return the function
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public static KDF getInstance(String algorithm, KDFParameters kdfParameters, Provider provider)
             throws NoSuchAlgorithmException, InvalidAlgorithmParameterException {
         if (provider == null) {
             throw new IllegalArgumentException("missing provider");
         }
-        return conParametros(algorithm, kdfParameters, provider, null);
+        return withParameters(algorithm, kdfParameters, provider, null);
     }
 
     /**
-     * Deriva una clave.
+     * Derives a key.
      *
-     * @param alg para que algoritmo es la clave
-     * @param derivationSpec los parametros de esta derivacion
-     * @return la clave
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws NoSuchAlgorithmException si no hay como armar una clave de ese algoritmo
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param alg which algorithm the key is for
+     * @param derivationSpec this derivation's parameters
+     * @return the key
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws NoSuchAlgorithmException if there is no way to assemble a key of that algorithm
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public SecretKey deriveKey(String alg, AlgorithmParameterSpec derivationSpec)
             throws InvalidAlgorithmParameterException, NoSuchAlgorithmException {
@@ -203,11 +203,11 @@ public final class KDF {
     }
 
     /**
-     * Deriva bytes.
+     * Derives bytes.
      *
-     * @param derivationSpec los parametros de esta derivacion
-     * @return los bytes
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param derivationSpec this derivation's parameters
+     * @return the bytes
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public byte[] deriveData(AlgorithmParameterSpec derivationSpec)
             throws InvalidAlgorithmParameterException {
@@ -215,19 +215,19 @@ public final class KDF {
     }
 
     /**
-     * Busca el servicio y arma la funcion.
+     * Looks the service up and builds the function.
      *
-     * <p>Los parametros de la funcion viajan como parametro de construccion del servicio, que es
-     * para lo que ese argumento existe en {@link Provider.Service#newInstance}.
+     * <p>The function's parameters travel as the service's construction parameter, which is what
+     * that argument of {@link Provider.Service#newInstance} exists for.
      */
-    private static KDF conParametros(String algorithm, KDFParameters params, Provider unico,
-            String noUsado)
+    private static KDF withParameters(String algorithm, KDFParameters params, Provider only,
+            String unused)
             throws NoSuchAlgorithmException, InvalidAlgorithmParameterException {
         if (algorithm == null) {
             throw new NullPointerException("null algorithm name");
         }
-        final Provider[] provs = unico == null
-                ? Security.getProviders() : new Provider[] {unico};
+        final Provider[] provs = only == null
+                ? Security.getProviders() : new Provider[] {only};
         for (int i = 0; i < provs.length; i++) {
             final Provider.Service s = provs[i].getService("KDF", algorithm);
             if (s != null) {

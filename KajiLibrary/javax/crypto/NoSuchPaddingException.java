@@ -3,11 +3,11 @@ package javax.crypto;
 import java.security.GeneralSecurityException;
 
 /**
- * Se pidio un relleno que el proveedor no tiene.
+ * A padding the provider does not have was asked for.
  *
- * <p>Va aparte de {@link java.security.NoSuchAlgorithmException} porque el nombre que se le pasa a
- * {@link Cipher#getInstance} lleva tres cosas --algoritmo, modo y relleno-- y saber cual de las tres
- * falto cambia el mensaje de error.
+ * <p>It is separate from {@link java.security.NoSuchAlgorithmException} because the name handed to
+ * {@link Cipher#getInstance} carries three things --algorithm, mode and padding-- and knowing which
+ * of the three was missing changes the error message.
  *
  * @since 1.4
  */
@@ -15,15 +15,15 @@ public class NoSuchPaddingException extends GeneralSecurityException {
 
     private static final long serialVersionUID = 1L;
 
-    /** Una sin mensaje. */
+    /** One with no message. */
     public NoSuchPaddingException() {
         super();
     }
 
     /**
-     * Una con mensaje.
+     * One with a message.
      *
-     * @param msg que paso
+     * @param msg what happened
      */
     public NoSuchPaddingException(String msg) {
         super(msg);

@@ -16,98 +16,97 @@ import java.security.cert.Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Cifra y descifra.
+ * Encrypts and decrypts.
  *
- * <h2>El nombre lleva tres cosas</h2>
+ * <h2>The name carries three things</h2>
  *
- * <p>{@code "AES/CBC/PKCS5Padding"} no es un algoritmo sino tres decisiones. El algoritmo dice como
- * se transforma un bloque; el modo dice como se encadenan los bloques entre si; el relleno dice como
- * se completa el ultimo. Las tres son necesarias y ninguna es un detalle: el mismo AES en modo ECB
- * deja ver los patrones del texto original, y en CBC no.
+ * <p>{@code "AES/CBC/PKCS5Padding"} is not an algorithm but three decisions. The algorithm says how
+ * a block is transformed; the mode says how the blocks are chained to each other; the padding says
+ * how the last one is completed. All three are necessary and none is a detail: the same AES in ECB
+ * mode lets the patterns of the original text show through, and in CBC it does not.
  *
- * <p>Se puede dar solo el algoritmo, y entonces el proveedor elige los otros dos. Conviene no
- * hacerlo: lo que elija depende del proveedor, y un programa que funciona en una maquina puede
- * cifrar distinto en otra.
+ * <p>The algorithm alone may be given, and then the provider chooses the other two. It is better not
+ * to: what it chooses depends on the provider, and a program that works on one machine may encrypt
+ * differently on another.
  *
- * <h2>{@link #update} y {@link #doFinal}</h2>
+ * <h2>{@link #update} and {@link #doFinal}</h2>
  *
- * <p>Estan separados porque un cifrado por bloques no puede entregar nada hasta tener un bloque
- * entero, y porque el relleno solo se puede aplicar cuando se sabe que ya no viene mas. Por eso
- * {@link #update} suele devolver menos bytes de los que recibe --a veces ninguno-- y {@link #doFinal}
- * devuelve el resto.
+ * <p>They are separate because a block cipher cannot hand anything over until it has a whole block,
+ * and because the padding can only be applied once it is known that no more is coming. That is why
+ * {@link #update} usually returns fewer bytes than it received --sometimes none-- and
+ * {@link #doFinal} returns the rest.
  *
- * <p>Nada esta cifrado hasta que {@link #doFinal} vuelve. Quedarse con lo que dio {@link #update} y
- * no llamar a {@link #doFinal} produce un mensaje truncado, no un mensaje mas corto.
+ * <p>Nothing is encrypted until {@link #doFinal} returns. Keeping what {@link #update} gave and not
+ * calling {@link #doFinal} produces a truncated message, not a shorter one.
  *
- * <h2>Envolver claves</h2>
+ * <h2>Wrapping keys</h2>
  *
- * <p>{@link #wrap} y {@link #unwrap} existen aparte de cifrar bytes porque una clave puede vivir
- * adentro de un dispositivo y no dejarse exportar. Envolverla ahi adentro es lo unico que se puede
- * hacer con ella; sacar sus bytes para cifrarlos no.
+ * <p>{@link #wrap} and {@link #unwrap} exist apart from encrypting bytes because a key may live
+ * inside a device and refuse to be exported. Wrapping it in there is the only thing that can be done
+ * with it; taking its bytes out to encrypt them cannot.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera: {@link #getInstance} busca de verdad entre los proveedores
- * registrados, arma el cifrador, le fija modo y relleno, y todo lo demas se le delega. Lo que no hay
- * es un proveedor que ofrezca cifrados --ver la nota del proveedor de {@code java.security}: no se
- * registra un servicio que no se puede cumplir--, asi que {@link #getInstance} tira
- * {@link NoSuchAlgorithmException} para cualquier nombre. Registrar un proveedor propio lo hace
- * andar.
+ * <p>The machinery works in full: {@link #getInstance} really searches among the registered
+ * providers, builds the cipher, sets its mode and padding, and delegates everything else to it. What
+ * is missing is a provider offering ciphers --see the note on {@code java.security}'s provider: a
+ * service that cannot be met is not registered-- so {@link #getInstance} throws
+ * {@link NoSuchAlgorithmException} for any name. Registering a provider of one's own makes it work.
  *
- * <p>El unico cifrador que se puede construir de fabrica es {@link NullCipher}, que no cifra nada y
- * existe justamente para eso.
+ * <p>The only cipher that can be built out of the box is {@link NullCipher}, which encrypts nothing
+ * and exists precisely for that.
  *
  * @since 1.4
  */
 public class Cipher {
 
-    /** Que va a cifrar. */
+    /** That it will encrypt. */
     public static final int ENCRYPT_MODE = 1;
 
-    /** Que va a descifrar. */
+    /** That it will decrypt. */
     public static final int DECRYPT_MODE = 2;
 
-    /** Que va a envolver una clave. */
+    /** That it will wrap a key. */
     public static final int WRAP_MODE = 3;
 
-    /** Que va a desenvolver una clave. */
+    /** That it will unwrap a key. */
     public static final int UNWRAP_MODE = 4;
 
-    /** Que lo desenvuelto es una clave publica. */
+    /** That what was unwrapped is a public key. */
     public static final int PUBLIC_KEY = 1;
 
-    /** Que lo desenvuelto es una clave privada. */
+    /** That what was unwrapped is a private key. */
     public static final int PRIVATE_KEY = 2;
 
-    /** Que lo desenvuelto es una clave simetrica. */
+    /** That what was unwrapped is a symmetric key. */
     public static final int SECRET_KEY = 3;
 
     private final CipherSpi spi;
     private final Provider provider;
     private final String transformation;
 
-    /** Si ya se lo configuro. Sin esto, cifrar daria basura en vez de un error. */
+    /** Whether it has been configured. Without this, encrypting would give junk instead of an error. */
     boolean initialized;
 
     /**
-     * Si se lo puede usar sin configurar.
+     * Whether it can be used without being configured.
      *
-     * <p>Lo prende {@link NullCipher}, que no tiene nada que configurar. Va aparte de
-     * {@link #initialized} porque {@link #toString} tiene que seguir diciendo que no esta
-     * configurado, que es lo que dice el JDK.
+     * <p>{@link NullCipher} turns it on, having nothing to configure. It is separate from
+     * {@link #initialized} because {@link #toString} has to go on saying it is not initialized,
+     * which is what the JDK says.
      */
-    boolean sinConfigurar;
+    boolean unconfigured;
 
     /**
-     * Uno alrededor de esa implementacion.
+     * One around that implementation.
      *
-     * <p>Es protegido y no publico porque el camino normal es {@link #getInstance}: quien lo llama
-     * directamente esta armando un cifrador a mano, y eso solo tiene sentido para
-     * {@link NullCipher} o para una subclase propia.
+     * <p>It is protected and not public because the normal way in is {@link #getInstance}: whoever
+     * calls this directly is assembling a cipher by hand, and that only makes sense for
+     * {@link NullCipher} or for a subclass of one's own.
      *
-     * @param cipherSpi la implementacion
-     * @param provider de quien es
-     * @param transformation el nombre con que se lo pidio
+     * @param cipherSpi the implementation
+     * @param provider whose it is
+     * @param transformation the name it was asked for by
      */
     protected Cipher(CipherSpi cipherSpi, Provider provider, String transformation) {
         this.spi = cipherSpi;
@@ -116,19 +115,19 @@ public class Cipher {
     }
 
     /**
-     * Un cifrador para esa transformacion.
+     * A cipher for that transformation.
      *
-     * @param transformation el algoritmo, o el algoritmo con su modo y su relleno
-     * @return el cifrador
-     * @throws NoSuchAlgorithmException si el nombre esta mal formado, o si ningun proveedor lo tiene
-     * @throws NoSuchPaddingException si ninguno tiene ese relleno
+     * @param transformation the algorithm, or the algorithm with its mode and its padding
+     * @return the cipher
+     * @throws NoSuchAlgorithmException if the name is malformed, or if no provider has it
+     * @throws NoSuchPaddingException if none has that padding
      */
     public static final Cipher getInstance(String transformation)
             throws NoSuchAlgorithmException, NoSuchPaddingException {
-        final String[] partes = partir(transformation);
+        final String[] parts = split(transformation);
         final Provider[] provs = Security.getProviders();
         for (int i = 0; i < provs.length; i++) {
-            final Cipher c = armar(provs[i], partes, transformation);
+            final Cipher c = build(provs[i], parts, transformation);
             if (c != null) {
                 return c;
             }
@@ -138,15 +137,15 @@ public class Cipher {
     }
 
     /**
-     * Un cifrador de ese proveedor, nombrado.
+     * A cipher from that provider, named.
      *
-     * @param transformation el algoritmo, o el algoritmo con su modo y su relleno
-     * @param provider el nombre del proveedor
-     * @return el cifrador
-     * @throws NoSuchAlgorithmException si el nombre esta mal formado, o si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws NoSuchPaddingException si ese proveedor no tiene ese relleno
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param transformation the algorithm, or the algorithm with its mode and its padding
+     * @param provider the provider's name
+     * @return the cipher
+     * @throws NoSuchAlgorithmException if the name is malformed, or if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws NoSuchPaddingException if that provider does not have that padding
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public static final Cipher getInstance(String transformation, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException {
@@ -161,22 +160,22 @@ public class Cipher {
     }
 
     /**
-     * Un cifrador de ese proveedor.
+     * A cipher from that provider.
      *
-     * @param transformation el algoritmo, o el algoritmo con su modo y su relleno
-     * @param provider el proveedor
-     * @return el cifrador
-     * @throws NoSuchAlgorithmException si el nombre esta mal formado, o si ese proveedor no lo tiene
-     * @throws NoSuchPaddingException si ese proveedor no tiene ese relleno
-     * @throws IllegalArgumentException si el proveedor es {@code null}
+     * @param transformation the algorithm, or the algorithm with its mode and its padding
+     * @param provider the provider
+     * @return the cipher
+     * @throws NoSuchAlgorithmException if the name is malformed, or if that provider does not have it
+     * @throws NoSuchPaddingException if that provider does not have that padding
+     * @throws IllegalArgumentException if the provider is {@code null}
      */
     public static final Cipher getInstance(String transformation, Provider provider)
             throws NoSuchAlgorithmException, NoSuchPaddingException {
         if (provider == null) {
             throw new IllegalArgumentException("Missing provider");
         }
-        final String[] partes = partir(transformation);
-        final Cipher c = armar(provider, partes, transformation);
+        final String[] parts = split(transformation);
+        final Cipher c = build(provider, parts, transformation);
         if (c != null) {
             return c;
         }
@@ -185,44 +184,44 @@ public class Cipher {
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el proveedor, o {@code null} si no viene de ninguno
+     * @return the provider, or {@code null} if it comes from none
      */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Con que nombre se lo pidio.
+     * The name it was asked for by.
      *
-     * @return la transformacion, o {@code null} si no se lo pidio con un nombre
+     * @return the transformation, or {@code null} if it was not asked for by name
      */
     public final String getAlgorithm() {
         return this.transformation;
     }
 
     /**
-     * Cuanto mide un bloque.
+     * How large a block is.
      *
-     * @return el tamano en bytes, o cero si no es un cifrado por bloques
+     * @return the size in bytes, or zero if it is not a block cipher
      */
     public final int getBlockSize() {
         return this.spi.engineGetBlockSize();
     }
 
     /**
-     * Cuanto va a salir si ahora se entregan esos bytes y se termina.
+     * How much will come out if those bytes are handed over now and it finishes.
      *
-     * <p>Puede pasarse: lo que hay que reservar es esto, y lo que se escribe puede ser menos.
+     * <p>It may overshoot: this is what has to be reserved, and what gets written may be less.
      *
-     * @param inputLen cuantos bytes se van a entregar
-     * @return el tamano en bytes
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si el largo es negativo
+     * @param inputLen how many bytes will be handed over
+     * @return the size in bytes
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the length is negative
      */
     public final int getOutputSize(int inputLen) {
-        comprobarConfigurado();
+        checkConfigured();
         if (inputLen < 0) {
             throw new IllegalArgumentException("Input size must be equal to or greater than zero");
         }
@@ -230,29 +229,29 @@ public class Cipher {
     }
 
     /**
-     * El vector de inicializacion.
+     * The initialization vector.
      *
-     * @return una copia del vector, o {@code null} si no hay
+     * @return a copy of the vector, or {@code null} if there is none
      */
     public final byte[] getIV() {
         return this.spi.engineGetIV();
     }
 
     /**
-     * Los parametros con que quedo configurado.
+     * The parameters it ended up configured with.
      *
-     * <p>Es como se entera el que descifra de lo que el que cifro genero al azar.
+     * <p>It is how whoever decrypts learns what whoever encrypted generated at random.
      *
-     * @return los parametros, o {@code null} si no usa ninguno
+     * @return the parameters, or {@code null} if it uses none
      */
     public final AlgorithmParameters getParameters() {
         return this.spi.engineGetParameters();
     }
 
     /**
-     * El mecanismo de exencion que se le aplico.
+     * The exemption mechanism applied to it.
      *
-     * @return siempre {@code null}: no hay politica de exportacion que aplicar, ver
+     * @return always {@code null}: there is no export policy to apply, see
      *     {@link ExemptionMechanism}
      */
     public final ExemptionMechanism getExemptionMechanism() {
@@ -260,42 +259,42 @@ public class Cipher {
     }
 
     /**
-     * Lo configura.
+     * Configures it.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param key with which key
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Key key) throws InvalidKeyException {
         init(opmode, key, new SecureRandom());
     }
 
     /**
-     * Lo configura, diciendo de donde sacar el azar.
+     * Configures it, saying where to take the randomness from.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param key with which key
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Key key, SecureRandom random) throws InvalidKeyException {
-        comprobarModo(opmode);
+        checkMode(opmode);
         this.initialized = false;
         this.spi.engineInit(opmode, key, random);
         this.initialized = true;
     }
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param key with which key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
@@ -303,33 +302,33 @@ public class Cipher {
     }
 
     /**
-     * Lo configura con parametros, diciendo de donde sacar el azar.
+     * Configures it with parameters, saying where to take the randomness from.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param params los parametros
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param key with which key
+     * @param params the parameters
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Key key, AlgorithmParameterSpec params, SecureRandom random)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
-        comprobarModo(opmode);
+        checkMode(opmode);
         this.initialized = false;
         this.spi.engineInit(opmode, key, params, random);
         this.initialized = true;
     }
 
     /**
-     * Lo configura con parametros ya codificados.
+     * Configures it with already encoded parameters.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param key with which key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Key key, AlgorithmParameters params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
@@ -337,44 +336,44 @@ public class Cipher {
     }
 
     /**
-     * Lo configura con parametros ya codificados, diciendo de donde sacar el azar.
+     * Configures it with already encoded parameters, saying where to take the randomness from.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param params los parametros
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param key with which key
+     * @param params the parameters
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Key key, AlgorithmParameters params, SecureRandom random)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
-        comprobarModo(opmode);
+        checkMode(opmode);
         this.initialized = false;
         this.spi.engineInit(opmode, key, params, random);
         this.initialized = true;
     }
 
     /**
-     * Lo configura con la clave publica de un certificado.
+     * Configures it with a certificate's public key.
      *
-     * @param opmode que va a hacer
-     * @param certificate el certificado
-     * @throws InvalidKeyException si la clave del certificado no sirve para este cifrado
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param certificate the certificate
+     * @throws InvalidKeyException if the certificate's key is no good for this cipher
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Certificate certificate) throws InvalidKeyException {
         init(opmode, certificate, new SecureRandom());
     }
 
     /**
-     * Lo configura con la clave publica de un certificado, diciendo de donde sacar el azar.
+     * Configures it with a certificate's public key, saying where to take the randomness from.
      *
-     * @param opmode que va a hacer
-     * @param certificate el certificado
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave del certificado no sirve para este cifrado
-     * @throws IllegalArgumentException si el modo de operacion no es uno de los cuatro
+     * @param opmode what it will do
+     * @param certificate the certificate
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the certificate's key is no good for this cipher
+     * @throws IllegalArgumentException if the operation mode is not one of the four
      */
     public final void init(int opmode, Certificate certificate, SecureRandom random)
             throws InvalidKeyException {
@@ -386,15 +385,15 @@ public class Cipher {
     }
 
     /**
-     * Entrega datos y devuelve lo que salga.
+     * Hands over data and returns whatever comes out.
      *
-     * @param input los datos
-     * @return lo que salio, o {@code null} si no salio nada
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si los datos son {@code null}
+     * @param input the data
+     * @return what came out, or {@code null} if nothing did
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the data is {@code null}
      */
     public final byte[] update(byte[] input) {
-        comprobarConfigurado();
+        checkConfigured();
         if (input == null) {
             throw new IllegalArgumentException("Null input buffer");
         }
@@ -402,31 +401,31 @@ public class Cipher {
     }
 
     /**
-     * Entrega parte de un arreglo y devuelve lo que salga.
+     * Hands over part of an array and returns whatever comes out.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @return lo que salio, o {@code null} si no salio nada
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si la porcion no esta bien
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @return what came out, or {@code null} if nothing did
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the slice is not right
      */
     public final byte[] update(byte[] input, int inputOffset, int inputLen) {
-        comprobarConfigurado();
-        comprobarPorcion(input, inputOffset, inputLen);
+        checkConfigured();
+        checkSlice(input, inputOffset, inputLen);
         return this.spi.engineUpdate(input, inputOffset, inputLen);
     }
 
     /**
-     * Entrega datos y escribe lo que salga en el arreglo dado.
+     * Hands over data and writes whatever comes out into the given array.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @param output donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si el arreglo de salida no alcanza
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @param output where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if the output array is not big enough
      */
     public final int update(byte[] input, int inputOffset, int inputLen, byte[] output)
             throws ShortBufferException {
@@ -434,21 +433,21 @@ public class Cipher {
     }
 
     /**
-     * Entrega datos y escribe lo que salga en el arreglo dado, desde esa posicion.
+     * Hands over data and writes whatever comes out into the given array, from that position.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @param output donde escribir
-     * @param outputOffset desde donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si el arreglo de salida no alcanza
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @param output where to write
+     * @param outputOffset from where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if the output array is not big enough
      */
     public final int update(byte[] input, int inputOffset, int inputLen, byte[] output,
             int outputOffset) throws ShortBufferException {
-        comprobarConfigurado();
-        comprobarPorcion(input, inputOffset, inputLen);
+        checkConfigured();
+        checkSlice(input, inputOffset, inputLen);
         if (output == null || outputOffset < 0) {
             throw new IllegalArgumentException("Bad arguments");
         }
@@ -456,46 +455,46 @@ public class Cipher {
     }
 
     /**
-     * Lo mismo, con buffers.
+     * The same, with buffers.
      *
-     * @param input de donde leer; queda consumido
-     * @param output donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si en el buffer de salida no entra
+     * @param input where to read from; it is left consumed
+     * @param output where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if it does not fit in the output buffer
      */
     public final int update(ByteBuffer input, ByteBuffer output) throws ShortBufferException {
-        comprobarConfigurado();
+        checkConfigured();
         return this.spi.engineUpdate(input, output);
     }
 
     /**
-     * Termina sin entregar nada mas.
+     * Finishes without handing anything else over.
      *
-     * @return lo que quedaba, o {@code null} si no quedaba nada
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @return what was left, or {@code null} if nothing was
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     public final byte[] doFinal() throws IllegalBlockSizeException, BadPaddingException {
-        comprobarConfigurado();
+        checkConfigured();
         return this.spi.engineDoFinal(null, 0, 0);
     }
 
     /**
-     * Termina y escribe lo que quedaba en el arreglo dado.
+     * Finishes and writes what was left into the given array.
      *
-     * @param output donde escribir
-     * @param outputOffset desde donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws ShortBufferException si el arreglo de salida no alcanza
-     * @throws BadPaddingException si el relleno no cierra
+     * @param output where to write
+     * @param outputOffset from where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws ShortBufferException if the output array is not big enough
+     * @throws BadPaddingException if the padding does not close
      */
     public final int doFinal(byte[] output, int outputOffset)
             throws IllegalBlockSizeException, ShortBufferException, BadPaddingException {
-        comprobarConfigurado();
+        checkConfigured();
         if (output == null || outputOffset < 0) {
             throw new IllegalArgumentException("Bad arguments");
         }
@@ -503,17 +502,17 @@ public class Cipher {
     }
 
     /**
-     * Entrega los ultimos datos y termina.
+     * Hands over the last data and finishes.
      *
-     * @param input los datos
-     * @return lo que salio
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input the data
+     * @return what came out
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     public final byte[] doFinal(byte[] input)
             throws IllegalBlockSizeException, BadPaddingException {
-        comprobarConfigurado();
+        checkConfigured();
         if (input == null) {
             throw new IllegalArgumentException("Null input buffer");
         }
@@ -521,35 +520,35 @@ public class Cipher {
     }
 
     /**
-     * Entrega parte de un arreglo y termina.
+     * Hands over part of an array and finishes.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @return lo que salio
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @return what came out
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     public final byte[] doFinal(byte[] input, int inputOffset, int inputLen)
             throws IllegalBlockSizeException, BadPaddingException {
-        comprobarConfigurado();
-        comprobarPorcion(input, inputOffset, inputLen);
+        checkConfigured();
+        checkSlice(input, inputOffset, inputLen);
         return this.spi.engineDoFinal(input, inputOffset, inputLen);
     }
 
     /**
-     * Entrega los ultimos datos, termina, y escribe en el arreglo dado.
+     * Hands over the last data, finishes, and writes into the given array.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @param output donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si el arreglo de salida no alcanza
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @param output where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if the output array is not big enough
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     public final int doFinal(byte[] input, int inputOffset, int inputLen, byte[] output)
             throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
@@ -557,24 +556,24 @@ public class Cipher {
     }
 
     /**
-     * Lo mismo, escribiendo desde esa posicion.
+     * The same, writing from that position.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @param output donde escribir
-     * @param outputOffset desde donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si el arreglo de salida no alcanza
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @param output where to write
+     * @param outputOffset from where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if the output array is not big enough
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     public final int doFinal(byte[] input, int inputOffset, int inputLen, byte[] output,
             int outputOffset)
             throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
-        comprobarConfigurado();
-        comprobarPorcion(input, inputOffset, inputLen);
+        checkConfigured();
+        checkSlice(input, inputOffset, inputLen);
         if (output == null || outputOffset < 0) {
             throw new IllegalArgumentException("Bad arguments");
         }
@@ -582,50 +581,50 @@ public class Cipher {
     }
 
     /**
-     * Lo mismo, con buffers.
+     * The same, with buffers.
      *
-     * @param input de donde leer; queda consumido
-     * @param output donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si en el buffer de salida no entra
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input where to read from; it is left consumed
+     * @param output where to write
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if it does not fit in the output buffer
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     public final int doFinal(ByteBuffer input, ByteBuffer output)
             throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
-        comprobarConfigurado();
+        checkConfigured();
         return this.spi.engineDoFinal(input, output);
     }
 
     /**
-     * Envuelve una clave.
+     * Wraps a key.
      *
-     * @param key la clave a envolver
-     * @return la clave cifrada
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalBlockSizeException si la clave codificada no mide un multiplo del bloque
-     * @throws InvalidKeyException si la clave no se puede codificar
+     * @param key the key to wrap
+     * @return the encrypted key
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalBlockSizeException if the encoded key is not a multiple of the block
+     * @throws InvalidKeyException if the key cannot be encoded
      */
     public final byte[] wrap(Key key) throws IllegalBlockSizeException, InvalidKeyException {
-        comprobarConfigurado();
+        checkConfigured();
         return this.spi.engineWrap(key);
     }
 
     /**
-     * Desenvuelve una clave.
+     * Unwraps a key.
      *
-     * @param wrappedKey la clave cifrada
-     * @param wrappedKeyAlgorithm para que algoritmo es la clave que sale
-     * @param wrappedKeyType si es publica, privada o secreta
-     * @return la clave
-     * @throws IllegalStateException si no se lo configuro
-     * @throws InvalidKeyException si lo descifrado no es una clave de ese tipo
-     * @throws NoSuchAlgorithmException si no hay con que reconstruirla
+     * @param wrappedKey the encrypted key
+     * @param wrappedKeyAlgorithm which algorithm the resulting key is for
+     * @param wrappedKeyType whether it is public, private or secret
+     * @return the key
+     * @throws IllegalStateException if it has not been configured
+     * @throws InvalidKeyException if what was decrypted is not a key of that type
+     * @throws NoSuchAlgorithmException if there is nothing to rebuild it with
      */
     public final Key unwrap(byte[] wrappedKey, String wrappedKeyAlgorithm, int wrappedKeyType)
             throws InvalidKeyException, NoSuchAlgorithmException {
-        comprobarConfigurado();
+        checkConfigured();
         if (wrappedKeyType != PUBLIC_KEY && wrappedKeyType != PRIVATE_KEY
                 && wrappedKeyType != SECRET_KEY) {
             throw new InvalidParameterException("Invalid key type");
@@ -634,12 +633,12 @@ public class Cipher {
     }
 
     /**
-     * Cual es la clave mas larga que se puede usar con ese algoritmo.
+     * What the longest key usable with that algorithm is.
      *
-     * @param transformation el algoritmo
-     * @return {@link Integer#MAX_VALUE}: no hay archivo de politica que limite nada
-     * @throws NoSuchAlgorithmException si el nombre esta mal formado
-     * @throws NullPointerException si el nombre es {@code null}
+     * @param transformation the algorithm
+     * @return {@link Integer#MAX_VALUE}: there is no policy file limiting anything
+     * @throws NoSuchAlgorithmException if the name is malformed
+     * @throws NullPointerException if the name is {@code null}
      */
     public static final int getMaxAllowedKeyLength(String transformation)
             throws NoSuchAlgorithmException {
@@ -650,12 +649,12 @@ public class Cipher {
     }
 
     /**
-     * Que parametros son los mas fuertes que se pueden usar con ese algoritmo.
+     * Which parameters are the strongest usable with that algorithm.
      *
-     * @param transformation el algoritmo
-     * @return {@code null}: no hay archivo de politica que limite nada
-     * @throws NoSuchAlgorithmException si el nombre esta mal formado
-     * @throws NullPointerException si el nombre es {@code null}
+     * @param transformation the algorithm
+     * @return {@code null}: there is no policy file limiting anything
+     * @throws NoSuchAlgorithmException if the name is malformed
+     * @throws NullPointerException if the name is {@code null}
      */
     public static final AlgorithmParameterSpec getMaxAllowedParameterSpec(String transformation)
             throws NoSuchAlgorithmException {
@@ -666,15 +665,15 @@ public class Cipher {
     }
 
     /**
-     * Entrega datos que van autenticados pero no cifrados.
+     * Hands over data that is authenticated but not encrypted.
      *
-     * @param src los datos
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si los datos son {@code null}
-     * @throws UnsupportedOperationException si este cifrado no es autenticado
+     * @param src the data
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the data is {@code null}
+     * @throws UnsupportedOperationException if this cipher is not authenticated
      */
     public final void updateAAD(byte[] src) {
-        comprobarConfigurado();
+        checkConfigured();
         if (src == null) {
             throw new IllegalArgumentException("src buffer is null");
         }
@@ -682,31 +681,31 @@ public class Cipher {
     }
 
     /**
-     * Lo mismo, con parte de un arreglo.
+     * The same, with part of an array.
      *
-     * @param src los datos
-     * @param offset desde donde
-     * @param len cuantos
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si la porcion no esta bien
-     * @throws UnsupportedOperationException si este cifrado no es autenticado
+     * @param src the data
+     * @param offset from where
+     * @param len how many
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the slice is not right
+     * @throws UnsupportedOperationException if this cipher is not authenticated
      */
     public final void updateAAD(byte[] src, int offset, int len) {
-        comprobarConfigurado();
-        comprobarPorcion(src, offset, len);
+        checkConfigured();
+        checkSlice(src, offset, len);
         this.spi.engineUpdateAAD(src, offset, len);
     }
 
     /**
-     * Lo mismo, con un buffer.
+     * The same, with a buffer.
      *
-     * @param src los datos; queda consumido
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si el buffer es {@code null}
-     * @throws UnsupportedOperationException si este cifrado no es autenticado
+     * @param src the data; it is left consumed
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the buffer is {@code null}
+     * @throws UnsupportedOperationException if this cipher is not authenticated
      */
     public final void updateAAD(ByteBuffer src) {
-        comprobarConfigurado();
+        checkConfigured();
         if (src == null) {
             throw new IllegalArgumentException("src buffer is null");
         }
@@ -714,9 +713,9 @@ public class Cipher {
     }
 
     /**
-     * Para leer al depurar.
+     * For reading while debugging.
      *
-     * @return la transformacion, si esta configurado, y de que proveedor salio
+     * @return the transformation, whether it is configured, and which provider it came from
      */
     @Override
     public String toString() {
@@ -727,57 +726,57 @@ public class Cipher {
     }
 
     /**
-     * Parte el nombre en algoritmo, modo y relleno.
+     * Splits the name into algorithm, mode and padding.
      *
-     * <p>Una sola parte o tres; dos o cuatro es un nombre mal formado. Se contesta con
-     * {@link NoSuchAlgorithmException} y no con {@link IllegalArgumentException} porque desde afuera
-     * es lo mismo: se pidio algo que no existe.
+     * <p>One part or three; two or four is a malformed name. It is answered with
+     * {@link NoSuchAlgorithmException} and not with {@link IllegalArgumentException} because from
+     * the outside it is the same thing: something that does not exist was asked for.
      */
-    private static String[] partir(String transformation) throws NoSuchAlgorithmException {
+    private static String[] split(String transformation) throws NoSuchAlgorithmException {
         if (transformation == null || transformation.isEmpty()) {
             throw new NoSuchAlgorithmException("No transformation given");
         }
-        final String[] partes = transformation.split("/", -1);
-        if (partes.length != 1 && partes.length != 3) {
+        final String[] parts = transformation.split("/", -1);
+        if (parts.length != 1 && parts.length != 3) {
             throw new NoSuchAlgorithmException(
                     "Invalid transformation format: " + transformation);
         }
-        if (partes.length == 1) {
-            return new String[] {partes[0].trim(), null, null};
+        if (parts.length == 1) {
+            return new String[] {parts[0].trim(), null, null};
         }
-        return new String[] {partes[0].trim(), partes[1].trim(), partes[2].trim()};
+        return new String[] {parts[0].trim(), parts[1].trim(), parts[2].trim()};
     }
 
     /**
-     * Busca en ese proveedor y arma el cifrador, o devuelve {@code null} si no lo tiene.
+     * Searches that provider and builds the cipher, or returns {@code null} if it does not have it.
      *
-     * <p>Se prueban cuatro nombres, de mas especifico a menos: un proveedor puede registrar el
-     * servicio con la transformacion entera --porque tiene una implementacion afinada para esa
-     * combinacion-- o solo con el algoritmo, y dejar que el modo y el relleno se le pidan aparte.
+     * <p>Four names are tried, from the most specific to the least: a provider may register the
+     * service under the whole transformation --because it has an implementation tuned for that
+     * combination-- or under the algorithm alone, and let the mode and the padding be set separately.
      */
-    private static Cipher armar(Provider p, String[] partes, String transformation)
+    private static Cipher build(Provider p, String[] parts, String transformation)
             throws NoSuchAlgorithmException, NoSuchPaddingException {
-        final String alg = partes[0];
-        final String modo = partes[1];
-        final String relleno = partes[2];
+        final String alg = parts[0];
+        final String mode = parts[1];
+        final String padding = parts[2];
         Provider.Service s = null;
-        boolean ponerModo = false;
-        boolean ponerRelleno = false;
-        if (modo != null) {
-            s = p.getService("Cipher", alg + "/" + modo + "/" + relleno);
+        boolean setMode = false;
+        boolean setPadding = false;
+        if (mode != null) {
+            s = p.getService("Cipher", alg + "/" + mode + "/" + padding);
             if (s == null) {
-                s = p.getService("Cipher", alg + "/" + modo);
-                ponerRelleno = s != null;
+                s = p.getService("Cipher", alg + "/" + mode);
+                setPadding = s != null;
             }
             if (s == null) {
-                s = p.getService("Cipher", alg + "//" + relleno);
-                ponerModo = s != null;
+                s = p.getService("Cipher", alg + "//" + padding);
+                setMode = s != null;
             }
         }
         if (s == null) {
             s = p.getService("Cipher", alg);
-            ponerModo = modo != null;
-            ponerRelleno = relleno != null;
+            setMode = mode != null;
+            setPadding = padding != null;
         }
         if (s == null) {
             return null;
@@ -788,29 +787,29 @@ public class Cipher {
                     "class configured for Cipher is not a CipherSpi: " + s.getClassName());
         }
         final CipherSpi spi = (CipherSpi) o;
-        if (ponerModo) {
-            spi.engineSetMode(modo);
+        if (setMode) {
+            spi.engineSetMode(mode);
         }
-        if (ponerRelleno) {
-            spi.engineSetPadding(relleno);
+        if (setPadding) {
+            spi.engineSetPadding(padding);
         }
         return new Cipher(spi, s.getProvider(), transformation);
     }
 
-    private void comprobarConfigurado() {
-        if (!this.initialized && !this.sinConfigurar) {
+    private void checkConfigured() {
+        if (!this.initialized && !this.unconfigured) {
             throw new IllegalStateException("Cipher not initialized");
         }
     }
 
-    private static void comprobarModo(int opmode) {
+    private static void checkMode(int opmode) {
         if (opmode != ENCRYPT_MODE && opmode != DECRYPT_MODE && opmode != WRAP_MODE
                 && opmode != UNWRAP_MODE) {
             throw new IllegalArgumentException("Invalid operation mode: " + opmode);
         }
     }
 
-    private static void comprobarPorcion(byte[] input, int offset, int len) {
+    private static void checkSlice(byte[] input, int offset, int len) {
         if (input == null || offset < 0 || len < 0 || len > input.length - offset) {
             throw new IllegalArgumentException("Bad arguments");
         }

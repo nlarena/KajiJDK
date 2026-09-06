@@ -5,31 +5,31 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /**
- * Cifra --o descifra-- lo que se escribe en otro flujo.
+ * Encrypts --or decrypts-- whatever is written into another stream.
  *
- * <h2>Cerrar es parte del mensaje</h2>
+ * <h2>Closing is part of the message</h2>
  *
- * <p>{@link #close} es lo que llama a {@code doFinal}, y {@code doFinal} es lo que escribe el ultimo
- * bloque con su relleno. Un programa que escribe todo y no cierra produce un archivo truncado: no
- * uno mas corto, uno que no se puede descifrar.
+ * <p>{@link #close} is what calls {@code doFinal}, and {@code doFinal} is what writes the last block
+ * with its padding. A program that writes everything and does not close produces a truncated file:
+ * not a shorter one, one that cannot be decrypted.
  *
- * <p>{@link #flush} no alcanza. Vacia lo que el flujo de abajo tenga pendiente, pero no puede
- * forzar al cifrador a entregar un bloque incompleto --si pudiera, no seria un cifrado por
- * bloques--.
+ * <p>{@link #flush} is not enough. It empties whatever the stream underneath has pending, but it
+ * cannot force the cipher to hand over an incomplete block --if it could, it would not be a block
+ * cipher.
  *
  * @since 1.4
  */
 public class CipherOutputStream extends FilterOutputStream {
 
     private final Cipher cipher;
-    private final byte[] uno = new byte[1];
-    private boolean cerrado;
+    private final byte[] one = new byte[1];
+    private boolean closed;
 
     /**
-     * Uno que pasa lo escrito por ese cifrador.
+     * One that puts what is written through that cipher.
      *
-     * @param os a donde escribir
-     * @param c el cifrador, ya configurado
+     * @param os where to write
+     * @param c the cipher, already configured
      */
     public CipherOutputStream(OutputStream os, Cipher c) {
         super(os);
@@ -37,31 +37,31 @@ public class CipherOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Uno que no cifra nada.
+     * One that encrypts nothing.
      *
-     * @param os a donde escribir
+     * @param os where to write
      */
     protected CipherOutputStream(OutputStream os) {
         this(os, new NullCipher());
     }
 
     /**
-     * Escribe un byte.
+     * Writes one byte.
      *
-     * @param b el byte
-     * @throws IOException si falla la escritura
+     * @param b the byte
+     * @throws IOException if the write fails
      */
     @Override
     public void write(int b) throws IOException {
-        this.uno[0] = (byte) b;
-        write(this.uno, 0, 1);
+        this.one[0] = (byte) b;
+        write(this.one, 0, 1);
     }
 
     /**
-     * Escribe un arreglo.
+     * Writes an array.
      *
-     * @param b los datos
-     * @throws IOException si falla la escritura
+     * @param b the data
+     * @throws IOException if the write fails
      */
     @Override
     public void write(byte[] b) throws IOException {
@@ -69,27 +69,27 @@ public class CipherOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Escribe parte de un arreglo.
+     * Writes part of an array.
      *
-     * @param b los datos
-     * @param off desde donde
-     * @param len cuantos
-     * @throws IOException si falla la escritura
+     * @param b the data
+     * @param off from where
+     * @param len how many
+     * @throws IOException if the write fails
      */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        final byte[] salieron = this.cipher.update(b, off, len);
-        if (salieron != null && salieron.length > 0) {
-            this.out.write(salieron);
+        final byte[] came = this.cipher.update(b, off, len);
+        if (came != null && came.length > 0) {
+            this.out.write(came);
         }
     }
 
     /**
-     * Vacia lo pendiente del flujo de abajo.
+     * Empties what the stream underneath has pending.
      *
-     * <p>No fuerza al cifrador a entregar un bloque incompleto: ver la nota de la clase.
+     * <p>It does not force the cipher to hand over an incomplete block: see the class note.
      *
-     * @throws IOException si falla
+     * @throws IOException if it fails
      */
     @Override
     public void flush() throws IOException {
@@ -97,25 +97,26 @@ public class CipherOutputStream extends FilterOutputStream {
     }
 
     /**
-     * Termina el cifrador, escribe lo ultimo, y cierra el flujo de abajo.
+     * Finishes the cipher, writes the last of it, and closes the stream underneath.
      *
-     * @throws IOException si falla la escritura o el cierre, o si el cifrador tira
+     * @throws IOException if the write or the close fails, or if the cipher throws
      */
     @Override
     public void close() throws IOException {
-        if (this.cerrado) {
+        if (this.closed) {
             return;
         }
-        this.cerrado = true;
+        this.closed = true;
         try {
-            final byte[] salieron = this.cipher.doFinal();
-            if (salieron != null && salieron.length > 0) {
-                this.out.write(salieron);
+            final byte[] came = this.cipher.doFinal();
+            if (came != null && came.length > 0) {
+                this.out.write(came);
             }
         } catch (BadPaddingException e) {
-            // Cifrando no pasa; descifrando si, y significa que el mensaje esta alterado.
+            // Encrypting it does not happen; decrypting it does, and it means the message is
+            // altered.
         } catch (IllegalBlockSizeException e) {
-            // Idem.
+            // Likewise.
         }
         this.out.flush();
         this.out.close();

@@ -12,29 +12,29 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 
 /**
- * Un objeto guardado cifrado.
+ * An object kept encrypted.
  *
- * <h2>Que hace</h2>
+ * <h2>What it does</h2>
  *
- * <p>Serializa el objeto y cifra los bytes. Lo que queda es un objeto que se puede seguir tratando
- * como cualquier otro --guardar, mandar, serializar de nuevo-- pero cuyo contenido no se puede leer
- * sin la clave.
+ * <p>It serializes the object and encrypts the bytes. What is left is an object that can go on being
+ * treated like any other --stored, sent, serialized again-- but whose content cannot be read without
+ * the key.
  *
- * <h2>Que no hace</h2>
+ * <h2>What it does not do</h2>
  *
- * <p>No autentica. Si el cifrado no es autenticado, alguien puede cambiar los bytes cifrados y
- * {@link #getObject} va a deserializar lo que salga. Y deserializar datos que uno no controla es
- * peligroso por si mismo: la deserializacion construye objetos arbitrarios antes de que el programa
- * pueda mirarlos.
+ * <p>It does not authenticate. If the cipher is not an authenticated one, somebody can change the
+ * encrypted bytes and {@link #getObject} will deserialize whatever comes out. And deserializing data
+ * one does not control is dangerous in itself: deserialization builds arbitrary objects before the
+ * program can look at them.
  *
- * <p>Por eso conviene sellar con un cifrado autenticado, o guardar aparte un
- * {@link Mac} de lo sellado.
+ * <p>That is why it is best to seal with an authenticated cipher, or to keep a {@link Mac} of what
+ * was sealed alongside it.
  *
  * <h2>{@link #getAlgorithm}</h2>
  *
- * <p>Guarda con que se sello, para que el que abre pueda armar el cifrador correspondiente. No
- * guarda la clave, obviamente; los parametros si, en {@link #encodedParams}, porque sin ellos
- * --sin el vector de inicializacion, por ejemplo-- no se podria descifrar.
+ * <p>It keeps what it was sealed with, so that whoever opens it can build the matching cipher. It
+ * does not keep the key, obviously; it does keep the parameters, in {@link #encodedParams}, because
+ * without them --without the initialization vector, for instance-- it could not be decrypted.
  *
  * @since 1.4
  */
@@ -42,20 +42,20 @@ public class SealedObject implements Serializable {
 
     private static final long serialVersionUID = 4482838265551344752L;
 
-    /** Los parametros con que se cifro, codificados, o {@code null} si no hubo. */
+    /** The parameters it was encrypted with, encoded, or {@code null} if there were none. */
     protected byte[] encodedParams;
 
     private final byte[] encryptedContent;
     private final String sealAlg;
 
     /**
-     * Sella ese objeto con ese cifrador.
+     * Seals that object with that cipher.
      *
-     * @param object lo que se guarda
-     * @param c el cifrador, ya configurado para cifrar
-     * @throws IOException si el objeto no se puede serializar
-     * @throws IllegalBlockSizeException si el cifrador no puede con lo serializado
-     * @throws NullPointerException si el cifrador es {@code null}
+     * @param object what is being kept
+     * @param c the cipher, already configured to encrypt
+     * @throws IOException if the object cannot be serialized
+     * @throws IllegalBlockSizeException if the cipher cannot cope with what was serialized
+     * @throws NullPointerException if the cipher is {@code null}
      */
     public SealedObject(Serializable object, Cipher c)
             throws IOException, IllegalBlockSizeException {
@@ -67,7 +67,7 @@ public class SealedObject implements Serializable {
         try {
             this.encryptedContent = c.doFinal(bytes.toByteArray());
         } catch (BadPaddingException e) {
-            // Cifrando no puede pasar: el relleno lo pone el cifrador.
+            // Encrypting it cannot happen: the padding is put there by the cipher.
             throw new RuntimeException(e.getMessage());
         }
         this.sealAlg = c.getAlgorithm();
@@ -76,9 +76,9 @@ public class SealedObject implements Serializable {
     }
 
     /**
-     * Una copia de otro.
+     * A copy of another one.
      *
-     * @param so el original
+     * @param so the original
      */
     protected SealedObject(SealedObject so) {
         this.encryptedContent = so.encryptedContent == null ? null
@@ -88,67 +88,68 @@ public class SealedObject implements Serializable {
     }
 
     /**
-     * Con que se sello.
+     * What it was sealed with.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public final String getAlgorithm() {
         return this.sealAlg;
     }
 
     /**
-     * Lo abre con esa clave.
+     * Opens it with that key.
      *
-     * <p>Arma el cifrador solo, con el algoritmo y los parametros guardados. Es la version comoda; la
-     * de {@link #getObject(Cipher)} sirve cuando el cifrador ya esta armado.
+     * <p>It builds the cipher itself, out of the stored algorithm and parameters. It is the
+     * convenient version; {@link #getObject(Cipher)} is for when the cipher is already built.
      *
-     * @param key la clave
-     * @return el objeto
-     * @throws IOException si no se puede deserializar
-     * @throws ClassNotFoundException si la clase del objeto no esta
-     * @throws NoSuchAlgorithmException si no hay un proveedor con ese algoritmo
-     * @throws InvalidKeyException si la clave no sirve
+     * @param key the key
+     * @return the object
+     * @throws IOException if it cannot be deserialized
+     * @throws ClassNotFoundException if the object's class is not there
+     * @throws NoSuchAlgorithmException if there is no provider with that algorithm
+     * @throws InvalidKeyException if the key is no good
      */
     public final Object getObject(Key key)
             throws IOException, ClassNotFoundException, NoSuchAlgorithmException,
             InvalidKeyException {
         try {
             final Cipher c = Cipher.getInstance(this.sealAlg);
-            return abrir(c, key);
+            return open(c, key);
         } catch (NoSuchPaddingException e) {
             throw new NoSuchAlgorithmException(e.getMessage());
         }
     }
 
     /**
-     * Lo abre con ese cifrador.
+     * Opens it with that cipher.
      *
-     * @param c el cifrador, ya configurado para descifrar
-     * @return el objeto
-     * @throws IOException si no se puede deserializar
-     * @throws ClassNotFoundException si la clase del objeto no esta
-     * @throws IllegalBlockSizeException si lo guardado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra, casi siempre porque la clave esta mal
-     * @throws NullPointerException si el cifrador es {@code null}
+     * @param c the cipher, already configured to decrypt
+     * @return the object
+     * @throws IOException if it cannot be deserialized
+     * @throws ClassNotFoundException if the object's class is not there
+     * @throws IllegalBlockSizeException if what was kept is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close, nearly always because the key is
+     *     wrong
+     * @throws NullPointerException if the cipher is {@code null}
      */
     public final Object getObject(Cipher c)
             throws IOException, ClassNotFoundException, IllegalBlockSizeException,
             BadPaddingException {
-        return leer(c.doFinal(this.encryptedContent));
+        return read(c.doFinal(this.encryptedContent));
     }
 
     /**
-     * Lo abre con esa clave, usando ese proveedor.
+     * Opens it with that key, using that provider.
      *
-     * @param key la clave
-     * @param provider el nombre del proveedor
-     * @return el objeto
-     * @throws IOException si no se puede deserializar
-     * @throws ClassNotFoundException si la clase del objeto no esta
-     * @throws NoSuchAlgorithmException si ese proveedor no tiene ese algoritmo
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param key the key
+     * @param provider the provider's name
+     * @return the object
+     * @throws IOException if it cannot be deserialized
+     * @throws ClassNotFoundException if the object's class is not there
+     * @throws NoSuchAlgorithmException if that provider does not have that algorithm
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws InvalidKeyException if the key is no good
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public final Object getObject(Key key, String provider)
             throws IOException, ClassNotFoundException, NoSuchAlgorithmException,
@@ -158,14 +159,14 @@ public class SealedObject implements Serializable {
         }
         try {
             final Cipher c = Cipher.getInstance(this.sealAlg, provider);
-            return abrir(c, key);
+            return open(c, key);
         } catch (NoSuchPaddingException e) {
             throw new NoSuchAlgorithmException(e.getMessage());
         }
     }
 
-    /** Configura el cifrador con lo guardado y lo abre. */
-    private Object abrir(Cipher c, Key key)
+    /** Configures the cipher with what was stored and opens it. */
+    private Object open(Cipher c, Key key)
             throws IOException, ClassNotFoundException, InvalidKeyException,
             NoSuchAlgorithmException {
         try {
@@ -173,11 +174,11 @@ public class SealedObject implements Serializable {
                 c.init(Cipher.DECRYPT_MODE, key);
             } else {
                 final java.security.AlgorithmParameters p =
-                        java.security.AlgorithmParameters.getInstance(sinModo(this.sealAlg));
+                        java.security.AlgorithmParameters.getInstance(withoutMode(this.sealAlg));
                 p.init(this.encodedParams);
                 c.init(Cipher.DECRYPT_MODE, key, p);
             }
-            return leer(c.doFinal(this.encryptedContent));
+            return read(c.doFinal(this.encryptedContent));
         } catch (java.security.InvalidAlgorithmParameterException e) {
             throw new RuntimeException(e.getMessage());
         } catch (IllegalBlockSizeException e) {
@@ -187,17 +188,17 @@ public class SealedObject implements Serializable {
         }
     }
 
-    /** El algoritmo sin el modo ni el relleno, que es como se nombran los parametros. */
-    private static String sinModo(String alg) {
+    /** The algorithm without the mode or the padding, which is how the parameters are named. */
+    private static String withoutMode(String alg) {
         if (alg == null) {
             return null;
         }
-        final int barra = alg.indexOf('/');
-        return barra < 0 ? alg : alg.substring(0, barra);
+        final int slash = alg.indexOf('/');
+        return slash < 0 ? alg : alg.substring(0, slash);
     }
 
-    private static Object leer(byte[] datos) throws IOException, ClassNotFoundException {
-        final ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(datos));
+    private static Object read(byte[] data) throws IOException, ClassNotFoundException {
+        final ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data));
         try {
             return ois.readObject();
         } finally {

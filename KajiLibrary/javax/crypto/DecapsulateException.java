@@ -3,11 +3,11 @@ package javax.crypto;
 import java.security.GeneralSecurityException;
 
 /**
- * No se pudo recuperar el secreto encapsulado.
+ * The encapsulated secret could not be recovered.
  *
- * <p>Casi siempre porque la encapsulacion llego alterada o porque la clave privada no es la que
- * corresponde. Igual que con la etiqueta de un cifrado autenticado, conviene no decir hacia afuera
- * cual de las dos cosas fue.
+ * <p>Nearly always because the encapsulation arrived altered or because the private key is not the
+ * matching one. As with an authenticated cipher's tag, it is best not to say outwards which of the
+ * two it was.
  *
  * @since 21
  */
@@ -16,19 +16,19 @@ public class DecapsulateException extends GeneralSecurityException {
     private static final long serialVersionUID = 1L;
 
     /**
-     * Una con mensaje.
+     * One with a message.
      *
-     * @param message que paso
+     * @param message what happened
      */
     public DecapsulateException(String message) {
         super(message);
     }
 
     /**
-     * Una con mensaje y causa.
+     * One with a message and a cause.
      *
-     * @param message que paso
-     * @param cause por que
+     * @param message what happened
+     * @param cause why
      */
     public DecapsulateException(String message, Throwable cause) {
         super(message, cause);

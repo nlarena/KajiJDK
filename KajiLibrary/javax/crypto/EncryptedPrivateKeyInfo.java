@@ -18,65 +18,65 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Una clave privada guardada cifrada, con la etiqueta de como se la cifro.
+ * A private key kept encrypted, with the label of how it was encrypted.
  *
- * <h2>Que es</h2>
+ * <h2>What it is</h2>
  *
- * <p>La estructura de PKCS#8: una identificacion de algoritmo y un bloque de bytes cifrados. Es lo
- * que hay adentro de un archivo de clave privada protegido por contrasena --lo que se ve como
- * {@code -----BEGIN ENCRYPTED PRIVATE KEY-----}--.
+ * <p>The PKCS#8 structure: an algorithm identification and a block of encrypted bytes. It is what
+ * lives inside a password-protected private key file --what shows up as
+ * {@code -----BEGIN ENCRYPTED PRIVATE KEY-----}.
  *
- * <p>La identificacion viaja en claro y tiene que viajar: sin ella no habria forma de saber con que
- * descifrar. Incluye los parametros --la sal y la cantidad de vueltas, si es una contrasena-- que
- * son publicos por diseno.
+ * <p>The identification travels in the clear and has to: without it there would be no way to know
+ * what to decrypt with. It includes the parameters --the salt and the iteration count, if it is a
+ * password-- which are public by design.
  *
- * <h2>Por que el algoritmo se guarda como texto</h2>
+ * <h2>Why the algorithm is kept as text</h2>
  *
- * <p>Porque en el archivo es un identificador de objeto, una lista de numeros. {@link #getAlgName}
- * lo traduce al nombre si lo conoce, y si no devuelve los numeros con puntos. Devolver los numeros
- * es mejor que fallar: el archivo se puede seguir leyendo y guardando aunque esta biblioteca no
- * conozca ese algoritmo.
+ * <p>Because in the file it is an object identifier, a list of numbers. {@link #getAlgName}
+ * translates it into the name when it knows it, and otherwise returns the numbers with dots.
+ * Returning the numbers is better than failing: the file can go on being read and written even when
+ * this library does not know that algorithm.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>Leer, escribir y traducir identificadores funciona de verdad, y es lo que hace falta para
- * manejar el archivo. Descifrar no: {@link #getKeySpec(Cipher)} necesita un cifrador ya armado, y
- * los demas necesitan armarlo, para lo cual hace falta un proveedor que ofrezca cifrados --ver la
- * nota de {@link Cipher}--. La tabla de nombres tiene los identificadores de PKCS#5 y PKCS#12, que
- * son los que aparecen en estos archivos; un nombre que no este es un
- * {@link NoSuchAlgorithmException} y no un identificador inventado.
+ * <p>Reading, writing and translating identifiers really works, and it is what is needed to handle
+ * the file. Decrypting does not: {@link #getKeySpec(Cipher)} needs an already built cipher, and the
+ * rest need to build one, for which a provider offering ciphers is needed --see {@link Cipher}'s
+ * note. The name table holds the PKCS#5 and PKCS#12 identifiers, which are the ones that turn up in
+ * these files; a name that is not there is a {@link NoSuchAlgorithmException} and not an invented
+ * identifier.
  *
  * @since 1.4
  */
 public class EncryptedPrivateKeyInfo implements DEREncodable {
 
-    private static final Map<String, String> NOMBRE_A_OID = new HashMap<String, String>();
-    private static final Map<String, String> OID_A_NOMBRE = new HashMap<String, String>();
+    private static final Map<String, String> NAME_TO_OID = new HashMap<String, String>();
+    private static final Map<String, String> OID_TO_NAME = new HashMap<String, String>();
 
     static {
-        // Los nombres y los identificadores estan tomados del JDK 25, uno por uno. Donde el JDK
-        // acepta un nombre pero devuelve otro al releer --DES da DES/CBC-- se anota igual, porque
-        // esa asimetria tambien es parte del comportamiento.
-        registrar("PBEWithMD5AndDES", "1.2.840.113549.1.5.3", true);
-        registrar("PBEWithSHA1AndDESede", "1.2.840.113549.1.12.1.3", true);
-        registrar("PBEWithSHA1AndRC2_40", "1.2.840.113549.1.12.1.6", true);
-        registrar("PBEWithSHA1AndRC2_128", "1.2.840.113549.1.12.1.5", true);
-        registrar("PBEWithSHA1AndRC4_40", "1.2.840.113549.1.12.1.2", true);
-        registrar("PBEWithSHA1AndRC4_128", "1.2.840.113549.1.12.1.1", true);
-        registrar("PBES2", "1.2.840.113549.1.5.13", true);
-        registrar("PBKDF2WithHmacSHA1", "1.2.840.113549.1.5.12", true);
-        registrar("AES", "2.16.840.1.101.3.4.1", true);
-        registrar("AES_128/CBC/NoPadding", "2.16.840.1.101.3.4.1.2", true);
-        registrar("AES_256/CBC/NoPadding", "2.16.840.1.101.3.4.1.42", true);
-        registrar("DESede", "1.3.14.3.2.17", true);
-        registrar("DES/CBC", "1.3.14.3.2.7", true);
-        registrar("DES", "1.3.14.3.2.7", false);
-        registrar("RC2/CBC/PKCS5Padding", "1.2.840.113549.3.2", true);
-        registrar("RC2", "1.2.840.113549.3.2", false);
-        registrar("Blowfish", "1.3.6.1.4.1.3029.1.1.2", true);
-        registrar("HmacSHA256", "1.2.840.113549.2.9", true);
-        registrar("EC", "1.2.840.10045.2.1", true);
-        registrar("DiffieHellman", "1.2.840.113549.1.3.1", true);
+        // The names and the identifiers are taken from JDK 25, one by one. Where the JDK accepts one
+        // name but returns another on reading back --DES gives DES/CBC-- it is written down all the
+        // same, because that asymmetry is part of the behaviour too.
+        register("PBEWithMD5AndDES", "1.2.840.113549.1.5.3", true);
+        register("PBEWithSHA1AndDESede", "1.2.840.113549.1.12.1.3", true);
+        register("PBEWithSHA1AndRC2_40", "1.2.840.113549.1.12.1.6", true);
+        register("PBEWithSHA1AndRC2_128", "1.2.840.113549.1.12.1.5", true);
+        register("PBEWithSHA1AndRC4_40", "1.2.840.113549.1.12.1.2", true);
+        register("PBEWithSHA1AndRC4_128", "1.2.840.113549.1.12.1.1", true);
+        register("PBES2", "1.2.840.113549.1.5.13", true);
+        register("PBKDF2WithHmacSHA1", "1.2.840.113549.1.5.12", true);
+        register("AES", "2.16.840.1.101.3.4.1", true);
+        register("AES_128/CBC/NoPadding", "2.16.840.1.101.3.4.1.2", true);
+        register("AES_256/CBC/NoPadding", "2.16.840.1.101.3.4.1.42", true);
+        register("DESede", "1.3.14.3.2.17", true);
+        register("DES/CBC", "1.3.14.3.2.7", true);
+        register("DES", "1.3.14.3.2.7", false);
+        register("RC2/CBC/PKCS5Padding", "1.2.840.113549.3.2", true);
+        register("RC2", "1.2.840.113549.3.2", false);
+        register("Blowfish", "1.3.6.1.4.1.3029.1.1.2", true);
+        register("HmacSHA256", "1.2.840.113549.2.9", true);
+        register("EC", "1.2.840.10045.2.1", true);
+        register("DiffieHellman", "1.2.840.113549.1.3.1", true);
     }
 
     private final String oid;
@@ -84,54 +84,54 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     private final byte[] encryptedData;
 
     /**
-     * Uno leido de su codificacion.
+     * One read from its encoding.
      *
-     * @param encoded los bytes
-     * @throws IOException si no es una estructura valida
-     * @throws NullPointerException si los bytes son {@code null}
+     * @param encoded the bytes
+     * @throws IOException if it is not a valid structure
+     * @throws NullPointerException if the bytes are {@code null}
      */
     public EncryptedPrivateKeyInfo(byte[] encoded) throws IOException {
         if (encoded == null) {
             throw new NullPointerException("the encoded parameter must be non-null");
         }
-        final byte[] copia = encoded.clone();
-        final Der raiz = Der.leer(copia, 0);
-        if (raiz.etiqueta != 0x30) {
-            throw new IOException("no es una SEQUENCE");
+        final byte[] copy = encoded.clone();
+        final Der root = Der.read(copy, 0);
+        if (root.tag != 0x30) {
+            throw new IOException("not a SEQUENCE");
         }
-        final Der alg = Der.leer(copia, raiz.contenido);
-        if (alg.etiqueta != 0x30) {
-            throw new IOException("el AlgorithmIdentifier no es una SEQUENCE");
+        final Der alg = Der.read(copy, root.content);
+        if (alg.tag != 0x30) {
+            throw new IOException("the AlgorithmIdentifier is not a SEQUENCE");
         }
-        final Der id = Der.leer(copia, alg.contenido);
-        if (id.etiqueta != 0x06) {
-            throw new IOException("falta el identificador de algoritmo");
+        final Der id = Der.read(copy, alg.content);
+        if (id.tag != 0x06) {
+            throw new IOException("the algorithm identifier is missing");
         }
-        this.oid = Der.oid(copia, id.contenido, id.largo);
-        final int finAlg = alg.contenido + alg.largo;
-        final int desdeParams = id.contenido + id.largo;
-        if (desdeParams < finAlg) {
-            this.paramsDer = new byte[finAlg - desdeParams];
-            System.arraycopy(copia, desdeParams, this.paramsDer, 0, this.paramsDer.length);
+        this.oid = Der.oid(copy, id.content, id.length);
+        final int algEnd = alg.content + alg.length;
+        final int paramsFrom = id.content + id.length;
+        if (paramsFrom < algEnd) {
+            this.paramsDer = new byte[algEnd - paramsFrom];
+            System.arraycopy(copy, paramsFrom, this.paramsDer, 0, this.paramsDer.length);
         } else {
             this.paramsDer = null;
         }
-        final Der datos = Der.leer(copia, finAlg);
-        if (datos.etiqueta != 0x04) {
-            throw new IOException("los datos cifrados no son una OCTET STRING");
+        final Der data = Der.read(copy, algEnd);
+        if (data.tag != 0x04) {
+            throw new IOException("the encrypted data is not an OCTET STRING");
         }
-        this.encryptedData = new byte[datos.largo];
-        System.arraycopy(copia, datos.contenido, this.encryptedData, 0, datos.largo);
+        this.encryptedData = new byte[data.length];
+        System.arraycopy(copy, data.content, this.encryptedData, 0, data.length);
     }
 
     /**
-     * Uno con ese algoritmo y esos datos.
+     * One with that algorithm and that data.
      *
-     * @param algName el nombre del algoritmo, o su identificador con puntos
-     * @param encryptedData los datos cifrados
-     * @throws NoSuchAlgorithmException si el nombre no esta en la tabla y no es un identificador
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws IllegalArgumentException si los datos estan vacios
+     * @param algName the algorithm's name, or its identifier with dots
+     * @param encryptedData the encrypted data
+     * @throws NoSuchAlgorithmException if the name is not in the table and is not an identifier
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws IllegalArgumentException if the data is empty
      */
     public EncryptedPrivateKeyInfo(String algName, byte[] encryptedData)
             throws NoSuchAlgorithmException {
@@ -144,19 +144,19 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
         if (encryptedData.length == 0) {
             throw new IllegalArgumentException("the encryptedData parameter must not be empty");
         }
-        this.oid = aOid(algName);
+        this.oid = toOid(algName);
         this.paramsDer = null;
         this.encryptedData = encryptedData.clone();
     }
 
     /**
-     * Uno con esos parametros y esos datos.
+     * One with those parameters and that data.
      *
-     * @param algParams los parametros, de donde salen el algoritmo y su configuracion
-     * @param encryptedData los datos cifrados
-     * @throws NoSuchAlgorithmException si el algoritmo de los parametros no esta en la tabla
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws IllegalArgumentException si los datos estan vacios
+     * @param algParams the parameters, which the algorithm and its configuration come from
+     * @param encryptedData the encrypted data
+     * @throws NoSuchAlgorithmException if the parameters' algorithm is not in the table
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws IllegalArgumentException if the data is empty
      */
     public EncryptedPrivateKeyInfo(AlgorithmParameters algParams, byte[] encryptedData)
             throws NoSuchAlgorithmException {
@@ -169,7 +169,7 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
         if (encryptedData.length == 0) {
             throw new IllegalArgumentException("the encryptedData parameter must not be empty");
         }
-        this.oid = aOid(algParams.getAlgorithm());
+        this.oid = toOid(algParams.getAlgorithm());
         byte[] p;
         try {
             p = algParams.getEncoded();
@@ -181,19 +181,19 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     }
 
     /**
-     * Con que algoritmo se cifro.
+     * Which algorithm it was encrypted with.
      *
-     * @return el nombre si esta en la tabla, o el identificador con puntos
+     * @return the name if it is in the table, or the identifier with dots
      */
     public String getAlgName() {
-        final String n = OID_A_NOMBRE.get(this.oid);
+        final String n = OID_TO_NAME.get(this.oid);
         return n == null ? this.oid : n;
     }
 
     /**
-     * Los parametros del algoritmo.
+     * The algorithm's parameters.
      *
-     * @return los parametros, o {@code null} si no hay ninguno o si no se los pudo interpretar
+     * @return the parameters, or {@code null} if there are none or they could not be interpreted
      */
     public AlgorithmParameters getAlgParameters() {
         if (this.paramsDer == null) {
@@ -211,99 +211,99 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     }
 
     /**
-     * Los bytes cifrados.
+     * The encrypted bytes.
      *
-     * @return una copia
+     * @return a copy
      */
     public byte[] getEncryptedData() {
         return this.encryptedData.clone();
     }
 
     /**
-     * Descifra y devuelve la clave privada en su forma codificada.
+     * Decrypts and returns the private key in its encoded form.
      *
-     * @param cipher el cifrador, ya configurado para descifrar
-     * @return la clave privada codificada
-     * @throws InvalidKeySpecException si lo descifrado no es una clave privada codificada, que es lo
-     *     que pasa cuando la clave de descifrado esta mal
-     * @throws NullPointerException si el cifrador es {@code null}
+     * @param cipher the cipher, already configured to decrypt
+     * @return the encoded private key
+     * @throws InvalidKeySpecException if what was decrypted is not an encoded private key, which is
+     *     what happens when the decryption key is wrong
+     * @throws NullPointerException if the cipher is {@code null}
      */
     public PKCS8EncodedKeySpec getKeySpec(Cipher cipher) throws InvalidKeySpecException {
         if (cipher == null) {
             throw new NullPointerException("cipher must be non-null");
         }
-        final byte[] claro;
+        final byte[] plain;
         try {
-            claro = cipher.doFinal(this.encryptedData);
+            plain = cipher.doFinal(this.encryptedData);
         } catch (GeneralSecurityException e) {
             throw new InvalidKeySpecException("Cannot retrieve the PKCS8EncodedKeySpec", e);
         }
-        return aKeySpec(claro);
+        return toKeySpec(plain);
     }
 
     /**
-     * Cifra una clave privada con una contrasena.
+     * Encrypts a private key with a password.
      *
-     * @param key la clave a cifrar
-     * @param password la contrasena
-     * @param algorithm con que algoritmo, o {@code null} para el de omision
-     * @param spec los parametros, o {@code null}
-     * @param provider que proveedor usar, o {@code null} para buscar entre todos
-     * @return la clave cifrada
-     * @throws IllegalArgumentException si la clave o la contrasena son {@code null}
-     * @throws UnsupportedOperationException siempre: hace falta un cifrado basado en contrasena, y
-     *     ningun proveedor registrado ofrece cifrados
+     * @param key the key to encrypt
+     * @param password the password
+     * @param algorithm with which algorithm, or {@code null} for the default one
+     * @param spec the parameters, or {@code null}
+     * @param provider which provider to use, or {@code null} to search among all of them
+     * @return the encrypted key
+     * @throws IllegalArgumentException if the key or the password are {@code null}
+     * @throws UnsupportedOperationException always: password-based encryption is needed, and no
+     *     registered provider offers ciphers
      */
     public static EncryptedPrivateKeyInfo encryptKey(PrivateKey key, char[] password,
             String algorithm, AlgorithmParameterSpec spec, Provider provider) {
         if (key == null || password == null) {
             throw new IllegalArgumentException("key and password must be non-null");
         }
-        throw new UnsupportedOperationException(SIN_CIFRADO);
+        throw new UnsupportedOperationException(NO_CIPHER);
     }
 
     /**
-     * Lo mismo, con el algoritmo y los parametros de omision.
+     * The same, with the default algorithm and parameters.
      *
-     * @param key la clave a cifrar
-     * @param password la contrasena
-     * @return la clave cifrada
-     * @throws IllegalArgumentException si la clave o la contrasena son {@code null}
-     * @throws UnsupportedOperationException siempre: ver la otra version
+     * @param key the key to encrypt
+     * @param password the password
+     * @return the encrypted key
+     * @throws IllegalArgumentException if the key or the password are {@code null}
+     * @throws UnsupportedOperationException always: see the other version
      */
     public static EncryptedPrivateKeyInfo encryptKey(PrivateKey key, char[] password) {
         return encryptKey(key, password, null, null, null);
     }
 
     /**
-     * Cifra una clave privada con otra clave.
+     * Encrypts a private key with another key.
      *
-     * @param key la clave a cifrar
-     * @param encKey con que clave cifrarla
-     * @param algorithm con que algoritmo, o {@code null} para el de omision
-     * @param spec los parametros, o {@code null}
-     * @param provider que proveedor usar, o {@code null} para buscar entre todos
-     * @param random de donde sacar el azar, o {@code null}
-     * @return la clave cifrada
-     * @throws IllegalArgumentException si alguna de las dos claves es {@code null}
-     * @throws UnsupportedOperationException siempre: ningun proveedor registrado ofrece cifrados
+     * @param key the key to encrypt
+     * @param encKey which key to encrypt it with
+     * @param algorithm with which algorithm, or {@code null} for the default one
+     * @param spec the parameters, or {@code null}
+     * @param provider which provider to use, or {@code null} to search among all of them
+     * @param random where to take the randomness from, or {@code null}
+     * @return the encrypted key
+     * @throws IllegalArgumentException if either of the two keys is {@code null}
+     * @throws UnsupportedOperationException always: no registered provider offers ciphers
      */
     public static EncryptedPrivateKeyInfo encryptKey(PrivateKey key, Key encKey, String algorithm,
             AlgorithmParameterSpec spec, Provider provider, SecureRandom random) {
         if (key == null || encKey == null) {
             throw new IllegalArgumentException("key and encKey must be non-null");
         }
-        throw new UnsupportedOperationException(SIN_CIFRADO);
+        throw new UnsupportedOperationException(NO_CIPHER);
     }
 
     /**
-     * Descifra la clave privada con una contrasena.
+     * Decrypts the private key with a password.
      *
-     * @param password la contrasena
-     * @return la clave privada
-     * @throws GeneralSecurityException si no se la puede descifrar; en esta biblioteca, siempre,
-     *     porque no hay proveedor que ofrezca el cifrado basado en contrasena
-     * @throws NullPointerException si la contrasena es {@code null}
+     * @param password the password
+     * @return the private key
+     * @throws GeneralSecurityException if it cannot be decrypted; in this library, always, because
+     *     there is no provider offering password-based encryption
+     * @throws NullPointerException if the password is {@code null}
      */
     public PrivateKey getKey(char[] password) throws GeneralSecurityException {
         if (password == null) {
@@ -313,13 +313,13 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     }
 
     /**
-     * Descifra la clave privada con otra clave.
+     * Decrypts the private key with another key.
      *
-     * @param decryptKey con que clave descifrarla
-     * @param provider que proveedor usar, o {@code null} para buscar entre todos
-     * @return la clave privada
-     * @throws GeneralSecurityException si no se la puede descifrar
-     * @throws NullPointerException si la clave es {@code null}
+     * @param decryptKey which key to decrypt it with
+     * @param provider which provider to use, or {@code null} to search among all of them
+     * @return the private key
+     * @throws GeneralSecurityException if it cannot be decrypted
+     * @throws NullPointerException if the key is {@code null}
      */
     public PrivateKey getKey(Key decryptKey, Provider provider) throws GeneralSecurityException {
         if (decryptKey == null) {
@@ -329,29 +329,29 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     }
 
     /**
-     * Descifra y devuelve la clave privada codificada, armando el cifrador solo.
+     * Decrypts and returns the encoded private key, building the cipher itself.
      *
-     * @param decryptKey con que clave descifrarla
-     * @return la clave privada codificada
-     * @throws NoSuchAlgorithmException si ningun proveedor tiene ese cifrado
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws NullPointerException si la clave es {@code null}
+     * @param decryptKey which key to decrypt it with
+     * @return the encoded private key
+     * @throws NoSuchAlgorithmException if no provider has that cipher
+     * @throws InvalidKeyException if the key is no good
+     * @throws NullPointerException if the key is {@code null}
      */
     public PKCS8EncodedKeySpec getKeySpec(Key decryptKey)
             throws NoSuchAlgorithmException, InvalidKeyException {
-        return conCifrador(cifrador(decryptKey, (Provider) null), decryptKey);
+        return withCipher(cipherFor(decryptKey, (Provider) null), decryptKey);
     }
 
     /**
-     * Lo mismo, con un proveedor nombrado.
+     * The same, with a named provider.
      *
-     * @param decryptKey con que clave descifrarla
-     * @param providerName el nombre del proveedor
-     * @return la clave privada codificada
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws NoSuchAlgorithmException si ese proveedor no tiene ese cifrado
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws NullPointerException si la clave o el nombre son {@code null}
+     * @param decryptKey which key to decrypt it with
+     * @param providerName the provider's name
+     * @return the encoded private key
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws NoSuchAlgorithmException if that provider does not have that cipher
+     * @throws InvalidKeyException if the key is no good
+     * @throws NullPointerException if the key or the name are {@code null}
      */
     public PKCS8EncodedKeySpec getKeySpec(Key decryptKey, String providerName)
             throws NoSuchProviderException, NoSuchAlgorithmException, InvalidKeyException {
@@ -366,49 +366,49 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     }
 
     /**
-     * Lo mismo, con un proveedor.
+     * The same, with a provider.
      *
-     * @param decryptKey con que clave descifrarla
-     * @param provider el proveedor
-     * @return la clave privada codificada
-     * @throws NoSuchAlgorithmException si ese proveedor no tiene ese cifrado
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws NullPointerException si la clave o el proveedor son {@code null}
+     * @param decryptKey which key to decrypt it with
+     * @param provider the provider
+     * @return the encoded private key
+     * @throws NoSuchAlgorithmException if that provider does not have that cipher
+     * @throws InvalidKeyException if the key is no good
+     * @throws NullPointerException if the key or the provider are {@code null}
      */
     public PKCS8EncodedKeySpec getKeySpec(Key decryptKey, Provider provider)
             throws NoSuchAlgorithmException, InvalidKeyException {
         if (provider == null) {
             throw new NullPointerException("provider must be non-null");
         }
-        return conCifrador(cifrador(decryptKey, provider), decryptKey);
+        return withCipher(cipherFor(decryptKey, provider), decryptKey);
     }
 
     /**
-     * La codificacion de esta estructura.
+     * The encoding of this structure.
      *
-     * <p>Los parametros del algoritmo se vuelven a escribir tal como llegaron, byte por byte. No es
-     * pereza: interpretarlos y volver a armarlos podria cambiar la codificacion, y esta estructura
-     * suele ir firmada.
+     * <p>The algorithm's parameters are written back exactly as they arrived, byte for byte. It is
+     * not laziness: interpreting them and assembling them again could change the encoding, and this
+     * structure often travels signed.
      *
-     * @return los bytes
-     * @throws IOException si no se la puede codificar
+     * @return the bytes
+     * @throws IOException if it cannot be encoded
      */
     public byte[] getEncoded() throws IOException {
-        final byte[] idDer = Der.escribirOid(this.oid);
-        final int largoAlg = idDer.length + (this.paramsDer == null ? 0 : this.paramsDer.length);
-        final byte[] alg = Der.envolver(0x30, unir(idDer, this.paramsDer), largoAlg);
-        final byte[] datos = Der.envolver(0x04, this.encryptedData, this.encryptedData.length);
-        return Der.envolver(0x30, unir(alg, datos), alg.length + datos.length);
+        final byte[] idDer = Der.writeOid(this.oid);
+        final int algLength = idDer.length + (this.paramsDer == null ? 0 : this.paramsDer.length);
+        final byte[] alg = Der.wrap(0x30, join(idDer, this.paramsDer), algLength);
+        final byte[] data = Der.wrap(0x04, this.encryptedData, this.encryptedData.length);
+        return Der.wrap(0x30, join(alg, data), alg.length + data.length);
     }
 
-    private static final String SIN_CIFRADO =
-            "no hay cifrado: ningun proveedor registrado ofrece el servicio Cipher";
+    private static final String NO_CIPHER =
+            "there is no encryption: no registered provider offers the Cipher service";
 
-    private PKCS8EncodedKeySpec conCifrador(Cipher c, Key decryptKey)
+    private PKCS8EncodedKeySpec withCipher(Cipher c, Key decryptKey)
             throws NoSuchAlgorithmException, InvalidKeyException {
         c.init(Cipher.DECRYPT_MODE, decryptKey);
         try {
-            return aKeySpec(c.doFinal(this.encryptedData));
+            return toKeySpec(c.doFinal(this.encryptedData));
         } catch (GeneralSecurityException e) {
             throw new InvalidKeyException("Cannot retrieve the PKCS8EncodedKeySpec", e);
         } catch (InvalidKeySpecException e) {
@@ -416,7 +416,7 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
         }
     }
 
-    private Cipher cifrador(Key decryptKey, Provider provider)
+    private Cipher cipherFor(Key decryptKey, Provider provider)
             throws NoSuchAlgorithmException, InvalidKeyException {
         if (decryptKey == null) {
             throw new NullPointerException("decryptKey must be non-null");
@@ -430,52 +430,52 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
         }
     }
 
-    /** Lo descifrado tiene que ser una clave privada codificada, o la clave estaba mal. */
-    private static PKCS8EncodedKeySpec aKeySpec(byte[] claro) throws InvalidKeySpecException {
+    /** What was decrypted has to be an encoded private key, or the key was wrong. */
+    private static PKCS8EncodedKeySpec toKeySpec(byte[] plain) throws InvalidKeySpecException {
         try {
-            final Der d = Der.leer(claro, 0);
-            if (d.etiqueta != 0x30 || d.contenido + d.largo != claro.length) {
+            final Der d = Der.read(plain, 0);
+            if (d.tag != 0x30 || d.content + d.length != plain.length) {
                 throw new InvalidKeySpecException("Cannot retrieve the PKCS8EncodedKeySpec");
             }
         } catch (IOException e) {
             throw new InvalidKeySpecException("Cannot retrieve the PKCS8EncodedKeySpec", e);
         }
-        return new PKCS8EncodedKeySpec(claro);
+        return new PKCS8EncodedKeySpec(plain);
     }
 
-    private static void registrar(String nombre, String oid, boolean canonico) {
-        NOMBRE_A_OID.put(nombre, oid);
-        if (canonico) {
-            OID_A_NOMBRE.put(oid, nombre);
+    private static void register(String name, String oid, boolean canonical) {
+        NAME_TO_OID.put(name, oid);
+        if (canonical) {
+            OID_TO_NAME.put(oid, name);
         }
     }
 
-    /** El identificador de ese nombre, o el nombre mismo si ya es un identificador. */
-    private static String aOid(String algName) throws NoSuchAlgorithmException {
-        final String oid = NOMBRE_A_OID.get(algName);
+    /** That name's identifier, or the name itself when it already is an identifier. */
+    private static String toOid(String algName) throws NoSuchAlgorithmException {
+        final String oid = NAME_TO_OID.get(algName);
         if (oid != null) {
             return oid;
         }
-        if (esOid(algName)) {
+        if (isOid(algName)) {
             return algName;
         }
         throw new NoSuchAlgorithmException("unrecognized algorithm name: " + algName);
     }
 
-    private static boolean esOid(String s) {
+    private static boolean isOid(String s) {
         if (s.isEmpty()) {
             return false;
         }
-        final String[] partes = s.split("[.]", -1);
-        if (partes.length < 2) {
+        final String[] parts = s.split("[.]", -1);
+        if (parts.length < 2) {
             return false;
         }
-        for (int i = 0; i < partes.length; i++) {
-            if (partes[i].isEmpty()) {
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty()) {
                 return false;
             }
-            for (int j = 0; j < partes[i].length(); j++) {
-                final char c = partes[i].charAt(j);
+            for (int j = 0; j < parts[i].length(); j++) {
+                final char c = parts[i].charAt(j);
                 if (c < '0' || c > '9') {
                     return false;
                 }
@@ -484,7 +484,7 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
         return true;
     }
 
-    private static byte[] unir(byte[] a, byte[] b) {
+    private static byte[] join(byte[] a, byte[] b) {
         if (b == null) {
             return a;
         }
@@ -495,65 +495,65 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
     }
 
     /**
-     * Lo minimo de DER que hace falta para esta estructura.
+     * The least DER this structure needs.
      *
-     * <p>Solo formas definidas y solo tres etiquetas: SEQUENCE, OBJECT IDENTIFIER y OCTET STRING.
-     * Los parametros del algoritmo no se interpretan --se copian-- asi que no hace falta mas.
+     * <p>Definite forms only and three tags only: SEQUENCE, OBJECT IDENTIFIER and OCTET STRING. The
+     * algorithm's parameters are not interpreted --they are copied-- so nothing more is needed.
      */
     private static final class Der {
 
-        final int etiqueta;
-        final int largo;
-        final int contenido;
+        final int tag;
+        final int length;
+        final int content;
 
-        private Der(int etiqueta, int largo, int contenido) {
-            this.etiqueta = etiqueta;
-            this.largo = largo;
-            this.contenido = contenido;
+        private Der(int tag, int length, int content) {
+            this.tag = tag;
+            this.length = length;
+            this.content = content;
         }
 
-        /** Lee la etiqueta y el largo que empiezan en esa posicion. */
-        static Der leer(byte[] b, int desde) throws IOException {
-            if (desde + 1 >= b.length) {
-                throw new java.io.EOFException("se termino antes de la etiqueta");
+        /** Reads the tag and the length starting at that position. */
+        static Der read(byte[] b, int from) throws IOException {
+            if (from + 1 >= b.length) {
+                throw new java.io.EOFException("it ended before the tag");
             }
-            final int etiqueta = b[desde] & 0xff;
-            int p = desde + 1;
+            final int tag = b[from] & 0xff;
+            int p = from + 1;
             int n = b[p] & 0xff;
             p++;
             if (n == 0x80) {
-                throw new IOException("forma indefinida: no es DER");
+                throw new IOException("indefinite form: not DER");
             }
             if (n > 0x80) {
-                final int octetos = n - 0x80;
-                if (octetos > 4 || p + octetos > b.length) {
-                    throw new IOException("largo fuera de rango");
+                final int octets = n - 0x80;
+                if (octets > 4 || p + octets > b.length) {
+                    throw new IOException("length out of range");
                 }
                 n = 0;
-                for (int i = 0; i < octetos; i++) {
+                for (int i = 0; i < octets; i++) {
                     n = (n << 8) | (b[p] & 0xff);
                     p++;
                 }
                 if (n < 0) {
-                    throw new IOException("largo fuera de rango");
+                    throw new IOException("length out of range");
                 }
             }
             if (p + n > b.length) {
-                throw new java.io.EOFException("se termino antes del contenido");
+                throw new java.io.EOFException("it ended before the content");
             }
-            return new Der(etiqueta, n, p);
+            return new Der(tag, n, p);
         }
 
-        /** El identificador de objeto que hay en esa porcion, con puntos. */
-        static String oid(byte[] b, int desde, int largo) throws IOException {
-            if (largo == 0) {
-                throw new IOException("identificador vacio");
+        /** The object identifier in that slice, with dots. */
+        static String oid(byte[] b, int from, int length) throws IOException {
+            if (length == 0) {
+                throw new IOException("empty identifier");
             }
             final StringBuilder s = new StringBuilder();
-            final int primero = b[desde] & 0xff;
-            s.append(primero / 40).append('.').append(primero % 40);
+            final int first = b[from] & 0xff;
+            s.append(first / 40).append('.').append(first % 40);
             long v = 0;
-            for (int i = desde + 1; i < desde + largo; i++) {
+            for (int i = from + 1; i < from + length; i++) {
                 final int c = b[i] & 0xff;
                 v = (v << 7) | (c & 0x7f);
                 if ((c & 0x80) == 0) {
@@ -564,27 +564,27 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
             return s.toString();
         }
 
-        /** Escribe un identificador de objeto dado con puntos. */
-        static byte[] escribirOid(String oid) {
-            final String[] partes = oid.split("[.]", -1);
-            final java.io.ByteArrayOutputStream cuerpo = new java.io.ByteArrayOutputStream();
-            cuerpo.write(Integer.parseInt(partes[0]) * 40 + Integer.parseInt(partes[1]));
-            for (int i = 2; i < partes.length; i++) {
-                escribirBase128(cuerpo, Long.parseLong(partes[i]));
+        /** Writes an object identifier given with dots. */
+        static byte[] writeOid(String oid) {
+            final String[] parts = oid.split("[.]", -1);
+            final java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+            body.write(Integer.parseInt(parts[0]) * 40 + Integer.parseInt(parts[1]));
+            for (int i = 2; i < parts.length; i++) {
+                writeBase128(body, Long.parseLong(parts[i]));
             }
-            final byte[] c = cuerpo.toByteArray();
-            return envolver(0x06, c, c.length);
+            final byte[] c = body.toByteArray();
+            return wrap(0x06, c, c.length);
         }
 
-        /** Un valor en base 128, con el bit de arriba prendido salvo en el ultimo octeto. */
-        private static void escribirBase128(java.io.ByteArrayOutputStream out, long v) {
-            int octetos = 1;
+        /** A value in base 128, with the top bit set except in the last octet. */
+        private static void writeBase128(java.io.ByteArrayOutputStream out, long v) {
+            int octets = 1;
             long t = v >>> 7;
             while (t != 0) {
-                octetos++;
+                octets++;
                 t = t >>> 7;
             }
-            for (int i = octetos - 1; i >= 0; i--) {
+            for (int i = octets - 1; i >= 0; i--) {
                 int c = (int) ((v >>> (7 * i)) & 0x7f);
                 if (i != 0) {
                     c = c | 0x80;
@@ -593,25 +593,25 @@ public class EncryptedPrivateKeyInfo implements DEREncodable {
             }
         }
 
-        /** Envuelve los primeros bytes de un arreglo con esa etiqueta y su largo. */
-        static byte[] envolver(int etiqueta, byte[] contenido, int largo) {
+        /** Wraps the first bytes of an array with that tag and its length. */
+        static byte[] wrap(int tag, byte[] content, int length) {
             final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            out.write(etiqueta);
-            if (largo < 128) {
-                out.write(largo);
+            out.write(tag);
+            if (length < 128) {
+                out.write(length);
             } else {
-                int octetos = 1;
-                int t = largo >>> 8;
+                int octets = 1;
+                int t = length >>> 8;
                 while (t != 0) {
-                    octetos++;
+                    octets++;
                     t = t >>> 8;
                 }
-                out.write(0x80 | octetos);
-                for (int i = octetos - 1; i >= 0; i--) {
-                    out.write((largo >>> (8 * i)) & 0xff);
+                out.write(0x80 | octets);
+                for (int i = octets - 1; i >= 0; i--) {
+                    out.write((length >>> (8 * i)) & 0xff);
                 }
             }
-            out.write(contenido, 0, largo);
+            out.write(content, 0, length);
             return out.toByteArray();
         }
     }

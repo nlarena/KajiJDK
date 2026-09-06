@@ -9,26 +9,25 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Genera claves simetricas.
+ * Generates symmetric keys.
  *
- * <h2>Por que no alcanza con bytes al azar</h2>
+ * <h2>Why random bytes are not enough</h2>
  *
- * <p>Para muchos algoritmos alcanzaria. Para otros no: DES y DESede tienen bits de paridad y claves
- * debiles que hay que descartar, y una clave para un algoritmo con estructura tiene que caer en un
- * rango. Sortear bytes y llamarlos clave produciria claves invalidas cada tanto, y --peor-- claves
- * validas pero debiles.
+ * <p>For many algorithms they would be. For others they are not: DES and DESede have parity bits and
+ * weak keys that have to be discarded, and a key for an algorithm with structure has to fall in a
+ * range. Drawing bytes and calling them a key would produce invalid keys now and then, and --worse--
+ * valid but weak ones.
  *
- * <h2>Configurarlo es optativo</h2>
+ * <h2>Configuring it is optional</h2>
  *
- * <p>Sin configurar, usa el tamano de omision del algoritmo, que es el recomendado. Obligar a
- * elegirlo seria peor: es como se terminan escribiendo claves de 512 bits en programas que nadie
- * volvio a mirar.
+ * <p>Unconfigured, it uses the algorithm's default size, which is the recommended one. Forcing the
+ * choice would be worse: it is how 512-bit keys end up written in programs nobody looked at again.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece generadores de claves,
- * asi que {@link #getInstance} tira {@link NoSuchAlgorithmException} para cualquier nombre.
- * Registrar un proveedor propio lo hace andar.
+ * <p>The machinery works in full, but no registered provider offers key generators, so
+ * {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. Registering a provider
+ * of one's own makes it work.
  *
  * @since 1.4
  */
@@ -39,11 +38,11 @@ public class KeyGenerator {
     private final String algorithm;
 
     /**
-     * Uno alrededor de esa implementacion.
+     * One around that implementation.
      *
-     * @param keyGenSpi la implementacion
-     * @param provider de quien es
-     * @param algorithm con que nombre se lo pidio
+     * @param keyGenSpi the implementation
+     * @param provider whose it is
+     * @param algorithm the name it was asked for by
      */
     protected KeyGenerator(KeyGeneratorSpi keyGenSpi, Provider provider, String algorithm) {
         this.spi = keyGenSpi;
@@ -52,21 +51,21 @@ public class KeyGenerator {
     }
 
     /**
-     * Para que algoritmo genera claves.
+     * Which algorithm it generates keys for.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Uno para ese algoritmo.
+     * One for that algorithm.
      *
-     * @param algorithm el algoritmo
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param algorithm the algorithm
+     * @return the engine
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public static final KeyGenerator getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -76,21 +75,21 @@ public class KeyGenerator {
         for (int i = 0; i < provs.length; i++) {
             final Provider.Service s = provs[i].getService("KeyGenerator", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " KeyGenerator not available");
     }
 
     /**
-     * Uno de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el algoritmo
-     * @param provider el nombre del proveedor
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param algorithm the algorithm
+     * @param provider the provider's name
+     * @return the engine
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public static final KeyGenerator getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -105,13 +104,13 @@ public class KeyGenerator {
     }
 
     /**
-     * Uno de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el algoritmo
-     * @param provider el proveedor
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws IllegalArgumentException si el proveedor es {@code null}
+     * @param algorithm the algorithm
+     * @param provider the provider
+     * @return the engine
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws IllegalArgumentException if the provider is {@code null}
      */
     public static final KeyGenerator getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -126,32 +125,32 @@ public class KeyGenerator {
             throw new NoSuchAlgorithmException(
                     "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el proveedor
+     * @return the provider
      */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Lo configura con el tamano de omision.
+     * Configures it with the default size.
      *
-     * @param random de donde sacar el azar
+     * @param random where to take the randomness from
      */
     public final void init(SecureRandom random) {
         this.spi.engineInit(random);
     }
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param params los parametros
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param params the parameters
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public final void init(AlgorithmParameterSpec params)
             throws InvalidAlgorithmParameterException {
@@ -159,11 +158,11 @@ public class KeyGenerator {
     }
 
     /**
-     * Lo configura con parametros, diciendo de donde sacar el azar.
+     * Configures it with parameters, saying where to take the randomness from.
      *
-     * @param params los parametros
-     * @param random de donde sacar el azar
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param params the parameters
+     * @param random where to take the randomness from
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public final void init(AlgorithmParameterSpec params, SecureRandom random)
             throws InvalidAlgorithmParameterException {
@@ -171,36 +170,36 @@ public class KeyGenerator {
     }
 
     /**
-     * Lo configura con un tamano.
+     * Configures it with a size.
      *
-     * @param keysize el tamano en bits
-     * @throws java.security.InvalidParameterException si ese tamano no sirve
+     * @param keysize the size in bits
+     * @throws java.security.InvalidParameterException if that size is no good
      */
     public final void init(int keysize) {
         init(keysize, new SecureRandom());
     }
 
     /**
-     * Lo configura con un tamano, diciendo de donde sacar el azar.
+     * Configures it with a size, saying where to take the randomness from.
      *
-     * @param keysize el tamano en bits
-     * @param random de donde sacar el azar
-     * @throws java.security.InvalidParameterException si ese tamano no sirve
+     * @param keysize the size in bits
+     * @param random where to take the randomness from
+     * @throws java.security.InvalidParameterException if that size is no good
      */
     public final void init(int keysize, SecureRandom random) {
         this.spi.engineInit(keysize, random);
     }
 
     /**
-     * Genera una clave.
+     * Generates a key.
      *
-     * @return la clave
+     * @return the key
      */
     public final SecretKey generateKey() {
         return this.spi.engineGenerateKey();
     }
 
-    private static KeyGenerator armar(Provider.Service s, String algorithm)
+    private static KeyGenerator build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         final Object o = s.newInstance(null);
         if (!(o instanceof KeyGeneratorSpi)) {

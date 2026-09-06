@@ -11,28 +11,29 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Un codigo de autenticacion de mensaje: un resumen con clave.
+ * A message authentication code: a digest with a key.
  *
- * <h2>Que prueba</h2>
+ * <h2>What it proves</h2>
  *
- * <p>Que el mensaje no cambio y que lo escribio alguien que tiene la clave. Un resumen a secas prueba
- * lo primero pero no lo segundo: cualquiera que cambie el mensaje puede recalcular el resumen.
+ * <p>That the message did not change and that it was written by somebody who has the key. A plain
+ * digest proves the first but not the second: anybody who changes the message can recompute the
+ * digest.
  *
- * <p>Lo que no prueba es cual de los dos lo escribio. Las dos partes comparten la misma clave, asi
- * que ninguna puede demostrarle a un tercero que fue la otra. Para eso hace falta una firma.
+ * <p>What it does not prove is which of the two wrote it. Both parties share the same key, so
+ * neither can prove to a third party that it was the other. That needs a signature.
  *
- * <h2>Como se compara</h2>
+ * <h2>How it is compared</h2>
  *
- * <p>Comparando los dos arreglos byte a byte con un bucle que corta al primer byte distinto se filtra
- * cuantos bytes coincidieron, y con eso se puede adivinar el codigo correcto uno a uno. La
- * comparacion tiene que mirar todos los bytes siempre, como hace
- * {@link java.security.MessageDigest#isEqual}.
+ * <p>Comparing the two arrays byte by byte with a loop that stops at the first different byte leaks
+ * how many bytes matched, and with that the right code can be guessed one byte at a time. The
+ * comparison has to look at every byte always, the way
+ * {@link java.security.MessageDigest#isEqual} does.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece codigos de
- * autenticacion, asi que {@link #getInstance} tira {@link NoSuchAlgorithmException} para cualquier
- * nombre. Registrar un proveedor propio lo hace andar.
+ * <p>The machinery works in full, but no registered provider offers authentication codes, so
+ * {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. Registering a provider
+ * of one's own makes it work.
  *
  * @since 1.4
  */
@@ -44,11 +45,11 @@ public class Mac implements Cloneable {
     private boolean initialized;
 
     /**
-     * Uno alrededor de esa implementacion.
+     * One around that implementation.
      *
-     * @param macSpi la implementacion
-     * @param provider de quien es
-     * @param algorithm con que nombre se lo pidio
+     * @param macSpi the implementation
+     * @param provider whose it is
+     * @param algorithm the name it was asked for by
      */
     protected Mac(MacSpi macSpi, Provider provider, String algorithm) {
         this.spi = macSpi;
@@ -57,21 +58,21 @@ public class Mac implements Cloneable {
     }
 
     /**
-     * Con que nombre se lo pidio.
+     * The name it was asked for by.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Uno para ese algoritmo.
+     * One for that algorithm.
      *
-     * @param algorithm el algoritmo
-     * @return el codigo de autenticacion
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param algorithm the algorithm
+     * @return the authentication code
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public static final Mac getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -81,21 +82,21 @@ public class Mac implements Cloneable {
         for (int i = 0; i < provs.length; i++) {
             final Provider.Service s = provs[i].getService("Mac", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " Mac not available");
     }
 
     /**
-     * Uno de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el algoritmo
-     * @param provider el nombre del proveedor
-     * @return el codigo de autenticacion
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param algorithm the algorithm
+     * @param provider the provider's name
+     * @return the authentication code
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public static final Mac getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -110,13 +111,13 @@ public class Mac implements Cloneable {
     }
 
     /**
-     * Uno de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el algoritmo
-     * @param provider el proveedor
-     * @return el codigo de autenticacion
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws IllegalArgumentException si el proveedor es {@code null}
+     * @param algorithm the algorithm
+     * @param provider the provider
+     * @return the authentication code
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws IllegalArgumentException if the provider is {@code null}
      */
     public static final Mac getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -131,32 +132,32 @@ public class Mac implements Cloneable {
             throw new NoSuchAlgorithmException(
                     "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el proveedor
+     * @return the provider
      */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Cuanto mide lo que sale.
+     * How large what comes out is.
      *
-     * @return el tamano en bytes
+     * @return the size in bytes
      */
     public final int getMacLength() {
         return this.spi.engineGetMacLength();
     }
 
     /**
-     * Lo configura.
+     * Configures it.
      *
-     * @param key la clave
-     * @throws InvalidKeyException si la clave no sirve
+     * @param key the key
+     * @throws InvalidKeyException if the key is no good
      */
     public final void init(Key key) throws InvalidKeyException {
         try {
@@ -168,12 +169,12 @@ public class Mac implements Cloneable {
     }
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param key la clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param key the key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public final void init(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
@@ -182,40 +183,40 @@ public class Mac implements Cloneable {
     }
 
     /**
-     * Entrega un byte.
+     * Hands over one byte.
      *
-     * @param input el byte
-     * @throws IllegalStateException si no se lo configuro
+     * @param input the byte
+     * @throws IllegalStateException if it has not been configured
      */
     public final void update(byte input) throws IllegalStateException {
-        comprobar();
+        check();
         this.spi.engineUpdate(input);
     }
 
     /**
-     * Entrega datos.
+     * Hands over data.
      *
-     * @param input los datos
-     * @throws IllegalStateException si no se lo configuro
+     * @param input the data
+     * @throws IllegalStateException if it has not been configured
      */
     public final void update(byte[] input) throws IllegalStateException {
-        comprobar();
+        check();
         if (input != null) {
             this.spi.engineUpdate(input, 0, input.length);
         }
     }
 
     /**
-     * Entrega parte de un arreglo.
+     * Hands over part of an array.
      *
-     * @param input los datos
-     * @param offset desde donde
-     * @param len cuantos
-     * @throws IllegalStateException si no se lo configuro
-     * @throws IllegalArgumentException si la porcion no esta bien
+     * @param input the data
+     * @param offset from where
+     * @param len how many
+     * @throws IllegalStateException if it has not been configured
+     * @throws IllegalArgumentException if the slice is not right
      */
     public final void update(byte[] input, int offset, int len) throws IllegalStateException {
-        comprobar();
+        check();
         if (input == null) {
             return;
         }
@@ -226,13 +227,13 @@ public class Mac implements Cloneable {
     }
 
     /**
-     * Entrega lo que quede en el buffer.
+     * Hands over whatever is left in the buffer.
      *
-     * @param input los datos; queda consumido
-     * @throws IllegalStateException si no se lo configuro
+     * @param input the data; it is left consumed
+     * @throws IllegalStateException if it has not been configured
      */
     public final void update(ByteBuffer input) {
-        comprobar();
+        check();
         if (input == null) {
             throw new IllegalArgumentException("Buffer must not be null");
         }
@@ -240,89 +241,89 @@ public class Mac implements Cloneable {
     }
 
     /**
-     * Termina y devuelve el codigo.
+     * Finishes and returns the code.
      *
-     * <p>Despues de esto queda listo para otro mensaje con la misma clave: no hay que volver a
-     * configurarlo.
+     * <p>After this it is ready for another message with the same key: it does not have to be
+     * configured again.
      *
-     * @return el codigo
-     * @throws IllegalStateException si no se lo configuro
+     * @return the code
+     * @throws IllegalStateException if it has not been configured
      */
     public final byte[] doFinal() throws IllegalStateException {
-        comprobar();
+        check();
         final byte[] r = this.spi.engineDoFinal();
         this.spi.engineReset();
         return r;
     }
 
     /**
-     * Termina y escribe el codigo en el arreglo dado.
+     * Finishes and writes the code into the given array.
      *
-     * @param output donde escribirlo
-     * @param outOffset desde donde
-     * @throws ShortBufferException si el arreglo no alcanza
-     * @throws IllegalStateException si no se lo configuro
+     * @param output where to write it
+     * @param outOffset from where
+     * @throws ShortBufferException if the array is not big enough
+     * @throws IllegalStateException if it has not been configured
      */
     public final void doFinal(byte[] output, int outOffset)
             throws ShortBufferException, IllegalStateException {
-        comprobar();
+        check();
         if (output == null || outOffset < 0) {
             throw new IllegalArgumentException("Bad arguments");
         }
-        final int largo = getMacLength();
-        if (output.length - outOffset < largo) {
+        final int length = getMacLength();
+        if (output.length - outOffset < length) {
             throw new ShortBufferException(
-                    "Cannot store MAC in output buffer: " + largo + " bytes needed");
+                    "Cannot store MAC in output buffer: " + length + " bytes needed");
         }
         final byte[] r = doFinal();
         System.arraycopy(r, 0, output, outOffset, r.length);
     }
 
     /**
-     * Entrega los ultimos datos, termina, y devuelve el codigo.
+     * Hands over the last data, finishes, and returns the code.
      *
-     * @param input los datos
-     * @return el codigo
-     * @throws IllegalStateException si no se lo configuro
+     * @param input the data
+     * @return the code
+     * @throws IllegalStateException if it has not been configured
      */
     public final byte[] doFinal(byte[] input) throws IllegalStateException {
-        comprobar();
+        check();
         update(input);
         return doFinal();
     }
 
     /**
-     * Lo deja listo para otro mensaje con la misma clave.
+     * Leaves it ready for another message with the same key.
      *
-     * <p>No borra la clave: eso seria volver a configurarlo.
+     * <p>It does not wipe the key: that would be configuring it again.
      */
     public final void reset() {
         this.spi.engineReset();
     }
 
     /**
-     * Una copia con el mismo estado.
+     * A copy with the same state.
      *
-     * <p>Sirve para calcular el codigo de dos mensajes que empiezan igual sin recorrer dos veces la
-     * parte comun.
+     * <p>It is for computing the code of two messages that start the same without walking the common
+     * part twice.
      *
-     * @return la copia
-     * @throws CloneNotSupportedException si la implementacion no se puede copiar
+     * @return the copy
+     * @throws CloneNotSupportedException if the implementation cannot be copied
      */
     @Override
     public final Object clone() throws CloneNotSupportedException {
-        final Mac copia = (Mac) super.clone();
-        copia.spi = (MacSpi) this.spi.clone();
-        return copia;
+        final Mac copy = (Mac) super.clone();
+        copy.spi = (MacSpi) this.spi.clone();
+        return copy;
     }
 
-    private void comprobar() {
+    private void check() {
         if (!this.initialized) {
             throw new IllegalStateException("MAC not initialized");
         }
     }
 
-    private static Mac armar(Provider.Service s, String algorithm)
+    private static Mac build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         final Object o = s.newInstance(null);
         if (!(o instanceof MacSpi)) {

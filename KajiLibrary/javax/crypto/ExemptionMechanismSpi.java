@@ -7,86 +7,85 @@ import java.security.Key;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que un proveedor tiene que escribir para ofrecer un mecanismo de exencion.
+ * What a provider has to write in order to offer an exemption mechanism.
  *
- * <h2>De donde sale esto</h2>
+ * <h2>Where this comes from</h2>
  *
- * <p>De cuando exportar criptografia fuerte estaba restringido. Un producto podia usar claves mas
- * largas de lo permitido si ademas guardaba, junto al mensaje, un bloque que le permitiera a una
- * autoridad recuperarlo. Eso es el bloque de exencion: deposito de claves, recuperacion de claves, o
- * debilitamiento deliberado.
+ * <p>From when exporting strong cryptography was restricted. A product could use keys longer than
+ * allowed if it also kept, alongside the message, a block letting an authority recover it. That is
+ * the exemption blob: key escrow, key recovery, or deliberate weakening.
  *
- * <p>Hoy no se usa. Las restricciones se levantaron y el JDK no trae ningun mecanismo; la maquinaria
- * quedo porque sacarla romperia programas que la nombran.
+ * <p>Nobody uses it today. The restrictions were lifted and the JDK ships no mechanism; the
+ * machinery stayed because removing it would break programs that name it.
  *
  * @since 1.4
  */
 public abstract class ExemptionMechanismSpi {
 
-    /** Uno. */
+    /** One. */
     public ExemptionMechanismSpi() {
     }
 
     /**
-     * Cuanto va a medir el bloque.
+     * How large the blob will be.
      *
-     * @param inputLen cuanto mide la entrada
-     * @return el tamano en bytes
+     * @param inputLen how large the input is
+     * @return the size in bytes
      */
     protected abstract int engineGetOutputSize(int inputLen);
 
     /**
-     * Lo configura.
+     * Configures it.
      *
-     * @param key la clave
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws ExemptionMechanismException si algo mas sale mal
+     * @param key the key
+     * @throws InvalidKeyException if the key is no good
+     * @throws ExemptionMechanismException if anything else goes wrong
      */
     protected abstract void engineInit(Key key)
             throws InvalidKeyException, ExemptionMechanismException;
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param key la clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws ExemptionMechanismException si algo mas sale mal
+     * @param key the key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws ExemptionMechanismException if anything else goes wrong
      */
     protected abstract void engineInit(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException,
             ExemptionMechanismException;
 
     /**
-     * Lo configura con parametros ya codificados.
+     * Configures it with already encoded parameters.
      *
-     * @param key la clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws ExemptionMechanismException si algo mas sale mal
+     * @param key the key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws ExemptionMechanismException if anything else goes wrong
      */
     protected abstract void engineInit(Key key, AlgorithmParameters params)
             throws InvalidKeyException, InvalidAlgorithmParameterException,
             ExemptionMechanismException;
 
     /**
-     * Genera el bloque.
+     * Generates the blob.
      *
-     * @return el bloque
-     * @throws ExemptionMechanismException si algo sale mal
+     * @return the blob
+     * @throws ExemptionMechanismException if anything goes wrong
      */
     protected abstract byte[] engineGenExemptionBlob() throws ExemptionMechanismException;
 
     /**
-     * Genera el bloque en el arreglo dado.
+     * Generates the blob into the given array.
      *
-     * @param output donde escribirlo
-     * @param outputOffset desde donde
-     * @return cuantos bytes se escribieron
-     * @throws ShortBufferException si el arreglo no alcanza
-     * @throws ExemptionMechanismException si algo sale mal
+     * @param output where to write it
+     * @param outputOffset from where
+     * @return how many bytes were written
+     * @throws ShortBufferException if the array is not big enough
+     * @throws ExemptionMechanismException if anything goes wrong
      */
     protected abstract int engineGenExemptionBlob(byte[] output, int outputOffset)
             throws ShortBufferException, ExemptionMechanismException;

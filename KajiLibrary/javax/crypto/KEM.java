@@ -12,36 +12,36 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Encapsulacion de claves: como se acuerda un secreto con quien solo publico su clave publica.
+ * Key encapsulation: how a secret is agreed with somebody who only published their public key.
  *
- * <h2>En que se diferencia de cifrar</h2>
+ * <h2>How it differs from encrypting</h2>
  *
- * <p>En que el secreto no se elige, se genera. Cifrar una clave con RSA obliga a que el que cifra
- * elija que cifrar, y esa eleccion es una de las fuentes historicas de errores: relleno mal hecho,
- * valores predecibles, la misma clave dos veces. Aca el que encapsula no elige nada: pide un secreto
- * y recibe el secreto y su encapsulacion.
+ * <p>In that the secret is not chosen, it is generated. Encrypting a key with RSA forces whoever
+ * encrypts to choose what to encrypt, and that choice is one of the historical sources of mistakes:
+ * badly done padding, predictable values, the same key twice. Here whoever encapsulates chooses
+ * nothing: they ask for a secret and get the secret and its encapsulation.
  *
- * <p>La otra diferencia es que no hace falta que las dos partes hablen. Con un acuerdo de claves
- * --{@link KeyAgreement}-- los dos tienen que mandar su mitad; aca alcanza con la clave publica del
- * destinatario, que puede estar publicada desde hace anos.
+ * <p>The other difference is that the two parties do not have to talk. With a key agreement
+ * --{@link KeyAgreement}-- both have to send their half; here the recipient's public key is enough,
+ * and it may have been published years ago.
  *
- * <h2>Por que ahora</h2>
+ * <h2>Why now</h2>
  *
- * <p>Porque es la forma que toman los algoritmos que resisten a una computadora cuantica. Los
- * acuerdos de claves clasicos se apoyan en problemas que esa computadora resolveria; los que
- * reemplazan a esos se expresan naturalmente como encapsulacion, no como acuerdo.
+ * <p>Because it is the shape the algorithms that resist a quantum computer take. The classical key
+ * agreements lean on problems such a computer would solve; the ones replacing them are naturally
+ * expressed as encapsulation, not as agreement.
  *
- * <h2>Los tamanos</h2>
+ * <h2>The sizes</h2>
  *
- * <p>{@link Encapsulator#secretSize} y {@link Encapsulator#encapsulationSize} se saben antes de
- * hacer nada. Es lo que permite reservar la memoria justa y armar protocolos de mensajes de tamano
- * fijo, que son mas faciles de analizar.
+ * <p>{@link Encapsulator#secretSize} and {@link Encapsulator#encapsulationSize} are known before
+ * anything is done. That is what allows exactly the right memory to be reserved and fixed-size
+ * message protocols to be built, which are easier to analyse.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece encapsulacion de claves,
- * asi que {@link #getInstance} tira {@link NoSuchAlgorithmException} para cualquier nombre.
- * Registrar un proveedor propio lo hace andar.
+ * <p>The machinery works in full, but no registered provider offers key encapsulation, so
+ * {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. Registering a provider
+ * of one's own makes it work.
  *
  * @since 21
  */
@@ -58,11 +58,12 @@ public final class KEM {
     }
 
     /**
-     * Un secreto recien generado, junto con lo que hay que mandarle al otro para que lo recupere.
+     * A freshly generated secret, together with what has to be sent to the other side for them to
+     * recover it.
      *
-     * @param key el secreto, ya como clave
-     * @param encapsulation lo que se le manda al otro
-     * @param params los parametros que hagan falta para recuperarlo, o {@code null}
+     * @param key the secret, already as a key
+     * @param encapsulation what is sent to the other side
+     * @param params whatever parameters are needed to recover it, or {@code null}
      * @since 21
      */
     public static final class Encapsulated {
@@ -72,12 +73,12 @@ public final class KEM {
         private final byte[] params;
 
         /**
-         * Uno.
+         * One.
          *
-         * @param key el secreto
-         * @param encapsulation lo que se le manda al otro
-         * @param params los parametros, o {@code null}
-         * @throws NullPointerException si la clave o la encapsulacion son {@code null}
+         * @param key the secret
+         * @param encapsulation what is sent to the other side
+         * @param params the parameters, or {@code null}
+         * @throws NullPointerException if the key or the encapsulation are {@code null}
          */
         public Encapsulated(SecretKey key, byte[] encapsulation, byte[] params) {
             if (key == null) {
@@ -92,34 +93,34 @@ public final class KEM {
         }
 
         /**
-         * El secreto.
+         * The secret.
          *
-         * @return la clave
+         * @return the key
          */
         public SecretKey key() {
             return this.key;
         }
 
         /**
-         * Lo que hay que mandarle al otro.
+         * What has to be sent to the other side.
          *
-         * @return la encapsulacion
+         * @return the encapsulation
          */
         public byte[] encapsulation() {
             return this.encapsulation.clone();
         }
 
         /**
-         * Los parametros que hagan falta para recuperarlo.
+         * Whatever parameters are needed to recover it.
          *
-         * @return los parametros, o {@code null}
+         * @return the parameters, or {@code null}
          */
         public byte[] params() {
             return this.params == null ? null : this.params.clone();
         }
     }
 
-    /** El lado que genera el secreto. */
+    /** The side that generates the secret. */
     public static final class Encapsulator {
 
         private final KEMSpi.EncapsulatorSpi spi;
@@ -131,61 +132,61 @@ public final class KEM {
         }
 
         /**
-         * De quien es la implementacion.
+         * Whose the implementation is.
          *
-         * @return el nombre del proveedor
+         * @return the provider's name
          */
         public String providerName() {
             return this.providerName;
         }
 
         /**
-         * Genera un secreto y su encapsulacion.
+         * Generates a secret and its encapsulation.
          *
-         * @return el secreto y la encapsulacion
+         * @return the secret and the encapsulation
          */
         public Encapsulated encapsulate() {
             return encapsulate(0, secretSize(), "Generic");
         }
 
         /**
-         * Lo mismo, quedandose con una parte del secreto.
+         * The same, keeping only part of the secret.
          *
-         * <p>Sirve cuando de un mismo secreto salen varias claves: se encapsula una vez y cada
-         * pedazo va a un uso distinto.
+         * <p>It is for when several keys come out of one secret: it is encapsulated once and each
+         * piece goes to a different use.
          *
-         * @param from desde que byte
-         * @param to hasta que byte, sin incluirlo
-         * @param algorithm para que algoritmo es la clave que sale
-         * @return el secreto y la encapsulacion
-         * @throws IndexOutOfBoundsException si el rango no cae adentro del secreto
-         * @throws NullPointerException si el algoritmo es {@code null}
+         * @param from from which byte
+         * @param to up to which byte, exclusive
+         * @param algorithm which algorithm the resulting key is for
+         * @return the secret and the encapsulation
+         * @throws IndexOutOfBoundsException if the range does not fall inside the secret
+         * @throws NullPointerException if the algorithm is {@code null}
          */
         public Encapsulated encapsulate(int from, int to, String algorithm) {
-            comprobarRango(from, to, secretSize(), algorithm);
+            checkRange(from, to, secretSize(), algorithm);
             return this.spi.engineEncapsulate(from, to, algorithm);
         }
 
         /**
-         * Cuanto mide el secreto.
+         * How large the secret is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         public int secretSize() {
             return this.spi.engineSecretSize();
         }
 
         /**
-         * Cuanto mide la encapsulacion.
+         * How large the encapsulation is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         public int encapsulationSize() {
             return this.spi.engineEncapsulationSize();
         }
     }
 
-    /** El lado que recupera el secreto. */
+    /** The side that recovers the secret. */
     public static final class Decapsulator {
 
         private final KEMSpi.DecapsulatorSpi spi;
@@ -197,44 +198,44 @@ public final class KEM {
         }
 
         /**
-         * De quien es la implementacion.
+         * Whose the implementation is.
          *
-         * @return el nombre del proveedor
+         * @return the provider's name
          */
         public String providerName() {
             return this.providerName;
         }
 
         /**
-         * Recupera el secreto entero.
+         * Recovers the whole secret.
          *
-         * @param encapsulation lo que mando el otro
-         * @return la clave
-         * @throws DecapsulateException si no se pudo recuperar
+         * @param encapsulation what the other side sent
+         * @return the key
+         * @throws DecapsulateException if it could not be recovered
          */
         public SecretKey decapsulate(byte[] encapsulation) throws DecapsulateException {
             return decapsulate(encapsulation, 0, secretSize(), "Generic");
         }
 
         /**
-         * Recupera una parte del secreto.
+         * Recovers part of the secret.
          *
-         * @param encapsulation lo que mando el otro
-         * @param from desde que byte
-         * @param to hasta que byte, sin incluirlo
-         * @param algorithm para que algoritmo es la clave que sale
-         * @return la clave
-         * @throws DecapsulateException si no se pudo recuperar
-         * @throws IndexOutOfBoundsException si el rango no cae adentro del secreto
-         * @throws NullPointerException si la encapsulacion o el algoritmo son {@code null}
-         * @throws IllegalArgumentException si la encapsulacion no mide lo que tiene que medir
+         * @param encapsulation what the other side sent
+         * @param from from which byte
+         * @param to up to which byte, exclusive
+         * @param algorithm which algorithm the resulting key is for
+         * @return the key
+         * @throws DecapsulateException if it could not be recovered
+         * @throws IndexOutOfBoundsException if the range does not fall inside the secret
+         * @throws NullPointerException if the encapsulation or the algorithm are {@code null}
+         * @throws IllegalArgumentException if the encapsulation is not the size it has to be
          */
         public SecretKey decapsulate(byte[] encapsulation, int from, int to, String algorithm)
                 throws DecapsulateException {
             if (encapsulation == null) {
                 throw new NullPointerException("encapsulation");
             }
-            comprobarRango(from, to, secretSize(), algorithm);
+            checkRange(from, to, secretSize(), algorithm);
             if (encapsulation.length != encapsulationSize()) {
                 throw new IllegalArgumentException("Invalid encapsulation size");
             }
@@ -242,18 +243,18 @@ public final class KEM {
         }
 
         /**
-         * Cuanto mide el secreto.
+         * How large the secret is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         public int secretSize() {
             return this.spi.engineSecretSize();
         }
 
         /**
-         * Cuanto mide la encapsulacion.
+         * How large the encapsulation is.
          *
-         * @return el tamano en bytes
+         * @return the size in bytes
          */
         public int encapsulationSize() {
             return this.spi.engineEncapsulationSize();
@@ -261,12 +262,12 @@ public final class KEM {
     }
 
     /**
-     * Uno para ese algoritmo.
+     * One for that algorithm.
      *
-     * @param algorithm el algoritmo
-     * @return el mecanismo
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param algorithm the algorithm
+     * @return the mechanism
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public static KEM getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -274,7 +275,7 @@ public final class KEM {
         }
         final Provider[] provs = Security.getProviders();
         for (int i = 0; i < provs.length; i++) {
-            final KEM k = armar(provs[i], algorithm);
+            final KEM k = build(provs[i], algorithm);
             if (k != null) {
                 return k;
             }
@@ -283,12 +284,12 @@ public final class KEM {
     }
 
     /**
-     * Uno de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el algoritmo
-     * @param provider el proveedor
-     * @return el mecanismo
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
+     * @param algorithm the algorithm
+     * @param provider the provider
+     * @return the mechanism
+     * @throws NoSuchAlgorithmException if that provider does not have it
      */
     public static KEM getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -298,7 +299,7 @@ public final class KEM {
         if (algorithm == null) {
             throw new NullPointerException("null algorithm name");
         }
-        final KEM k = armar(provider, algorithm);
+        final KEM k = build(provider, algorithm);
         if (k != null) {
             return k;
         }
@@ -307,13 +308,13 @@ public final class KEM {
     }
 
     /**
-     * Uno de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el algoritmo
-     * @param provider el nombre del proveedor
-     * @return el mecanismo
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
+     * @param algorithm the algorithm
+     * @param provider the provider's name
+     * @return the mechanism
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
      */
     public static KEM getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -328,11 +329,11 @@ public final class KEM {
     }
 
     /**
-     * Un encapsulador para esa clave publica.
+     * An encapsulator for that public key.
      *
-     * @param publicKey la clave publica del otro
-     * @return el encapsulador
-     * @throws InvalidKeyException si la clave no sirve
+     * @param publicKey the other one's public key
+     * @return the encapsulator
+     * @throws InvalidKeyException if the key is no good
      */
     public Encapsulator newEncapsulator(PublicKey publicKey) throws InvalidKeyException {
         try {
@@ -343,12 +344,12 @@ public final class KEM {
     }
 
     /**
-     * Lo mismo, diciendo de donde sacar el azar.
+     * The same, saying where to take the randomness from.
      *
-     * @param publicKey la clave publica del otro
-     * @param secureRandom de donde sacar el azar, o {@code null}
-     * @return el encapsulador
-     * @throws InvalidKeyException si la clave no sirve
+     * @param publicKey the other one's public key
+     * @param secureRandom where to take the randomness from, or {@code null}
+     * @return the encapsulator
+     * @throws InvalidKeyException if the key is no good
      */
     public Encapsulator newEncapsulator(PublicKey publicKey, SecureRandom secureRandom)
             throws InvalidKeyException {
@@ -360,15 +361,15 @@ public final class KEM {
     }
 
     /**
-     * Lo mismo, con parametros.
+     * The same, with parameters.
      *
-     * @param publicKey la clave publica del otro
-     * @param spec los parametros, o {@code null}
-     * @param secureRandom de donde sacar el azar, o {@code null}
-     * @return el encapsulador
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws NullPointerException si la clave es {@code null}
+     * @param publicKey the other one's public key
+     * @param spec the parameters, or {@code null}
+     * @param secureRandom where to take the randomness from, or {@code null}
+     * @return the encapsulator
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws InvalidKeyException if the key is no good
+     * @throws NullPointerException if the key is {@code null}
      */
     public Encapsulator newEncapsulator(PublicKey publicKey, AlgorithmParameterSpec spec,
             SecureRandom secureRandom)
@@ -381,11 +382,11 @@ public final class KEM {
     }
 
     /**
-     * Un desencapsulador para esa clave privada.
+     * A decapsulator for that private key.
      *
-     * @param privateKey la clave privada propia
-     * @return el desencapsulador
-     * @throws InvalidKeyException si la clave no sirve
+     * @param privateKey one's own private key
+     * @return the decapsulator
+     * @throws InvalidKeyException if the key is no good
      */
     public Decapsulator newDecapsulator(PrivateKey privateKey) throws InvalidKeyException {
         try {
@@ -396,14 +397,14 @@ public final class KEM {
     }
 
     /**
-     * Lo mismo, con parametros.
+     * The same, with parameters.
      *
-     * @param privateKey la clave privada propia
-     * @param spec los parametros, o {@code null}
-     * @return el desencapsulador
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws NullPointerException si la clave es {@code null}
+     * @param privateKey one's own private key
+     * @param spec the parameters, or {@code null}
+     * @return the decapsulator
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws InvalidKeyException if the key is no good
+     * @throws NullPointerException if the key is {@code null}
      */
     public Decapsulator newDecapsulator(PrivateKey privateKey, AlgorithmParameterSpec spec)
             throws InvalidAlgorithmParameterException, InvalidKeyException {
@@ -415,15 +416,15 @@ public final class KEM {
     }
 
     /**
-     * Con que nombre se lo pidio.
+     * The name it was asked for by.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public String getAlgorithm() {
         return this.algorithm;
     }
 
-    private static KEM armar(Provider p, String algorithm) throws NoSuchAlgorithmException {
+    private static KEM build(Provider p, String algorithm) throws NoSuchAlgorithmException {
         final Provider.Service s = p.getService("KEM", algorithm);
         if (s == null) {
             return null;
@@ -436,13 +437,13 @@ public final class KEM {
         return new KEM((KEMSpi) o, s.getProvider(), algorithm);
     }
 
-    /** El rango pedido tiene que caer adentro del secreto, y el algoritmo no puede faltar. */
-    static void comprobarRango(int from, int to, int tam, String algorithm) {
+    /** The range asked for has to fall inside the secret, and the algorithm cannot be missing. */
+    static void checkRange(int from, int to, int size, String algorithm) {
         if (algorithm == null) {
             throw new NullPointerException("null algorithm name");
         }
-        if (from < 0 || from > to || to > tam) {
-            throw new IndexOutOfBoundsException("from: " + from + ", to: " + to + ", size: " + tam);
+        if (from < 0 || from > to || to > size) {
+            throw new IndexOutOfBoundsException("from: " + from + ", to: " + to + ", size: " + size);
         }
     }
 }

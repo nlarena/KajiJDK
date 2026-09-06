@@ -10,243 +10,243 @@ import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que un proveedor tiene que escribir para ofrecer un cifrado.
+ * What a provider has to write in order to offer a cipher.
  *
- * <h2>Por que separado de {@link Cipher}</h2>
+ * <h2>Why it is separate from {@link Cipher}</h2>
  *
- * <p>Porque son dos audiencias distintas. {@link Cipher} es la cara que ve quien cifra: tiene
- * sobrecargas para cada comodidad --arreglos, porciones de arreglos, {@link ByteBuffer}-- y no le
- * pide nada a nadie. Esto es la cara que ve quien implementa el algoritmo, y esa quiere ser lo mas
- * chica posible. Cada sobrecarga que se le agregara aca seria trabajo repetido en cada proveedor.
+ * <p>Because they are two different audiences. {@link Cipher} is the face whoever encrypts sees: it
+ * has overloads for every convenience --arrays, slices of arrays, {@link ByteBuffer}-- and asks
+ * nothing of anybody. This is the face whoever implements the algorithm sees, and that one wants to
+ * be as small as possible. Every overload added here would be work repeated in every provider.
  *
- * <h2>Cuales tienen cuerpo</h2>
+ * <h2>Which ones have a body</h2>
  *
- * <p>Las de {@link ByteBuffer} y las de envolver claves. Las primeras porque se pueden escribir una
- * sola vez sacando los bytes del buffer y llamando a la version de arreglos --eso es lo que hace la
- * implementacion de aca--; las segundas porque no todo cifrado sabe envolver claves, y las que no
- * saben tiran {@link UnsupportedOperationException}.
+ * <p>The {@link ByteBuffer} ones and the key-wrapping ones. The first because they can be written
+ * once by taking the bytes out of the buffer and calling the array version --which is what the
+ * implementation here does; the second because not every cipher knows how to wrap keys, and the ones
+ * that do not throw {@link UnsupportedOperationException}.
  *
- * <h2>El modo y el relleno</h2>
+ * <h2>The mode and the padding</h2>
  *
- * <p>{@link #engineSetMode} y {@link #engineSetPadding} se llaman una sola vez, al construir, y
- * salen de partir el nombre que se le paso a {@link Cipher#getInstance}. Un proveedor puede
- * rechazarlos: no todo algoritmo tiene modos, y un cifrado de flujo no tiene relleno.
+ * <p>{@link #engineSetMode} and {@link #engineSetPadding} are called once, at construction, and come
+ * out of splitting the name handed to {@link Cipher#getInstance}. A provider may refuse them: not
+ * every algorithm has modes, and a stream cipher has no padding.
  *
  * @since 1.4
  */
 public abstract class CipherSpi {
 
-    /** Uno. */
+    /** One. */
     public CipherSpi() {
     }
 
     /**
-     * Fija el modo de operacion.
+     * Sets the operation mode.
      *
-     * @param mode el modo, como {@code "CBC"}
-     * @throws NoSuchAlgorithmException si el proveedor no tiene ese modo
+     * @param mode the mode, such as {@code "CBC"}
+     * @throws NoSuchAlgorithmException if the provider does not have that mode
      */
     protected abstract void engineSetMode(String mode) throws NoSuchAlgorithmException;
 
     /**
-     * Fija el relleno.
+     * Sets the padding.
      *
-     * @param padding el relleno, como {@code "PKCS5Padding"}
-     * @throws NoSuchPaddingException si el proveedor no tiene ese relleno
+     * @param padding the padding, such as {@code "PKCS5Padding"}
+     * @throws NoSuchPaddingException if the provider does not have that padding
      */
     protected abstract void engineSetPadding(String padding) throws NoSuchPaddingException;
 
     /**
-     * Cuanto mide un bloque.
+     * How large a block is.
      *
-     * @return el tamano en bytes, o cero si no es un cifrado por bloques
+     * @return the size in bytes, or zero if it is not a block cipher
      */
     protected abstract int engineGetBlockSize();
 
     /**
-     * Cuanto va a salir si ahora se entregan esos bytes y se termina.
+     * How much will come out if those bytes are handed over now and it finishes.
      *
-     * <p>Puede pasarse, nunca quedarse corto: sirve para reservar el arreglo de salida.
+     * <p>It may overshoot, never fall short: it is for reserving the output array.
      *
-     * @param inputLen cuantos bytes se van a entregar
-     * @return el tamano en bytes
+     * @param inputLen how many bytes will be handed over
+     * @return the size in bytes
      */
     protected abstract int engineGetOutputSize(int inputLen);
 
     /**
-     * El vector de inicializacion.
+     * The initialization vector.
      *
-     * @return una copia del vector, o {@code null} si no hay
+     * @return a copy of the vector, or {@code null} if there is none
      */
     protected abstract byte[] engineGetIV();
 
     /**
-     * Los parametros con que quedo configurado.
+     * The parameters it ended up configured with.
      *
-     * <p>Importa cuando el cifrador genero alguno solo --un vector de inicializacion al azar, por
-     * ejemplo--: es la unica forma de que el que descifra sepa cual uso.
+     * <p>It matters when the cipher generated some by itself --a random initialization vector, for
+     * instance: it is the only way for whoever decrypts to know which it used.
      *
-     * @return los parametros, o {@code null} si no usa ninguno
+     * @return the parameters, or {@code null} if it uses none
      */
     protected abstract AlgorithmParameters engineGetParameters();
 
     /**
-     * Lo configura.
+     * Configures it.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
+     * @param opmode what it will do
+     * @param key with which key
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the key is no good for this cipher
      */
     protected abstract void engineInit(int opmode, Key key, SecureRandom random)
             throws InvalidKeyException;
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param params los parametros
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param opmode what it will do
+     * @param key with which key
+     * @param params the parameters
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     protected abstract void engineInit(int opmode, Key key, AlgorithmParameterSpec params,
             SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException;
 
     /**
-     * Lo configura con parametros ya codificados.
+     * Configures it with already encoded parameters.
      *
-     * @param opmode que va a hacer
-     * @param key con que clave
-     * @param params los parametros
-     * @param random de donde sacar lo que haya que sortear
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param opmode what it will do
+     * @param key with which key
+     * @param params the parameters
+     * @param random where to take whatever has to be drawn from
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     protected abstract void engineInit(int opmode, Key key, AlgorithmParameters params,
             SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException;
 
     /**
-     * Entrega datos y devuelve lo que salga.
+     * Hands over data and returns whatever comes out.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @return lo que salio, o {@code null} si no salio nada
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @return what came out, or {@code null} if nothing did
      */
     protected abstract byte[] engineUpdate(byte[] input, int inputOffset, int inputLen);
 
     /**
-     * Entrega datos y escribe lo que salga en el arreglo dado.
+     * Hands over data and writes whatever comes out into the given array.
      *
-     * @param input los datos
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @param output donde escribir
-     * @param outputOffset desde donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws ShortBufferException si el arreglo de salida no alcanza
+     * @param input the data
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @param output where to write
+     * @param outputOffset from where to write
+     * @return how many bytes were written
+     * @throws ShortBufferException if the output array is not big enough
      */
     protected abstract int engineUpdate(byte[] input, int inputOffset, int inputLen, byte[] output,
             int outputOffset) throws ShortBufferException;
 
     /**
-     * Lo mismo, con buffers.
+     * The same, with buffers.
      *
-     * <p>La implementacion de aca saca los bytes del buffer de entrada, llama a la version de
-     * arreglos y los pone en el de salida. Un proveedor que pueda trabajar sobre el buffer sin
-     * copiar --uno que hable con la maquina directamente-- deberia redefinirlo.
+     * <p>The implementation here takes the bytes out of the input buffer, calls the array version
+     * and puts them into the output one. A provider that can work on the buffer without copying
+     * --one that talks to the machine directly-- should override it.
      *
-     * @param input de donde leer; queda consumido
-     * @param output donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws ShortBufferException si en el buffer de salida no entra
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws IllegalArgumentException si son el mismo buffer
-     * @throws java.nio.ReadOnlyBufferException si el de salida es de solo lectura
+     * @param input where to read from; it is left consumed
+     * @param output where to write
+     * @return how many bytes were written
+     * @throws ShortBufferException if it does not fit in the output buffer
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws IllegalArgumentException if they are the same buffer
+     * @throws java.nio.ReadOnlyBufferException if the output one is read-only
      */
     protected int engineUpdate(ByteBuffer input, ByteBuffer output) throws ShortBufferException {
-        final byte[] entrada = sacar(input, output);
-        return poner(output, engineUpdate(entrada, 0, entrada.length));
+        final byte[] in = take(input, output);
+        return put(output, engineUpdate(in, 0, in.length));
     }
 
     /**
-     * Entrega los ultimos datos y termina.
+     * Hands over the last data and finishes.
      *
-     * @param input los datos, o {@code null}
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @return lo que salio
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input the data, or {@code null}
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @return what came out
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     protected abstract byte[] engineDoFinal(byte[] input, int inputOffset, int inputLen)
             throws IllegalBlockSizeException, BadPaddingException;
 
     /**
-     * Entrega los ultimos datos, termina, y escribe en el arreglo dado.
+     * Hands over the last data, finishes, and writes into the given array.
      *
-     * @param input los datos, o {@code null}
-     * @param inputOffset desde donde
-     * @param inputLen cuantos
-     * @param output donde escribir
-     * @param outputOffset desde donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws ShortBufferException si el arreglo de salida no alcanza
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
+     * @param input the data, or {@code null}
+     * @param inputOffset from where
+     * @param inputLen how many
+     * @param output where to write
+     * @param outputOffset from where to write
+     * @return how many bytes were written
+     * @throws ShortBufferException if the output array is not big enough
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
      */
     protected abstract int engineDoFinal(byte[] input, int inputOffset, int inputLen, byte[] output,
             int outputOffset)
             throws ShortBufferException, IllegalBlockSizeException, BadPaddingException;
 
     /**
-     * Lo mismo, con buffers.
+     * The same, with buffers.
      *
-     * @param input de donde leer; queda consumido
-     * @param output donde escribir
-     * @return cuantos bytes se escribieron
-     * @throws ShortBufferException si en el buffer de salida no entra
-     * @throws IllegalBlockSizeException si lo entregado no mide un multiplo del bloque
-     * @throws BadPaddingException si el relleno no cierra
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws IllegalArgumentException si son el mismo buffer
-     * @throws java.nio.ReadOnlyBufferException si el de salida es de solo lectura
+     * @param input where to read from; it is left consumed
+     * @param output where to write
+     * @return how many bytes were written
+     * @throws ShortBufferException if it does not fit in the output buffer
+     * @throws IllegalBlockSizeException if what was handed over is not a multiple of the block
+     * @throws BadPaddingException if the padding does not close
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws IllegalArgumentException if they are the same buffer
+     * @throws java.nio.ReadOnlyBufferException if the output one is read-only
      */
     protected int engineDoFinal(ByteBuffer input, ByteBuffer output)
             throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
-        final byte[] entrada = sacar(input, output);
-        return poner(output, engineDoFinal(entrada, 0, entrada.length));
+        final byte[] in = take(input, output);
+        return put(output, engineDoFinal(in, 0, in.length));
     }
 
     /**
-     * Cifra una clave.
+     * Encrypts a key.
      *
-     * <p>Envolver una clave no es lo mismo que cifrar sus bytes: la clave se codifica primero, y el
-     * proveedor puede hacerlo sin que el material salga nunca a memoria --que es todo el punto
-     * cuando la clave vive adentro de un dispositivo--.
+     * <p>Wrapping a key is not the same as encrypting its bytes: the key is encoded first, and the
+     * provider may do it without the material ever reaching memory --which is the whole point when
+     * the key lives inside a device.
      *
-     * @param key la clave a envolver
-     * @return la clave cifrada
-     * @throws IllegalBlockSizeException si la clave codificada no mide un multiplo del bloque
-     * @throws InvalidKeyException si la clave no se puede codificar
-     * @throws UnsupportedOperationException si este cifrado no sabe envolver claves
+     * @param key the key to wrap
+     * @return the encrypted key
+     * @throws IllegalBlockSizeException if the encoded key is not a multiple of the block
+     * @throws InvalidKeyException if the key cannot be encoded
+     * @throws UnsupportedOperationException if this cipher does not know how to wrap keys
      */
     protected byte[] engineWrap(Key key) throws IllegalBlockSizeException, InvalidKeyException {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Descifra una clave.
+     * Decrypts a key.
      *
-     * @param wrappedKey la clave cifrada
-     * @param wrappedKeyAlgorithm para que algoritmo es la clave que sale
-     * @param wrappedKeyType si es publica, privada o secreta
-     * @return la clave
-     * @throws InvalidKeyException si lo descifrado no es una clave de ese tipo
-     * @throws NoSuchAlgorithmException si no hay con que reconstruirla
-     * @throws UnsupportedOperationException si este cifrado no sabe envolver claves
+     * @param wrappedKey the encrypted key
+     * @param wrappedKeyAlgorithm which algorithm the resulting key is for
+     * @param wrappedKeyType whether it is public, private or secret
+     * @return the key
+     * @throws InvalidKeyException if what was decrypted is not a key of that type
+     * @throws NoSuchAlgorithmException if there is nothing to rebuild it with
+     * @throws UnsupportedOperationException if this cipher does not know how to wrap keys
      */
     protected Key engineUnwrap(byte[] wrappedKey, String wrappedKeyAlgorithm, int wrappedKeyType)
             throws InvalidKeyException, NoSuchAlgorithmException {
@@ -254,52 +254,52 @@ public abstract class CipherSpi {
     }
 
     /**
-     * Cuantos bits tiene esa clave.
+     * How many bits that key has.
      *
-     * @param key la clave
-     * @return el tamano en bits
-     * @throws InvalidKeyException si la clave no sirve para este cifrado
-     * @throws UnsupportedOperationException si este cifrado no sabe contestarlo
+     * @param key the key
+     * @return the size in bits
+     * @throws InvalidKeyException if the key is no good for this cipher
+     * @throws UnsupportedOperationException if this cipher does not know how to answer
      */
     protected int engineGetKeySize(Key key) throws InvalidKeyException {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Entrega datos que van autenticados pero no cifrados.
+     * Hands over data that is authenticated but not encrypted.
      *
-     * <p>Solo tiene sentido en un cifrado autenticado. Sirve para lo que tiene que viajar a la vista
-     * --una cabecera, un numero de secuencia-- pero igual protegido contra cambios.
+     * <p>It only makes sense in an authenticated cipher. It is for what has to travel in the clear
+     * --a header, a sequence number-- but protected against changes all the same.
      *
-     * @param src los datos
-     * @param offset desde donde
-     * @param len cuantos
-     * @throws UnsupportedOperationException si este cifrado no es autenticado
+     * @param src the data
+     * @param offset from where
+     * @param len how many
+     * @throws UnsupportedOperationException if this cipher is not authenticated
      */
     protected void engineUpdateAAD(byte[] src, int offset, int len) {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Lo mismo, con un buffer.
+     * The same, with a buffer.
      *
-     * @param src los datos; queda consumido
-     * @throws UnsupportedOperationException si este cifrado no es autenticado
+     * @param src the data; it is left consumed
+     * @throws UnsupportedOperationException if this cipher is not authenticated
      */
     protected void engineUpdateAAD(ByteBuffer src) {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Comprueba los dos buffers y saca los bytes del de entrada, que queda consumido.
+     * Checks the two buffers and takes the bytes out of the input one, which is left consumed.
      *
-     * <p>Se lo consume antes de saber si la salida va a entrar. Es lo que hace el JDK y no un
-     * descuido: quien atrape una {@link ShortBufferException} tiene que volver a armar la entrada,
-     * no reintentar con el mismo buffer.
+     * <p>It is consumed before it is known whether the output will fit. That is what the JDK does
+     * and not an oversight: whoever catches a {@link ShortBufferException} has to build the input
+     * again, not retry with the same buffer.
      */
-    private static byte[] sacar(ByteBuffer input, ByteBuffer output) {
+    private static byte[] take(ByteBuffer input, ByteBuffer output) {
         if (input == null || output == null) {
-            throw new NullPointerException("los buffers no pueden ser nulos");
+            throw new NullPointerException("the buffers must not be null");
         }
         if (input == output) {
             throw new IllegalArgumentException("input and output buffers must not be the same");
@@ -307,21 +307,21 @@ public abstract class CipherSpi {
         if (output.isReadOnly()) {
             throw new java.nio.ReadOnlyBufferException();
         }
-        final byte[] entrada = new byte[input.remaining()];
-        input.get(entrada);
-        return entrada;
+        final byte[] in = new byte[input.remaining()];
+        input.get(in);
+        return in;
     }
 
-    /** Pone lo que salio en el buffer de salida. */
-    private static int poner(ByteBuffer output, byte[] salida) throws ShortBufferException {
-        if (salida == null || salida.length == 0) {
+    /** Puts what came out into the output buffer. */
+    private static int put(ByteBuffer output, byte[] out) throws ShortBufferException {
+        if (out == null || out.length == 0) {
             return 0;
         }
-        if (output.remaining() < salida.length) {
+        if (output.remaining() < out.length) {
             throw new ShortBufferException(
-                    "output buffer too small: " + output.remaining() + " < " + salida.length);
+                    "output buffer too small: " + output.remaining() + " < " + out.length);
         }
-        output.put(salida);
-        return salida.length;
+        output.put(out);
+        return out.length;
     }
 }

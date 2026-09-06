@@ -7,70 +7,69 @@ import java.security.Key;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que un proveedor tiene que escribir para ofrecer un codigo de autenticacion de mensaje.
+ * What a provider has to write in order to offer a message authentication code.
  *
- * <h2>Que es un MAC y que no</h2>
+ * <h2>What a MAC is and what it is not</h2>
  *
- * <p>Es un resumen con clave. Un resumen a secas prueba que el mensaje no cambio, pero cualquiera
- * puede recalcularlo despues de cambiarlo; con clave, solo puede calcularlo quien la tiene. Eso es
- * lo que lo vuelve una prueba de origen y no solo de integridad.
+ * <p>It is a digest with a key. A plain digest proves the message did not change, but anybody can
+ * recompute it after changing it; with a key, only whoever has the key can compute it. That is what
+ * makes it a proof of origin and not only of integrity.
  *
- * <p>Lo que no es: una firma. Las dos partes comparten la misma clave, asi que ninguna de las dos
- * puede demostrarle a un tercero que la otra escribio el mensaje --podria haberlo escrito ella
- * misma--.
+ * <p>What it is not: a signature. Both parties share the same key, so neither can prove to a third
+ * party that the other wrote the message --it could have written it itself.
  *
  * <h2>{@link #clone}</h2>
  *
- * <p>Existe para lo mismo que en un resumen: poder guardar el estado despues de una parte comun y
- * seguir por dos caminos distintos sin recalcularla. Un proveedor que no lo permita hereda el
- * comportamiento de {@link Object}, que tira.
+ * <p>It exists for the same reason as in a digest: being able to save the state after a common
+ * prefix and carry on down two different paths without recomputing it. A provider that does not
+ * allow it inherits {@link Object}'s behaviour, which throws.
  *
  * @since 1.4
  */
 public abstract class MacSpi {
 
-    /** Uno. */
+    /** One. */
     public MacSpi() {
     }
 
     /**
-     * Cuanto mide lo que sale.
+     * How large what comes out is.
      *
-     * @return el tamano en bytes
+     * @return the size in bytes
      */
     protected abstract int engineGetMacLength();
 
     /**
-     * Lo configura.
+     * Configures it.
      *
-     * @param key la clave
-     * @param params los parametros, o {@code null}
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param key the key
+     * @param params the parameters, or {@code null}
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     protected abstract void engineInit(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException;
 
     /**
-     * Entrega un byte.
+     * Hands over one byte.
      *
-     * @param input el byte
+     * @param input the byte
      */
     protected abstract void engineUpdate(byte input);
 
     /**
-     * Entrega datos.
+     * Hands over data.
      *
-     * @param input los datos
-     * @param offset desde donde
-     * @param len cuantos
+     * @param input the data
+     * @param offset from where
+     * @param len how many
      */
     protected abstract void engineUpdate(byte[] input, int offset, int len);
 
     /**
-     * Entrega lo que quede en el buffer.
+     * Hands over whatever is left in the buffer.
      *
-     * @param input los datos; queda consumido
+     * @param input the data; it is left consumed
      */
     protected void engineUpdate(ByteBuffer input) {
         if (input == null) {
@@ -81,32 +80,32 @@ public abstract class MacSpi {
         }
         if (input.hasArray()) {
             final byte[] a = input.array();
-            final int desde = input.arrayOffset() + input.position();
-            final int cuantos = input.remaining();
-            engineUpdate(a, desde, cuantos);
+            final int from = input.arrayOffset() + input.position();
+            final int howMany = input.remaining();
+            engineUpdate(a, from, howMany);
             input.position(input.limit());
             return;
         }
-        final byte[] copia = new byte[input.remaining()];
-        input.get(copia);
-        engineUpdate(copia, 0, copia.length);
+        final byte[] copy = new byte[input.remaining()];
+        input.get(copy);
+        engineUpdate(copy, 0, copy.length);
     }
 
     /**
-     * Termina y devuelve el codigo.
+     * Finishes and returns the code.
      *
-     * @return el codigo
+     * @return the code
      */
     protected abstract byte[] engineDoFinal();
 
-    /** Vuelve al estado que tenia despues de configurarlo. */
+    /** Goes back to the state it had after being configured. */
     protected abstract void engineReset();
 
     /**
-     * Una copia con el mismo estado.
+     * A copy with the same state.
      *
-     * @return la copia
-     * @throws CloneNotSupportedException si este no se puede copiar
+     * @return the copy
+     * @throws CloneNotSupportedException if this one cannot be copied
      */
     @Override
     public Object clone() throws CloneNotSupportedException {

@@ -11,33 +11,33 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Dos partes terminan con la misma clave sin que esa clave haya viajado.
+ * Two parties end up with the same key without that key ever having travelled.
  *
- * <h2>Como puede ser</h2>
+ * <h2>How that can be</h2>
  *
- * <p>Cada parte manda su mitad publica y la combina con su mitad privada. La aritmetica esta armada
- * para que las dos combinaciones den lo mismo, y para que a quien mira pasar los dos mensajes
- * publicos no le alcance para calcularlo. Es la unica forma de que dos maquinas que nunca hablaron
- * compartan un secreto por un canal que cualquiera puede leer.
+ * <p>Each party sends its public half and combines it with its private half. The arithmetic is built
+ * so that both combinations come out the same, and so that watching the two public messages go by is
+ * not enough to work it out. It is the only way for two machines that never spoke to share a secret
+ * over a channel anybody can read.
  *
- * <h2>Lo que no da</h2>
+ * <h2>What it does not give</h2>
  *
- * <p>No dice con quien se acordo. Alguien en el medio puede acordar una clave con cada lado y
- * traducir entre las dos sin que ninguno se entere. Por eso un acuerdo de claves va siempre
- * acompanado de algo que autentique al otro: un certificado, una firma, una clave conocida de
- * antemano.
+ * <p>It does not say whom the agreement was with. Somebody in the middle can agree a key with each
+ * side and translate between the two without either noticing. That is why a key agreement always
+ * comes with something that authenticates the other side: a certificate, a signature, a key known in
+ * advance.
  *
  * <h2>{@link #generateSecret(String)}</h2>
  *
- * <p>El secreto crudo no sirve como clave: su distribucion no es uniforme y usarlo directo es un
- * error conocido. Esta version lo pasa por donde corresponda antes de entregarlo, y es la que hay
- * que usar.
+ * <p>The raw secret is no good as a key: its distribution is not uniform and using it straight is a
+ * known mistake. This version puts it through whatever it has to go through before handing it over,
+ * and it is the one to use.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece acuerdos de claves, asi
- * que {@link #getInstance} tira {@link NoSuchAlgorithmException} para cualquier nombre. Registrar un
- * proveedor propio lo hace andar.
+ * <p>The machinery works in full, but no registered provider offers key agreements, so
+ * {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. Registering a provider
+ * of one's own makes it work.
  *
  * @since 1.4
  */
@@ -48,11 +48,11 @@ public class KeyAgreement {
     private final String algorithm;
 
     /**
-     * Uno alrededor de esa implementacion.
+     * One around that implementation.
      *
-     * @param keyAgreeSpi la implementacion
-     * @param provider de quien es
-     * @param algorithm con que nombre se lo pidio
+     * @param keyAgreeSpi the implementation
+     * @param provider whose it is
+     * @param algorithm the name it was asked for by
      */
     protected KeyAgreement(KeyAgreementSpi keyAgreeSpi, Provider provider, String algorithm) {
         this.spi = keyAgreeSpi;
@@ -61,21 +61,21 @@ public class KeyAgreement {
     }
 
     /**
-     * Con que nombre se lo pidio.
+     * The name it was asked for by.
      *
-     * @return el algoritmo
+     * @return the algorithm
      */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Uno para ese algoritmo.
+     * One for that algorithm.
      *
-     * @param algorithm el algoritmo
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el algoritmo es {@code null}
+     * @param algorithm the algorithm
+     * @return the engine
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the algorithm is {@code null}
      */
     public static final KeyAgreement getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -85,21 +85,21 @@ public class KeyAgreement {
         for (int i = 0; i < provs.length; i++) {
             final Provider.Service s = provs[i].getService("KeyAgreement", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " KeyAgreement not available");
     }
 
     /**
-     * Uno de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el algoritmo
-     * @param provider el nombre del proveedor
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param algorithm the algorithm
+     * @param provider the provider's name
+     * @return the engine
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public static final KeyAgreement getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -114,13 +114,13 @@ public class KeyAgreement {
     }
 
     /**
-     * Uno de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el algoritmo
-     * @param provider el proveedor
-     * @return el motor
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws IllegalArgumentException si el proveedor es {@code null}
+     * @param algorithm the algorithm
+     * @param provider the provider
+     * @return the engine
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws IllegalArgumentException if the provider is {@code null}
      */
     public static final KeyAgreement getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -135,46 +135,46 @@ public class KeyAgreement {
             throw new NoSuchAlgorithmException(
                     "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el proveedor
+     * @return the provider
      */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Lo configura con la mitad privada propia.
+     * Configures it with one's own private half.
      *
-     * @param key la clave privada
-     * @throws InvalidKeyException si la clave no sirve
+     * @param key the private key
+     * @throws InvalidKeyException if the key is no good
      */
     public final void init(Key key) throws InvalidKeyException {
         init(key, new SecureRandom());
     }
 
     /**
-     * Lo configura, diciendo de donde sacar el azar.
+     * Configures it, saying where to take the randomness from.
      *
-     * @param key la clave privada
-     * @param random de donde sacar el azar
-     * @throws InvalidKeyException si la clave no sirve
+     * @param key the private key
+     * @param random where to take the randomness from
+     * @throws InvalidKeyException if the key is no good
      */
     public final void init(Key key, SecureRandom random) throws InvalidKeyException {
         this.spi.engineInit(key, random);
     }
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param key la clave privada
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param key the private key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public final void init(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
@@ -182,13 +182,13 @@ public class KeyAgreement {
     }
 
     /**
-     * Lo configura con parametros, diciendo de donde sacar el azar.
+     * Configures it with parameters, saying where to take the randomness from.
      *
-     * @param key la clave privada
-     * @param params los parametros
-     * @param random de donde sacar el azar
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param key the private key
+     * @param params the parameters
+     * @param random where to take the randomness from
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public final void init(Key key, AlgorithmParameterSpec params, SecureRandom random)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
@@ -196,13 +196,13 @@ public class KeyAgreement {
     }
 
     /**
-     * Combina la mitad publica de otro participante.
+     * Combines another participant's public half.
      *
-     * @param key la clave publica del otro
-     * @param lastPhase si es el ultimo
-     * @return la clave intermedia, o {@code null} si no hay
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws IllegalStateException si no se lo configuro
+     * @param key the other one's public key
+     * @param lastPhase whether it is the last one
+     * @return the intermediate key, or {@code null} if there is none
+     * @throws InvalidKeyException if the key is no good
+     * @throws IllegalStateException if it has not been configured
      */
     public final Key doPhase(Key key, boolean lastPhase)
             throws InvalidKeyException, IllegalStateException {
@@ -210,23 +210,23 @@ public class KeyAgreement {
     }
 
     /**
-     * El secreto acordado, crudo.
+     * The agreed secret, raw.
      *
-     * @return el secreto
-     * @throws IllegalStateException si faltan fases
+     * @return the secret
+     * @throws IllegalStateException if phases are missing
      */
     public final byte[] generateSecret() throws IllegalStateException {
         return this.spi.engineGenerateSecret();
     }
 
     /**
-     * El secreto acordado, crudo, escrito en el arreglo dado.
+     * The agreed secret, raw, written into the given array.
      *
-     * @param sharedSecret donde escribirlo
-     * @param offset desde donde
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si faltan fases
-     * @throws ShortBufferException si el arreglo no alcanza
+     * @param sharedSecret where to write it
+     * @param offset from where
+     * @return how many bytes were written
+     * @throws IllegalStateException if phases are missing
+     * @throws ShortBufferException if the array is not big enough
      */
     public final int generateSecret(byte[] sharedSecret, int offset)
             throws IllegalStateException, ShortBufferException {
@@ -234,20 +234,20 @@ public class KeyAgreement {
     }
 
     /**
-     * El secreto acordado, ya convertido en clave de ese algoritmo.
+     * The agreed secret, already turned into a key of that algorithm.
      *
-     * @param algorithm para que algoritmo
-     * @return la clave
-     * @throws IllegalStateException si faltan fases
-     * @throws NoSuchAlgorithmException si no hay como armar una clave de ese algoritmo
-     * @throws InvalidKeyException si el secreto no da para una clave de ese algoritmo
+     * @param algorithm for which algorithm
+     * @return the key
+     * @throws IllegalStateException if phases are missing
+     * @throws NoSuchAlgorithmException if there is no way to assemble a key of that algorithm
+     * @throws InvalidKeyException if the secret is not enough for a key of that algorithm
      */
     public final SecretKey generateSecret(String algorithm)
             throws IllegalStateException, NoSuchAlgorithmException, InvalidKeyException {
         return this.spi.engineGenerateSecret(algorithm);
     }
 
-    private static KeyAgreement armar(Provider.Service s, String algorithm)
+    private static KeyAgreement build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         final Object o = s.newInstance(null);
         if (!(o instanceof KeyAgreementSpi)) {

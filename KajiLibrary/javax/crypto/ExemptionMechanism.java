@@ -11,31 +11,29 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Un mecanismo de exencion: lo que permitia usar claves mas largas de lo que se podia exportar.
+ * An exemption mechanism: what allowed keys longer than could be exported to be used.
  *
- * <h2>De donde sale</h2>
+ * <h2>Where it comes from</h2>
  *
- * <p>De cuando exportar criptografia fuerte estaba restringido por ley. Un producto podia pasarse
- * del limite si ademas guardaba, junto al mensaje, un bloque que le permitiera a una autoridad
- * recuperarlo: deposito de claves, recuperacion de claves, o debilitamiento deliberado. Ese bloque
- * es lo que genera {@link #genExemptionBlob}.
+ * <p>From when exporting strong cryptography was restricted by law. A product could go over the
+ * limit if it also kept, alongside the message, a block letting an authority recover it: key escrow,
+ * key recovery, or deliberate weakening. That block is what {@link #genExemptionBlob} generates.
  *
- * <p>{@link #isCryptoAllowed} era la pregunta que {@link Cipher} hacia antes de dejar usar una clave
- * larga: contestaba que si solo despues de que el bloque estuviera generado para esa clave.
+ * <p>{@link #isCryptoAllowed} was the question {@link Cipher} asked before letting a long key be
+ * used: it answered yes only once the blob had been generated for that key.
  *
- * <h2>Hoy</h2>
+ * <h2>Today</h2>
  *
- * <p>Las restricciones se levantaron y el JDK no trae ningun mecanismo. La maquinaria quedo porque
- * sacarla romperia programas que la nombran, y porque un despliegue con reglas propias podria
- * registrar el suyo.
+ * <p>The restrictions were lifted and the JDK ships no mechanism. The machinery stayed because
+ * removing it would break programs that name it, and because a deployment with rules of its own
+ * could register one.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>Where this library stands</h2>
  *
- * <p>La maquinaria funciona entera, pero ningun proveedor registrado ofrece mecanismos de exencion
- * --tampoco el JDK--, asi que {@link #getInstance} tira {@link NoSuchAlgorithmException} para
- * cualquier nombre. En esta biblioteca no hay ademas politica que aplicar:
- * {@link Cipher#getMaxAllowedKeyLength} no limita nada y {@link Cipher#getExemptionMechanism} da
- * siempre {@code null}.
+ * <p>The machinery works in full, but no registered provider offers exemption mechanisms --the JDK
+ * does not either-- so {@link #getInstance} throws {@link NoSuchAlgorithmException} for any name. In
+ * this library there is also no policy to apply: {@link Cipher#getMaxAllowedKeyLength} limits
+ * nothing and {@link Cipher#getExemptionMechanism} always gives {@code null}.
  *
  * @since 1.4
  */
@@ -45,15 +43,15 @@ public class ExemptionMechanism {
     private final Provider provider;
     private final String mechanism;
 
-    private Key clave;
-    private boolean generado;
+    private Key key;
+    private boolean generated;
 
     /**
-     * Uno alrededor de esa implementacion.
+     * One around that implementation.
      *
-     * @param exmechSpi la implementacion
-     * @param provider de quien es
-     * @param mechanism con que nombre se lo pidio
+     * @param exmechSpi the implementation
+     * @param provider whose it is
+     * @param mechanism the name it was asked for by
      */
     protected ExemptionMechanism(ExemptionMechanismSpi exmechSpi, Provider provider,
             String mechanism) {
@@ -63,21 +61,21 @@ public class ExemptionMechanism {
     }
 
     /**
-     * Como se llama.
+     * What it is called.
      *
-     * @return el nombre del mecanismo
+     * @return the mechanism's name
      */
     public final String getName() {
         return this.mechanism;
     }
 
     /**
-     * Uno con ese nombre.
+     * One with that name.
      *
-     * @param algorithm el nombre del mecanismo
-     * @return el mecanismo
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
-     * @throws NullPointerException si el nombre es {@code null}
+     * @param algorithm the mechanism's name
+     * @return the mechanism
+     * @throws NoSuchAlgorithmException if no provider has it
+     * @throws NullPointerException if the name is {@code null}
      */
     public static final ExemptionMechanism getInstance(String algorithm)
             throws NoSuchAlgorithmException {
@@ -88,21 +86,21 @@ public class ExemptionMechanism {
         for (int i = 0; i < provs.length; i++) {
             final Provider.Service s = provs[i].getService("ExemptionMechanism", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " ExemptionMechanism not available");
     }
 
     /**
-     * Uno de ese proveedor, nombrado.
+     * One from that provider, named.
      *
-     * @param algorithm el nombre del mecanismo
-     * @param provider el nombre del proveedor
-     * @return el mecanismo
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
-     * @throws IllegalArgumentException si el nombre del proveedor es {@code null} o vacio
+     * @param algorithm the mechanism's name
+     * @param provider the provider's name
+     * @return the mechanism
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws NoSuchProviderException if there is no provider by that name
+     * @throws IllegalArgumentException if the provider's name is {@code null} or empty
      */
     public static final ExemptionMechanism getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -117,13 +115,13 @@ public class ExemptionMechanism {
     }
 
     /**
-     * Uno de ese proveedor.
+     * One from that provider.
      *
-     * @param algorithm el nombre del mecanismo
-     * @param provider el proveedor
-     * @return el mecanismo
-     * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
-     * @throws IllegalArgumentException si el proveedor es {@code null}
+     * @param algorithm the mechanism's name
+     * @param provider the provider
+     * @return the mechanism
+     * @throws NoSuchAlgorithmException if that provider does not have it
+     * @throws IllegalArgumentException if the provider is {@code null}
      */
     public static final ExemptionMechanism getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -138,114 +136,114 @@ public class ExemptionMechanism {
             throw new NoSuchAlgorithmException(
                     "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
     /**
-     * De quien es la implementacion.
+     * Whose the implementation is.
      *
-     * @return el proveedor
+     * @return the provider
      */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Si esa clave ya tiene su bloque de exencion generado.
+     * Whether that key already has its exemption blob generated.
      *
-     * <p>Es la pregunta que decide si se la puede usar. Contesta que si solo cuando el bloque se
-     * genero para esa misma clave: uno generado para otra no exime a esta.
+     * <p>It is the question that decides whether it may be used. It answers yes only when the blob
+     * was generated for that same key: one generated for another does not exempt this one.
      *
-     * @param key la clave
-     * @return cierto si ya se genero el bloque para ella
-     * @throws ExemptionMechanismException si no se puede contestar
+     * @param key the key
+     * @return true if the blob has already been generated for it
+     * @throws ExemptionMechanismException if it cannot be answered
      */
     public final boolean isCryptoAllowed(Key key) throws ExemptionMechanismException {
-        return this.generado && this.clave != null && this.clave.equals(key);
+        return this.generated && this.key != null && this.key.equals(key);
     }
 
     /**
-     * Cuanto va a medir el bloque.
+     * How large the blob will be.
      *
-     * @param inputLen cuanto mide la entrada
-     * @return el tamano en bytes
-     * @throws IllegalStateException si no se lo configuro
+     * @param inputLen how large the input is
+     * @return the size in bytes
+     * @throws IllegalStateException if it has not been configured
      */
     public final int getOutputSize(int inputLen) throws IllegalStateException {
-        comprobar();
+        check();
         return this.spi.engineGetOutputSize(inputLen);
     }
 
     /**
-     * Lo configura.
+     * Configures it.
      *
-     * @param key la clave
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws ExemptionMechanismException si algo mas sale mal
+     * @param key the key
+     * @throws InvalidKeyException if the key is no good
+     * @throws ExemptionMechanismException if anything else goes wrong
      */
     public final void init(Key key) throws InvalidKeyException, ExemptionMechanismException {
-        this.generado = false;
+        this.generated = false;
         this.spi.engineInit(key);
-        this.clave = key;
+        this.key = key;
     }
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param key la clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws ExemptionMechanismException si algo mas sale mal
+     * @param key the key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws ExemptionMechanismException if anything else goes wrong
      */
     public final void init(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException,
             ExemptionMechanismException {
-        this.generado = false;
+        this.generated = false;
         this.spi.engineInit(key, params);
-        this.clave = key;
+        this.key = key;
     }
 
     /**
-     * Lo configura con parametros ya codificados.
+     * Configures it with already encoded parameters.
      *
-     * @param key la clave
-     * @param params los parametros
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
-     * @throws ExemptionMechanismException si algo mas sale mal
+     * @param key the key
+     * @param params the parameters
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
+     * @throws ExemptionMechanismException if anything else goes wrong
      */
     public final void init(Key key, AlgorithmParameters params)
             throws InvalidKeyException, InvalidAlgorithmParameterException,
             ExemptionMechanismException {
-        this.generado = false;
+        this.generated = false;
         this.spi.engineInit(key, params);
-        this.clave = key;
+        this.key = key;
     }
 
     /**
-     * Genera el bloque.
+     * Generates the blob.
      *
-     * @return el bloque
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ExemptionMechanismException si algo sale mal
+     * @return the blob
+     * @throws IllegalStateException if it has not been configured
+     * @throws ExemptionMechanismException if anything goes wrong
      */
     public final byte[] genExemptionBlob()
             throws IllegalStateException, ExemptionMechanismException {
-        comprobar();
+        check();
         final byte[] r = this.spi.engineGenExemptionBlob();
-        this.generado = true;
+        this.generated = true;
         return r;
     }
 
     /**
-     * Genera el bloque en el arreglo dado.
+     * Generates the blob into the given array.
      *
-     * @param output donde escribirlo
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si el arreglo no alcanza
-     * @throws ExemptionMechanismException si algo sale mal
+     * @param output where to write it
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if the array is not big enough
+     * @throws ExemptionMechanismException if anything goes wrong
      */
     public final int genExemptionBlob(byte[] output)
             throws IllegalStateException, ShortBufferException, ExemptionMechanismException {
@@ -253,30 +251,30 @@ public class ExemptionMechanism {
     }
 
     /**
-     * Genera el bloque en el arreglo dado, desde esa posicion.
+     * Generates the blob into the given array, from that position.
      *
-     * @param output donde escribirlo
-     * @param outputOffset desde donde
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si no se lo configuro
-     * @throws ShortBufferException si el arreglo no alcanza
-     * @throws ExemptionMechanismException si algo sale mal
+     * @param output where to write it
+     * @param outputOffset from where
+     * @return how many bytes were written
+     * @throws IllegalStateException if it has not been configured
+     * @throws ShortBufferException if the array is not big enough
+     * @throws ExemptionMechanismException if anything goes wrong
      */
     public final int genExemptionBlob(byte[] output, int outputOffset)
             throws IllegalStateException, ShortBufferException, ExemptionMechanismException {
-        comprobar();
+        check();
         final int n = this.spi.engineGenExemptionBlob(output, outputOffset);
-        this.generado = true;
+        this.generated = true;
         return n;
     }
 
-    private void comprobar() {
-        if (this.clave == null) {
+    private void check() {
+        if (this.key == null) {
             throw new IllegalStateException("ExemptionMechanism not initialized");
         }
     }
 
-    private static ExemptionMechanism armar(Provider.Service s, String algorithm)
+    private static ExemptionMechanism build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         final Object o = s.newInstance(null);
         if (!(o instanceof ExemptionMechanismSpi)) {

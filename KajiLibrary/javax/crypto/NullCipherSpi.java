@@ -5,18 +5,18 @@ import java.security.Key;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 
-// La implementacion detras de `NullCipher`: copia los bytes tal cual.
+// The implementation behind `NullCipher`: it copies the bytes as they are.
 //
-// De paquete a proposito, igual que en el JDK: no es API, y lo unico que la construye es
-// `NullCipher`. Hacerla publica agregaria a `javax.crypto` un nombre que el JDK no tiene.
+// Package-private on purpose, as in the JDK: it is not API, and the only thing that builds one is
+// `NullCipher`. Making it public would add to `javax.crypto` a name the JDK does not have.
 //
-// Todo lo que no sea copiar contesta lo que corresponde a un cifrado que no cifra: bloque de un
-// byte, salida del mismo tamano que la entrada, sin parametros. El vector de inicializacion son
-// ocho ceros y no `null`, que es lo que hace el JDK; devolver `null` seria mas honesto pero
-// rompería a quien lo compare contra el suyo.
+// Everything that is not copying answers what befits a cipher that does not encrypt: a block of one
+// byte, an output the same size as the input, no parameters. The initialization vector is eight
+// zeros and not `null`, which is what the JDK does; returning `null` would be more honest but would
+// break anyone comparing it against theirs.
 final class NullCipherSpi extends CipherSpi {
 
-    private static final byte[] IV_VACIO = new byte[8];
+    private static final byte[] EMPTY_IV = new byte[8];
 
     NullCipherSpi() {
     }
@@ -41,7 +41,7 @@ final class NullCipherSpi extends CipherSpi {
 
     @Override
     protected byte[] engineGetIV() {
-        return IV_VACIO.clone();
+        return EMPTY_IV.clone();
     }
 
     @Override

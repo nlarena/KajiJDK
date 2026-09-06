@@ -8,94 +8,94 @@ import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que un proveedor tiene que escribir para ofrecer un acuerdo de claves.
+ * What a provider has to write in order to offer a key agreement.
  *
- * <h2>Que resuelve</h2>
+ * <h2>What it solves</h2>
  *
- * <p>Dos partes que nunca hablaron terminan con la misma clave secreta, sin que esa clave haya
- * viajado. Cada una manda su parte publica y combina la que recibe con su parte privada; la
- * aritmetica hace que las dos combinaciones den lo mismo, y que a quien mira pasar los dos mensajes
- * publicos no le alcance para calcularlo.
+ * <p>Two parties that never spoke end up with the same secret key, without that key ever having
+ * travelled. Each sends its public part and combines the one it receives with its own private part;
+ * the arithmetic makes both combinations come out the same, and makes watching the two public
+ * messages go by not enough to work it out.
  *
- * <h2>Las fases</h2>
+ * <h2>The phases</h2>
  *
- * <p>{@link #engineDoPhase} se llama una vez por cada participante que no sea uno mismo, y la
- * ultima se marca con {@code lastPhase}. Son varias porque el acuerdo se generaliza a mas de dos
- * partes; con dos, que es el caso normal, hay una sola fase y es la ultima.
+ * <p>{@link #engineDoPhase} is called once per participant other than oneself, and the last one is
+ * marked with {@code lastPhase}. There are several because the agreement generalizes to more than
+ * two parties; with two, which is the normal case, there is a single phase and it is the last.
  *
  * @since 1.4
  */
 public abstract class KeyAgreementSpi {
 
-    /** Uno. */
+    /** One. */
     public KeyAgreementSpi() {
     }
 
     /**
-     * Lo configura con la parte privada propia.
+     * Configures it with one's own private part.
      *
-     * @param key la clave privada
-     * @param random de donde sacar el azar
-     * @throws InvalidKeyException si la clave no sirve
+     * @param key the private key
+     * @param random where to take the randomness from
+     * @throws InvalidKeyException if the key is no good
      */
     protected abstract void engineInit(Key key, SecureRandom random) throws InvalidKeyException;
 
     /**
-     * Lo configura con parametros.
+     * Configures it with parameters.
      *
-     * @param key la clave privada
-     * @param params los parametros
-     * @param random de donde sacar el azar
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @param key the private key
+     * @param params the parameters
+     * @param random where to take the randomness from
+     * @throws InvalidKeyException if the key is no good
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     protected abstract void engineInit(Key key, AlgorithmParameterSpec params, SecureRandom random)
             throws InvalidKeyException, InvalidAlgorithmParameterException;
 
     /**
-     * Combina la parte publica de otro participante.
+     * Combines another participant's public part.
      *
-     * @param key la clave publica del otro
-     * @param lastPhase si es el ultimo participante
-     * @return la clave intermedia, o {@code null} si no hay
-     * @throws InvalidKeyException si la clave no sirve
-     * @throws IllegalStateException si no se lo configuro
+     * @param key the other one's public key
+     * @param lastPhase whether it is the last participant
+     * @return the intermediate key, or {@code null} if there is none
+     * @throws InvalidKeyException if the key is no good
+     * @throws IllegalStateException if it has not been configured
      */
     protected abstract Key engineDoPhase(Key key, boolean lastPhase)
             throws InvalidKeyException, IllegalStateException;
 
     /**
-     * El secreto acordado.
+     * The agreed secret.
      *
-     * @return el secreto
-     * @throws IllegalStateException si faltan fases
+     * @return the secret
+     * @throws IllegalStateException if phases are missing
      */
     protected abstract byte[] engineGenerateSecret() throws IllegalStateException;
 
     /**
-     * El secreto acordado, escrito en el arreglo dado.
+     * The agreed secret, written into the given array.
      *
-     * @param sharedSecret donde escribirlo
-     * @param offset desde donde
-     * @return cuantos bytes se escribieron
-     * @throws IllegalStateException si faltan fases
-     * @throws ShortBufferException si el arreglo no alcanza
+     * @param sharedSecret where to write it
+     * @param offset from where
+     * @return how many bytes were written
+     * @throws IllegalStateException if phases are missing
+     * @throws ShortBufferException if the array is not big enough
      */
     protected abstract int engineGenerateSecret(byte[] sharedSecret, int offset)
             throws IllegalStateException, ShortBufferException;
 
     /**
-     * El secreto acordado, ya convertido en clave de ese algoritmo.
+     * The agreed secret, already turned into a key of that algorithm.
      *
-     * <p>No es lo mismo que tomar los bytes crudos: el secreto de un acuerdo tiene una distribucion
-     * que no es uniforme, y usarlo directo como clave es un error conocido. Esto lo pasa por donde
-     * corresponda antes de entregarlo.
+     * <p>It is not the same as taking the raw bytes: the secret of an agreement has a distribution
+     * that is not uniform, and using it straight as a key is a known mistake. This puts it through
+     * whatever it has to go through before handing it over.
      *
-     * @param algorithm para que algoritmo
-     * @return la clave
-     * @throws IllegalStateException si faltan fases
-     * @throws NoSuchAlgorithmException si no hay como armar una clave de ese algoritmo
-     * @throws InvalidKeyException si el secreto no da para una clave de ese algoritmo
+     * @param algorithm for which algorithm
+     * @return the key
+     * @throws IllegalStateException if phases are missing
+     * @throws NoSuchAlgorithmException if there is no way to assemble a key of that algorithm
+     * @throws InvalidKeyException if the secret is not enough for a key of that algorithm
      */
     protected abstract SecretKey engineGenerateSecret(String algorithm)
             throws IllegalStateException, NoSuchAlgorithmException, InvalidKeyException;
