@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalField;
 import java.time.temporal.TemporalUnit;
@@ -10,7 +11,7 @@ import java.time.temporal.ChronoUnit;
 
 // KajiLibrary's java.time.Year — a year on the ISO calendar, e.g. 2026. Immutable value type.
 // Implements Temporal, TemporalAdjuster and Comparable. A KajiLibrary subset.
-public final class Year implements Temporal, TemporalAdjuster, Comparable<Year> {
+public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>, Serializable {
 
     private final int year;
 

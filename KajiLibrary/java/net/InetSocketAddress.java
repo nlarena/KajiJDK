@@ -1,26 +1,24 @@
 package java.net;
 
-// Una direccion IP mas un puerto -- o, cuando no se pudo resolver el nombre, un nombre mas un
-// puerto.
+// An IP address plus a port -- or, when the name could not be resolved, a name plus a port.
 //
-// Ese "o" es toda la clase. Un `InetSocketAddress` puede estar en dos estados y la diferencia es
-// visible en la API (`isUnresolved`, y `getAddress()` que devuelve null) porque **es util que lo
-// sea**: se puede armar la direccion de un proxy o de un destino sin tener DNS a mano, pasarla por
-// ahi, y que la resolucion pase mas tarde o en otra maquina. Por eso `createUnresolved` no es un
-// caso degradado sino una factoria de primera.
+// That "or" is the whole class. An `InetSocketAddress` can be in two states and the difference is
+// visible in the API (`isUnresolved`, and `getAddress()` returning null) because **it is useful that
+// it should be**: a proxy's or a destination's address can be assembled without DNS at hand, passed
+// around, and resolved later or on another machine. That is why `createUnresolved` is not a degraded
+// case but a first-class factory.
 //
-// En KajiJDK eso deja de ser un detalle: sin resolver, `new InetSocketAddress(nombre, puerto)`
-// termina en el estado no resuelto para todo lo que no sea un literal IP. No hay nada que
-// disimular ahi -- es exactamente el estado que el JDK produce cuando el DNS no contesta, con los
-// mismos observables.
+// In KajiJDK that stops being a detail: with no resolver, `new InetSocketAddress(name, port)` ends up
+// in the unresolved state for anything that is not an IP literal. There is nothing to hide there --
+// it is exactly the state the JDK produces when DNS does not answer, with the same observables.
 //
-// La clase entera es computacion pura: guarda, valida y formatea. No hay nada omitido.
+// The whole class is pure computation: it stores, validates and formats. Nothing is omitted.
 public class InetSocketAddress extends SocketAddress {
 
     private static final long serialVersionUID = 5076001401234631237L;
 
-    // Exactamente uno de estos dos manda: si `addr` no es null, la direccion esta resuelta y
-    // `hostname` es null; si es null, esta sin resolver y `hostname` tiene el nombre.
+    // Exactly one of these two rules: if `addr` is not null, the address is resolved and `hostname`
+    // is null; if it is null, it is unresolved and `hostname` holds the name.
     private final String hostname;
     private final InetAddress addr;
     private final int port;
@@ -32,18 +30,18 @@ public class InetSocketAddress extends SocketAddress {
     }
 
     /**
-     * Comodin (0.0.0.0) en ese puerto: "cualquier direccion local".
+     * The wildcard (0.0.0.0) on that port: "any local address".
      *
-     * @throws IllegalArgumentException si el puerto esta fuera de 0..65535
+     * @throws IllegalArgumentException if the port is outside 0..65535
      */
     public InetSocketAddress(int port) {
         this(checkPort(port), (InetAddress) null);
     }
 
     /**
-     * Esa direccion en ese puerto. {@code addr} null significa el comodin.
+     * That address on that port. A null {@code addr} means the wildcard.
      *
-     * @throws IllegalArgumentException si el puerto esta fuera de 0..65535
+     * @throws IllegalArgumentException if the port is outside 0..65535
      */
     public InetSocketAddress(InetAddress addr, int port) {
         this(checkPort(port), addr);
@@ -56,12 +54,12 @@ public class InetSocketAddress extends SocketAddress {
     }
 
     /**
-     * Intenta resolver {@code hostname}; si no se puede, queda sin resolver con ese nombre.
+     * Tries to resolve {@code hostname}; if it cannot, it is left unresolved with that name.
      *
-     * <p>Que no tire cuando la resolucion falla es del contrato: el objeto sigue siendo utilizable y
-     * el que lo recibe decide que hacer con un destino sin resolver.
+     * <p>That it does not throw when resolution fails comes from the contract: the object is still
+     * usable and whoever receives it decides what to do with an unresolved destination.
      *
-     * @throws IllegalArgumentException si el puerto esta fuera de rango o {@code hostname} es null
+     * @throws IllegalArgumentException if the port is out of range or {@code hostname} is null
      */
     public InetSocketAddress(String hostname, int port) {
         checkPort(port);
@@ -78,7 +76,7 @@ public class InetSocketAddress extends SocketAddress {
         this.port = port;
     }
 
-    /** Una direccion sin resolver, sin siquiera intentar resolverla. */
+    /** An unresolved address, without even trying to resolve it. */
     public static InetSocketAddress createUnresolved(String host, int port) {
         checkPort(port);
         checkHost(host);
@@ -103,12 +101,12 @@ public class InetSocketAddress extends SocketAddress {
         return this.port;
     }
 
-    /** La direccion, o null si esta sin resolver. */
+    /** The address, or null if it is unresolved. */
     public final InetAddress getAddress() {
         return this.addr;
     }
 
-    /** El nombre del host: el que se pidio si esta sin resolver, el de la direccion si no. */
+    /** The host's name: the one asked for if it is unresolved, the address's if it is not. */
     public final String getHostName() {
         if (this.hostname != null) {
             return this.hostname;
@@ -120,11 +118,11 @@ public class InetSocketAddress extends SocketAddress {
     }
 
     /**
-     * Como {@link #getHostName()}, pero **sin** disparar una resolucion inversa.
+     * Like {@link #getHostName()}, but **without** triggering a reverse lookup.
      *
-     * <p>La diferencia solo se nota en el JDK real, donde `getHostName()` puede salir a la red; aca
-     * las dos hacen lo mismo. Aun asi el metodo corresponde: quien escribe codigo portable necesita
-     * poder decir "el nombre que ya tenes, no vayas a buscar otro".
+     * <p>The difference only shows in the real JDK, where `getHostName()` may go out to the network;
+     * here the two do the same. The method belongs all the same: whoever writes portable code needs
+     * to be able to say "the name you already have, do not go looking for another".
      */
     public final String getHostString() {
         if (this.hostname != null) {
@@ -145,7 +143,7 @@ public class InetSocketAddress extends SocketAddress {
             return this.hostname + "/<unresolved>:" + this.port;
         }
         String s = this.addr.toString();
-        // Los corchetes de la parte numerica de una IPv6, sin los cuales "::1:80" seria ambiguo.
+        // The brackets round an IPv6's numeric part, without which "::1:80" would be ambiguous.
         if (this.addr instanceof Inet6Address) {
             int i = s.lastIndexOf('/');
             s = s.substring(0, i + 1) + "[" + s.substring(i + 1) + "]";
@@ -153,9 +151,10 @@ public class InetSocketAddress extends SocketAddress {
         return s + ":" + this.port;
     }
 
-    // Dos sin resolver son iguales si coinciden nombre (sin distinguir mayusculas) y puerto; dos
-    // resueltas, si coinciden direccion y puerto. Una resuelta nunca es igual a una sin resolver,
-    // aunque el nombre apunte a esa direccion: no se sabe, justamente porque no se resolvio.
+    // Two unresolved ones are equal if the name (case-insensitively) and the port match; two
+    // resolved ones, if the address and the port match. A resolved one is never equal to an
+    // unresolved one, even if the name points at that address: it is not known, precisely because it
+    // was not resolved.
     public final boolean equals(Object obj) {
         if (!(obj instanceof InetSocketAddress)) {
             return false;

@@ -1,10 +1,10 @@
 package java.net;
 
-// Un ConnectException: el otro extremo rechazo la conexion o no contesto a tiempo.
+// A ConnectException: the far end refused the connection or did not answer in time.
 //
-// Subclase de `SocketException` por la misma razon que la madre existe aca (ver `SocketException`):
-// nombra un modo de falla, no promete poder producirlo. Quien atrapa `SocketException` la atrapa
-// tambien, que es de lo que se trata la jerarquia.
+// A subclass of `SocketException` for the same reason its parent exists here (see `SocketException`):
+// it names a failure mode, it does not promise to be able to produce it. Whoever catches
+// `SocketException` catches it too, which is what the hierarchy is about.
 public class ConnectException extends SocketException {
 
     private static final long serialVersionUID = 3767514772251481192L;

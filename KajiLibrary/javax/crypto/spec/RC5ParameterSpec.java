@@ -4,15 +4,15 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.util.Arrays;
 
 /**
- * Los parametros de RC5: version, rondas, tamano de palabra y, si el modo lo pide, un IV.
+ * RC5's parameters: version, rounds, word size and, if the mode calls for it, an IV.
  *
- * <p>RC5 es una **familia** de cifrados y no uno solo: cambiando el tamano de palabra y las rondas
- * se obtienen algoritmos distintos e incompatibles entre si. Por eso estos tres numeros van en los
- * parametros y no estan fijos en el algoritmo.
+ * <p>RC5 is a **family** of ciphers and not a single one: changing the word size and the rounds gives
+ * different algorithms, incompatible with each other. That is why these three numbers go in the
+ * parameters and are not fixed in the algorithm.
  *
- * <p>El IV mide **dos palabras**, no un largo fijo: con palabras de 32 bits son ocho bytes y con
- * palabras de 64 son dieciseis. De ahi que la validacion dependa de `wordSize`, que es lo que la
- * distingue de la de {@link RC2ParameterSpec}.
+ * <p>The IV is **two words** long, not a fixed length: with 32-bit words that is eight bytes and with
+ * 64-bit words sixteen. Hence the validation depending on `wordSize`, which is what tells it apart
+ * from {@link RC2ParameterSpec}'s.
  */
 public class RC5ParameterSpec implements AlgorithmParameterSpec {
 
@@ -21,7 +21,7 @@ public class RC5ParameterSpec implements AlgorithmParameterSpec {
     private final int wordSize;
     private final byte[] iv;
 
-    /** Sin IV: para los modos que no lo usan. `wordSize` esta en bits. */
+    /** With no IV: for the modes that do not use one. `wordSize` is in bits. */
     public RC5ParameterSpec(int version, int rounds, int wordSize) {
         this.version = version;
         this.rounds = rounds;
@@ -30,26 +30,26 @@ public class RC5ParameterSpec implements AlgorithmParameterSpec {
     }
 
     /**
-     * @throws IllegalArgumentException si el IV es nulo o no mide dos palabras
+     * @throws IllegalArgumentException if the IV is null or is not two words long
      */
     public RC5ParameterSpec(int version, int rounds, int wordSize, byte[] iv) {
         this(version, rounds, wordSize, iv, 0);
     }
 
     /**
-     * El IV son las dos palabras a partir de `offset`.
+     * The IV is the two words starting at `offset`.
      *
-     * @throws IllegalArgumentException si el IV es nulo o quedan menos de dos palabras desde
+     * @throws IllegalArgumentException if the IV is null or fewer than two words are left from
      *     `offset`
      */
     public RC5ParameterSpec(int version, int rounds, int wordSize, byte[] iv, int offset) {
         if (iv == null) {
-            throw new IllegalArgumentException("el IV no puede ser nulo");
+            throw new IllegalArgumentException("the IV cannot be null");
         }
         int len = (wordSize / 8) * 2;
         if (iv.length - offset < len) {
             throw new IllegalArgumentException(
-                    "el IV de RC5 son dos palabras (" + len + " bytes) desde el offset");
+                    "an RC5 IV is two words (" + len + " bytes) from the offset");
         }
         this.version = version;
         this.rounds = rounds;
@@ -57,27 +57,27 @@ public class RC5ParameterSpec implements AlgorithmParameterSpec {
         this.iv = IvParameterSpec.copy(iv, offset, len);
     }
 
-    /** La version del algoritmo. */
+    /** The algorithm's version. */
     public int getVersion() {
         return this.version;
     }
 
-    /** Cuantas rondas. */
+    /** How many rounds. */
     public int getRounds() {
         return this.rounds;
     }
 
-    /** El tamano de palabra, en bits. */
+    /** The word size, in bits. */
     public int getWordSize() {
         return this.wordSize;
     }
 
-    /** Una copia del IV, o nulo si no tiene. */
+    /** A copy of the IV, or null if it has none. */
     public byte[] getIV() {
         return this.iv == null ? null : IvParameterSpec.copy(this.iv, 0, this.iv.length);
     }
 
-    /** Igualdad por los tres numeros y el IV. */
+    /** Equality by the three numbers and the IV. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

@@ -1,5 +1,6 @@
 package java.util;
 
+import java.io.Serializable;
 import java.util.random.RandomGenerator;
 
 // A pseudo-random generator: a 48-bit **linear congruential** sequence, seed = seed * 0x5DEECE66D
@@ -17,7 +18,7 @@ import java.util.random.RandomGenerator;
 //
 // Los flujos (ints/longs/doubles) los aporta `RandomGenerator` como defaults; aca solo estan los
 // metodos cuyos valores son parte del contrato de ESTA clase.
-public class Random implements RandomGenerator {
+public class Random implements RandomGenerator, Serializable {
 
     private long seed;
 

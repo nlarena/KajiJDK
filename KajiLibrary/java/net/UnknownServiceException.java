@@ -3,16 +3,16 @@ package java.net;
 import java.io.IOException;
 
 /**
- * KajiLibrary's java.net.UnknownServiceException -- la conexion no soporta la operacion que se le
- * pidio.
+ * KajiLibrary's java.net.UnknownServiceException -- the connection does not support the operation it
+ * was asked for.
  *
- * <p>La distincion con {@link java.net.MalformedURLException} es la que vale la pena tener clara, y
- * es la razon de que sean dos excepciones y no una: aquella dice que **la URL no se entiende**; esta
- * dice que se entendio perfectamente y que **no hay como atenderla**. Un `http://ejemplo` mal escrito
- * es lo primero; un `http://ejemplo` bien escrito en una biblioteca que no trae cliente HTTP es lo
- * segundo. Quien las confunde va a buscar el error en el lugar equivocado.
+ * <p>The distinction from {@link java.net.MalformedURLException} is the one worth keeping clear, and
+ * it is the reason they are two exceptions and not one: that one says **the URL is not understood**;
+ * this one says it was understood perfectly and that **there is no way to serve it**. A misspelt
+ * `http://example` is the first; a well-formed `http://example` in a library that ships no HTTP client
+ * is the second. Whoever confuses them will look for the error in the wrong place.
  *
- * <p>Es lo que tira {@link URL#openStream()} para todo esquema que no sea `file:`.
+ * <p>It is what {@link URL#openStream()} throws for every scheme other than `file:`.
  */
 public class UnknownServiceException extends IOException {
 

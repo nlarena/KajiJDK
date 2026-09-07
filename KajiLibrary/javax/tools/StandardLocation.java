@@ -4,13 +4,13 @@ package javax.tools;
 // manager understands. Naming them as an enum (instead of leaving them strings) is what lets
 // a compiler ask for "the class output" without agreeing on a spelling with its caller.
 //
-// La clausula `implements JavaFileManager.Location` **esta**. La nota anterior explicaba que se
-// habia omitido porque el javac congelado no podia nombrar un tipo anidado de otra unidad -- con el
-// nombre calificado daba error duro y con `import` la clausula se descartaba **en silencio**, o sea
-// una superinterfaz fantasma. Eso se arreglo, y la nota decia que ese dia alcanzaba con agregar la
-// clausula: alcanzo.
+// The `implements JavaFileManager.Location` clause **is here**. The earlier note explained that it
+// had been left out because the frozen javac could not name a type nested in another unit -- with the
+// qualified name it was a hard error and with an `import` the clause was discarded **silently**, that
+// is, a phantom superinterface. That was fixed, and the note said that the day it was, adding the
+// clause would be enough: it was.
 //
-// Con ella entra tambien `locationFor(String)`, cuyo retorno es ese mismo tipo anidado.
+// `locationFor(String)` comes in with it, since its return type is that same nested type.
 public enum StandardLocation implements JavaFileManager.Location {
 
     CLASS_OUTPUT,
@@ -28,52 +28,51 @@ public enum StandardLocation implements JavaFileManager.Location {
     PATCH_MODULE_PATH;
 
     /**
-     * La ubicacion de ese nombre, creando una nueva si no es una de las estandar.
+     * The location with that name, creating a new one if it is not one of the standard ones.
      *
-     * <p>Que pueda **crear** una es el punto: las ubicaciones no son un conjunto cerrado, y una
-     * herramienta puede definir la suya. Las creadas se recuerdan, para que dos llamadas con el
-     * mismo nombre den la **misma** ubicacion -- si no, un `Map` con ubicaciones por clave nunca
-     * encontraria nada.
+     * <p>That it can **create** one is the point: locations are not a closed set, and a tool may
+     * define its own. The created ones are remembered, so that two calls with the same name give the
+     * **same** location -- otherwise a `Map` keyed by location would never find anything.
      */
     public static JavaFileManager.Location locationFor(String name) {
         if (name == null) {
             throw new NullPointerException("name");
         }
-        StandardLocation[] estandar = StandardLocation.values();
+        StandardLocation[] standard = StandardLocation.values();
         int i = 0;
-        while (i < estandar.length) {
-            if (estandar[i].getName().equals(name)) {
-                return estandar[i];
+        while (i < standard.length) {
+            if (standard[i].getName().equals(name)) {
+                return standard[i];
             }
             i = i + 1;
         }
-        synchronized (CREADAS) {
-            JavaFileManager.Location ya = CREADAS.get(name);
-            if (ya != null) {
-                return ya;
+        synchronized (CREATED) {
+            JavaFileManager.Location existing = CREATED.get(name);
+            if (existing != null) {
+                return existing;
             }
-            JavaFileManager.Location nueva = new UbicacionPropia(name);
-            CREADAS.put(name, nueva);
-            return nueva;
+            JavaFileManager.Location fresh = new CustomLocation(name);
+            CREATED.put(name, fresh);
+            return fresh;
         }
     }
 
-    // Las ubicaciones que `locationFor` invento. Un mapa y no una lista porque la pregunta es
-    // siempre "la de este nombre".
-    private static final java.util.HashMap<String, JavaFileManager.Location> CREADAS =
+    // The locations `locationFor` invented. A map and not a list because the question is always
+    // "the one with this name".
+    private static final java.util.HashMap<String, JavaFileManager.Location> CREATED =
             new java.util.HashMap<String, JavaFileManager.Location>();
 
     public String getName() {
         return name();
     }
 
-    // Las tres a las que el compilador ESCRIBE.
+    // The three the compiler WRITES to.
     public boolean isOutputLocation() {
         return this == CLASS_OUTPUT || this == SOURCE_OUTPUT || this == NATIVE_HEADER_OUTPUT;
     }
 
-    // El JDK real pregunta si el nombre contiene "MODULE"; sin String.contains en la
-    // biblioteca, la lista va enumerada — que es la misma respuesta, constante por constante.
+    // The real JDK asks whether the name contains "MODULE"; without String.contains in the library,
+    // the list is enumerated — which is the same answer, constant by constant.
     public boolean isModuleOrientedLocation() {
         return this == ANNOTATION_PROCESSOR_MODULE_PATH
             || this == MODULE_SOURCE_PATH
@@ -84,22 +83,22 @@ public enum StandardLocation implements JavaFileManager.Location {
     }
 }
 
-// La ubicacion que `StandardLocation.locationFor` inventa para un nombre que no es de las estandar.
-// Es de nivel superior y de paquete: el JDK la tiene anidada y anonima, y aca una clase con nombre
-// se lee mejor y no depende de la captura del entorno.
+// The location `StandardLocation.locationFor` invents for a name that is not one of the standard
+// ones. It is top-level and package-private: the JDK has it nested and anonymous, and here a named
+// class reads better and does not depend on capturing the environment.
 //
-// **No es de salida.** Una ubicacion inventada no puede saberlo, y decir que si haria que una
-// herramienta intentara escribir en ella.
-final class UbicacionPropia implements JavaFileManager.Location {
+// **It is not an output location.** An invented location cannot know, and saying that it is would
+// make a tool try to write into it.
+final class CustomLocation implements JavaFileManager.Location {
 
-    private final String nombre;
+    private final String name;
 
-    UbicacionPropia(String nombre) {
-        this.nombre = nombre;
+    CustomLocation(String name) {
+        this.name = name;
     }
 
     public String getName() {
-        return this.nombre;
+        return this.name;
     }
 
     public boolean isOutputLocation() {
@@ -107,6 +106,6 @@ final class UbicacionPropia implements JavaFileManager.Location {
     }
 
     public String toString() {
-        return this.nombre;
+        return this.name;
     }
 }

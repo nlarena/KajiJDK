@@ -818,7 +818,7 @@
 //!   status 0  Status::OK         the method ran to one of its exits. `key` is 0 and means nothing.
 //!   status 1  Status::DEOPT      a guard failed;    `key` names a ResumeSite.
 //!   status 2  Status::SAFEPOINT  the poll fired;    `key` names a ResumeSite (a bytecode pc).
-//!   status 3  Status::ALLOC      Eden or the log is full; `key` names a ResumeSite.
+//!   status 3  Status::ALLOC      Eden or a log is full;   `key` names a ResumeSite.
 //! ```
 //!
 //! Every value of `key` is a [`ResumeSite::key`]: a bytecode pc for a site in the root's own body,
@@ -1046,9 +1046,34 @@
 //!
 //! **Where the class comes from is the design decision**, and it is the interpreter's observation
 //! rather than the static type: the dispatch path already holds the receiver's header word, so
-//! recording it is one `Relaxed` store on a path that has already loaded it, and by the time a
+//! recording it costs a load and a compare on a path that has already loaded it, and by the time a
 //! method is compiled the site has been observed at least as many times as the invocation counter
 //! demanded. A guess is not a wrong answer, only a slow site.
+//!
+//! ## The cache is polymorphic, not monomorphic
+//!
+//! One class per site is the right answer for a site that only ever sees one, and the wrong answer
+//! for one that rotates. `ops[i & 3].f(acc)` — four implementors of an interface, in strict order —
+//! misses the single baked class three times out of four, and a miss is not merely a slow call: it
+//! is a deopt, and a deopt **retires the method's on-stack entry**, so the loop that contained the
+//! site finishes interpreted. That is the whole of `bench/BkMega` reading 2.0x where `bench/BkMono`
+//! — the same program, the same bodies, the same printed number, one receiver class instead of four
+//! — read 200x.
+//!
+//! So a site carries **as many classes as the VM observed there**, up to
+//! [`RECEIVER_WAYS`][crate::jvm::interpreter::metaspace::RECEIVER_WAYS], each with the target *its*
+//! class's table selects, and the guard becomes a chain: the receiver's class is read once and
+//! compared against each in turn, the first match falls into that arm's body, and falling off the
+//! end deopts. See [`emit_chain`], and [`emit_guard`] for the `n = 1` case it widens — which stays
+//! literally one comparison, because a monomorphic site must not pay for a chain it does not need.
+//!
+//! **A site with more classes than there are ways refuses the method.** A chain that cannot cover
+//! the site would be paid for on every call and deopt anyway, losing the loop after paying for the
+//! guards; refusing loses the loop without paying. There is a better answer for such a site — a
+//! real vtable dispatch in native code — and this tier cannot express it: the receiver's class is a
+//! heap offset, and turning one into an entry point means a flat, pointer-stable table addressable
+//! from an instruction stream, where the VM has a `HashMap<String, Vec<VtableEntry>>` of `String`s
+//! and `MethodId`s. And it would dispatch without inlining, which is where the 139x came from.
 //!
 //! An `invokeinterface` needs nothing extra: a guard on the **exact** class makes the signature
 //! search the interpreter would do unnecessary, which is why one [`Guard::ExactClass`] serves both
@@ -1077,6 +1102,169 @@
 //! then — for the one factory with a plausible shape, `metafactory` — expressing "allocate the spun
 //! class and run its `<init>`" as the `new` + `invokespecial` pair it already is. Both are real
 //! steps; neither is a guard.
+
+//! # Group 4: a **real call**, and the deopt that walks back out through it
+//!
+//! Everything above expands a call. This group adds the other answer, for the sites an expansion
+//! cannot serve — and the census says which they are: a **recursion** (the cycle check refuses it
+//! by identity, and a recursion is a call by definition), a callee past [`MAX_INLINE_BYTES`] or
+//! [`MAX_INLINE_DEPTH`], and — the largest group by far — a callee whose *body* this tier cannot
+//! scan at all. Nothing of the callee is needed to call it.
+//!
+//! Group 4 landed with its scope restricted to the **statically bound** invokes, `invokestatic`
+//! and `invokespecial`, on the grounds that a dispatched site would need its class guard in front
+//! of the call and that a guard in front of a *call* is a different mechanism from a guard in
+//! front of an expansion. That separation did its job — it isolated the hard problem (the call)
+//! from the orthogonal one (choosing the target) — and **milestone F3 removes it**, because the
+//! second half of the claim turned out to be false. See "Group 5" below.
+//!
+//! ## Nothing unwinds, and that is the whole design
+//!
+//! No unwind data is registered for these frames (`RtlAddFunctionTable`; see
+//! [`x64::Frame`][crate::burst::x64::Frame]'s "known gap"), so a structured unwind *through* one is
+//! not possible — and it would be the wrong shape anyway. Instead:
+//!
+//! > A callee that cannot go on **returns normally through its own epilogue**, with the status in
+//! > `RAX`. Its caller sees the non-OK status, parks it in a **link slot** of its own buffer, and
+//! > returns the same reason under its own resume key. The interpreter is left one `ret` at a time,
+//! > and at no moment is a native frame half-finished.
+//!
+//! ## What the emitted site is
+//!
+//! ```text
+//!   is there code?          no  -> deopt at this pc; the interpreter makes the call
+//!   do the frames fit?      no  -> deopt at this pc; likewise
+//!   spill the chain             (minus this call's arguments)
+//!   build the callee's frame    (its own region of the buffer: arguments in, everything else zero)
+//!   call [record.code]
+//!   status OK?              no  -> park it, return the same reason under this site's key
+//!                           yes -> reload the operand cache, take the result out of RDX
+//! ```
+//!
+//! Five things carry it, and each is a decision rather than a detail.
+//!
+//! **1. A stable [`NativeRecord`] per method, and therefore an address rather than a target.** The
+//! callee is usually compiled *later* than the caller, and a recursive method would have to know
+//! its own entry point while it is still being emitted. One load through a boxed, never-moving cell
+//! answers both, and turns "the callee is not compiled" into an ordinary deopt at the invoke rather
+//! than a compile-time refusal.
+//!
+//! **2. The frame budget is a budget, not a counter.** The interpreter hands native code its own
+//! headroom against `MAX_FRAMES` in a callee-saved register ([`FRAMES`]); each site spends
+//! `chain_len` plus the callee's [`frame_depth`][CompiledCode::frame_depth] out of it, passes the
+//! remainder on, and a site that cannot pay **deopts at the invoke** — handing the call back to the
+//! side that counts frames exactly. So the bound native code enforces *is* the bound of the
+//! reconstruction: exact, not conservative, and a runaway recursion reaches `StackOverflowError`
+//! where an interpreted one would. A separate cap
+//! ([`NATIVE_FRAME_BUDGET`][super::code_cache::JitCache::NATIVE_FRAME_BUDGET]) bounds the *buffer*,
+//! not the correctness.
+//!
+//! **3. The reconstruction reuses the virtual frames of inlining, unchanged.** A callee's region of
+//! the buffer starts one [`buffer_slots`][CompiledCode::buffer_slots] past its caller's, and the
+//! link slot's low half is a [`ResumeSite::key`] *of the callee's compilation* — so the interpreter
+//! walks the chain by reading two numbers per level. The callee's root frame becomes a
+//! [`VirtualState`][super::code_cache::VirtualState] of the same list inlining fills, and
+//! `resume_from_jit` needed no change at all: it cannot tell a frame an expansion flattened from
+//! one a call removed.
+//!
+//! **4. A complete map of locals.** [`ResumeSite::locals`] is *differential* — only the slots
+//! compiled code may have touched — because the interpreter is already holding that frame. A frame
+//! a **call** created has no counterpart, so every slot has to be written:
+//! [`ResumeSite::frame_locals`]. `Conflict` and `Opaque` go back as `Value::Int(0)`, which is safe
+//! in the only direction that matters (neither can fabricate a reference) and correct because the
+//! call zeroed exactly those slots.
+//!
+//! **5. The result comes back in `RDX`.** Not in the callee's result slot: that offset is a
+//! consequence of a compilation the caller never saw, and [`Mem`] has no index register, so it
+//! would not even be addressable. One extra `mov` on an exit path that is traversed once per call.
+//!
+//! ## The two resume sites of one call
+//!
+//! A call site owns **two** entries in the resume map, and telling them apart is what makes the
+//! interpreter's job unambiguous:
+//!
+//! | | the call was not made | the callee could not finish |
+//! |---|---|---|
+//! | key | the invoke's own ([`site_key`]) | a range of its own ([`link_key`]) |
+//! | the caller's stack | **with** the arguments | without them — they are the callee's locals |
+//! | what the interpreter does | re-executes the invoke | waits at the invoke for the rebuilt callee |
+//!
+//! ## The restriction, stated rather than hidden
+//!
+//! A compilation carrying an **allocation log** or a **write-barrier log** may not be entered by a
+//! call. Both logs live in the compilation's own region of the buffer, and only the *outermost*
+//! excursion's are replayed when native code returns — so an object allocated in a nested frame
+//! would be one the collector never hears about, and an old→young pointer written there would be a
+//! live object the next minor collection frees. The gate is in
+//! [`install`][super::code_cache::JitCache::install]: such a compilation simply leaves its record's
+//! `code` at zero, so it is called by the interpreter alone.
+//!
+//! **What it costs, measured rather than asserted** (census, 6012 methods, the shipping policy):
+//! 1328 of the 4472 compilations — 30% — carry a log and can therefore never be entered by a call.
+//! That is the number the restriction is usually quoted by, and on its own it overstates the case
+//! badly. The number that says what lifting it would *buy today* is on the caller's side: of the
+//! 1658 compilations that emit a real call, **21** are blocked from making every one of their
+//! calls by a target that compiles-but-is-logged, and **1362** by a target that does not compile
+//! at all. So the log restriction is not yet the binding constraint — the subset
+//! is — and a shared log lifts twenty-one call sites' worth of ceiling. It becomes the binding
+//! constraint the moment the callees start compiling, which is why the plan below stays written
+//! down rather than being carried out here.
+//!
+//! # Group 5 (milestone F3): the dispatched sites, called rather than expanded
+//!
+//! The two mechanisms above are one mechanism. An expansion of a dispatched call is sound because
+//! of a guard on the receiver's class; a *call* at a dispatched site is sound for exactly the same
+//! reason and by exactly the same instructions — [`emit_guard`] is one function and both arms of
+//! the invoke emitter call it. Writing it twice is what this milestone refuses to do: two copies
+//! would be written against the same [`Guard`] today and against two readings of it the first time
+//! either side was touched, and the failure mode is silent (a call that enters the *wrong body*
+//! for a receiver the other path would have rejected).
+//!
+//! What makes the target as fixed for a call as it is for an expansion is where it came from: the
+//! VM looks the callee up in the **method table of the very class the guard names**, not in the
+//! declared owner's. With the class pinned by the guard, the `MethodId` is pinned, and therefore
+//! so is the [`NativeRecord`] address the site bakes in. `Sub.m` and `Base.m` have different
+//! records, and resolving by the owner would call the wrong one for a receiver the guard
+//! *accepts* — which is the one error a class guard cannot catch, and the one the differential
+//! fixture `java/NkCall.java` is built to make loud.
+//!
+//! **`invokeinterface` costs nothing extra**, for the reason milestone F2 already gave: an exact
+//! class makes the signature search unnecessary, so `SiteKind::Signature` hands back the same
+//! `Callee` — same [`Guard::ExactClass`], same record — as `SiteKind::Vtable`, and not one line of
+//! this module asks which opcode it is looking at.
+//!
+//! ## When to expand and when to call
+//!
+//! Both answers now exist for the same site, and the order is unchanged: **expand when the
+//! expansion is possible within the budgets above, call otherwise.** That is a measured choice
+//! rather than an inherited one — the census in `burst::jit_tests` was run under three policies
+//! back to back on one corpus of 5887 methods (the corpus grows while the VM's own fixtures are
+//! rebuilt, so only figures from the *same* sitting are comparable — which is why the three rows
+//! below are a little behind the totals quoted elsewhere in this comment):
+//!
+//! | policy | compile | emit a call | every target callable |
+//! |---|---|---|---|
+//! | expand first, call as fallback | 4384 | 1619 | 271 |
+//! | call first at dispatched sites | 4416 | 1811 | 536 |
+//! | never expand, always call | 4553 | 3246 | 1877 |
+//!
+//! "Never expand" leads on both columns, and neither column is evidence, because the **log
+//! restriction below is the dominant term in both**: a policy that expands less moves fewer
+//! callees' logs into their callers, so it produces more logless — hence callable — compilations
+//! for a reason that has nothing to do with whether calling is better than expanding. Until that
+//! restriction is lifted the census cannot separate the two, so the policy stays the one that
+//! needs no record, no frame budget and no "the callee is not compiled" deopt whenever an
+//! expansion is available. **Re-running that table is the experiment that should decide it**, and
+//! the census now carries the numbers to do so.
+//!
+//! ## The restriction, and what it actually costs
+//!
+//! Lifting it means a **shared** log — one whose address is baked in as an immediate the way the
+//! poll word is — and one further thing that is easy to miss: `alloc_records` would have to become
+//! non-zero for every compilation that can *call*, not only for one that allocates, or a root that
+//! allocates nothing would neither zero the shared counter on the way in nor replay it on the way
+//! out. That is exactly the "an object the collector never knows about" the restriction prevents.
+//!
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1472,6 +1660,61 @@ pub struct Callee<'a> {
     /// statically bound call answers [`Guard::Static`]; a speculatively bound one names the class
     /// its body was selected for.
     pub guard: Guard,
+    /// **The address of this callee's [`NativeRecord`]**, when the VM keeps one for it — the one
+    /// thing a *real* call needs that an inlined one does not.
+    ///
+    /// It is an address rather than a target because the callee may not be compiled yet, and may
+    /// never be: a record is minted the first time a site names the method and is filled in when
+    /// (if) that method is installed. So the emitted call loads the entry point **through** this
+    /// address at run time, and "the callee is not compiled" becomes an ordinary deopt at the
+    /// invoke rather than a compile-time refusal — which is also, and not incidentally, what makes
+    /// direct recursion expressible: `f`'s own record is already there while `f` is being compiled.
+    ///
+    /// `None` refuses the native-call fallback for this site. The VM answers `None` for every call
+    /// it does not bind statically (a native call is emitted only where inlining would have needed
+    /// no class guard) and for a target it cannot name.
+    pub record: Option<usize>,
+}
+
+/// **The stable per-method cell a compiled call jumps through.**
+///
+/// One of these exists per method the VM has ever seen at a call site, it never moves, and its
+/// address is baked into every caller as an immediate. Compiled code only ever *reads* it.
+///
+/// # Why an indirection at all
+///
+/// A direct `call rel32` would need the callee's code to exist when the caller is compiled and to
+/// stay at that address forever. Neither holds: the callee is usually compiled *later* (it is a
+/// different method with its own counter), and a recursive method would have to know its own entry
+/// point while it is still being emitted. One load per call buys all three properties — the callee
+/// may be compiled after the caller, a method may call itself, and a callee that is never compiled
+/// simply leaves [`code`][NativeRecord::code] at zero, which the call site tests and turns into an
+/// ordinary deopt at the invoke.
+///
+/// # The two words, and why the second is not a statistic
+///
+/// [`frames`][NativeRecord::frames] is how many interpreter frames one deopt out of that callee can
+/// hand back ([`CompiledCode::frame_depth`]). The call site spends it out of the **frame budget**
+/// it was entered with, so the depth check the interpreter makes at every invoke keeps being made
+/// — by the one side that still knows how deep the interpreter's own stack is.
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct NativeRecord {
+    /// The entry address of the callee's compiled code, or **0** when it has none this tier may
+    /// call: not compiled, refused, or compiled but carrying a log this caller could not replay
+    /// (see [`CompiledCode::alloc_records`]).
+    pub code: u64,
+    /// [`CompiledCode::frame_depth`] of that code — how many interpreter frames one deopt out of it
+    /// produces. Meaningless, and left at zero, while `code` is zero.
+    pub frames: u64,
+}
+
+impl NativeRecord {
+    /// Byte offset of [`code`][NativeRecord::code] inside the record. `#[repr(C)]` is what makes
+    /// this a fact rather than a hope.
+    pub const CODE: i32 = 0;
+    /// Byte offset of [`frames`][NativeRecord::frames].
+    pub const FRAMES: i32 = 8;
 }
 
 /// **What an expanded call checks before it runs the body it was given** — the whole of this
@@ -1489,6 +1732,12 @@ pub struct Callee<'a> {
 /// interpreter dispatches the call by its full path. The guard is emitted **before** the arguments
 /// are copied into the callee's locals, so a miss resumes at the invoke with the operand stack it
 /// was entered with and the call is simply performed again, interpreted.
+///
+/// **One [`Guard`] is one arm, and a site may have several.** A dispatched site that has seen `n`
+/// classes carries `n` of these, one per class, each in front of the body *that* class selects; the
+/// chain that compares them is [`emit_chain`] and the `n = 1` case is [`emit_guard`]. Nothing in
+/// this enum changes for it — an arm still names exactly one class and still deopts on anything
+/// else — which is why the chain needed no new variant.
 ///
 /// Why an equality test is enough — the same argument `checkcast` makes: a `Class<…>` mirror is
 /// `malloc_old`ed and pinned against `gc::compact`, so its offset is fixed for the VM's life, and
@@ -1649,7 +1898,16 @@ pub struct Environment<'a> {
     /// class is initialised (`Done`) — the same requirement `getstatic` and `new` have, and for the
     /// same reason: compiled code cannot run a `<clinit>` — and the callee is neither native nor
     /// synchronized (there is no monitor to take in an instruction stream).
-    pub invoke: &'a dyn Fn(Unit, usize, u16) -> Option<Callee<'a>>,
+    /// **The answer is a list**, since the polymorphic inline cache: one [`Callee`] per receiver
+    /// class the VM has actually observed at this site, in first-seen order, each carrying its own
+    /// [`Guard`] and its own body — a `Sub` and a `Base` at one site are two different methods and
+    /// two different records. A statically bound call answers a one-element list.
+    ///
+    /// `None` and the empty list mean the same thing and are both refusals: the VM has nothing to
+    /// offer here. `None` is also what a **megamorphic** site answers — one that has seen more
+    /// classes than the profile has ways — because a chain that cannot cover the site would be paid
+    /// for on every call and deopt anyway.
+    pub invoke: &'a dyn Fn(Unit, usize, u16) -> Option<Vec<Callee<'a>>>,
     /// Where the heap is and how it is laid out — see [`Heap`].
     pub heap: Heap,
     /// The address of the 8-byte safepoint poll word, baked in as an immediate.
@@ -1666,6 +1924,17 @@ const LOCALS: Reg = Reg::Rbx;
 /// poll site — keeping the address in a register turns each poll into `mov` + `cmp` + `jcc`
 /// instead of re-materialising a 10-byte `movabs` immediate on every loop iteration.
 const POLL: Reg = Reg::Rsi;
+
+/// The register holding the **frame budget** for the whole body: how many interpreter frames this
+/// excursion may still create, delivered by the interpreter as the third ABI argument.
+///
+/// Callee-saved, and — like [`POLL`] — saved and loaded **only** when something reads it, i.e. only
+/// when the compilation contains a real call. A compilation that inlines everything emits exactly
+/// the bytes it emitted before this step.
+///
+/// `RDI` is the one non-volatile register [`CACHE`] deliberately leaves out, which is why it is
+/// available here at no cost to the operand-stack allocator.
+const FRAMES: Reg = Reg::Rdi;
 
 /// Scratch. Never live across an instruction boundary — every bytecode opcode loads what it needs,
 /// computes, and stores back to a slot.
@@ -1890,9 +2159,9 @@ pub enum Outcome {
     /// and this is the bytecode pc to resume interpreting at. The only difference is *why*, which
     /// matters to the counters and to whether on-stack entry stays open.
     Safepoint(u32),
-    /// An allocation's fast path was not available — Eden is full, or this excursion has already
-    /// logged as many allocations as the buffer holds. Same state contract again; see
-    /// [`Status::ALLOC`] for why it is not folded into [`Outcome::Deopt`].
+    /// A **capacity** exit rather than a failed guard — Eden is full, this excursion has already
+    /// logged as many allocations as the buffer holds, or its write-barrier log is full. Same state
+    /// contract again; see [`Status::ALLOC`] for why it is not folded into [`Outcome::Deopt`].
     ///
     /// The two array opcodes report this for two further conditions that are not about capacity at
     /// all: a **negative** count and a count over [`MAX_INLINE_ARRAY_BYTES`]. A site carries one
@@ -1929,12 +2198,18 @@ impl Status {
     ///
     /// The state contract is a deopt's exactly — the buffer holds the locals and the operand stack,
     /// and the instruction at that pc has not run — but the *reason* is a capacity condition rather
-    /// than a guard failure: Eden had no room, or the excursion's allocation log is full. Two things
-    /// follow from that difference, which is why it is a status of its own. It must not close the
-    /// method's on-stack entry (the condition clears at the next collection, and closing OSR on the
-    /// first Eden fill would retire every allocating loop after one lap); and it must not be counted
-    /// as a deopt, because "this method keeps failing a guard" and "this loop keeps filling Eden"
-    /// are different facts about a run.
+    /// than a guard failure: Eden had no room, or the excursion's allocation log is full, or its
+    /// **write-barrier log** is. Two things follow from that difference, which is why it is a status
+    /// of its own. It must not close the method's on-stack entry (every one of those conditions
+    /// clears on its own — Eden at the next collection, either log when the trampoline drains it on
+    /// the way out — so closing OSR on the first fill would retire the loop after one lap for
+    /// nothing); and it must not be counted as a deopt, because "this method keeps failing a guard"
+    /// and "this loop keeps filling a fixed buffer" are different facts about a run.
+    ///
+    /// **A reference store's capacity exit is one of these, and it is the only exit of that
+    /// instruction that is.** An `aastore` also guards on type, and those guards report `DEOPT` from
+    /// a stub of their own at the same pc — see `Frames::barriers`, which is where the split lives
+    /// and why it is per exit and not per site.
     ///
     /// `newarray`/`anewarray` add two conditions to the list that are not about capacity: a
     /// **negative** count, and one whose array would exceed [`MAX_INLINE_ARRAY_BYTES`]. They ride
@@ -2240,6 +2515,33 @@ pub struct ResumeSite {
     /// At a site inside an inlined callee this is the stack **with the call's arguments already
     /// removed** — they became the callee's locals, so leaving them here would push them twice.
     pub stack: Vec<Kind>,
+    /// **Every local slot of the root frame**, slot `0` first — the *complete* map the differential
+    /// [`locals`][ResumeSite::locals] above deliberately is not.
+    ///
+    /// It exists because a compilation can now be entered from **another compilation** rather than
+    /// from the interpreter, and then there is no frame on the far side to leave alone: the caller
+    /// wrote this frame's arguments and zeroed the rest, exactly as the emitted inline call does
+    /// for a [`VirtualFrame`], and every slot of it has to be handed back.
+    ///
+    /// [`Kind::Opaque`] and [`Kind::Conflict`] are written back as `Value::Int(0)` rather than
+    /// skipped, and that is sound for the same two reasons an inlined frame's slots are. `Opaque`
+    /// means no path to here wrote the slot, so it still holds the zero the call put there.
+    /// `Conflict` means the slot is dead ([`State::load`] refuses to compile a read of one), so
+    /// nothing can observe what is in it — and neither value can fabricate a reference, which is
+    /// the only direction that would hurt the collector.
+    ///
+    /// Filled for every site of every compilation, because whether a method will ever be *called*
+    /// natively is not known when it is compiled.
+    pub frame_locals: Vec<Kind>,
+    /// **Set only on the site a real call comes back through un-finished** — see [`NativeSite`].
+    ///
+    /// A native call site has **two** resume sites and this is what tells them apart. One says
+    /// "the call was not made" (the callee has no code, or the frame budget would not cover it):
+    /// its stack still carries the arguments, the interpreter re-executes the invoke, and it is an
+    /// ordinary site with `native == None`. The other says "the call was made and the callee could
+    /// not finish": its stack stops short of the arguments — they are the callee's locals now —
+    /// and the frames the callee owes are read out of the callee's own region of the buffer.
+    pub native: Option<NativeSite>,
     /// **The frames above the root**, outermost first and innermost last — empty for a site in the
     /// root's own body, which is every site there was before step 8.
     ///
@@ -2248,6 +2550,27 @@ pub struct ResumeSite {
     /// from that moment the call chain is an ordinary one: the innermost frame runs the instruction
     /// native code could not, and each `return` unwinds into the caller waiting at its invoke.
     pub inlined: Vec<VirtualFrame>,
+}
+
+/// **What a resume site needs to follow a real call**: which method was called, and where the
+/// status it returned was parked.
+///
+/// A compiled call that comes back with a non-OK status does not unwind — nothing can, since no
+/// unwind data is registered for these frames and a half-finished native frame is exactly what this
+/// tier refuses to have. It **returns normally**, and the caller writes the status it was handed
+/// into a slot of its own buffer and returns its own non-OK status one level further out. So the
+/// interpreter is handed the outermost compilation's state, and the chain is reconstructed by
+/// following one link per level — one `ret` per level on the way out, one read per level on the
+/// way back in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct NativeSite {
+    /// The callee's [`Unit`] — its `MethodId`, which is also the key its compilation is installed
+    /// under, so the interpreter can find the resume map the link's key names.
+    pub unit: Unit,
+    /// The buffer slot the callee's **status word** was parked in. Its low 32 bits are a
+    /// [`ResumeSite::key`] *of the callee's compilation*; its high 32 bits are the [`Status`] this
+    /// caller propagated outwards unchanged.
+    pub link: u32,
 }
 
 impl ResumeSite {
@@ -2379,6 +2702,12 @@ pub struct CompiledCode {
     /// contract's second half** — a shorter buffer would be written past the end by a deopt spill,
     /// by the return, by the first inline allocation or by the first recorded reference store.
     pub buffer_slots: u32,
+    /// **How many invokes this compilation emits as real calls** — see [`NativeCall`].
+    ///
+    /// It is a fact about the emitted code rather than a statistic: a test that asserts a recursive
+    /// method compiles would pass just as well against a compilation that inlined its way out of
+    /// the recursion, and this is what tells the two apart.
+    pub native_sites: u32,
     /// **Loop headers**: the bytecode pcs this code may be entered at on-stack, and the same pcs
     /// at which it polls the safepoint word. Ascending, and always the target of some backward
     /// branch with an operand-stack depth of 0 (see the module docs). Empty for a method with no
@@ -2457,7 +2786,11 @@ pub const ALLOC_LOG_RECORDS: u32 = 256;
 /// reference store cannot insert into the collector's remembered set (that is a `HashSet` behind a
 /// decision about heap regions), so it records the pair and the trampoline replays it. Fixed
 /// because the buffer is allocated once, therefore bounded, therefore a full log is a reason to
-/// leave.
+/// leave — and, since the exits of a reference store were split, a reason to leave through
+/// [`Status::ALLOC`] rather than [`Status::DEOPT`], whichever of the two opcodes it is. The
+/// trampoline drains the log on the way out, so the next excursion starts empty: this is a capacity
+/// condition that clears on its own, and closing on-stack entry for it retires a loop that was
+/// making perfectly good progress. See `Frames::barriers`.
 ///
 /// It fills far more slowly than the allocation log does, because compiled code applies the
 /// barrier's own predicate before it records: a store whose holder is young — which is nearly
@@ -3232,7 +3565,12 @@ fn transfer(
         // mismatch is an [`Ineligible::WrongType`] like any other.
         0xb6..=0xb9 => {
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let callee = (env.invoke)(method.unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode: op })?;
+            // **The shape of the call is the shape of *any* of its targets.** Every alternative
+            // of a dispatched site was selected for the same descriptor — that is what a vtable
+            // slot and a signature lookup both mean — so the operands this instruction pops are the
+            // same whichever arm runs. The first one answers for all of them, and `plan` is where
+            // the rest are checked against it (see `alternatives_agree`).
+            let callee = first_callee(env, method.unit, pc, index, op)?;
             let want = arg_kinds(&callee.method).ok_or(Ineligible::WrongType { pc })?;
             // El conteo que reporta la VM y el que dice el descriptor tienen que coincidir. No es
             // defensa contra un class file hostil: es que `arg_slots` viene del resolver del
@@ -3312,10 +3650,26 @@ struct Body<'a> {
     /// Whose body this is: its code, its `max_locals`, its descriptor, and the [`Unit`] its
     /// constant-pool indices resolve against.
     method: Method<'a>,
-    /// **The inline sites of this body**: the pc of each invoke that was expanded, and the index in
-    /// the body table of the body it expanded to. An invoke *not* in this map is not in the subset
-    /// and made the whole method ineligible, so an empty map means a body with no calls at all.
-    children: BTreeMap<usize, usize>,
+    /// **The inline sites of this body**: the pc of each invoke that was expanded, and the indices
+    /// in the body table of the bodies it expanded to. An invoke *not* in this map is not in the
+    /// subset and made the whole method ineligible, so an empty map means a body with no calls at
+    /// all.
+    ///
+    /// **A list and not one index, since the polymorphic inline cache.** A dispatched site that has
+    /// seen `n` receiver classes expands to `n` bodies — one per class, each the target *that*
+    /// class's table selects — and the emitter puts a chain of class comparisons in front of them,
+    /// one arm each. The list is in the profile's first-seen order, which is the order the arms are
+    /// compared in, and it is never empty. A statically bound site, and a dispatched one that has
+    /// only ever seen a single class, has exactly one entry and emits exactly the one comparison
+    /// F2 emitted.
+    children: BTreeMap<usize, Vec<usize>>,
+    /// **The invokes of this body that are emitted as *real calls*** (group 4): the pc of each,
+    /// and its index in the compilation's [`NativeCall`] table.
+    ///
+    /// Disjoint from [`children`][Body::children] by construction — [`plan`] decides one or the
+    /// other per site, inlining first and falling back to a call — and between them they cover
+    /// every invoke in the body, because an invoke that is neither refuses the method.
+    native: BTreeMap<usize, usize>,
     /// The body this one was inlined into, and the pc of the invoke that did it. `None` for the
     /// root. This is the **caller chain**, and it is what a deopt walks to rebuild the interpreter
     /// frames above the one it stopped in.
@@ -4017,7 +4371,7 @@ fn decode(
         0xb6..=0xb9 => {
             need(invoke_len(op) as usize)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let callee = (env.invoke)(method.unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode: op })?;
+            let callee = first_callee(env, method.unit, pc, index, op)?;
             let pops = u16::try_from(callee.arg_slots).map_err(|_| Ineligible::TooBig)?;
             let pushes = u16::from(!returns_void(callee.method.descriptor));
             simple(invoke_len(op), pops, pushes)
@@ -4239,6 +4593,7 @@ fn scan_body<'a>(method: Method<'a>, env: &Environment<'a>, inlined: bool) -> Re
     Ok(Body {
         method: *method,
         children: BTreeMap::new(),
+        native: BTreeMap::new(),
         parent: None,
         arg_slots: 0,
         guard: Guard::Static,
@@ -4337,8 +4692,129 @@ const MAX_INLINE_BODIES: usize = 24;
 /// argument about liveness that every future opcode would have to be checked against, while
 /// disjointness is a property of the arithmetic here and of nothing else; and the cost is bounded
 /// by the two budgets above, which is what makes the simple answer affordable.
-fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, Ineligible> {
+/// **Every target the VM has observed at one dispatched site** — see [`Environment::invoke`].
+///
+/// A `None` and an empty list are the same refusal and are turned into the same
+/// [`Ineligible::Opcode`] the compiler answers for any opcode outside the subset: a site the VM
+/// cannot describe is a site this tier has nothing to compile. That covers a cold branch's invoke,
+/// an `invokedynamic`, and — since the polymorphic cache — a **megamorphic** site, one that has
+/// seen more receiver classes than the profile has ways.
+fn callees<'a>(
+    env: &Environment<'a>,
+    unit: Unit,
+    pc: usize,
+    index: u16,
+    opcode: u8,
+) -> Result<Vec<Callee<'a>>, Ineligible> {
+    match (env.invoke)(unit, pc, index) {
+        Some(list) if !list.is_empty() => Ok(list),
+        _ => Err(Ineligible::Opcode { pc, opcode }),
+    }
+}
+
+/// The first target of a site — all the two passes that ask about the **shape** of a call need,
+/// since every alternative of one site was selected for the same descriptor.
+fn first_callee<'a>(
+    env: &Environment<'a>,
+    unit: Unit,
+    pc: usize,
+    index: u16,
+    opcode: u8,
+) -> Result<Callee<'a>, Ineligible> {
+    Ok(callees(env, unit, pc, index, opcode)?[0])
+}
+
+/// **Whether a list of alternatives can become a guard chain**, which is three questions and not
+/// one:
+///
+///  - There is more than one of them. A single class is not a chain, and routing it through this
+///    path would emit the same one comparison by a longer road.
+///  - **Every arm is guarded by a class.** A chain selects by comparing the receiver's class
+///    against each arm's; an arm carrying [`Guard::Static`] or [`Guard::NotNull`] would match
+///    *anything*, so it is not an arm, it is the whole site. The VM only ever answers those two for
+///    a statically bound call, which has one target by construction — so this is a check on the
+///    resolver rather than on the program, and it is here because the emitter's correctness rests
+///    on it.
+///  - **They agree on how many operands the call consumes.** The chain reads the receiver **once**,
+///    from `depth - arg_slots`, before it knows which arm will run; if two arms disagreed about
+///    where the receiver is, the class tested would not be the class dispatched on. Every
+///    alternative of one site has the same descriptor, so this is true — and it is asserted rather
+///    than assumed, because the consequence of it being false is a silently wrong dispatch.
+///
+/// It deliberately says nothing about the *targets*: two classes selecting the same method is
+/// ordinary (an inherited method), and two arms expanding the same body is correct, merely
+/// redundant.
+fn alternatives_fit(alts: &[Callee<'_>], arg_slots: usize) -> bool {
+    alts.len() > 1
+        && alts
+            .iter()
+            .all(|c| matches!(c.guard, Guard::ExactClass(_)) && c.arg_slots == arg_slots)
+}
+
+/// **Scans one callee as a body to be expanded in place**, or names the reason it cannot be.
+///
+/// Lifted out of [`plan`]'s closure unchanged so the polymorphic path can call it once per arm.
+/// `site` is the `(body, pc)` of the invoke, and `count` is how many bodies the compilation would
+/// already hold — which is *not* `bodies.len()` when the arms of one site are being scanned before
+/// any of them is pushed.
+fn expand_one<'a>(
+    bodies: &[Body<'a>],
+    depth: &[usize],
+    count: usize,
+    bytes: usize,
+    site: (usize, usize),
+    callee: &Callee<'a>,
+    env: &Environment<'a>,
+) -> Result<Body<'a>, Ineligible> {
+    let (at, pc) = site;
+    if depth[at] >= MAX_INLINE_DEPTH {
+        return Err(Ineligible::InlineDepth { pc });
+    }
+    if count >= MAX_INLINE_BODIES {
+        return Err(Ineligible::TooBig);
+    }
+    // **The cycle check.** Walk the caller chain to the root; a unit that is already on it would
+    // expand into itself, and no depth bound is the honest reason to stop.
+    let mut up = Some(at);
+    while let Some(b) = up {
+        if bodies[b].method.unit == callee.method.unit {
+            return Err(Ineligible::InlineCycle { pc });
+        }
+        up = bodies[b].parent.map(|(caller, _)| caller);
+    }
+    if bytes.saturating_add(callee.method.code.len()) > MAX_INLINE_BYTES {
+        return Err(Ineligible::InlineBudget { pc });
+    }
+    scan_body(callee.method, env, true)
+}
+
+/// **All the arms of one polymorphic site, or none of them** — the scanned bodies and the inline
+/// byte budget they leave behind.
+///
+/// The budgets are spent *as if* each arm had already been pushed, which is the whole reason this
+/// is not a loop over [`expand_one`] at the call site: `n` copies of a body cost `n` times its
+/// bytes and `n` entries in the body table, and a chain that fitted only because its own arms were
+/// not counted would blow [`MAX_INLINE_BYTES`] on the arm after it.
+fn expand_all<'a>(
+    bodies: &[Body<'a>],
+    depth: &[usize],
+    bytes: usize,
+    site: (usize, usize),
+    alts: &[Callee<'a>],
+    env: &Environment<'a>,
+) -> Option<(Vec<Body<'a>>, usize)> {
+    let (mut out, mut spent) = (Vec::with_capacity(alts.len()), bytes);
+    for alt in alts {
+        let body = expand_one(bodies, depth, bodies.len() + out.len(), spent, site, alt, env).ok()?;
+        spent = spent.saturating_add(alt.method.code.len());
+        out.push(body);
+    }
+    Some((out, spent))
+}
+
+fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligible> {
     let mut bodies = vec![scan_body(root, env, false)?];
+    let mut calls: Vec<NativeCall> = Vec::new();
     let mut depth = vec![1usize];
     let mut bytes = bodies[0].method.code.len();
 
@@ -4356,28 +4832,15 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, In
         for (pc, index) in sites {
             let unit = bodies[at].method.unit;
             let opcode = bodies[at].method.code[pc];
-            if depth[at] >= MAX_INLINE_DEPTH {
-                return Err(Ineligible::InlineDepth { pc });
-            }
-            if bodies.len() >= MAX_INLINE_BODIES {
-                return Err(Ineligible::TooBig);
-            }
-            let callee = (env.invoke)(unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode })?;
-            // **The cycle check.** Walk the caller chain to the root; a unit that is already on it
-            // would expand into itself, and no depth bound is the honest reason to stop.
-            let mut up = Some(at);
-            while let Some(b) = up {
-                if bodies[b].method.unit == callee.method.unit {
-                    return Err(Ineligible::InlineCycle { pc });
-                }
-                up = bodies[b].parent.map(|(caller, _)| caller);
-            }
-            bytes = bytes.saturating_add(callee.method.code.len());
-            if bytes > MAX_INLINE_BYTES {
-                return Err(Ineligible::InlineBudget { pc });
-            }
+            // **Every class this site has dispatched on**, in first-seen order — one target each.
+            // A statically bound call, and a dispatched one that has only ever seen a single class,
+            // answers a one-element list and takes exactly the path milestone F2 built.
+            let alts = callees(env, unit, pc, index, opcode)?;
+            let callee = alts[0];
             // The **shape** check the emitter depends on and the type map cannot state: the call
-            // must consume exactly the operands the callee's locals are built from.
+            // must consume exactly the operands the callee's locals are built from. It is asked
+            // before the inline/call fork because it is a property of the *site*, and neither
+            // answer survives it being false.
             let entry_depth = bodies[at].state[pc].as_ref().expect("a reachable invoke").stack.len();
             if callee.arg_slots > entry_depth {
                 return Err(Ineligible::StackUnderflow { pc });
@@ -4391,18 +4854,103 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, In
             // Esto reemplaza a la igualdad `ancho == cantidad de operandos`, que era la forma de
             // decir "todos los argumentos son categoría-1" y rechazaba **150 métodos del censo**,
             // el 100% de ellos con un `long` o un `double` en el descriptor.
+            //
+            // Como el chequeo de arriba, es del **sitio** y no del cuerpo, así que va antes de la
+            // bifurcación: una llamada real copia los argumentos exactamente igual que una
+            // expansión, y ninguna de las dos respuestas sobrevive a que esto sea falso.
+            let dest = arg_destinations(&callee.method).ok_or(Ineligible::WrongType { pc })?;
             let width = arg_slot_width(&callee.method).ok_or(Ineligible::WrongType { pc })?;
-            if width > callee.method.max_locals {
+            if dest.len() != callee.arg_slots || width > callee.method.max_locals {
                 return Err(Ineligible::WrongType { pc });
             }
-            let mut body = scan_body(callee.method, env, true)?;
+            // **Whether this site could be a real call**, decided before the expansion is tried so
+            // that a refusal below has somewhere to fall to.
+            //
+            // **Milestone F3 drops the "statically bound only" half of this**, which was the last
+            // thing keeping the two mechanisms apart: a guard in front of a *call* is the same
+            // guard as one in front of an expansion ([`emit_guard`] is now literally the same
+            // function), and the target it protects is just as fixed — the VM selected it out of
+            // the guarded class's own table, so with the class pinned by the guard the `MethodId`
+            // is pinned with it, and therefore so is the [`NativeRecord`] address baked in here.
+            // A site whose receiver is of any other class deopts, exactly as an expanded one does.
+            //
+            // The condition that is left is the one that was always the real one: **the VM handed
+            // back a record**. It answers `None` for a target it cannot name, and that is the only
+            // reason a site is not callable.
+            let callable = match callee.record {
+                Some(record) if calls.len() < MAX_NATIVE_SITES => Some(record),
+                _ => None,
+            };
+            // **The polymorphic arm, tried first and all-or-nothing.**
+            //
+            // A site with `n > 1` observed classes is covered by expanding the callee `n` times —
+            // one body per class, behind a chain of class comparisons — and there is no partial
+            // version of that: an arm that could not be expanded would have to fall back to a call,
+            // and the chain would then be two mechanisms interleaved with two answers for the same
+            // `pc`. So either every alternative expands or none of them does.
+            //
+            // When it does not, the site falls back to `alts[0]` and the code below is byte for
+            // byte what F2 emitted — a single guard on the first class seen, which misses on every
+            // other one. That is not good, but it is exactly today's behaviour, so a site that
+            // cannot take the chain is never made *worse* by the chain existing.
+            let arms = match alternatives_fit(&alts, callee.arg_slots) {
+                false => None,
+                true => expand_all(&bodies, &depth, bytes, (at, pc), &alts, env),
+            };
+            if let Some((expanded, spent)) = arms {
+                bytes = spent;
+                let mut kids = Vec::with_capacity(expanded.len());
+                for (mut body, alt) in expanded.into_iter().zip(&alts) {
+                    body.parent = Some((at, pc));
+                    body.arg_slots = alt.arg_slots;
+                    body.guard = alt.guard;
+                    kids.push(bodies.len());
+                    bodies.push(body);
+                    depth.push(depth[at] + 1);
+                }
+                bodies[at].children.insert(pc, kids);
+                continue;
+            }
+            // The expansion, and every reason it can be refused. Each one used to end the whole
+            // compilation; now each one is a *fallback* whenever `callable` says so, which is the
+            // whole of group 4's widening — recursion, a body past the budget, a callee this tier
+            // could not scan at all.
+            let expanded = expand_one(&bodies, &depth, bodies.len(), bytes, (at, pc), &callee, env);
+            let mut body = match (expanded, callable) {
+                (Ok(body), _) => body,
+                // **The fallback**: emit a call instead of a body. Nothing about the callee is
+                // scanned, compiled or even required to be compilable — the site loads an address
+                // out of the callee's record at run time, and a record still holding zero is an
+                // ordinary deopt at this invoke.
+                (Err(_), Some(record)) => {
+                    bodies[at].native.insert(pc, calls.len());
+                    calls.push(NativeCall {
+                        body: at,
+                        pc,
+                        unit: callee.method.unit,
+                        record,
+                        guard: callee.guard,
+                        arg_slots: callee.arg_slots,
+                        max_locals: callee.method.max_locals,
+                        dest,
+                        returns: match returns_void(callee.method.descriptor) {
+                            true => None,
+                            false => Some(return_kind(callee.method.descriptor)),
+                        },
+                        link: 0,
+                    });
+                    continue;
+                }
+                (Err(e), None) => return Err(e),
+            };
+            bytes = bytes.saturating_add(callee.method.code.len());
             body.parent = Some((at, pc));
             body.arg_slots = callee.arg_slots;
             body.guard = callee.guard;
             let child = bodies.len();
             bodies.push(body);
             depth.push(depth[at] + 1);
-            bodies[at].children.insert(pc, child);
+            bodies[at].children.insert(pc, vec![child]);
         }
         at += 1;
     }
@@ -4422,7 +4970,70 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Vec<Body<'a>>, In
     if frame > MAX_STACK_SLOTS as u32 {
         return Err(Ineligible::TooBig);
     }
-    Ok(bodies)
+    Ok(Plan { bodies, calls })
+}
+
+/// **One invoke this compilation emits as a real call**, and everything both the emitter and the
+/// resume map need about it.
+///
+/// It is deliberately *not* a [`Body`]: nothing of the callee is scanned, so there is no code, no
+/// type map and no frame region here. What there is, is the shape of the call — how many operands
+/// it consumes, which of the callee's local slots each lands in, and what it leaves behind — plus
+/// the address of the cell the entry point is read out of.
+struct NativeCall {
+    /// Which body the invoke is in.
+    body: usize,
+    /// Its pc in that body. The pair `(body, pc)` is what the resume map is keyed by.
+    pc: usize,
+    /// The callee's [`Unit`], carried into [`NativeSite::unit`] so a deopt can be followed into the
+    /// callee's own compilation.
+    unit: Unit,
+    /// The address of the callee's [`NativeRecord`], baked in as an immediate.
+    record: usize,
+    /// **What has to hold at run time for `record` to be the right record** — see [`Guard`], and
+    /// [`emit_guard`], which is the one place either answer to a dispatched call emits it.
+    ///
+    /// [`Guard::Static`] for `invokestatic`/`invokespecial`, where the target is a static fact.
+    /// [`Guard::ExactClass`] for the `invokevirtual`/`invokeinterface` this milestone adds: the VM
+    /// selected the target out of *that class's* table, so the record is that class's answer and
+    /// nothing else's. A receiver of any other class deopts and the interpreter dispatches.
+    guard: Guard,
+    /// Operands consumed: the descriptor's arguments plus the receiver.
+    arg_slots: usize,
+    /// The callee's `max_locals` — how much of its region the call zeroes before writing the
+    /// arguments, which is what makes the callee's entry frame the one `Frame::reset_for_call`
+    /// would have built.
+    max_locals: usize,
+    /// Which of the callee's local slots each operand lands in ([`arg_destinations`]).
+    dest: Vec<usize>,
+    /// What the call leaves on the caller's operand stack — `None` for a `void` callee.
+    returns: Option<Kind>,
+    /// The buffer slot this site parks the callee's status word in. Assigned by the layout in
+    /// [`compile_with_regs`], since it sits past every body's region.
+    link: u32,
+}
+
+/// What [`plan`] hands the emitter: the inline tree, and the calls it could not turn into one.
+struct Plan<'a> {
+    bodies: Vec<Body<'a>>,
+    calls: Vec<NativeCall>,
+}
+
+/// **How many real call sites one compilation may contain.** Each costs one buffer slot (its link
+/// word) and one entry in the resume map, so the bound is about the buffer rather than about the
+/// code: it is what keeps [`CompiledCode::buffer_slots`] — and therefore the scratch buffer, which
+/// is sized for a whole chain of these — a small number.
+const MAX_NATIVE_SITES: usize = 32;
+
+/// **The key native code reports for the second resume site of a call** — the one that says the
+/// callee ran and could not finish.
+///
+/// Numbered out of a range no other key can reach: a site in the root's body is its own pc
+/// (`< MAX_CODE_LEN`), an inlined one is `MAX_CODE_LEN + n` with `n` bounded by
+/// [`MAX_INLINE_BYTES`], and this is `2 * MAX_CODE_LEN` upwards. The link slot is unique per site
+/// within a compilation, so using it as the offset needs no second table.
+fn link_key(link: u32) -> u32 {
+    2 * MAX_CODE_LEN as u32 + link
 }
 
 /// Whether the opcode is an **invoke this tier inlines**: all four of the constant-pool-indexed
@@ -4567,7 +5178,7 @@ pub fn compile_with_regs<'a>(
     env: &Environment<'a>,
     regs: u32,
 ) -> Result<CompiledCode, Ineligible> {
-    let bodies = plan(*method, env)?;
+    let Plan { bodies, mut calls } = plan(*method, env)?;
     let root = &bodies[0];
     // The native frame holds **every** body's operand stack, each in its own slice — see
     // [`Body::frame_base`]. With one body that is the method's own depth, exactly as before.
@@ -4582,9 +5193,16 @@ pub fn compile_with_regs<'a>(
     // **Any** body's loop headers read `POLL`, not only the root's: since group 3's first stage an
     // inlined callee may loop, and its header polls through the same word.
     let polls = bodies.iter().any(|b| !b.osr.is_empty());
+    // **[`FRAMES`] is saved on exactly the same terms as [`POLL`]**: only a compilation that makes
+    // a real call ever reads the frame budget, so one that inlines everything emits the prologue it
+    // emitted before this step, byte for byte.
+    let has_calls = !calls.is_empty();
     let mut saved: Vec<Reg> = vec![LOCALS];
     if polls {
         saved.push(POLL);
+    }
+    if has_calls {
+        saved.push(FRAMES);
     }
     saved.extend(CACHE[..regs as usize].iter().copied().filter(|r| !r.is_volatile()));
     let frame = super::x64::Frame::new(native_slots, &saved);
@@ -4596,7 +5214,9 @@ pub fn compile_with_regs<'a>(
     let mut st = Frames {
         labels: bodies.iter().map(|b| vec![None; b.method.code.len()]).collect(),
         deopt: bodies.iter().map(|b| vec![None; b.method.code.len()]).collect(),
+        barrier: bodies.iter().map(|b| vec![None; b.method.code.len()]).collect(),
         sites: BTreeSet::new(),
+        barriers: BTreeSet::new(),
         allocs: BTreeSet::new(),
         // A loop header gets two more names: `osr_labels[pc]` is the instruction itself (where an
         // on-stack entry lands, *past* the poll — so a re-entry always makes at least one iteration
@@ -4605,6 +5225,7 @@ pub fn compile_with_regs<'a>(
         // a loop header has.
         osr_labels: vec![None; root.method.code.len()],
         exits: bodies.iter().map(|b| vec![None; b.method.code.len()]).collect(),
+        links: calls.iter().map(|_| a.new_label()).collect(),
         epilogue: a.new_label(),
         regs,
     };
@@ -4629,6 +5250,12 @@ pub fn compile_with_regs<'a>(
     if polls {
         // The poll word's address, loaded once for every body that polls.
         a.mov_ri(POLL, env.poll_word as i64);
+    }
+    if has_calls {
+        // **The frame budget**, delivered in the third argument register and parked before a single
+        // body instruction runs — `R8` is also [`CACHE`]`[0]`, so operand 0 would otherwise be the
+        // very first thing to overwrite it.
+        a.mov_rr(FRAMES, frame.arg(2));
     }
     if !root.osr.is_empty() {
         // The entry dispatch. `frame.arg(1)` is RDX, which is also `T2` (scratch, and `cqo`'s
@@ -4663,8 +5290,32 @@ pub fn compile_with_regs<'a>(
         false => 0,
     };
     let barrier_base: i32 = alloc_base + alloc_slots;
+    let barrier_slots: i32 = match barriers {
+        true => 1 + 2 * BARRIER_LOG_RECORDS as i32,
+        false => 0,
+    };
+    // **The link slots**: one per real call site, past every log. Each parks the status word its
+    // callee returned, whose low half is a resume key *of the callee's compilation* — which is how
+    // one deopt is followed down a chain of native frames that has already unwound itself.
+    let link_base: i32 = barrier_base + barrier_slots;
+    for (i, call) in calls.iter_mut().enumerate() {
+        call.link = (link_base + i as i32) as u32;
+    }
+    // **Where a callee's region starts**, and the reason this number has to be known before a byte
+    // is emitted: a real call hands its callee the slots just past this compilation's own, so the
+    // regions stack instead of overlapping and every frame's deopt state is still there when the
+    // outermost call finally returns.
+    let buffer_slots: i32 = link_base + calls.len() as i32;
 
-    emit_body(&mut a, &bodies, 0, env, &frame, Layout { result_base, alloc_base, barrier_base }, &mut st)?;
+    emit_body(
+        &mut a,
+        &bodies,
+        0,
+        env,
+        &frame,
+        Layout { result_base, alloc_base, barrier_base, buffer_slots, calls: &calls },
+        &mut st,
+    )?;
 
     // The safepoint exit stubs, one per loop header, parked here at the end of the function so a
     // taken poll costs the loop body nothing but the `jcc` — the stub itself never shares a cache
@@ -4685,7 +5336,7 @@ pub fn compile_with_regs<'a>(
         for &pc in &body.osr {
             a.bind(st.exits[b][pc].expect("every loop header has an exit stub"));
             if b != 0 {
-                spill_chain(&mut a, &bodies, &frame, st.regs, b, pc);
+                spill_chain(&mut a, &bodies, &frame, st.regs, b, pc, 0);
             }
             a.mov_ri(T0, Status::safepoint_value(site_key(&bodies, &st.sites, b, pc)));
             a.jmp(st.epilogue);
@@ -4732,7 +5383,7 @@ pub fn compile_with_regs<'a>(
     // instruction was entered with.
     for &(b, pc) in &st.sites {
         a.bind(st.deopt[b][pc].expect("a guarded pc has a stub"));
-        spill_chain(&mut a, &bodies, &frame, st.regs, b, pc);
+        spill_chain(&mut a, &bodies, &frame, st.regs, b, pc, 0);
         let key = site_key(&bodies, &st.sites, b, pc);
         a.mov_ri(
             T0,
@@ -4741,6 +5392,42 @@ pub fn compile_with_regs<'a>(
                 false => Status::deopt_value(key),
             },
         );
+        a.jmp(st.epilogue);
+    }
+
+    // **The barrier-capacity stubs**, the second exit of a reference store. Same state, same key,
+    // same shape as the stub just above it — and a different status word, which is the whole reason
+    // it exists: a full write-barrier log is a capacity exit and must not retire the method's
+    // on-stack entry, while the type guards of the `aastore` it shares a pc with must. See
+    // [`Frames::barriers`].
+    for &(b, pc) in &st.barriers {
+        debug_assert!(st.sites.contains(&(b, pc)), "a barrier exit belongs to a site that guards");
+        a.bind(st.barrier[b][pc].expect("a barrier-logging pc has a capacity stub"));
+        spill_chain(&mut a, &bodies, &frame, st.regs, b, pc, 0);
+        a.mov_ri(T0, Status::alloc_value(site_key(&bodies, &st.sites, b, pc)));
+        a.jmp(st.epilogue);
+    }
+
+    // **The link stubs**: where a real call lands when its callee handed back a non-OK status.
+    //
+    // Three things happen here and no fourth, and the shortness is the design. The callee's status
+    // word is **parked** in this site's link slot, so the interpreter can follow it into the
+    // callee's own resume map. The status *class* is preserved and only the key is replaced, so a
+    // poll inside a callee is still a poll to whoever entered this code — a deopt would be counted
+    // as a failing guard and would retire this method's on-stack entry for something that was not
+    // its fault. And control leaves through the ordinary epilogue.
+    //
+    // **Nothing is spilled here**, which is not an omission: the whole chain was spilled *before*
+    // the call, because a call clobbers the volatile half of the operand-stack cache and there
+    // would be nothing left to read by now. That pre-call spill is the one this stub relies on.
+    for (i, call) in calls.iter().enumerate() {
+        a.bind(st.links[i]);
+        a.mov_mr(Mem::at(LOCALS, 8 * call.link as i32), T0);
+        // `status | key`, with the callee's key masked off and this site's put in its place.
+        a.mov_ri(T1, !0xFFFF_FFFFi64);
+        a.and_rr(T0, T1);
+        a.mov_ri(T1, i64::from(link_key(call.link)));
+        a.or_rr(T0, T1);
         a.jmp(st.epilogue);
     }
 
@@ -4767,7 +5454,22 @@ pub fn compile_with_regs<'a>(
         .chain(st.sites.iter().copied())
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .map(|(b, pc)| resume_site(&bodies, &st.sites, &touched_locals, b, pc))
+        .map(|(b, pc)| resume_site(&bodies, &st.sites, &touched_locals, b, pc, 0, None))
+        // **The second site of every real call.** Same body, same pc, same stubs' shape — and a
+        // state that differs in exactly the two things a call changes: the arguments have left the
+        // caller's stack (they are the callee's locals), and the frames the callee owes are read
+        // through the link.
+        .chain(calls.iter().map(|call| {
+            resume_site(
+                &bodies,
+                &st.sites,
+                &touched_locals,
+                call.body,
+                call.pc,
+                call.arg_slots,
+                Some(NativeSite { unit: call.unit, link: call.link }),
+            )
+        }))
         .collect();
     resume_sites.sort_by_key(|s| s.key);
     // **Every resume site must be rebuildable, and that is checked here rather than believed.**
@@ -4800,10 +5502,6 @@ pub fn compile_with_regs<'a>(
         true => BARRIER_LOG_RECORDS,
         false => 0,
     };
-    let barrier_slots: i32 = match barriers {
-        true => 1 + 2 * BARRIER_LOG_RECORDS as i32,
-        false => 0,
-    };
     Ok(CompiledCode {
         code: emitted,
         touched_locals,
@@ -4814,7 +5512,8 @@ pub fn compile_with_regs<'a>(
         alloc_records,
         barrier_base: barrier_base as u32,
         barrier_records,
-        buffer_slots: (barrier_base + barrier_slots) as u32,
+        buffer_slots: buffer_slots as u32,
+        native_sites: calls.len() as u32,
         osr_entries: bodies[0].osr.iter().map(|&pc| pc as u32).collect(),
         resume_sites,
         frame_depth,
@@ -4823,13 +5522,14 @@ pub fn compile_with_regs<'a>(
     })
 }
 
-/// **The whole-compilation buffer offsets** every body needs and none of them owns: where the
-/// method's result goes, where the allocation log starts, and where the write-barrier log starts.
-/// All three sit past the last body's region, so they are a property of the tree rather than of any
-/// one node — which is exactly why they are passed down together rather than derived inside
-/// [`emit_body`].
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct Layout {
+/// **What every body needs and no body owns**: the buffer offsets past the last body's region, and
+/// the table of this compilation's real call sites.
+///
+/// All of it is a property of the *tree* rather than of any one node — the result slot, both logs
+/// and the callee regions all sit past every body — which is exactly why it is passed down together
+/// rather than derived inside [`emit_body`].
+#[derive(Clone, Copy)]
+struct Layout<'c> {
     /// [`CompiledCode::result_base`], as an `i64`-slot index.
     result_base: i32,
     /// [`CompiledCode::alloc_base`], as an `i64`-slot index. Always `result_base + 1`.
@@ -4837,6 +5537,11 @@ struct Layout {
     /// [`CompiledCode::barrier_base`], as an `i64`-slot index: past the allocation log when this
     /// compilation carries one, and `alloc_base` itself when it does not.
     barrier_base: i32,
+    /// [`CompiledCode::buffer_slots`] — the whole region's length, and therefore **where a callee's
+    /// region begins**. A real call hands its callee `buffer + 8 * this`.
+    buffer_slots: i32,
+    /// Every invoke this compilation emits as a **real call**, indexed by [`Body::native`].
+    calls: &'c [NativeCall],
 }
 
 /// Whether the opcode at `pc` of `method` is a reference store **compiled code must record for the
@@ -4878,14 +5583,45 @@ struct Frames {
     labels: Vec<Vec<Option<Label>>>,
     /// The deopt stub of each guarded pc, per body. Created on demand and emitted after the code.
     deopt: Vec<Vec<Option<Label>>>,
+    /// **The second stub of a reference store**: the one its write-barrier *capacity* guard branches
+    /// to, as against [`deopt`][Frames::deopt], which the same instruction's other guards branch to.
+    /// Created on demand for the two opcodes [`logs_barrier`] names, and emitted after the code
+    /// beside the first.
+    ///
+    /// Two stubs at one pc, where every other guarded opcode has one, because a full log and a
+    /// failed speculation are different facts about the same instruction and only one of them
+    /// should retire the method's on-stack entry — see [`barriers`][Frames::barriers].
+    barrier: Vec<Vec<Option<Label>>>,
     /// Every `(body, pc)` that can deopt, in a deterministic order — the stubs are emitted from it
     /// and it is what the resume map is built from.
     sites: BTreeSet<(usize, usize)>,
-    /// The subset of [`sites`][Frames::sites] whose stub reports `Status::ALLOC` rather than
+    /// Every `(body, pc)` that owns a [`barrier`][Frames::barrier] stub — a subset of
+    /// [`sites`][Frames::sites], since a reference store guards and is therefore a site already.
+    /// Its stub always reports `Status::ALLOC`, whichever status the site's own stub reports.
+    ///
+    /// **Why the capacity guard is not a deopt.** `Status::DEOPT` feeds the "this method keeps
+    /// failing a guard" counter, whose purpose is to stop OSR from re-entering a loop that cannot
+    /// make progress natively. A full barrier log is the opposite of that: the trampoline drains it
+    /// on the way out, so the very next excursion starts with an empty log and makes progress. It
+    /// is precisely the "capacity ran out, the interpreter's turn" shape [`Status::ALLOC`] exists
+    /// for, and it is the *same* condition as a full allocation log, which has always reported
+    /// `ALLOC`.
+    ///
+    /// This used to be decided per **site** rather than per **exit**, and one status per site is
+    /// what made the two opcodes disagree: a `putfield` of a reference had no other recurring guard
+    /// so the whole site could be `ALLOC`, while an `aastore` also guards on *type* — a guard that
+    /// recurs without throwing, and the one case OSR retirement genuinely exists for — so the whole
+    /// site had to be `DEOPT`, capacity exit included. The price was paid in `bench/BkRefA`, whose
+    /// 600 `aastore`s per call fill a 256-record log mid-way and so retired the method's on-stack
+    /// entry on every one of its 1000 calls: 1.7x against the 112x of `bench/BkRefW`, the same
+    /// barrier and the same log through a `putfield`. Splitting the *exit* instead of the site
+    /// makes each guard report what it actually is, and both opcodes now share one mechanism.
+    barriers: BTreeSet<(usize, usize)>,
+    /// The subset of [`sites`][Frames::sites] whose **own** stub reports `Status::ALLOC` rather than
     /// `Status::DEOPT` — the three allocating opcodes, and the `putfield` of a **reference** field.
     /// Same stub shape, same state, different reason; see [`Status::ALLOC`] for why the difference
-    /// is worth a status of its own, and the `putfield` arm of [`emit_body`] for why a barrier-log
-    /// site belongs on this side of the split and an `aastore` does not.
+    /// is worth a status of its own. A reference store's *capacity* exit is not decided here: it has
+    /// a stub of its own and is always `ALLOC` — see [`barriers`][Frames::barriers].
     allocs: BTreeSet<(usize, usize)>,
     /// The **root's** loop headers: where an on-stack entry lands (past the poll). Root-only —
     /// an inlined body may loop (group 3, stage 1) but may never be *entered* at one of its
@@ -4895,6 +5631,11 @@ struct Frames {
     /// rebuild a whole call chain, so it is a different stub from the root's and needs its own
     /// label.
     exits: Vec<Vec<Option<Label>>>,
+    /// **The stub each real call comes back into when its callee could not finish**, one per
+    /// [`NativeCall`]. Distinct from that site's ordinary deopt stub because the two hand back
+    /// different states: the ordinary one says the call was never made and leaves the arguments on
+    /// the stack, this one says the call ran and the arguments are gone.
+    links: Vec<Label>,
     /// The one shared exit: every `return`, every poll and every deopt leaves through it.
     epilogue: Label,
     /// **How many operand-stack positions are register-resident** in this compilation — see
@@ -4953,8 +5694,16 @@ fn site_key(bodies: &[Body], sites: &BTreeSet<(usize, usize)>, b: usize, pc: usi
 ///
 /// Written once because both stubs need it: a guard's, and — since group 3's first stage — an
 /// inlined loop header's safepoint poll, whose callers are just as much in the middle of a call.
-fn spill_chain(a: &mut Asm, bodies: &[Body], frame: &super::x64::Frame, regs: u32, b: usize, pc: usize) {
-    let (mut cur, mut cur_pc, mut child_args) = (b, pc, 0usize);
+fn spill_chain(
+    a: &mut Asm,
+    bodies: &[Body],
+    frame: &super::x64::Frame,
+    regs: u32,
+    b: usize,
+    pc: usize,
+    consumed: usize,
+) {
+    let (mut cur, mut cur_pc, mut child_args) = (b, pc, consumed);
     loop {
         let body = &bodies[cur];
         let depth = body.state[cur_pc].as_ref().expect("a resume site is reachable").stack.len();
@@ -4964,6 +5713,43 @@ fn spill_chain(a: &mut Asm, bodies: &[Body], frame: &super::x64::Frame, regs: u3
             let home = operand_home(frame, regs, body.frame_base + k as u32);
             let src = in_reg(a, home, T0);
             a.mov_mr(Mem::at(LOCALS, 8 * (body.spill_base as i32 + k as i32)), src);
+        }
+        let Some((caller, invoke)) = body.parent else { break };
+        (child_args, cur, cur_pc) = (body.arg_slots, caller, invoke);
+    }
+}
+
+/// **Puts the operand-stack cache back after a real call**, the mirror of [`spill_chain`] and its
+/// exact counterpart: same walk, same frames, same slots, read instead of written.
+///
+/// A call clobbers the **volatile** half of [`CACHE`] (`R8`–`R11`, which the Microsoft x64 ABI lets
+/// any callee use freely), so every cached operand of every frame in the chain has to come back
+/// from the slot the pre-call spill put it in. Three kinds of home are deliberately *not* touched:
+///
+///  - a **frame slot**, because the callee's frame is below this one's `RSP` and its shadow space
+///    is the 32 bytes reserved for exactly this — nothing it writes can reach an operand slot;
+///  - a **non-volatile** cache register (`R12`–`R15`), because a compiled callee that uses one
+///    saves it in its own prologue, like any other function;
+///  - the arguments themselves, which are the callee's locals now and are dead on this side.
+fn reload_chain(
+    a: &mut Asm,
+    bodies: &[Body],
+    frame: &super::x64::Frame,
+    regs: u32,
+    b: usize,
+    pc: usize,
+    consumed: usize,
+) {
+    let (mut cur, mut cur_pc, mut child_args) = (b, pc, consumed);
+    loop {
+        let body = &bodies[cur];
+        let depth = body.state[cur_pc].as_ref().expect("a call site is reachable").stack.len();
+        for k in 0..depth - child_args {
+            if let Home::Reg(r) = operand_home(frame, regs, body.frame_base + k as u32) {
+                if r.is_volatile() {
+                    a.mov_rm(r, Mem::at(LOCALS, 8 * (body.spill_base as i32 + k as i32)));
+                }
+            }
         }
         let Some((caller, invoke)) = body.parent else { break };
         (child_args, cur, cur_pc) = (body.arg_slots, caller, invoke);
@@ -5002,9 +5788,11 @@ fn resume_site(
     touched_locals: &[u16],
     b: usize,
     pc: usize,
+    consumed: usize,
+    native: Option<NativeSite>,
 ) -> ResumeSite {
     let mut frames: Vec<VirtualFrame> = Vec::new();
-    let (mut cur, mut cur_pc, mut child_args) = (b, pc, 0usize);
+    let (mut cur, mut cur_pc, mut child_args) = (b, pc, consumed);
     let (root_pc, root_state) = loop {
         let body = &bodies[cur];
         let at = body.state[cur_pc].as_ref().expect("a resume site is reachable");
@@ -5025,9 +5813,20 @@ fn resume_site(
     // Collected innermost-first; the interpreter pushes outermost-first.
     frames.reverse();
     ResumeSite {
-        key: site_key(bodies, sites, b, pc),
+        key: match native {
+            // The **second** site of a native call, numbered out of a range of its own — see
+            // [`link_key`]. It shares its pc, its body and its stubs' shape with the first one and
+            // differs in exactly two things: the arguments are gone from the stack, and the frames
+            // the callee owes hang off the link.
+            Some(NativeSite { link, .. }) => link_key(link),
+            None => site_key(bodies, sites, b, pc),
+        },
+        native,
         pc: root_pc as u32,
         locals: touched_locals.iter().map(|&slot| root_state.local(slot)).collect(),
+        // The complete map, for a caller that has no frame to leave alone — see
+        // [`ResumeSite::frame_locals`]. Read out of the very same state the differential one is.
+        frame_locals: (0..bodies[0].method.max_locals).map(|i| root_state.local(i as u16)).collect(),
         // The root's own stack, minus the arguments of the call it is in the middle of (nothing,
         // when the site is in its own body).
         stack: root_state.stack[..root_state.stack.len() - child_args].to_vec(),
@@ -5113,8 +5912,12 @@ fn emit_body(
         let cached = body
             .children
             .get(&pc)
-            .is_some_and(|&child| bodies[child].guard != Guard::Static);
-        let deopt = match guards(op) || cached {
+            .is_some_and(|kids| bodies[kids[0]].guard != Guard::Static);
+        // A **real call** guards too, and its guards are the two the record answers: is there any
+        // code to call, and will the frames it may hand back fit in the budget this excursion was
+        // entered with. Both fail into an ordinary deopt at the invoke, where the interpreter makes
+        // the call itself.
+        let deopt = match guards(op) || cached || body.native.contains_key(&pc) {
             true => {
                 let label = a.new_label();
                 st.deopt[b][pc] = Some(label);
@@ -5139,21 +5942,39 @@ fn emit_body(
                 // of a big array, which recurs, and which is exactly the "this is not native
                 // code's job" shape `ALLOC` was introduced for. Neither wants the loop retired.
                 //
-                // **A `putfield` of a reference joins them, and an `aastore` does not.** Both
-                // record into the write-barrier log and both can find it full — but that is a
-                // `putfield`'s *only* recurring guard (its other one, a null receiver, throws and
-                // ends the loop), and a full log is precisely the "capacity ran out, the
-                // interpreter's turn" shape `ALLOC` exists for: it must not retire the method's
-                // on-stack entry, because the very next excursion starts with an empty log and
-                // makes progress. An `aastore` also guards on **type**, and a type guard recurs
-                // *without throwing* — a covariant store the interpreter accepts deopts here every
-                // iteration — which is exactly the "this loop cannot progress natively" shape OSR
-                // retirement exists for. One stub per pc carries one status, so the two cannot both
-                // be served at one site; the price, stated rather than hidden, is that a full
-                // barrier log inside an `aastore` closes that method's on-stack entry for good.
+                // **A `putfield` of a reference joins them, and an `aastore` did not** — which was
+                // a bug, and the one this arm now states the fix for. Both record into the
+                // write-barrier log and both can find it full, and a full log is the same fact
+                // either way: capacity ran out, the trampoline drains it on the way out, and the
+                // next excursion starts empty and makes progress. But an `aastore` *also* guards on
+                // **type**, and a type guard recurs without throwing — a covariant store the
+                // interpreter accepts deopts here every iteration — which is exactly the "this loop
+                // cannot progress natively" shape OSR retirement exists for. One status per site
+                // could not serve both, so the capacity exit was conflated with the type guards and
+                // reported `DEOPT`; the price was `bench/BkRefA` at 1.7x against `bench/BkRefW`'s
+                // 112x, for the same barrier and the same log.
+                //
+                // So the split is per **exit** and not per site: a reference store gets a second
+                // stub, below, which always reports `ALLOC`, and this set decides only what the
+                // site's *own* stub — the one every other guard of the instruction branches to —
+                // reports. A `putfield` of a reference stays in it because its only other guard is
+                // a null receiver, which throws and ends the loop either way.
                 if matches!(op, 0xbb..=0xbd) || barrier_field(code, unit, pc, env) {
                     st.allocs.insert((b, pc));
                 }
+                label
+            }
+            false => st.epilogue,
+        };
+        // **The capacity exit of a reference store**, named separately from the guards above it so
+        // that the two opcodes that log a barrier leave through one mechanism and report one status
+        // for one condition. `logs_barrier` is the same predicate that decided this method carries
+        // a log at all, asked over the same pcs, so a pc with a capacity guard always has a stub.
+        let barrier_full = match logs_barrier(&body.method, env, pc) {
+            true => {
+                let label = a.new_label();
+                st.barrier[b][pc] = Some(label);
+                st.barriers.insert((b, pc));
                 label
             }
             false => st.epilogue,
@@ -5632,11 +6453,13 @@ fn emit_body(
                     a.jcc(Cond::B, skip); // a young holder remembers nothing
                     a.cmp_rr(T1, T2);
                     a.jcc(Cond::Ae, skip); // an old value is not a young pointer
-                    // Room in this excursion's log? This is the last thing that can deopt, and
-                    // nothing has been written yet when it does.
+                    // Room in this excursion's log? This is the last thing that can leave, and
+                    // nothing has been written yet when it does — and it leaves through the
+                    // *capacity* stub, not this instruction's guard stub, because a full log is not
+                    // a failed speculation. See `Frames::barriers`.
                     a.mov_rm(T2, barrier_count);
                     a.cmp_ri(T2, BARRIER_LOG_RECORDS as i32);
-                    a.jcc(Cond::Ae, deopt);
+                    a.jcc(Cond::Ae, barrier_full);
                     // `T2` becomes the record's address: `LOCALS + 8*(barrier_base + 1) + 16*count`.
                     a.imul_rri(T2, T2, 16);
                     a.add_rr(T2, LOCALS);
@@ -5685,6 +6508,11 @@ fn emit_body(
             // the length), two are JVMS §6.5's dynamic assignability check turned into equality
             // comparisons against profiled mirrors, and one is the write-barrier log's capacity.
             //
+            // **Five guards, two exits.** The first four are speculations and leave through this
+            // pc's deopt stub, reporting `Status::DEOPT`; the capacity guard is not a speculation
+            // and leaves through this pc's *capacity* stub, reporting `Status::ALLOC` — the same
+            // exit the `putfield` arm above uses for the same condition. See `Frames::barriers`.
+            //
             // **The type check, and why equality is the whole of it.** Arrays are covariant, so
             // `animals[0] = cat` on a `Dog[]` is an `ArrayStoreException` that only the runtime
             // classes can detect — and detecting it in general is `is_subtype`, a walk over class
@@ -5704,7 +6532,8 @@ fn emit_body(
             // one; this tier throws nothing, as everywhere.
             //
             // **The order is not the JVMS's**, and does not need to be: every one of the five ways
-            // out is a deopt, and the interpreter re-executes this instruction and raises whichever
+            // out hands back the same state at the same pc, and the interpreter re-executes this
+            // instruction and raises whichever
             // of `NullPointerException` / `ArrayIndexOutOfBoundsException` / `ArrayStoreException`
             // is right by its own order. What the order *does* have to satisfy is the write/pc
             // rule — every guard before the store — and the register budget, which is three
@@ -5769,7 +6598,7 @@ fn emit_body(
                 a.jcc(Cond::Ae, skip); // an old value is not a young pointer
                 a.mov_rm(T2, barrier_count);
                 a.cmp_ri(T2, BARRIER_LOG_RECORDS as i32);
-                a.jcc(Cond::Ae, deopt);
+                a.jcc(Cond::Ae, barrier_full);
                 a.imul_rri(T2, T2, 16);
                 a.add_rr(T2, LOCALS);
                 a.mov_mr(Mem::at(T2, barrier_first), T0); // the holder
@@ -6410,8 +7239,16 @@ fn emit_body(
                 None => {
                     let v = in_reg(a, home(d - 1), T0);
                     a.mov_mr(result, v);
+                    // **And into `T2`/`RDX`, for a caller that is compiled code** (F3, group 4).
+                    // The result slot is at an offset only *this* compilation knows, and a native
+                    // caller does not: it was fixed by a compilation it never saw, and [`Mem`] has
+                    // no index register, so the slot is not even addressable from there. A second
+                    // return register costs one `mov` on the exit path — traversed once per call —
+                    // and it is free for the interpreter, which ignores `RDX` exactly as the ABI
+                    // lets it.
+                    a.mov_rr(T2, v);
                     // `Status::OK` is zero, so the status word is a two-byte `xor eax, eax`. It
-                    // comes *after* the store, since `in_reg` may well have handed back `T0`.
+                    // comes *after* the stores, since `in_reg` may well have handed back `T0`.
                     a.xor_rr(T0, T0);
                     a.jmp(st.epilogue);
                 }
@@ -6578,65 +7415,163 @@ fn emit_body(
             //    so the guard never touches the address `eden_base + 0`; the interpreter then
             //    re-executes the invoke and raises the `NullPointerException` for it, as this tier
             //    raises nothing.
-            0xb6..=0xb9 => {
-                let child = *body.children.get(&pc).expect("plan expanded every invoke it accepted");
-                let (base, locals) = (bodies[child].locals_base as i32, bodies[child].method.max_locals);
-                let args = bodies[child].arg_slots as u16;
-                if bodies[child].guard != Guard::Static {
-                    // The receiver is the **bottom-most** of the operands this call consumes — the
-                    // slot that becomes the callee's local 0.
-                    read_home(a, T0, home(d - args));
-                    a.cmp_ri(T0, 0);
-                    a.jcc(Cond::E, deopt);
-                }
-                if let Guard::ExactClass(mirror) = bodies[child].guard {
-                    heap_address(a, env.heap, T0, T1);
-                    a.mov_rm32(T1, Mem::at(T0, 0)); // the header's class_id
-                    // Through `T2` rather than a `cmp r, imm32`: an offset is a `u32` and may not
-                    // fit a signed 32-bit immediate, and a truncated compare would be right for
-                    // every small heap and wrong above 2 GiB.
-                    a.mov_ri(T2, i64::from(mirror));
-                    a.cmp_rr(T1, T2);
-                    a.jcc(Cond::Ne, deopt);
-                }
-                // **El operando `k` es el local `w(k)`, no el local `k`.** Un argumento de
-                // categoría-2 se lleva dos slots y los que vienen después arrancan uno más allá —
-                // exactamente el layout que arma `Frame::reset_for_call` del lado del intérprete,
-                // que es con quien esto tiene que coincidir al byte.
+            // --- a real call: compiled code calling compiled code ----------------------------
+            //
+            // Everything above this line is the *expansion* of a call. This is the other answer,
+            // for the sites an expansion cannot serve — a recursion, a callee past the budget, a
+            // body this tier cannot scan at all — and its whole design is that **nothing unwinds**.
+            //
+            // ```text
+            //   is there code?          no  -> deopt at this pc; the interpreter makes the call
+            //   do the frames fit?      no  -> deopt at this pc; likewise
+            //   spill the chain             (the call clobbers the volatile half of the cache, and
+            //                                a callee that stops has to find this state already
+            //                                written — there is nothing left to spill afterwards)
+            //   build the callee's frame    (its own region of the buffer: arguments in, rest zero)
+            //   call
+            //   status OK?              no  -> the link stub: park the status, return the same
+            //                                  reason under this site's own key
+            //                           yes -> reload the cache, take the result out of RDX
+            // ```
+            //
+            // **Why a callee that fails returns rather than unwinds.** No unwind data is registered
+            // for these frames (`x64::Frame`'s known gap), so a structured unwind through one is not
+            // possible — and would be the wrong shape anyway. Instead each level returns through its
+            // own epilogue with a status in `RAX`, its caller parks that status and returns the same
+            // *reason* under its own key, and the interpreter is handed the outermost state with a
+            // chain of links to follow inwards. One `ret` per level, no frame left half-finished,
+            // and the reconstruction is the one inlining already had.
+            //
+            // **The order rule holds unchanged.** Both guards precede the first write, and the
+            // first write — the callee's entry frame — is into a region of the buffer no
+            // interpreter state names. So a deopt here reports an invoke that has not run.
+            0xb6..=0xb9 if body.native.contains_key(&pc) => {
+                let call = &layout.calls[body.native[&pc]];
+                let args = call.arg_slots as u16;
+                // How many interpreter frames *this* compilation would already have rebuilt here.
+                // The callee's own count is added at run time, out of its record.
+                let chain = chain_len(bodies, b) as i32;
+                // Where the callee's region begins: just past this compilation's whole buffer.
+                let sub = layout.buffer_slots;
+
+                // **Guard 0 — the receiver is of the class this record was chosen for** (milestone
+                // F3), and it is emitted by the very function the expansion arm calls. A
+                // dispatched site's target is selected by the receiver's runtime class; the VM
+                // named one class and looked the target up in *that class's* table, so the record
+                // below is that class's answer. Anything else — a `null`, a subclass, a sibling
+                // implementor — deopts, and the interpreter dispatches by its full path.
                 //
-                // El orden es **primero cerar, después escribir**, y no al revés: con anchos, los
-                // slots que nadie ocupa ya no son sólo la cola (`args..locals`) sino también las
-                // mitades altas, que quedan *entre* dos argumentos. Cerar todo lo que no es destino
-                // y después escribir los destinos deja el frame idéntico al que arma el intérprete
-                // —que hace `resize(max_locals, Value::Int(0))` y encima escribe los argumentos— y
-                // deja la mitad alta en el cero que [`Kind::Cat2High`] nombra.
-                let dest = arg_destinations(&bodies[child].method).ok_or(Ineligible::WrongType { pc })?;
-                // **Un destino por operando, y esto es un rechazo y no un `debug_assert`.** El bucle
-                // de abajo lee el operando `k` en `home(d - args + k)`: si `dest` fuera más largo
-                // que `args`, leería operandos de *arriba* de la región de argumentos y los
-                // escribiría en los locales del callee. `transfer` ya chequea lo mismo, pero contra
-                // **su** respuesta de `(env.invoke)` — el resolver se consulta tres veces por sitio
-                // y sólo la de `plan` llega hasta acá, así que las dos no son el mismo hecho. Un
-                // `debug_assert` no corre en release, que es donde esto importa.
-                if dest.len() != args as usize {
-                    return Err(Ineligible::WrongType { pc });
-                }
-                // Cerado **incondicional**: todo slot que ningún argumento ocupa. Antes alcanzaba
-                // con la cola `args..locals`; con anchos, los slots libres son también las mitades
-                // altas, que quedan *entre* dos argumentos. Sin condición previa a propósito — la
-                // que había (`dest.len() < locals`) era cierta por una consecuencia del techo de
-                // `plan`, y habría dejado de serlo en silencio el día que ese techo se aflojara.
+                // It goes **first**, before the record is even read, because it is the guard that
+                // decides whether the record is the right one at all; and it may, because like the
+                // two below it writes nothing.
+                emit_guard(a, call.guard, home(d - args), env.heap, deopt);
+                // **Guard 1 — is there anything to call.** A record still holding zero is a callee
+                // that is not compiled (yet, or ever). That is not a compile-time refusal but a
+                // run-time deopt, which is also what makes *direct recursion* expressible: a method
+                // bakes in its own record while it is still being emitted.
+                a.mov_ri(T0, call.record as i64);
+                a.mov_rm(T1, Mem::at(T0, NativeRecord::CODE));
+                a.cmp_ri(T1, 0);
+                a.jcc(Cond::E, deopt);
+                // **Guard 2 — the frame budget.** The interpreter checks its own stack against
+                // `MAX_FRAMES` at every invoke, and this tier hides invokes twice over now (an
+                // expansion and a call). So the budget it was entered with is spent here: this
+                // chain's frames plus everything the callee's compilation can hand back. A site
+                // that cannot pay deopts, giving the call back to the side that counts frames — so
+                // a runaway recursion still throws `StackOverflowError` exactly where an
+                // interpreted one would.
+                a.mov_rm(T2, Mem::at(T0, NativeRecord::FRAMES));
+                a.add_ri(T2, chain);
+                a.cmp_rr(T2, FRAMES);
+                a.jcc(Cond::A, deopt);
+
+                // **The spill, before the call and not after.** A call clobbers `R8`–`R11`, so by
+                // the time a non-OK status comes back there is nothing left in the cache to write
+                // down. Spilling here costs a store per live operand on a path that is already
+                // crossing a function boundary, and it is what makes the link stub three
+                // instructions long. The arguments are excluded: they become the callee's locals,
+                // and a state carrying them *and* the callee's frame would push each one twice.
+                spill_chain(a, bodies, frame, st.regs, b, pc, args as usize);
+
+                // **The callee's entry frame**, in its own region: zero everything no argument
+                // occupies, then write the arguments where [`arg_destinations`] says. Byte for byte
+                // what the inline arm does, and what `Frame::reset_for_call` does on the other side
+                // — the difference is only which region it lands in.
                 a.xor_rr(T0, T0);
-                for i in 0..locals {
-                    if !dest.contains(&i) {
-                        a.mov_mr(Mem::at(LOCALS, 8 * (base + i as i32)), T0);
+                for i in 0..call.max_locals {
+                    if !call.dest.contains(&i) {
+                        a.mov_mr(Mem::at(LOCALS, 8 * (sub + i as i32)), T0);
                     }
                 }
-                for (k, &to) in dest.iter().enumerate() {
+                for (k, &to) in call.dest.iter().enumerate() {
                     let v = in_reg(a, home(d - args + k as u16), T0);
-                    a.mov_mr(Mem::at(LOCALS, 8 * (base + to as i32)), v);
+                    a.mov_mr(Mem::at(LOCALS, 8 * (sub + to as i32)), v);
                 }
-                emit_body(a, bodies, child, env, frame, layout, st)?;
+
+                // The three arguments, in the order that keeps each one out of the next one's way.
+                // `frame.arg(2)` is `R8`, which is also `CACHE[0]` — set last of the three that
+                // could still be read, and only after every operand has been marshalled.
+                a.mov_rr(frame.arg(2), FRAMES);
+                a.sub_ri(frame.arg(2), chain);
+                a.mov_rr(frame.arg(0), LOCALS);
+                a.add_ri(frame.arg(0), 8 * sub);
+                a.xor_rr(frame.arg(1), frame.arg(1)); // entry pc 0: an ordinary invocation
+                // Re-read the entry point rather than keeping it live across the marshalling: the
+                // record cannot have changed (nothing has run since guard 1), and a register held
+                // across all that would be one the argument set has to work around.
+                a.mov_ri(T0, call.record as i64);
+                a.mov_rm(T0, Mem::at(T0, NativeRecord::CODE));
+                a.call_r(T0);
+
+                // `RAX` is the callee's status word: zero is `Status::OK` outright, since an OK
+                // return carries an empty key.
+                a.cmp_ri(T0, 0);
+                a.jcc(Cond::Ne, st.links[body.native[&pc]]);
+                reload_chain(a, bodies, frame, st.regs, b, pc, args as usize);
+                // **The result comes back in `RDX`**, not out of the callee's result slot: that
+                // offset belongs to a compilation this caller never saw, and [`Mem`] has no index
+                // register, so it is not even addressable from here. See the `ireturn` arm, which
+                // writes both.
+                if call.returns.is_some() {
+                    let into = operand_home(frame, st.regs, body.frame_base + (d - args) as u32);
+                    write_home(a, into, T2);
+                }
+            }
+
+            0xb6..=0xb9 => {
+                let kids = body.children.get(&pc).expect("plan expanded every invoke it accepted");
+                // The receiver is the **bottom-most** of the operands this call consumes — the slot
+                // that becomes the callee's local 0 — and it is at the same place whichever arm
+                // runs, because [`alternatives_fit`] refused a site whose arms disagreed about how
+                // many operands the call consumes.
+                let args = bodies[kids[0]].arg_slots as u16;
+                match kids.as_slice() {
+                    // **One class: exactly the code milestone F2 emitted.** One comparison, and the
+                    // body straight after it — no chain, no arm labels, no jump. This is not an
+                    // optimisation of the general case, it is the general case at `n = 1`, and it is
+                    // written as its own arm so that a monomorphic site cannot pay for the machinery
+                    // a polymorphic one needs. One function for both answers to a dispatched site;
+                    // see [`emit_guard`] for why it is not two.
+                    [child] => {
+                        emit_guard(a, bodies[*child].guard, home(d - args), env.heap, deopt);
+                        emit_expansion(a, bodies, *child, env, frame, layout, st)?;
+                    }
+                    // **Two or more: the chain.** The receiver's class is read once and compared
+                    // against each arm's in the profile's first-seen order; the first match falls
+                    // into that arm's body, and falling off the end is a deopt, which is where a
+                    // class the site has never seen goes. Each arm ends in its body's `return`,
+                    // which jumps to the instruction after the invoke — the same label the `n = 1`
+                    // case falls through to — so the arms need no join point of their own.
+                    _ => {
+                        let arms: Vec<Label> = kids.iter().map(|_| a.new_label()).collect();
+                        let guards: Vec<Guard> = kids.iter().map(|&c| bodies[c].guard).collect();
+                        emit_chain(a, &guards, &arms, home(d - args), env.heap, deopt, pc)?;
+                        for (&child, &arm) in kids.iter().zip(&arms) {
+                            a.bind(arm);
+                            emit_expansion(a, bodies, child, env, frame, layout, st)?;
+                        }
+                    }
+                }
             }
 
             _ => return Err(Ineligible::Opcode { pc, opcode: op }),
@@ -6724,13 +7659,188 @@ fn guards(op: u8) -> bool {
         | 0x32      // aaload: the same two, and nothing else -- see the emitter
         | 0xb5      // putfield: a null receiver
         | 0x4f      // iastore: a null array, or an index out of range
-        | 0x53      // aastore: those two, plus both halves of the type check and a full barrier log
+        | 0x53      // aastore: those two, plus both halves of the type check (a full barrier log
+                    // leaves here too, but through the capacity stub -- see `Frames::barriers`)
         | 0xbb      // new: Eden full, or this excursion's allocation log full
         | 0xbc | 0xbd // newarray / anewarray: those two, plus a negative or oversized count
         | 0xc0 | 0xc1 // checkcast / instanceof: anything but the *exact* class (null never deopts)
         | 0xbf      // athrow: unconditional — every exception is the interpreter's (group 5)
         | 0xc2 | 0xc3 // monitorenter / monitorexit: unconditional — a monitor is the scheduler's
     )
+}
+
+/// **The inline cache's guard, emitted once and used by both answers to a dispatched call.**
+///
+/// A speculatively bound site has two shapes now — the call is *expanded* (the callee's body is
+/// emitted in place) or it is *made* (the callee's compiled code is entered through its
+/// [`NativeRecord`]) — and both are only sound while the receiver is of the class the target was
+/// selected for. Two copies of that check is one copy too many: they would be written against the
+/// same [`Guard`] today and against two different readings of it the first time either side is
+/// touched, and the failure mode is the silent one (a call that enters the *wrong body* for a
+/// receiver whose class the other path would have rejected). So there is one function, and the two
+/// arms of the invoke emitter both call it.
+///
+/// The receiver is the **bottom-most** operand the call consumes — the one that becomes the
+/// callee's local 0 — and `receiver` is its home. What is emitted, per [`Guard`]:
+///
+/// ```text
+///   Static           nothing at all
+///   NotNull          receiver == 0                 -> deopt
+///   ExactClass(m)    receiver == 0                 -> deopt
+///                    header class_id != m          -> deopt
+/// ```
+///
+/// **It writes nothing** — not the heap, not a home register, not a buffer slot. It computes in
+/// `T0`/`T1`/`T2`, which is what lets it sit in front of the call's first write and therefore what
+/// makes a miss report a pc whose instruction has not run: the operand stack the deopt hands back
+/// still carries the receiver and every argument, which is exactly what the interpreter needs to
+/// perform the call by its own full path.
+///
+/// **`null` is a miss, not a dereference**: it is tested before the header is read, so the guard
+/// never touches `eden_base + 0`. The interpreter re-executes the invoke and raises the
+/// `NullPointerException` for it.
+fn emit_guard(a: &mut Asm, guard: Guard, receiver: Home, heap: Heap, deopt: Label) {
+    if guard == Guard::Static {
+        return;
+    }
+    read_home(a, T0, receiver);
+    a.cmp_ri(T0, 0);
+    a.jcc(Cond::E, deopt);
+    if let Guard::ExactClass(mirror) = guard {
+        heap_address(a, heap, T0, T1);
+        a.mov_rm32(T1, Mem::at(T0, 0)); // the header's class_id
+        // Through `T2` rather than a `cmp r, imm32`: an offset is a `u32` and may not fit a signed
+        // 32-bit immediate, and a truncated compare would be right for every small heap and wrong
+        // above 2 GiB.
+        a.mov_ri(T2, i64::from(mirror));
+        a.cmp_rr(T1, T2);
+        a.jcc(Cond::Ne, deopt);
+    }
+}
+
+/// **The inline cache's guard when the site has seen more than one class**: one comparison per arm,
+/// and a deopt for everything the site has never seen.
+///
+/// It is [`emit_guard`] widened, and it emits the same two facts in the same order — the receiver is
+/// not `null`, and its class is one this compilation has a body for — with the second one asked `n`
+/// times instead of once:
+///
+/// ```text
+///     receiver == 0                 -> deopt
+///     header class_id == m1         -> arm 1
+///     header class_id == m2         -> arm 2
+///     …
+///                                   -> deopt
+/// ```
+///
+/// **The header is read once.** It cannot change between two comparisons of the same chain —
+/// nothing runs in between, and no collection can run while native code is on this stack — so `n`
+/// re-reads would be `n` loads of one word. What *is* per-arm is materialising the mirror, through
+/// `T2` and for [`emit_guard`]'s reason: a heap offset is a `u32` and need not fit a signed 32-bit
+/// immediate.
+///
+/// **It writes nothing**, exactly as the single-class guard writes nothing, and that is what lets
+/// the whole chain sit in front of the call's first write: a miss on every arm reports a pc whose
+/// instruction has not run, and the interpreter dispatches the call by its full path with the
+/// receiver and every argument still on the operand stack it hands back.
+///
+/// **The order of the arms is the profile's first-seen order**, not a frequency order, and nothing
+/// here depends on it: every arm is a full equality test against a distinct class, so the chain
+/// computes the same answer in any order and only the number of comparisons a hit costs changes.
+///
+/// A [`Guard`] that is not a class is refused rather than skipped. An arm that matches anything
+/// would swallow every class after it, and the arms after it are other classes' bodies — so this is
+/// the one place where being permissive would produce a *wrong dispatch* instead of a slow one.
+fn emit_chain(
+    a: &mut Asm,
+    guards: &[Guard],
+    arms: &[Label],
+    receiver: Home,
+    heap: Heap,
+    deopt: Label,
+    pc: usize,
+) -> Result<(), Ineligible> {
+    read_home(a, T0, receiver);
+    a.cmp_ri(T0, 0);
+    a.jcc(Cond::E, deopt);
+    heap_address(a, heap, T0, T1);
+    a.mov_rm32(T1, Mem::at(T0, 0)); // the header's class_id
+    for (&guard, &arm) in guards.iter().zip(arms) {
+        let Guard::ExactClass(mirror) = guard else {
+            return Err(Ineligible::WrongType { pc });
+        };
+        a.mov_ri(T2, i64::from(mirror));
+        a.cmp_rr(T1, T2);
+        a.jcc(Cond::E, arm);
+    }
+    a.jmp(deopt);
+    Ok(())
+}
+
+/// **Everything one expanded call does after its guard has passed**: build the callee's entry frame
+/// out of the caller's operands, then emit the callee's body in place.
+///
+/// Split out of the invoke arm so that a polymorphic site can do it once per arm. It takes the
+/// child rather than the caller because everything it needs is already recorded on the child — its
+/// parent is the `(body, pc)` of the invoke, which is where the caller's operand depth is read from
+/// — so the arms of one site cannot drift apart in how they marshal.
+///
+/// **El operando `k` es el local `w(k)`, no el local `k`.** Un argumento de categoría-2 se lleva dos
+/// slots y los que vienen después arrancan uno más allá — exactamente el layout que arma
+/// `Frame::reset_for_call` del lado del intérprete, que es con quien esto tiene que coincidir al
+/// byte.
+///
+/// El orden es **primero cerar, después escribir**, y no al revés: con anchos, los slots que nadie
+/// ocupa ya no son sólo la cola (`args..locals`) sino también las mitades altas, que quedan *entre*
+/// dos argumentos. Cerar todo lo que no es destino y después escribir los destinos deja el frame
+/// idéntico al que arma el intérprete —que hace `resize(max_locals, Value::Int(0))` y encima escribe
+/// los argumentos— y deja la mitad alta en el cero que [`Kind::Cat2High`] nombra.
+///
+/// **Cada brazo escribe en su propia región**, y eso es lo que hace que una cadena sea sound: el
+/// `locals_base` sale del `Body` del brazo, que [`plan`] le dio una tajada propia del buffer. Dos
+/// brazos del mismo `pc` no comparten un solo slot, así que el cerado de uno no puede pisar nada del
+/// otro — y como sólo uno de los dos corre, tampoco importa que el otro quede sin escribir.
+fn emit_expansion(
+    a: &mut Asm,
+    bodies: &[Body],
+    child: usize,
+    env: &Environment,
+    frame: &super::x64::Frame,
+    layout: Layout,
+    st: &mut Frames,
+) -> Result<(), Ineligible> {
+    let (caller, pc) = bodies[child].parent.expect("an expanded body has the invoke that expanded it");
+    let d = bodies[caller].state[pc].as_ref().expect("a reachable invoke").stack.len() as u16;
+    let (base, locals) = (bodies[child].locals_base as i32, bodies[child].method.max_locals);
+    let args = bodies[child].arg_slots as u16;
+    let (frame_base, regs) = (bodies[caller].frame_base, st.regs);
+    let home = |k: u16| -> Home { operand_home(frame, regs, frame_base + k as u32) };
+    let dest = arg_destinations(&bodies[child].method).ok_or(Ineligible::WrongType { pc })?;
+    // **Un destino por operando, y esto es un rechazo y no un `debug_assert`.** El bucle de abajo
+    // lee el operando `k` en `home(d - args + k)`: si `dest` fuera más largo que `args`, leería
+    // operandos de *arriba* de la región de argumentos y los escribiría en los locales del callee.
+    // `transfer` ya chequea lo mismo, pero contra **su** respuesta de `(env.invoke)` — el resolver
+    // se consulta tres veces por sitio y sólo la de `plan` llega hasta acá, así que las dos no son
+    // el mismo hecho. Un `debug_assert` no corre en release, que es donde esto importa.
+    if dest.len() != args as usize {
+        return Err(Ineligible::WrongType { pc });
+    }
+    // Cerado **incondicional**: todo slot que ningún argumento ocupa. Antes alcanzaba con la cola
+    // `args..locals`; con anchos, los slots libres son también las mitades altas, que quedan *entre*
+    // dos argumentos. Sin condición previa a propósito — la que había (`dest.len() < locals`) era
+    // cierta por una consecuencia del techo de `plan`, y habría dejado de serlo en silencio el día
+    // que ese techo se aflojara.
+    a.xor_rr(T0, T0);
+    for i in 0..locals {
+        if !dest.contains(&i) {
+            a.mov_mr(Mem::at(LOCALS, 8 * (base + i as i32)), T0);
+        }
+    }
+    for (k, &to) in dest.iter().enumerate() {
+        let v = in_reg(a, home(d - args + k as u16), T0);
+        a.mov_mr(Mem::at(LOCALS, 8 * (base + to as i32)), v);
+    }
+    emit_body(a, bodies, child, env, frame, layout, st)
 }
 
 /// Turns the heap **offset** in `reg` into a machine address, in place, clobbering `scratch`.

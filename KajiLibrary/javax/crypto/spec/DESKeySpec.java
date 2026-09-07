@@ -4,32 +4,31 @@ import java.security.InvalidKeyException;
 import java.security.spec.KeySpec;
 
 /**
- * Una clave DES: ocho bytes, de los cuales solo cincuenta y seis bits son clave.
+ * A DES key: eight bytes, of which only fifty-six bits are key.
  *
- * <p>El octavo bit de cada byte es de **paridad** y DES lo ignora. De ahi los dos metodos
- * estaticos, que son lo unico interesante de esta clase:
+ * <p>The eighth bit of each byte is a **parity** bit and DES ignores it. Hence the two static
+ * methods, which are the only interesting thing about this class:
  *
  * <ul>
- * <li>{@link #isParityAdjusted} dice si los bits de paridad estan bien puestos --paridad impar por
- *     byte--. Una clave sin ajustar sigue siendo usable; el bit solo servia para detectar errores
- *     de transmision en hardware de los anos setenta.</li>
- * <li>{@link #isWeak} dice si es una de las dieciseis claves que DES tiene documentadas como
- *     debiles o semidebiles. Una clave debil hace que cifrar dos veces devuelva el texto original,
- *     y una semidebil forma pares donde una descifra lo que cifro la otra. **Eso si importa**, y por
- *     eso el metodo existe: son claves que hay que rechazar, no advertir.
- *     <p>Ojo con como compara: byte por byte, **con el bit de paridad**. Una clave debil con la
- *     paridad mal puesta no la reconoce, aunque para DES sea la misma clave. Ver la nota de la
- *     implementacion.</li>
+ * <li>{@link #isParityAdjusted} says whether the parity bits are properly set --odd parity per
+ *     byte--. An unadjusted key is still usable; the bit only served to detect transmission errors in
+ *     nineteen-seventies hardware.</li>
+ * <li>{@link #isWeak} says whether it is one of the sixteen keys DES documents as weak or
+ *     semi-weak. A weak key makes encrypting twice give back the original text, and a semi-weak one
+ *     forms pairs where one decrypts what the other encrypted. **That does matter**, and that is why
+ *     the method exists: they are keys to reject, not to warn about.
+ *     <p>Mind how it compares: byte by byte, **with the parity bit**. A weak key with the parity
+ *     wrongly set is not recognized, even though to DES it is the same key. See the note in the
+ *     implementation.</li>
  * </ul>
  */
 public class DESKeySpec implements KeySpec {
 
-    /** Los bytes que una clave DES ocupa. */
+    /** The bytes a DES key takes up. */
     public static final int DES_KEY_LEN = 8;
 
-    // Las dieciseis claves problematicas, con los bits de paridad puestos como el estandar las
-    // publica. Las cuatro primeras son debiles y las doce restantes forman los seis pares
-    // semidebiles. Se comparan ignorando los bits de paridad, que es lo que hace `esta`.
+    // The sixteen problematic keys, with the parity bits set as the standard publishes them. The
+    // first four are weak and the remaining twelve form the six semi-weak pairs.
     private static final byte[][] PROBLEMATIC = {
         { (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01,
           (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01 },
@@ -68,50 +67,50 @@ public class DESKeySpec implements KeySpec {
     private final byte[] key;
 
     /**
-     * @throws InvalidKeyException si el arreglo tiene menos de ocho bytes
-     * @throws NullPointerException si es nulo
+     * @throws InvalidKeyException if the array has fewer than eight bytes
+     * @throws NullPointerException if it is null
      */
     public DESKeySpec(byte[] key) throws InvalidKeyException {
         this(key, 0);
     }
 
     /**
-     * La clave son los ocho bytes a partir de `offset`.
+     * The key is the eight bytes starting at `offset`.
      *
-     * @throws InvalidKeyException si quedan menos de ocho bytes desde `offset`
-     * @throws NullPointerException si el arreglo es nulo
+     * @throws InvalidKeyException if fewer than eight bytes are left from `offset`
+     * @throws NullPointerException if the array is null
      */
     public DESKeySpec(byte[] key, int offset) throws InvalidKeyException {
         if (key == null) {
-            throw new NullPointerException("la clave no puede ser nula");
+            throw new NullPointerException("the key cannot be null");
         }
         if (key.length - offset < DES_KEY_LEN) {
             throw new InvalidKeyException(
-                    "una clave DES son " + DES_KEY_LEN + " bytes desde el offset");
+                    "a DES key is " + DES_KEY_LEN + " bytes from the offset");
         }
         this.key = IvParameterSpec.copy(key, offset, DES_KEY_LEN);
     }
 
-    /** Una copia de los ocho bytes. */
+    /** A copy of the eight bytes. */
     public byte[] getKey() {
         return IvParameterSpec.copy(this.key, 0, DES_KEY_LEN);
     }
 
     /**
-     * Si los bits de paridad estan puestos: cada byte tiene una cantidad **impar** de unos.
+     * Whether the parity bits are set: each byte has an **odd** number of ones.
      *
-     * @throws InvalidKeyException si quedan menos de ocho bytes desde `offset`
-     * @throws NullPointerException si el arreglo es nulo
+     * @throws InvalidKeyException if fewer than eight bytes are left from `offset`
+     * @throws NullPointerException if the array is null
      */
     public static boolean isParityAdjusted(byte[] key, int offset) throws InvalidKeyException {
-        exigirOcho(key, offset);
+        requireEight(key, offset);
         for (int i = offset; i < offset + DES_KEY_LEN; i++) {
-            int unos = 0;
+            int ones = 0;
             int b = key[i] & 0xFF;
             for (int bit = 0; bit < 8; bit++) {
-                unos = unos + ((b >> bit) & 1);
+                ones = ones + ((b >> bit) & 1);
             }
-            if (unos % 2 == 0) {
+            if (ones % 2 == 0) {
                 return false;
             }
         }
@@ -119,44 +118,44 @@ public class DESKeySpec implements KeySpec {
     }
 
     /**
-     * Si es una de las dieciseis claves debiles o semidebiles. Ver la nota de la clase.
+     * Whether it is one of the sixteen weak or semi-weak keys. See the class's note.
      *
-     * @throws InvalidKeyException si quedan menos de ocho bytes desde `offset`
-     * @throws NullPointerException si el arreglo es nulo
+     * @throws InvalidKeyException if fewer than eight bytes are left from `offset`
+     * @throws NullPointerException if the array is null
      */
     public static boolean isWeak(byte[] key, int offset) throws InvalidKeyException {
-        exigirOcho(key, offset);
+        requireEight(key, offset);
         for (int i = 0; i < PROBLEMATIC.length; i++) {
-            boolean igual = true;
-            for (int j = 0; j < DES_KEY_LEN && igual; j++) {
-                // Se comparan los bytes ENTEROS, bit de paridad incluido, y eso es lo que hace el
-                // JDK 25 -- comprobado. Uno esperaria lo contrario: DES ignora el bit de paridad,
-                // asi que 0x00 y 0x01 son la misma clave para el algoritmo y la de todos ceros
-                // deberia ser tan debil como la de todos unos. `isWeak` contesta `false` para la de
-                // ceros y `true` para la de unos.
+            boolean same = true;
+            for (int j = 0; j < DES_KEY_LEN && same; j++) {
+                // WHOLE bytes are compared, parity bit included, and that is what JDK 25 does --
+                // measured. One would expect the opposite: DES ignores the parity bit, so 0x00 and
+                // 0x01 are the same key to the algorithm and the all-zeros one should be as weak as
+                // the all-ones one. `isWeak` answers `false` for the zeros one and `true` for the
+                // ones one.
                 //
-                // Es una decision del JDK y no un descuido: la lista del estandar publica las
-                // dieciseis claves CON su paridad ajustada, y el metodo responde por esa lista y no
-                // por la clase de equivalencia. La consecuencia practica es que `isWeak` no alcanza
-                // por si solo -- hay que ajustar la paridad antes de preguntar.
+                // It is a JDK decision and not an oversight: the standard's list publishes the
+                // sixteen keys WITH their parity adjusted, and the method answers for that list and
+                // not for the equivalence class. The practical consequence is that `isWeak` is not
+                // enough on its own -- the parity has to be adjusted before asking.
                 if (key[offset + j] != PROBLEMATIC[i][j]) {
-                    igual = false;
+                    same = false;
                 }
             }
-            if (igual) {
+            if (same) {
                 return true;
             }
         }
         return false;
     }
 
-    private static void exigirOcho(byte[] key, int offset) throws InvalidKeyException {
+    private static void requireEight(byte[] key, int offset) throws InvalidKeyException {
         if (key == null) {
-            throw new NullPointerException("la clave no puede ser nula");
+            throw new NullPointerException("the key cannot be null");
         }
         if (key.length - offset < DES_KEY_LEN) {
             throw new InvalidKeyException(
-                    "una clave DES son " + DES_KEY_LEN + " bytes desde el offset");
+                    "a DES key is " + DES_KEY_LEN + " bytes from the offset");
         }
     }
 }

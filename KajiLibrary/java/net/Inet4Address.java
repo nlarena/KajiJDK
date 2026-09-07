@@ -1,25 +1,24 @@
 package java.net;
 
-// Una direccion IPv4: cuatro bytes.
+// An IPv4 address: four bytes.
 //
-// Todo lo de aca es aritmetica sobre esos cuatro bytes y gramatica de literales, o sea que se puede
-// escribir completo sin red. Los dos parsers publicos --`ofLiteral` y `ofPosixLiteral`-- son
-// gramaticas **distintas** y la diferencia importa:
+// Everything here is arithmetic over those four bytes and literal grammar, which is to say it can be
+// written complete with no network. The two public parsers --`ofLiteral` and `ofPosixLiteral`-- are
+// **different** grammars and the difference matters:
 //
-//   - `ofLiteral` es la forma de la plataforma Java: entre uno y cuatro campos, **siempre
-//     decimales**. Los ceros a la izquierda no significan octal ("010.1.1.1" es 10.1.1.1).
-//   - `ofPosixLiteral` es la de `inet_aton(3)`: los mismos campos, pero con las convenciones de C
-//     para la base -- "0x" es hexadecimal y un cero a la izquierda es octal ("010.1.1.1" es
-//     8.1.1.1).
+//   - `ofLiteral` is the Java platform's form: between one and four fields, **always decimal**.
+//     Leading zeros do not mean octal ("010.1.1.1" is 10.1.1.1).
+//   - `ofPosixLiteral` is `inet_aton(3)`'s: the same fields, but with C's conventions for the base --
+//     "0x" is hexadecimal and a leading zero is octal ("010.1.1.1" is 8.1.1.1).
 //
-// Que existan las dos no es redundancia: la de POSIX es la que usan `ping`, `curl` y el resto del
-// sistema, y leer un literal con la gramatica equivocada cambia la direccion en silencio. Por eso
-// tener las dos con nombres distintos es mas seguro que tener una "que adivine".
+// That both exist is not redundancy: the POSIX one is what `ping`, `curl` and the rest of the system
+// use, and reading a literal with the wrong grammar changes the address silently. That is why having
+// both under different names is safer than having one "that guesses".
 //
-// La forma corta (menos de cuatro campos) tampoco es un capricho: el ultimo campo absorbe todos los
-// bytes que faltan, asi que "127.1" es 127.0.0.1 y "2130706433" tambien.
+// The short form (fewer than four fields) is not a whim either: the last field absorbs all the bytes
+// that are missing, so "127.1" is 127.0.0.1 and so is "2130706433".
 //
-// No hay nada omitido en esta clase.
+// Nothing is omitted in this class.
 public final class Inet4Address extends InetAddress {
 
     private static final long serialVersionUID = 3286316764910316507L;
@@ -30,8 +29,9 @@ public final class Inet4Address extends InetAddress {
         super(hostName, addr);
     }
 
-    // La comodin, 0.0.0.0. Lleva "0.0.0.0" como nombre y no null, igual que en el JDK: es la unica
-    // direccion que se imprime "0.0.0.0/0.0.0.0", y `InetSocketAddress(int)` depende de eso.
+    // The wildcard, 0.0.0.0. It carries "0.0.0.0" as its name and not null, just as in the JDK: it is
+    // the only address that prints as "0.0.0.0/0.0.0.0", and `InetSocketAddress(int)` depends on
+    // that.
     Inet4Address() {
         super("0.0.0.0", new byte[] {0, 0, 0, 0});
     }
@@ -60,20 +60,20 @@ public final class Inet4Address extends InetAddress {
         return this.b(0) == 169 && this.b(1) == 254;
     }
 
-    /** 10/8, 172.16/12 y 192.168/16: los tres rangos privados del RFC 1918. */
+    /** 10/8, 172.16/12 and 192.168/16: RFC 1918's three private ranges. */
     public boolean isSiteLocalAddress() {
         return this.b(0) == 10
                 || (this.b(0) == 172 && this.b(1) >= 16 && this.b(1) <= 31)
                 || (this.b(0) == 192 && this.b(1) == 168);
     }
 
-    /** Multicast global: todo 224/4 menos el bloque reservado 224.0.0.0/24. */
+    /** Global multicast: all of 224/4 except the reserved 224.0.0.0/24 block. */
     public boolean isMCGlobal() {
         return this.b(0) >= 224 && this.b(0) <= 238
                 && !(this.b(0) == 224 && this.b(1) == 0 && this.b(2) == 0);
     }
 
-    /** IPv4 no tiene alcance "nodo", asi que nunca. */
+    /** IPv4 has no "node" scope, so never. */
     public boolean isMCNodeLocal() {
         return false;
     }
@@ -101,15 +101,15 @@ public final class Inet4Address extends InetAddress {
         return numericToTextFormat(this.addr);
     }
 
-    // Los cuatro bytes empaquetados en el int, que es la representacion natural de una IPv4 y con la
-    // que dos direcciones distintas nunca colisionan.
+    // The four bytes packed into the int, which is an IPv4's natural representation and one with
+    // which two different addresses never collide.
     public int hashCode() {
         return (this.b(0) << 24) | (this.b(1) << 16) | (this.b(2) << 8) | this.b(3);
     }
 
-    // Una IPv4 nunca es igual a una IPv6, aunque los bytes coincidan: son direcciones de espacios
-    // distintos. (La forma "IPv4-mapped" no rompe esto porque se convierte a Inet4Address al
-    // construirse, no al comparar.)
+    // An IPv4 is never equal to an IPv6, even if the bytes match: they are addresses from different
+    // spaces. (The "IPv4-mapped" form does not break this because it is converted to an Inet4Address
+    // on construction, not on comparison.)
     public boolean equals(Object obj) {
         if (!(obj instanceof Inet4Address)) {
             return false;
@@ -125,12 +125,12 @@ public final class Inet4Address extends InetAddress {
         return true;
     }
 
-    // ---- literales ------------------------------------------------------------------------------
+    // ---- literals -------------------------------------------------------------------------------
 
     /**
-     * La direccion que describe el literal decimal {@code s} (uno a cuatro campos).
+     * The address the decimal literal {@code s} describes (one to four fields).
      *
-     * @throws IllegalArgumentException si no lo es
+     * @throws IllegalArgumentException if it is not one
      */
     public static Inet4Address ofLiteral(String s) {
         if (s == null) {
@@ -144,10 +144,10 @@ public final class Inet4Address extends InetAddress {
     }
 
     /**
-     * La direccion que describe {@code s} con las reglas de {@code inet_aton(3)}: "0x" es hex y un
-     * cero adelante es octal.
+     * The address {@code s} describes under {@code inet_aton(3)}'s rules: "0x" is hex and a leading
+     * zero is octal.
      *
-     * @throws IllegalArgumentException si no es un literal POSIX valido
+     * @throws IllegalArgumentException if it is not a valid POSIX literal
      */
     public static Inet4Address ofPosixLiteral(String s) {
         if (s == null) {
@@ -164,12 +164,12 @@ public final class Inet4Address extends InetAddress {
         return (src[0] & 0xff) + "." + (src[1] & 0xff) + "." + (src[2] & 0xff) + "." + (src[3] & 0xff);
     }
 
-    // La gramatica de la plataforma: campos decimales separados por puntos, entre uno y cuatro. Los
-    // primeros campos valen un byte cada uno; el ultimo se reparte en todos los bytes que quedan,
-    // que es de donde salen "127.1" y "2130706433".
+    // The platform's grammar: decimal fields separated by dots, between one and four. The first
+    // fields are worth one byte each; the last is spread over all the bytes that are left, which is
+    // where "127.1" and "2130706433" come from.
     //
-    // El tope de quince caracteres es del JDK y no es decorativo: sin el, "0000000000000000000001"
-    // seria una direccion valida y ademas desbordaria el acumulador.
+    // The fifteen-character cap is the JDK's and it is not decorative: without it,
+    // "0000000000000000000001" would be a valid address and would also overflow the accumulator.
     static byte[] textToNumericFormat(String src) {
         int len = src.length();
         if (len == 0 || len > 15) {
@@ -206,9 +206,9 @@ public final class Inet4Address extends InetAddress {
         return spread(res, currByte, value);
     }
 
-    // Igual que la anterior, pero cada campo se lee con las bases de C. Se separa en vez de agregarle
-    // un flag a la otra porque las dos gramaticas divergen en el primer caracter ('0') y mezclarlas
-    // hace que un error en una se filtre a la otra.
+    // The same as the previous one, but each field is read with C's bases. It is kept separate rather
+    // than adding a flag to the other because the two grammars diverge at the first character ('0')
+    // and mixing them lets an error in one leak into the other.
     static byte[] posixToNumericFormat(String src) {
         int len = src.length();
         if (len == 0) {
@@ -247,7 +247,7 @@ public final class Inet4Address extends InetAddress {
         return spread(res, currByte, value);
     }
 
-    // El ultimo campo ocupa desde `currByte` hasta el final, en orden de red.
+    // The last field occupies from `currByte` to the end, in network order.
     private static byte[] spread(byte[] res, int currByte, long value) {
         int b = 3;
         while (b >= currByte) {

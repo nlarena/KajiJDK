@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalAdjuster;
@@ -28,7 +29,7 @@ import java.time.temporal.ValueRange;
 // **anterior** a 15:00+00:00 aunque su hora sea mayor. Por eso `compareTo` desempata despues por
 // hora local -- si no, dos horas distintas que designan el mismo instante compararian 0 y un
 // `TreeSet` se quedaria con una sola.
-public final class OffsetTime implements Temporal, TemporalAdjuster, Comparable<OffsetTime> {
+public final class OffsetTime implements Temporal, TemporalAdjuster, Comparable<OffsetTime>, Serializable {
 
     private final LocalTime time;
     private final ZoneOffset offset;

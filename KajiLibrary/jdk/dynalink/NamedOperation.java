@@ -3,15 +3,14 @@ package jdk.dynalink;
 import java.util.Objects;
 
 /**
- * Una {@link Operation} con el nombre del miembro ya fijado en tiempo de enlace.
+ * An {@link Operation} with the member's name already fixed at link time.
  *
- * <p>La distincion que importa: `GET:PROPERTY` toma el nombre como argumento en tiempo de
- * ejecucion, mientras que `GET:PROPERTY:x` lo lleva adentro. Eso permite que el enlazador
- * resuelva el miembro **una vez** y deje una invocacion directa, en lugar de una busqueda por
- * llamada.
+ * <p>The distinction that matters: `GET:PROPERTY` takes the name as a run-time argument, while
+ * `GET:PROPERTY:x` carries it inside. That lets the linker resolve the member **once** and leave a
+ * direct invocation, instead of a lookup per call.
  *
- * <p>El nombre es un `Object` y no un `String` porque hay lenguajes con claves que no son
- * texto (simbolos, enteros). Solo se le exige `equals`/`hashCode`.
+ * <p>The name is an `Object` and not a `String` because there are languages with keys that are not
+ * text (symbols, integers). All that is asked of it is `equals`/`hashCode`.
  *
  * @since 9
  */
@@ -20,7 +19,7 @@ public final class NamedOperation implements Operation {
     private final Operation baseOperation;
     private final Object name;
 
-    /** @throws IllegalArgumentException si la base ya es un `NamedOperation`. */
+    /** @throws IllegalArgumentException if the base is already a `NamedOperation`. */
     public NamedOperation(final Operation baseOperation, final Object name) {
         if (baseOperation instanceof NamedOperation) {
             throw new IllegalArgumentException("baseOperation is a NamedOperation");
@@ -60,16 +59,16 @@ public final class NamedOperation implements Operation {
         return baseOperation.toString() + ":" + name.toString();
     }
 
-    /** La base de `op` si tiene nombre; `op` misma si no. */
+    /** The base of `op` if it has a name; `op` itself if not. */
     public static Operation getBaseOperation(final Operation op) {
         return op instanceof NamedOperation ? ((NamedOperation) op).baseOperation : op;
     }
 
     /**
-     * El nombre de `op`, o `null` si `op` no es una operacion con nombre.
+     * The name of `op`, or `null` if `op` is not a named operation.
      *
-     * <p>El `null` es la respuesta correcta y no un valor inventado: "esta operacion no lleva
-     * nombre" es exactamente lo que el llamador pregunta, y asi lo especifica el JDK.
+     * <p>The `null` is the right answer and not an invented value: "this operation carries no name"
+     * is exactly what the caller is asking, and that is how the JDK specifies it.
      */
     public static Object getName(final Operation op) {
         return op instanceof NamedOperation ? ((NamedOperation) op).name : null;

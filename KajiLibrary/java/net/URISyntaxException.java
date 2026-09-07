@@ -1,12 +1,12 @@
 package java.net;
 
-// Checked exception that says WHERE a URI string stopped being a URI: guarda la entrada
-// completa, el motivo, y el indice del caracter que la rompio. `getMessage()` los junta.
+// Checked exception that says WHERE a URI string stopped being a URI: it keeps the whole input,
+// the reason, and the index of the character that broke it. `getMessage()` joins them.
 //
-// KajiLibrary: superficie identica a la del JDK (6 miembros). El unico rodeo esta en
-// `getMessage()`: el JDK arma "motivo at index N: entrada" y nuestro `String` no tiene
-// `valueOf(int)`, asi que el numero se escribe a mano con `digits()` — diez lineas de
-// aritmetica sobre `char`, que es lo mismo que haria cualquier `Integer.toString`.
+// KajiLibrary: the same surface as the JDK's (6 members). The only detour is in `getMessage()`: the
+// JDK builds "reason at index N: input" and our `String` has no `valueOf(int)`, so the number is
+// written out by hand with `digits()` — ten lines of arithmetic over `char`, which is the same thing
+// any `Integer.toString` would do.
 public class URISyntaxException extends Exception {
 
     private final String input;
@@ -38,7 +38,7 @@ public class URISyntaxException extends Exception {
         return this.reason;
     }
 
-    // -1 cuando el motivo no apunta a una posicion concreta.
+    // -1 when the reason does not point at a concrete position.
     public int getIndex() {
         return this.index;
     }
@@ -55,7 +55,7 @@ public class URISyntaxException extends Exception {
         return sb.toString();
     }
 
-    // `String.valueOf(int)` no existe en esta biblioteca; esto es su equivalente minimo.
+    // `String.valueOf(int)` does not exist in this library; this is its minimal equivalent.
     private static String digits(int value) {
         if (value == 0) {
             return "0";

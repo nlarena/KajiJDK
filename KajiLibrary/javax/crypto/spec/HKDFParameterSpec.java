@@ -7,62 +7,61 @@ import java.util.List;
 import javax.crypto.SecretKey;
 
 /**
- * Los parametros de HKDF (RFC 5869), la derivacion de claves en dos pasos.
+ * HKDF's parameters (RFC 5869), the two-step key derivation.
  *
- * <p>Los dos pasos son lo que explica la forma de esta interfaz, que si no parece caprichosa:
+ * <p>The two steps are what explains the shape of this interface, which otherwise looks arbitrary:
  *
  * <ul>
- * <li><strong>Extraer</strong> toma material de entrada --que puede no ser uniforme: un secreto
- *     Diffie-Hellman, una contrasena estirada-- y una sal, y produce una clave pseudoaleatoria
- *     (`PRK`) que si lo es.</li>
- * <li><strong>Expandir</strong> toma esa `PRK`, un texto de contexto y un largo, y produce la
- *     clave final. Se puede expandir varias veces la misma `PRK` con contextos distintos para
- *     obtener claves independientes.</li>
+ * <li><strong>Extract</strong> takes input material --which may not be uniform: a Diffie-Hellman
+ *     secret, a stretched password-- and a salt, and produces a pseudorandom key (`PRK`) that is.</li>
+ * <li><strong>Expand</strong> takes that `PRK`, a context string and a length, and produces the
+ *     final key. The same `PRK` can be expanded several times with different contexts to obtain
+ *     independent keys.</li>
  * </ul>
  *
- * <p>De ahi las tres implementaciones: {@link Extract} hace solo el primer paso, {@link Expand}
- * solo el segundo --cuando uno ya tiene la `PRK`-- y {@link ExtractThenExpand} los dos de una.
- * Son las tres formas legitimas de usar HKDF y no hay una cuarta, por eso son `final` y no hay
- * constructor publico de la interfaz.
+ * <p>Hence the three implementations: {@link Extract} does only the first step, {@link Expand} only
+ * the second --when one already has the `PRK`-- and {@link ExtractThenExpand} both at once. They are
+ * the three legitimate ways of using HKDF and there is no fourth, which is why they are `final` and
+ * the interface has no public constructor.
  *
- * <p><strong>El material se acumula.</strong> {@link Builder#addIKM} y {@link Builder#addSalt} se
- * pueden llamar varias veces, y lo que se pasa se **concatena** en orden en vez de reemplazar. No
- * es una comodidad: permite armar la entrada a partir de pedazos que llegan por separado sin tener
- * que juntarlos en un arreglo antes, que es justamente lo que uno quiere evitar con material
- * secreto.
+ * <p><strong>The material accumulates.</strong> {@link Builder#addIKM} and {@link Builder#addSalt}
+ * can be called several times, and what is passed is **concatenated** in order instead of replacing.
+ * It is not a convenience: it allows the input to be assembled out of pieces that arrive separately
+ * without having to join them into an array first, which is exactly what one wants to avoid with
+ * secret material.
  */
 public interface HKDFParameterSpec extends AlgorithmParameterSpec {
 
-    /** Un constructor para las formas que empiezan por extraer. */
+    /** A builder for the forms that start by extracting. */
     public static Builder ofExtract() {
         return new Builder();
     }
 
     /**
-     * La forma que **solo expande**, a partir de una `PRK` que uno ya tiene.
+     * The form that **only expands**, from a `PRK` one already has.
      *
-     * @param prk la clave pseudoaleatoria; no puede ser nula
-     * @param info el contexto, o nulo para ninguno
-     * @param length cuantos bytes se quieren, mayor que cero
-     * @throws NullPointerException si `prk` es nula
-     * @throws IllegalArgumentException si `length` no es positivo
+     * @param prk the pseudorandom key; it cannot be null
+     * @param info the context, or null for none
+     * @param length how many bytes are wanted, greater than zero
+     * @throws NullPointerException if `prk` is null
+     * @throws IllegalArgumentException if `length` is not positive
      */
     public static Expand expandOnly(SecretKey prk, byte[] info, int length) {
         if (prk == null) {
-            throw new NullPointerException("la PRK no puede ser nula");
+            throw new NullPointerException("the PRK cannot be null");
         }
         if (length <= 0) {
-            throw new IllegalArgumentException("el largo tiene que ser positivo");
+            throw new IllegalArgumentException("the length has to be positive");
         }
         return new Expand(prk, info, length);
     }
 
     /**
-     * El constructor de las formas que extraen.
+     * The builder of the forms that extract.
      *
-     * <p>Es mutable y se usa una vez: se le agregan entradas y se termina con {@link #extractOnly}
-     * o {@link #thenExpand}. Los dos devuelven un objeto ya congelado, asi que seguir usando el
-     * constructor despues no cambia lo que se devolvio.
+     * <p>It is mutable and used once: inputs are added to it and it is finished with
+     * {@link #extractOnly} or {@link #thenExpand}. Both return an already frozen object, so going on
+     * using the builder afterwards does not change what was returned.
      */
     public static final class Builder {
 
@@ -72,49 +71,49 @@ public interface HKDFParameterSpec extends AlgorithmParameterSpec {
         Builder() {
         }
 
-        /** Solo el primer paso: produce la `PRK` y ahi termina. */
+        /** Only the first step: it produces the `PRK` and stops there. */
         public Extract extractOnly() {
             return new Extract(this.ikms, this.salts);
         }
 
         /**
-         * Los dos pasos: extrae y despues expande con ese contexto a ese largo.
+         * Both steps: it extracts and then expands with that context to that length.
          *
-         * @throws IllegalArgumentException si `length` no es positivo
+         * @throws IllegalArgumentException if `length` is not positive
          */
         public ExtractThenExpand thenExpand(byte[] info, int length) {
             if (length <= 0) {
-                throw new IllegalArgumentException("el largo tiene que ser positivo");
+                throw new IllegalArgumentException("the length has to be positive");
             }
             return new ExtractThenExpand(this.ikms, this.salts, info, length);
         }
 
         /**
-         * Agrega material de entrada. Ver la nota de la interfaz sobre la concatenacion.
+         * Adds input material. See the interface's note about concatenation.
          *
-         * @throws NullPointerException si la clave es nula
+         * @throws NullPointerException if the key is null
          */
         public Builder addIKM(SecretKey ikm) {
             if (ikm == null) {
-                throw new NullPointerException("el material de entrada no puede ser nulo");
+                throw new NullPointerException("the input material cannot be null");
             }
             this.ikms.add(ikm);
             return this;
         }
 
         /**
-         * Agrega material de entrada en crudo.
+         * Adds raw input material.
          *
-         * <p>Se envuelve en un {@link SecretKeySpec} con algoritmo `"Generic"`, que es el nombre
-         * que el JDK usa para material que no pertenece a ningun algoritmo en particular. Un
-         * arreglo **vacio** se ignora en vez de agregarse: concatenar cero bytes no cambia nada, y
-         * guardarlo solo haria que la lista tuviera un elemento que no aporta.
+         * <p>It is wrapped in a {@link SecretKeySpec} with algorithm `"Generic"`, which is the name
+         * the JDK uses for material belonging to no algorithm in particular. An **empty** array is
+         * ignored instead of added: concatenating zero bytes changes nothing, and keeping it would
+         * only give the list an element that contributes nothing.
          *
-         * @throws NullPointerException si el arreglo es nulo
+         * @throws NullPointerException if the array is null
          */
         public Builder addIKM(byte[] ikm) {
             if (ikm == null) {
-                throw new NullPointerException("el material de entrada no puede ser nulo");
+                throw new NullPointerException("the input material cannot be null");
             }
             if (ikm.length != 0) {
                 this.ikms.add(new SecretKeySpec(ikm, "Generic"));
@@ -123,26 +122,26 @@ public interface HKDFParameterSpec extends AlgorithmParameterSpec {
         }
 
         /**
-         * Agrega sal.
+         * Adds salt.
          *
-         * @throws NullPointerException si la clave es nula
+         * @throws NullPointerException if the key is null
          */
         public Builder addSalt(SecretKey salt) {
             if (salt == null) {
-                throw new NullPointerException("la sal no puede ser nula");
+                throw new NullPointerException("the salt cannot be null");
             }
             this.salts.add(salt);
             return this;
         }
 
         /**
-         * Agrega sal en crudo. Vale la misma nota que {@link #addIKM(byte[])}.
+         * Adds raw salt. The same note as {@link #addIKM(byte[])} applies.
          *
-         * @throws NullPointerException si el arreglo es nulo
+         * @throws NullPointerException if the array is null
          */
         public Builder addSalt(byte[] salt) {
             if (salt == null) {
-                throw new NullPointerException("la sal no puede ser nula");
+                throw new NullPointerException("the salt cannot be null");
             }
             if (salt.length != 0) {
                 this.salts.add(new SecretKeySpec(salt, "Generic"));
@@ -151,7 +150,7 @@ public interface HKDFParameterSpec extends AlgorithmParameterSpec {
         }
     }
 
-    /** Solo el primer paso: de material de entrada y sal a una `PRK`. */
+    /** Only the first step: from input material and salt to a `PRK`. */
     public static final class Extract implements HKDFParameterSpec {
 
         private final List<SecretKey> ikms;
@@ -162,18 +161,18 @@ public interface HKDFParameterSpec extends AlgorithmParameterSpec {
             this.salts = Collections.unmodifiableList(new ArrayList<SecretKey>(salts));
         }
 
-        /** El material de entrada, en orden y de solo lectura. */
+        /** The input material, in order and read-only. */
         public List<SecretKey> ikms() {
             return this.ikms;
         }
 
-        /** La sal, en orden y de solo lectura. */
+        /** The salt, in order and read-only. */
         public List<SecretKey> salts() {
             return this.salts;
         }
     }
 
-    /** Solo el segundo paso: de una `PRK` y un contexto a la clave final. */
+    /** Only the second step: from a `PRK` and a context to the final key. */
     public static final class Expand implements HKDFParameterSpec {
 
         private final SecretKey prk;
@@ -186,24 +185,24 @@ public interface HKDFParameterSpec extends AlgorithmParameterSpec {
             this.length = length;
         }
 
-        /** La clave pseudoaleatoria de la que se expande. */
+        /** The pseudorandom key that is expanded from. */
         public SecretKey prk() {
             return this.prk;
         }
 
-        /** Una copia del contexto, o nulo si no hay. */
+        /** A copy of the context, or null if there is none. */
         public byte[] info() {
             return this.info == null ? null
                     : IvParameterSpec.copy(this.info, 0, this.info.length);
         }
 
-        /** Cuantos bytes se quieren. */
+        /** How many bytes are wanted. */
         public int length() {
             return this.length;
         }
     }
 
-    /** Los dos pasos de una. */
+    /** Both steps at once. */
     public static final class ExtractThenExpand implements HKDFParameterSpec {
 
         private final List<SecretKey> ikms;
@@ -218,23 +217,23 @@ public interface HKDFParameterSpec extends AlgorithmParameterSpec {
             this.length = length;
         }
 
-        /** El material de entrada, en orden y de solo lectura. */
+        /** The input material, in order and read-only. */
         public List<SecretKey> ikms() {
             return this.ikms;
         }
 
-        /** La sal, en orden y de solo lectura. */
+        /** The salt, in order and read-only. */
         public List<SecretKey> salts() {
             return this.salts;
         }
 
-        /** Una copia del contexto, o nulo si no hay. */
+        /** A copy of the context, or null if there is none. */
         public byte[] info() {
             return this.info == null ? null
                     : IvParameterSpec.copy(this.info, 0, this.info.length);
         }
 
-        /** Cuantos bytes se quieren. */
+        /** How many bytes are wanted. */
         public int length() {
             return this.length;
         }

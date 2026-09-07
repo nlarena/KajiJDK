@@ -9,62 +9,63 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 
 /**
- * Una respuesta sacada de la cache que originalmente vino por una conexion segura.
+ * A response taken from the cache that originally came over a secure connection.
  *
- * <h2>Por que hace falta un tipo aparte</h2>
+ * <h2>Why a separate type is needed</h2>
  *
- * <p>Porque servir desde la cache pierde el canal. Una {@link CacheResponse} comun entrega los bytes
- * y nada mas, y entonces el codigo que decidia algo mirando el certificado del servidor —o la suite
- * acordada— <strong>no puede repetir esa decision</strong> cuando la respuesta viene de disco.
+ * <p>Because serving from the cache loses the channel. An ordinary {@link CacheResponse} hands over
+ * the bytes and nothing more, and then code that decided something by looking at the server's
+ * certificate —or the agreed cipher suite— <strong>cannot repeat that decision</strong> when the
+ * response comes from disk.
  *
- * <p>Esta clase es lo que hace que la cache no degrade la seguridad en silencio: guarda tambien lo
- * que se sabia del canal en el momento en que la respuesta se obtuvo, y lo devuelve. La informacion
- * es <em>historica</em> —describe la conexion original, no una actual— y esa es exactamente la
- * distincion que hay que tener presente al usarla.
+ * <p>This class is what keeps the cache from silently degrading security: it also stores what was
+ * known about the channel at the moment the response was obtained, and gives it back. The information
+ * is <em>historical</em> —it describes the original connection, not a current one— and that is
+ * exactly the distinction to bear in mind when using it.
  *
  * @since 1.5
  */
 public abstract class SecureCacheResponse extends CacheResponse {
 
-    /** Para las implementaciones de cache. */
+    /** For the cache implementations. */
     public SecureCacheResponse() {
     }
 
-    /** La suite que se habia acordado. */
+    /** The cipher suite that had been agreed. */
     public abstract String getCipherSuite();
 
     /**
-     * Los certificados que se habian presentado, o {@code null} si no se presento ninguno.
+     * The certificates that had been presented, or {@code null} if none were.
      *
-     * <p>La lista va del propio hacia la CA raiz, que es el orden del protocolo.
+     * <p>The list goes from one's own towards the root CA, which is the protocol's order.
      */
     public abstract List<Certificate> getLocalCertificateChain();
 
     /**
-     * Los certificados que habia presentado el servidor.
+     * The certificates the server had presented.
      *
-     * @throws SSLPeerUnverifiedException si no se habia autenticado — puede pasar con una conexion
-     *     perfectamente valida, porque cifrar y autenticar son cosas distintas
+     * @throws SSLPeerUnverifiedException if it had not authenticated — this can happen with a
+     *     perfectly valid connection, because encrypting and authenticating are different things
      */
     public abstract List<Certificate> getServerCertificateChain()
             throws SSLPeerUnverifiedException;
 
     /**
-     * Quien era el servidor.
+     * Who the server was.
      *
-     * @throws SSLPeerUnverifiedException si no se habia autenticado
+     * @throws SSLPeerUnverifiedException if it had not authenticated
      */
     public abstract Principal getPeerPrincipal() throws SSLPeerUnverifiedException;
 
-    /** Quien se habia presentado como, o {@code null}. */
+    /** Who one had presented as, or {@code null}. */
     public abstract Principal getLocalPrincipal();
 
     /**
-     * La sesion original, si la cache la conservo.
+     * The original session, if the cache kept it.
      *
-     * <p>Un {@link Optional} y con cuerpo: llego despues que el resto de la clase, y una cache vieja
-     * no tiene por que haber guardado la sesion entera. Vacio significa "no la tengo", que es una
-     * respuesta legitima y distinta de "no habia".
+     * <p>An {@link Optional} and with a body: it arrived after the rest of the class, and an old
+     * cache has no reason to have kept the whole session. Empty means "I do not have it", which is a
+     * legitimate answer and different from "there was none".
      *
      * @since 12
      */

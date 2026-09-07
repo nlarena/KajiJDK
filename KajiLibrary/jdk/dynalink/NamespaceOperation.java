@@ -4,11 +4,11 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Una {@link Operation} atada a uno o mas {@link Namespace}, en orden de preferencia.
+ * An {@link Operation} bound to one or more {@link Namespace}, in order of preference.
  *
- * <p>Es inmutable y se compara por valor. El constructor rechaza que la operacion base sea a su
- * vez un `NamespaceOperation` o un {@link NamedOperation}: eso es lo que fija el orden de
- * anidamiento en una sola direccion y hace que desarmar una operacion no tenga casos.
+ * <p>It is immutable and compares by value. The constructor refuses a base operation that is itself
+ * a `NamespaceOperation` or a {@link NamedOperation}: that is what fixes the nesting order in a
+ * single direction and makes taking an operation apart a case-free job.
  *
  * @since 9
  */
@@ -18,8 +18,8 @@ public final class NamespaceOperation implements Operation {
     private final Namespace[] namespaces;
 
     /**
-     * @throws IllegalArgumentException si la base ya esta decorada, o si no se paso ningun
-     *         espacio de nombres.
+     * @throws IllegalArgumentException if the base is already decorated, or if no namespace was
+     *         passed.
      */
     public NamespaceOperation(final Operation baseOperation, final Namespace... namespaces) {
         this.baseOperation = Objects.requireNonNull(baseOperation, "baseOperation is null");
@@ -38,12 +38,12 @@ public final class NamespaceOperation implements Operation {
         }
     }
 
-    /** La operacion sin la decoracion de espacios de nombres. */
+    /** The operation without the namespace decoration. */
     public Operation getBaseOperation() {
         return baseOperation;
     }
 
-    /** Copia del arreglo de espacios de nombres — el interno no se expone. */
+    /** A copy of the namespace array — the internal one is not exposed. */
     public Namespace[] getNamespaces() {
         return namespaces.clone();
     }
@@ -95,17 +95,17 @@ public final class NamespaceOperation implements Operation {
         return b.toString();
     }
 
-    /** La base de `op` si esta decorada con espacios de nombres; `op` misma si no lo esta. */
+    /** The base of `op` if it is decorated with namespaces; `op` itself if it is not. */
     public static Operation getBaseOperation(final Operation op) {
         return op instanceof NamespaceOperation ? ((NamespaceOperation) op).getBaseOperation() : op;
     }
 
-    /** Los espacios de nombres de `op`, o un arreglo vacio si no tiene. */
+    /** The namespaces of `op`, or an empty array if it has none. */
     public static Namespace[] getNamespaces(final Operation op) {
         return op instanceof NamespaceOperation ? ((NamespaceOperation) op).getNamespaces() : new Namespace[0];
     }
 
-    /** Si `op` es exactamente `baseOperation` decorada con un conjunto que incluye `namespace`. */
+    /** Whether `op` is exactly `baseOperation` decorated with a set that includes `namespace`. */
     public static boolean contains(final Operation op, final Operation baseOperation, final Namespace namespace) {
         if (op instanceof NamespaceOperation) {
             final NamespaceOperation no = (NamespaceOperation) op;

@@ -1,77 +1,73 @@
 package java.net;
 
-// Un datagrama: un bloque de bytes con un destino, o con un remitente.
+// A datagram: a block of bytes with a destination, or with a sender.
 //
 // ===========================================================================================
-// POR QUE ESTA ENTERA AUNQUE NO HAYA RED
+// IT IS THE ENVELOPE, NOT THE POST
 // ===========================================================================================
 //
-// `DatagramPacket` **no manda ni recibe nada**. Es el sobre, no el correo: guarda un buffer, un
-// tramo dentro de ese buffer, y una direccion con un puerto. Mandarlo es trabajo de
-// `DatagramSocket`, que en KajiJDK no existe porque no hay nativos de red.
-//
-// Que el sobre exista sin correo no es una promesa vacia. Todos sus miembros son accesores sobre
-// campos y validaciones de rango, y todos hacen exactamente lo que dicen. Un programa puede armar
-// un datagrama, leerlo, reusarlo y verificarlo aca igual que en el JDK; lo unico que no puede es
-// entregarlo, y de eso se entera al buscar `DatagramSocket` y no encontrarlo -- un error de
-// compilacion, que es la forma honesta de decirlo.
+// `DatagramPacket` **neither sends nor receives anything**. It holds a buffer, a stretch inside that
+// buffer, and an address with a port. Sending it is `DatagramSocket`'s job. When this note was first
+// written there was no `DatagramSocket` in KajiJDK --there were no network natives-- and the point
+// was that the envelope existing without the post is not an empty promise: every member here is an
+// accessor over a field or a range check, and every one does exactly what it says. There is a
+// `DatagramSocket` now, so the datagram can also be delivered.
 //
 // ===========================================================================================
-// EL DETALLE QUE IMPORTA: `length` ES DE ENTRADA Y DE SALIDA
+// THE DETAIL THAT MATTERS: `length` IS BOTH INPUT AND OUTPUT
 // ===========================================================================================
 //
-// Al **recibir**, `length` entra valiendo cuanto espacio hay y sale valiendo cuantos bytes
-// llegaron. Por eso reusar un paquete para varias recepciones es un error clasico: despues de
-// recibir 10 bytes en un buffer de 1024, `length` quedo en 10, y la recepcion siguiente trunca a
-// 10 bytes sin avisar. La cura es `setLength(buf.length)` antes de cada recepcion.
+// On **receiving**, `length` goes in meaning how much room there is and comes out meaning how many
+// bytes arrived. That is why reusing a packet for several receptions is a classic mistake: after
+// receiving 10 bytes into a 1024-byte buffer, `length` is left at 10, and the next reception
+// truncates to 10 bytes without warning. The cure is `setLength(buf.length)` before each reception.
 //
-// Se documenta aca porque es la parte del contrato que la firma no muestra, y este archivo es todo
-// lo que queda de ese contrato en este arbol.
+// It is documented here because it is the part of the contract the signature does not show.
 //
-// Los dieciocho miembros estan; nada omitido.
+// All eighteen members are here; nothing omitted.
 public final class DatagramPacket {
 
     private byte[] buf;
     private int offset;
     private int length;
 
-    // Cuanto se pidio en el ultimo `setLength`/`setData`. Al recibir, `length` se pisa con lo que
-    // llego, y sin este campo no se podria saber cuanto entraba en realidad.
+    // How much was asked for in the last `setLength`/`setData`. On receiving, `length` is overwritten
+    // with what arrived, and without this field there would be no telling how much actually fitted.
     private int bufLength;
 
     private InetAddress address;
 
-    // Arranca en 0 y no en -1. Parece un detalle y no lo es: un paquete recien construido sin
-    // destino reporta el puerto 0, que es lo que hace el JDK 25 --las versiones viejas ponian -1--
-    // y lo que hace que `getSocketAddress()` de un paquete sin destino devuelva la direccion
-    // comodin con puerto 0 en vez de tirar por un puerto invalido.
+    // It starts at 0 and not at -1. It looks like a detail and it is not: a freshly built packet with
+    // no destination reports port 0, which is what JDK 25 does --the old versions put -1-- and it is
+    // what makes `getSocketAddress()` of a packet with no destination return the wildcard address
+    // with port 0 instead of throwing over an invalid port.
     private int port;
 
     /**
-     * Un paquete que usa {@code length} bytes de {@code buf} a partir de {@code offset}.
+     * A packet using {@code length} bytes of {@code buf} starting at {@code offset}.
      *
-     * <p>Sin direccion: sirve para **recibir**, o para mandarlo despues de ponerle una.
+     * <p>With no address: it serves to **receive**, or to be sent after being given one.
      *
-     * @throws IllegalArgumentException si el tramo no entra en el buffer
-     * @throws NullPointerException     si {@code buf} es null
+     * @throws IllegalArgumentException if the stretch does not fit the buffer
+     * @throws NullPointerException     if {@code buf} is null
      */
     public DatagramPacket(byte[] buf, int offset, int length) {
         setData(buf, offset, length);
     }
 
     /**
-     * Un paquete que usa los primeros {@code length} bytes de {@code buf}.
+     * A packet using the first {@code length} bytes of {@code buf}.
      *
-     * @throws IllegalArgumentException si {@code length} no entra en el buffer
+     * @throws IllegalArgumentException if {@code length} does not fit the buffer
      */
     public DatagramPacket(byte[] buf, int length) {
         this(buf, 0, length);
     }
 
     /**
-     * Un paquete listo para mandar a {@code address}:{@code port}.
+     * A packet ready to be sent to {@code address}:{@code port}.
      *
-     * @throws IllegalArgumentException si el tramo no entra, o el puerto esta fuera de 0..65535
+     * @throws IllegalArgumentException if the stretch does not fit, or the port is outside 0..65535
      */
     public DatagramPacket(byte[] buf, int offset, int length, InetAddress address, int port) {
         setData(buf, offset, length);
@@ -80,10 +76,10 @@ public final class DatagramPacket {
     }
 
     /**
-     * Un paquete listo para mandar a {@code address}, dada como direccion de socket.
+     * A packet ready to be sent to {@code address}, given as a socket address.
      *
-     * @throws IllegalArgumentException si {@code address} no es una {@link InetSocketAddress}
-     *                                  resuelta, o el tramo no entra
+     * @throws IllegalArgumentException if {@code address} is not a resolved
+     *                                  {@link InetSocketAddress}, or the stretch does not fit
      */
     public DatagramPacket(byte[] buf, int offset, int length, SocketAddress address) {
         setData(buf, offset, length);
@@ -91,67 +87,67 @@ public final class DatagramPacket {
     }
 
     /**
-     * Un paquete listo para mandar, usando los primeros {@code length} bytes.
+     * A packet ready to be sent, using the first {@code length} bytes.
      *
-     * @throws IllegalArgumentException si el tramo no entra, o el puerto esta fuera de rango
+     * @throws IllegalArgumentException if the stretch does not fit, or the port is out of range
      */
     public DatagramPacket(byte[] buf, int length, InetAddress address, int port) {
         this(buf, 0, length, address, port);
     }
 
     /**
-     * Un paquete listo para mandar, usando los primeros {@code length} bytes.
+     * A packet ready to be sent, using the first {@code length} bytes.
      *
-     * @throws IllegalArgumentException si {@code address} no es una {@link InetSocketAddress}
-     *                                  resuelta, o el tramo no entra
+     * @throws IllegalArgumentException if {@code address} is not a resolved
+     *                                  {@link InetSocketAddress}, or the stretch does not fit
      */
     public DatagramPacket(byte[] buf, int length, SocketAddress address) {
         this(buf, 0, length, address);
     }
 
-    /** A quien va, o de quien vino; null si no se le puso ninguna. */
+    /** Who it goes to, or who it came from; null if none was set. */
     public synchronized InetAddress getAddress() {
         return this.address;
     }
 
-    /** El puerto de destino o de origen; 0 si no se le puso ninguno. */
+    /** The destination or origin port; 0 if none was set. */
     public synchronized int getPort() {
         return this.port;
     }
 
     /**
-     * El buffer, **sin copiar**.
+     * The buffer, **uncopied**.
      *
-     * <p>Que no se copie es del contrato del JDK y es lo que hace barato reusar un paquete: quien
-     * recibe escribe directo sobre este arreglo. Tambien significa que modificarlo cambia el
-     * paquete, que es justamente para lo que esta.
+     * <p>That it is not copied comes from the JDK's contract and it is what makes reusing a packet
+     * cheap: whoever receives writes straight onto this array. It also means that modifying it
+     * changes the packet, which is exactly what it is there for.
      */
     public synchronized byte[] getData() {
         return this.buf;
     }
 
-    /** Donde arrancan los datos dentro del buffer. */
+    /** Where the data starts inside the buffer. */
     public synchronized int getOffset() {
         return this.offset;
     }
 
-    /** Cuantos bytes valen. Ver la cabecera: al recibir, esto cambia. */
+    /** How many bytes count. See the header: on receiving, this changes. */
     public synchronized int getLength() {
         return this.length;
     }
 
     /**
-     * Cambia el buffer y el tramo.
+     * Changes the buffer and the stretch.
      *
-     * @throws NullPointerException     si {@code buf} es null
-     * @throws IllegalArgumentException si el tramo no entra en el buffer
+     * @throws NullPointerException     if {@code buf} is null
+     * @throws IllegalArgumentException if the stretch does not fit the buffer
      */
     public synchronized void setData(byte[] buf, int offset, int length) {
         if (buf == null) {
             throw new NullPointerException("null packet buffer");
         }
-        // La suma se hace y se compara asi para que no la de vuelta un desbordamiento: con
-        // `offset + length` en int, dos valores enormes dan negativo y pasarian el chequeo.
+        // The sum is done and compared this way so that an overflow cannot turn it round: with
+        // `offset + length` in int, two enormous values give a negative and would pass the check.
         if (offset < 0 || length < 0 || offset > buf.length - length) {
             throw new IllegalArgumentException("illegal length or offset");
         }
@@ -161,15 +157,15 @@ public final class DatagramPacket {
         this.bufLength = length;
     }
 
-    /** A donde mandarlo; null lo deja sin destino. */
+    /** Where to send it; null leaves it with no destination. */
     public synchronized void setAddress(InetAddress iaddr) {
         this.address = iaddr;
     }
 
     /**
-     * A que puerto mandarlo.
+     * Which port to send it to.
      *
-     * @throws IllegalArgumentException si esta fuera de 0..65535
+     * @throws IllegalArgumentException if it is outside 0..65535
      */
     public synchronized void setPort(int iport) {
         if (iport < 0 || iport > 0xFFFF) {
@@ -179,11 +175,11 @@ public final class DatagramPacket {
     }
 
     /**
-     * Destino y puerto de una sola vez.
+     * Destination and port in one go.
      *
-     * @throws IllegalArgumentException si no es una {@link InetSocketAddress}, o si es una sin
-     *                                  resolver -- mandar a un nombre que nadie resolvio no es una
-     *                                  operacion que se pueda completar
+     * @throws IllegalArgumentException if it is not an {@link InetSocketAddress}, or if it is an
+     *                                  unresolved one -- sending to a name nobody resolved is not an
+     *                                  operation that can be completed
      */
     public synchronized void setSocketAddress(SocketAddress address) {
         if (address == null || !(address instanceof InetSocketAddress)) {
@@ -197,16 +193,16 @@ public final class DatagramPacket {
         setPort(addr.getPort());
     }
 
-    /** Destino y puerto juntos. */
+    /** Destination and port together. */
     public synchronized SocketAddress getSocketAddress() {
         return new InetSocketAddress(getAddress(), getPort());
     }
 
     /**
-     * Cambia el buffer conservando el tramo, si sigue entrando.
+     * Changes the buffer, keeping the stretch if it still fits.
      *
-     * @throws NullPointerException     si {@code buf} es null
-     * @throws IllegalArgumentException si el tramo que ya tenia no entra en el buffer nuevo
+     * @throws NullPointerException     if {@code buf} is null
+     * @throws IllegalArgumentException if the stretch it already had does not fit the new buffer
      */
     public synchronized void setData(byte[] buf) {
         if (buf == null) {
@@ -219,12 +215,12 @@ public final class DatagramPacket {
     }
 
     /**
-     * Cuantos bytes valen.
+     * How many bytes count.
      *
-     * <p>Antes de reusar un paquete para recibir hay que llamar a este metodo con el tamano del
-     * buffer; ver la cabecera.
+     * <p>Before reusing a packet to receive, this method has to be called with the buffer's size; see
+     * the header.
      *
-     * @throws IllegalArgumentException si no entra en el buffer desde el offset actual
+     * @throws IllegalArgumentException if it does not fit the buffer from the current offset
      */
     public synchronized void setLength(int length) {
         if (length < 0 || this.offset > this.buf.length - length) {

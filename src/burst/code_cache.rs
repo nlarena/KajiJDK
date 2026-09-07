@@ -190,6 +190,28 @@ impl JitValue {
     /// method from its first byte and apply every write twice. There is no path to that now: the
     /// site could not have been installed, and if the invariant were ever broken this stops loudly
     /// instead of quietly re-running a method.
+    /// The read for a **frame that does not exist yet** — the root frame of a compilation another
+    /// compilation called, whose locals are handed back complete rather than by name.
+    ///
+    /// It differs from [`of_value`][JitValue::of_value] in the two kinds that name no value, and
+    /// the answer for both is `Int(0)` rather than a skip, because there is nothing to skip *to*:
+    /// the caller wrote this frame's arguments and zeroed the rest, so a slot the map cannot type
+    /// is a slot holding the zero the call put there.
+    ///
+    ///  - `Opaque` — no path from the method's entry to this pc wrote the slot, so it still holds
+    ///    that zero, and `Int(0)` is not a stand-in but literally what is in it.
+    ///  - `Conflict` — two paths wrote it two ways and the slot is provably **dead** (a read of one
+    ///    does not compile; see `ResumeSite::locals`), so nothing can observe the difference.
+    ///
+    /// Neither can fabricate a reference, which is the only direction that would hurt the
+    /// collector: `Int(0)` is a well-typed `Value` whatever the slot used to hold.
+    fn of_frame(kind: Kind, raw: i64) -> JitValue {
+        match kind {
+            Kind::Opaque | Kind::Conflict => JitValue::Int(0),
+            _ => JitValue::of_value(kind, raw),
+        }
+    }
+
     fn of_value(kind: Kind, raw: i64) -> JitValue {
         match kind {
             // **The one kind that names a value here and no value in [`JitValue::of`]**, because
@@ -235,6 +257,12 @@ mod native {
             ExecMem::from_code(code).map(Native)
         }
 
+        /// Where the mapped code starts — what a compiled **caller** jumps to, through this
+        /// method's [`NativeRecord`][super::super::compile::NativeRecord].
+        pub fn address(&self) -> u64 {
+            self.0.as_ptr() as u64
+        }
+
         /// Calls the compiled method.
         ///
         /// # Safety
@@ -243,18 +271,23 @@ mod native {
         /// local index the compiled code names — i.e. the caller must have honoured the marshalling
         /// contract in [`CompiledCode::touched_locals`][super::CompiledCode::touched_locals]. The
         /// code itself is trusted to be what [`compile`][super::super::compile::compile] produced:
-        /// an `extern "system" fn(*mut i64, i64) -> i64` that preserves every non-volatile
+        /// an `extern "system" fn(*mut i64, i64, i64) -> i64` that preserves every non-volatile
         /// register. `entry_pc` must be `0` or one of the code's own
         /// [`osr_entries`][super::CompiledCode::osr_entries] — any other value would fall through
         /// the entry dispatch and run the method from its start with mid-method locals.
-        pub unsafe fn call(&self, locals: *mut i64, entry_pc: i64) -> i64 {
+        ///
+        /// `frames` is the **frame budget**: how many interpreter frames this excursion may still
+        /// create. It bounds both the reconstruction a deopt hands back and the depth of the native
+        /// call chain, and the buffer must be long enough for that many nested regions — see
+        /// [`JitCache::install`][super::JitCache::install].
+        pub unsafe fn call(&self, locals: *mut i64, entry_pc: i64, frames: i64) -> i64 {
             // SAFETY: `compile` emits exactly one function per block, entered at offset 0, built
             // from `x64::Frame` (Microsoft x64 prologue/epilogue, every saved register restored,
-            // terminated by `ret`), taking its pointer argument in RCX and its entry pc in RDX and
-            // returning the packed status/value in RAX. That is this signature. The caller's own
-            // `# Safety` clause covers the pointer and the entry pc.
-            let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { self.0.as_fn() };
-            f(locals, entry_pc)
+            // terminated by `ret`), taking its pointer argument in RCX, its entry pc in RDX and its
+            // frame budget in R8, and returning the packed status/value in RAX. That is this
+            // signature. The caller's own `# Safety` clause covers the pointer and the entry pc.
+            let f: extern "system" fn(*mut i64, i64, i64) -> i64 = unsafe { self.0.as_fn() };
+            f(locals, entry_pc, frames)
         }
     }
 }
@@ -274,11 +307,16 @@ mod native {
         }
 
         /// Unreachable: no `Native` is ever constructed off Windows.
+        pub fn address(&self) -> u64 {
+            unreachable!("no method is ever compiled on this platform")
+        }
+
+        /// Unreachable: no `Native` is ever constructed off Windows.
         ///
         /// # Safety
         ///
         /// Vacuous — there is no value of this type to call it on.
-        pub unsafe fn call(&self, _locals: *mut i64, _entry_pc: i64) -> i64 {
+        pub unsafe fn call(&self, _locals: *mut i64, _entry_pc: i64, _frames: i64) -> i64 {
             unreachable!("no method is ever compiled on this platform")
         }
     }
@@ -312,6 +350,12 @@ enum Entry {
         /// object or an array, which carries no log at all. See [`CompiledCode::barrier_base`].
         barrier_base: usize,
         barrier_records: usize,
+        /// How long this compilation's whole buffer region is — [`CompiledCode::buffer_slots`].
+        ///
+        /// It is what a **native callee's** region is offset by: a compiled call hands the callee
+        /// `buffer + 8 * buffer_slots`, so the regions stack rather than overlap and every frame's
+        /// deopt state is still readable when the outermost call finally returns.
+        buffer_slots: usize,
         /// The bytecode pcs this code may be entered at on-stack (its loop headers), ascending.
         osr_entries: Vec<u32>,
         /// **The resume map**: every point native code can hand a half-finished method back at,
@@ -412,6 +456,23 @@ pub enum OsrResult {
     Deopt(ResumeState),
 }
 
+/// **How one crossing into native code is entered**: at the method's start or at a loop header, on
+/// stack or not, and with how many interpreter frames of headroom.
+///
+/// The three travel together because they are one decision made in two places — [`JitCache::run`]
+/// and [`JitCache::run_osr`] — and because the frame budget is meaningless without knowing which of
+/// the two it was: an on-stack entry's root frame already exists and costs nothing new.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Crossing {
+    /// The bytecode pc to start at; `0` is the ordinary invocation.
+    entry_pc: u32,
+    /// Whether this is an on-stack entry at a loop header.
+    on_stack: bool,
+    /// How many interpreter frames this excursion may still create — see
+    /// [`NATIVE_FRAME_BUDGET`][JitCache::NATIVE_FRAME_BUDGET].
+    headroom: usize,
+}
+
 /// Counters, for tests and for the measurement harness. Every one of them is a *fact about a run*,
 /// not a timing: they are what makes "the benchmark actually compiled something" checkable instead
 /// of assumed.
@@ -438,6 +499,19 @@ pub struct JitStats {
     /// the excursion's allocation log was. Counted apart from `deopts` because it is a capacity
     /// condition that clears by itself, not a guard the method keeps failing.
     pub alloc_exits: usize,
+    /// **Real call sites installed**: how many invokes the compiled methods of this cache emit as
+    /// calls rather than as expansions. A fact about the code, counted at install time.
+    ///
+    /// It is what tells a test that a recursive method compiled *because* it can call itself from
+    /// a compilation that inlined its way around the recursion — the two are indistinguishable
+    /// from the answer alone.
+    pub native_sites: usize,
+    /// **Exits that had to be followed through a real call's link**: a callee that could not finish
+    /// and whose state was read out of its own region of the buffer.
+    ///
+    /// One per level, so a two-deep chain that stops at the bottom counts two. Zero means every
+    /// exit came out of the compilation the interpreter itself entered.
+    pub linked_exits: usize,
     /// **Interpreter frames rebuilt that inlining had removed**, summed over every exit — see
     /// [`ResumeState::inlined`].
     ///
@@ -465,8 +539,24 @@ pub struct JitCache {
     /// code-layout noise cannot masquerade as an effect. Same reasoning, same shape, as `enabled`.
     regs: u32,
     entries: HashMap<usize, Entry>,
+    /// **The stable cell one compiled method calls another through** — see
+    /// [`NativeRecord`][super::compile::NativeRecord].
+    ///
+    /// Boxed so the address handed to the compiler cannot move when the map rehashes, and keyed by
+    /// the same `MethodId` as [`entries`][JitCache::entries]. A record is minted the first time a
+    /// call site *names* the method — which may be long before that method is compiled, and may be
+    /// for a method that never is — and filled in by [`install`][JitCache::install].
+    /// Behind a [`RefCell`][std::cell::RefCell] because minting one is the only thing the
+    /// **compiler's resolvers** need to change about this cache, and they run while the rest of the
+    /// VM is borrowed immutably. Single-threaded by construction — a `JitCache` belongs to one
+    /// thread — so the cell is a borrow-checker note, not a synchronisation decision.
+    records: std::cell::RefCell<HashMap<usize, Box<super::compile::NativeRecord>>>,
     /// The marshalling buffer, grown once to the largest `max_locals` seen and reused thereafter —
     /// a compiled call must not allocate, or the allocator would be the thing being measured.
+    ///
+    /// Since group 4 it holds **a stack of regions**, not one: a compiled call gives its callee the
+    /// slots past its own, so the buffer is sized for the deepest native chain the frame budget
+    /// permits ([`JitCache::NATIVE_FRAME_BUDGET`]).
     scratch: Vec<i64>,
     /// The **safepoint poll word** — see [`JitCache::poll_word`] for why it is shaped like this.
     poll: Arc<AtomicU64>,
@@ -487,6 +577,23 @@ impl JitCache {
     /// compiled almost immediately, high enough that the one-off calls of class initialisation and
     /// start-up never pay for a scan. Override with `JVM_JIT_THRESHOLD`.
     pub const THRESHOLD: u32 = 32;
+
+    /// **How many interpreter frames one excursion into native code may create**, and therefore how
+    /// deep a chain of compiled-to-compiled calls may get.
+    ///
+    /// The interpreter hands native code `min(MAX_FRAMES - frames.len(), this)`, every call site
+    /// spends at least one unit of it out of the budget it was entered with, and a site that cannot
+    /// pay deopts *at the invoke* — handing the call back to the side that still counts frames. So
+    /// this is not a correctness bound: a runaway recursion still reaches the interpreter's own
+    /// `MAX_FRAMES` and throws the `StackOverflowError` it would have thrown interpreted, just
+    /// after a few more trips across the boundary.
+    ///
+    /// **What it does bound is the buffer.** Each nested call takes the slots past its caller's, so
+    /// the scratch buffer must hold this many regions plus one; sizing it for `MAX_FRAMES` (2000)
+    /// regions would be megabytes per thread for a depth no real program reaches. Sixteen is deep
+    /// enough that ordinary call chains never touch it and shallow enough that the buffer stays a
+    /// few tens of kilobytes.
+    pub const NATIVE_FRAME_BUDGET: usize = 16;
 
     /// **What `JVM_JIT` says**, read exactly as [`from_env`][JitCache::from_env] reads it — and the
     /// only place that decision is written down.
@@ -532,6 +639,7 @@ impl JitCache {
             threshold,
             regs,
             entries: HashMap::new(),
+            records: std::cell::RefCell::new(HashMap::new()),
             scratch: Vec::new(),
             poll: Arc::new(AtomicU64::new(0)),
             stats: JitStats::default(),
@@ -674,8 +782,28 @@ impl JitCache {
         // locals **and** the operand slots a deopt spills past them. `max(1)` because an empty
         // `Vec`'s `as_mut_ptr` is dangling, and a dangling pointer is not worth reasoning about
         // even when nothing dereferences it.
+        //
+        // **Times the native chain's depth** (group 4): a compiled call hands its callee the slots
+        // past its own region, so the buffer has to hold one region per level. The frame budget
+        // bounds the levels at [`NATIVE_FRAME_BUDGET`][JitCache::NATIVE_FRAME_BUDGET], and each
+        // region is at most the largest `buffer_slots` any installed compilation has — so this
+        // product, taken over the running maximum, covers every chain that can form.
         let slots = compiled.buffer_slots as usize;
-        self.scratch.resize(self.scratch.len().max(slots).max(1), 0);
+        let native_sites = compiled.native_sites as usize;
+        let room = slots.saturating_mul(Self::NATIVE_FRAME_BUDGET + 1);
+        self.scratch.resize(self.scratch.len().max(room).max(1), 0);
+        // **The record a compiled caller jumps through.** Filled here and never again — but only
+        // when this code is one a native caller may enter, which means carrying **no logs**: the
+        // allocation and write-barrier records live in this compilation's own buffer region, and
+        // only the *outermost* excursion's are replayed by `enter`, so an object allocated in a
+        // nested frame would be one the collector never hears about. A callee that allocates
+        // therefore keeps `code` at zero and is called by the interpreter alone.
+        if compiled.alloc_records == 0 && compiled.barrier_records == 0 {
+            let mut records = self.records.borrow_mut();
+            let record = records.entry(key).or_default();
+            record.code = native.address();
+            record.frames = u64::from(compiled.frame_depth);
+        }
         self.entries.insert(
             key,
             Entry::Compiled {
@@ -683,6 +811,7 @@ impl JitCache {
                 touched: compiled.touched_locals,
                 slots,
                 stack_base: compiled.stack_base as usize,
+                buffer_slots: slots,
                 result_base: compiled.result_base as usize,
                 alloc_base: compiled.alloc_base as usize,
                 alloc_records: compiled.alloc_records as usize,
@@ -701,6 +830,7 @@ impl JitCache {
         // convention — a caller that installed without asking would otherwise underflow a counter.
         self.stats.rejected = self.stats.rejected.saturating_sub(1);
         self.stats.compiled += 1;
+        self.stats.native_sites += native_sites;
     }
 
     /// Runs `key`'s compiled code, marshalling its locals through `local`.
@@ -733,11 +863,12 @@ impl JitCache {
     pub fn run(
         &mut self,
         key: usize,
+        headroom: usize,
         local: impl Fn(u16) -> Option<i64>,
         allocated: impl FnMut(usize, usize),
         remembered: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
-        self.enter(key, 0, false, local, allocated, remembered)
+        self.enter(Crossing { entry_pc: 0, on_stack: false, headroom }, key, local, allocated, remembered)
     }
 
     /// Enters `key`'s compiled code **at a loop header**, marshalling its locals through `local`.
@@ -759,6 +890,7 @@ impl JitCache {
         &mut self,
         key: usize,
         entry_pc: u32,
+        headroom: usize,
         local: impl Fn(u16) -> Option<i64>,
         allocated: impl FnMut(usize, usize),
         remembered: impl FnMut(usize, usize),
@@ -768,7 +900,8 @@ impl JitCache {
                 if *osr_open && osr_entries.contains(&entry_pc) => {}
             _ => return None,
         }
-        let result = self.enter(key, entry_pc, true, local, allocated, remembered)?;
+        let crossing = Crossing { entry_pc, on_stack: true, headroom };
+        let result = self.enter(crossing, key, local, allocated, remembered)?;
         if let OsrResult::Safepoint(_) = result {
             self.stats.safepoint_exits += 1;
         }
@@ -810,8 +943,8 @@ impl JitCache {
     ///    the site key is an immediate *this compiler wrote into the stub that just returned it*.
     ///    A miss is memory corruption or a compiler bug, and the honest response to either is to
     ///    stop, not to quietly re-run a method that has already had its effects.
-    fn resume_state(&self, key: usize, site_key: u32) -> ResumeState {
-        let Some(Entry::Compiled { touched, resume, stack_base, .. }) = self.entries.get(&key) else {
+    fn resume_state(&self, key: usize, site_key: u32) -> (ResumeState, usize) {
+        let Some(Entry::Compiled { touched, resume, stack_base, buffer_slots, .. }) = self.entries.get(&key) else {
             unreachable!("native code for {key} returned, so {key} is an installed compilation");
         };
         let Some(site) = resume.iter().find(|site| site.key == site_key) else {
@@ -831,11 +964,21 @@ impl JitCache {
         // **The frames inlining removed** (step 8). Each carries the buffer slot of every value it
         // needs, so this is a read rather than a layout calculation — where a frame's locals and
         // operands live was decided once, by the compiler, and is not re-derived here.
-        let inlined = site
-            .inlined
+        let mut inlined: Vec<VirtualState> = self.expanded(site, 0);
+        // **And the frames a real call removed** (group 4), which are the same list continued: a
+        // callee that could not finish left its state in its own region of the buffer, and its
+        // status word — parked in this site's link slot — says which of *its* sites to read.
+        let links = self.linked(site, 0, *buffer_slots, &mut inlined);
+        (ResumeState { pc: site.pc, locals, stack, inlined }, links)
+    }
+
+    /// The frames one site's **inlining** removed, read out of the region starting at `base`.
+    fn expanded(&self, site: &ResumeSite, base: usize) -> Vec<VirtualState> {
+        site.inlined
             .iter()
             .map(|frame| {
-                let read = |&(slot, kind): &(u32, Kind)| JitValue::of_value(kind, self.scratch[slot as usize]);
+                let read =
+                    |&(slot, kind): &(u32, Kind)| JitValue::of_value(kind, self.scratch[base + slot as usize]);
                 VirtualState {
                     unit: frame.unit,
                     pc: frame.pc,
@@ -843,17 +986,90 @@ impl JitCache {
                     stack: frame.stack.iter().map(read).collect(),
                 }
             })
-            .collect();
-        ResumeState { pc: site.pc, locals, stack, inlined }
+            .collect()
+    }
+
+    /// **Follows a real call's link**, appending the callee's frames and, recursively, whatever the
+    /// callee itself called. Answers how many links were followed.
+    ///
+    /// The whole of the nesting is two numbers. A callee's region starts one `buffer_slots` past
+    /// its caller's, which is the arithmetic the emitted call already used to hand over its buffer
+    /// pointer; and its resume key is the low half of the status word its caller parked in the link
+    /// slot, which is the very word the callee returned. Nothing is searched for and nothing is
+    /// guessed — the same two facts, read from the two sides of the boundary.
+    ///
+    /// The callee's **root** frame is a `VirtualState` like any other, and that is the point of
+    /// [`ResumeSite::frame_locals`]: from the interpreter's side there is no difference between a
+    /// frame an expansion removed and a frame a call removed, so `resume_from_jit` needs no case
+    /// for either.
+    ///
+    /// The recursion is bounded by the frame budget, which every call site spends at least one unit
+    /// of — see [`JitCache::NATIVE_FRAME_BUDGET`].
+    fn linked(&self, site: &ResumeSite, base: usize, buffer_slots: usize, out: &mut Vec<VirtualState>) -> usize {
+        let Some(link) = site.native else { return 0 };
+        let raw = self.scratch[base + link.link as usize];
+        let sub_key = raw as u32;
+        let sub_base = base + buffer_slots;
+        let Some(Entry::Compiled { resume, stack_base, buffer_slots: sub_slots, .. }) =
+            self.entries.get(&link.unit)
+        else {
+            unreachable!("a real call only enters a callee whose record this cache filled in");
+        };
+        let Some(sub) = resume.iter().find(|s| s.key == sub_key) else {
+            unreachable!("a callee parked {sub_key}, which is not one of its own resume sites");
+        };
+        out.push(VirtualState {
+            unit: link.unit,
+            pc: sub.pc,
+            // **Complete**, not differential: this frame was created by the call, so there is no
+            // interpreter frame underneath whose untouched slots could be left alone.
+            locals: sub
+                .frame_locals
+                .iter()
+                .enumerate()
+                .map(|(i, &kind)| JitValue::of_frame(kind, self.scratch[sub_base + i]))
+                .collect(),
+            stack: sub
+                .stack
+                .iter()
+                .enumerate()
+                .map(|(k, &kind)| JitValue::of_value(kind, self.scratch[sub_base + stack_base + k]))
+                .collect(),
+        });
+        out.extend(self.expanded(sub, sub_base));
+        1 + self.linked(sub, sub_base, *sub_slots, out)
     }
 
     /// [`Self::resume_state`] plus the one thing every caller wants counted: **how many frames
     /// inlining had removed** at this site. Every exit that hands a state back goes through here,
     /// so [`JitStats::virtual_frames`] cannot drift from what was actually rebuilt.
     fn resumed(&mut self, key: usize, site_key: u32) -> ResumeState {
-        let state = self.resume_state(key, site_key);
+        let (state, links) = self.resume_state(key, site_key);
         self.stats.virtual_frames += state.inlined.len();
+        self.stats.linked_exits += links;
         state
+    }
+
+    /// **The address of `key`'s [`NativeRecord`][super::compile::NativeRecord]**, minting it if this
+    /// is the first time anything has asked.
+    ///
+    /// It is what a compiled caller bakes in as an immediate, so three things have to be true of it
+    /// and all three are properties of this shape rather than of the caller's care. It is **stable**
+    /// — the record is boxed, so rehashing the map cannot move it. It **exists before the callee
+    /// does** — a site names a method long before (and possibly without ever) that method being
+    /// compiled, and a record whose `code` is zero is exactly the "not compiled" the call site
+    /// tests for. And it is **the same record the callee will fill**, which is what makes direct
+    /// recursion work: `f` bakes in `f`'s own record while `f` is still being emitted, and
+    /// [`install`][JitCache::install] fills it a moment later.
+    ///
+    /// `&mut` because minting is an insert. Called only from the compiler's resolvers, i.e. once
+    /// per site per compilation, and never while native code is running.
+    pub fn record_address(&self, key: usize) -> usize {
+        let mut records = self.records.borrow_mut();
+        let record = records.entry(key).or_default();
+        // The address outlives the borrow because the record is **boxed**: the map owns a pointer,
+        // and nothing ever removes or replaces the box a key maps to.
+        std::ptr::from_mut::<super::compile::NativeRecord>(&mut **record) as usize
     }
 
     /// **How many interpreter frames a deopt out of `key` can produce** — 1 for a method with
@@ -863,6 +1079,11 @@ impl JitCache {
     ///
     /// A method that is not compiled needs none, which is the answer that makes the caller's check
     /// harmless when the JIT has nothing to offer.
+    ///
+    /// **It is the compilation's own depth and not the chain's**, and that is exact rather than
+    /// optimistic: a *native* call inside this code spends the frame budget it was entered with and
+    /// refuses to make the call when the budget will not cover it, so no excursion ever rebuilds
+    /// more frames than the interpreter had room for when it checked this number.
     pub fn frames_needed(&self, key: usize) -> usize {
         match self.entries.get(&key) {
             Some(Entry::Compiled { frame_depth, .. }) => *frame_depth,
@@ -875,13 +1096,13 @@ impl JitCache {
     /// the `unsafe` block exist once.
     fn enter(
         &mut self,
+        crossing: Crossing,
         key: usize,
-        entry_pc: u32,
-        on_stack: bool,
         local: impl Fn(u16) -> Option<i64>,
         mut allocated: impl FnMut(usize, usize),
         mut remembered: impl FnMut(usize, usize),
     ) -> Option<OsrResult> {
+        let Crossing { entry_pc, on_stack, headroom } = crossing;
         if !self.enabled {
             return None;
         }
@@ -941,7 +1162,12 @@ impl JitCache {
         // the call and is not aliased: the compiled code is the only thing running. `entry_pc` is
         // 0 (the ordinary entry) or, from `run_osr`, checked to be one of this code's own entry
         // points — the two values the entry dispatch is built for.
-        let raw = unsafe { native.call(self.scratch.as_mut_ptr(), entry_pc as i64) };
+        // **The frame budget**, clamped to what the buffer can hold: the interpreter's own
+        // headroom against `MAX_FRAMES`, but never more regions than `install` sized the scratch
+        // for. Clamping is not a correctness compromise — a site that cannot pay hands the call
+        // back to the interpreter, which counts frames exactly.
+        let budget = headroom.min(Self::NATIVE_FRAME_BUDGET) as i64;
+        let raw = unsafe { native.call(self.scratch.as_mut_ptr(), entry_pc as i64, budget) };
         // **Before anything else**, and on every outcome: replay what native code allocated into the
         // heap's pending log. This is the fourth quarter of an Eden allocation (see the `new` arm in
         // `compile`), deferred exactly as far as it can be and no further — the interpreter has not
@@ -1154,7 +1380,7 @@ mod tests {
         for _ in 0..1000 {
             assert_eq!(c.on_entry(7), Decision::Interpret);
         }
-        assert_eq!(c.run(7, |_| Some(0), no_allocations, no_barriers), None);
+        assert_eq!(c.run(7, 64, |_| Some(0), no_allocations, no_barriers), None);
         assert_eq!(c.stats(), JitStats::default());
     }
 
@@ -1168,7 +1394,7 @@ mod tests {
         let code = add_two(&c);
         c.install(7, Ok(code), 2);
         assert_eq!(c.on_entry(7), Decision::Ready);
-        assert_eq!(c.run(7, |i| Some(i as i64 * 10 + 1), no_allocations, no_barriers), Some(returned(1 + 11)));
+        assert_eq!(c.run(7, 64, |i| Some(i as i64 * 10 + 1), no_allocations, no_barriers), Some(returned(1 + 11)));
         assert_eq!(c.stats().compiled, 1);
         assert_eq!(c.stats().rejected, 0);
         assert_eq!(c.stats().native_calls, 1);
@@ -1184,7 +1410,7 @@ mod tests {
         let code = add_two(&c);
         c.install(7, Ok(code), 2);
         // Slot 1 holds something that is not an int (a reference, a long, a double...).
-        assert_eq!(c.run(7, |i| (i != 1).then_some(3), no_allocations, no_barriers), None);
+        assert_eq!(c.run(7, 64, |i| (i != 1).then_some(3), no_allocations, no_barriers), None);
         assert_eq!(c.stats().unmarshallable, 1);
         assert_eq!(c.stats().native_calls, 0);
     }
@@ -1206,8 +1432,8 @@ mod tests {
         }
         let code = compiled(&c, &[0x1a, 0x1b, 0x6c, 0xac], 2, "(II)I");
         c.install(7, Ok(code), 2);
-        assert_eq!(c.run(7, |i| Some(if i == 0 { 100 } else { 7 }), no_allocations, no_barriers), Some(returned(14)));
-        let out = c.run(7, |i| Some(if i == 0 { 100 } else { 0 }), no_allocations, no_barriers);
+        assert_eq!(c.run(7, 64, |i| Some(if i == 0 { 100 } else { 7 }), no_allocations, no_barriers), Some(returned(14)));
+        let out = c.run(7, 64, |i| Some(if i == 0 { 100 } else { 0 }), no_allocations, no_barriers);
         assert_eq!(
             out,
             Some(OsrResult::Deopt(ResumeState {
@@ -1250,7 +1476,7 @@ mod tests {
         // Local 0 is the zero divisor *and* the branch flag, so this call takes the path that never
         // writes slot 2 — and the assertion below is that the answer does not depend on which path
         // it took, because the map says `Conflict` either way.
-        let out = c.run(9, |i| Some([0, 264, 4242][i as usize]), no_allocations, no_barriers);
+        let out = c.run(9, 64, |i| Some([0, 264, 4242][i as usize]), no_allocations, no_barriers);
         assert_eq!(
             out,
             Some(OsrResult::Deopt(ResumeState {
@@ -1302,7 +1528,7 @@ mod tests {
         // Enter at the loop header with i already at 5 and the bound at 9. Native code must run
         // the remaining four iterations and return 9 — not restart from `i = 0`, which is the one
         // thing an entry-point mix-up would look like.
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 9 }), no_allocations, no_barriers);
+        let out = c.run_osr(7, 2, 64, |i| Some(if i == 0 { 5 } else { 9 }), no_allocations, no_barriers);
         assert_eq!(out, Some(returned(9)));
         assert_eq!(c.stats().osr_entries, 1);
         assert_eq!(c.stats().native_calls, 1);
@@ -1315,7 +1541,7 @@ mod tests {
         let mut c = warm_loop();
         // pc 7 is the `iinc` — a real instruction, but not a loop header, so not an entry point.
         // Falling through the dispatch would run the method from pc 0 and answer 9 instead.
-        assert_eq!(c.run_osr(7, 7, |_| Some(0), no_allocations, no_barriers), None);
+        assert_eq!(c.run_osr(7, 7, 64, |_| Some(0), no_allocations, no_barriers), None);
         assert_eq!(c.stats().native_calls, 0, "nothing must have been entered");
     }
 
@@ -1326,7 +1552,7 @@ mod tests {
         // Raise the poll *before* entering: the first time the loop comes round to its header the
         // check fires, so exactly one iteration runs natively.
         c.poll_word().store(1, std::sync::atomic::Ordering::Release);
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 5 } else { 1_000_000 }), no_allocations, no_barriers);
+        let out = c.run_osr(7, 2, 64, |i| Some(if i == 0 { 5 } else { 1_000_000 }), no_allocations, no_barriers);
         // The state it comes back with is the state the interpreter has to resume from: local 0
         // advanced by exactly the one iteration that ran, the pc at the loop header, and an empty
         // operand stack — which is what a loop header being an entry point *means*.
@@ -1345,7 +1571,7 @@ mod tests {
         // Lower it again and the very same code runs the loop to the end — the poll is a
         // condition, not a mode.
         c.poll_word().store(0, std::sync::atomic::Ordering::Release);
-        let out = c.run_osr(7, 2, |i| Some(if i == 0 { 6 } else { 9 }), no_allocations, no_barriers);
+        let out = c.run_osr(7, 2, 64, |i| Some(if i == 0 { 6 } else { 9 }), no_allocations, no_barriers);
         assert_eq!(out, Some(returned(9)));
         assert_eq!(c.stats().safepoint_exits, 1);
     }
@@ -1382,7 +1608,7 @@ mod tests {
         assert_eq!(code.resume_sites.iter().map(|s| s.pc).collect::<Vec<_>>(), vec![0, 2]);
         c.install(7, Ok(code), 2);
         assert!(c.watches_back_edges(7));
-        let out = c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 0 }), no_allocations, no_barriers);
+        let out = c.run_osr(7, 0, 64, |i| Some(if i == 0 { 10 } else { 0 }), no_allocations, no_barriers);
         assert_eq!(
             out,
             Some(OsrResult::Deopt(ResumeState {
@@ -1394,7 +1620,7 @@ mod tests {
         );
         assert_eq!(c.stats().deopts, 1);
         assert!(!c.watches_back_edges(7), "OSR is closed after a deopt from a loop header");
-        assert_eq!(c.run_osr(7, 0, |i| Some(if i == 0 { 10 } else { 2 }), no_allocations, no_barriers), None, "and stays closed");
+        assert_eq!(c.run_osr(7, 0, 64, |i| Some(if i == 0 { 10 } else { 2 }), no_allocations, no_barriers), None, "and stays closed");
         assert_eq!(c.stats().native_calls, 1, "the second attempt never entered");
     }
 
@@ -1509,7 +1735,7 @@ mod tests {
         c.install(7, Ok(program), 1);
 
         let mut seen: Vec<(usize, usize)> = Vec::new();
-        let out = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)), no_barriers);
+        let out = c.run(7, 64, |_| Some(0), |offset, size| seen.push((offset, size)), no_barriers);
         assert!(matches!(out, Some(OsrResult::Returned(Some(JitValue::Reference(_))))));
         assert_eq!(
             seen,
@@ -1521,7 +1747,7 @@ mod tests {
         // objects, not four. A stale count here would replay references to objects that a
         // collection has since recycled — the one bookkeeping mistake that is silent.
         seen.clear();
-        let _ = c.run(7, |_| Some(0), |offset, size| seen.push((offset, size)), no_barriers);
+        let _ = c.run(7, 64, |_| Some(0), |offset, size| seen.push((offset, size)), no_barriers);
         assert_eq!(seen, vec![(TestEden::NULL_PAGE + 32, 16), (TestEden::NULL_PAGE + 48, 16)]);
     }
 
@@ -1553,7 +1779,7 @@ mod tests {
         c.install(7, Ok(program), 1);
 
         let mut seen = 0usize;
-        let out = c.run_osr(7, 2, |_| Some(0), |_, _| seen += 1, no_barriers);
+        let out = c.run_osr(7, 2, 64, |_| Some(0), |_, _| seen += 1, no_barriers);
         // The state contract is a deopt's — the interpreter resumes at the `new` that did not run.
         match out {
             Some(OsrResult::Deopt(state)) => assert_eq!(state.pc, 8),
@@ -1567,4 +1793,220 @@ mod tests {
         assert!(c.watches_back_edges(7), "an alloc exit must not retire the loop");
     }
 
+    /// A stand-in heap with **two generations**, which [`TestEden`] deliberately does not have: its
+    /// `old_start` is `u32::MAX`, so everything in it is young and the write barrier's filter can
+    /// never fire. A test about a *full* barrier log needs somewhere Old to store into.
+    ///
+    /// The split is `FakeHeap`'s in `compile_tests`, and biased the same way `HeapService::jit_bases`
+    /// biases the real one: an offset below `eden_end` is Eden's, anything above is the other
+    /// buffer's, and `old_start` sits exactly on the seam.
+    #[cfg(windows)]
+    struct TestGenerations {
+        eden: Vec<u8>,
+        old: Vec<u8>,
+    }
+
+    #[cfg(windows)]
+    impl TestGenerations {
+        const NULL_PAGE: usize = 8;
+        const EDEN_SIZE: usize = 256;
+        const EDEN_END: u32 = (Self::NULL_PAGE + Self::EDEN_SIZE) as u32;
+        const CAPACITY: usize = 1024;
+
+        fn new() -> TestGenerations {
+            TestGenerations { eden: vec![0; Self::EDEN_SIZE], old: vec![0; Self::CAPACITY] }
+        }
+
+        fn heap(&self) -> super::super::compile::Heap {
+            super::super::compile::Heap {
+                eden_base: self.eden.as_ptr() as usize - Self::NULL_PAGE,
+                other_base: self.old.as_ptr() as usize,
+                eden_end: Self::EDEN_END,
+                max_offset: Self::CAPACITY,
+                // No program here allocates, so there is no cursor to bump: a zero here is what
+                // `compile` reads as "this heap has no inline Eden", and every `new` would leave.
+                eden_cursor: 0,
+                eden_capacity: Self::EDEN_SIZE,
+                null_page: Self::NULL_PAGE as u32,
+                array_length: 8,
+                array_data: 12,
+                int_element: 4,
+                reference_element: 4,
+                old_start: Self::EDEN_END,
+            }
+        }
+
+        /// Writes a 4-byte word at a heap **offset**, routed to the buffer that offset belongs to —
+        /// the same two-armed decision the emitted code makes.
+        fn write(&mut self, offset: usize, value: i32) {
+            let bytes = value.to_le_bytes();
+            match offset < Self::EDEN_END as usize {
+                true => self.eden[offset - Self::NULL_PAGE..][..4].copy_from_slice(&bytes),
+                false => self.old[offset..][..4].copy_from_slice(&bytes),
+            }
+        }
+
+        fn read(&self, offset: usize) -> i32 {
+            let bytes: [u8; 4] = match offset < Self::EDEN_END as usize {
+                true => self.eden[offset - Self::NULL_PAGE..][..4].try_into().expect("four bytes"),
+                false => self.old[offset..][..4].try_into().expect("four bytes"),
+            };
+            i32::from_le_bytes(bytes)
+        }
+    }
+
+    /// The two mirrors every `aastore` in this file is profiled against — a pinned pair, and two
+    /// *different* numbers, so a test that swapped the array's check for the value's fails.
+    #[cfg(windows)]
+    const TEST_ARRAY_CLASS: u32 = 0x0300;
+    #[cfg(windows)]
+    const TEST_ELEMENT_CLASS: u32 = 0x0400;
+
+    /// [`compiled`] for a program that stores references into an array.
+    #[cfg(windows)]
+    fn compiled_astore(
+        c: &JitCache,
+        code: &[u8],
+        max_locals: usize,
+        signature: &str,
+        heap: &TestGenerations,
+    ) -> CompiledCode {
+        use super::super::compile::{ArrayStore, Environment, Method};
+        super::super::compile::compile(
+            &Method { unit: 0, code, max_locals, descriptor: signature, is_static: true, has_handlers: false },
+            &Environment {
+                int_const: &|_, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
+                instance: &|_, _| None,
+                array: &|_, _| None,
+                invoke: &|_, _, _| None,
+                heap: heap.heap(),
+                array_store: &|_, _| {
+                    Some(ArrayStore { array_class: TEST_ARRAY_CLASS, element_class: TEST_ELEMENT_CLASS })
+                },
+                class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
+                poll_word: c.poll_address(),
+            },
+        )
+        .unwrap()
+    }
+
+    /// **A full write-barrier log inside an `aastore` is re-entrable**, which is this fix's whole
+    /// claim and the one thing the compiler-side test cannot show: it takes a `JitCache` to know
+    /// whether the method's on-stack entry is still open, and a *second* excursion to know that
+    /// re-entering it makes progress.
+    ///
+    /// What this is a regression test for, in one number: `bench/BkRefA` stores 600 references per
+    /// call into a 256-record log, so it filled the log halfway through every call and — while a
+    /// full log reported `DEOPT` — retired its own on-stack entry on the first of its 1000 calls and
+    /// ran the rest interpreted. 1.7x, against 112x for `bench/BkRefW`, which is the same barrier
+    /// and the same log reached through a `putfield`.
+    ///
+    /// Three things are asserted and each fails on its own for a different mistake: the *status*
+    /// (a `DEOPT` here is the bug), the *re-entry* (an exit that leaves the method uncallable is a
+    /// different bug with the same symptom), and the *log* — every pair recorded reaches the caller,
+    /// on both excursions, because an exit that drops the log frees a live object at the next minor
+    /// collection and nothing else would notice.
+    #[test]
+    #[cfg(windows)]
+    fn a_full_barrier_log_in_an_aastore_is_re_entrable() {
+        let mut c = cache();
+        let mut heap = TestGenerations::new();
+        // An **Old** array of the profiled class at offset 512, and a **young** value of its element
+        // class at offset 100: the one combination the barrier's filter passes, so every iteration
+        // costs a record and the log fills.
+        heap.write(512, TEST_ARRAY_CLASS as i32);
+        heap.write(512 + 8, 1); // length
+        heap.write(100, TEST_ELEMENT_CLASS as i32);
+
+        //  0: iconst_0; istore_2                                  i = 0
+        //  2: iload_2; sipush n; if_icmpge +13 (-> 19)             <- the loop header
+        //  9: aload_0; iconst_0; aload_1; aastore                  arr[0] = v
+        // 13: iinc 2 1; goto -14 (-> 2)
+        // 19: iload_2; ireturn                                     the trip count
+        let n = super::super::compile::BARRIER_LOG_RECORDS as i32 + 8;
+        let code = [
+            0x03, 0x3d, // 0: iconst_0; istore_2
+            0x1c, 0x11, (n >> 8) as u8, n as u8, 0xa2, 0x00, 0x0d, // 2
+            0x2a, 0x03, 0x2b, 0x53, // 9: aload_0; iconst_0; aload_1; aastore
+            0x84, 0x02, 0x01, 0xa7, 0xff, 0xf2, // 13
+            0x1c, 0xac, // 19
+        ];
+        let program = compiled_astore(&c, &code, 3, "([Ljava/lang/Object;Ljava/lang/Object;)I", &heap);
+        assert_eq!(program.osr_entries, vec![2], "the loop header");
+        assert_eq!(program.barrier_records, super::super::compile::BARRIER_LOG_RECORDS);
+        c.install(7, Ok(program), 3);
+
+        let enter = |c: &mut JitCache, i: i64, seen: &mut Vec<(usize, usize)>| {
+            c.run_osr(
+                7,
+                2,
+                64,
+                |k| Some(match k {
+                    0 => 512,
+                    1 => 100,
+                    _ => i,
+                }),
+                no_allocations,
+                |holder, value| seen.push((holder, value)),
+            )
+        };
+
+        // **The first excursion** runs until the log is full and leaves at the `aastore` that could
+        // not record — with the loop counter at exactly the log's capacity, since one iteration
+        // logs one pair.
+        let mut seen = Vec::new();
+        let out = enter(&mut c, 0, &mut seen);
+        let records = super::super::compile::BARRIER_LOG_RECORDS as usize;
+        let resumed = match out {
+            Some(OsrResult::Deopt(state)) => state,
+            other => panic!("expected a resume at the `aastore`, got {other:?}"),
+        };
+        assert_eq!(resumed.pc, 12, "the interpreter resumes at the `aastore` that did not run");
+        assert_eq!(
+            resumed.locals.iter().find(|(i, _)| *i == 2).map(|(_, v)| *v),
+            Some(JitValue::Int(records as i32)),
+            "one iteration logs one pair, so the counter is exactly the log's capacity"
+        );
+        // The operand stack the new exit hands back is the `aastore`'s three operands, in JVMS
+        // order — spilled by the capacity stub exactly as the guard stub beside it would have. A
+        // stub that leaves without spilling hands the interpreter a state it cannot re-execute, and
+        // nothing else here would notice.
+        assert_eq!(
+            resumed.stack,
+            vec![JitValue::Reference(512), JitValue::Int(0), JitValue::Reference(100)],
+            "the array, the index and the value, as the instruction was entered with them"
+        );
+        assert_eq!(
+            c.stats().deopts,
+            0,
+            "a full write-barrier log is a capacity condition, not a failed guard — counting it as \
+             a deopt is what closed BkRefA's on-stack entry on its first call"
+        );
+        assert_eq!(c.stats().alloc_exits, 1);
+        assert_eq!(seen.len(), records, "every pair native code recorded reached the caller");
+        assert!(seen.iter().all(|&pair| pair == (512, 100)), "holder and value, in that order");
+        assert_eq!(heap.read(512 + 12), 100, "and the store itself happened");
+
+        // **The decisive assertion.** On-stack entry is still open, so the loop comes back in — and
+        // the second excursion, starting with a drained log, runs the remaining eight iterations to
+        // the `ireturn`. Both halves matter: `watches_back_edges` says the interpreter would still
+        // offer this loop, and the entry says it is actually taken.
+        assert!(c.watches_back_edges(7), "a full barrier log must not retire the loop");
+        seen.clear();
+        let out = enter(&mut c, records as i64, &mut seen);
+        assert_eq!(
+            out,
+            Some(OsrResult::Returned(Some(JitValue::Int(n)))),
+            "the re-entered loop runs to completion"
+        );
+        assert_eq!(seen.len(), n as usize - records, "and its own pairs reached the caller too");
+        assert_eq!(c.stats().native_calls, 2, "two excursions, and the second really entered");
+        assert_eq!(c.stats().deopts, 0, "neither of them was a deopt");
+    }
 }

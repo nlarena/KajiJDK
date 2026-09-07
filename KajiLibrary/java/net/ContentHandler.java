@@ -2,42 +2,42 @@ package java.net;
 
 import java.io.IOException;
 
-// El que convierte el cuerpo de una respuesta en un objeto de Java.
+// The one that turns a response's body into a Java object.
 //
-// Un `ContentHandler` es lo que hace que `url.getContent()` pueda devolver una `Image` y no un
-// `InputStream`: se lo elige por el tipo MIME de la respuesta, y el sabe leer ese tipo.
+// A `ContentHandler` is what lets `url.getContent()` return an `Image` and not an `InputStream`: it
+// is chosen by the response's MIME type, and it knows how to read that type.
 //
 // ===========================================================================================
-// ENTRA ENTERA, Y NO ES UNA CONCESION
+// IT GOES IN WHOLE, AND IT IS NOT A CONCESSION
 // ===========================================================================================
 //
-// Es abstracta y su unico metodo abstracto --`getContent(URLConnection)`-- lo escribe quien
-// extiende. Esta clase no lee de la red: recibe una conexion ya abierta por otro y le pide el
-// flujo. Lo unico que aporta de propio es la sobrecarga con `Class[]`, que es filtrado puro sobre
-// el resultado del abstracto.
+// It is abstract and its only abstract method --`getContent(URLConnection)`-- is written by whoever
+// extends it. This class does not read from the network: it receives a connection someone else has
+// already opened and asks it for the stream. The only thing of its own it contributes is the
+// `Class[]` overload, which is pure filtering over the abstract method's result.
 //
-// Lo que no hay en KajiJDK es un CATALOGO de manejadores --el JDK trae los suyos para `text/plain`,
-// `image/gif` y demas, en paquetes internos--. Eso no es parte de esta clase: es de
-// `URLConnection`, que aca solo consulta la factoria que la aplicacion instale.
+// What KajiJDK does not have is a CATALOGUE of handlers --the JDK ships its own for `text/plain`,
+// `image/gif` and the rest, in internal packages. That is not part of this class: it belongs to
+// `URLConnection`, which here only consults the factory the application installs.
 public abstract class ContentHandler {
 
     public ContentHandler() {
     }
 
     /**
-     * Lee el cuerpo de {@code urlc} y lo devuelve como objeto.
+     * Reads {@code urlc}'s body and returns it as an object.
      *
-     * @throws IOException si falla la lectura
+     * @throws IOException if the read fails
      */
     public abstract Object getContent(URLConnection urlc) throws IOException;
 
     /**
-     * Como {@link #getContent(URLConnection)}, pero solo si el resultado es de alguno de los tipos
-     * pedidos; si no, null.
+     * Like {@link #getContent(URLConnection)}, but only if the result is of one of the requested
+     * types; otherwise null.
      *
-     * <p>Existe para que el llamador pueda decir "dame esto **si** lo podes dar como una `Image`",
-     * y no tener que hacer el `instanceof` y descartar despues de haber leido todo. Que devuelva
-     * null en vez de tirar es a proposito: no encontrar el tipo pedido no es un error de IO.
+     * <p>It exists so that the caller can say "give me this **if** you can give it as an `Image`",
+     * and not have to do the `instanceof` and discard after having read everything. That it returns
+     * null instead of throwing is on purpose: not finding the requested type is not an I/O error.
      */
     public Object getContent(URLConnection urlc, Class[] classes) throws IOException {
         Object obj = this.getContent(urlc);

@@ -1,10 +1,10 @@
 package java.net;
 
-// La familia de protocolos de una direccion: IPv4, IPv6, o sockets de dominio Unix.
+// An address's protocol family: IPv4, IPv6, or Unix-domain sockets.
 //
-// Un solo metodo, `name()`, y esa es la gracia: la interfaz existe para que las APIs que abren
-// canales puedan aceptar familias que no sean las tres estandar sin cambiar sus firmas. El
-// enum `StandardProtocolFamily` la implementa; cualquiera puede aportar otra.
+// A single method, `name()`, and that is the point: the interface exists so that the APIs that open
+// channels can accept families other than the three standard ones without changing their signatures.
+// The `StandardProtocolFamily` enum implements it; anyone can contribute another.
 public interface ProtocolFamily {
 
     String name();

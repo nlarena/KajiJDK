@@ -2,39 +2,39 @@ package java.net;
 
 import java.util.List;
 
-// Donde viven las cookies guardadas.
+// Where the stored cookies live.
 //
-// El almacen se define como interfaz --y no como una clase concreta-- porque la persistencia es
-// decision de la aplicacion: en memoria mientras dure el proceso, en un archivo, o compartida entre
-// varios. `CookieManager` usa uno en memoria si no le dan otro.
+// The store is defined as an interface --and not as a concrete class-- because persistence is the
+// application's decision: in memory for as long as the process lasts, in a file, or shared between
+// several. `CookieManager` uses an in-memory one if it is not given another.
 //
-// Las dos consultas no son la misma: `get(URI)` devuelve las que **le corresponden** a esa URI
-// aplicando las reglas de dominio, y `getCookies()` devuelve todas. La primera es la que usa el
-// cliente HTTP; la segunda, quien quiera inspeccionar o exportar el almacen.
+// The two queries are not the same: `get(URI)` returns the ones that **belong** to that URI, applying
+// the domain rules, and `getCookies()` returns all of them. The first is the one the HTTP client
+// uses; the second, whoever wants to inspect or export the store.
 //
-// Guardar y buscar es computacion pura. Nada omitido.
+// Keeping and looking up is pure computation. Nothing omitted.
 public interface CookieStore {
 
     /**
-     * Guarda {@code cookie} como venida de {@code uri}.
+     * Stores {@code cookie} as having come from {@code uri}.
      *
-     * <p>Si ya habia una con el mismo nombre, dominio y ruta, la reemplaza: esos tres campos son la
-     * identidad de una cookie (ver {@link HttpCookie#equals}).
+     * <p>If there was already one with the same name, domain and path, it replaces it: those three
+     * fields are a cookie's identity (see {@link HttpCookie#equals}).
      */
     void add(URI uri, HttpCookie cookie);
 
-    /** Las cookies que le corresponden a {@code uri}, ya descartadas las vencidas. */
+    /** The cookies that belong to {@code uri}, with the expired ones already discarded. */
     List<HttpCookie> get(URI uri);
 
-    /** Todas las cookies vivas del almacen. */
+    /** Every live cookie in the store. */
     List<HttpCookie> getCookies();
 
-    /** Las URIs que tienen alguna cookie asociada. */
+    /** The URIs that have some cookie associated with them. */
     List<URI> getURIs();
 
-    /** Saca esa cookie. Devuelve si estaba. */
+    /** Removes that cookie. Returns whether it was there. */
     boolean remove(URI uri, HttpCookie cookie);
 
-    /** Vacia el almacen. Devuelve si habia algo que sacar. */
+    /** Empties the store. Returns whether there was anything to remove. */
     boolean removeAll();
 }

@@ -138,9 +138,9 @@ public final class Cleaner {
         }
 
         public void run() {
-            // `poll()` y no `remove()`: nuestro `ReferenceQueue` todavia no tiene la forma
-            // bloqueante, asi que el lazo cede el procesador cuando no hay nada. Cuando exista
-            // `remove()` esto pasa a ser una espera de verdad en vez de una vuelta en vacio.
+            // `poll()` and not `remove()`: our `ReferenceQueue` has no blocking form yet, so the
+            // loop yields the processor when there is nothing. Once `remove()` exists this becomes a
+            // real wait instead of a spin.
             boolean running = true;
             while (running) {
                 Reference ref = queue.poll();

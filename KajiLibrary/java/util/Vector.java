@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Iterator;
@@ -31,7 +33,7 @@ import java.util.RandomAccess;
 //
 // Subset of the JDK's: the bulk operations (addAll/removeAll/retainAll), subList, the
 // ListIterator, clone and serialization are not modelled.
-public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess {
+public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess, Serializable, Cloneable {
 
     // Protected, as in the JDK: these three *are* Vector's public surface for a subclass —
     // {@link Stack} reads them directly rather than going through the locked accessors.
@@ -48,7 +50,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     public Vector(int initialCapacity) {
         if (initialCapacity < 0) {
-            throw new IllegalArgumentException("Illegal Capacity");
+            throw new IllegalArgumentException("Illegal Capacity: " + initialCapacity);
         }
         elementData = new Object[initialCapacity];
         capacityIncrement = 0;
@@ -56,7 +58,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess 
 
     public Vector(int initialCapacity, int capacityIncrement) {
         if (initialCapacity < 0) {
-            throw new IllegalArgumentException("Illegal Capacity");
+            throw new IllegalArgumentException("Illegal Capacity: " + initialCapacity);
         }
         elementData = new Object[initialCapacity];
         this.capacityIncrement = capacityIncrement;

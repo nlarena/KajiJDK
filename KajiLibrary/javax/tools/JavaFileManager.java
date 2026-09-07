@@ -10,77 +10,72 @@ import java.util.Set;
 // write "files" without knowing what a file is. Every lookup is (location, name, kind), so
 // the same front end works over a directory tree, a jar, or a map held in memory.
 //
-// OMITIDOS — salida (a), omitir el miembro. Dos causas distintas:
+// Six members used to be missing here, for two different reasons.
 //
-// 1) Tipos que no existen en KajiLibrary:
-//      - `ClassLoader getClassLoader(Location)`             -> no hay java.lang.ClassLoader.
-//      - `<S> ServiceLoader<S> getServiceLoader(Location, Class<S>)` -> no hay ServiceLoader.
+// 1) Types that did not exist in KajiLibrary: `ClassLoader getClassLoader(Location)` and
+//    `<S> ServiceLoader<S> getServiceLoader(Location, Class<S>)`.
 //
-// 2) Defecto del compilador congelado: un tipo anidado declarado en OTRA unidad de
-//    compilacion no se puede nombrar (ver el informe; `JavaFileObject.Kind` da error duro y
-//    `import javax.tools.JavaFileObject.Kind` degrada a Object en silencio). Por eso caen
-//    los cuatro miembros que mencionan Kind:
-//      - `Iterable<JavaFileObject> list(Location, String, Set<JavaFileObject.Kind>, boolean)`
-//      - `JavaFileObject getJavaFileForInput(Location, String, JavaFileObject.Kind)`
-//      - `JavaFileObject getJavaFileForOutput(Location, String, JavaFileObject.Kind, FileObject)`
-//      - `JavaFileObject getJavaFileForOutputForOriginatingFiles(Location, String, JavaFileObject.Kind, FileObject...)`
-//    Se dejan los imports de Iterator y Set porque los demas miembros si los usan.
+// 2) A defect of the frozen compiler: a nested type declared in ANOTHER compilation unit could not be
+//    named (see the report; `JavaFileObject.Kind` was a hard error and
+//    `import javax.tools.JavaFileObject.Kind` silently degraded to Object). That took down the four
+//    members mentioning Kind: `list`, `getJavaFileForInput`, `getJavaFileForOutput` and
+//    `getJavaFileForOutputForOriginatingFiles`.
 //
-// `Location`, en cambio, se declara aca adentro: dentro de la misma unidad de compilacion el
-// tipo anidado si resuelve.
+// Both causes are gone and all six are here. `Location` was always declarable inside this file: a
+// nested type does resolve within its own compilation unit.
 public interface JavaFileManager extends Closeable, Flushable, OptionChecker {
 
-    // Donde buscar, o donde dejar. El JDK la trata como token opaco: StandardLocation trae
-    // las trece canonicas y un file manager puede inventar las suyas.
+    // Where to look, or where to put things. The JDK treats it as an opaque token:
+    // StandardLocation brings the thirteen canonical ones and a file manager may invent its own.
     public interface Location {
 
         String getName();
 
         boolean isOutputLocation();
 
-        // El JDK real pregunta si el nombre contiene "MODULE"; sin String.contains en la
-        // biblioteca, el default conservador es "no".
+        // The real JDK asks whether the name contains "MODULE"; without String.contains in the
+        // library, the conservative default is "no".
         default boolean isModuleOrientedLocation() {
             return false;
         }
     }
 
     /**
-     * El cargador con el que correr las herramientas que viven en esa ubicacion.
+     * The loader to run the tools living at that location with.
      *
-     * <p>Existe por los procesadores de anotaciones: son codigo del usuario que el compilador tiene
-     * que **ejecutar**, y hay que cargarlo de algun lado sin mezclarlo con el classpath de lo que se
-     * esta compilando.
+     * <p>It exists because of annotation processors: they are user code the compiler has to
+     * **execute**, and it has to be loaded from somewhere without mixing it with the classpath of
+     * what is being compiled.
      *
-     * @return el cargador, o `null` si la ubicacion no lo admite
+     * @return the loader, or `null` if the location does not admit one
      */
     ClassLoader getClassLoader(Location location);
 
     /**
-     * Todos los objetos de esa ubicacion y ese paquete, de las clases de archivo pedidas.
+     * Every object at that location and in that package, of the requested file kinds.
      *
-     * <p>Es la operacion central del gestor: es como el compilador **descubre** que hay en un
-     * paquete sin que nadie se lo enumere.
+     * <p>It is the manager's central operation: it is how the compiler **discovers** what is in a
+     * package without anyone enumerating it for it.
      *
-     * @param recurse si tambien mirar los subpaquetes
+     * @param recurse whether to look into the subpackages too
      */
     Iterable<JavaFileObject> list(Location location, String packageName,
             Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException;
 
-    /** El objeto de **entrada** de esa clase binaria, o `null` si no esta. */
+    /** The **input** object for that binary class, or `null` if it is not there. */
     JavaFileObject getJavaFileForInput(Location location, String className,
             JavaFileObject.Kind kind) throws IOException;
 
     /**
-     * El objeto de **salida** para esa clase binaria.
+     * The **output** object for that binary class.
      *
-     * <p>`sibling` es una pista, no un dato: el gestor puede usarla para poner la salida al lado de
-     * la fuente que la origino. Puede ser `null`.
+     * <p>`sibling` is a hint, not a fact: the manager may use it to put the output next to the source
+     * that originated it. It may be `null`.
      */
     JavaFileObject getJavaFileForOutput(Location location, String className,
             JavaFileObject.Kind kind, FileObject sibling) throws IOException;
 
-    /** Igual, con **todas** las fuentes que lo originan; la primera hace de `sibling`. */
+    /** The same, with **all** the sources that originate it; the first acts as `sibling`. */
     default JavaFileObject getJavaFileForOutputForOriginatingFiles(Location location,
             String className, JavaFileObject.Kind kind, FileObject... originatingFiles)
             throws IOException {
@@ -92,12 +87,12 @@ public interface JavaFileManager extends Closeable, Flushable, OptionChecker {
     }
 
     /**
-     * Los servicios de ese tipo que hay en esa ubicacion.
+     * The services of that type at that location.
      *
-     * <p>Es como el compilador encuentra los procesadores de anotaciones declarados por
-     * `META-INF/services`. **Devuelve un cargador vacio**: esta biblioteca no lee ese directorio de
-     * servicios, y un cargador vacio es exactamente lo que el JDK devuelve para una ubicacion que no
-     * declara ninguno.
+     * <p>It is how the compiler finds the annotation processors declared through
+     * `META-INF/services`. **It returns an empty loader**: this library does not read that services
+     * directory, and an empty loader is exactly what the JDK returns for a location that declares
+     * none.
      */
     default <S> java.util.ServiceLoader<S> getServiceLoader(Location location, Class<S> service)
             throws IOException {
@@ -124,10 +119,10 @@ public interface JavaFileManager extends Closeable, Flushable, OptionChecker {
         return getFileForOutput(location, packageName, relativeName, sibling);
     }
 
-    // Sin `throws IOException`, a proposito: el `java.io.Flushable` / `java.io.Closeable` de
-    // KajiLibrary declara `void flush()` / `void close()` SIN excepcion (a diferencia del JDK
-    // real), y el javac congelado rechaza ensanchar el throws de un metodo heredado (§8.4.8.3).
-    // El descriptor es identico al del JDK; lo unico que falta es el atributo Exceptions.
+    // Without `throws IOException`, on purpose: KajiLibrary's `java.io.Flushable` /
+    // `java.io.Closeable` declares `void flush()` / `void close()` WITHOUT the exception (unlike the
+    // real JDK), and the frozen javac refuses to widen an inherited method's throws (§8.4.8.3). The
+    // descriptor is identical to the JDK's; the only thing missing is the Exceptions attribute.
     void flush();
 
     void close();

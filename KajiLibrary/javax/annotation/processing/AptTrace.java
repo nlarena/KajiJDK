@@ -1,8 +1,8 @@
 package javax.annotation.processing;
-// Puente de salida mínimo para el round loop de APT (fase 2): un processor imprime llamando a este
-// método estático, que la VM despacha a un native (escribe en la consola del intérprete). Existe
-// porque `System.out.println` todavía no compila en el javac del proyecto (la resolución de
-// `System.out` como campo estático falla); es la versión mínima de un `Messager` que delega en Rust.
+// Minimal output bridge for APT's round loop (phase 2): a processor prints by calling this static
+// method, which the VM dispatches to a native (it writes to the interpreter's console). It exists
+// because `System.out.println` does not compile yet in the project's javac (resolving `System.out`
+// as a static field fails); it is the minimal version of a `Messager` delegating to Rust.
 public class AptTrace {
     public static native void trace(String msg);
 }

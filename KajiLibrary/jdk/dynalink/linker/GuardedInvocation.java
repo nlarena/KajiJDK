@@ -11,39 +11,39 @@ import java.util.Objects;
 import jdk.dynalink.CallSiteDescriptor;
 
 /**
- * Un metodo mas las condiciones bajo las cuales sigue siendo el correcto.
+ * A method handle plus the conditions under which it goes on being the right one.
  *
- * <h2>Por que el enlace es esto y no un metodo a secas</h2>
+ * <h2>Why a link is this and not a bare method handle</h2>
  *
- * <p>Porque enlazar sale caro y llamar sale barato. Si la respuesta del enlazador fuera solo "para
- * estos argumentos, llama a esto", habria que preguntar en cada invocacion y el enlace no serviria
- * de nada. La respuesta util es "mientras se cumpla esto, llama a esto", y las tres formas de
- * decir "mientras se cumpla esto" son las tres partes opcionales de esta clase.
+ * <p>Because linking is expensive and calling is cheap. If the linker's answer were only "for these
+ * arguments, call this", it would have to be asked on every invocation and linking would be worth
+ * nothing. The useful answer is "as long as this holds, call this", and the three ways of saying "as
+ * long as this holds" are this class's three optional parts.
  *
- * <h2>Las tres condiciones, y por que son tres y no una</h2>
+ * <h2>The three conditions, and why they are three and not one</h2>
  *
- * <p><strong>La guarda</strong> es un metodo que devuelve {@code boolean} y recibe los mismos
- * argumentos (o un prefijo de ellos). Se evalua en <strong>cada</strong> invocacion. Es la
- * condicion que depende de los valores: "el receptor sigue siendo de esta clase".
+ * <p><strong>The guard</strong> is a method handle returning {@code boolean} and taking the same
+ * arguments (or a prefix of them). It is evaluated on <strong>every</strong> invocation. It is the
+ * condition that depends on the values: "the receiver is still of this class".
  *
- * <p><strong>Los switch points</strong> no se evaluan nunca: son un interruptor global que alguien
- * baja una sola vez, y hasta entonces el JIT puede borrar el chequeo por completo. Es la condicion
- * que depende del mundo y no de los argumentos — "nadie redefinio este metodo todavia". Costo cero
- * mientras nada cambie, que es la razon de que existan aparte de la guarda.
+ * <p><strong>The switch points</strong> are never evaluated: they are a global switch someone throws
+ * exactly once, and until then the JIT can erase the check entirely. It is the condition that depends
+ * on the world and not on the arguments — "nobody has redefined this method yet". Zero cost while
+ * nothing changes, which is the reason they exist apart from the guard.
  *
- * <p><strong>La excepcion</strong> es la condicion que solo se descubre intentando. Si la
- * invocacion tira esa clase de excepcion, se considera que el enlace no valia y se reintenta por
- * el camino lento. Sirve para lo que seria carisimo chequear por adelantado.
+ * <p><strong>The exception</strong> is the condition that is only discovered by trying. If the
+ * invocation throws that class of exception, the link is taken to have been invalid and the slow path
+ * is retried. It serves for what would be far too expensive to check up front.
  *
- * <p>Las tres son opcionales y componen en ese orden inverso al que se enumeran: primero los
- * switch points, adentro la captura de excepcion, y mas adentro la guarda. Se ve en
+ * <p>All three are optional and they compose in the reverse of the order they are listed in: switch
+ * points first, the exception catch inside them, and the guard further in. It can be seen in
  * {@link #compose}.
  *
- * <h2>Inmutable</h2>
+ * <h2>Immutable</h2>
  *
- * <p>Todos los metodos que parecen modificar —{@link #asType}, {@link #addSwitchPoint},
- * {@link #dropArguments}— devuelven una instancia nueva. Tiene que ser asi porque una misma
- * invocacion enlazada se comparte entre sitios y entre hilos.
+ * <p>Every method that looks like a mutator —{@link #asType}, {@link #addSwitchPoint},
+ * {@link #dropArguments}— returns a new instance. It has to be that way because one linked invocation
+ * is shared between sites and between threads.
  *
  * @since 9
  */
@@ -55,40 +55,40 @@ public class GuardedInvocation {
     private final Class<? extends Throwable> exception;
 
     /**
-     * Una invocacion sin condiciones: siempre vale.
+     * An invocation with no conditions: it always holds.
      *
-     * @param invocation el metodo
+     * @param invocation the method handle
      */
     public GuardedInvocation(final MethodHandle invocation) {
         this(invocation, null, (SwitchPoint[]) null, null);
     }
 
     /**
-     * Con guarda.
+     * With a guard.
      *
-     * @param invocation el metodo
-     * @param guard la guarda, o {@code null}
+     * @param invocation the method handle
+     * @param guard the guard, or {@code null}
      */
     public GuardedInvocation(final MethodHandle invocation, final MethodHandle guard) {
         this(invocation, guard, (SwitchPoint[]) null, null);
     }
 
     /**
-     * Con un switch point.
+     * With a switch point.
      *
-     * @param invocation el metodo
-     * @param switchPoint el interruptor, o {@code null}
+     * @param invocation the method handle
+     * @param switchPoint the switch, or {@code null}
      */
     public GuardedInvocation(final MethodHandle invocation, final SwitchPoint switchPoint) {
         this(invocation, null, switchPoint, null);
     }
 
     /**
-     * Con guarda y un switch point.
+     * With a guard and a switch point.
      *
-     * @param invocation el metodo
-     * @param guard la guarda, o {@code null}
-     * @param switchPoint el interruptor, o {@code null}
+     * @param invocation the method handle
+     * @param guard the guard, or {@code null}
+     * @param switchPoint the switch, or {@code null}
      */
     public GuardedInvocation(final MethodHandle invocation, final MethodHandle guard,
             final SwitchPoint switchPoint) {
@@ -96,12 +96,12 @@ public class GuardedInvocation {
     }
 
     /**
-     * Con las tres condiciones, en su forma de un solo switch point.
+     * With all three conditions, in the single-switch-point form.
      *
-     * @param invocation el metodo
-     * @param guard la guarda, o {@code null}
-     * @param switchPoint el interruptor, o {@code null}
-     * @param exception la excepcion que invalida el enlace, o {@code null}
+     * @param invocation the method handle
+     * @param guard the guard, or {@code null}
+     * @param switchPoint the switch, or {@code null}
+     * @param exception the exception that invalidates the link, or {@code null}
      */
     public GuardedInvocation(final MethodHandle invocation, final MethodHandle guard,
             final SwitchPoint switchPoint, final Class<? extends Throwable> exception) {
@@ -110,49 +110,49 @@ public class GuardedInvocation {
     }
 
     /**
-     * Con las tres condiciones y varios switch points.
+     * With all three conditions and several switch points.
      *
-     * <p>Es el constructor al que llaman todos los demas.
+     * <p>It is the constructor every other one calls.
      *
-     * @param invocation el metodo; no puede ser {@code null}
-     * @param guard la guarda, o {@code null}
-     * @param switchPoints los interruptores, o {@code null}
-     * @param exception la excepcion que invalida el enlace, o {@code null}
+     * @param invocation the method handle; it cannot be {@code null}
+     * @param guard the guard, or {@code null}
+     * @param switchPoints the switches, or {@code null}
+     * @param exception the exception that invalidates the link, or {@code null}
      */
     public GuardedInvocation(final MethodHandle invocation, final MethodHandle guard,
             final SwitchPoint[] switchPoints, final Class<? extends Throwable> exception) {
         this.invocation = Objects.requireNonNull(invocation);
         this.guard = guard;
-        // Se copia al entrar y al salir: el arreglo es de quien lo paso y no queremos que
-        // modificarlo despues cambie un enlace que ya se esta usando.
+        // Copied on the way in and on the way out: the array belongs to whoever passed it and we do
+        // not want a later change to it to alter a link that is already in use.
         this.switchPoints = switchPoints == null ? null : switchPoints.clone();
         this.exception = exception;
     }
 
-    /** El metodo a invocar. */
+    /** The method handle to invoke. */
     public MethodHandle getInvocation() {
         return invocation;
     }
 
-    /** La guarda, o {@code null} si no hay. */
+    /** The guard, or {@code null} if there is none. */
     public MethodHandle getGuard() {
         return guard;
     }
 
-    /** Los interruptores, o {@code null} si no hay. Es una copia. */
+    /** The switches, or {@code null} if there are none. It is a copy. */
     public SwitchPoint[] getSwitchPoints() {
         return switchPoints == null ? null : switchPoints.clone();
     }
 
-    /** La excepcion que invalida el enlace, o {@code null}. */
+    /** The exception that invalidates the link, or {@code null}. */
     public Class<? extends Throwable> getException() {
         return exception;
     }
 
     /**
-     * Si alguno de los interruptores ya se bajo.
+     * Whether any of the switches has already been thrown.
      *
-     * <p>Sirve para descartar de antemano un enlace que se sabe muerto, sin llegar a armarlo.
+     * <p>It serves to discard up front a link known to be dead, without getting as far as building it.
      */
     public boolean hasBeenInvalidated() {
         if (switchPoints == null) {
@@ -167,11 +167,11 @@ public class GuardedInvocation {
     }
 
     /**
-     * La misma invocacion con otro metodo y otra guarda, conservando las demas condiciones.
+     * The same invocation with another method handle and another guard, keeping the other conditions.
      *
-     * @param newInvocation el metodo nuevo
-     * @param newGuard la guarda nueva, o {@code null}
-     * @return la invocacion derivada
+     * @param newInvocation the new method handle
+     * @param newGuard the new guard, or {@code null}
+     * @return the derived invocation
      */
     public GuardedInvocation replaceMethods(final MethodHandle newInvocation,
             final MethodHandle newGuard) {
@@ -179,94 +179,94 @@ public class GuardedInvocation {
     }
 
     /**
-     * Un interruptor mas.
+     * One more switch.
      *
-     * @param newSwitchPoint el interruptor, o {@code null} para no agregar nada
-     * @return la invocacion derivada, o {@code this} si no habia nada que agregar
+     * @param newSwitchPoint the switch, or {@code null} to add nothing
+     * @return the derived invocation, or {@code this} if there was nothing to add
      */
     public GuardedInvocation addSwitchPoint(final SwitchPoint newSwitchPoint) {
         if (newSwitchPoint == null) {
             return this;
         }
-        final SwitchPoint[] nuevos;
+        final SwitchPoint[] updated;
         if (switchPoints == null) {
-            nuevos = new SwitchPoint[] { newSwitchPoint };
+            updated = new SwitchPoint[] { newSwitchPoint };
         } else {
-            nuevos = Arrays.copyOf(switchPoints, switchPoints.length + 1);
-            nuevos[switchPoints.length] = newSwitchPoint;
+            updated = Arrays.copyOf(switchPoints, switchPoints.length + 1);
+            updated[switchPoints.length] = newSwitchPoint;
         }
-        return new GuardedInvocation(invocation, guard, nuevos, exception);
+        return new GuardedInvocation(invocation, guard, updated, exception);
     }
 
     /**
-     * Adaptada a otra firma, con las conversiones de Java.
+     * Adapted to another signature, with Java's conversions.
      *
-     * @param newType la firma pedida
-     * @return la invocacion adaptada
+     * @param newType the requested signature
+     * @return the adapted invocation
      */
     public GuardedInvocation asType(final MethodType newType) {
         return replaceMethods(invocation.asType(newType),
-                guard == null ? null : guard.asType(tipoDeGuarda(guard, newType)));
+                guard == null ? null : guard.asType(guardType(guard, newType)));
     }
 
     /**
-     * Adaptada a otra firma, con las conversiones de los lenguajes tambien.
+     * Adapted to another signature, with the languages' conversions as well.
      *
-     * @param linkerServices los servicios que aportan esas conversiones
-     * @param newType la firma pedida
-     * @return la invocacion adaptada
+     * @param linkerServices the services that contribute those conversions
+     * @param newType the requested signature
+     * @return the adapted invocation
      */
     public GuardedInvocation asType(final LinkerServices linkerServices, final MethodType newType) {
         return replaceMethods(linkerServices.asType(invocation, newType),
                 guard == null ? null
-                        : linkerServices.asType(guard, tipoDeGuarda(guard, newType)));
+                        : linkerServices.asType(guard, guardType(guard, newType)));
     }
 
     /**
-     * Como {@link #asType(LinkerServices, MethodType)}, pero sin degradar el valor de retorno.
+     * Like {@link #asType(LinkerServices, MethodType)}, but without degrading the return value.
      *
-     * @param linkerServices los servicios
-     * @param newType la firma pedida
-     * @return la invocacion adaptada, quiza con un retorno mas ancho que el pedido
+     * @param linkerServices the services
+     * @param newType the requested signature
+     * @return the adapted invocation, perhaps with a wider return than requested
      */
     public GuardedInvocation asTypeSafeReturn(final LinkerServices linkerServices,
             final MethodType newType) {
         return replaceMethods(linkerServices.asTypeLosslessReturn(invocation, newType),
                 guard == null ? null
-                        : linkerServices.asType(guard, tipoDeGuarda(guard, newType)));
+                        : linkerServices.asType(guard, guardType(guard, newType)));
     }
 
     /**
-     * Adaptada a la firma de un sitio de invocacion.
+     * Adapted to a call site's signature.
      *
-     * @param desc el descriptor del sitio
-     * @return la invocacion adaptada
+     * @param desc the site's descriptor
+     * @return the adapted invocation
      */
     public GuardedInvocation asType(final CallSiteDescriptor desc) {
         return asType(desc.getMethodType());
     }
 
     /**
-     * La firma que le corresponde a la guarda dentro de una invocacion de firma {@code tipo}.
+     * The signature the guard takes inside an invocation of signature {@code type}.
      *
-     * <p>Es la de la invocacion recortada a los parametros que la guarda mira, y devolviendo
-     * {@code boolean}. La guarda puede tomar menos parametros que la invocacion —lo habitual es que
-     * mire solo el receptor— y no tendria sentido obligarla a declarar los que ignora.
+     * <p>It is the invocation's, cut down to the parameters the guard looks at, and returning
+     * {@code boolean}. The guard may take fewer parameters than the invocation —usually it looks only
+     * at the receiver— and there would be no sense in forcing it to declare the ones it ignores.
      */
-    private static MethodType tipoDeGuarda(final MethodHandle guarda, final MethodType tipo) {
-        return tipo.dropParameterTypes(guarda.type().parameterCount(), tipo.parameterCount())
+    private static MethodType guardType(final MethodHandle guard, final MethodType type) {
+        return type.dropParameterTypes(guard.type().parameterCount(), type.parameterCount())
                 .changeReturnType(boolean.class);
     }
 
     /**
-     * Con filtros aplicados a algunos argumentos.
+     * With filters applied to some arguments.
      *
-     * <p>Los mismos filtros van al metodo y a la guarda: si el argumento que llega esta filtrado,
-     * la guarda tiene que opinar sobre el valor filtrado y no sobre el original.
+     * <p>The same filters go to the method handle and to the guard: if the incoming argument is
+     * filtered, the guard has to have its opinion about the filtered value and not the original.
      *
-     * @param pos la posicion del primer argumento a filtrar
-     * @param filters los filtros
-     * @return la invocacion derivada
+     * @param pos the position of the first argument to filter
+     * @param filters the filters
+     * @return the derived invocation
      */
     public GuardedInvocation filterArguments(final int pos, final MethodHandle... filters) {
         return replaceMethods(MethodHandles.filterArguments(invocation, pos, filters),
@@ -274,11 +274,11 @@ public class GuardedInvocation {
     }
 
     /**
-     * Con argumentos extra que se ignoran.
+     * With extra arguments that are ignored.
      *
-     * @param pos donde insertarlos
-     * @param valueTypes los tipos de los argumentos ignorados
-     * @return la invocacion derivada
+     * @param pos where to insert them
+     * @param valueTypes the types of the ignored arguments
+     * @return the derived invocation
      */
     public GuardedInvocation dropArguments(final int pos, final List<Class<?>> valueTypes) {
         return replaceMethods(MethodHandles.dropArguments(invocation, pos, valueTypes),
@@ -286,11 +286,11 @@ public class GuardedInvocation {
     }
 
     /**
-     * Con argumentos extra que se ignoran.
+     * With extra arguments that are ignored.
      *
-     * @param pos donde insertarlos
-     * @param valueTypes los tipos de los argumentos ignorados
-     * @return la invocacion derivada
+     * @param pos where to insert them
+     * @param valueTypes the types of the ignored arguments
+     * @return the derived invocation
      */
     public GuardedInvocation dropArguments(final int pos, final Class<?>... valueTypes) {
         return replaceMethods(MethodHandles.dropArguments(invocation, pos, valueTypes),
@@ -298,46 +298,46 @@ public class GuardedInvocation {
     }
 
     /**
-     * El metodo final: la invocacion con sus tres condiciones puestas, y un mismo camino de
-     * respaldo para las tres.
+     * The final method handle: the invocation with its three conditions in place, and one and the
+     * same fallback path for all three.
      *
-     * @param fallback a donde ir cuando alguna condicion no se cumple
-     * @return el metodo compuesto
+     * @param fallback where to go when some condition does not hold
+     * @return the composed method handle
      */
     public MethodHandle compose(final MethodHandle fallback) {
         return compose(fallback, fallback, fallback);
     }
 
     /**
-     * El metodo final, con un respaldo distinto para cada condicion.
+     * The final method handle, with a different fallback for each condition.
      *
-     * <p>El armado va de adentro hacia afuera, y el orden no es arbitrario. La guarda queda mas
-     * adentro porque es la que se evalua siempre y tiene que ser lo primero. Despues la captura de
-     * excepcion, que envuelve tanto a la invocacion como a la guarda. Los switch points quedan
-     * afuera de todo porque son los mas baratos: si el interruptor esta bajado no hay que entrar a
-     * nada.
+     * <p>The assembly goes from the inside out, and the order is not arbitrary. The guard sits
+     * innermost because it is the one always evaluated and it has to come first. Then the exception
+     * catch, which wraps both the invocation and the guard. The switch points end up outside
+     * everything because they are the cheapest: if the switch has been thrown there is nothing to
+     * enter at all.
      *
-     * @param switchpointFallback a donde ir si un interruptor se bajo
-     * @param guardFallback a donde ir si la guarda dio {@code false}
-     * @param catchFallback a donde ir si salto la excepcion
-     * @return el metodo compuesto
+     * @param switchpointFallback where to go if a switch was thrown
+     * @param guardFallback where to go if the guard returned {@code false}
+     * @param catchFallback where to go if the exception was raised
+     * @return the composed method handle
      */
     public MethodHandle compose(final MethodHandle switchpointFallback,
             final MethodHandle guardFallback, final MethodHandle catchFallback) {
-        final MethodHandle conGuarda = guard == null ? invocation
+        final MethodHandle guarded = guard == null ? invocation
                 : MethodHandles.guardWithTest(guard, invocation, guardFallback);
-        // El manejador de catchException recibe la excepcion como primer argumento, y el respaldo
-        // no la espera: dropArguments le agrega ese parametro adelante para que la descarte.
-        final MethodHandle conCaptura = exception == null ? conGuarda
-                : MethodHandles.catchException(conGuarda, exception,
+        // catchException's handler receives the exception as its first argument, and the fallback does
+        // not expect it: dropArguments adds that parameter in front so that it discards it.
+        final MethodHandle caught = exception == null ? guarded
+                : MethodHandles.catchException(guarded, exception,
                         MethodHandles.dropArguments(catchFallback, 0, exception));
         if (switchPoints == null) {
-            return conCaptura;
+            return caught;
         }
-        MethodHandle salida = conCaptura;
+        MethodHandle result = caught;
         for (final SwitchPoint sp : switchPoints) {
-            salida = sp.guardWithTest(salida, switchpointFallback);
+            result = sp.guardWithTest(result, switchpointFallback);
         }
-        return salida;
+        return result;
     }
 }

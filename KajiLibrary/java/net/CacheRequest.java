@@ -3,30 +3,30 @@ package java.net;
 import java.io.IOException;
 import java.io.OutputStream;
 
-// El canal por donde una respuesta se escribe en el cache.
+// The channel a response is written into the cache through.
 //
-// Aparece del lado de la **escritura**: cuando llega una respuesta que vale la pena guardar,
-// `ResponseCache.put` devuelve uno de estos y el cliente copia el cuerpo en su `OutputStream`
-// mientras se lo entrega al que pidio.
+// It appears on the **writing** side: when a response worth keeping arrives, `ResponseCache.put`
+// returns one of these and the client copies the body into its `OutputStream` while handing it to
+// whoever asked.
 //
-// `abort()` es la parte que hace que el diseno funcione: si la conexion se corta a la mitad, lo que
-// se alcanzo a escribir es basura --una respuesta truncada guardada como completa es peor que no
-// tener cache-- y el cliente avisa para que el cache tire lo escrito. Un cache sin ese aviso
-// terminaria sirviendo respuestas incompletas.
+// `abort()` is the part that makes the design work: if the connection is cut halfway, what was
+// written is rubbish --a truncated response stored as complete is worse than having no cache-- and
+// the client says so, so that the cache throws away what was written. A cache without that notice
+// would end up serving incomplete responses.
 //
-// Abstracta, sin logica propia y sin red: es un contrato. Nada omitido.
+// Abstract, with no logic of its own and no network: it is a contract. Nothing omitted.
 public abstract class CacheRequest {
 
     public CacheRequest() {
     }
 
     /**
-     * El flujo donde escribir el cuerpo de la respuesta.
+     * The stream to write the response's body into.
      *
-     * @throws IOException si el cache no puede abrirlo
+     * @throws IOException if the cache cannot open it
      */
     public abstract OutputStream getBody() throws IOException;
 
-    /** Descarta lo escrito hasta ahora: la respuesta no llego entera y no hay que guardarla. */
+    /** Discards what has been written so far: the response did not arrive whole and is not to be kept. */
     public abstract void abort();
 }

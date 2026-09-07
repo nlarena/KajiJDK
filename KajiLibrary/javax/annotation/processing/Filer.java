@@ -7,46 +7,45 @@ import javax.tools.JavaFileObject;
 
 import java.io.IOException;
 
-// Por donde un procesador **crea** los archivos que genera (JSR 269 §Filer). No es un
-// `JavaFileManager` de proposito general: la herramienta se queda con lo que se cree aca para
-// reincorporarlo (una fuente generada dispara otra ronda) y para no dejar que dos procesadores
-// pisen el mismo tipo.
+// Where a processor **creates** the files it generates (JSR 269 §Filer). It is not a general-purpose
+// `JavaFileManager`: the tool keeps whatever is created here so as to feed it back in (a generated
+// source triggers another round) and so as not to let two processors trample the same type.
 //
-// Los `originatingElements` son varargs y pueden ir vacios: son los elementos que "causaron" el
-// archivo, y sirven para invalidacion incremental. El contrato los declara opcionales
-// explicitamente, asi que pasar ninguno es legal y no significa un error.
+// The `originatingElements` are varargs and may be empty: they are the elements that "caused" the
+// file, and they serve incremental invalidation. The contract declares them optional explicitly, so
+// passing none is legal and does not mean an error.
 //
-// El implementador de este proyecto es `KajiFiler`; solo `createSourceFile` esta soportado de
-// verdad (ver su encabezado).
+// This project's implementor is `KajiFiler`; only `createSourceFile` is really supported (see its
+// header).
 public interface Filer {
 
     /**
-     * Crea una fuente `.java` nueva para el tipo `name` (nombre completo, con puntos).
+     * Creates a new `.java` source for the type `name` (its full, dotted name).
      *
-     * @throws FilerException si ese tipo ya se creo o el nombre no es valido
+     * @throws FilerException if that type was already created or the name is not valid
      */
     JavaFileObject createSourceFile(CharSequence name, Element... originatingElements)
             throws IOException;
 
     /**
-     * Crea un `.class` nuevo para el tipo `name`. Generar bytecode directamente es legal pero raro:
-     * lo normal es generar fuente y dejar que el compilador lo compile.
+     * Creates a new `.class` for the type `name`. Generating bytecode directly is legal but unusual:
+     * the normal thing is to generate source and let the compiler compile it.
      */
     JavaFileObject createClassFile(CharSequence name, Element... originatingElements)
             throws IOException;
 
     /**
-     * Crea un recurso auxiliar (un `.properties`, un `META-INF/services/...`) en `location`.
+     * Creates an auxiliary resource (a `.properties`, a `META-INF/services/...`) at `location`.
      *
-     * @param moduleAndPkg el paquete (o `modulo/paquete`) que lo contiene; vacio para la raiz
-     * @param relativeName el nombre del archivo, relativo a ese paquete
+     * @param moduleAndPkg the package (or `module/package`) containing it; empty for the root
+     * @param relativeName the file's name, relative to that package
      */
     FileObject createResource(JavaFileManager.Location location, CharSequence moduleAndPkg,
             CharSequence relativeName, Element... originatingElements) throws IOException;
 
     /**
-     * Abre un recurso **existente** para leerlo. No crea nada, y no toma `originatingElements`
-     * justamente porque leer no genera.
+     * Opens an **existing** resource to read it. It creates nothing, and it takes no
+     * `originatingElements` precisely because reading generates nothing.
      */
     FileObject getResource(JavaFileManager.Location location, CharSequence moduleAndPkg,
             CharSequence relativeName) throws IOException;

@@ -1957,8 +1957,13 @@ impl Exec<'_> {
         // is old→young, so the ordinary excursion pays nothing at all for this.
         let mut pairs: Vec<(usize, usize)> = Vec::new();
         let (jit, heap) = (&mut self.running.jit, &self.shared.heap);
+        // **The frame budget** the excursion is entered with: how many interpreter frames are
+        // still available under `MAX_FRAMES`. `frame` is not on the stack yet, so this is the
+        // headroom the whole compilation — including anything it *calls* natively — must fit in.
+        let headroom = Self::MAX_FRAMES.saturating_sub(self.running.frames.len());
         let outcome = jit.run(
             callee,
+            headroom,
             |slot| Self::marshal(frame.load(slot as usize)),
             |offset, size| heap.log_jit_allocation(offset, size),
             |holder, value| pairs.push((holder, value)),
@@ -2023,6 +2028,10 @@ impl Exec<'_> {
         let result = {
             let metaspace = &self.shared.metaspace;
             let heap = &self.shared.heap;
+            // Shared, not `&mut`: the only thing a resolver changes about the cache is minting a
+            // callee's [`NativeRecord`], which goes through a `RefCell` for exactly this reason —
+            // a compilation may not otherwise touch the VM's state.
+            let jit = &self.running.jit;
             let shape = Self::jit_shape(metaspace, method);
             let bases = heap.jit_bases();
             crate::burst::compile::compile_with_regs(
@@ -2083,7 +2092,7 @@ impl Exec<'_> {
                         array_operations::jit_array_class(metaspace, &class)
                             .map(|(class_id, element)| crate::burst::compile::ArrayType { class_id, element })
                     },
-                    invoke: &|unit, pc, index| Self::jit_callee(metaspace, unit, pc, index),
+                    invoke: &|unit, pc, index| Self::jit_callee(metaspace, jit, unit, pc, index),
                     // Where the heap is, and the three layout constants an array read needs — each
                     // taken from the module that owns it, so compiled code and the interpreter
                     // cannot come to disagree about where a `length` word or an element sits.
@@ -2217,10 +2226,11 @@ impl Exec<'_> {
     /// for calls that have really happened, and a cold branch full of calls costs nothing.
     fn jit_callee<'m>(
         metaspace: &'m MetaspaceService,
+        jit: &crate::burst::code_cache::JitCache,
         unit: MethodId,
         pc: usize,
         index: u16,
-    ) -> Option<crate::burst::compile::Callee<'m>> {
+    ) -> Option<Vec<crate::burst::compile::Callee<'m>>> {
         use call_site::{CallSite, SiteKind};
         use crate::burst::compile::Guard;
 
@@ -2270,43 +2280,87 @@ impl Exec<'_> {
         // method — and it is not a failure: the honest answer for a call that has never happened is
         // that this tier has nothing to speculate on, so the method is refused exactly as it was
         // before F2.
-        let (callee, guard) = match site.kind {
+        //
+        // **Since the polymorphic cache the answer is a *list*.** A dispatched site is resolved
+        // once per class the profile recorded, each through *that* class's own table, so the list
+        // is `n` different targets under `n` different guards. `receiver_profile` answers the three
+        // cases the compiler distinguishes: an empty list for a site that has never run (nothing to
+        // speculate on, refused exactly as F2 refused a `0` mirror), one to `RECEIVER_WAYS` mirrors
+        // for a site a chain of guards can cover, and `None` for a **megamorphic** one — more
+        // classes than there are ways — which is refused too, and that is milestone F3's answer to
+        // "what happens when the profile overflows". A chain that cannot cover the site would be
+        // paid for on every call and deopt anyway, and a deopt retires the method's on-stack entry:
+        // the site would cost the guards *and* lose the loop. Refusing costs neither.
+        let targets: Vec<(MethodId, Guard)> = match site.kind {
             // `invokestatic` has no receiver, and the interpreter's `invokespecial` never looks at
             // one; but its `invokevirtual` throws the `NullPointerException` before it dispatches,
             // even for the `private` nestmate target that lands here — so that one case owes a null
             // check to keep native code and the interpreter agreeing.
-            SiteKind::Direct(callee) => (callee, if op == 0xb6 { Guard::NotNull } else { Guard::Static }),
-            SiteKind::Vtable(slot) => {
-                let mirror = metaspace.receiver_class(unit, pc);
-                let callee = metaspace.vtable_method_at_mirror_readonly(mirror as usize, slot)?;
-                (callee, Guard::ExactClass(mirror))
+            SiteKind::Direct(callee) => {
+                vec![(callee, if op == 0xb6 { Guard::NotNull } else { Guard::Static })]
             }
-            SiteKind::Signature(signature) => {
-                let mirror = metaspace.receiver_class(unit, pc);
-                let callee = metaspace.vtable_method_at_mirror_by_signature_readonly(mirror as usize, signature)?;
-                (callee, Guard::ExactClass(mirror))
-            }
+            SiteKind::Vtable(slot) => metaspace
+                .receiver_profile(unit, pc)?
+                .into_iter()
+                .map(|mirror| {
+                    let callee = metaspace.vtable_method_at_mirror_readonly(mirror as usize, slot)?;
+                    Some((callee, Guard::ExactClass(mirror)))
+                })
+                .collect::<Option<Vec<_>>>()?,
+            SiteKind::Signature(signature) => metaspace
+                .receiver_profile(unit, pc)?
+                .into_iter()
+                .map(|mirror| {
+                    let callee =
+                        metaspace.vtable_method_at_mirror_by_signature_readonly(mirror as usize, signature)?;
+                    Some((callee, Guard::ExactClass(mirror)))
+                })
+                .collect::<Option<Vec<_>>>()?,
             // `NoTarget` has no body; `ArrayClone` and the two `MethodHandle` kinds are interpreter
             // actions with no bytecode behind them at all.
             _ => return None,
         };
-        if metaspace.is_native(callee)
-            || metaspace.is_synchronized(callee)
-            || metaspace.intrinsic(callee) != crate::jvm::interpreter::metaspace::Intrinsic::None
-            || metaspace.code(callee).is_empty()
-            || !metaspace.declaring_class_initialized(callee)
-        {
+        // A site with no target at all is a site that has never dispatched. It was a `0` mirror in
+        // F2 and it is an empty profile now, and it means the same thing: refuse.
+        if targets.is_empty() {
+            return None;
+        }
+        // **Every** target has to pass, not merely the first. One arm of a chain that cannot be
+        // compiled is not a slower arm, it is a class the guard would accept and then run the wrong
+        // thing for — so the eligibility of the site is the conjunction over its classes.
+        if targets.iter().any(|&(callee, _)| {
+            metaspace.is_native(callee)
+                || metaspace.is_synchronized(callee)
+                || metaspace.intrinsic(callee) != crate::jvm::interpreter::metaspace::Intrinsic::None
+                || metaspace.code(callee).is_empty()
+                || !metaspace.declaring_class_initialized(callee)
+        }) {
             return None;
         }
         // The operands the call consumes: the descriptor's arguments, plus the receiver for every
         // instance call — which is all three of `invokevirtual`, `invokespecial` and
         // `invokeinterface`. The VM's own number, so it cannot drift from what the interpreter pops.
         let receiver = usize::from(op != 0xb8);
-        Some(crate::burst::compile::Callee {
+        Some(targets.into_iter().map(|(callee, guard)| crate::burst::compile::Callee {
             method: Self::jit_shape(metaspace, callee),
             arg_slots: metaspace.arg_count(callee) + receiver,
             guard,
-        })
+            // **The address of the callee's record** — for every site, since milestone F3.
+            //
+            // It used to be the statically bound sites alone, on the grounds that a guard in front
+            // of a call is a different mechanism from a guard in front of an expansion. It is not:
+            // `burst::compile::emit_guard` is one function and both answers call it. What matters
+            // is that `callee` above is the *same* method on both paths — for a dispatched site it
+            // came out of `vtable_method_at_mirror_readonly` / `…_by_signature_readonly`, i.e. out
+            // of the table of the very class `guard` names — so with the class pinned by the guard
+            // the target is pinned too, and its record address is a constant of this site.
+            //
+            // **Resolving through the guarded class's table rather than through the declared owner
+            // is the whole of the correctness here.** `Sub.m` and `Base.m` have different records;
+            // baking the owner's would call the wrong body for a receiver the guard *accepts*,
+            // which is the one error a class guard cannot catch.
+            record: Some(jit.record_address(callee)),
+        }).collect())
     }
 
     /// The **back-edge hook** (F3 step 3): called after every backward branch, with the pc the
@@ -2398,6 +2452,10 @@ impl Exec<'_> {
         if self.running.frames.len() + new_frames > Self::MAX_FRAMES {
             return None;
         }
+        // The same budget the ordinary entry passes, with the same `+1`: this frame is **already**
+        // on the stack, so the compilation's own root frame costs nothing new and only the frames
+        // above it have to fit.
+        let headroom = (Self::MAX_FRAMES + 1).saturating_sub(self.running.frames.len());
         // The write barrier's pairs, applied the moment the borrow of `jit` ends — see the same
         // local in `try_compiled_call` for why they take one hop more than the allocations do.
         let mut pairs: Vec<(usize, usize)> = Vec::new();
@@ -2411,6 +2469,7 @@ impl Exec<'_> {
             let outcome = jit.run_osr(
                 method,
                 target_pc as u32,
+                headroom,
                 |slot| Self::marshal(frame.load(slot as usize)),
                 |offset, size| heap.log_jit_allocation(offset, size),
                 |holder, value| pairs.push((holder, value)),

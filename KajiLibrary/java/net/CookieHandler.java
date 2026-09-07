@@ -4,20 +4,20 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-// El punto donde se enchufa el manejo de cookies de toda la VM.
+// The point where the whole VM's cookie handling is plugged in.
 //
-// Es abstracta y con un registro estatico, igual que `Authenticator`, y por la misma razon: quien
-// hace pedidos HTTP no puede recibir la politica de cookies por parametro --esta diez capas mas
-// abajo-- asi que la busca en un lugar acordado.
+// It is abstract and has a static registry, just like `Authenticator`, and for the same reason:
+// whoever makes HTTP requests cannot receive the cookie policy as a parameter --it is ten layers
+// further down-- so it looks for it in an agreed place.
 //
-// La API habla en **headers crudos** (`Map<String, List<String>>`) y no en objetos `HttpCookie`, lo
-// que parece un retroceso hasta que se ve el motivo: asi el handler puede manejar cookies que la
-// plataforma no sabe modelar, y el cliente HTTP no necesita saber nada de cookies -- pasa los
-// headers que recibio y pega los que le devuelven.
+// The API speaks in **raw headers** (`Map<String, List<String>>`) and not in `HttpCookie` objects,
+// which looks like a step backwards until the reason shows: that way the handler can deal with
+// cookies the platform cannot model, and the HTTP client needs to know nothing about cookies -- it
+// passes the headers it received and pastes in the ones it gets back.
 //
-// Registrar y consultar un callback es computacion pura, y `CookieManager` implementa el trabajo de
-// verdad sin tocar la red. Lo que falta en KajiJDK es un cliente HTTP que llame a esto, y eso no es
-// parte de este contrato. Nada omitido.
+// Registering and consulting a callback is pure computation, and `CookieManager` implements the real
+// work without touching the network. What KajiJDK lacks is an HTTP client to call this, and that is
+// not part of this contract. Nothing omitted.
 public abstract class CookieHandler {
 
     private static CookieHandler cookieHandler;
@@ -25,29 +25,30 @@ public abstract class CookieHandler {
     public CookieHandler() {
     }
 
-    /** El handler instalado, o null si no hay ninguno. */
+    /** The installed handler, or null if there is none. */
     public static synchronized CookieHandler getDefault() {
         return cookieHandler;
     }
 
-    /** Instala el handler de toda la VM. */
+    /** Installs the whole VM's handler. */
     public static synchronized void setDefault(CookieHandler cHandler) {
         cookieHandler = cHandler;
     }
 
     /**
-     * Los headers de cookies que hay que mandar en un pedido a {@code uri}.
+     * The cookie headers to be sent in a request to {@code uri}.
      *
-     * @param requestHeaders los headers que el cliente ya tiene armados, de solo lectura
-     * @return un mapa de nombre de header a valores; tipicamente con la clave "Cookie"
+     * @param requestHeaders the headers the client has already assembled, read-only
+     * @return a map from header name to values; typically with the key "Cookie"
      */
     public abstract Map<String, List<String>> get(URI uri, Map<String, List<String>> requestHeaders)
             throws IOException;
 
     /**
-     * Guarda las cookies que trajo una respuesta de {@code uri}.
+     * Stores the cookies a response from {@code uri} brought.
      *
-     * @param responseHeaders los headers de la respuesta; interesan "Set-Cookie" y "Set-Cookie2"
+     * @param responseHeaders the response's headers; "Set-Cookie" and "Set-Cookie2" are the ones that
+     *     matter
      */
     public abstract void put(URI uri, Map<String, List<String>> responseHeaders) throws IOException;
 }

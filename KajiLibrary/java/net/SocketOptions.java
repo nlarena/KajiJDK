@@ -1,95 +1,95 @@
 package java.net;
 
-// El vocabulario viejo de las opciones de socket: un entero por opcion y `Object` por valor.
+// The old vocabulary of socket options: an integer per option and `Object` for the value.
 //
 // ===========================================================================================
-// POR QUE HAY DOS FORMAS DE NOMBRAR LO MISMO
+// WHY THERE ARE TWO WAYS OF NAMING THE SAME THING
 // ===========================================================================================
 //
-// KajiJDK tiene `StandardSocketOptions`, donde cada opcion es un par (nombre, tipo) y el compilador
-// puede rechazar `setOption(SO_KEEPALIVE, 5)`. **Esta interfaz es la anterior**, y su costo se ve de
-// una: la opcion es un `int` cualquiera y el valor un `Object` cualquiera, asi que confundir dos
-// opciones o pasar el tipo equivocado no se descubre hasta ejecucion, del otro lado del socket.
+// KajiJDK has `StandardSocketOptions`, where each option is a (name, type) pair and the compiler can
+// reject `setOption(SO_KEEPALIVE, 5)`. **This interface is the earlier one**, and its cost shows at
+// once: the option is any old `int` and the value any old `Object`, so confusing two options or
+// passing the wrong type is not discovered until run time, on the far side of the socket.
 //
-// Se conserva porque es la que implementan `SocketImpl` y `DatagramSocketImpl` --su firma la fija el
-// JDK-- y sacarla dejaria a esas dos sin poder declararse. No es una alternativa: es la capa de
-// abajo, y `StandardSocketOptions` es la de arriba.
+// It is kept because it is the one `SocketImpl` and `DatagramSocketImpl` implement --the JDK fixes
+// their signature-- and removing it would leave those two undeclarable. It is not an alternative: it
+// is the lower layer, and `StandardSocketOptions` is the upper one.
 //
 // ===========================================================================================
-// QUE ENTRA
+// WHAT GOES IN
 // ===========================================================================================
 //
-// Las quince constantes y los dos metodos, o sea todo. Las constantes son numeros acordados --el
-// contrato dice cuales, y son estos-- y los dos metodos son **abstractos**: esta interfaz declara
-// que alguien sabra leer y escribir opciones, no lo hace.
+// The fifteen constants and the two methods, that is, everything. The constants are agreed numbers
+// --the contract says which, and these are they-- and the two methods are **abstract**: this
+// interface declares that someone will know how to read and write options, it does not do it.
 //
-// Que en esta VM nadie la implemente con un socket de verdad no cambia nada de lo que esta escrito
-// aca. Una interfaz sin implementaciones sigue siendo exactamente lo que promete: un contrato.
+// That nobody in this VM implements it with a real socket changes nothing of what is written here.
+// An interface with no implementations is still exactly what it promises: a contract.
 public interface SocketOptions {
 
-    /** Mandar los datos apenas se escriben, sin juntarlos (algoritmo de Nagle apagado). */
+    /** Send the data as soon as it is written, without coalescing it (Nagle's algorithm off). */
     public static final int TCP_NODELAY = 0x0001;
 
-    /** A que direccion local atarse. Solo de lectura: se fija al atar el socket. */
+    /** Which local address to bind to. Read-only: it is set when the socket is bound. */
     public static final int SO_BINDADDR = 0x000F;
 
-    /** Reusar una direccion que quedo en TIME_WAIT. */
+    /** Reuse an address left in TIME_WAIT. */
     public static final int SO_REUSEADDR = 0x04;
 
-    /** Permitir que varios sockets se aten al mismo puerto. */
+    /** Allow several sockets to bind to the same port. */
     public static final int SO_REUSEPORT = 0x0E;
 
-    /** Permitir mandar a la direccion de broadcast. */
+    /** Allow sending to the broadcast address. */
     public static final int SO_BROADCAST = 0x0020;
 
-    /** Por que interfaz salen los multicast (la forma vieja, con una direccion). */
+    /** Which interface multicasts go out through (the old form, with an address). */
     public static final int IP_MULTICAST_IF = 0x10;
 
-    /** Por que interfaz salen los multicast (la forma nueva, con una interfaz). */
+    /** Which interface multicasts go out through (the new form, with an interface). */
     public static final int IP_MULTICAST_IF2 = 0x1f;
 
-    /** Si el que manda un multicast tambien lo recibe. */
+    /** Whether the sender of a multicast also receives it. */
     public static final int IP_MULTICAST_LOOP = 0x12;
 
-    /** El campo "tipo de servicio" de la cabecera IP. */
+    /** The IP header's "type of service" field. */
     public static final int IP_TOS = 0x3;
 
-    /** Cuanto esperar al cerrar a que salgan los datos pendientes. */
+    /** How long to wait on close for the pending data to go out. */
     public static final int SO_LINGER = 0x0080;
 
-    /** Cuanto espera una lectura antes de darse por vencida. */
+    /** How long a read waits before giving up. */
     public static final int SO_TIMEOUT = 0x1006;
 
-    /** Tamano del buffer de salida. */
+    /** The output buffer's size. */
     public static final int SO_SNDBUF = 0x1001;
 
-    /** Tamano del buffer de entrada. */
+    /** The input buffer's size. */
     public static final int SO_RCVBUF = 0x1002;
 
-    /** Mandar sondas periodicas para detectar una conexion muerta. */
+    /** Send periodic probes to detect a dead connection. */
     public static final int SO_KEEPALIVE = 0x0008;
 
-    /** Entregar los datos urgentes mezclados con los normales. */
+    /** Deliver the urgent data mixed in with the normal data. */
     public static final int SO_OOBINLINE = 0x1003;
 
     /**
-     * Fija una opcion.
+     * Sets an option.
      *
-     * <p>Para las opciones que son un interruptor, {@code val} es un `Boolean`; apagarla se pide con
-     * `Boolean.FALSE`, no con null.
+     * <p>For the options that are a switch, {@code val} is a `Boolean`; turning it off is asked for
+     * with `Boolean.FALSE`, not with null.
      *
-     * @throws SocketException si la opcion no se conoce, el valor no corresponde, o el socket la
-     *                         rechaza
+     * @throws SocketException if the option is not known, the value does not match, or the socket
+     *                         refuses it
      */
     public void setOption(int optID, Object value) throws SocketException;
 
     /**
-     * El valor de una opcion.
+     * An option's value.
      *
-     * <p>Las opciones que son un interruptor devuelven `Boolean.FALSE` cuando estan apagadas y el
-     * valor cuando tienen uno -- de ahi que el tipo de retorno sea `Object` y no algo mas preciso.
+     * <p>The options that are a switch return `Boolean.FALSE` when they are off and the value when
+     * they have one -- hence the return type being `Object` and not something more precise.
      *
-     * @throws SocketException si la opcion no se conoce o el socket no la puede leer
+     * @throws SocketException if the option is not known or the socket cannot read it
      */
     public Object getOption(int optID) throws SocketException;
 }

@@ -1,5 +1,6 @@
 package java.lang;
 
+import java.io.Serializable;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 
@@ -8,7 +9,7 @@ import java.io.PrintWriter;
 // "not yet initialised". The message/cause plumbing is pure Java. Stack-trace **capture** needs the
 // VM (there is no native `fillInStackTrace`), so the trace is empty unless one is set with
 // `setStackTrace`; the suppressed-exception list (try-with-resources) is modelled in full.
-public class Throwable {
+public class Throwable implements Serializable {
 
     private String message;
     private Throwable cause;

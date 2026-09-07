@@ -8,35 +8,36 @@ import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
 /**
- * La conexion a una URL {@code jar:}, que nombra un archivo dentro de un `.jar`.
+ * The connection to a {@code jar:} URL, which names a file inside a `.jar`.
  *
- * <p>La forma de la URL es {@code jar:<url del jar>!/<entrada>}, y el separador {@code !/} es lo que
- * la parte: lo de antes es una URL cualquiera --normalmente {@code file:} o {@code http:}-- y lo de
- * despues, la ruta adentro del archivo. La entrada puede faltar, y entonces la URL nombra al `.jar`
- * entero: {@code jar:file:/x/a.jar!/} es valida y su {@link #getEntryName} es `null`.
+ * <p>The URL's shape is {@code jar:<jar url>!/<entry>}, and the {@code !/} separator is what splits
+ * it: what comes before is an ordinary URL --usually {@code file:} or {@code http:}-- and what comes
+ * after, the path inside the archive. The entry may be missing, and then the URL names the whole
+ * `.jar`: {@code jar:file:/x/a.jar!/} is valid and its {@link #getEntryName} is `null`.
  *
- * <h2>Por que esta clase es abstracta y aun asi hace casi todo</h2>
+ * <h2>Why this class is abstract and yet does almost everything</h2>
  *
- * <p>Lo unico que no sabe hacer es **conseguir el archivo**: eso depende del protocolo de adentro --
- * un {@code file:} se abre, un {@code http:} se descarga y se cachea-- y por eso {@link #getJarFile}
- * queda para la subclase. Todo lo demas se puede escribir una vez y aca esta: partir la URL,
- * encontrar la entrada, leer el manifiesto, sacar los atributos y los certificados. Es el reparto
- * que hace el JDK y es el correcto -- ocho de los diez miembros no dependen del transporte.
+ * <p>The only thing it does not know how to do is **get hold of the file**: that depends on the inner
+ * protocol --a {@code file:} is opened, an {@code http:} is downloaded and cached-- and that is why
+ * {@link #getJarFile} is left to the subclass. Everything else can be written once and here it is:
+ * splitting the URL, finding the entry, reading the manifest, getting the attributes and the
+ * certificates. It is the JDK's division of labour and it is the right one -- eight of the ten
+ * members do not depend on the transport.
  *
- * <h2>Los atributos: dos metodos que se confunden</h2>
+ * <h2>The attributes: two methods people confuse</h2>
  *
- * <p>{@link #getAttributes} son los de **la entrada** y {@link #getMainAttributes} los de **la
- * seccion principal del manifiesto**, que valen para todo el archivo. Un `.jar` firmado guarda el
- * resumen de cada archivo en su propia seccion, y ahi la diferencia deja de ser academica.
+ * <p>{@link #getAttributes} are **the entry's** and {@link #getMainAttributes} are **the manifest's
+ * main section's**, which hold for the whole archive. A signed `.jar` keeps each file's digest in its
+ * own section, and there the difference stops being academic.
  */
 public abstract class JarURLConnection extends URLConnection {
 
     /**
-     * La conexion a la URL del `.jar` en si.
+     * The connection to the `.jar`'s own URL.
      *
-     * <p>Es `null` hasta que una subclase la abra. Esta declarada acá y `protected` porque el JDK lo
-     * hace: es el punto por donde una subclase le pasa opciones --tiempos de espera, cabeceras-- a
-     * la conexion de adentro.
+     * <p>It is `null` until a subclass opens it. It is declared here and `protected` because the JDK
+     * does so: it is the point where a subclass passes options --timeouts, headers-- to the inner
+     * connection.
      */
     protected URLConnection jarFileURLConnection;
 
@@ -44,29 +45,30 @@ public abstract class JarURLConnection extends URLConnection {
     private final String entryName;
 
     /**
-     * Parte la URL en el `.jar` y la entrada.
+     * Splits the URL into the `.jar` and the entry.
      *
-     * @throws MalformedURLException si no tiene la forma {@code jar:<url>!/<entrada>}
+     * @throws MalformedURLException if it is not of the form {@code jar:<url>!/<entry>}
      */
     protected JarURLConnection(URL url) throws MalformedURLException {
         super(url);
         String spec = url.getFile();
         int sep = spec.indexOf("!/");
         if (sep == -1) {
-            // El `!/` no es decorativo: sin el no se sabe donde termina la URL de adentro, y una URL
-            // `jar:` sin separador no nombra nada. El JDK tira exactamente acá.
+            // The `!/` is not decorative: without it there is no telling where the inner URL ends,
+            // and a `jar:` URL with no separator names nothing. The JDK throws in exactly this
+            // place.
             throw new MalformedURLException("no !/ in spec");
         }
         this.jarFileURL = new URL(spec.substring(0, sep));
-        String resto = spec.substring(sep + 2);
-        // Una entrada vacia significa "el archivo entero", y eso es `null` y no `""`: el contrato
-        // distingue las dos cosas, y un `""` se leeria como una entrada con nombre vacio.
-        this.entryName = resto.isEmpty() ? null : JarURLConnection.decodificar(resto);
+        String rest = spec.substring(sep + 2);
+        // An empty entry means "the whole archive", and that is `null` and not `""`: the contract
+        // tells the two apart, and a `""` would read as an entry with an empty name.
+        this.entryName = rest.isEmpty() ? null : JarURLConnection.decode(rest);
     }
 
-    // El nombre de la entrada viene percent-encoded, como cualquier parte de una URL. Sin decodificar,
-    // un archivo con un espacio en el nombre se busca como `a%20b.txt` y no se encuentra nunca.
-    private static String decodificar(String s) {
+    // The entry's name comes percent-encoded, like any part of a URL. Undecoded, a file with a space
+    // in its name is looked up as `a%20b.txt` and is never found.
+    private static String decode(String s) {
         if (s.indexOf('%') < 0) {
             return s;
         }
@@ -89,50 +91,50 @@ public abstract class JarURLConnection extends URLConnection {
         return sb.toString();
     }
 
-    /** La URL del `.jar`, sin la parte de la entrada. */
+    /** The `.jar`'s URL, without the entry part. */
     public URL getJarFileURL() {
         return this.jarFileURL;
     }
 
-    /** El nombre de la entrada, o `null` si la URL nombra al archivo entero. */
+    /** The entry's name, or `null` if the URL names the whole archive. */
     public String getEntryName() {
         return this.entryName;
     }
 
     /**
-     * El `.jar` abierto.
+     * The opened `.jar`.
      *
-     * <p>Lo unico que esta clase no puede hacer sola: depende del protocolo de adentro. Ver la nota
-     * de la clase.
+     * <p>The one thing this class cannot do on its own: it depends on the inner protocol. See the
+     * class's note.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     public abstract JarFile getJarFile() throws IOException;
 
     /**
-     * El manifiesto del `.jar`, o `null` si no tiene.
+     * The `.jar`'s manifest, or `null` if it has none.
      *
-     * <p>Un `.jar` sin manifiesto es perfectamente valido --es un zip-- asi que `null` no es un
-     * error sino la respuesta.
+     * <p>A `.jar` with no manifest is perfectly valid --it is a zip-- so `null` is not an error but
+     * the answer.
      *
-     * @throws IOException si no se pudo abrir el archivo
+     * @throws IOException if the archive could not be opened
      */
     public Manifest getManifest() throws IOException {
         return this.getJarFile().getManifest();
     }
 
     /**
-     * La entrada que la URL nombra, o `null` si nombra al archivo entero **o si no existe**.
+     * The entry the URL names, or `null` if it names the whole archive **or if it does not exist**.
      *
-     * <p>Los dos casos dan `null`, y eso se lee mal pero es el contrato: esta clase no comprueba que
-     * la entrada exista. Quien lo hace es el manejador de protocolo concreto, al conectar, y por eso
-     * un `jar:` de verdad falla con `FileNotFoundException` mucho antes de llegar acá.
+     * <p>Both cases give `null`, and that reads badly but it is the contract: this class does not
+     * check that the entry exists. The one that does is the concrete protocol handler, on connecting,
+     * and that is why a real `jar:` fails with `FileNotFoundException` long before getting here.
      *
-     * <p>Escribí este método tirando para una entrada ausente --parecía mejor que devolver `null`--
-     * y el JDK me corrigió: la prueba de comportamiento no coincidió corriendo contra `java` de
-     * verdad. Distinguir los dos `null` es trabajo de la subclase, no de esta.
+     * <p>I wrote this method throwing for a missing entry --it seemed better than returning `null`--
+     * and the JDK corrected me: the behaviour test did not match when run against the real `java`.
+     * Telling the two `null`s apart is the subclass's job, not this one's.
      *
-     * @throws IOException si no se pudo abrir el archivo
+     * @throws IOException if the archive could not be opened
      */
     public JarEntry getJarEntry() throws IOException {
         if (this.entryName == null) {
@@ -142,11 +144,11 @@ public abstract class JarURLConnection extends URLConnection {
     }
 
     /**
-     * Los atributos **de la entrada**, o `null` si la URL nombra al archivo entero.
+     * **The entry's** attributes, or `null` if the URL names the whole archive.
      *
-     * <p>Ver la nota de la clase sobre la diferencia con {@link #getMainAttributes}.
+     * <p>See the class's note on the difference from {@link #getMainAttributes}.
      *
-     * @throws IOException si no se pudo abrir el archivo, o si la entrada no existe
+     * @throws IOException if the archive could not be opened, or if the entry does not exist
      */
     public Attributes getAttributes() throws IOException {
         JarEntry e = this.getJarEntry();
@@ -154,9 +156,9 @@ public abstract class JarURLConnection extends URLConnection {
     }
 
     /**
-     * Los atributos de la seccion principal del manifiesto, o `null` si no hay manifiesto.
+     * The manifest's main section's attributes, or `null` if there is no manifest.
      *
-     * @throws IOException si no se pudo abrir el archivo
+     * @throws IOException if the archive could not be opened
      */
     public Attributes getMainAttributes() throws IOException {
         Manifest m = this.getManifest();
@@ -164,14 +166,13 @@ public abstract class JarURLConnection extends URLConnection {
     }
 
     /**
-     * Los certificados con que se firmo la entrada, o `null`.
+     * The certificates the entry was signed with, or `null`.
      *
-     * <p><strong>Solo valen despues de leer la entrada entera</strong>, y eso no es un detalle de
-     * esta implementacion sino como funciona la firma de un `.jar`: el resumen se comprueba mientras
-     * se leen los bytes, asi que preguntar antes devuelve `null` aunque el archivo este firmado. El
-     * JDK dice lo mismo.
+     * <p><strong>They only hold after reading the whole entry</strong>, and that is not a detail of
+     * this implementation but how signing a `.jar` works: the digest is checked while the bytes are
+     * read, so asking beforehand returns `null` even if the archive is signed. The JDK says the same.
      *
-     * @throws IOException si no se pudo abrir el archivo, o si la entrada no existe
+     * @throws IOException if the archive could not be opened, or if the entry does not exist
      */
     public Certificate[] getCertificates() throws IOException {
         JarEntry e = this.getJarEntry();

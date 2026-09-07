@@ -8,30 +8,30 @@ import java.time.format.TextStyle;
 import java.util.Locale;
 
 /**
- * Comprueba los ocho miembros de {@code java.time.format} que faltaban, contra el JDK 25.
+ * Checks the eight members of {@code java.time.format} that used to be missing, against JDK 25.
  *
- * <h2>Que se compara</h2>
+ * <h2>What is compared</h2>
  *
- * <p>Los tres de plantilla --{@code getLocalizedDateTimePattern(String, ...)},
- * {@code appendLocalized(String)} y {@code ofLocalizedPattern}-- sobre cuarenta y cinco plantillas
- * en los seis idiomas que la biblioteca trae, incluidas las combinaciones que no salen del pegado
- * simple y las que no resuelven. {@code appendDayPeriodText} sobre las veinticuatro horas del dia en
- * los seis idiomas y en los dos juegos de nombres. Y las cuatro de zona sobre desplazamientos, que
- * es la unica clase de zona que esta biblioteca puede construir.
+ * <p>The three template ones --{@code getLocalizedDateTimePattern(String, ...)},
+ * {@code appendLocalized(String)} and {@code ofLocalizedPattern}-- over forty-five templates in the
+ * six languages the library ships, including the combinations that do not come out of simple gluing
+ * and the ones that do not resolve. {@code appendDayPeriodText} over the twenty-four hours of the
+ * day in the six languages and in the two name sets. And the four zone ones over offsets, which is
+ * the only kind of zone this library can build.
  *
- * <p>Lo que se formatea de verdad usa plantillas de campos numericos: los nombres de mes y de dia
- * de esta biblioteca estan solo en ingles, que es un hueco del lado del texto y no de las
- * plantillas. Resolver la plantilla al patron se compara en los seis idiomas igual.
+ * <p>What is really formatted uses templates of numeric fields: this library's month and day names
+ * exist in English only, which is a gap on the text side and not on the template side. Resolving
+ * the template to the pattern is compared in the six languages all the same.
  *
- * <p>Tambien se compara la frontera entre las dos formas de fallar: una plantilla mal escrita da
- * {@link IllegalArgumentException} y una bien escrita que el idioma no sabe formatear da
- * {@code DateTimeException}. Confundirlas romperia a quien atrape una sola.
+ * <p>The boundary between the two ways of failing is compared too: a malformed template gives
+ * {@link IllegalArgumentException} and a well-formed one the language cannot format gives
+ * {@code DateTimeException}. Confusing them would break anyone catching only one.
  *
- * <p>{@link #donde()} devuelve el indice de la primera respuesta que no coincide, o -1.
+ * <p>{@link #where()} returns the index of the first answer that does not match, or -1.
  */
 public class FMT1 {
 
-    static final String[] ESPERADO = {
+    static final String[] EXPECTED = {
         "pat|und|y|y",
         "pat|und|yy|DateTimeException",
         "pat|und|yyyy|G y",
@@ -386,44 +386,44 @@ public class FMT1 {
         "pat|ja-JP||DateTimeException",
         "pat|ja-JP|vvvv|DateTimeException",
         "pat|ja-JP|hH|DateTimeException",
-        "malas|IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;",
-        "nulos|NullPointerException|NullPointerException|NullPointerException|NullPointerException",
-        "crono-nula|NullPointerException|MMM d, y",
+        "bad|IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;IllegalArgumentException;",
+        "nulls|NullPointerException|NullPointerException|NullPointerException|NullPointerException",
+        "null-chrono|NullPointerException|MMM d, y",
         "fmt|und|2026-03-09|2026-03-09 14:05",
         "fmt|en-US|3/9/2026|3/9/2026, 14:05",
         "fmt|es-AR|9/3/2026|9/3/2026, 14:05",
         "fmt|de-DE|9.3.2026|9.3.2026, 14:05",
         "fmt|fr-FR|09/03/2026|09/03/2026 14:05",
         "fmt|ja-JP|2026/3/9|2026/3/9 14:05",
-        "relocaliza|3/9/2026|9.3.2026",
+        "relocalize|3/9/2026|9.3.2026",
         "ofLocalizedPattern|3/9/2026|14:05",
-        "dia|und|FULL|AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;",
-        "dia|und|NARROW|AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;",
-        "dia|en-US|FULL|midnight;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;noon;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the evening;in the evening;in the evening;at night;at night;at night;",
-        "dia|en-US|NARROW|mi;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;n;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the evening;in the evening;in the evening;at night;at night;at night;",
-        "dia|es-AR|FULL|madrugada;madrugada;madrugada;madrugada;madrugada;madrugada;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;mediod\u00eda;tarde;tarde;tarde;tarde;tarde;tarde;tarde;noche;noche;noche;noche;",
-        "dia|es-AR|NARROW|madrugada;madrugada;madrugada;madrugada;madrugada;madrugada;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;mediod\u00eda;tarde;tarde;tarde;tarde;tarde;tarde;tarde;noche;noche;noche;noche;",
-        "dia|de-DE|FULL|Mitternacht;nachts;nachts;nachts;nachts;morgens;morgens;morgens;morgens;morgens;vormittags;vormittags;mittags;nachmittags;nachmittags;nachmittags;nachmittags;nachmittags;abends;abends;abends;abends;abends;abends;",
-        "dia|de-DE|NARROW|Mitternacht;nachts;nachts;nachts;nachts;morgens;morgens;morgens;morgens;morgens;vorm.;vorm.;mittags;nachm.;nachm.;nachm.;nachm.;nachm.;abends;abends;abends;abends;abends;abends;",
-        "dia|fr-FR|FULL|minuit;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;du soir;du soir;du soir;du soir;du soir;du soir;",
-        "dia|fr-FR|NARROW|minuit;matin;matin;matin;mat.;mat.;mat.;mat.;mat.;mat.;mat.;mat.;midi;ap.m.;ap.m.;ap.m.;ap.m.;ap.m.;soir;soir;soir;soir;soir;soir;",
-        "dia|ja-JP|FULL|\u771f\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u6b63\u5348;\u663c;\u663c;\u663c;\u5915\u65b9;\u5915\u65b9;\u5915\u65b9;\u591c;\u591c;\u591c;\u591c;\u591c\u4e2d;",
-        "dia|ja-JP|NARROW|\u771f\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u6b63\u5348;\u663c;\u663c;\u663c;\u5915\u65b9;\u5915\u65b9;\u5915\u65b9;\u591c;\u591c;\u591c;\u591c;\u591c\u4e2d;",
-        "cortes|midnight|in the morning|in the morning|noon|in the afternoon|at night",
-        "dia-nulo|NullPointerException",
-        "zona|und|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
-        "zona|en-US|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
-        "zona|es-AR|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
-        "zona|de-DE|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
-        "zona|fr-FR|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
-        "zona|ja-JP|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
-        "zona-utc|Z|+05:30",
-        "zona-nulos|NullPointerException|NullPointerException|NullPointerException|ok",
-        "zona-sin-zona|DateTimeException",
-        "zona-parse|+05:30",
+        "day|und|FULL|AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;",
+        "day|und|NARROW|AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;AM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;PM;",
+        "day|en-US|FULL|midnight;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;noon;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the evening;in the evening;in the evening;at night;at night;at night;",
+        "day|en-US|NARROW|mi;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;in the morning;n;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the afternoon;in the evening;in the evening;in the evening;at night;at night;at night;",
+        "day|es-AR|FULL|madrugada;madrugada;madrugada;madrugada;madrugada;madrugada;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;mediod\u00eda;tarde;tarde;tarde;tarde;tarde;tarde;tarde;noche;noche;noche;noche;",
+        "day|es-AR|NARROW|madrugada;madrugada;madrugada;madrugada;madrugada;madrugada;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;ma\u00f1ana;mediod\u00eda;tarde;tarde;tarde;tarde;tarde;tarde;tarde;noche;noche;noche;noche;",
+        "day|de-DE|FULL|Mitternacht;nachts;nachts;nachts;nachts;morgens;morgens;morgens;morgens;morgens;vormittags;vormittags;mittags;nachmittags;nachmittags;nachmittags;nachmittags;nachmittags;abends;abends;abends;abends;abends;abends;",
+        "day|de-DE|NARROW|Mitternacht;nachts;nachts;nachts;nachts;morgens;morgens;morgens;morgens;morgens;vorm.;vorm.;mittags;nachm.;nachm.;nachm.;nachm.;nachm.;abends;abends;abends;abends;abends;abends;",
+        "day|fr-FR|FULL|minuit;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;du matin;midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;de l\u2019apr\u00e8s-midi;du soir;du soir;du soir;du soir;du soir;du soir;",
+        "day|fr-FR|NARROW|minuit;matin;matin;matin;mat.;mat.;mat.;mat.;mat.;mat.;mat.;mat.;midi;ap.m.;ap.m.;ap.m.;ap.m.;ap.m.;soir;soir;soir;soir;soir;soir;",
+        "day|ja-JP|FULL|\u771f\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u6b63\u5348;\u663c;\u663c;\u663c;\u5915\u65b9;\u5915\u65b9;\u5915\u65b9;\u591c;\u591c;\u591c;\u591c;\u591c\u4e2d;",
+        "day|ja-JP|NARROW|\u771f\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u591c\u4e2d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u671d;\u6b63\u5348;\u663c;\u663c;\u663c;\u5915\u65b9;\u5915\u65b9;\u5915\u65b9;\u591c;\u591c;\u591c;\u591c;\u591c\u4e2d;",
+        "cuts|midnight|in the morning|in the morning|noon|in the afternoon|at night",
+        "day-null|NullPointerException",
+        "zone|und|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
+        "zone|en-US|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
+        "zone|es-AR|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
+        "zone|de-DE|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
+        "zone|fr-FR|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
+        "zone|ja-JP|-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;-03:00;",
+        "zone-utc|Z|+05:30",
+        "zone-nulls|NullPointerException|NullPointerException|NullPointerException|ok",
+        "zone-without-zone|DateTimeException",
+        "zone-parse|+05:30",
     };
 
-    static final String[] PLANTILLAS = {
+    static final String[] TEMPLATES = {
         "y", "yy", "yyyy", "M", "MM", "MMM", "MMMM", "MMMMM", "d", "E", "EEE", "EEEE", "EEEEE",
         "Md", "MMMd", "MEd", "MMMEd", "yM", "yMd", "yMMM", "yMMMd", "yMMMEd", "yMMMM", "yQQQ",
         "yQQQQ", "GyMMMd", "GyMMMEd", "Q", "QQQ",
@@ -432,123 +432,123 @@ public class FMT1 {
         "w", "ww", "yy", "zzz", "B", "QQQQQ", "yyy", "", "vvvv", "hH",
     };
 
-    static final String[] MALAS = {
+    static final String[] BAD = {
         "abc", "dE", "My", "yMy", "mH", "ddd", "EEEEEE", "GGGGGG", "y M", "y2", "K", "k", "L",
         "a", "S", "u", "hhh", "vvvvv", "zzzzz", "BBBBBB",
     };
 
-    /** Lo que hacen los ocho miembros, una linea por comprobacion. */
+    /** What the eight members do, one line per check. */
     static String[] actual() throws Exception {
         final java.util.List<String> a = new java.util.ArrayList<String>();
         final Locale[] locales = {
             Locale.ROOT, Locale.US, new Locale("es", "AR"), Locale.GERMANY, Locale.FRANCE,
             Locale.JAPAN,
         };
-        final String[] etiquetas = {"und", "en-US", "es-AR", "de-DE", "fr-FR", "ja-JP"};
+        final String[] tags = {"und", "en-US", "es-AR", "de-DE", "fr-FR", "ja-JP"};
 
-        // El patron de cada plantilla en cada idioma.
+        // The pattern of each template in each language.
         for (int li = 0; li < locales.length; li++) {
-            for (int i = 0; i < PLANTILLAS.length; i++) {
-                a.add("pat|" + etiquetas[li] + "|" + PLANTILLAS[i] + "|"
-                        + patron(PLANTILLAS[i], locales[li]));
+            for (int i = 0; i < TEMPLATES.length; i++) {
+                a.add("pat|" + tags[li] + "|" + TEMPLATES[i] + "|"
+                        + pattern(TEMPLATES[i], locales[li]));
             }
         }
 
-        // Las plantillas mal escritas, que fallan distinto.
-        final StringBuilder malas = new StringBuilder();
-        for (int i = 0; i < MALAS.length; i++) {
-            malas.append(patron(MALAS[i], Locale.US)).append(';');
+        // The malformed templates, which fail differently.
+        final StringBuilder bad = new StringBuilder();
+        for (int i = 0; i < BAD.length; i++) {
+            bad.append(pattern(BAD[i], Locale.US)).append(';');
         }
-        a.add("malas|" + malas);
+        a.add("bad|" + bad);
 
-        // Los nulos.
-        a.add("nulos|" + intentar(new PatNulo()) + "|" + intentar(new LocaleNulo())
-                + "|" + intentar(new AppendNulo()) + "|" + intentar(new OfNulo()));
+        // The nulls.
+        a.add("nulls|" + attempt(new NullTemplate()) + "|" + attempt(new NullLocale())
+                + "|" + attempt(new NullAppend()) + "|" + attempt(new NullOf()));
 
-        // El calendario nulo no cambia nada: se toma el ISO.
-        a.add("crono-nula|" + patronCrono("yMMMd", null, Locale.US)
-                + "|" + patronCrono("yMMMd", IsoChronology.INSTANCE, Locale.US));
+        // A null calendar changes nothing: ISO is taken.
+        a.add("null-chrono|" + patternChrono("yMMMd", null, Locale.US)
+                + "|" + patternChrono("yMMMd", IsoChronology.INSTANCE, Locale.US));
 
-        // Formatear de verdad con una plantilla, no solo resolver el patron.
-        final ZonedDateTime cuando =
+        // Really formatting with a template, not just resolving the pattern.
+        final ZonedDateTime when =
                 ZonedDateTime.of(2026, 3, 9, 14, 5, 6, 0, ZoneOffset.ofHours(-3));
-        // Se formatea con plantillas de campos NUMERICOS. Los nombres de mes y de dia de esta
-        // biblioteca estan solo en ingles --es un hueco del lado del texto, no de las plantillas--
-        // asi que un `MMM` en aleman no sale de los dos lados y no se puede comparar. Lo que aca se
-        // compara es que la plantilla resuelva al patron correcto y que ese patron se aplique.
+        // Formatting is done with templates of NUMERIC fields. This library's month and day names
+        // exist in English only --a gap on the text side, not on the template side-- so an `MMM` in
+        // German does not come out on both sides and cannot be compared. What is compared here is
+        // that the template resolves to the right pattern and that that pattern is applied.
         for (int li = 0; li < locales.length; li++) {
-            a.add("fmt|" + etiquetas[li] + "|"
+            a.add("fmt|" + tags[li] + "|"
                     + new DateTimeFormatterBuilder().appendLocalized("yMd")
-                        .toFormatter(locales[li]).format(cuando)
+                        .toFormatter(locales[li]).format(when)
                     + "|"
                     + new DateTimeFormatterBuilder().appendLocalized("yMdHm")
-                        .toFormatter(locales[li]).format(cuando));
+                        .toFormatter(locales[li]).format(when));
         }
-        // El mismo formateador cambia de idioma con `withLocale`: el patron se resuelve al usar.
+        // The same formatter changes language with `withLocale`: the pattern resolves on use.
         final DateTimeFormatter f = new DateTimeFormatterBuilder().appendLocalized("yMd")
                 .toFormatter(Locale.US);
-        a.add("relocaliza|" + f.format(cuando) + "|"
-                + f.withLocale(Locale.GERMANY).format(cuando));
+        a.add("relocalize|" + f.format(when) + "|"
+                + f.withLocale(Locale.GERMANY).format(when));
         a.add("ofLocalizedPattern|"
-                + DateTimeFormatter.ofLocalizedPattern("yMd").withLocale(Locale.US).format(cuando)
+                + DateTimeFormatter.ofLocalizedPattern("yMd").withLocale(Locale.US).format(when)
                 + "|"
                 + DateTimeFormatter.ofLocalizedPattern("Hm").withLocale(Locale.FRANCE)
-                    .format(cuando));
+                    .format(when));
 
-        // El periodo del dia, hora por hora.
-        final TextStyle[] estilos = {TextStyle.FULL, TextStyle.NARROW};
+        // The period of the day, hour by hour.
+        final TextStyle[] styles = {TextStyle.FULL, TextStyle.NARROW};
         for (int li = 0; li < locales.length; li++) {
-            for (int e = 0; e < estilos.length; e++) {
+            for (int e = 0; e < styles.length; e++) {
                 final DateTimeFormatter p = new DateTimeFormatterBuilder()
-                        .appendDayPeriodText(estilos[e]).toFormatter(locales[li]);
+                        .appendDayPeriodText(styles[e]).toFormatter(locales[li]);
                 final StringBuilder b = new StringBuilder();
                 for (int h = 0; h < 24; h++) {
                     b.append(p.format(LocalTime.of(h, 0))).append(';');
                 }
-                a.add("dia|" + etiquetas[li] + "|" + estilos[e] + "|" + b);
+                a.add("day|" + tags[li] + "|" + styles[e] + "|" + b);
             }
         }
-        // Los minutos donde estan los cortes finos.
+        // The minutes where the fine cuts are.
         final DateTimeFormatter pu = new DateTimeFormatterBuilder()
                 .appendDayPeriodText(TextStyle.FULL).toFormatter(Locale.US);
-        a.add("cortes|" + pu.format(LocalTime.of(0, 0)) + "|" + pu.format(LocalTime.of(0, 1))
+        a.add("cuts|" + pu.format(LocalTime.of(0, 0)) + "|" + pu.format(LocalTime.of(0, 1))
                 + "|" + pu.format(LocalTime.of(11, 59)) + "|" + pu.format(LocalTime.of(12, 0))
                 + "|" + pu.format(LocalTime.of(12, 1)) + "|" + pu.format(LocalTime.of(23, 59)));
-        a.add("dia-nulo|" + intentar(new DiaNulo()));
+        a.add("day-null|" + attempt(new NullDayPeriod()));
 
-        // La zona: lo unico construible aca es un desplazamiento.
+        // The zone: the only thing constructible here is an offset.
         for (int li = 0; li < locales.length; li++) {
             final StringBuilder b = new StringBuilder();
             for (int e = 0; e < TextStyle.values().length; e++) {
-                final TextStyle est = TextStyle.values()[e];
-                b.append(new DateTimeFormatterBuilder().appendZoneText(est)
-                        .toFormatter(locales[li]).format(cuando)).append(';');
-                b.append(new DateTimeFormatterBuilder().appendGenericZoneText(est)
-                        .toFormatter(locales[li]).format(cuando)).append(';');
+                final TextStyle st = TextStyle.values()[e];
+                b.append(new DateTimeFormatterBuilder().appendZoneText(st)
+                        .toFormatter(locales[li]).format(when)).append(';');
+                b.append(new DateTimeFormatterBuilder().appendGenericZoneText(st)
+                        .toFormatter(locales[li]).format(when)).append(';');
             }
-            a.add("zona|" + etiquetas[li] + "|" + b);
+            a.add("zone|" + tags[li] + "|" + b);
         }
         final ZonedDateTime utc = ZonedDateTime.of(2026, 3, 9, 14, 0, 0, 0, ZoneOffset.UTC);
-        final ZonedDateTime media = ZonedDateTime.of(2026, 3, 9, 14, 0, 0, 0,
+        final ZonedDateTime halfHour = ZonedDateTime.of(2026, 3, 9, 14, 0, 0, 0,
                 ZoneOffset.ofHoursMinutes(5, 30));
-        a.add("zona-utc|" + new DateTimeFormatterBuilder().appendZoneText(TextStyle.FULL)
+        a.add("zone-utc|" + new DateTimeFormatterBuilder().appendZoneText(TextStyle.FULL)
                 .toFormatter(Locale.US).format(utc)
                 + "|" + new DateTimeFormatterBuilder().appendGenericZoneText(TextStyle.SHORT)
-                .toFormatter(Locale.US).format(media));
-        a.add("zona-nulos|" + intentar(new ZonaNula()) + "|" + intentar(new ZonaSetNulo())
-                + "|" + intentar(new GenNula()) + "|" + intentar(new GenSetNulo()));
-        a.add("zona-sin-zona|" + intentar(new ZonaSinZona()));
-        a.add("zona-parse|" + new DateTimeFormatterBuilder().appendZoneText(TextStyle.FULL)
+                .toFormatter(Locale.US).format(halfHour));
+        a.add("zone-nulls|" + attempt(new NullZone()) + "|" + attempt(new NullZoneSet())
+                + "|" + attempt(new NullGeneric()) + "|" + attempt(new NullGenericSet()));
+        a.add("zone-without-zone|" + attempt(new ZoneWithoutZone()));
+        a.add("zone-parse|" + new DateTimeFormatterBuilder().appendZoneText(TextStyle.FULL)
                 .toFormatter(Locale.US).parse("+05:30")
                 .query(java.time.temporal.TemporalQueries.zoneId()));
 
         return a.toArray(new String[a.size()]);
     }
 
-    /** El patron, o el nombre simple de lo que haya tirado. */
-    static String patron(String plantilla, Locale l) {
+    /** The pattern, or the simple name of whatever it threw. */
+    static String pattern(String template, Locale l) {
         try {
-            return DateTimeFormatterBuilder.getLocalizedDateTimePattern(plantilla,
+            return DateTimeFormatterBuilder.getLocalizedDateTimePattern(template,
                     IsoChronology.INSTANCE, l);
         } catch (Throwable t) {
             final String n = t.getClass().getName();
@@ -556,24 +556,24 @@ public class FMT1 {
         }
     }
 
-    static String patronCrono(String plantilla, java.time.chrono.Chronology c, Locale l) {
+    static String patternChrono(String template, java.time.chrono.Chronology c, Locale l) {
         try {
-            return DateTimeFormatterBuilder.getLocalizedDateTimePattern(plantilla, c, l);
+            return DateTimeFormatterBuilder.getLocalizedDateTimePattern(template, c, l);
         } catch (Throwable t) {
             final String n = t.getClass().getName();
             return n.substring(n.lastIndexOf('.') + 1);
         }
     }
 
-    /** Algo que se corre para ver con que falla. */
-    interface Tiro {
-        void correr() throws Exception;
+    /** Something run to see what it fails with. */
+    interface Attempt {
+        void run() throws Exception;
     }
 
-    /** Corre eso y devuelve "ok" o el nombre simple de lo que haya tirado. */
-    static String intentar(Tiro r) {
+    /** Runs that and returns "ok" or the simple name of whatever it threw. */
+    static String attempt(Attempt r) {
         try {
-            r.correr();
+            r.run();
             return "ok";
         } catch (Throwable t) {
             final String n = t.getClass().getName();
@@ -581,86 +581,86 @@ public class FMT1 {
         }
     }
 
-    static class PatNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullTemplate implements Attempt {
+        public void run() throws Exception {
             DateTimeFormatterBuilder.getLocalizedDateTimePattern(null, IsoChronology.INSTANCE,
                     Locale.US);
         }
     }
 
-    static class LocaleNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullLocale implements Attempt {
+        public void run() throws Exception {
             DateTimeFormatterBuilder.getLocalizedDateTimePattern("yMd", IsoChronology.INSTANCE,
                     null);
         }
     }
 
-    static class AppendNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullAppend implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendLocalized((String) null);
         }
     }
 
-    static class OfNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullOf implements Attempt {
+        public void run() throws Exception {
             DateTimeFormatter.ofLocalizedPattern(null);
         }
     }
 
-    static class DiaNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullDayPeriod implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendDayPeriodText(null);
         }
     }
 
-    static class ZonaNula implements Tiro {
-        public void correr() throws Exception {
+    static class NullZone implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendZoneText(null);
         }
     }
 
-    static class ZonaSetNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullZoneSet implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendZoneText(TextStyle.FULL, null);
         }
     }
 
-    static class GenNula implements Tiro {
-        public void correr() throws Exception {
+    static class NullGeneric implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendGenericZoneText(null);
         }
     }
 
-    static class GenSetNulo implements Tiro {
-        public void correr() throws Exception {
+    static class NullGenericSet implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendGenericZoneText(TextStyle.FULL, null);
         }
     }
 
-    static class ZonaSinZona implements Tiro {
-        public void correr() throws Exception {
+    static class ZoneWithoutZone implements Attempt {
+        public void run() throws Exception {
             new DateTimeFormatterBuilder().appendZoneText(TextStyle.FULL).toFormatter(Locale.US)
                     .format(java.time.LocalDateTime.of(2026, 3, 9, 14, 0));
         }
     }
 
     /**
-     * El indice de la primera respuesta que no coincide con la del JDK, o -1.
+     * The index of the first answer that does not match the JDK's, or -1.
      *
-     * @return el indice, o -1
+     * @return the index, or -1
      */
-    public static int donde() {
+    public static int where() {
         final String[] a;
         try {
             a = actual();
         } catch (Throwable e) {
             return 9000;
         }
-        if (a.length != ESPERADO.length) {
+        if (a.length != EXPECTED.length) {
             return 8000 + a.length;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!a[i].equals(ESPERADO[i])) {
+            if (!a[i].equals(EXPECTED[i])) {
                 return i;
             }
         }
@@ -675,8 +675,8 @@ public class FMT1 {
             }
             return;
         }
-        final int i = donde();
-        System.out.println(i < 0 ? "sin diferencias"
-                : i + ":\n  nuestro=" + a[i] + "\n  jdk    =" + ESPERADO[i]);
+        final int i = where();
+        System.out.println(i < 0 ? "no differences"
+                : i + ":\n  ours=" + a[i] + "\n  jdk    =" + EXPECTED[i]);
     }
 }

@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalField;
 import java.time.temporal.TemporalUnit;
@@ -19,7 +20,7 @@ import java.time.chrono.IsoChronology;
 // NO declara `Comparable<LocalDate>`: hereda `Comparable<ChronoLocalDate>` de `ChronoLocalDate`
 // (#276), y una clase no puede implementar dos parametrizaciones de la misma interfaz. Es tambien
 // lo que hace el JDK, y por la misma razon.
-public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalDate {
+public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalDate, Serializable {
 
     private static final long DAYS_0000_TO_1970 = 719528L;
 

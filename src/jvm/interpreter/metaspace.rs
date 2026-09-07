@@ -270,6 +270,30 @@ struct VtableEntry {
     method: MethodId,
 }
 
+/// **How many distinct receiver classes one dispatched call site records** — the width of the
+/// polymorphic inline cache, in ways.
+///
+/// Four, and the number is measured rather than chosen. Two is the other classic value and it is
+/// the one this VM's own instrument rules out: `bench/BkMega` rotates through four implementors of
+/// one interface in strict order, so at two ways the site overflows on its third call, the profile
+/// reports megamorphic, and the row measures exactly what it measured before the cache existed. At
+/// four ways it fits, the guard chain covers every call, and the row moves. Above four the extra
+/// ways cost a word per code byte each and cover no workload here, so there is nothing to weigh
+/// them against.
+///
+/// It bounds three separate things at once, which is why it is one constant: how many mirrors the
+/// profile stores per site, how many `cmp`/`jcc` pairs a guard chain can be, and how many copies of
+/// a callee's body one inlined site may expand to.
+pub const RECEIVER_WAYS: usize = 4;
+
+/// The value a receiver-profile way holds when the site has seen **more distinct classes than there
+/// are ways**: a chain of guards cannot cover it, so the compiler refuses the method rather than
+/// emitting arms that are paid for and miss anyway.
+///
+/// `u32::MAX` is free as a marker for the same reason `0` is free as "unused": a way holds the heap
+/// offset of a `Class<…>` mirror, and no mirror sits at either end of a `u32`.
+pub const MEGAMORPHIC: u32 = u32::MAX;
+
 /// One resolved method body, owned a single time by the metaspace (the
 /// "load-once" home every frame of that method points at).
 struct MethodBody {
@@ -327,26 +351,46 @@ struct MethodBody {
     /// contend for the same cell, and keeping them apart means the field cache's payload layout
     /// and this one's stay independent.
     call_sites: Vec<AtomicU64>,
-    /// **The last receiver class seen at each dispatched call site** (milestone F2, the
-    /// monomorphic inline cache): the heap offset of the `Class<…>` mirror the `invokevirtual` or
-    /// `invokeinterface` at `pc` last dispatched on, or `0` for "never executed". One cell per code
-    /// byte, alongside [`Self::call_sites`] and allocated on the same condition.
+    /// **The receiver classes seen at each dispatched call site** (milestone F2 as a *monomorphic*
+    /// cache, widened here to a polymorphic one): the heap offsets of the `Class<…>` mirrors the
+    /// `invokevirtual` or `invokeinterface` at `pc` has dispatched on. [`RECEIVER_WAYS`] cells per
+    /// code byte — way `w` of `pc` is index `pc * RECEIVER_WAYS + w` — allocated on the same
+    /// condition as [`Self::call_sites`].
     ///
-    /// **Why a *last* rather than a count, a majority or a history.** The JIT compiles a method
-    /// only once its counter has run out, which is thirty-two invocations or a loop's worth of
-    /// back-edges — so by the time this word is read it has been written thirty-two times, and at a
-    /// site that really is monomorphic every one of those writes was the same value. Nothing
-    /// cleverer buys anything a guard does not already provide: a wrong guess is not a wrong answer,
-    /// it is a deopt, and the interpreter dispatches the call by its full path. What a wrong guess
-    /// costs is speed at that site, which is the thing this whole tier is allowed to be wrong about.
+    /// A way holding `0` is unused, so an all-zero group is a site that has **never executed**; the
+    /// used ways are a prefix, filled left to right in first-seen order, and never reordered.
+    /// [`MEGAMORPHIC`] in the last way means the site saw more distinct classes than there are ways
+    /// and the profile gave up — see [`MetaspaceService::receiver_profile`].
+    ///
+    /// **Why a set of the first N rather than a *last*, which is what F2 had.** A *last* is exactly
+    /// right for a site that only ever sees one class and exactly wrong for one that rotates: at
+    /// `ops[i & 3].f(x)` the last-seen class is a different one on every iteration, so the single
+    /// guard the compiler built out of it missed on the very next call, the method deopted, and its
+    /// on-stack entry was retired — the loop then ran interpreted, which is the 2.0x of `BkMega`
+    /// against the 200x of `BkMono` on the same program. What the compiler needs is not the most
+    /// recent class but *how many distinct ones there are*, because that is what decides whether a
+    /// chain of guards can cover the site at all.
+    ///
+    /// **Why first-N and not most-frequent.** A count per way would make the write path a
+    /// read-modify-write on a shared word — on the interpreter's hot dispatch path — to order a
+    /// chain whose arms cost one `cmp`/`jcc` each. The order of the arms is a second-order effect;
+    /// whether the site *fits* is the first-order one, and a set answers that with a scan that
+    /// stops at the first match.
     ///
     /// It is *not* part of the packed [`Self::call_sites`] word, which has no room for another 32
     /// bits, and it is deliberately not a `Vec<AtomicU64>`: a mirror offset is a `u32` by the same
     /// boundary argument every heap offset here crosses on.
     ///
-    /// `AtomicU32` and `Relaxed`, for exactly the reason the two site caches are: the word is
-    /// self-contained, publishes no other memory, and two threads writing different receivers race
-    /// to a value that is a real receiver either way.
+    /// `AtomicU32` and `Relaxed`, for exactly the reason the two site caches are: each word is
+    /// self-contained and publishes no other memory. Two threads filling the same empty way race to
+    /// a value that is a real receiver either way, and the worst a race produces is the same mirror
+    /// in two ways (a redundant arm, which resolves to the same target) or a class dropped (a
+    /// deopt, which is what an unprofiled class gets anyway).
+    ///
+    /// **The cost is [`RECEIVER_WAYS`] words per code byte** where F2 spent one. That is the same
+    /// shape of over-allocation [`Self::call_sites`] already makes — a cell for every byte, when
+    /// only the invoke bytes can ever use one — multiplied; the sparse alternative is a second
+    /// table mapping pc to a site ordinal, which trades this space for a load on the write path.
     receiver_classes: Vec<AtomicU32>,
     /// **The last array class seen at each `aastore`** (F3-H3, the JIT's array-store guard): the
     /// heap offset of the `Class<…>` mirror the `aastore` at `pc` last stored into, or `0` for
@@ -1119,7 +1163,7 @@ impl MetaspaceService {
         // contain an `invokevirtual` or an `invokeinterface` — pays for the table; a body full of
         // `invokestatic`s is statically bound and has nothing to observe.
         let receiver_classes = match code.iter().any(|&b| b == 0xb6 || b == 0xb9) {
-            true => (0..code.len()).map(|_| AtomicU32::new(0)).collect(),
+            true => (0..code.len() * RECEIVER_WAYS).map(|_| AtomicU32::new(0)).collect(),
             false => Vec::new(),
         };
         // The array-store profile (F3-H3), on exactly the same terms: only a method that can reach
@@ -1311,24 +1355,71 @@ impl MetaspaceService {
         }
     }
 
-    /// The **last receiver class** the dispatched call at `pc` of `method` was made on — the heap
-    /// offset of its `Class<…>` mirror — or `0` for a site that has never run (and for a `pc` with
-    /// no cell at all). See [`MethodBody::receiver_classes`]; this is the JIT's only source of
-    /// profile, and `0` is what makes a never-executed site simply not inlinable.
-    pub fn receiver_class(&self, method: MethodId, pc: usize) -> u32 {
-        match self.methods[method].receiver_classes.get(pc) {
-            Some(cell) => cell.load(Ordering::Relaxed),
-            None => 0,
+    /// **Every receiver class the dispatched call at `pc` of `method` has been made on**, in
+    /// first-seen order and at most [`RECEIVER_WAYS`] of them — the heap offsets of their
+    /// `Class<…>` mirrors. See [`MethodBody::receiver_classes`]; this is the JIT's only source of
+    /// profile.
+    ///
+    /// Three answers, and each one means something different to the compiler:
+    ///
+    ///  - **Empty** — the site has never run (or has no cells at all). There is nothing to
+    ///    speculate on and inventing a class would be a guess, so the method is refused, exactly as
+    ///    it was when this returned `0`.
+    ///  - **One to [`RECEIVER_WAYS`] mirrors** — the site is monomorphic or polymorphic, and the
+    ///    compiler can cover it with that many guarded arms.
+    ///  - **`None`, i.e. megamorphic** — the site has seen more distinct classes than there are
+    ///    ways. A chain cannot cover it: every arm would be paid for and the site would deopt
+    ///    anyway, which is strictly worse than not compiling. The method is refused.
+    pub fn receiver_profile(&self, method: MethodId, pc: usize) -> Option<Vec<u32>> {
+        let ways = &self.methods[method].receiver_classes;
+        let Some(cells) = ways.get(pc * RECEIVER_WAYS..(pc + 1) * RECEIVER_WAYS) else {
+            return Some(Vec::new());
+        };
+        let mut seen = Vec::with_capacity(RECEIVER_WAYS);
+        for cell in cells {
+            match cell.load(Ordering::Relaxed) {
+                0 => break,
+                MEGAMORPHIC => return None,
+                // A race can leave the same mirror in two ways; they would resolve to the same
+                // target and emit two identical arms, so the duplicate is dropped here rather than
+                // paid for at run time.
+                mirror if !seen.contains(&mirror) => seen.push(mirror),
+                _ => {}
+            }
         }
+        Some(seen)
     }
 
-    /// Records the receiver class of the dispatched call at `pc`. One `Relaxed` store on a path
-    /// that has already read the same word out of the object's header, and a `pc` with no cell is a
-    /// silent no-op — exactly like the two site caches above.
+    /// Records the receiver class of the dispatched call at `pc`: adds `mirror` to the site's set
+    /// if it is not already there, and marks the site [`MEGAMORPHIC`] if the ways are full and it
+    /// is new. A `pc` with no cells is a silent no-op, exactly like the site caches above.
+    ///
+    /// **What this costs the interpreter**, which is the reason it is written as a scan that stops
+    /// at the first match rather than as anything cleverer. The monomorphic case — one load, one
+    /// compare, *no store* — is cheaper than the unconditional `Relaxed` store F2 had here, because
+    /// after the first call the value is already in way 0. A rotating site pays one load and one
+    /// compare per way until it finds its own, and a megamorphic one stops at the first way that
+    /// holds the marker. Nothing here allocates, locks, or writes twice.
     pub fn set_receiver_class(&self, method: MethodId, pc: usize, mirror: u32) {
-        if let Some(cell) = self.methods[method].receiver_classes.get(pc) {
-            cell.store(mirror, Ordering::Relaxed);
+        let ways = &self.methods[method].receiver_classes;
+        let Some(cells) = ways.get(pc * RECEIVER_WAYS..(pc + 1) * RECEIVER_WAYS) else {
+            return;
+        };
+        for cell in cells {
+            match cell.load(Ordering::Relaxed) {
+                v if v == mirror || v == MEGAMORPHIC => return,
+                0 => {
+                    cell.store(mirror, Ordering::Relaxed);
+                    return;
+                }
+                _ => {}
+            }
         }
+        // Every way is taken by some other class: this site sees more classes than a chain of
+        // guards can cover, and saying so is worth more than the last way's contents. The marker
+        // goes in the **last** way so the scan above still stops at the first match for the
+        // classes that are recorded.
+        cells[RECEIVER_WAYS - 1].store(MEGAMORPHIC, Ordering::Relaxed);
     }
 
     /// The **last array class** the `aastore` at `pc` of `method` stored into — the heap offset of
@@ -1590,6 +1681,79 @@ mod tests {
         // A user class comes from the application loader (java/).
         metaspace.get_or_load("Add").expect("Add should load from java/");
         assert_eq!(metaspace.loader_of("Add"), Some(ClassLoader::Application));
+    }
+
+
+    /// Un `MethodId` cuyo cuerpo contiene un `invokevirtual` o un `invokeinterface`, y el `pc` del
+    /// primero — o sea, un sitio despachado con celdas de perfil de verdad, no una tabla vacía.
+    ///
+    /// Se busca el opcode en vez de hornear un `pc`: el `.class` lo compila nuestro `javac` y el
+    /// desplazamiento se mueve, pero que `BmVirtual.run` despache es lo que la carga *es*.
+    fn pic_dispatched_site() -> (MetaspaceService, MethodId, usize) {
+        use crate::jvm::class_file::ClassFile;
+        let mut metaspace = MetaspaceService::new(
+            vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")],
+            vec![PathBuf::from("java")],
+        );
+        let class = ClassFile::from_path("java/BmVirtual.class").expect("load BmVirtual");
+        let name = class.class_name(class.this_class).unwrap().to_string();
+        metaspace.add(name.clone(), class);
+        let method = metaspace.resolve_method(&name, "run", "()I").expect("run()");
+        let pc = metaspace
+            .code(method)
+            .iter()
+            .position(|&b| b == 0xb6 || b == 0xb9)
+            .expect("BmVirtual.run despacha: si esto falla, la carga dejó de medir lo que medía");
+        (metaspace, method, pc)
+    }
+
+    #[test]
+    fn pic_un_sitio_monomorfico_deja_el_perfil_en_una_sola_clase() {
+        let (metaspace, method, pc) = pic_dispatched_site();
+        // Un sitio que nunca corrió no tiene nada que ofrecer, y eso es distinto de estar
+        // desbordado: la lista vacía rechaza el método, el `None` también, pero por razones que el
+        // compilador no debe confundir.
+        assert_eq!(metaspace.receiver_profile(method, pc), Some(Vec::new()));
+        // Mil llamadas con la misma clase dejan **una** entrada. Y la segunda en adelante ni
+        // siquiera escriben: la palabra ya está, el escaneo para en la primera way.
+        for _ in 0..1000 {
+            metaspace.set_receiver_class(method, pc, 77);
+        }
+        assert_eq!(metaspace.receiver_profile(method, pc), Some(vec![77]));
+    }
+
+    #[test]
+    fn pic_el_perfil_guarda_las_clases_en_el_orden_en_que_las_vio() {
+        let (metaspace, method, pc) = pic_dispatched_site();
+        // Rotando en orden estricto, que es la forma de `bench/BkMega`: `ops[i & 3].f(acc)`.
+        for _ in 0..50 {
+            for class in [11, 22, 33, 44] {
+                metaspace.set_receiver_class(method, pc, class);
+            }
+        }
+        // Las cuatro, en el orden de primera aparición — que es el orden en que la cadena de
+        // guardas compara — y ninguna repetida por más que se hayan visto cincuenta veces cada una.
+        assert_eq!(metaspace.receiver_profile(method, pc), Some(vec![11, 22, 33, 44]));
+    }
+
+    #[test]
+    fn pic_una_clase_de_mas_desborda_el_perfil_y_lo_marca_megamorfico() {
+        let (metaspace, method, pc) = pic_dispatched_site();
+        // Exactamente `RECEIVER_WAYS` clases entran: el sitio es polimórfico y una cadena lo cubre.
+        for k in 0..RECEIVER_WAYS {
+            metaspace.set_receiver_class(method, pc, 100 + k as u32);
+        }
+        assert_eq!(metaspace.receiver_profile(method, pc).map(|v| v.len()), Some(RECEIVER_WAYS));
+        // La siguiente clase distinta no entra, y lo que queda no es "las primeras N": es la
+        // respuesta de que el sitio no se puede cubrir. `None` y no una lista corta, porque una
+        // lista corta le diría al compilador que emita una cadena que va a fallar en cada llamada.
+        metaspace.set_receiver_class(method, pc, 999);
+        assert_eq!(metaspace.receiver_profile(method, pc), None, "el sitio quedó megamórfico");
+        // Y es **pegajoso**: volver a ver una de las clases originales no lo des-desborda. Un sitio
+        // que ya demostró tener más clases que ways no deja de tenerlas porque la próxima llamada
+        // repita una.
+        metaspace.set_receiver_class(method, pc, 100);
+        assert_eq!(metaspace.receiver_profile(method, pc), None);
     }
 
     #[test]

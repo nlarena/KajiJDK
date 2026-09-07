@@ -204,7 +204,10 @@ public class TableColumn implements java.io.Serializable {
             return;
         }
         if (this.resizedPostingDisableCount == 0) {
-            avisar(COLUMN_WIDTH_PROPERTY, Integer.valueOf(viejo), Integer.valueOf(nuevo));
+            // El aviso va con el nombre "width", NO con COLUMN_WIDTH_PROPERTY, que vale
+            // "columWidth" -- un error de tipeo del JDK que quedo en la constante publica y que
+            // nadie usa. Esta medido: quien escucha una columna recibe "width".
+            avisar("width", Integer.valueOf(viejo), Integer.valueOf(nuevo));
         }
     }
 

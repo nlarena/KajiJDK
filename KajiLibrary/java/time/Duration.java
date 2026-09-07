@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.util.List;
 import java.util.ArrayList;
 import java.time.temporal.TemporalAmount;
@@ -12,7 +13,7 @@ import java.time.temporal.ChronoUnit;
 // normalised to [0, 1e9), seconds may be negative). Immutable value type: every operation returns
 // a fresh Duration. Implements TemporalAmount (so `temporal.plus(duration)` works) and Comparable.
 // Ya no es un subconjunto: la superficie publica esta completa.
-public final class Duration implements TemporalAmount, Comparable<Duration> {
+public final class Duration implements TemporalAmount, Comparable<Duration>, Serializable {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
 

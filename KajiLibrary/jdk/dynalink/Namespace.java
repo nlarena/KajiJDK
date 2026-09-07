@@ -1,13 +1,13 @@
 package jdk.dynalink;
 
 /**
- * El espacio de nombres sobre el que actua una {@link Operation}.
+ * The namespace an {@link Operation} acts on.
  *
- * <p>La interfaz esta **vacia a proposito**: un espacio de nombres es una identidad, no un
- * comportamiento. Lo unico que se le pide a una implementacion es que sea comparable por
- * `equals` — {@link NamespaceOperation#contains} no hace otra cosa. Los tres del lenguaje
- * estan en {@link StandardNamespace}; un lenguaje dinamico que necesite mas (por ejemplo, un
- * espacio de "variables globales") declara los suyos.
+ * <p>The interface is **empty on purpose**: a namespace is an identity, not a behaviour. The only
+ * thing an implementation is asked for is that it compare with `equals` —
+ * {@link NamespaceOperation#contains} does nothing else. The language's three are in
+ * {@link StandardNamespace}; a dynamic language that needs more (a "global variables" namespace,
+ * say) declares its own.
  *
  * @since 9
  */

@@ -2,15 +2,15 @@ package java.net;
 
 import java.io.IOException;
 
-// Un pedido HTTP hay que repetirlo, pero automaticamente no se puede.
+// An HTTP request has to be repeated, but it cannot be done automatically.
 //
-// El caso tipico: se mando un POST con cuerpo, el servidor contesto 3xx, y reintentar significaria
-// volver a mandar el cuerpo -- que puede ser un stream ya consumido, o una operacion que no es
-// idempotente. En vez de decidir por el llamador, el JDK aborta y le entrega los datos que
-// necesitaria para decidir: el codigo, la razon, y a donde redirigia.
+// The typical case: a POST with a body was sent, the server answered 3xx, and retrying would mean
+// sending the body again -- which may be an already consumed stream, or an operation that is not
+// idempotent. Instead of deciding for the caller, the JDK aborts and hands over the data the caller
+// would need in order to decide: the code, the reason, and where it was redirecting to.
 //
-// Por eso los tres accessors: sin ellos la excepcion diria "reintenta" sin decir que ni adonde, y
-// no serviria de nada.
+// Hence the three accessors: without them the exception would say "retry" without saying what or
+// where, and would be of no use.
 public class HttpRetryException extends IOException {
 
     private static final long serialVersionUID = -9186022286469111381L;
@@ -34,13 +34,14 @@ public class HttpRetryException extends IOException {
         return this.responseCode;
     }
 
-    // Es el mensaje de detalle, no un campo aparte: el JDK reusa `getMessage()` aca. Se deja igual
-    // porque el contrato publico es "la razon", y la razon es lo que se paso como detalle.
+    // It is the detail message, not a separate field: the JDK reuses `getMessage()` here. It is left
+    // as it is because the public contract is "the reason", and the reason is what was passed as the
+    // detail.
     public String getReason() {
         return super.getMessage();
     }
 
-    /** El {@code Location} de la respuesta, o null si no habia. */
+    /** The response's {@code Location}, or null if there was none. */
     public String getLocation() {
         return this.location;
     }

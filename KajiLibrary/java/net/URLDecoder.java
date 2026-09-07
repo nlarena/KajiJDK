@@ -5,23 +5,23 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
-// La inversa de `URLEncoder`: '+' vuelve a ser espacio y "%XX" vuelve a ser un byte.
+// `URLEncoder`'s inverse: '+' becomes a space again and "%XX" becomes a byte again.
 //
-// El unico punto donde esto es mas que un bucle: los "%XX" **consecutivos hay que juntarlos** antes
-// de decodificarlos. Un caracter fuera de ASCII ocupa varios bytes en UTF-8, y decodificar cada byte
-// por separado da tres caracteres rotos en vez de uno bueno. Por eso el bucle interno acumula toda
-// la corrida de escapes y recien despues arma el `String`.
+// The one point where this is more than a loop: **consecutive** "%XX" escapes have to be gathered
+// before decoding them. A non-ASCII character takes several bytes in UTF-8, and decoding each byte
+// separately gives three broken characters instead of one good one. That is why the inner loop
+// accumulates the whole run of escapes and only then builds the `String`.
 //
-// Es computacion pura: no hay nada omitido.
+// It is pure computation: nothing is omitted.
 public final class URLDecoder {
 
     private URLDecoder() {
     }
 
     /**
-     * Decodifica con UTF-8.
+     * Decodes with UTF-8.
      *
-     * @deprecated El resultado depende del juego de caracteres; usar la sobrecarga que lo pide.
+     * @deprecated The result depends on the character set; use the overload that asks for it.
      */
     @Deprecated
     public static String decode(String s) {
@@ -29,9 +29,9 @@ public final class URLDecoder {
     }
 
     /**
-     * Decodifica con el juego de caracteres de ese nombre.
+     * Decodes with the character set of that name.
      *
-     * @throws UnsupportedEncodingException si el nombre no corresponde a ninguno
+     * @throws UnsupportedEncodingException if the name matches none
      */
     public static String decode(String s, String enc) throws UnsupportedEncodingException {
         if (enc == null) {
@@ -47,9 +47,9 @@ public final class URLDecoder {
     }
 
     /**
-     * Decodifica con ese juego de caracteres.
+     * Decodes with that character set.
      *
-     * @throws IllegalArgumentException si hay un '%' sin dos digitos hexadecimales detras
+     * @throws IllegalArgumentException if there is a '%' without two hexadecimal digits behind it
      */
     public static String decode(String s, Charset charset) {
         Objects.requireNonNull(charset, "charset");

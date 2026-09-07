@@ -13,66 +13,66 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-// La clase base de la que hereda casi todo procesador real (JSR 269 §AbstractProcessor). Lo unico
-// que deja abstracto es `process`; todo lo demas lo resuelve leyendo por reflexion las anotaciones
-// `@SupportedAnnotationTypes`, `@SupportedOptions` y `@SupportedSourceVersion` de la subclase.
+// The base class nearly every real processor inherits from (JSR 269 §AbstractProcessor). The only
+// thing it leaves abstract is `process`; everything else it resolves by reading the subclass's
+// `@SupportedAnnotationTypes`, `@SupportedOptions` and `@SupportedSourceVersion` by reflection.
 //
 // ============================================================================================
-//  AVISO IMPORTANTE — las tres `getSupported*` devuelven su valor por defecto en ESTA VM
+//  IMPORTANT WARNING — the three `getSupported*` return their default value in THIS VM
 // ============================================================================================
 //
-// El mecanismo de esta clase es leer sus propias anotaciones en tiempo de ejecucion. En KajiJDK eso
-// **no funciona todavia**, y no por como esta escrita esta clase sino por un bug del compilador del
-// proyecto:
+// This class's mechanism is to read its own annotations at run time. In KajiJDK that **does not work
+// yet**, and not because of how this class is written but because of a bug in the project's
+// compiler:
 //
-//   nuestro javac no emite el atributo `RuntimeVisibleAnnotations` cuando el tipo de la anotacion
-//   que se aplica se resuelve desde el **classpath** (un `.class`), en vez de estar declarado en la
-//   misma unidad de compilacion.
+//   our javac does not emit the `RuntimeVisibleAnnotations` attribute when the type of the applied
+//   annotation resolves from the **classpath** (a `.class`), instead of being declared in the same
+//   compilation unit.
 //
-// Un procesador de usuario esta siempre en ese caso: `@SupportedAnnotationTypes` vive en
-// KajiLibrary, o sea en el classpath. Asi que su `.class` sale sin la anotacion, y
-// `getClass().getAnnotation(SupportedAnnotationTypes.class)` devuelve `null` — verificado, no
-// supuesto. (El mismo bug explica por que el propio `SupportedAnnotationTypes.class` de la
-// biblioteca perdio su `@Retention(RUNTIME)`: se compilo leyendo `@Retention` del classpath.)
+// A user's processor is always in that case: `@SupportedAnnotationTypes` lives in KajiLibrary, that
+// is, on the classpath. So its `.class` comes out without the annotation, and
+// `getClass().getAnnotation(SupportedAnnotationTypes.class)` returns `null` — measured, not assumed.
+// (The same bug explains why the library's own `SupportedAnnotationTypes.class` lost its
+// `@Retention(RUNTIME)`: it was compiled reading `@Retention` from the classpath.)
 //
-// Consecuencia concreta: `getSupportedAnnotationTypes()` devuelve el conjunto vacio,
-// `getSupportedOptions()` tambien, y `getSupportedSourceVersion()` devuelve `RELEASE_6`, para
-// **cualquier** procesador, tenga o no las anotaciones puestas.
+// The concrete consequence: `getSupportedAnnotationTypes()` returns the empty set,
+// `getSupportedOptions()` too, and `getSupportedSourceVersion()` returns `RELEASE_6`, for **any**
+// processor, whether or not it has the annotations on it.
 //
-// Se escribio igual con la logica real, y a proposito: el codigo es correcto — hace exactamente lo
-// que manda el contrato con la entrada que recibe — y va a empezar a dar la respuesta buena sola en
-// cuanto el compilador emita las anotaciones. Falsear el resultado (por ejemplo devolver `{"*"}`)
-// seria mentir sobre lo que el procesador declaro.
+// It was written with the real logic all the same, and on purpose: the code is correct — it does
+// exactly what the contract demands with the input it receives — and it will start giving the right
+// answer on its own as soon as the compiler emits the annotations. Faking the result (returning
+// `{"*"}`, say) would be lying about what the processor declared.
 //
-// Que esto no rompa nada hoy tiene una razon puntual: el round loop de este proyecto
-// (`src/jvm/interpreter/apt.rs`) no consulta ninguna de las tres — construye el procesador, le da
-// `init(env)` y lo llama a `process(...)` en cada ronda. El filtrado por tipo de anotacion todavia
-// no existe, asi que un procesador recibe todas las rondas igual.
+// That this breaks nothing today has a specific reason: this project's round loop
+// (`src/jvm/interpreter/apt.rs`) consults none of the three — it builds the processor, gives it
+// `init(env)` and calls `process(...)` each round. Filtering by annotation type does not exist yet,
+// so a processor gets every round regardless.
 //
-// UNA OMISION DELIBERADA, por lo mismo. El JDK real, cuando no encuentra la anotacion y el
-// procesador ya esta inicializado, avisa por el `Messager`: "No SupportedSourceVersion annotation
-// found on X, returning RELEASE_6". Aca ese aviso **no** se emite, y a proposito: como la anotacion
-// nunca se ve, el aviso saldria para todo procesador — incluidos los que SI la tienen puesta. Seria
-// decirle a alguien que se olvido de algo que en realidad escribio. Un aviso que miente es peor que
-// no avisar; la explicacion honesta es este encabezado.
+// ONE DELIBERATE OMISSION, for the same reason. The real JDK, when it does not find the annotation
+// and the processor is already initialized, warns through the `Messager`: "No SupportedSourceVersion
+// annotation found on X, returning RELEASE_6". Here that warning is **not** emitted, and on purpose:
+// since the annotation is never seen, the warning would come out for every processor — including the
+// ones that DO have it. It would be telling someone they forgot something they actually wrote. A
+// warning that lies is worse than no warning; the honest explanation is this header.
 public abstract class AbstractProcessor implements Processor {
 
-    /** El entorno que dejo `init`. `protected` porque las subclases lo usan directo. */
+    /** The environment `init` left. `protected` because the subclasses use it directly. */
     protected ProcessingEnvironment processingEnv;
 
-    // Si ya paso por `init`. Se lee y escribe bajo el candado de la instancia (ver `init` y
-    // `isInitialized`, ambos `synchronized`): la herramienta puede inicializar en un hilo y
-    // procesar en otro.
+    // Whether it has been through `init`. It is read and written under the instance's lock (see
+    // `init` and `isInitialized`, both `synchronized`): the tool may initialize on one thread and
+    // process on another.
     private boolean initialized = false;
 
-    /** Solo para las subclases. */
+    /** For the subclasses only. */
     protected AbstractProcessor() {
     }
 
     /**
-     * Las opciones de `@SupportedOptions`, o el conjunto vacio si no esta.
+     * The options from `@SupportedOptions`, or the empty set if it is not there.
      *
-     * <p>Ver el aviso del encabezado: hoy siempre es el conjunto vacio.
+     * <p>See the header's warning: today it is always the empty set.
      */
     public Set<String> getSupportedOptions() {
         SupportedOptions so = this.getClass().getAnnotation(SupportedOptions.class);
@@ -83,9 +83,9 @@ public abstract class AbstractProcessor implements Processor {
     }
 
     /**
-     * Los tipos de `@SupportedAnnotationTypes`, o el conjunto vacio si no esta.
+     * The types from `@SupportedAnnotationTypes`, or the empty set if it is not there.
      *
-     * <p>Ver el aviso del encabezado: hoy siempre es el conjunto vacio.
+     * <p>See the header's warning: today it is always the empty set.
      */
     public Set<String> getSupportedAnnotationTypes() {
         SupportedAnnotationTypes sat = this.getClass().getAnnotation(SupportedAnnotationTypes.class);
@@ -96,11 +96,11 @@ public abstract class AbstractProcessor implements Processor {
     }
 
     /**
-     * La version de `@SupportedSourceVersion`, o `RELEASE_6` si no esta.
+     * The version from `@SupportedSourceVersion`, or `RELEASE_6` if it is not there.
      *
-     * <p>`RELEASE_6` y no `latest()`: es el default que fija el contrato, y es deliberadamente bajo
-     * para que un procesador que no dice nada no prometa entender construcciones que no conoce. Ver
-     * el aviso del encabezado: hoy siempre cae en este default.
+     * <p>`RELEASE_6` and not `latest()`: it is the default the contract fixes, and it is deliberately
+     * low so that a processor which says nothing does not promise to understand constructs it does
+     * not know. See the header's warning: today it always falls back to this default.
      */
     public SourceVersion getSupportedSourceVersion() {
         SupportedSourceVersion ssv = this.getClass().getAnnotation(SupportedSourceVersion.class);
@@ -111,11 +111,11 @@ public abstract class AbstractProcessor implements Processor {
     }
 
     /**
-     * Guarda el entorno. `synchronized`, y rechaza el segundo llamado: el contrato dice "exactamente
-     * una vez", y un procesador reinicializado a mitad de camino quedaria con un `Filer` de otra
-     * corrida.
+     * Stores the environment. `synchronized`, and it refuses the second call: the contract says
+     * "exactly once", and a processor reinitialized halfway would be left with a `Filer` from another
+     * run.
      *
-     * @throws IllegalStateException si ya se llamo
+     * @throws IllegalStateException if it has already been called
      */
     public synchronized void init(ProcessingEnvironment processingEnv) {
         if (this.initialized) {
@@ -126,35 +126,35 @@ public abstract class AbstractProcessor implements Processor {
         this.initialized = true;
     }
 
-    /** Lo unico que la subclase tiene que escribir. */
+    /** The only thing the subclass has to write. */
     public abstract boolean process(Set<? extends TypeElement> annotations,
             RoundEnvironment roundEnv);
 
     /**
-     * Sin sugerencias. Es la respuesta correcta para un procesador que no ofrece completado, y la
-     * que da el JDK real desde esta clase base.
+     * No suggestions. It is the right answer for a processor that offers no completion, and the one
+     * the real JDK gives from this base class.
      */
     public Iterable<? extends Completion> getCompletions(Element element,
             AnnotationMirror annotation, ExecutableElement member, String userText) {
-        return SIN_COMPLETADOS;
+        return NO_COMPLETIONS;
     }
 
-    // Se guarda en un campo con el tipo escrito en vez de devolver `Collections.emptyList()` en el
-    // `return`: nuestro javac no infiere `T` cuando el destino es un supertipo con comodin
-    // (`List<T>` contra `Iterable<? extends Completion>`) y rechaza la llamada. Con el tipo fijado
-    // acá la inferencia no hace falta — y de paso la lista vacía se crea una sola vez.
-    private static final List<Completion> SIN_COMPLETADOS =
+    // It is kept in a field with the type written out instead of returning `Collections.emptyList()`
+    // in the `return`: our javac does not infer `T` when the target is a supertype with a wildcard
+    // (`List<T>` against `Iterable<? extends Completion>`) and rejects the call. With the type fixed
+    // here no inference is needed — and the empty list is created exactly once.
+    private static final List<Completion> NO_COMPLETIONS =
             Collections.unmodifiableList(new ArrayList<Completion>());
 
-    /** Si ya paso por {@link #init}. */
+    /** Whether it has been through {@link #init}. */
     protected synchronized boolean isInitialized() {
         return this.initialized;
     }
 
-    // Interno: copia el arreglo de una anotacion a un conjunto inmutable. `LinkedHashSet` para no
-    // perder el orden en que se declararon (el contrato no lo exige, pero un orden estable hace que
-    // los mensajes de diagnostico no bailen), y una **copia** porque `value()` devuelve el arreglo
-    // clonado de la anotacion y no queremos que el conjunto siga atado a el.
+    // Internal: copies an annotation's array into an immutable set. `LinkedHashSet` so as not to
+    // lose the order they were declared in (the contract does not require it, but a stable order
+    // keeps the diagnostic messages from dancing about), and a **copy** because `value()` returns the
+    // annotation's cloned array and we do not want the set tied to it.
     private static Set<String> arrayToSet(String[] array) {
         Set<String> set = new LinkedHashSet<String>();
         for (String s : array) {

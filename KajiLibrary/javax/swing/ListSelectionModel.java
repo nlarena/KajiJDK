@@ -86,4 +86,44 @@ public interface ListSelectionModel {
 
     /** Saca un oyente. */
     void removeListSelectionListener(ListSelectionListener x);
+
+    /**
+     * Los indices elegidos, en orden.
+     *
+     * <p>Es un metodo con cuerpo en la interfaz -- lo agrego Java 19 -- para que las
+     * implementaciones viejas lo hereden sin tocarlas. Recorre del minimo al maximo preguntando uno
+     * por uno, que es lo unico que se puede hacer con la interfaz de arriba: un modelo que sepa
+     * mejor donde estan sus tramos puede sobreescribirlo.
+     */
+    default int[] getSelectedIndices() {
+        int iMin = getMinSelectionIndex();
+        int iMax = getMaxSelectionIndex();
+        if (iMin < 0 || iMax < 0) {
+            return new int[0];
+        }
+        int[] rvTmp = new int[1 + (iMax - iMin)];
+        int n = 0;
+        for (int i = iMin; i <= iMax; i++) {
+            if (isSelectedIndex(i)) {
+                rvTmp[n] = i;
+                n = n + 1;
+            }
+        }
+        int[] rv = new int[n];
+        System.arraycopy(rvTmp, 0, rv, 0, n);
+        return rv;
+    }
+
+    /** Cuantos hay elegidos; ver {@link #getSelectedIndices}. */
+    default int getSelectedItemsCount() {
+        int iMin = getMinSelectionIndex();
+        int iMax = getMaxSelectionIndex();
+        int count = 0;
+        for (int i = iMin; i <= iMax; i++) {
+            if (isSelectedIndex(i)) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
 }

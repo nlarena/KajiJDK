@@ -2,6 +2,7 @@ package java.lang;
 
 // Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
 // (finding #210).
+import java.io.Serializable;
 import java.lang.constant.ClassDesc;
 import java.lang.reflect.AccessFlag;
 import java.lang.reflect.AnnotatedType;
@@ -43,7 +44,7 @@ import java.util.Set;
  * every method that was native for convenience rather than necessity also differed from the
  * reference in its modifiers.
  */
-public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfField {
+public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfField, Serializable {
 
     // Only the VM constructs mirrors -- as in the JDK, whose constructor is private and called
     // from native code. Private also suppresses the synthesized public default one.

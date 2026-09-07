@@ -8,47 +8,47 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-// Lo que un procesador ve de **una** ronda (JSR 269 §RoundEnvironment). Se construye de nuevo en
-// cada ronda: preguntarle a uno viejo no da los elementos nuevos.
+// What a processor sees of **one** round (JSR 269 §RoundEnvironment). It is built afresh each round:
+// asking an old one does not give the new elements.
 //
-// El implementador de este proyecto es `RoundEnvironmentImpl`.
+// This project's implementor is `RoundEnvironmentImpl`.
 public interface RoundEnvironment {
 
     /**
-     * Si esta es la ronda **final**, la que corre despues de que ya no se genero nada mas. En ella
-     * un procesador puede hacer su verificacion global, pero ya no tiene sentido generar: no queda
-     * ronda que procese lo generado.
+     * Whether this is the **final** round, the one that runs after nothing more has been generated.
+     * In it a processor may do its global verification, but generating no longer makes sense: there
+     * is no round left to process what was generated.
      */
     boolean processingOver();
 
     /**
-     * Si alguien reporto un error en la ronda **anterior**. Sirve para no encadenar errores
-     * derivados sobre un modelo que ya se sabe roto.
+     * Whether anyone reported an error in the **previous** round. It serves to avoid chaining derived
+     * errors on top of a model already known to be broken.
      */
     boolean errorRaised();
 
-    /** Los tipos raiz de esta ronda: lo que la herramienta va a compilar. */
+    /** This round's root types: what the tool is going to compile. */
     Set<? extends Element> getRootElements();
 
-    /** Los elementos anotados con `a`, buscando en las raices y en lo anidado. */
+    /** The elements annotated with `a`, searching the roots and what is nested in them. */
     Set<? extends Element> getElementsAnnotatedWith(TypeElement a);
 
     /**
-     * Igual, pero nombrando el tipo de anotacion por su `Class`. Es la variante comoda cuando el
-     * procesador tiene la anotacion en su propio classpath; la de `TypeElement` es la general (una
-     * anotacion puede no estar cargada).
+     * The same, but naming the annotation type by its `Class`. It is the convenient variant when the
+     * processor has the annotation on its own classpath; the `TypeElement` one is the general case
+     * (an annotation may not be loaded).
      */
     Set<? extends Element> getElementsAnnotatedWith(Class<? extends Annotation> a);
 
-    // Las dos de abajo son `default` en el contrato: la union sobre varias anotaciones se define
-    // enteramente en terminos de la busqueda de a una, asi que no hay nada que un implementador
-    // pueda saber mejor. Se escriben sin streams, que es lo que hay aca.
+    // The two below are `default` in the contract: the union over several annotations is defined
+    // entirely in terms of the one-at-a-time lookup, so there is nothing an implementor could know
+    // better. They are written without streams, which is what there is here.
 
-    /** La union de {@link #getElementsAnnotatedWith(TypeElement)} sobre todas las de `annotations`. */
+    /** The union of {@link #getElementsAnnotatedWith(TypeElement)} over all of `annotations`. */
     default Set<? extends Element> getElementsAnnotatedWithAny(TypeElement... annotations) {
-        // `LinkedHashSet` y no `HashSet`: el orden queda determinado por el de `annotations`, asi
-        // que dos corridas iguales dan la misma secuencia y los mensajes no bailan. Inmutable al
-        // salir, porque el conjunto lo fabrica el contrato y no es de nadie para modificar.
+        // `LinkedHashSet` and not `HashSet`: the order is determined by that of `annotations`, so two
+        // equal runs give the same sequence and the messages do not dance about. Immutable on the way
+        // out, because the set is manufactured by the contract and is nobody's to modify.
         Set<Element> result = new LinkedHashSet<Element>();
         for (TypeElement a : annotations) {
             result.addAll(this.getElementsAnnotatedWith(a));
@@ -56,7 +56,7 @@ public interface RoundEnvironment {
         return Collections.unmodifiableSet(result);
     }
 
-    /** La union de {@link #getElementsAnnotatedWith(Class)} sobre todas las de `annotations`. */
+    /** The union of {@link #getElementsAnnotatedWith(Class)} over all of `annotations`. */
     default Set<? extends Element> getElementsAnnotatedWithAny(
             Set<Class<? extends Annotation>> annotations) {
         Set<Element> result = new LinkedHashSet<Element>();

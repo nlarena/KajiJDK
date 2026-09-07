@@ -1,5 +1,6 @@
 package java.net;
 
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 
 // Un URI segun RFC 3986, descompuesto en sus cinco piezas: esquema, autoridad, camino,
@@ -16,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 //
 // El parser usa `charAt` y `substring(int,int)` porque nuestro `String` no tiene `indexOf`
 // ni `substring(int)` — de ahi los `scan*` de abajo.
-public final class URI implements Comparable<URI> {
+public final class URI implements Comparable<URI>, Serializable {
 
     private final String string;
     private final String scheme;

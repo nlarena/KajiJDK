@@ -1,22 +1,23 @@
 package java.net;
 
 /**
- * KajiLibrary's java.net.SocketOption — una opción de socket, con su nombre y el tipo de su valor.
+ * KajiLibrary's java.net.SocketOption — a socket option, with its name and the type of its value.
  *
- * <p>Las dos preguntas que declara son justo lo que hace falta para que las opciones sean
- * **extensibles y seguras a la vez**: el nombre identifica la opción, y `type()` dice de qué tipo es
- * su valor, de modo que `setOption(opción, valor)` puede verificar en compilación —por la variable de
- * tipo— y también en ejecución que el valor corresponde.
+ * <p>The two questions it declares are exactly what is needed to make options **extensible and safe
+ * at the same time**: the name identifies the option, and `type()` says what type its value is, so
+ * that `setOption(option, value)` can check at compile time —through the type variable— and at run
+ * time too that the value matches.
  *
- * <p>Sin esto habría que tener un método por opción, o pasar `Object` y descubrir el error tarde.
+ * <p>Without this there would have to be one method per option, or `Object` would have to be passed
+ * and the error discovered late.
  *
- * @param <T> el tipo del valor de la opción
+ * @param <T> the type of the option's value
  */
 public interface SocketOption<T> {
 
-    /** El nombre de la opción. */
+    /** The option's name. */
     String name();
 
-    /** El tipo de su valor. */
+    /** The type of its value. */
     Class<T> type();
 }

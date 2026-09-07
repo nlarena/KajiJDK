@@ -10,13 +10,13 @@ import javax.annotation.processing.Processor;
 // hands back a CompilationTask you configure and then call(), which is what makes annotation
 // processors and a custom file manager attachable before the first source is read.
 //
-// `getStandardFileManager(...)` **esta**: la nota anterior lo omitia porque `java.nio.charset` no
-// existia, y ahora existe entero.
+// `getStandardFileManager(...)` **is here**: the earlier note left it out because
+// `java.nio.charset` did not exist, and now it exists in full.
 public interface JavaCompiler extends Tool, OptionChecker {
 
-    // El trabajo pendiente: ya sabe que compilar, todavia no empezo. Es Callable<Boolean>
-    // porque el resultado de una compilacion es un si/no, y porque asi se puede mandar a un
-    // ExecutorService sin envolverla.
+    // The pending work: it already knows what to compile, it has not started yet. It is
+    // Callable<Boolean> because the result of a compilation is a yes/no, and because that way it can
+    // be handed to an ExecutorService without wrapping it.
     public interface CompilationTask extends Callable<Boolean> {
 
         void addModules(Iterable<String> moduleNames);
@@ -29,11 +29,11 @@ public interface JavaCompiler extends Tool, OptionChecker {
     }
 
     /**
-     * El gestor de archivos estandar de esta herramienta.
+     * This tool's standard file manager.
      *
-     * <p>Los tres argumentos son los tres canales por los que una herramienta habla con el mundo: a
-     * donde van los diagnosticos, en que idioma, y con que codificacion se leen las fuentes. `null`
-     * en cualquiera de ellos significa "lo que el sistema use por defecto".
+     * <p>The three arguments are the three channels a tool talks to the world through: where the
+     * diagnostics go, in which language, and with which encoding the sources are read. `null` in any
+     * of them means "whatever the system uses by default".
      */
     StandardJavaFileManager getStandardFileManager(
             DiagnosticListener<? super JavaFileObject> diagnosticListener, Locale locale,

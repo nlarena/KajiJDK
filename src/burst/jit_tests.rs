@@ -57,6 +57,21 @@ fn boot_class_path() -> Vec<PathBuf> {
     vec![PathBuf::from("KajiLibrary"), PathBuf::from("boot")]
 }
 
+/// El **classpath de aplicación** de este arnés: las fixtures históricas en `java/`, y las del
+/// instrumento de medición en `bench/`.
+///
+/// Son dos directorios y no uno por una razón de procedencia, no de orden. Los `.class` de `java/`
+/// se recompilan con **nuestro** `javac` cada tanto — es un corpus vivo, y esa es su gracia — así
+/// que una medición apoyada en ellos mide nuestro compilador tanto como nuestra VM, y se mueve
+/// cuando el compilador se mueve. Los de `bench/` los compila el `javac` **real** de JDK 25, se
+/// escriben una vez y no los toca nadie: son el instrumento, y un instrumento cuyo patrón cambia
+/// solo no es un instrumento.
+///
+/// Un solo lugar y no doce copias, por la razón de siempre.
+fn app_class_path() -> Vec<PathBuf> {
+    vec![PathBuf::from("java"), PathBuf::from("bench")]
+}
+
 /// Una fixture que toca `String` da lo mismo por este arnés que por la VM de verdad.
 ///
 /// # Qué se estaba escapando
@@ -98,7 +113,7 @@ fn una_fixture_de_string_da_lo_mismo_que_el_jdk_real() {
 
 fn run_tuned(class_file: &str, jit: bool, regs: Option<u32>) -> (i32, usize, JitStats) {
     use crate::jvm::interpreter::bytecode_interpreter::execute_counting_tuned;
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let class = ClassFile::from_path(class_file).expect("load class");
     let name = class.class_name(class.this_class).unwrap().to_string();
     metaspace.add(name.clone(), class);
@@ -183,37 +198,37 @@ fn a_hot_method_with_an_inner_loop_agrees_with_the_interpreter() {
 }
 
 #[test]
-fn the_benchmark_workloads_that_are_still_controls_are_unaffected() {
-    // The `Bm*` workloads that are still this milestone's **zero-effect controls**, and the reason
-    // each of them is one. After step 9 there are only two left, and the honest statement of where
-    // they stand is:
+fn bminvoke_is_the_workload_group_4_took_from_the_controls() {
+    // **The last `Bm*` control, and group 4 is what took it.** `BmInvoke.bmFib` calls itself and
+    // `run` calls `bmFib`; through group 3 the cycle check refused the expansion and refused the
+    // method with it, so both arms of this row in the measurement table were the same interpreted
+    // run. A recursion is precisely the shape a real call reaches, so it compiles now.
     //
-    //  - `BmInvoke`: `bmFib` calls itself, and `run` calls `bmFib`. Step 8 expands calls, but not
-    //    a **recursive** one — a callee already on the inline path would expand for ever, and the
-    //    cycle check refuses it by identity. So both methods stay out.
-    // Three workloads used to be here and are not any more. Step 5 took `BmVirtual` (its three `f`
-    // overrides are `aload_0; getfield; …; ireturn`), step 9 took `BmField` — the last one the JIT
-    // had never been able to touch at all — and the **array-allocation step took `BmArray`**, whose
-    // `run` begins `new int[1024]` and was held out by that one opcode alone. See
-    // [`bmvirtual_is_the_workload_step_5_took_from_the_controls`],
-    // [`bmfield_is_the_workload_step_9_took_from_the_controls`] and
-    // [`bmarray_is_the_workload_the_array_step_took_from_the_controls`].
+    // Three workloads left the control list before it — step 5 took `BmVirtual`, step 9 took
+    // `BmField`, the array step took `BmArray` (see the three tests named after them) — so the
+    // honest statement is the one this milestone's notes already make: **there are no zero-effect
+    // controls left**, and `bench_jit`'s table can no longer contain a row whose two arms are the
+    // same run. A future measurement needs a workload written to be one, not one that survived.
     //
-    // So `BmInvoke` is the **last** control, and that is worth saying plainly: this milestone's
-    // measurement table now has exactly one row whose two arms are the same interpreted run.
-    //
-    // Pinning it here means the table cannot quietly become a comparison of two identical runs: if
-    // a future change makes it compile, this test says so first.
-    for (class_file, expected) in [("java/BmInvoke.class", 252_624)] {
-        let (off, off_steps, _) = run(class_file, false);
-        let (on, on_steps, stats) = run(class_file, true);
-        assert_eq!(off, expected, "{class_file}");
-        assert_eq!(on, expected, "{class_file}");
-        assert_eq!(on_steps, off_steps, "{class_file}: a control must execute the same opcodes");
-        assert_eq!(stats.compiled, 0, "{class_file} must compile nothing (it is a control)");
-        assert_eq!(stats.native_calls, 0, "{class_file}");
-    }
-
+    // 252624 is what `java BmInvoke` prints.
+    let stats = differential("java/BmInvoke.class", 252_624);
+    assert_eq!(stats.compiled, 2, "`bmFib` and `run`");
+    assert_eq!(stats.rejected, 0);
+    // **This is the deep-recursion case**, and the two counters below are the whole of how it
+    // behaves. `bmFib(24)` recurses far past the frame budget one excursion is entered with, so a
+    // call every so often cannot pay for its callee and deopts *at the invoke* — handing the rest
+    // of that chain back to the interpreter, which counts frames exactly. Each of those deopts
+    // rebuilds the frames of every native level below it, which is what `linked_exits` counts.
+    assert!(stats.deopts > 0, "a recursion deeper than the budget must hand itself back");
+    assert!(
+        stats.linked_exits > 0,
+        "a deopt inside a called compilation must be followed through its link"
+    );
+    // And the point of the whole exercise: the interpreter now executes a tiny fraction of the
+    // opcodes it used to, because the recursion runs natively between those hand-backs.
+    let (_, off_steps, _) = run("java/BmInvoke.class", false);
+    let (_, on_steps, _) = run("java/BmInvoke.class", true);
+    assert!(on_steps * 10 < off_steps, "{on_steps} opcodes with the JIT vs {off_steps} without");
 }
 
 #[test]
@@ -349,7 +364,7 @@ fn with_poll_on(
     raise: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicU64>),
 ) -> (i32, JitStats) {
     use crate::jvm::interpreter::bytecode_interpreter::execute_counting_with_jit_and_poll;
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let class = ClassFile::from_path(class_file).expect("load class");
     let name = class.class_name(class.this_class).unwrap().to_string();
     metaspace.add(name.clone(), class);
@@ -425,7 +440,7 @@ fn the_poll_may_be_raised_and_lowered_while_the_program_runs() {
 /// One timed run: the class is loaded and resolved *outside* the timer, so what is measured is
 /// execution and nothing else.
 fn timed(class_file: &str, jit: bool) -> (i32, usize, JitStats, std::time::Duration) {
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let class = ClassFile::from_path(class_file).expect("load class");
     let name = class.class_name(class.this_class).unwrap().to_string();
     metaspace.add(name.clone(), class);
@@ -441,162 +456,587 @@ fn timed(class_file: &str, jit: bool) -> (i32, usize, JitStats, std::time::Durat
     }
 }
 
+/// La **mediana** de una muestra ya ordenada.
+///
+/// Es el estadístico del banco, y no el promedio, por una razón que no es de gusto: una corrida
+/// interrumpida sólo puede salir **más lenta**, nunca más rápida, así que la contaminación de esta
+/// máquina es unilateral y un promedio la absorbe entera. Una sola muestra pisada por el planificador
+/// mueve el promedio de una muestra de cinco a siete veces la mediana — ese número está medido en
+/// `el_estadistico_del_banco_es_una_mediana_y_no_un_promedio`, que es lo que impide que alguien
+/// "simplifique" esto a una suma dividida por el largo.
 fn median(sorted: &[std::time::Duration]) -> std::time::Duration {
     sorted[sorted.len() / 2]
 }
 
-// The **JIT measurement**, run with:
-//
-//     cargo test --release --lib bench_jit -- --ignored --nocapture
-//
-// ------------------------------------------------------------------------------------------
-// **Why this table can be read at all.** `bench_baseline`'s protocol (see `gc.rs`) exists
-// because the dominant noise on this machine is *code layout*: any edit relinks the crate and
-// swings a workload by ±3–12%, which is larger than most honest effects. Every rule there is a
-// way of separating the change from the relayout.
-//
-// Here the two arms are **not two binaries**. The JIT is a runtime flag, so both arms are the
-// same machine code at the same addresses in the same process — there is no relayout between
-// them to separate out. That removes the largest error term outright, and it is the reason this
-// measurement is worth more than the usual before/after. What remains is ordinary run-to-run
-// noise, and the rest of the protocol still applies to it:
-//
-//  1. **Mirrored order** (off·on / on·off, alternating) so run position, thermal drift and
-//     background load fall on both arms equally.
-//  2. **Zero-effect controls.** `BmInvoke` compiles *nothing* (its only hot method is recursive,
-//     which the inliner refuses by identity) and `BmArray` compiles nothing either (its hot method
-//     begins with `newarray`). The control assertions below pin those counts from the JIT's own
-//     counters rather than from belief, so "these arms do the same work" stays a checked claim.
-//     Whatever ratio they show is the noise floor, and a treatment's ratio is only evidence in so
-//     far as it exceeds it.
-//
-//     **Step 9 cost this table a control.** `BmField` was one for six steps and is now a treatment:
-//     its `run` was refused at its outer loop header for a dead slot two edges typed differently,
-//     and that is exactly what the type lattice's top now absorbs. Two controls is thin, so
-//     `BmArray` was promoted from "also a control, for a different reason" to a pinned one.
-//  3. **Median and minimum.** An interrupted run can only be slower, so the minimum is the
-//     least-perturbed sample; when median and minimum disagree, the spread is the story.
-//
-// `BmLoop` is the headline of step 3 and it deserves its own note, because until step 3 it was a
-// *control*. Its body is entirely inside the compiled subset — it is the ideal shape for this
-// JIT — but `run()` is entered exactly **once** and loops 900 000 times inside it, which an
-// invocation counter can never see, so nothing was compiled and its two arms were the same
-// execution. With a back-edge counter and on-stack replacement it compiles, is entered in the
-// middle of its loop, and finishes there. `JtLoop` is the same arithmetic and the same 900 000
-// iterations re-shaped into 3 000 calls of 300, i.e. the shape the *previous* trigger could
-// already see; keeping both in the table is what separates "OSR works" from "the JIT works".
-#[test]
-#[ignore = "benchmark: prints the JIT table, asserts no timing"]
-fn bench_jit() {
-    const PAIRS: usize = 7; // 1 warm-up pair (discarded) + 6 measured
+// =============================================================================================
+// Hito F-bench: el instrumento
+// =============================================================================================
 
-    // (class file, expected value, role). `None` is a **treatment** — it must compile something.
-    // `Some(n)` is a **control**: it must compile exactly `n` methods, and every one of them must
-    // be incapable of moving the measurement. The count rather than a boolean is what lets a
-    // workload whose *arms are not literally identical* still serve as a noise floor — a compiled
-    // method that does nothing is still a control, but only if nothing else quietly joins it.
-    let workloads = [
-        ("java/BmLoop.class", 161_265, None),
-        ("java/JtLoop.class", 832_880, None),
-        // Step 5's treatment, and the one that measures something different from the other two:
-        // its compiled methods are *small* (`aload_0; getfield; …; ireturn`), so what is being
-        // timed is the **boundary** — marshal, call, unpack — against an interpreted body of a
-        // handful of opcodes, rather than a long loop that pays the crossing once.
-        ("java/BmVirtual.class", 861_237, None),
-        // Step 6's treatments, written when `BmField` was still a control: the same arithmetic with
-        // the inner loop hoisted into a method the trigger could see. `JdArray` pays the boundary
-        // once per 1024 array writes; `JdField` once per 500 field writes, on a receiver that has
-        // to be marshalled every time. They stay in the table — now that `BmField` itself compiles,
-        // the three together separate "the writes are fast" from "the whole loop is native".
-        ("java/JdArray.class", 649_216, None),
-        ("java/JdField.class", 685_184, None),
-        // **Step 9's treatment, and the headline of this step**: `BmField` was a control in every
-        // table before this one. Its hot method is the only workload here that allocates inside the
-        // loop being measured, so its "on" arm is also the only one whose time includes collection
-        // — which is what makes it diagnostic rather than merely one more win.
-        ("java/BmField.class", 973_376, None),
-        // The controls, with the exact count of what each compiles. Both are zero, and both for a
-        // reason the JIT states rather than one this table assumes: `BmInvoke`'s hot method is
-        // recursive (the inliner refuses it by identity) and `BmArray`'s begins with `newarray`.
-        ("java/BmInvoke.class", 252_624, Some(0)),
-        ("java/BmArray.class", 615_180, Some(0)),
-    ];
+/// Una fila de la tabla de medición.
+#[derive(Clone, Copy)]
+struct Row {
+    /// El `.class`, relativo a la raíz del repo.
+    file: &'static str,
+    /// Lo que imprime el `java` **real** de JDK 25 para esa clase. Ata la fila al JLS y no a sí
+    /// misma.
+    expected: i32,
+    /// **Cuántos métodos compila esta fila, exactamente.** Cero para un control; cero también para
+    /// una fila histórica, donde el número no se pincha (ver `legacy`).
+    ///
+    /// Es un conteo exacto y no un `> 0` por algo que se descubrió rompiéndolo a propósito: se
+    /// envenenó el método caliente de `BkRefW` —el lazo, que es lo único que esa fila mide— y la
+    /// aserción `compiled > 0` **no lo vio**, porque `run` seguía compilando. La fila habría quedado
+    /// midiendo el intérprete contra sí mismo con la suite en verde: el mismo modo de falla que este
+    /// hito existe para cerrar, sólo que del lado de los tratamientos. Con el conteo exacto, 2 -> 1
+    /// y la suite se pone roja.
+    compiles: usize,
+    /// Si esta fila es un **control**: además de compilar cero, no entra a código nativo ni una vez,
+    /// así que sus dos brazos son literalmente la misma ejecución.
+    control: bool,
+    /// El control **gemelo**: el mismo programa, más una rama que nunca se toma y que lo saca del
+    /// subconjunto compilable. Su razón off/on es el piso de ruido **de esta fila** — mismo lazo,
+    /// mismos accesos a memoria, misma escala — y no un piso promedio prestado de otra carga.
+    twin: Option<&'static str>,
+}
 
-    eprintln!();
-    eprintln!("F3 JIT — green, median of {} mirrored pairs (1 warm-up discarded)", PAIRS - 1);
-    eprintln!(
-        "{:<10} {:>9} {:>12} {:>12} {:>8} {:>10} {:>10} {:>7}  role",
-        "workload", "compiled", "JIT off", "JIT on", "median", "off min", "on min", "min"
-    );
-    eprintln!("{}", "-".repeat(104));
+const fn treatment(file: &'static str, expected: i32, compiles: usize, twin: &'static str) -> Row {
+    Row { file, expected, compiles, control: false, twin: Some(twin) }
+}
 
-    let mut control_ratios = Vec::new();
-    let mut treatment_ratios = Vec::new();
-    for (class_file, expected, control) in workloads {
-        let short = class_file.trim_start_matches("java/").trim_end_matches(".class");
-        let (mut off_times, mut on_times) = (Vec::new(), Vec::new());
-        let mut compiled = 0;
-        for pair in 0..PAIRS {
-            // Mirrored: off·on, on·off, off·on, ... so neither arm always runs first.
-            let first_is_off = pair % 2 == 0;
-            let first = timed(class_file, !first_is_off);
-            let second = timed(class_file, first_is_off);
+const fn control(file: &'static str, expected: i32) -> Row {
+    Row { file, expected, compiles: 0, control: true, twin: None }
+}
+
+/// Una fila histórica de `java/`. Va **sin** conteo pinchado, y a propósito: sus `.class` los
+/// recompila nuestro `javac` cada tanto, así que un número exacto acá se rompería por un cambio del
+/// compilador y no por uno del JIT — rojo por ruido, que es peor que no mirar. Lo que sí se exige es
+/// que compile algo, porque una fila histórica que dejó de compilar es una fila que no mide nada.
+/// Las del instrumento, en `bench/`, no tienen esa excusa: las compila el `javac` real una sola vez
+/// y no las toca nadie.
+const fn legacy(file: &'static str, expected: i32) -> Row {
+    Row { file, expected, compiles: 0, control: false, twin: None }
+}
+
+/// La aserción que sostiene la tabla entera, en un solo lugar porque la corren dos llamadores: la
+/// medición (en **cada** repetición, no una vez al final) y el test de la suite.
+fn check_compiled(row: Row, stats: &JitStats) {
+    let name = short(row.file);
+    if row.control {
+        assert_eq!(
+            stats.compiled, 0,
+            "{name} es un CONTROL del banco y compiló {} métodos. Dejó de ser un piso de ruido: sus \
+             dos brazos ya no son la misma corrida, así que toda razón normalizada contra él es \
+             falsa. Escribir un control nuevo, no aflojar este número.",
+            stats.compiled
+        );
+        assert_eq!(
+            stats.native_calls, 0,
+            "{name} es un CONTROL y entró a código nativo {} veces",
+            stats.native_calls
+        );
+    } else if row.twin.is_some() {
+        assert_eq!(
+            stats.compiled, row.compiles,
+            "{name} es un TRATAMIENTO del instrumento y compiló {} métodos en vez de {}. O el \
+             subconjunto compilable se movió —y entonces la fila mide otra cosa que la última vez— \
+             o su método caliente dejó de compilar y la fila mide el intérprete contra sí mismo.",
+            stats.compiled, row.compiles
+        );
+    } else {
+        assert!(
+            stats.compiled > 0,
+            "{name} está en la tabla como tratamiento histórico y no compila nada: sus dos brazos \
+             son la misma corrida interpretada"
+        );
+    }
+}
+
+/// **La tabla.** Cada tratamiento de `bench/` viene con su gemelo de efecto cero pegado abajo.
+///
+/// # Por qué gemelos y no "un par de controles"
+///
+/// Tres cargas dejaron de ser controles en esta sesión — `BmVirtual`, `BmField`, `BmArray` — y una
+/// cuarta, `BmInvoke`, cayó con el grupo 4. Todas por lo mismo: eran controles **por accidente**,
+/// porque el subconjunto compilable todavía no las alcanzaba, y el día que las alcanzó nadie se
+/// enteró. Con el censo en 74% cualquier programa normal que uno elija hoy compila o compila pronto,
+/// así que un control no puede ser una carga que *todavía* no compila: tiene que ser una carga
+/// escrita para no compilar, por un motivo estructural, y **contada** en cada corrida.
+///
+/// El gemelo es ese diseño llevado al final: `BkArithC` es `BkArith` letra por letra más un
+/// `if (NEVER != 0) { … ("" + n) … }`. `NEVER` es un `static int` no final, así que `javac` no lo
+/// pliega y el `invokedynamic` queda en el bytecode (verificado con `javap -c`); el escaneo lo ve y
+/// rechaza el método entero, y la ejecución nunca entra a la rama, así que cuesta un `getstatic` y
+/// un `ifeq` por llamada. Los dos archivos imprimen **el mismo número** — también comprobado — de
+/// modo que la fila y su gemelo son el mismo programa corrido dos veces, y la razón off/on del
+/// gemelo es ruido puro por construcción.
+///
+/// # Por qué `invokedynamic` y no otra cosa
+///
+/// Porque es lo único que este nivel tiene cerrado **estructuralmente** y no por falta de trabajo:
+/// un `invokedynamic` acá no es una llamada, el intérprete vuelve a correr el bootstrap y lo que
+/// produce es una acción de la VM, no un destino; no hay `MethodId` enlazado que darle a este nivel,
+/// así que no hay guarda que lo cubra (ver el módulo `compile`). Aun así **no se confía en eso**:
+/// `los_controles_del_banco_no_compilan_nada` lo cuenta en cada corrida de la suite.
+const BENCH_ROWS: &[Row] = &[
+    // Aritmética sobre locales en un método caliente. Es la forma de `JtLoop` recompilada con el
+    // `javac` real, y el piso contra el que se leen las demás filas.
+    treatment("bench/BkArith.class", 124_386, 2, "BkArithC"),
+    control("bench/BkArithC.class", 124_386),
+    // **Escritura de referencias a campo** (`putfield` de `Object`): la write barrier. Frente
+    // agregado en esta sesión, sin un solo número hasta ahora.
+    treatment("bench/BkRefW.class", 37_928, 2, "BkRefWC"),
+    control("bench/BkRefWC.class", 37_928),
+    // **Escritura de referencias a arreglo** (`aastore`): write barrier más la comprobación de tipo
+    // de almacenamiento que un `iastore` no tiene. El otro frente sin números.
+    treatment("bench/BkRefA.class", 37_928, 2, "BkRefAC"),
+    control("bench/BkRefAC.class", 37_928),
+    // **Despacho de interfaz monomórfico**. `BkMono` y `BkMega` corren el mismo programa con los
+    // mismos cuerpos y devuelven el mismo número; lo único que las separa es cuántas clases ve el
+    // sitio de llamada, así que la diferencia entre esas dos filas es despacho y nada más.
+    treatment("bench/BkMono.class", 365_000, 1, "BkMonoC"),
+    control("bench/BkMonoC.class", 365_000),
+    // **Despacho de interfaz megamórfico**: cuatro receptores rotando. Es la fila que puede salir
+    // negativa, y por eso está.
+    //
+    // **Compila 1, y antes compilaba 5.** Los 5 eran `step` más los cuatro `BkOp*.f`, y que los
+    // cuatro cuerpos se compilaran por su cuenta era el síntoma: `step` deoptaba en la primera
+    // iteración, se retiraba su entrada on-stack, el bucle corría interpretado y cada `f()` se ponía
+    // caliente sola y se entraba desde el intérprete 300.876 veces. Con el caché polimórfico `step`
+    // se queda compilado y expande los cuatro cuerpos adentro, así que ninguno de los cuatro llega
+    // nunca a las 32 invocaciones interpretadas que lo compilarían. 1 es el mismo número que
+    // `BkMono`, que es lo que tiene que ser: son el mismo programa.
+    treatment("bench/BkMega.class", 365_000, 1, "BkMegaC"),
+    control("bench/BkMegaC.class", 365_000),
+];
+
+/// Las filas históricas de `java/`, que se siguen midiendo por continuidad con las tablas anteriores
+/// del hito y **no** como instrumento.
+///
+/// La distinción es de procedencia, no de calidad: sus `.class` los recompila nuestro `javac` cada
+/// tanto, así que su tiempo se mueve cuando se mueve el compilador y no sólo cuando se mueve el JIT.
+/// Ninguna tiene gemelo, así que ninguna se normaliza; sus razones se imprimen crudas.
+const LEGACY_ROWS: &[Row] = &[
+    legacy("java/BmLoop.class", 161_265),
+    legacy("java/JtLoop.class", 832_880),
+    legacy("java/BmVirtual.class", 861_237),
+    legacy("java/JdArray.class", 649_216),
+    legacy("java/JdField.class", 685_184),
+    legacy("java/BmField.class", 973_376),
+    // Los dos que **eran** controles y ya no lo son. Se quedan como tratamientos, con el nombre de
+    // lo que les pasó escrito al lado: `BmInvoke` compila desde el grupo 4 (su método caliente es
+    // recursivo, que ahora es exactamente la forma que una llamada real alcanza) y `BmArray` desde
+    // el paso de arreglos. Ninguno de los dos puede volver a servir de piso de ruido.
+    legacy("java/BmInvoke.class", 252_624),
+    legacy("java/BmArray.class", 615_180),
+];
+
+fn short(file: &str) -> &str {
+    file.rsplit('/').next().unwrap_or(file).trim_end_matches(".class")
+}
+
+/// Lo que el banco mide de una fila: los tiempos de los dos brazos, ya ordenados, y los contadores
+/// del JIT de la última corrida del brazo prendido.
+///
+/// Los contadores enteros y no sólo `compiled` porque son lo único que distingue "el JIT no sirve
+/// acá" de "el JIT entra y se sale todo el tiempo", y esas dos cosas piden arreglos distintos. Una
+/// tabla que sólo imprime la razón deja al lector adivinando cuál de las dos vio.
+struct Sample {
+    off: Vec<std::time::Duration>,
+    on: Vec<std::time::Duration>,
+    stats: JitStats,
+}
+
+impl Sample {
+    fn ratio(&self) -> f64 {
+        median(&self.off).as_nanos() as f64 / median(&self.on).as_nanos() as f64
+    }
+
+    fn min_ratio(&self) -> f64 {
+        self.off[0].as_nanos() as f64 / self.on[0].as_nanos() as f64
+    }
+}
+
+/// El corazón del banco: corre `rows` en **cuadrado latino** y devuelve una muestra por fila.
+///
+/// # El protocolo, y por qué cada regla está
+///
+/// El ruido dominante de esta máquina es el **layout del código**: cualquier edición reenlaza el
+/// crate y mueve una carga ±3–12%, más que el efecto de casi cualquier cambio. Se demostró con un
+/// experimento nulo — agregar un campo `HashMap` **sin usar** movió un control +3.4%.
+///
+/// 1. **Los dos brazos son el mismo binario.** El JIT es una bandera de tiempo de ejecución, así que
+///    "con" y "sin" son el mismo código máquina en las mismas direcciones del mismo proceso. No hay
+///    relayout entre los brazos que separar, y ése es el término de error que arruinó las mediciones
+///    anteriores. Es el motivo por el que este instrumento vale más que un antes/después.
+/// 2. **Cuadrado latino sobre la *posición*.** En la repetición `r` las filas se recorren rotadas
+///    `r` lugares, así que ninguna carga cae siempre en el mismo momento de la tanda: la deriva
+///    térmica, el turbo que se agota y lo que sea que esté haciendo la máquina se reparten parejo
+///    entre todas las filas en vez de castigar a las últimas.
+/// 3. **Orden de brazos espejado** dentro de cada fila, alternando con `r`, por lo mismo a escala
+///    chica: ningún brazo corre siempre primero.
+/// 4. **Una repetición de calentamiento, descartada.** La primera toca páginas, resuelve clases y
+///    llena cachés que las demás encuentran calientes.
+///
+/// Con `REPS = 11` y diez filas el cuadrado cierra exacto: descartada la de calentamiento quedan
+/// diez repeticiones y cada carga visita **cada una** de las diez posiciones de la tanda una vez.
+/// Las filas históricas son ocho, así que ahí el reparto es parejo pero no exacto, y por eso no se
+/// normalizan ni sostienen afirmaciones finas.
+/// 5. **Mediana y mínimo.** Ver `median`. Cuando los dos no dicen lo mismo, la dispersión *es* el
+///    resultado y hay que decirlo, no elegir el número que conviene.
+///
+/// Los conteos de compilación se verifican **en cada repetición**, no una vez al final: un control
+/// que compila algo recién en la quinta corrida es exactamente la forma de degradación silenciosa
+/// que este hito existe para cerrar.
+fn measure(rows: &[Row], reps: usize) -> Vec<Sample> {
+    let mut off: Vec<Vec<std::time::Duration>> = vec![Vec::new(); rows.len()];
+    let mut on: Vec<Vec<std::time::Duration>> = vec![Vec::new(); rows.len()];
+    let mut stats = vec![JitStats::default(); rows.len()];
+    for rep in 0..reps {
+        for j in 0..rows.len() {
+            // El cuadrado latino: la fila `j` de esta repetición es la `(rep + j)`-ésima de la
+            // tabla, así que cada carga visita cada posición de la tanda.
+            let idx = (rep + j) % rows.len();
+            let row = rows[idx];
+            let name = short(row.file);
+            // El espejo va con `rep` y **no** con `rep + j`. Con `rep + j` el orden de los brazos
+            // queda determinado por la paridad de `idx` —porque `idx = (rep + j) % rows.len()` y la
+            // tabla tiene un número par de filas— así que cada carga corría siempre en el mismo
+            // orden y el espejo no espejaba nada. Encontrado releyendo, no midiendo: el síntoma
+            // habría sido un sesgo constante en una sola dirección, indistinguible de un efecto.
+            let first_is_off = rep % 2 == 0;
+            let first = timed(row.file, !first_is_off);
+            let second = timed(row.file, first_is_off);
             let (off_run, on_run) = if first_is_off { (first, second) } else { (second, first) };
-            assert_eq!(off_run.0, expected, "{short}: wrong result with the JIT off");
-            assert_eq!(on_run.0, expected, "{short}: wrong result with the JIT on");
-            assert_eq!(off_run.2, JitStats::default(), "{short}: the JIT-off arm must do nothing");
-            // The control assertion, from the JIT's own counters rather than from belief: a
-            // control compiles exactly the methods it is declared to (none of which can move the
-            // measurement), which is what makes its ratio a noise floor instead of an effect.
-            match control {
-                Some(n) => assert_eq!(on_run.2.compiled, n, "{short}: a control's compiled count"),
-                None => assert!(on_run.2.compiled > 0, "{short}: a treatment must compile something"),
-            }
-            compiled = on_run.2.compiled;
-            if pair > 0 {
-                off_times.push(off_run.3);
-                on_times.push(on_run.3);
+            assert_eq!(off_run.0, row.expected, "{name}: resultado distinto con el JIT apagado");
+            assert_eq!(on_run.0, row.expected, "{name}: resultado distinto con el JIT prendido");
+            assert_eq!(off_run.2, JitStats::default(), "{name}: el brazo apagado no debe compilar");
+            check_compiled(row, &on_run.2);
+            stats[idx] = on_run.2;
+            if rep > 0 {
+                off[idx].push(off_run.3);
+                on[idx].push(on_run.3);
             }
         }
-        off_times.sort();
-        on_times.sort();
-        let (off, on) = (median(&off_times), median(&on_times));
-        let (off_min, on_min) = (off_times[0], on_times[0]);
-        let ratio = off.as_nanos() as f64 / on.as_nanos() as f64;
-        let min_ratio = off_min.as_nanos() as f64 / on_min.as_nanos() as f64;
-        match control {
-            None => treatment_ratios.push((short, ratio)),
-            Some(_) => control_ratios.push(ratio),
-        }
+    }
+    (0..rows.len())
+        .map(|i| {
+            off[i].sort();
+            on[i].sort();
+            Sample { off: std::mem::take(&mut off[i]), on: std::mem::take(&mut on[i]), stats: stats[i] }
+        })
+        .collect()
+}
+
+fn print_table(rows: &[Row], samples: &[Sample]) {
+    eprintln!(
+        "{:<10} {:>8} {:>11} {:>11} {:>8} {:>10} {:>10} {:>7}  papel",
+        "carga", "compila", "JIT off", "JIT on", "mediana", "off min", "on min", "min"
+    );
+    eprintln!("{}", "-".repeat(100));
+    for (row, s) in rows.iter().zip(samples) {
         eprintln!(
-            "{:<10} {:>9} {:>11.1?} {:>12.1?} {:>7.2}x {:>10.1?} {:>10.1?} {:>6.2}x  {}",
-            short,
-            compiled,
-            off,
-            on,
-            ratio,
-            off_min,
-            on_min,
-            min_ratio,
-            match control {
-                None => "treatment",
-                Some(0) => "control (compiles nothing)",
-                Some(_) => "control (compiles only no-ops)",
+            "{:<10} {:>8} {:>10.1?} {:>11.1?} {:>7.2}x {:>10.1?} {:>10.1?} {:>6.2}x  {}",
+            short(row.file),
+            s.stats.compiled,
+            median(&s.off),
+            median(&s.on),
+            s.ratio(),
+            s.off[0],
+            s.on[0],
+            s.min_ratio(),
+            match (row.control, row.twin) {
+                (true, _) => "control (gemelo, compila 0)".to_string(),
+                (false, Some(t)) => format!("tratamiento (gemelo: {t})"),
+                (false, None) => "tratamiento (histórico, sin gemelo)".to_string(),
             }
         );
     }
+}
 
-    // The normalisation. A control's two arms are the *same* execution, so its ratio is pure
-    // noise; dividing a treatment's ratio by the controls' median states the speedup net of
-    // whatever the machine was doing while the numbers were collected.
-    control_ratios.sort_by(f64::total_cmp);
-    let noise = control_ratios[control_ratios.len() / 2];
-    eprintln!();
-    eprintln!("control noise floor (median of the controls' off/on ratio): {noise:.3}x");
-    for (short, ratio) in treatment_ratios {
-        eprintln!("{short} raw speedup: {ratio:.2}x — normalised: {:.2}x", ratio / noise);
+/// Los contadores del JIT por fila: lo que separa "el JIT no ayuda acá" de "el JIT entra y se vuelve
+/// a salir".
+///
+/// `nativas` son las entradas a código nativo, `deopt` las que volvieron por una guarda, `alloc` las
+/// que volvieron porque Eden o el registro de asignaciones se llenaron, `poll` las que volvieron por
+/// el safepoint, y `sitios` los invokes que se instalaron como llamada real en vez de expandirse.
+/// Una fila con muchas `nativas` y una razón chica está pagando el cruce y no ganando nada adentro.
+fn print_counters(rows: &[Row], samples: &[Sample]) {
+    eprintln!(
+        "{:<10} {:>8} {:>10} {:>8} {:>8} {:>8} {:>7} {:>7}",
+        "carga", "compila", "nativas", "OSR", "deopt", "alloc", "poll", "sitios"
+    );
+    eprintln!("{}", "-".repeat(70));
+    for (row, s) in rows.iter().zip(samples) {
+        let st = s.stats;
+        eprintln!(
+            "{:<10} {:>8} {:>10} {:>8} {:>8} {:>8} {:>7} {:>7}",
+            short(row.file),
+            st.compiled,
+            st.native_calls,
+            st.osr_entries,
+            st.deopts,
+            st.alloc_exits,
+            st.safepoint_exits,
+            st.native_sites
+        );
     }
+}
+
+// La **medición del JIT**, que se corre con:
+//
+//     cargo test --release --lib bench_jit -- --ignored --nocapture
+//
+// El protocolo está en `measure`; la tabla y su diseño, en `BENCH_ROWS`.
+#[test]
+#[ignore = "benchmark: imprime la tabla del JIT, no afirma tiempos"]
+fn bench_jit() {
+    const REPS: usize = 11; // 1 de calentamiento (descartada) + 10 medidas
+
+    let samples = measure(BENCH_ROWS, REPS);
+    let legacy = measure(LEGACY_ROWS, REPS);
+
     eprintln!();
+    eprintln!(
+        "F-bench — green, mediana de {} repeticiones en cuadrado latino (1 de calentamiento descartada)",
+        REPS - 1
+    );
+    eprintln!("instrumento: bench/ (javac real de JDK 25, fijo)");
+    eprintln!();
+    print_table(BENCH_ROWS, &samples);
+    eprintln!();
+    print_counters(BENCH_ROWS, &samples);
+
+    // La normalización. La razón off/on de un gemelo es ruido puro — sus dos brazos son la misma
+    // ejecución interpretada — así que dividir el tratamiento por su gemelo enuncia la aceleración
+    // neta de lo que la máquina estuviera haciendo mientras se tomaban los números.
+    //
+    // Y al revés, que es la parte que hay que decir aunque incomode: si un gemelo se mueve **junto**
+    // con su tratamiento, eso no es un efecto atenuado, es ruido, y la fila no sostiene ninguna
+    // afirmación. Por eso se imprime el gemelo al lado y no sólo el cociente.
+    eprintln!();
+    eprintln!("{:<10} {:>9} {:>9} {:>12}  lectura", "carga", "cruda", "gemelo", "normalizada");
+    eprintln!("{}", "-".repeat(72));
+    let mut baseline = Vec::new();
+    for (row, s) in BENCH_ROWS.iter().zip(&samples) {
+        let Some(twin) = row.twin else { continue };
+        let t = BENCH_ROWS.iter().position(|r| short(r.file) == twin).expect("gemelo en la tabla");
+        let noise = samples[t].ratio();
+        let normalised = s.ratio() / noise;
+        // El gemelo se aparta de 1.00 tanto como el efecto: no hay señal por encima del ruido.
+        let verdict = if (noise - 1.0).abs() >= (normalised - 1.0).abs() {
+            "RUIDO: el gemelo se mueve tanto como el efecto"
+        } else if normalised > 1.0 {
+            "el JIT gana"
+        } else {
+            "el JIT PIERDE"
+        };
+        eprintln!(
+            "{:<10} {:>8.2}x {:>8.3}x {:>11.2}x  {verdict}",
+            short(row.file),
+            s.ratio(),
+            noise,
+            normalised
+        );
+        baseline.push((short(row.file), normalised));
+    }
+
+    eprintln!();
+    eprintln!("mono vs mega — el mismo programa, misma respuesta, distinto despacho:");
+    for name in ["BkMono", "BkMega"] {
+        let i = BENCH_ROWS.iter().position(|r| short(r.file) == name).expect("fila");
+        eprintln!(
+            "  {name:<8} JIT off {:>9.1?}  JIT on {:>9.1?}  razón {:.2}x",
+            median(&samples[i].off),
+            median(&samples[i].on),
+            samples[i].ratio()
+        );
+    }
+
+    eprintln!();
+    eprintln!("filas históricas de java/ (corpus vivo: los recompila nuestro javac, no son instrumento)");
+    eprintln!();
+    print_table(LEGACY_ROWS, &legacy);
+    eprintln!();
+    print_counters(LEGACY_ROWS, &legacy);
+
+    // La línea base guardada, para que un paso futuro pueda detectar una **regresión** en vez de
+    // medir en el vacío. Se imprime en el formato exacto de `bench/BASELINE.tsv` para que
+    // actualizarla sea copiar y pegar, y nunca se escribe sola: una línea base que se reescribe a sí
+    // misma no detecta nada.
+    eprintln!();
+    eprintln!("línea base — pegar en bench/BASELINE.tsv si estos números son los nuevos de referencia:");
+    for (name, normalised) in &baseline {
+        eprintln!("{name}\t{normalised:.3}");
+    }
+    compare_with_baseline(&baseline);
+    eprintln!();
+}
+
+/// Compara la tanda contra `bench/BASELINE.tsv` e imprime las desviaciones.
+///
+/// El umbral es 12%, que es el techo medido del ruido de layout de esta máquina y no un número
+/// elegido: por debajo de eso una diferencia no se distingue de haber reenlazado el crate.
+fn compare_with_baseline(measured: &[(&str, f64)]) {
+    let Ok(text) = std::fs::read_to_string("bench/BASELINE.tsv") else {
+        eprintln!("(no hay bench/BASELINE.tsv: esta tanda no se compara contra nada)");
+        return;
+    };
+    eprintln!();
+    eprintln!("contra bench/BASELINE.tsv:");
+    for (name, now) in measured {
+        let Some(before) = baseline_entry(&text, name) else {
+            eprintln!("  {name:<10} SIN línea base");
+            continue;
+        };
+        let delta = (now / before - 1.0) * 100.0;
+        let flag = if delta.abs() >= 12.0 { "  <-- fuera del ruido de layout (±12%)" } else { "" };
+        eprintln!("  {name:<10} {before:.3}x -> {now:.3}x  ({delta:+.1}%){flag}");
+    }
+}
+
+/// Lee una entrada de `bench/BASELINE.tsv`: líneas `nombre<TAB>razón`, `#` comenta.
+fn baseline_entry(text: &str, name: &str) -> Option<f64> {
+    text.lines()
+        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .find_map(|l| {
+            let (k, v) = l.split_once('\t')?;
+            (k.trim() == name).then(|| v.trim().parse().ok())?
+        })
+}
+
+/// **El test que hace honesto al instrumento.** Corre en la suite, en las tres configuraciones, y en
+/// cada corrida:
+///
+/// - **cuenta** lo que compila cada control y falla si dejó de ser cero, y falla también si el
+///   control **entró** a código nativo aunque sea una vez;
+/// - **cuenta** lo que compila cada tratamiento y lo compara contra el número exacto de la tabla,
+///   no contra `> 0`. La primera versión de este test usaba `> 0` y se le plantó el sabotaje de
+///   envenenar el método caliente de `BkRefW`: **pasó igual**, porque `run` seguía compilando,
+///   dejando la fila midiendo el intérprete contra sí mismo con la suite en verde. Es el mismo modo
+///   de falla que le pasó a `BmField`, `BmArray` y `BmInvoke` sin que nadie se enterara, sólo que
+///   del lado de los tratamientos;
+/// - comprueba que cada gemelo **imprime el mismo número** que su tratamiento, que es lo que hace
+///   que el par sea el mismo programa y no dos programas parecidos.
+///
+/// Sin esto el instrumento se degrada solo, en silencio, y la tabla sigue imprimiendo un piso de
+/// ruido que ya no lo es. Con esto, el día que `invokedynamic` entre al subconjunto compilable, la
+/// suite se pone roja y dice por qué.
+///
+/// Corre contra `bench/`, que es fijo, así que sus números exactos no se mueven solos. Las filas
+/// históricas de `java/` van en `las_filas_historicas_del_banco_siguen_compilando`, con la exigencia
+/// más floja que su corpus vivo permite.
+#[test]
+fn los_controles_del_banco_no_compilan_nada() {
+    for row in BENCH_ROWS {
+        let name = short(row.file);
+        let (off, _, off_stats) = run(row.file, false);
+        let (on, _, on_stats) = run(row.file, true);
+        assert_eq!(off, row.expected, "{name}: el intérprete no coincide con el `java` real");
+        assert_eq!(on, off, "{name}: el JIT calcula otra cosa que el intérprete");
+        assert_eq!(off_stats, JitStats::default(), "{name}: JVM_JIT=0 no debe compilar nada");
+        check_compiled(*row, &on_stats);
+    }
+    // Cada gemelo imprime lo mismo que su tratamiento: es lo que los hace el mismo programa.
+    for row in BENCH_ROWS {
+        let Some(twin) = row.twin else { continue };
+        let t = BENCH_ROWS
+            .iter()
+            .find(|r| short(r.file) == twin)
+            .unwrap_or_else(|| panic!("{} declara el gemelo {twin}, que no está en la tabla", short(row.file)));
+        assert_eq!(
+            t.expected,
+            row.expected,
+            "{} y su gemelo {twin} imprimen números distintos, así que no son el mismo programa",
+            short(row.file)
+        );
+        assert!(t.control, "el gemelo {twin} tiene que estar declarado como control");
+    }
+}
+
+/// Los tratamientos históricos de `java/` **también** tienen que compilar algo.
+///
+/// Van aparte de `los_controles_del_banco_no_compilan_nada` porque su corpus es vivo — otra sesión
+/// recompila `java/*.class` — y porque su papel es distinto: son continuidad con las tablas
+/// anteriores, no instrumento. Lo que sí hace falta custodiar es que ninguna se vuelva a colar en la
+/// tabla como una fila que no mide nada, que fue el modo de falla de este hito.
+#[test]
+fn las_filas_historicas_del_banco_siguen_compilando() {
+    for row in LEGACY_ROWS {
+        let name = short(row.file);
+        let (off, _, off_stats) = run(row.file, false);
+        let (on, _, on_stats) = run(row.file, true);
+        assert_eq!(off, row.expected, "{name}: el intérprete no coincide con el `java` real");
+        assert_eq!(on, off, "{name}: el JIT calcula otra cosa que el intérprete");
+        assert_eq!(off_stats, JitStats::default(), "{name}: JVM_JIT=0 no debe compilar nada");
+        check_compiled(*row, &on_stats);
+    }
+}
+
+/// El estadístico del banco es una **mediana**, y este test es lo que impide que vuelva a ser un
+/// promedio.
+///
+/// La muestra es la forma real de la contaminación de esta máquina: cuatro corridas juntas y una
+/// pisada por el planificador. La mediana no la ve; el promedio queda dominado por ella. El test
+/// afirma las dos mitades — que `median` devuelve el elemento del medio, y que en esta muestra el
+/// promedio está a más del triple — así que reimplementar `median` como una suma dividida por el
+/// largo lo pone rojo por las dos vías.
+#[test]
+fn el_estadistico_del_banco_es_una_mediana_y_no_un_promedio() {
+    use std::time::Duration;
+    let mut sample = vec![
+        Duration::from_millis(10),
+        Duration::from_millis(400), // la corrida interrumpida
+        Duration::from_millis(11),
+        Duration::from_millis(12),
+        Duration::from_millis(13),
+    ];
+    sample.sort();
+    let med = median(&sample);
+    assert_eq!(med, Duration::from_millis(12), "la mediana es el elemento del medio");
+    let mean: Duration = sample.iter().sum::<Duration>() / sample.len() as u32;
+    assert!(
+        mean > med * 3,
+        "el promedio de esta muestra ({mean:?}) tiene que estar dominado por el outlier; si no lo \
+         está, la muestra dejó de ejercitar lo que este test custodia"
+    );
+    // Y la dirección importa: una corrida contaminada sólo puede salir más lenta, así que el mínimo
+    // es la muestra menos perturbada y nunca está por encima de la mediana.
+    assert!(sample[0] <= med);
+}
+
+/// `bench/BASELINE.tsv` cubre exactamente los tratamientos de la tabla.
+///
+/// Es el guardián de la cuarta pata del hito: una línea base sirve para detectar una regresión sólo
+/// si está completa. Agregar un tratamiento sin su entrada, o dejar una entrada de una fila que ya
+/// no existe, deja el archivo mintiendo en silencio — que es el mismo modo de falla que los
+/// controles, en otro archivo.
+#[test]
+fn la_linea_base_cubre_la_tabla() {
+    let text = std::fs::read_to_string("bench/BASELINE.tsv").expect("bench/BASELINE.tsv");
+    let entries: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .map(|l| l.split('\t').next().unwrap().trim())
+        .collect();
+    let treatments: Vec<&str> =
+        BENCH_ROWS.iter().filter(|r| r.twin.is_some()).map(|r| short(r.file)).collect();
+    for t in &treatments {
+        assert!(
+            entries.contains(t),
+            "bench/BASELINE.tsv no tiene entrada para el tratamiento {t}: su fila no se puede \
+             comparar contra nada"
+        );
+        assert!(
+            baseline_entry(&text, t).is_some(),
+            "la entrada de {t} en bench/BASELINE.tsv no es un número"
+        );
+    }
+    for e in &entries {
+        assert!(
+            treatments.contains(e),
+            "bench/BASELINE.tsv tiene una entrada para {e}, que no es un tratamiento de la tabla"
+        );
+    }
 }
 
 /// The **user-facing switch**, checked against the environment rather than the programmatic
@@ -616,7 +1056,7 @@ fn the_env_var_is_the_user_facing_switch() {
     let setting = std::env::var("JVM_JIT").unwrap_or_else(|_| "<unset>".to_string());
     // `None` = respect the environment, which is exactly what `execute` does for a real run.
     let (value, _, stats) = {
-        let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+        let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
         let class = ClassFile::from_path("java/JtLoop.class").expect("load class");
         let name = class.class_name(class.this_class).unwrap().to_string();
         metaspace.add(name.clone(), class);
@@ -727,18 +1167,28 @@ fn getstatic_of_an_int_agrees_with_the_interpreter() {
     let stats = differential("java/WdStatic.class", 246_189);
     // `own`, `inherited`, `far`, `mutable`, `mixed` — **and `churn`**, which the array-allocation
     // step added: it is `new int[16]` in a loop, and it was refused for that opcode alone.
-    // Not `notAnInt` (a `String` static, so the resolver refuses it), not `run` (invokes).
-    assert_eq!(stats.compiled, 6);
-    // Tres y no dos desde que este arnés bootea con `KajiLibrary` en vez de `boot/` a secas (ver
-    // [`boot_class_path`]): la biblioteca de verdad pone **un** método más en el camino de este
-    // workload, y se lo escanea y se lo rechaza. Que sea rechazado y no compilado se ve en que
-    // `compiled` no se movió, y que el JIT siga acertando se ve en que el diferencial de arriba
-    // sigue dando 246189. Lo que cambió es cobertura, no corrección.
+    // Not `notAnInt` (a `String` static, so the resolver refuses it).
+    //
+    // **Siete desde milestone F3**, y el séptimo es `run` — el método que este comentario venía
+    // anotando como "no compila, tiene invokes". Sus invokes son dispatchados y ninguno se podía
+    // inlinear; ahora se emiten como **llamadas nativas** con la guarda de clase adelante, así que
+    // el método entra. El diferencial de arriba sigue dando 246189, que es lo que dice que entró
+    // bien; el número exacto es a propósito, para que un movimiento como éste se vea.
+    assert_eq!(stats.compiled, 7);
+    // Dos: `notAnInt` y **un método de la biblioteca**, que este arnés escanea desde que bootea con
+    // `KajiLibrary` en vez de `boot/` a secas (ver [`boot_class_path`]) y que se rechaza. Eran tres
+    // hasta F3; `run` se movió de esta columna a la de arriba.
     //
     // El número es a propósito exacto y no un `>=`: depende de la imagen de arranque, así que si la
     // biblioteca crece este test tiene que fallar y que alguien lo mire.
-    assert_eq!(stats.rejected, 3, "`notAnInt`, `run`, y uno de la biblioteca");
-    assert_eq!(stats.deopts, 0);
+    assert_eq!(stats.rejected, 2, "`notAnInt` y uno de la biblioteca");
+    // **Ya no es cero, y el número es la restricción de los logs medida en un workload real.**
+    // `run` compila desde F3 y sus llamadas son nativas; los callees que llama (`churn` sobre
+    // todos) **alocan**, así que `JitCache::install` les deja el `code` del record en cero y cada
+    // sitio deopta en el invoke. Es decir: el método entró, la guarda de clase acertó, y lo que
+    // frena la llamada es exactamente lo que la documentación de `NativeRecord::code` dice que la
+    // frena. El día que el log compartido levante esa restricción, este número tiene que bajar.
+    assert!(stats.deopts > 0, "los callees de `run` alocan: sus records quedan en cero");
     assert_eq!(stats.unmarshallable, 0);
     // `churn` is the reason this workload was written — it allocates hard enough to force
     // collections between the other calls — and now it allocates *natively*, 16-int arrays at a
@@ -862,21 +1312,118 @@ fn nested_inlining_rebuilds_every_frame_in_the_chain() {
 }
 
 #[test]
-fn recursion_is_cut_by_the_cycle_check_rather_than_expanded() {
-    // **The bound that is not a depth bound.** A method that calls itself would inline into itself
-    // without end, and the honest reason to stop is identity rather than arithmetic: a callee whose
-    // `Unit` is already on the path from the root is refused. `JiRec` has both shapes — `down`
-    // calling itself, and `mutualA`/`mutualB` calling each other, which no per-method check would
-    // see and which is caught two expansions in.
+fn recursion_is_compiled_by_a_real_call_rather_than_expanded() {
+    // **The shape a call reaches and an expansion never can.** A method that calls itself would
+    // inline into itself without end, so the cycle check refuses the expansion by identity — and
+    // through group 3 that refusal was the end of the method. Group 4 gives it somewhere to fall
+    // to: the site emits a **call** through the callee's record instead, which is exactly what a
+    // recursion is, and the cycle check goes on doing its one job (choosing which of the two).
     //
-    // The assertion that matters is the one that is easy to overlook: this test **terminates**.
+    // `JiRec` has both shapes — `down` calling itself, and `mutualA`/`mutualB` calling each other,
+    // which no per-method check would see. The assertion that was easy to overlook is still here
+    // and still the important one: this test **terminates**, both at compile time and at run time.
     // 3900 is what `java JiRec` prints.
     let stats = differential("java/JiRec.class", 3_900);
-    // `sum`, a leaf that inlines nowhere and compiles as it always did. The other four are refused
-    // — the three recursive ones for the cycle, and `run` because it calls them.
-    assert_eq!(stats.compiled, 1, "`sum`");
-    assert_eq!(stats.rejected, 4, "`down`, `mutualA`, `mutualB` and `run`");
-    assert_eq!(stats.deopts, 0);
+    // Every method in the file now compiles, which is the whole of the step: `sum` as it always
+    // did, and `down`, `mutualA` and `run` because a call they could not expand is a call they can
+    // make. (`mutualB` is expanded into `mutualA` and never becomes hot on its own.)
+    assert_eq!(stats.compiled, 4, "`sum`, `down`, `mutualA` and `run`");
+    assert_eq!(stats.rejected, 0, "nothing is refused for a call any more");
+    assert_eq!(stats.native_sites, 4, "one per recursive edge, plus `run`'s");
+    // **Zero deopts, and that is the strong claim.** `down(6)` and `mutualA(5)` recurse six and
+    // five levels deep, all of it in native code: every level pays the frame budget, finds it
+    // covers the callee, calls, and gets an ordinary value back. A single miss anywhere in the
+    // chain — a null entry point, a budget that did not add up, a result read from the wrong place
+    // — would show here as a deopt at the invoke, and the answer would still be right, which is
+    // exactly why the answer alone is not enough.
+    assert_eq!(stats.deopts, 0, "every recursive call is made natively");
+}
+
+// =============================================================================================
+// Group 4: **a real call**, through the whole VM.
+//
+// `NcCall` is the milestone's own fixture and every arm of it is a shape an expansion cannot
+// reach. What the three tests below split apart is what a single differential cannot say on its
+// own: that the answer is right (this one), that the *reconstruction* through a native frame is
+// right (the one after it, which is the only shape that can see a bug in it at all), and that the
+// frame budget stops a runaway recursion exactly where the interpreter would.
+// =============================================================================================
+
+/// The whole fixture, both arms, against the real JDK. 146514 is what `java NcCall` of JDK 25
+/// prints, and the `.class` files are **that** compiler's — not this repo's, which would make the
+/// comparison one of our own two halves against each other.
+#[test]
+fn a_real_call_agrees_with_the_interpreter() {
+    // **Both arms of the register cache**, which is not a formality here: a call clobbers the
+    // volatile half of it, so the spill before the call and the reload after it are the whole of
+    // what `JVM_JIT_REGS=0` does *not* exercise. The two arms must agree on the answer **and** on
+    // every counter — a reload that dropped an operand would show as a different number in the
+    // cached arm alone.
+    let stats = differential_regs("java/NcCall.class", 243_114);
+    // Nearly every method in the file compiles, and none of them could before: each is either
+    // recursive or calls something recursive. A lower bound rather than an exact count: *which* methods trip their counter first depends
+    // on the substrate's scheduling, and the claim here is about the shapes being reachable at all.
+    assert!(stats.compiled >= 6, "{} methods compiled", stats.compiled);
+    // At most one refusal, and it is not about calls: `run`'s `boom(0)` sits behind the loop that
+    // makes `run` hot, so on the substrate where `run` is scanned first that site has never
+    // executed *and* no other site has resolved `boom` — which leaves the VM nothing to name. A
+    // cold site whose target was never resolved anywhere is the one statically bound shape this
+    // group still cannot serve, and it is a property of the profile rather than of the mechanism.
+    assert!(stats.rejected <= 1, "{} methods refused", stats.rejected);
+    // ...and they really are calls rather than expansions. Without this the test would pass just
+    // as well against a compiler that had found some way to inline its way out of the recursion.
+    assert!(stats.native_sites > 0, "no invoke was emitted as a call");
+    assert_eq!(stats.unmarshallable, 0);
+}
+
+/// **The reconstruction through a native frame**, which is the half of this group that a right
+/// answer alone cannot vouch for.
+///
+/// `rec`'s base case is an `instanceof` against the **exact** class, so an `NcDeeper` hands the
+/// method back there — with four native frames of `rec` above it, each holding a value (`w`) that
+/// exists only on its own operand stack, underneath the arguments it has already given away. Every
+/// one of those frames has to come back, at the invoke, with `w` where it was and the arguments
+/// *gone*, and then finish its own arithmetic interpreted.
+///
+/// Two things make this the shape that can actually fail. The deopt **resumes to a value** rather
+/// than throwing — a deopt that ends in an exception discards the frames it rebuilt, so a wrong
+/// reconstruction would be invisible. And the live operand is *below* the arguments, so a frame
+/// that kept them, or lost the operand under them, computes a different number.
+#[test]
+fn a_deopt_inside_a_called_compilation_rebuilds_the_whole_chain() {
+    let (off, _, _) = run("java/NcCall.class", false);
+    let (on, _, stats) = run("java/NcCall.class", true);
+    assert_eq!(on, off, "the chain a real call rebuilt computes something else");
+    // **The link was followed**, which is the mechanism this test is named for: a callee that could
+    // not finish returned a status its caller parked, and the interpreter read the callee's own
+    // resume site out of the callee's own region of the buffer.
+    assert!(stats.linked_exits > 0, "no exit came back through a real call's link");
+    // And every one of those brought frames with it — the root frame of each called compilation,
+    // plus whatever that compilation had itself inlined.
+    assert!(
+        stats.virtual_frames >= stats.linked_exits,
+        "{} frames rebuilt for {} links",
+        stats.virtual_frames,
+        stats.linked_exits
+    );
+}
+
+/// **The frame budget is a budget, not a counter.** `NcCall.boom` recurses with no base case, so
+/// the only thing that can stop it is the same `MAX_FRAMES` an interpreted recursion meets — and
+/// the two arms of the fixture agree on the number, which they could not if native code either
+/// overshot (a stack it built past the limit) or undershot (a `StackOverflowError` thrown early).
+///
+/// The mechanism is that a call site *spends* the budget it was entered with, and a site that
+/// cannot pay hands the call back to the interpreter at the invoke — so the counting is always
+/// done by the side that knows how deep its own stack is.
+#[test]
+fn a_runaway_recursion_overflows_where_an_interpreted_one_does() {
+    // The whole fixture ends in a caught `StackOverflowError`, and the caught branch contributes a
+    // marker to the score. Both arms reaching the same total is the assertion.
+    let (off, _, _) = run("java/NcCall.class", false);
+    let (on, _, _) = run("java/NcCall.class", true);
+    assert_eq!(on, off);
+    assert_eq!(off, 243_114, "the interpreter disagrees with `java NcCall` of JDK 25");
 }
 
 // =============================================================================================
@@ -1057,7 +1604,11 @@ fn an_explicit_throw_is_caught_by_the_handler_of_the_frame_the_deopt_rebuilt() {
     // surprise: their invocation counters were incremented only while `deepThrow` was interpreted,
     // so they stop one short of the threshold on the very call that compiles their caller and are
     // never entered through the interpreter again.
-    assert_eq!(stats.compiled, 4, "`caughtHere`, `propagates`, `catcher` and `deepThrow`");
+    // **And `run` since group 4**, which is the fifth: it is a `try`/`catch` around four invokes,
+    // two of which (`caughtHere`, `catcher`) it can expand and two of which it now *calls*.
+    assert_eq!(stats.compiled, 5, "the four above, and `run` now that it may call");
+    // `run` is the only one with a real call in it, and it has two.
+    assert_eq!(stats.native_sites, 2, "`run`'s two calls");
     // **Every deopt here is an athrow, and that is arithmetic rather than a hope.** The only other
     // guard in the file is `100 / k` in `caughtHere`, which is reached only on the path where `k`
     // is not zero. So the count is the number of throws: over 4000 iterations, one per multiple of
@@ -1424,16 +1975,40 @@ fn subset_census() {
     let mut methods = 0usize;
     let mut returns_value = 0usize;
     let mut compiled: Vec<String> = Vec::new();
+    let (mut with_calls, mut logged) = (0usize, 0usize);
+    // **What a call actually buys**, and the only number that can arbitrate the inline-vs-call
+    // policy. "This method compiles" says nothing about whether its calls can be *made*: a site
+    // loads its entry point out of the callee's `NativeRecord`, and that record holds code only
+    // when the callee itself compiled **and** carries no allocation or write-barrier log. A caller
+    // whose callee fails either test deopts at every invoke, which is to say it compiles into a
+    // method that hands itself straight back.
+    //
+    // So the roots' call targets are collected here and checked after the loop, once every unit
+    // that is a target has been compiled — including the ones outside the censused population,
+    // since a `java/` method calls `KajiLibrary` and `boot/` methods all the time.
+    let mut call_targets: Vec<std::collections::BTreeSet<usize>> = Vec::new();
+    // `0` = compiles and carries no log, so a call can enter it; `1` = compiles but carries an
+    // allocation or write-barrier log, which is the **log restriction** and nothing else; `2` =
+    // does not compile at all. Three states rather than two because the middle one is the only one
+    // a shared log would move, and "how much does the restriction cost" is exactly its size.
+    let mut callable: std::collections::BTreeMap<usize, u8> = std::collections::BTreeMap::new();
     let mut reasons: BTreeMap<String, usize> = BTreeMap::new();
     // The **split**: the same refusals, attributed to what the resolver actually saw. Kept apart
     // from `reasons` so the coarse table stays comparable with every earlier step's.
     let mut split: BTreeMap<(&'static str, String), usize> = BTreeMap::new();
     let notes = std::cell::RefCell::new(Refusals::default());
 
-    for &root in &population {
+    // **Every unit is compiled; only the population is censused.** The tallies below are the same
+    // ones they always were -- drawn from `java/` alone -- but a call target is usually a
+    // `KajiLibrary` or `boot/` method, and "can this call be made?" is unanswerable without
+    // knowing whether *that* method compiles and is logless. So the loop runs over the whole
+    // table, `callable` is filled for all of it, and `censused` gates everything else.
+    let in_population: std::collections::BTreeSet<usize> = population.iter().copied().collect();
+    for root in 0..units.len() {
+        let censused = in_population.contains(&root);
         let class = class_of(&classes, &units, root);
         let member = &class.methods[units[root].1];
-        methods += 1;
+        methods += usize::from(censused);
         // The **ceiling**, and every step so far has moved it. It is the set of methods whose
         // *exit* this tier can express: step 5 added `areturn` (methods returning a reference),
         // step 7 added `return` (methods returning `void` — `<init>` and every setter, which
@@ -1445,13 +2020,23 @@ fn subset_census() {
         // out of the ceiling any more: every descriptor this tier can parse has an exit.
         let descriptor = class.utf8(member.descriptor_index).unwrap_or("");
         let returns = descriptor.rsplit(')').next().unwrap_or("");
-        if matches!(returns, "I" | "Z" | "B" | "S" | "C" | "V" | "J" | "F" | "D") || returns.starts_with(['L', '[']) {
+        if censused
+            && (matches!(returns, "I" | "Z" | "B" | "S" | "C" | "V" | "J" | "F" | "D")
+                || returns.starts_with(['L', '[']))
+        {
             returns_value += 1;
         }
         // A fresh slate per method: what a *previous* method's resolver refused says nothing about
         // this one, and an attribution carried across would be worse than none.
         *notes.borrow_mut() = Refusals::default();
-        let result = crate::burst::compile::compile(
+        // The compilation itself, as a closure so that the two callers below can differ in one
+        // thing only: whether a **panic** is a test failure. It is, for a censused method -- that
+        // is the corpus this tier is written against. It is not for the rest of the table, which
+        // includes hand-written `boot/` stubs whose `max_locals` does not even cover their own
+        // descriptor; those are compiled here only to answer "could a call to this be made", and a
+        // stub that makes the emitter assert is simply not callable.
+        let attempt = || {
+            crate::burst::compile::compile(
             &shape(&classes, &units, &bodies, root),
             &crate::burst::compile::Environment {
                 // The four constant resolvers, each of which **writes down what it refused**: a
@@ -1601,14 +2186,26 @@ fn subset_census() {
                         }
                         owner = up.to_string();
                     };
-                    Some(crate::burst::compile::Callee {
+                    Some(vec![crate::burst::compile::Callee {
                         method: shape(&classes, &units, &bodies, target),
                         arg_slots: census_arg_slots(desc, op != 0xb8),
                         guard: match op {
                             0xb6 | 0xb9 => crate::burst::compile::Guard::ExactClass(1),
                             _ => crate::burst::compile::Guard::Static,
                         },
-                    })
+                        // **The record a real call jumps through** (group 4). Every site has one in
+                        // a running VM — it is minted the first time the site names the method,
+                        // long before (and possibly without ever) that method being compiled — so
+                        // answering with a plausible address is not an upper-bound licence like the
+                        // stubs above, it is the same fact. What a running VM decides *later* is
+                        // whether the record holds any code, and that is a deopt at the invoke
+                        // rather than a refusal here.
+                        //
+                        // **All four opcodes since milestone F3.** A dispatched site's record is
+                        // the one the *guarded* class's table names, which is exactly as fixed as a
+                        // statically bound site's once the guard has fixed the class.
+                        record: Some(1),
+                    }])
                 },
                 heap: CENSUS_HEAP,
                 // The `checkcast`/`instanceof`/`ldc Foo.class` stub: **any `CONSTANT_Class`**
@@ -1636,12 +2233,52 @@ fn subset_census() {
                 },
                 poll_word: poll,
             },
+        )
+        };
+        let result = match censused {
+            true => attempt(),
+            false => {
+                let hushed = std::panic::take_hook();
+                std::panic::set_hook(Box::new(|_| {}));
+                let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(attempt));
+                std::panic::set_hook(hushed);
+                answer.unwrap_or(Err(crate::burst::compile::Ineligible::TooBig))
+            }
+        };
+        // **Every unit gets an answer, including "no".** A target that does not compile is not
+        // callable -- which is a fact, not an unknown -- so the entry is written on both arms.
+        callable.insert(
+            root,
+            match &result {
+                Ok(code) if code.alloc_records == 0 && code.barrier_records == 0 => 0,
+                Ok(_) => 1,
+                Err(_) => 2,
+            },
         );
+        if !censused {
+            continue;
+        }
         match result {
-            Ok(_) => {
+            Ok(code) => {
                 let short = classes[units[root].0].0.rsplit('/').next().unwrap_or("?");
                 let name = class.utf8(member.name_index).unwrap_or("?");
                 compiled.push(format!("{short}.{name}"));
+                // **Group 4's two numbers.** How many compilations emit a real call, and how many
+                // of them a real call could never *enter* — a compilation carrying an allocation
+                // or a write-barrier log lives with its records in its own region of the buffer,
+                // and only the outermost excursion's are replayed, so a nested one would allocate
+                // objects the collector never hears about. The restriction is stated in
+                // `JitCache::install`; this is what it costs.
+                with_calls += usize::from(code.native_sites > 0);
+                logged += usize::from(code.alloc_records > 0 || code.barrier_records > 0);
+                if code.native_sites > 0 {
+                    call_targets.push(
+                        code.resume_sites
+                            .iter()
+                            .filter_map(|site| site.native.map(|n| n.unit))
+                            .collect(),
+                    );
+                }
             }
             Err(crate::burst::compile::Ineligible::Opcode { pc, opcode }) => {
                 // The mnemonic is decoded from the **opcode byte** rather than by indexing this
@@ -1774,6 +2411,43 @@ fn subset_census() {
     eprintln!("  in the list because it stopped being a refusal in group 2, not because it is");
     eprintln!("  invisible here.");
     eprintln!();
+    eprintln!();
+    eprintln!("group 4 — real calls:");
+    eprintln!("  compilations that emit at least one:   {with_calls}");
+    eprintln!("  compilations a real call may NOT enter: {logged}   (they carry an allocation or");
+    eprintln!("      write-barrier log, whose records only the outermost excursion replays)");
+    eprintln!();
+    // **Whether the calls a compilation emits can actually be made** — the question "this method
+    // compiles" cannot answer, and the one the inline-vs-call policy turns on. A site loads its
+    // entry point out of the callee's `NativeRecord`; that record holds code only when the callee
+    // compiled *and* carries no log, so a target that fails either test makes the site a deopt at
+    // every execution. `callable` is complete by now: the loop above compiles **every** unit
+    // in the table, censused or not, precisely so that a `KajiLibrary` or `boot/` target has an
+    // answer. What is left in the unknown bucket is a target this census could not name at all.
+    let (mut all_ok, mut blocked_by_log, mut blocked_by_refusal, mut some_unknown) = (0, 0, 0, 0usize);
+    for targets in &call_targets {
+        let known: Vec<Option<u8>> = targets.iter().map(|u| callable.get(u).copied()).collect();
+        // Worst state wins: a compilation is only as callable as its least callable target. The
+        // "refused" bucket is checked before the "logged" one so that a caller blocked by both is
+        // not credited to the restriction -- lifting the log would not free it.
+        match (
+            known.iter().any(Option::is_none),
+            known.iter().any(|k| k == &Some(2)),
+            known.iter().any(|k| k == &Some(1)),
+        ) {
+            (true, _, _) => some_unknown += 1,
+            (false, true, _) => blocked_by_refusal += 1,
+            (false, false, true) => blocked_by_log += 1,
+            (false, false, false) => all_ok += 1,
+        }
+    }
+    eprintln!("  ({} units compiled in all: the whole table, not only the censused population)", callable.len());
+    eprintln!("  ...of those, by whether the calls can be MADE:");
+    eprintln!("      every target compiles and is logless:  {all_ok}");
+    eprintln!("      blocked only by the LOG RESTRICTION (a target compiles but is logged):  {blocked_by_log}");
+    eprintln!("      blocked by a target that does not compile at all:  {blocked_by_refusal}");
+    eprintln!("      at least one target this census cannot name at all:  {some_unknown}");
+    eprintln!();
     eprintln!("the {} methods that compile:", compiled.len());
     for name in &compiled {
         eprintln!("  {name}");
@@ -1784,15 +2458,16 @@ fn subset_census() {
 #[test]
 fn methods_outside_the_subset_are_scanned_once_and_never_again() {
     // The cost model. A hot method that cannot be compiled must pay for exactly one scan in its
-    // whole lifetime — `BmInvoke.bmFib` is called ~250 000 times, so a per-call rescan would be
-    // impossible to miss in the timings but easy to miss by reading the code.
-    let (_, _, stats) = run("java/BmInvoke.class", true);
-    // Two methods are now scanned: `bmFib` (from its invocation counter) and `run` (from the
-    // back-edge counter of the loop that calls it). Each exactly once, ever — `bmFib` is called
-    // ~250 000 times and `run` loops 6 000, so a per-event rescan would be impossible to miss in
-    // the timings and easy to miss by reading the code.
-    assert_eq!(stats.rejected, 2, "each is scanned exactly once, and refused");
-    assert_eq!(stats.compiled, 0);
+    // whole lifetime, and `rejected` is what says so: it is incremented once per scan and taken
+    // back only by a successful install, so a method rescanned on every call would send it through
+    // the roof rather than leave it at the number of methods.
+    //
+    // **The workload had to change with group 4**, and the reason is worth recording: this used to
+    // be `BmInvoke`, whose two methods were refused for a recursive call — and a call is no longer
+    // a refusal. `JaArray.scanChars`/`scanBytes` are refused for an *opcode* (`caload`, `baload`),
+    // which is the only kind of refusal left that a hot loop can keep hitting.
+    let (_, _, stats) = run("java/JaArray.class", true);
+    assert_eq!(stats.rejected, 2, "each scanner is scanned exactly once, and refused");
 }
 
 // =============================================================================================
@@ -2110,13 +2785,20 @@ fn the_harness_shapes_go_through_the_inline_cache() {
     //
     // 745120 is what `java JcShapes` of JDK 25 prints.
     let stats = differential("java/JcShapes.class", 745_120);
-    // **Forty deopts, and the number is the whole result.** `steady` is monomorphic and is called
-    // 40 × 300 times: not one of those misses. `rotate` is genuinely polymorphic — one call site,
-    // three receiver classes, rotating — and is entered 40 times: each entry runs until the first
-    // receiver that is not the baked class, deopts once, and is interpreted from there. So a
-    // polymorphic site costs one deopt per entry and a monomorphic one costs none, which is
-    // precisely the trade a monomorphic cache makes.
-    assert_eq!(stats.deopts, 40, "one per entry into `rotate`; `steady` never misses");
+    // **Cero deopts, y el número es el resultado entero — era 40.**
+    //
+    // `steady` es monomórfico y nunca falló: sus 40 × 300 llamadas aciertan la única guarda que hay.
+    // `rotate` es el que cambió: un sitio, **tres** clases de receptor rotando, y con el caché
+    // monomórfico cada entrada corría hasta el primer receptor que no era la clase horneada, deoptaba
+    // una vez y seguía interpretada — 40 entradas, 40 deopts. Con el caché polimórfico las tres
+    // clases entran en el perfil (`RECEIVER_WAYS` = 4), la cadena las cubre a las tres, y no queda
+    // ninguna llamada que falle.
+    //
+    // Que el 40 se haya vuelto 0 **sin que se mueva la respuesta** es la afirmación: `differential`
+    // arriba ya comparó los dos brazos contra lo que imprime el `java` real, así que la cadena
+    // despacha al cuerpo correcto para cada una de las tres clases. Un 0 acá con un número distinto
+    // arriba sería exactamente el modo de falla que este archivo existe para agarrar.
+    assert_eq!(stats.deopts, 0, "la cadena cubre las tres clases de `rotate`; `steady` sigue sin fallar");
     assert_eq!(stats.unmarshallable, 0);
 }
 
@@ -2236,7 +2918,7 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
     use crate::jvm::interpreter::heap::HeapService;
     use crate::jvm::interpreter::metaspace::InitState;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     // `BmField`'s pool names `BmCell`, which has two `int` fields — a real class, a real layout, a
     // real mirror. Loading it is what mints its Class ID and allocates that mirror in Old.
@@ -2377,7 +3059,7 @@ fn an_unlogged_allocation_is_exactly_the_corruption_the_replay_prevents() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     class_operations::load_class(&mut metaspace, &mut heap, "BmCell");
     // An object in Eden that the collector's log does not contain. `malloc` records into the
@@ -2435,7 +3117,7 @@ fn a_reference_stored_by_compiled_code_survives_a_minor_with_no_root_but_the_bar
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     for name in ["WbRef", "WbCell"] {
         class_operations::load_class(&mut metaspace, &mut heap, name);
@@ -2555,7 +3237,7 @@ fn a_reference_store_whose_barrier_is_not_replayed_is_exactly_the_corruption_it_
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     for name in ["WbRef", "WbCell"] {
         class_operations::load_class(&mut metaspace, &mut heap, name);
@@ -2597,7 +3279,7 @@ fn an_aastore_by_compiled_code_keeps_its_element_alive_across_a_minor() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     for name in ["WbArr", "WbLeaf"] {
         class_operations::load_class(&mut metaspace, &mut heap, name);
@@ -2765,10 +3447,16 @@ fn array_allocation_agrees_with_the_interpreter() {
     let stats = differential("java/JaArray.class", 549_311);
     // `fill`, `chars`, `bytes`, `refs`, `big`, `neg` — every method whose body is an allocation and
     // the arithmetic around it — **and, since F3-H3, `countNulls`**: `aaload` joined the subset,
-    // and this counter is where that shows up. Still out: `scanChars`/`scanBytes` (`caload` and
-    // `baload` are outside it) and `run` (a `try`/`catch` around invokes).
-    assert_eq!(stats.compiled, 7, "the six allocators, plus `countNulls` now that `aaload` compiles");
-    assert_eq!(stats.rejected, 3, "the two remaining scanners and `run`");
+    // and this counter is where that shows up. **And `run` since group 4**: its `try`/`catch` was
+    // never the refusal — the two invokes it makes to methods this tier cannot compile were, and a
+    // call it cannot expand is now a call it can *make*. Still out: `scanChars`/`scanBytes`, whose
+    // `caload`/`baload` are outside the subset.
+    assert_eq!(stats.compiled, 8, "the six allocators, `countNulls`, and `run` now that it may call");
+    assert_eq!(stats.rejected, 2, "the two remaining scanners");
+    // Two of `run`'s invokes are emitted as real calls — to the two scanners, which never compile,
+    // so each one is a deopt at the invoke and the interpreter makes the call. That is the honest
+    // shape of the fallback and the reason a site is not refused for a callee that never compiles.
+    assert_eq!(stats.native_sites, 2, "`run`'s two calls to the scanners");
     // **The negative count is not a deopt**, and that is deliberate rather than incidental: the
     // guard rides the same stub as the Eden-full one, which reports `Status::ALLOC`. The two are
     // the same rebuilt state resumed at the same instruction, so what the interpreter does next is
@@ -2905,7 +3593,7 @@ fn a_compiled_array_is_zeroed_to_the_rounded_stride() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     // The mirror has to exist before anything is compiled — minting one allocates, and a
     // compilation may not. The refusal is checked rather than assumed.
@@ -2974,7 +3662,7 @@ fn an_array_allocated_by_compiled_code_survives_a_minor_collection() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     let class_id = array_operations::array_class_mirror(&mut metaspace, &mut heap, "[I") as u32;
 
@@ -3038,7 +3726,7 @@ fn an_unlogged_array_is_exactly_the_corruption_the_replay_prevents() {
     use crate::jvm::interpreter::gc;
     use crate::jvm::interpreter::heap::HeapService;
 
-    let mut metaspace = MetaspaceService::new(boot_class_path(), vec![PathBuf::from("java")]);
+    let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
     let mut heap = HeapService::new();
     array_operations::array_class_mirror(&mut metaspace, &mut heap, "[I");
     let compiled = compile_newarray(&heap, &metaspace, 10, "(I)[I").expect("`[I` has a mirror");
@@ -3082,4 +3770,67 @@ fn an_unlogged_array_is_exactly_the_corruption_the_replay_prevents() {
 #[test]
 fn argumentos_de_categoria_2_en_callees_inlineados_dan_lo_mismo_que_el_jdk_real() {
     differential("java/JcCat2.class", 1566736103);
+}
+
+
+
+
+
+// =============================================================================================
+// Milestone F3: a dispatched call emitted as a **real call**, behind the inline cache's guard.
+// =============================================================================================
+
+/// **The whole of milestone F3 through the whole VM**, against a real `java`.
+///
+/// Until this step a virtual site had exactly one answer — expand the callee, or refuse the method
+/// — and the group-4 native call was fenced off to the statically bound invokes on the grounds that
+/// "a guard in front of a call is a different mechanism from a guard in front of an expansion". It
+/// is not: `burst::compile::emit_guard` is one function and both arms call it. What the guard buys
+/// a *call* is the same thing it buys an expansion — with the receiver's class pinned, the target
+/// is pinned, and so is the `NativeRecord` address the site loads its entry point out of.
+///
+/// So this fixture is written against the four ways that can be wrong, and every one of them is a
+/// *wrong answer* here rather than a slow one:
+///
+///  - **the guard omitted on the call path.** `NkBig.big` and `NkBigB.big` compute different
+///    arithmetic, and site A is warmed with a `NkBig` and then handed a `NkBigB`. A site that
+///    called the baked address anyway runs `NkBig.big` on a `NkBigB` and the score moves. The
+///    receiver really changes class at the site that is really a call — which is the trap
+///    self-recursion sets, since a recursive site's receiver never changes and a missing guard
+///    there is unobservable.
+///  - **a miss that does not deopt.** Same site, same drift; there is nowhere else for a miss to go.
+///  - **the target taken from the declared owner rather than from the guarded class's table**, and
+///    this one is the reason the fixture has a **site E**. The first version of it did not, and did
+///    not catch the sabotage: every site above is warmed with a receiver of the class its own
+///    *declared type* already names, so the two resolutions happen to pick the same method and the
+///    mistake is invisible — the guard then misses on the drifting half and hides it a second time.
+///    `callBigSub`, `callIfaceSub` and `callChainSub` are the same three sites warmed with the
+///    **overriding subclass**, so the guard *hits* while the declared owner names a different body.
+///    `NkIb.viaTop` makes it sharpest: `viaTop` is a **default method inherited through a
+///    superinterface** (`NkMid extends NkTop`), so the declared owner is an *interface* and a site
+///    bound to it runs the inherited default for a receiver that overrides it.
+///  - **a reconstruction that loses a frame.** Site B's callee is called natively *and deopts*, at
+///    an inner dispatched site whose receiver drifts independently of the outer one — so the
+///    interpreter has to rebuild the caller's frame **and** the frame the call created, and then
+///    **resume to a value**. A deopt that ended in an exception would discard the frames and hide
+///    exactly this.
+///
+/// `508124` is what `java NkCall` prints on a real JDK 25 — and the fixture is compiled by that
+/// javac rather than by this repo's, so the pair is pinned to the JLS instead of to itself.
+#[test]
+fn una_llamada_nativa_despachada_da_lo_mismo_que_el_jdk_real() {
+    let stats = differential("java/NkCall.class", 508_124);
+    // Something really was emitted as a call rather than expanded. Without this the test would pass
+    // just as well against a compiler that refused every one of these sites.
+    assert!(stats.native_sites > 0, "los sitios despachados tienen que emitir llamadas de verdad");
+    // The guards really missed: the drifting half of the run is what produces these.
+    assert!(stats.deopts > 0, "la mitad que deriva tiene que fallar la guarda y deoptar");
+    // **A callee that could not finish, followed back through its link.** This is the one counter
+    // no expansion can produce: it is incremented once per level of a chain of real calls whose
+    // innermost frame stopped. Site B is what makes it non-zero.
+    assert!(stats.linked_exits > 0, "el callee llamado nativamente tiene que deoptar y volver por su link");
+    // ...and the frame that call created was rebuilt. `virtual_frames` counts the frames an exit
+    // hands back that the interpreter was not already holding, which for a native call is the
+    // callee's own — so this is the reconstruction of site B's two frames, counted.
+    assert!(stats.virtual_frames > 0, "el frame que creó la llamada tiene que reconstruirse");
 }

@@ -1,17 +1,17 @@
 package java.net;
 
-// Quien fabrica la implementacion de bajo nivel de un `DatagramSocket`.
+// The one that manufactures a `DatagramSocket`'s low-level implementation.
 //
-// Existe por la misma razon que `SocketImplFactory`: para que una aplicacion pueda meter su propia
-// pila de UDP --un tunel, una simulacion, una capa de prueba-- debajo de la API estandar, sin que
-// nadie que use `DatagramSocket` se entere.
+// It exists for the same reason as `SocketImplFactory`: so that an application can put its own UDP
+// stack --a tunnel, a simulation, a test layer-- underneath the standard API, without anyone using
+// `DatagramSocket` noticing.
 //
-// Una sola por VM, y se instala con `DatagramSocket.setDatagramSocketImplFactory`.
+// One per VM, and it is installed with `DatagramSocket.setDatagramSocketImplFactory`.
 //
-// @deprecated El JDK la deprecio junto con el mecanismo de `DatagramSocketImpl`.
+// @deprecated The JDK deprecated it along with the `DatagramSocketImpl` mechanism.
 @Deprecated
 public interface DatagramSocketImplFactory {
 
-    /** Una implementacion nueva, sin crear todavia el socket del sistema. */
+    /** A fresh implementation, without creating the system socket yet. */
     DatagramSocketImpl createDatagramSocketImpl();
 }

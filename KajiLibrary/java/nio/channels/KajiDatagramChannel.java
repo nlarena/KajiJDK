@@ -120,7 +120,7 @@ final class KajiDatagramChannel extends DatagramChannel {
     }
 
     public java.net.DatagramSocket socket() {
-        return (java.net.DatagramSocket) jdk.internal.net.Adopcion.datagrama(this.handle);
+        return (java.net.DatagramSocket) jdk.internal.net.Adoption.datagram(this.handle);
     }
 
     // ---- conectar ----------------------------------------------------------------------------

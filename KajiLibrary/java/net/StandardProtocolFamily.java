@@ -1,12 +1,13 @@
 package java.net;
 
-// Las tres familias de protocolo que define la plataforma.
+// The three protocol families the platform defines.
 //
-// Es un enum y no constantes sueltas porque el conjunto es cerrado del lado de la plataforma: hay
-// exactamente estas tres, y un `switch` sobre ellas puede ser exhaustivo. Que igual implemente
-// `ProtocolFamily` es lo que deja la puerta abierta a familias de terceros sin abrir este enum.
+// It is an enum and not loose constants because the set is closed on the platform's side: there are
+// exactly these three, and a `switch` over them can be exhaustive. That it implements
+// `ProtocolFamily` all the same is what leaves the door open to third-party families without opening
+// this enum.
 //
-// Nada de esto pide una pila de red: son nombres.
+// None of this asks for a network stack: they are names.
 public enum StandardProtocolFamily implements ProtocolFamily {
 
     /** IPv4. */
@@ -15,6 +16,6 @@ public enum StandardProtocolFamily implements ProtocolFamily {
     /** IPv6. */
     INET6,
 
-    /** Sockets de dominio Unix. */
+    /** Unix-domain sockets. */
     UNIX;
 }

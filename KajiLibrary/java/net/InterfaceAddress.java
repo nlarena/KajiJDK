@@ -1,80 +1,72 @@
 package java.net;
 
-// Una direccion de una placa de red, con su mascara y su broadcast.
+// One address of a network interface, with its mask and its broadcast.
 //
-// ===========================================================================================
-// EXISTE, PERO EN ESTA VM NADIE PUEDE FABRICAR UNA
-// ===========================================================================================
+// There is no way to build one by hand, and that is correct rather than a papered-over gap: in the
+// JDK there is none either -- the constructor is package-private, and the only source is
+// `NetworkInterface.getInterfaceAddresses()`. `NetworkInterface` was missing from this tree for a
+// long time (enumerating the machine's interfaces is an operating-system call the VM does not expose;
+// the full why is in `InetAddress`'s header), and while it was, this class was unreachable. The
+// earlier note said that the day `NetworkInterface` arrived this class would not change a line: it
+// arrived, and it did not.
 //
-// Y eso es correcto, no un hueco tapado. En el JDK tampoco hay forma de construir una a mano: el
-// constructor es de paquete, y la unica fuente es `NetworkInterface.getInterfaceAddresses()`.
-// `NetworkInterface` no esta en este arbol --enumerar las placas de la maquina es una llamada al
-// sistema operativo que la VM no expone; el porque completo esta en la cabecera de `InetAddress`--
-// asi que la fuente no existe y la clase queda inalcanzable.
+// What is **not** done is giving it a public constructor the JDK does not have so that it can be
+// "used". That would be inventing API: it would change the contract to cover up another class's
+// absence.
 //
-// Escribirla igual tiene sentido por dos razones y ninguna es el conteo:
-//
-//  1. **No miente nada.** Sus tres accesores devuelven lo que se le puso, y si nadie le pone nada,
-//     nadie los llama. No hay un solo metodo aca que prometa una operacion que no ocurra.
-//  2. Es el tipo que las firmas necesitan nombrar. El dia que haya `NetworkInterface`, esta clase
-//     no cambia una linea.
-//
-// Lo que **no** se hace es darle un constructor publico que el JDK no tiene, para que se pueda
-// "usar". Eso si seria inventar API: cambiaria el contrato para tapar la ausencia de otra clase.
-//
-// La longitud del prefijo es un `short` y no un `int` porque no pasa de 128 (IPv6) ni de 32 (IPv4);
-// el tipo lo fija el JDK.
+// The prefix length is a `short` and not an `int` because it does not go past 128 (IPv6) or 32
+// (IPv4); the JDK fixes the type.
 public final class InterfaceAddress {
 
     private final InetAddress address;
     private final Inet4Address broadcast;
     private final short maskLength;
 
-    // De paquete, como en el JDK: la fabrica es `NetworkInterface`, y no hay otra.
+    // Package-private, as in the JDK: the factory is `NetworkInterface`, and there is no other.
     InterfaceAddress(InetAddress address, Inet4Address broadcast, short maskLength) {
         this.address = address;
         this.broadcast = broadcast;
         this.maskLength = maskLength;
     }
 
-    /** La direccion IP de esta placa. */
+    /** This interface's IP address. */
     public InetAddress getAddress() {
         return this.address;
     }
 
     /**
-     * La direccion de broadcast de esta subred, o null.
+     * This subnet's broadcast address, or null.
      *
-     * <p>Null para IPv6 **siempre**, y no por falta de datos: IPv6 no tiene broadcast, usa multicast
-     * en su lugar. Por eso el tipo de retorno declarado es `InetAddress` pero el valor solo puede
-     * ser una `Inet4Address`.
+     * <p>Null for IPv6 **always**, and not for want of data: IPv6 has no broadcast, it uses multicast
+     * instead. That is why the declared return type is `InetAddress` but the value can only be an
+     * `Inet4Address`.
      */
     public InetAddress getBroadcast() {
         return this.broadcast;
     }
 
-    /** Cuantos bits de la direccion son la red: 24 para una mascara 255.255.255.0. */
+    /** How many bits of the address are the network: 24 for a 255.255.255.0 mask. */
     public short getNetworkPrefixLength() {
         return this.maskLength;
     }
 
-    /** Iguales si coinciden las tres partes. */
+    /** Equal if the three parts match. */
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof InterfaceAddress)) {
             return false;
         }
-        InterfaceAddress otra = (InterfaceAddress) obj;
-        if (!iguales(this.address, otra.address)) {
+        InterfaceAddress other = (InterfaceAddress) obj;
+        if (!same(this.address, other.address)) {
             return false;
         }
-        if (!iguales(this.broadcast, otra.broadcast)) {
+        if (!same(this.broadcast, other.broadcast)) {
             return false;
         }
-        return this.maskLength == otra.maskLength;
+        return this.maskLength == other.maskLength;
     }
 
-    private static boolean iguales(Object a, Object b) {
+    private static boolean same(Object a, Object b) {
         if (a == null) {
             return b == null;
         }
@@ -93,7 +85,7 @@ public final class InterfaceAddress {
         return h;
     }
 
-    /** En la forma "direccion/prefijo [broadcast]", que es la del JDK. */
+    /** In the form "address/prefix [broadcast]", which is the JDK's. */
     @Override
     public String toString() {
         return this.address + "/" + this.maskLength + " [" + this.broadcast + "]";

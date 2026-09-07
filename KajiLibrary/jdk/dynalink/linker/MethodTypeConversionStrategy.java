@@ -4,17 +4,17 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 
 /**
- * Como adaptar un metodo a otra firma cuando {@code MethodHandle.asType} no alcanza.
+ * How to adapt a method handle to another signature when {@code MethodHandle.asType} is not enough.
  *
- * <h2>Cuando no alcanza</h2>
+ * <h2>When it is not enough</h2>
  *
- * <p>{@code asType} solo hace las conversiones de Java: ensanchar un primitivo, encajonar,
- * ampliar una referencia. Un lenguaje dinamico casi siempre tiene mas — convertir un numero a
- * cadena, una cadena a numero, cualquier objeto a booleano. Esas no las puede hacer el runtime
- * solo, y esta interfaz es donde el lenguaje las aporta.
+ * <p>{@code asType} only does Java's conversions: widening a primitive, boxing, widening a
+ * reference. A dynamic language almost always has more — number to string, string to number, any
+ * object to boolean. The runtime cannot do those on its own, and this interface is where the
+ * language contributes them.
  *
- * <p>Se aplica <strong>despues</strong> de las conversiones de Java, no en lugar de ellas: lo que
- * llega aca es lo que {@code asType} no supo resolver.
+ * <p>It is applied <strong>after</strong> Java's conversions, not instead of them: what arrives here
+ * is what {@code asType} could not resolve.
  *
  * @since 9
  */
@@ -22,11 +22,11 @@ import java.lang.invoke.MethodType;
 public interface MethodTypeConversionStrategy {
 
     /**
-     * El metodo adaptado a la firma pedida.
+     * The method handle adapted to the requested signature.
      *
-     * @param target el metodo original
-     * @param newType la firma pedida
-     * @return el adaptado, o el original si no hay nada que hacer
+     * @param target the original method handle
+     * @param newType the requested signature
+     * @return the adapted one, or the original if there is nothing to do
      */
     MethodHandle asType(MethodHandle target, MethodType newType);
 }

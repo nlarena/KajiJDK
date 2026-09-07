@@ -8,116 +8,116 @@ import jdk.dynalink.SecureLookupSupplier;
 import jdk.dynalink.linker.support.TypeUtilities;
 
 /**
- * Lo que un enlazador puede pedirle al que lo hospeda mientras enlaza.
+ * What a linker can ask of its host while linking.
  *
- * <h2>Por que un enlazador necesita algo de afuera</h2>
+ * <h2>Why a linker needs anything from outside</h2>
  *
- * <p>Porque no esta solo. Un enlazador de objetos Java tiene que convertir un argumento al tipo
- * del parametro, y esa conversion puede ser de <strong>otro</strong> lenguaje que corre en el
- * mismo sitio: pasarle una funcion de un lenguaje de scripting a un metodo que espera un
- * {@code Runnable}, por ejemplo. El unico que conoce la cadena entera es el que la compuso, y
- * esta interfaz es como la presta.
+ * <p>Because it is not alone. A linker for Java objects has to convert an argument to the
+ * parameter's type, and that conversion may belong to <strong>another</strong> language running at
+ * the same site: passing a scripting language's function to a method expecting a {@code Runnable},
+ * for instance. The only one who knows the whole chain is whoever composed it, and this interface is
+ * how it lends it out.
  *
- * <p>Por eso {@link #getGuardedInvocation} esta aca: un enlazador puede delegar un pedido a la
- * cadena completa, incluyendose a si mismo, sin conocerla.
+ * <p>That is why {@link #getGuardedInvocation} is here: a linker can delegate a request to the whole
+ * chain, itself included, without knowing it.
  *
  * @since 9
  */
 public interface LinkerServices {
 
     /**
-     * Adapta un metodo a otra firma, usando ademas las conversiones de los lenguajes.
+     * Adapts a method handle to another signature, using the languages' conversions as well.
      *
-     * <p>Es el reemplazo de {@code MethodHandle.asType}, que solo hace las de Java.
+     * <p>It is the replacement for {@code MethodHandle.asType}, which only does Java's.
      *
-     * @param handle el metodo
-     * @param fromType la firma pedida
-     * @return el metodo adaptado
+     * @param handle the method handle
+     * @param fromType the requested signature
+     * @return the adapted method handle
      */
     MethodHandle asType(MethodHandle handle, MethodType fromType);
 
     /**
-     * Como {@link #asType}, pero sin degradar el valor de retorno.
+     * Like {@link #asType}, but without degrading the return value.
      *
-     * <p>La diferencia importa en una cadena de invocaciones. Si el metodo devuelve {@code long} y
-     * el sitio declara {@code int}, {@code asType} trunca — y trunca <strong>antes</strong> de que
-     * nadie pueda mirar el valor. Este metodo, en cambio, deja el retorno mas ancho cuando la
-     * conversion perderia informacion, y el recorte queda para el final del todo, donde el que
-     * invoca puede decidir otra cosa.
+     * <p>The difference matters in a chain of invocations. If the method returns {@code long} and the
+     * site declares {@code int}, {@code asType} truncates — and truncates <strong>before</strong>
+     * anyone can look at the value. This method instead leaves the return wider when the conversion
+     * would lose information, and the narrowing is left for the very end, where the caller can decide
+     * otherwise.
      *
-     * @param handle el metodo
-     * @param fromType la firma pedida
-     * @return el metodo adaptado, quiza con un retorno mas ancho que el pedido
+     * @param handle the method handle
+     * @param fromType the requested signature
+     * @return the adapted method handle, perhaps with a wider return than requested
      */
     default MethodHandle asTypeLosslessReturn(final MethodHandle handle, final MethodType fromType) {
-        final Class<?> retorno = handle.type().returnType();
-        return asType(handle, TypeUtilities.isConvertibleWithoutLoss(retorno, fromType.returnType())
-                ? fromType : fromType.changeReturnType(retorno));
+        final Class<?> returnType = handle.type().returnType();
+        return asType(handle, TypeUtilities.isConvertibleWithoutLoss(returnType, fromType.returnType())
+                ? fromType : fromType.changeReturnType(returnType));
     }
 
     /**
-     * El metodo que convierte de un tipo a otro, o {@code null} si no hay ninguno.
+     * The method handle that converts from one type to another, or {@code null} if there is none.
      *
-     * @param sourceType el tipo de partida
-     * @param targetType el tipo de llegada
-     * @return el convertidor, o {@code null}
+     * @param sourceType the type to start from
+     * @param targetType the type to arrive at
+     * @return the converter, or {@code null}
      */
     MethodHandle getTypeConverter(Class<?> sourceType, Class<?> targetType);
 
     /**
-     * Si existe alguna conversion de un tipo a otro.
+     * Whether any conversion from one type to another exists.
      *
-     * <p>No es lo mismo que {@link #getTypeConverter} distinto de {@code null}: la conversion
-     * puede existir y estar guardada, de modo que solo se sepa con el valor en la mano.
+     * <p>It is not the same as {@link #getTypeConverter} being non-{@code null}: the conversion may
+     * exist and be guarded, so that it is only known with the value in hand.
      *
-     * @param from el tipo de partida
-     * @param to el tipo de llegada
-     * @return si la conversion es posible
+     * @param from the type to start from
+     * @param to the type to arrive at
+     * @return whether the conversion is possible
      */
     boolean canConvert(Class<?> from, Class<?> to);
 
     /**
-     * Delega un pedido a la cadena completa de enlazadores.
+     * Delegates a request to the whole chain of linkers.
      *
-     * @param linkRequest el pedido
-     * @return la invocacion enlazada, o {@code null} si nadie supo
-     * @throws Exception si el enlace falla
+     * @param linkRequest the request
+     * @return the linked invocation, or {@code null} if nobody knew how
+     * @throws Exception if linking fails
      */
     GuardedInvocation getGuardedInvocation(LinkRequest linkRequest) throws Exception;
 
     /**
-     * Consulta a los {@link ConversionComparator} de la cadena cual destino conviene.
+     * Asks the chain's {@link ConversionComparator}s which target suits.
      *
-     * @param sourceType el tipo del valor
-     * @param targetType1 el primer destino
-     * @param targetType2 el segundo destino
-     * @return la preferencia, o {@code INDETERMINATE} si ninguno opina
+     * @param sourceType the value's type
+     * @param targetType1 the first target
+     * @param targetType2 the second target
+     * @return the preference, or {@code INDETERMINATE} if none of them has an opinion
      */
     ConversionComparator.Comparison compareConversion(Class<?> sourceType, Class<?> targetType1,
             Class<?> targetType2);
 
     /**
-     * Aplica el filtro de objetos internos configurado por quien hospeda.
+     * Applies the internal-object filter configured by the host.
      *
-     * <p>Sirve para que los valores propios de un lenguaje no se escapen a otro. Si no hay filtro
-     * configurado devuelve el metodo tal cual.
+     * <p>It keeps one language's own values from escaping into another. If no filter is configured it
+     * returns the method handle unchanged.
      *
-     * @param target el metodo
-     * @return el metodo filtrado
+     * @param target the method handle
+     * @return the filtered method handle
      */
     MethodHandle filterInternalObjects(MethodHandle target);
 
     /**
-     * Corre algo con el {@code Lookup} de un sitio disponible.
+     * Runs something with a site's {@code Lookup} available.
      *
-     * <p>Es la forma de que un convertidor de tipos alcance miembros privados de la clase que hizo
-     * la llamada: en vez de recibir la credencial —que podria guardarse— recibe una ventana de
-     * tiempo durante la cual esta puesta. Fuera de esa ventana no la tiene.
+     * <p>It is how a type converter reaches private members of the calling class: instead of
+     * receiving the credential --which it could keep-- it receives a window of time during which the
+     * credential is in place. Outside that window it does not have it.
      *
-     * @param <T> lo que devuelve la accion
-     * @param operation la accion
-     * @param lookupSupplier el portador del lookup
-     * @return lo que devolvio la accion
+     * @param <T> what the action returns
+     * @param operation the action
+     * @param lookupSupplier the carrier of the lookup
+     * @return whatever the action returned
      */
     <T> T getWithLookup(Supplier<T> operation, SecureLookupSupplier lookupSupplier);
 }

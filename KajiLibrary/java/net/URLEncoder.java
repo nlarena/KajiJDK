@@ -5,27 +5,27 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
-// El escape de "application/x-www-form-urlencoded": lo que hace un formulario HTML al mandarse.
+// The "application/x-www-form-urlencoded" escape: what an HTML form does when it is submitted.
 //
-// **No es el escape de una URL**, aunque el nombre lo sugiera, y confundirlos es el error clasico.
-// Este formato viene de los formularios: el espacio se codifica como '+' y la barra '/' se
-// codifica, lo que arruina cualquier ruta. Para armar una URL esta `java.net.URI`, que aplica RFC
-// 3986. Este es para armar el cuerpo de un POST o una query string, y ahi es correcto.
+// **It is not URL escaping**, although the name suggests it, and confusing them is the classic
+// mistake. This format comes from forms: the space is encoded as '+' and the slash '/' is encoded,
+// which ruins any path. For building a URL there is `java.net.URI`, which applies RFC 3986. This one
+// is for building a POST body or a query string, and there it is correct.
 //
-// El conjunto que NO se codifica es el del JDK y es mas chico de lo que uno espera: letras, digitos,
-// y solo cuatro signos -- '-', '_', '.', '*'. La tilde **si** se codifica, aunque el RFC 3986 la
-// considere no reservada, porque este formato es anterior a ese RFC y cambiarlo romperia servidores.
+// The set that is NOT encoded is the JDK's and it is smaller than one expects: letters, digits, and
+// only four signs -- '-', '_', '.', '*'. The tilde **is** encoded, even though RFC 3986 considers it
+// unreserved, because this format predates that RFC and changing it would break servers.
 //
-// Es computacion pura: no hay nada omitido.
+// It is pure computation: nothing is omitted.
 public final class URLEncoder {
 
     private URLEncoder() {
     }
 
     /**
-     * Codifica con UTF-8.
+     * Encodes with UTF-8.
      *
-     * @deprecated El resultado depende del juego de caracteres; usar la sobrecarga que lo pide.
+     * @deprecated The result depends on the character set; use the overload that asks for it.
      */
     @Deprecated
     public static String encode(String s) {
@@ -33,9 +33,9 @@ public final class URLEncoder {
     }
 
     /**
-     * Codifica con el juego de caracteres de ese nombre.
+     * Encodes with the character set of that name.
      *
-     * @throws UnsupportedEncodingException si el nombre no corresponde a ninguno
+     * @throws UnsupportedEncodingException if the name matches none
      */
     public static String encode(String s, String enc) throws UnsupportedEncodingException {
         if (enc == null) {
@@ -50,7 +50,7 @@ public final class URLEncoder {
         return encode(s, cs);
     }
 
-    /** Codifica con ese juego de caracteres. */
+    /** Encodes with that character set. */
     public static String encode(String s, Charset charset) {
         Objects.requireNonNull(charset, "charset");
         StringBuilder out = new StringBuilder(s.length());
@@ -64,9 +64,9 @@ public final class URLEncoder {
                 out.append('+');
                 i = i + 1;
             } else {
-                // Un par subrogado son dos `char` que forman un solo caracter: hay que pasarlos
-                // juntos al juego de caracteres o salen dos secuencias invalidas en vez de una
-                // valida.
+                // A surrogate pair is two `char`s forming a single character: they have to be
+                // passed to the character set together or two invalid sequences come out instead of
+                // one valid one.
                 int end = i + 1;
                 if (Character.isHighSurrogate(c) && end < s.length()
                         && Character.isLowSurrogate(s.charAt(end))) {

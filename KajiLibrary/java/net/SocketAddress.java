@@ -1,15 +1,15 @@
 package java.net;
 
 /**
- * KajiLibrary's java.net.SocketAddress — una dirección de socket, sin decir de qué protocolo.
+ * KajiLibrary's java.net.SocketAddress — a socket address, without saying of which protocol.
  *
- * <p>**No tiene ningún método, y eso es lo que es.** Existe para que las firmas que hablan de "una
- * dirección" no tengan que nombrar un protocolo concreto: `bind(SocketAddress)` sirve igual para una
- * dirección IP con puerto que para una ruta de socket de dominio Unix. La forma de la dirección la
- * pone la subclase.
+ * <p>**It has no method at all, and that is what it is.** It exists so that the signatures speaking
+ * of "an address" do not have to name a concrete protocol: `bind(SocketAddress)` serves an IP address
+ * with a port just as well as a Unix-domain socket path. The address's shape is the subclass's
+ * business.
  *
- * <p>Es abstracta y sin miembros a propósito: un tipo que sólo aporta un nombre común. Que no se
- * pueda hacer nada con una es correcto — lo único que hace falta es poder pasarla.
+ * <p>It is abstract and memberless on purpose: a type that only contributes a common name. That
+ * nothing can be done with one is correct — the only thing needed is to be able to pass it.
  */
 public abstract class SocketAddress implements java.io.Serializable {
 

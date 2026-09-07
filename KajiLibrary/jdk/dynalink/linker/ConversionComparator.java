@@ -1,46 +1,46 @@
 package jdk.dynalink.linker;
 
 /**
- * Desempata entre dos conversiones posibles cuando ninguna es obviamente mejor.
+ * Breaks the tie between two possible conversions when neither is obviously better.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it solves</h2>
  *
- * <p>Un lenguaje dinamico invoca `f(x)` y la clase destino tiene `f(int)` y `f(String)`. Si `x`
- * es un `double`, las dos sobrecargas son alcanzables: el lenguaje sabe convertir un numero a
- * `int` y tambien sabe convertirlo a `String`. Java no tiene una regla para elegir, porque el
- * conjunto de conversiones no es el de Java — lo aporta el enlazador del lenguaje.
+ * <p>A dynamic language calls `f(x)` and the target class has `f(int)` and `f(String)`. If `x` is a
+ * `double`, both overloads are reachable: the language knows how to convert a number to `int` and
+ * also how to convert it to `String`. Java has no rule for choosing, because the set of conversions
+ * is not Java's — it is contributed by the language's linker.
  *
- * <p>Esta interfaz es donde ese enlazador dice cual prefiere. Un {@link GuardingDynamicLinker}
- * que ademas la implementa participa del desempate; uno que no la implementa simplemente no
- * opina.
+ * <p>This interface is where that linker says which one it prefers. A {@link GuardingDynamicLinker}
+ * that also implements it takes part in the tie-break; one that does not implement it simply has no
+ * opinion.
  *
- * <h2>Por que puede no saber</h2>
+ * <h2>Why it may not know</h2>
  *
- * <p>Por {@link Comparison#INDETERMINATE}, que no es un error sino la respuesta honesta de quien
- * no tiene preferencia entre esos dos destinos. Si todos los comparadores contestan eso, la
- * ambiguedad queda sin resolver y el que invoca decide con sus propias reglas.
+ * <p>Through {@link Comparison#INDETERMINATE}, which is not an error but the honest answer of one
+ * who has no preference between those two targets. If every comparator answers that, the ambiguity
+ * is left unresolved and the caller decides by its own rules.
  *
  * @since 9
  */
 public interface ConversionComparator {
 
-    /** La preferencia entre dos tipos destino. */
+    /** The preference between two target types. */
     enum Comparison {
-        /** Sin preferencia: este comparador no distingue entre los dos destinos. */
+        /** No preference: this comparator does not tell the two targets apart. */
         INDETERMINATE,
-        /** El primer destino es mejor. */
+        /** The first target is better. */
         TYPE_1_BETTER,
-        /** El segundo destino es mejor. */
+        /** The second target is better. */
         TYPE_2_BETTER
     }
 
     /**
-     * Cual de los dos destinos conviene para un valor de {@code sourceType}.
+     * Which of the two targets suits a value of {@code sourceType}.
      *
-     * @param sourceType el tipo del valor que hay que convertir
-     * @param targetType1 el primer destino candidato
-     * @param targetType2 el segundo destino candidato
-     * @return la preferencia, o {@link Comparison#INDETERMINATE} si no la hay
+     * @param sourceType the type of the value to convert
+     * @param targetType1 the first candidate target
+     * @param targetType2 the second candidate target
+     * @return the preference, or {@link Comparison#INDETERMINATE} if there is none
      */
     Comparison compareConversion(Class<?> sourceType, Class<?> targetType1, Class<?> targetType2);
 }

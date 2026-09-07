@@ -4,33 +4,33 @@ import java.lang.invoke.MethodHandles;
 import java.util.function.Supplier;
 
 /**
- * Aporta las conversiones de tipo propias de un lenguaje.
+ * Contributes a language's own type conversions.
  *
- * <h2>Por que la conversion tambien lleva guarda</h2>
+ * <h2>Why the conversion carries a guard too</h2>
  *
- * <p>Porque casi nunca depende solo de las clases. "Convertir a numero" puede valer para las
- * cadenas que parecen numeros y no para las otras, aunque las dos sean {@code String}. El
- * resultado es un {@link GuardedInvocation}: la conversion mas la condicion bajo la cual es esa y
- * no otra. Cuando la guarda falla, el que invoca prueba la siguiente alternativa.
+ * <p>Because it almost never depends on the classes alone. "Convert to a number" may hold for the
+ * strings that look like numbers and not for the others, even though both are {@code String}. The
+ * result is a {@link GuardedInvocation}: the conversion plus the condition under which it is that
+ * one and not another. When the guard fails, the caller tries the next alternative.
  *
- * <h2>Por que el lookup llega como un proveedor y no directo</h2>
+ * <h2>Why the lookup arrives as a supplier and not directly</h2>
  *
- * <p>Porque un {@code Lookup} es una credencial y entregarla sin que nadie la pida seria
- * regalarla. El {@link Supplier} obliga a llamarlo para obtenerla, que es donde el control puede
- * ocurrir; un convertidor que no necesita acceso privilegiado simplemente nunca lo invoca.
+ * <p>Because a {@code Lookup} is a credential and handing it over unasked would be giving it away.
+ * The {@link Supplier} forces a call to obtain it, which is where the control can happen; a
+ * converter that needs no privileged access simply never invokes it.
  *
  * @since 9
  */
 public interface GuardingTypeConverterFactory {
 
     /**
-     * Como convertir de un tipo a otro, con la condicion bajo la cual vale.
+     * How to convert from one type to another, with the condition under which it holds.
      *
-     * @param sourceType el tipo de partida
-     * @param targetType el tipo de llegada
-     * @param lookupSupplier el lookup del sitio, si hace falta
-     * @return la conversion con su guarda, o {@code null} si esta fabrica no la sabe hacer
-     * @throws Exception si la conversion no se puede construir
+     * @param sourceType the type to start from
+     * @param targetType the type to arrive at
+     * @param lookupSupplier the site's lookup, if it is needed
+     * @return the conversion with its guard, or {@code null} if this factory cannot make it
+     * @throws Exception if the conversion cannot be built
      */
     GuardedInvocation convertToType(Class<?> sourceType, Class<?> targetType,
             Supplier<MethodHandles.Lookup> lookupSupplier) throws Exception;

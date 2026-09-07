@@ -10,8 +10,8 @@ import javax.lang.model.SourceVersion;
 // code. JavaCompiler and DocumentationTool are the two the platform ships.
 public interface Tool {
 
-    // El JDK real devuelve el nombre del modulo que provee la herramienta; sin java.lang.Module
-    // el default honesto es la cadena vacia. La firma es la de verdad.
+    // The real JDK returns the name of the module providing the tool; without java.lang.Module the
+    // honest default is the empty string. The signature is the real one.
     default String name() {
         return "";
     }

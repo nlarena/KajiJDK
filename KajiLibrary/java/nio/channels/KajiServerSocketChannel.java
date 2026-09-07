@@ -92,7 +92,7 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
     }
 
     public java.net.ServerSocket socket() {
-        return (java.net.ServerSocket) jdk.internal.net.Adopcion.servidor(this.handle);
+        return (java.net.ServerSocket) jdk.internal.net.Adoption.server(this.handle);
     }
 
     // ---- aceptar -----------------------------------------------------------------------------

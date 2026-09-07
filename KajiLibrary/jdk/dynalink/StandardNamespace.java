@@ -1,32 +1,32 @@
 package jdk.dynalink;
 
 /**
- * Los tres espacios de nombres que todo objeto del lenguaje tiene.
+ * The three namespaces every object of the language has.
  *
- * <p>La separacion entre {@link #PROPERTY} y {@link #ELEMENT} es la que Java no hace y los
- * lenguajes dinamicos si: `a.x` y `a[x]` son operaciones distintas aunque el nombre coincida.
- * {@link #METHOD} existe aparte de `PROPERTY` porque en un JavaBean el metodo `getFoo` y la
- * propiedad `foo` conviven, y pedir "el miembro foo" tiene dos respuestas segun donde se mire.
+ * <p>The split between {@link #PROPERTY} and {@link #ELEMENT} is the one Java does not make and
+ * dynamic languages do: `a.x` and `a[x]` are different operations even when the name coincides.
+ * {@link #METHOD} exists apart from `PROPERTY` because in a JavaBean the method `getFoo` and the
+ * property `foo` live side by side, and asking for "the member foo" has two answers depending on
+ * where you look.
  *
  * @since 9
  */
 public enum StandardNamespace implements Namespace {
 
-    /** Propiedad con nombre: `obj.foo`. */
+    /** Named property: `obj.foo`. */
     PROPERTY,
 
-    /** Elemento indexado por clave o posicion: `obj[foo]`. */
+    /** Element indexed by key or position: `obj[foo]`. */
     ELEMENT,
 
-    /** Metodo: lo que se obtiene al pedir `obj.foo` esperando algo invocable. */
+    /** Method: what you get when asking for `obj.foo` expecting something invocable. */
     METHOD;
 
     /**
-     * El primer espacio de nombres estandar de `op`, o `null` si no tiene ninguno.
+     * The first standard namespace of `op`, or `null` if it has none.
      *
-     * <p>Desarma las dos capas de decoracion en el unico orden en que pueden estar (nombre
-     * afuera, espacios adentro), asi que sirve tanto para `GET:PROPERTY` como para
-     * `GET:PROPERTY:x`.
+     * <p>It unwraps the two layers of decoration in the only order they can be in (name outside,
+     * namespaces inside), so it serves both `GET:PROPERTY` and `GET:PROPERTY:x`.
      */
     public static StandardNamespace findFirst(final Operation op) {
         for (final Namespace ns : NamespaceOperation.getNamespaces(NamedOperation.getBaseOperation(op))) {

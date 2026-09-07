@@ -4,9 +4,9 @@ import java.math.BigInteger;
 import java.security.spec.KeySpec;
 
 /**
- * Una clave privada Diffie-Hellman: el exponente `x` mas los parametros con los que se usa.
+ * A Diffie-Hellman private key: the exponent `x` plus the parameters it is used with.
  *
- * <p>Vale la misma nota que {@link DHPublicKeySpec} sobre por que los parametros viajan adentro.
+ * <p>The same note as {@link DHPublicKeySpec} applies about why the parameters travel inside.
  */
 public class DHPrivateKeySpec implements KeySpec {
 
@@ -14,24 +14,24 @@ public class DHPrivateKeySpec implements KeySpec {
     private final BigInteger p;
     private final BigInteger g;
 
-    /** El exponente privado `x`, con su primo y su generador. */
+    /** The private exponent `x`, with its prime and its generator. */
     public DHPrivateKeySpec(BigInteger x, BigInteger p, BigInteger g) {
         this.x = x;
         this.p = p;
         this.g = g;
     }
 
-    /** El exponente privado. */
+    /** The private exponent. */
     public BigInteger getX() {
         return this.x;
     }
 
-    /** El primo. */
+    /** The prime. */
     public BigInteger getP() {
         return this.p;
     }
 
-    /** El generador. */
+    /** The generator. */
     public BigInteger getG() {
         return this.g;
     }

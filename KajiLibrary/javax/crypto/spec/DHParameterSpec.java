@@ -4,15 +4,16 @@ import java.math.BigInteger;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Los parametros publicos de Diffie-Hellman: el primo `p`, el generador `g` y, opcionalmente, el
- * largo del exponente privado.
+ * Diffie-Hellman's public parameters: the prime `p`, the generator `g` and, optionally, the length of
+ * the private exponent.
  *
- * <p>`l` en cero significa "sin restriccion", que es distinto de "cero bits": el constructor de dos
- * argumentos lo deja asi. No hay forma de pedir un exponente de cero bits, y no la hay porque no
- * tendria sentido.
+ * <p>`l` at zero means "no restriction", which is different from "zero bits": the two-argument
+ * constructor leaves it that way. There is no way to ask for a zero-bit exponent, and there is none
+ * because it would make no sense.
  *
- * <p>No valida que `p` sea primo. Comprobarlo es caro --una prueba probabilistica sobre un numero
- * de dos mil bits-- y el JDK tampoco lo hace: quien genera los parametros es responsable de eso.
+ * <p>It does not validate that `p` is prime. Checking it is expensive --a probabilistic test on a
+ * two-thousand-bit number-- and the JDK does not do it either: whoever generates the parameters is
+ * responsible for that.
  */
 public class DHParameterSpec implements AlgorithmParameterSpec {
 
@@ -20,31 +21,31 @@ public class DHParameterSpec implements AlgorithmParameterSpec {
     private final BigInteger g;
     private final int l;
 
-    /** Sin restriccion sobre el largo del exponente privado. */
+    /** With no restriction on the length of the private exponent. */
     public DHParameterSpec(BigInteger p, BigInteger g) {
         this.p = p;
         this.g = g;
         this.l = 0;
     }
 
-    /** Con el exponente privado limitado a `l` bits. */
+    /** With the private exponent limited to `l` bits. */
     public DHParameterSpec(BigInteger p, BigInteger g, int l) {
         this.p = p;
         this.g = g;
         this.l = l;
     }
 
-    /** El primo. */
+    /** The prime. */
     public BigInteger getP() {
         return this.p;
     }
 
-    /** El generador. */
+    /** The generator. */
     public BigInteger getG() {
         return this.g;
     }
 
-    /** El largo del exponente privado en bits, o cero si no hay restriccion. */
+    /** The length of the private exponent in bits, or zero if there is no restriction. */
     public int getL() {
         return this.l;
     }

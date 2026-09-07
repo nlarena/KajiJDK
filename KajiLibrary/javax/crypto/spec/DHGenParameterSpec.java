@@ -3,30 +3,30 @@ package javax.crypto.spec;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * Lo que hace falta para **generar** parametros Diffie-Hellman: de cuantos bits el primo y de
- * cuantos el exponente.
+ * What is needed to **generate** Diffie-Hellman parameters: how many bits the prime and how many the
+ * exponent.
  *
- * <p>Es la contraparte de {@link DHParameterSpec}: esta describe parametros que todavia no existen
- * y aquella los que ya se calcularon. De ahi que esta sean dos enteros y aquella dos numeros
- * enormes.
+ * <p>It is {@link DHParameterSpec}'s counterpart: this one describes parameters that do not exist
+ * yet and that one the ones already computed. Hence this one being two integers and that one two
+ * enormous numbers.
  */
 public class DHGenParameterSpec implements AlgorithmParameterSpec {
 
     private final int primeSize;
     private final int exponentSize;
 
-    /** El primo de `primeSize` bits y el exponente de `exponentSize`. */
+    /** The prime of `primeSize` bits and the exponent of `exponentSize`. */
     public DHGenParameterSpec(int primeSize, int exponentSize) {
         this.primeSize = primeSize;
         this.exponentSize = exponentSize;
     }
 
-    /** El tamano del primo, en bits. */
+    /** The prime's size, in bits. */
     public int getPrimeSize() {
         return this.primeSize;
     }
 
-    /** El tamano del exponente, en bits. */
+    /** The exponent's size, in bits. */
     public int getExponentSize() {
         return this.exponentSize;
     }

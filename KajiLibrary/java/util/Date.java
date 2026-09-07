@@ -1,5 +1,8 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
+
 // KajiLibrary's java.util.Date (finding #267).
 //
 // It exists because `jakarta.persistence.Query` binds parameters of it, next to the Calendar
@@ -13,7 +16,7 @@ package java.util;
 // stays true: the instant, not a rendering of it in a zone we do not have.
 //
 // A missing member is a legal subset; a member that lies is not.
-public class Date implements Comparable<Date> {
+public class Date implements Comparable<Date>, Serializable, Cloneable {
 
     /** Milliseconds since the epoch. The whole state of a Date. */
     private long fastTime;

@@ -8,27 +8,27 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * Un {@link MethodHandles.Lookup} sin excepciones verificadas.
+ * A {@link MethodHandles.Lookup} with no checked exceptions.
  *
- * <h2>Por que existe</h2>
+ * <h2>Why it exists</h2>
  *
- * <p>Porque un enlazador busca metodos que <strong>sabe</strong> que estan: los suyos propios, los
- * que acaba de encontrar por reflexion. En ese uso, {@code NoSuchMethodException} no es una
- * condicion a manejar sino un error de programa, y obligar a escribir un {@code try}/{@code catch}
- * alrededor de cada busqueda solo agrega ruido.
+ * <p>Because a linker looks up methods it <strong>knows</strong> are there: its own, the ones it has
+ * just found by reflection. In that use, {@code NoSuchMethodException} is not a condition to handle
+ * but a programming error, and forcing a {@code try}/{@code catch} around every lookup only adds
+ * noise.
  *
- * <p>Por eso cada metodo de aca convierte la excepcion verificada en el {@code Error} que le
- * corresponde: {@link NoSuchMethodError}, {@link NoSuchFieldError}, {@link IllegalAccessError}.
- * Son los mismos que tiraria la JVM si el metodo faltara en una invocacion compilada — la
- * traduccion no inventa una categoria nueva, usa la que ya existia para esta misma falla.
+ * <p>So every method here turns the checked exception into the {@code Error} that corresponds to it:
+ * {@link NoSuchMethodError}, {@link NoSuchFieldError}, {@link IllegalAccessError}. They are the same
+ * ones the JVM would throw if the method were missing from a compiled invocation — the translation
+ * invents no new category, it uses the one that already existed for this very failure.
  *
- * <p>La causa original queda encadenada, asi que no se pierde nada.
+ * <p>The original cause stays chained, so nothing is lost.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>La logica de aca esta completa, pero el {@code MethodHandles.Lookup} que hay debajo todavia
- * no puede fabricar handles sin soporte de la VM. Las busquedas terminan en
- * {@link UnsupportedOperationException}, no en un resultado equivocado.
+ * <p>The logic here is complete, but the {@code MethodHandles.Lookup} underneath still cannot build
+ * handles without VM support. The lookups end in {@link UnsupportedOperationException}, not in a
+ * wrong result.
  *
  * @since 9
  */
@@ -36,208 +36,208 @@ public final class Lookup {
 
     private final MethodHandles.Lookup lookup;
 
-    /** Uno con acceso solo a lo publico. */
+    /** One with access to public members only. */
     public static final Lookup PUBLIC = new Lookup(MethodHandles.publicLookup());
 
     /**
-     * Envuelve un lookup.
+     * Wraps a lookup.
      *
-     * @param lookup el lookup a envolver
+     * @param lookup the lookup to wrap
      */
     public Lookup(final MethodHandles.Lookup lookup) {
         this.lookup = lookup;
     }
 
     /**
-     * Como {@code Lookup.unreflect}, sin excepcion verificada.
+     * Like {@code Lookup.unreflect}, with no checked exception.
      *
-     * @param m el metodo
-     * @return el handle
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param m the method
+     * @return the method handle
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle unreflect(final Method m) {
         return unreflect(lookup, m);
     }
 
     /**
-     * Como {@code Lookup.unreflect}, sin excepcion verificada.
+     * Like {@code Lookup.unreflect}, with no checked exception.
      *
-     * @param lookup el lookup a usar
-     * @param m el metodo
-     * @return el handle
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param lookup the lookup to use
+     * @param m the method
+     * @return the method handle
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public static MethodHandle unreflect(final MethodHandles.Lookup lookup, final Method m) {
         try {
             return lookup.unreflect(m);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo obtener el handle del metodo " + m, e);
+            throw noAccess("could not get the method handle for " + m, e);
         }
     }
 
     /**
-     * Como {@code Lookup.unreflectGetter}, sin excepcion verificada.
+     * Like {@code Lookup.unreflectGetter}, with no checked exception.
      *
-     * @param f el campo
-     * @return el handle de lectura
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param f the field
+     * @return the getter handle
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle unreflectGetter(final Field f) {
         try {
             return lookup.unreflectGetter(f);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo obtener el lector del campo " + f, e);
+            throw noAccess("could not get the getter for field " + f, e);
         }
     }
 
     /**
-     * Como {@code Lookup.findGetter}, sin excepciones verificadas.
+     * Like {@code Lookup.findGetter}, with no checked exceptions.
      *
-     * @param refc la clase donde esta el campo
-     * @param name el nombre del campo
-     * @param type el tipo del campo
-     * @return el handle de lectura
-     * @throws NoSuchFieldError si el campo no existe
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param refc the class the field is in
+     * @param name the field's name
+     * @param type the field's type
+     * @return the getter handle
+     * @throws NoSuchFieldError if the field does not exist
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle findGetter(final Class<?> refc, final String name, final Class<?> type) {
         try {
             return lookup.findGetter(refc, name, type);
         } catch (final NoSuchFieldException e) {
-            throw sinCampo("no se encontro el campo " + descripcion(refc, name, type), e);
+            throw noField("field not found: " + describe(refc, name, type), e);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo leer el campo " + descripcion(refc, name, type), e);
+            throw noAccess("could not read field " + describe(refc, name, type), e);
         }
     }
 
     /**
-     * Como {@code Lookup.unreflectSetter}, sin excepcion verificada.
+     * Like {@code Lookup.unreflectSetter}, with no checked exception.
      *
-     * @param f el campo
-     * @return el handle de escritura
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param f the field
+     * @return the setter handle
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle unreflectSetter(final Field f) {
         try {
             return lookup.unreflectSetter(f);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo obtener el escritor del campo " + f, e);
+            throw noAccess("could not get the setter for field " + f, e);
         }
     }
 
     /**
-     * Como {@code Lookup.unreflectConstructor}, sin excepcion verificada.
+     * Like {@code Lookup.unreflectConstructor}, with no checked exception.
      *
-     * @param c el constructor
-     * @return el handle
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param c the constructor
+     * @return the method handle
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle unreflectConstructor(final Constructor<?> c) {
         return unreflectConstructor(lookup, c);
     }
 
     /**
-     * Como {@code Lookup.unreflectConstructor}, sin excepcion verificada.
+     * Like {@code Lookup.unreflectConstructor}, with no checked exception.
      *
-     * @param lookup el lookup a usar
-     * @param c el constructor
-     * @return el handle
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param lookup the lookup to use
+     * @param c the constructor
+     * @return the method handle
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public static MethodHandle unreflectConstructor(final MethodHandles.Lookup lookup,
             final Constructor<?> c) {
         try {
             return lookup.unreflectConstructor(c);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo obtener el handle del constructor " + c, e);
+            throw noAccess("could not get the method handle for constructor " + c, e);
         }
     }
 
     /**
-     * Como {@code Lookup.findSpecial}, sin excepciones verificadas.
+     * Like {@code Lookup.findSpecial}, with no checked exceptions.
      *
-     * <p>El llamador especial es la propia clase declarante: esta es la busqueda que sirve para
-     * invocar un metodo <strong>sin</strong> despacho virtual, que es lo que hace falta para
-     * llamar a la implementacion de una superclase.
+     * <p>The special caller is the declaring class itself: this is the lookup that serves to invoke a
+     * method <strong>without</strong> virtual dispatch, which is what is needed to call a
+     * superclass's implementation.
      *
-     * @param declaringClass la clase que declara el metodo
-     * @param name el nombre
-     * @param type la firma
-     * @return el handle
-     * @throws NoSuchMethodError si el metodo no existe
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param declaringClass the class declaring the method
+     * @param name the name
+     * @param type the signature
+     * @return the method handle
+     * @throws NoSuchMethodError if the method does not exist
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle findSpecial(final Class<?> declaringClass, final String name,
             final MethodType type) {
         try {
             return lookup.findSpecial(declaringClass, name, type, declaringClass);
         } catch (final NoSuchMethodException e) {
-            throw sinMetodo("no se encontro el metodo especial "
-                    + descripcion(declaringClass, name, type), e);
+            throw noMethod("special method not found: "
+                    + describe(declaringClass, name, type), e);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo invocar el metodo especial "
-                    + descripcion(declaringClass, name, type), e);
+            throw noAccess("could not invoke special method "
+                    + describe(declaringClass, name, type), e);
         }
     }
 
     /**
-     * Como {@code Lookup.findStatic}, sin excepciones verificadas.
+     * Like {@code Lookup.findStatic}, with no checked exceptions.
      *
-     * @param declaringClass la clase que declara el metodo
-     * @param name el nombre
-     * @param type la firma
-     * @return el handle
-     * @throws NoSuchMethodError si el metodo no existe
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param declaringClass the class declaring the method
+     * @param name the name
+     * @param type the signature
+     * @return the method handle
+     * @throws NoSuchMethodError if the method does not exist
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle findStatic(final Class<?> declaringClass, final String name,
             final MethodType type) {
         try {
             return lookup.findStatic(declaringClass, name, type);
         } catch (final NoSuchMethodException e) {
-            throw sinMetodo("no se encontro el metodo estatico "
-                    + descripcion(declaringClass, name, type), e);
+            throw noMethod("static method not found: "
+                    + describe(declaringClass, name, type), e);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo invocar el metodo estatico "
-                    + descripcion(declaringClass, name, type), e);
+            throw noAccess("could not invoke static method "
+                    + describe(declaringClass, name, type), e);
         }
     }
 
     /**
-     * Como {@code Lookup.findVirtual}, sin excepciones verificadas.
+     * Like {@code Lookup.findVirtual}, with no checked exceptions.
      *
-     * @param declaringClass la clase que declara el metodo
-     * @param name el nombre
-     * @param type la firma, sin el receptor
-     * @return el handle, que toma el receptor como primer argumento
-     * @throws NoSuchMethodError si el metodo no existe
-     * @throws IllegalAccessError si el lookup no alcanza
+     * @param declaringClass the class declaring the method
+     * @param name the name
+     * @param type the signature, without the receiver
+     * @return the method handle, which takes the receiver as its first argument
+     * @throws NoSuchMethodError if the method does not exist
+     * @throws IllegalAccessError if the lookup does not reach
      */
     public MethodHandle findVirtual(final Class<?> declaringClass, final String name,
             final MethodType type) {
         try {
             return lookup.findVirtual(declaringClass, name, type);
         } catch (final NoSuchMethodException e) {
-            throw sinMetodo("no se encontro el metodo virtual "
-                    + descripcion(declaringClass, name, type), e);
+            throw noMethod("virtual method not found: "
+                    + describe(declaringClass, name, type), e);
         } catch (final IllegalAccessException e) {
-            throw sinAcceso("no se pudo invocar el metodo virtual "
-                    + descripcion(declaringClass, name, type), e);
+            throw noAccess("could not invoke virtual method "
+                    + describe(declaringClass, name, type), e);
         }
     }
 
     /**
-     * Un metodo especial de la clase del propio lookup.
+     * A special method of the lookup's own class.
      *
-     * <p>Es el atajo que usa un enlazador para tomar handles de sus propios metodos: la clase no
-     * se nombra porque es la del lookup, y los tipos se dan sueltos en vez de armar un
+     * <p>It is the shortcut a linker uses to take handles of its own methods: the class is not named
+     * because it is the lookup's, and the types are given loose instead of building a
      * {@link MethodType}.
      *
-     * @param lookup el lookup, cuya clase es la que declara el metodo
-     * @param name el nombre
-     * @param rtype el tipo de retorno
-     * @param ptypes los tipos de los parametros
-     * @return el handle
+     * @param lookup the lookup, whose class is the one declaring the method
+     * @param name the name
+     * @param rtype the return type
+     * @param ptypes the parameter types
+     * @return the method handle
      */
     public static MethodHandle findOwnSpecial(final MethodHandles.Lookup lookup, final String name,
             final Class<?> rtype, final Class<?>... ptypes) {
@@ -245,12 +245,12 @@ public final class Lookup {
     }
 
     /**
-     * Un metodo especial de la clase de este lookup.
+     * A special method of this lookup's class.
      *
-     * @param name el nombre
-     * @param rtype el tipo de retorno
-     * @param ptypes los tipos de los parametros
-     * @return el handle
+     * @param name the name
+     * @param rtype the return type
+     * @param ptypes the parameter types
+     * @return the method handle
      */
     public MethodHandle findOwnSpecial(final String name, final Class<?> rtype,
             final Class<?>... ptypes) {
@@ -258,13 +258,13 @@ public final class Lookup {
     }
 
     /**
-     * Un metodo estatico de la clase del propio lookup.
+     * A static method of the lookup's own class.
      *
-     * @param lookup el lookup, cuya clase es la que declara el metodo
-     * @param name el nombre
-     * @param rtype el tipo de retorno
-     * @param ptypes los tipos de los parametros
-     * @return el handle
+     * @param lookup the lookup, whose class is the one declaring the method
+     * @param name the name
+     * @param rtype the return type
+     * @param ptypes the parameter types
+     * @return the method handle
      */
     public static MethodHandle findOwnStatic(final MethodHandles.Lookup lookup, final String name,
             final Class<?> rtype, final Class<?>... ptypes) {
@@ -272,37 +272,37 @@ public final class Lookup {
     }
 
     /**
-     * Un metodo estatico de la clase de este lookup.
+     * A static method of this lookup's class.
      *
-     * @param name el nombre
-     * @param rtype el tipo de retorno
-     * @param ptypes los tipos de los parametros
-     * @return el handle
+     * @param name the name
+     * @param rtype the return type
+     * @param ptypes the parameter types
+     * @return the method handle
      */
     public MethodHandle findOwnStatic(final String name, final Class<?> rtype,
             final Class<?>... ptypes) {
         return findStatic(lookup.lookupClass(), name, MethodType.methodType(rtype, ptypes));
     }
 
-    private static String descripcion(final Class<?> clazz, final String name, final Object type) {
-        return clazz.getName() + "." + name + " de tipo " + type;
+    private static String describe(final Class<?> clazz, final String name, final Object type) {
+        return clazz.getName() + "." + name + " of type " + type;
     }
 
-    private static NoSuchMethodError sinMetodo(final String mensaje, final Throwable causa) {
-        final NoSuchMethodError e = new NoSuchMethodError(mensaje);
-        e.initCause(causa);
+    private static NoSuchMethodError noMethod(final String message, final Throwable cause) {
+        final NoSuchMethodError e = new NoSuchMethodError(message);
+        e.initCause(cause);
         return e;
     }
 
-    private static NoSuchFieldError sinCampo(final String mensaje, final Throwable causa) {
-        final NoSuchFieldError e = new NoSuchFieldError(mensaje);
-        e.initCause(causa);
+    private static NoSuchFieldError noField(final String message, final Throwable cause) {
+        final NoSuchFieldError e = new NoSuchFieldError(message);
+        e.initCause(cause);
         return e;
     }
 
-    private static IllegalAccessError sinAcceso(final String mensaje, final Throwable causa) {
-        final IllegalAccessError e = new IllegalAccessError(mensaje);
-        e.initCause(causa);
+    private static IllegalAccessError noAccess(final String message, final Throwable cause) {
+        final IllegalAccessError e = new IllegalAccessError(message);
+        e.initCause(cause);
         return e;
     }
 }

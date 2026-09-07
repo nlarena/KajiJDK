@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.zone.ZoneRulesException;
 
 // KajiLibrary's java.time.ZoneId — the identifier for a time-zone, the base type of ZoneOffset. A
@@ -8,7 +9,7 @@ import java.time.zone.ZoneRulesException;
 // tzdb transition rules — a data wall — so they raise ZoneRulesException. The abstract getRules()
 // accessor of the JDK is therefore omitted. The package-private constructor limits subclassing to
 // java.time (as in the JDK), where ZoneOffset extends it.
-public abstract class ZoneId {
+public abstract class ZoneId implements Serializable {
 
     ZoneId() {
     }

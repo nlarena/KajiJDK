@@ -23,361 +23,367 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-// Lo que quedo de un parseo: los campos que el texto traia, ya resueltos.
+// What is left of a parse: the fields the text brought, already resolved.
 //
-// No es una fecha ni una hora: es la bolsa intermedia, y existe porque el que parsea no sabe --ni
-// tiene por que saber-- en que clase van a entrar los campos. `LocalDate.from(esto)`, `Year.from(esto)`
-// y `OffsetTime.from(esto)` sacan cada uno lo suyo de la misma bolsa.
+// It is neither a date nor a time: it is the bag in between, and it exists because whoever parses
+// does not know --and has no business knowing-- which class the fields will go into.
+// `LocalDate.from(this)`, `Year.from(this)` and `OffsetTime.from(this)` each take their own out of
+// the same bag.
 //
-// Los campos **crudos** se conservan ademas de los resueltos, y eso importa: `Year.from` lee `YEAR`
-// directo, asi que si la resolucion los consumiera, un patron de `"yyyy"` no daria un `Year`.
+// The **raw** fields are kept alongside the resolved ones, and that matters: `Year.from` reads
+// `YEAR` directly, so if resolving consumed them a `"yyyy"` pattern would not give a `Year`.
 //
-// **Resolver es donde se decide que significa el texto**, y por eso `ResolverStyle` esta aca y no en
-// el lector. El lector solo sabe que leyo `02` donde iba el mes; que `2023-02-30` sea un error
-// (`STRICT`), el 28 de febrero (`SMART`) o el 2 de marzo (`LENIENT`) es una pregunta posterior, y la
-// respuesta la da la cronologia, no el patron.
+// **Resolving is where what the text means gets decided**, and that is why `ResolverStyle` is here
+// and not in the reader. The reader only knows it read `02` where the month goes; whether
+// `2023-02-30` is an error (`STRICT`), the 28th of February (`SMART`) or the 2nd of March
+// (`LENIENT`) is a later question, and the chronology answers it, not the pattern.
 final class Parsed implements TemporalAccessor {
 
-    private final Map<TemporalField, Long> campos;
+    private final Map<TemporalField, Long> fields;
     private final ZoneOffset offset;
-    private final ZoneId zona;
-    private final Chronology cronologia;
-    private final LocalDate fecha;
-    private final LocalTime hora;
-    private final Period exceso;
-    private final Boolean bisiesto;
+    private final ZoneId zone;
+    private final Chronology chronology;
+    private final LocalDate date;
+    private final LocalTime time;
+    private final Period excess;
+    private final Boolean leapSecond;
 
-    Parsed(CtxParseo ctx, ResolverStyle estilo, Set<TemporalField> soloEstos, ZoneId zonaPorDefecto,
-            Chronology cronologiaPorDefecto) {
-        Map<TemporalField, Long> m = ctx.campos;
-        if (soloEstos != null) {
-            // `withResolverFields`: los campos que no estan en el juego se sacan **antes** de
-            // resolver. Es la unica forma de desempatar un texto que trae informacion redundante y
-            // contradictoria --anio+dia-del-anio contra anio+mes+dia-- diciendo cual de las dos vale.
-            Map<TemporalField, Long> filtrado = new HashMap<TemporalField, Long>();
+    Parsed(ParseContext ctx, ResolverStyle style, Set<TemporalField> onlyThese, ZoneId defaultZone,
+            Chronology defaultChronology) {
+        Map<TemporalField, Long> m = ctx.fields;
+        if (onlyThese != null) {
+            // `withResolverFields`: the fields that are not in the set are taken out **before**
+            // resolving. It is the only way to break a tie in a text that brings redundant and
+            // contradictory information --year+day-of-year against year+month+day-- by saying which
+            // of the two holds.
+            Map<TemporalField, Long> filtered = new HashMap<TemporalField, Long>();
             Iterator<Map.Entry<TemporalField, Long>> it = m.entrySet().iterator();
             while (it.hasNext()) {
                 Map.Entry<TemporalField, Long> e = it.next();
-                if (soloEstos.contains(e.getKey())) {
-                    filtrado.put(e.getKey(), e.getValue());
+                if (onlyThese.contains(e.getKey())) {
+                    filtered.put(e.getKey(), e.getValue());
                 }
             }
-            m = filtrado;
+            m = filtered;
         }
-        this.campos = m;
+        this.fields = m;
         this.offset = ctx.offset;
-        // Sin zona escrita pero con desplazamiento, la zona **es** el desplazamiento: es lo unico
-        // que se sabe del lugar, y es cierto. Y si el formateador traia una zona por `withZone`, esa
-        // es la que vale cuando el texto no dijo nada.
-        ZoneId z = ctx.zona;
+        // With no zone written but an offset present, the zone **is** the offset: it is the only
+        // thing known about the place, and it is true. And if the formatter carried a zone from
+        // `withZone`, that is the one that holds when the text said nothing.
+        ZoneId z = ctx.zone;
         if (z == null) {
             z = ctx.offset;
         }
         if (z == null) {
-            z = zonaPorDefecto;
+            z = defaultZone;
         }
-        this.zona = z;
-        Chronology c = ctx.cronologia;
+        this.zone = z;
+        Chronology c = ctx.chronology;
         if (c == null) {
-            c = cronologiaPorDefecto;
+            c = defaultChronology;
         }
         if (c == null) {
             c = IsoChronology.INSTANCE;
         }
-        this.cronologia = c;
+        this.chronology = c;
 
-        // `y` deja `YEAR_OF_ERA`, y casi todo lo que viene despues quiere `YEAR`: `Year.from`,
-        // `YearMonth.from` y la resolucion de la fecha. La conversion se hace **antes** y se deja
-        // anotada en el mapa, no adentro de la copia que consume la cronologia, porque un patron de
-        // `"yyyy-MM"` no llega a formar una fecha y aun asi tiene que dar un `YearMonth`.
+        // `y` leaves `YEAR_OF_ERA`, and nearly everything that comes after wants `YEAR`:
+        // `Year.from`, `YearMonth.from` and resolving the date. The conversion happens **first**
+        // and is written into the map, not into the copy the chronology consumes, because a
+        // `"yyyy-MM"` pattern never forms a date and still has to give a `YearMonth`.
         //
-        // **Menos en modo estricto y sin era escrita**, donde el anio de la era no alcanza: `2021`
-        // sin decir si es de esta era o de la anterior no designa un anio, y suponer la corriente es
-        // exactamente la clase de suposicion que `STRICT` existe para no hacer. Es la razon por la
-        // que `uuuu` --anio proleptico-- es el que hay que usar con `STRICT`, y no `yyyy`.
-        boolean anioSinEra = estilo == ResolverStyle.STRICT
-                && this.campos.containsKey(ChronoField.YEAR_OF_ERA)
-                && !this.campos.containsKey(ChronoField.ERA)
-                && !this.campos.containsKey(ChronoField.YEAR);
-        if (!anioSinEra && !this.campos.containsKey(ChronoField.YEAR)
-                && this.campos.containsKey(ChronoField.YEAR_OF_ERA)) {
-            long yoe = this.campos.get(ChronoField.YEAR_OF_ERA).longValue();
-            Long era = this.campos.get(ChronoField.ERA);
+        // **Except in strict mode with no era written**, where the year of the era is not enough:
+        // `2021` without saying whether it belongs to this era or the previous one does not name a
+        // year, and assuming the current one is exactly the kind of assumption `STRICT` exists not
+        // to make. It is the reason `uuuu` --the proleptic year-- is the one to use with `STRICT`,
+        // and not `yyyy`.
+        boolean yearWithoutEra = style == ResolverStyle.STRICT
+                && this.fields.containsKey(ChronoField.YEAR_OF_ERA)
+                && !this.fields.containsKey(ChronoField.ERA)
+                && !this.fields.containsKey(ChronoField.YEAR);
+        if (!yearWithoutEra && !this.fields.containsKey(ChronoField.YEAR)
+                && this.fields.containsKey(ChronoField.YEAR_OF_ERA)) {
+            long yoe = this.fields.get(ChronoField.YEAR_OF_ERA).longValue();
+            Long era = this.fields.get(ChronoField.ERA);
             java.time.chrono.Era e;
             if (era != null) {
-                e = this.cronologia.eraOf((int) era.longValue());
+                e = this.chronology.eraOf((int) era.longValue());
             } else {
-                // Sin era escrita, la corriente: es lo que quiere decir el que escribe un anio solo.
-                java.util.List<java.time.chrono.Era> eras = this.cronologia.eras();
+                // With no era written, the current one: it is what whoever writes a bare year
+                // means.
+                java.util.List<java.time.chrono.Era> eras = this.chronology.eras();
                 e = eras.get(eras.size() - 1);
             }
-            this.campos.put(ChronoField.YEAR,
-                    Long.valueOf((long) this.cronologia.prolepticYear(e, (int) yoe)));
+            this.fields.put(ChronoField.YEAR,
+                    Long.valueOf((long) this.chronology.prolepticYear(e, (int) yoe)));
         }
 
-        int[] excesoDias = new int[1];
-        this.hora = resolverHora(this.campos, estilo, ctx.excesoDia, excesoDias);
-        this.exceso = excesoDias[0] == 0 ? Period.ZERO : Period.ofDays(excesoDias[0]);
-        this.bisiesto = Boolean.valueOf(ctx.segundoBisiesto);
-        ChronoLocalDate cruda = resolverFecha(this.campos, estilo, this.cronologia, anioSinEra);
-        // Se **normaliza por el dia epoch** antes de mirarla. El `LocalDate.of` de esta biblioteca
-        // no valida el dia contra el largo del mes: `LocalDate.of(2023, 2, 30)` devuelve un objeto
-        // que se imprime `2023-02-30` y cuyo `toEpochDay()` es el del 2 de marzo. Pasar por el dia
-        // epoch convierte ese objeto en la fecha que de verdad designa, que es la unica sobre la que
-        // tiene sentido comprobar nada.
-        ChronoLocalDate resuelta = cruda == null ? null
-                : this.cronologia.dateEpochDay(cruda.toEpochDay());
-        this.fecha = resuelta == null ? null : LocalDate.ofEpochDay(resuelta.toEpochDay());
+        int[] excessDays = new int[1];
+        this.time = resolveTime(this.fields, style, ctx.excessDay, excessDays);
+        this.excess = excessDays[0] == 0 ? Period.ZERO : Period.ofDays(excessDays[0]);
+        this.leapSecond = Boolean.valueOf(ctx.leapSecond);
+        ChronoLocalDate raw = resolveDateFields(this.fields, style, this.chronology, yearWithoutEra);
+        // It is **normalized through the epoch day** before being looked at. This library's
+        // `LocalDate.of` does not validate the day against the month's length: `LocalDate.of(2023,
+        // 2, 30)` returns an object that prints `2023-02-30` and whose `toEpochDay()` is the 2nd of
+        // March's. Going through the epoch day turns that object into the date it really names,
+        // which is the only one it makes sense to check anything about.
+        ChronoLocalDate resolved = raw == null ? null
+                : this.chronology.dateEpochDay(raw.toEpochDay());
+        this.date = resolved == null ? null : LocalDate.ofEpochDay(resolved.toEpochDay());
 
-        if (resuelta != null && estilo == ResolverStyle.STRICT) {
-            // **La comprobacion cruzada.** En modo estricto, la fecha resuelta tiene que decir lo
-            // mismo que decia el texto. Existe porque el camino estricto de la cronologia termina en
-            // `LocalDate.of(anio, mes, dia)`, y el `LocalDate.of` de esta biblioteca **no valida el
-            // dia contra el largo del mes**: `LocalDate.of(2023, 2, 30)` devuelve el 2 de marzo en
-            // vez de tirar. Sin esta vuelta, `ISO_LOCAL_DATE.parse("2023-02-30")` daria una fecha
-            // --equivocada y silenciosa-- donde el JDK da un error. Queda anotado: el arreglo de
-            // fondo va en `LocalDate.of`, y el dia que este se puede sacar.
-            this.cruzar(resuelta, ChronoField.YEAR);
-            this.cruzar(resuelta, ChronoField.MONTH_OF_YEAR);
-            this.cruzar(resuelta, ChronoField.DAY_OF_MONTH);
-            this.cruzar(resuelta, ChronoField.DAY_OF_YEAR);
-            this.cruzar(resuelta, ChronoField.DAY_OF_WEEK);
+        if (resolved != null && style == ResolverStyle.STRICT) {
+            // **The cross-check.** In strict mode, the resolved date has to say the same as the
+            // text said. It exists because the chronology's strict path ends in `LocalDate.of(year,
+            // month, day)`, and this library's `LocalDate.of` **does not validate the day against
+            // the month's length**: `LocalDate.of(2023, 2, 30)` returns the 2nd of March instead of
+            // throwing. Without this round trip, `ISO_LOCAL_DATE.parse("2023-02-30")` would give a
+            // date --wrong and silent-- where the JDK gives an error. Written down: the underlying
+            // fix belongs in `LocalDate.of`, and the day it lands this can go.
+            this.crossCheck(resolved, ChronoField.YEAR);
+            this.crossCheck(resolved, ChronoField.MONTH_OF_YEAR);
+            this.crossCheck(resolved, ChronoField.DAY_OF_MONTH);
+            this.crossCheck(resolved, ChronoField.DAY_OF_YEAR);
+            this.crossCheck(resolved, ChronoField.DAY_OF_WEEK);
         }
-        if (resuelta != null) {
-            // Los campos que la fecha resuelta implica se depositan de vuelta. Sin esto, un patron de
-            // `"yyyy-DDD"` --anio y dia del anio-- daria un `LocalDate` pero no un `YearMonth`, y el
-            // texto traia lo que hacia falta para los dos.
-            this.campos.put(ChronoField.EPOCH_DAY, Long.valueOf(resuelta.toEpochDay()));
-            this.anotar(resuelta, ChronoField.YEAR);
-            this.anotar(resuelta, ChronoField.MONTH_OF_YEAR);
-            this.anotar(resuelta, ChronoField.DAY_OF_MONTH);
-            this.anotar(resuelta, ChronoField.DAY_OF_YEAR);
-            this.anotar(resuelta, ChronoField.DAY_OF_WEEK);
+        if (resolved != null) {
+            // The fields the resolved date implies are deposited back. Without this, a `"yyyy-DDD"`
+            // pattern --year and day of year-- would give a `LocalDate` but not a `YearMonth`, and
+            // the text brought what was needed for both.
+            this.fields.put(ChronoField.EPOCH_DAY, Long.valueOf(resolved.toEpochDay()));
+            this.noteField(resolved, ChronoField.YEAR);
+            this.noteField(resolved, ChronoField.MONTH_OF_YEAR);
+            this.noteField(resolved, ChronoField.DAY_OF_MONTH);
+            this.noteField(resolved, ChronoField.DAY_OF_YEAR);
+            this.noteField(resolved, ChronoField.DAY_OF_WEEK);
         }
-        if (this.hora != null) {
-            this.campos.put(ChronoField.NANO_OF_DAY, Long.valueOf(this.hora.toNanoOfDay()));
-            this.campos.put(ChronoField.HOUR_OF_DAY, Long.valueOf((long) this.hora.getHour()));
-            this.campos.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf((long) this.hora.getMinute()));
-            this.campos.put(ChronoField.SECOND_OF_MINUTE, Long.valueOf((long) this.hora.getSecond()));
-            this.campos.put(ChronoField.NANO_OF_SECOND, Long.valueOf((long) this.hora.getNano()));
+        if (this.time != null) {
+            this.fields.put(ChronoField.NANO_OF_DAY, Long.valueOf(this.time.toNanoOfDay()));
+            this.fields.put(ChronoField.HOUR_OF_DAY, Long.valueOf((long) this.time.getHour()));
+            this.fields.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf((long) this.time.getMinute()));
+            this.fields.put(ChronoField.SECOND_OF_MINUTE, Long.valueOf((long) this.time.getSecond()));
+            this.fields.put(ChronoField.NANO_OF_SECOND, Long.valueOf((long) this.time.getNano()));
         }
         if (this.offset != null) {
-            this.campos.put(ChronoField.OFFSET_SECONDS,
+            this.fields.put(ChronoField.OFFSET_SECONDS,
                     Long.valueOf((long) this.offset.getTotalSeconds()));
         }
-        // Un instante leido --`ISO_INSTANT`-- trae solo `INSTANT_SECONDS`. Desplegarlo a fecha y hora
-        // locales es lo que permite que el mismo texto de tambien un `OffsetDateTime`, y es una
-        // deduccion exacta: con el desplazamiento a mano no hay ninguna eleccion que hacer.
-        Long instante = this.campos.get(ChronoField.INSTANT_SECONDS);
-        if (instante != null && resuelta == null && this.offset != null) {
-            LocalDateTime ldt = LocalDateTime.ofEpochSecond(instante.longValue(), 0, this.offset);
-            Long nano = this.campos.get(ChronoField.NANO_OF_SECOND);
-            this.campos.put(ChronoField.EPOCH_DAY, Long.valueOf(ldt.toLocalDate().toEpochDay()));
-            this.campos.put(ChronoField.NANO_OF_DAY, Long.valueOf(ldt.toLocalTime().toNanoOfDay()
+        // An instant that was read --`ISO_INSTANT`-- brings only `INSTANT_SECONDS`. Unfolding it
+        // into a local date and time is what lets the same text also give an `OffsetDateTime`, and
+        // it is an exact deduction: with the offset at hand there is no choice to make.
+        Long instant = this.fields.get(ChronoField.INSTANT_SECONDS);
+        if (instant != null && resolved == null && this.offset != null) {
+            LocalDateTime ldt = LocalDateTime.ofEpochSecond(instant.longValue(), 0, this.offset);
+            Long nano = this.fields.get(ChronoField.NANO_OF_SECOND);
+            this.fields.put(ChronoField.EPOCH_DAY, Long.valueOf(ldt.toLocalDate().toEpochDay()));
+            this.fields.put(ChronoField.NANO_OF_DAY, Long.valueOf(ldt.toLocalTime().toNanoOfDay()
                     + (nano == null ? 0L : nano.longValue())));
         }
     }
 
-    private void cruzar(ChronoLocalDate d, ChronoField campo) {
-        Long leido = this.campos.get(campo);
-        if (leido != null && d.isSupported(campo) && d.getLong(campo) != leido.longValue()) {
-            throw new DateTimeException("Conflict found: " + campo + " " + leido
-                    + " differs from " + campo + " " + d.getLong(campo) + " derived from " + d);
+    private void crossCheck(ChronoLocalDate d, ChronoField field) {
+        Long read = this.fields.get(field);
+        if (read != null && d.isSupported(field) && d.getLong(field) != read.longValue()) {
+            throw new DateTimeException("Conflict found: " + field + " " + read
+                    + " differs from " + field + " " + d.getLong(field) + " derived from " + d);
         }
     }
 
-    private void anotar(ChronoLocalDate d, ChronoField campo) {
-        if (d.isSupported(campo)) {
-            this.campos.put(campo, Long.valueOf(d.getLong(campo)));
+    private void noteField(ChronoLocalDate d, ChronoField field) {
+        if (d.isSupported(field)) {
+            this.fields.put(field, Long.valueOf(d.getLong(field)));
         }
     }
 
-    LocalDate fecha() {
-        return this.fecha;
+    LocalDate date() {
+        return this.date;
     }
 
-    LocalTime hora() {
-        return this.hora;
+    LocalTime time() {
+        return this.time;
     }
 
-    Period exceso() {
-        return this.exceso;
+    Period excess() {
+        return this.excess;
     }
 
-    Boolean bisiesto() {
-        return this.bisiesto;
+    Boolean leapSecond() {
+        return this.leapSecond;
     }
 
-    private static Long sacar(Map<TemporalField, Long> campos, TemporalField campo) {
-        return campos.remove(campo);
+    private static Long take(Map<TemporalField, Long> fields, TemporalField field) {
+        return fields.remove(field);
     }
 
-    // Los campos de hora se derrumban hacia `HOUR_OF_DAY`/`MINUTE_OF_HOUR`/`SECOND_OF_MINUTE`/
-    // `NANO_OF_SECOND`, que son los cuatro que un `LocalTime` entiende, y recien despues se arma la
-    // hora. El orden importa: `NANO_OF_DAY` gana sobre los sueltos porque es mas especifico.
-    private static LocalTime resolverHora(Map<TemporalField, Long> campos, ResolverStyle estilo,
-            boolean excesoDelLector, int[] excesoDias) {
-        Map<TemporalField, Long> t = new HashMap<TemporalField, Long>(campos);
-        boolean laxo = estilo == ResolverStyle.LENIENT;
+    // The time fields collapse towards `HOUR_OF_DAY`/`MINUTE_OF_HOUR`/`SECOND_OF_MINUTE`/
+    // `NANO_OF_SECOND`, which are the four a `LocalTime` understands, and only then is the time
+    // built. The order matters: `NANO_OF_DAY` wins over the loose ones because it is more specific.
+    private static LocalTime resolveTime(Map<TemporalField, Long> fields, ResolverStyle style,
+            boolean readerExcess, int[] excessDays) {
+        Map<TemporalField, Long> t = new HashMap<TemporalField, Long>(fields);
+        boolean lenient = style == ResolverStyle.LENIENT;
 
-        Long nanoDelDia = sacar(t, ChronoField.NANO_OF_DAY);
-        if (nanoDelDia != null) {
-            long v = nanoDelDia.longValue();
+        Long nanoOfDay = take(t, ChronoField.NANO_OF_DAY);
+        if (nanoOfDay != null) {
+            long v = nanoOfDay.longValue();
             t.put(ChronoField.HOUR_OF_DAY, Long.valueOf(v / 3600000000000L));
             t.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf(v / 60000000000L % 60L));
             t.put(ChronoField.SECOND_OF_MINUTE, Long.valueOf(v / 1000000000L % 60L));
             t.put(ChronoField.NANO_OF_SECOND, Long.valueOf(v % 1000000000L));
         }
-        Long microDelDia = sacar(t, ChronoField.MICRO_OF_DAY);
-        if (microDelDia != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
-            long v = microDelDia.longValue();
+        Long microOfDay = take(t, ChronoField.MICRO_OF_DAY);
+        if (microOfDay != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
+            long v = microOfDay.longValue();
             t.put(ChronoField.HOUR_OF_DAY, Long.valueOf(v / 3600000000L));
             t.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf(v / 60000000L % 60L));
             t.put(ChronoField.SECOND_OF_MINUTE, Long.valueOf(v / 1000000L % 60L));
             t.put(ChronoField.NANO_OF_SECOND, Long.valueOf(v % 1000000L * 1000L));
         }
-        Long miliDelDia = sacar(t, ChronoField.MILLI_OF_DAY);
-        if (miliDelDia != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
-            long v = miliDelDia.longValue();
+        Long milliOfDay = take(t, ChronoField.MILLI_OF_DAY);
+        if (milliOfDay != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
+            long v = milliOfDay.longValue();
             t.put(ChronoField.HOUR_OF_DAY, Long.valueOf(v / 3600000L));
             t.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf(v / 60000L % 60L));
             t.put(ChronoField.SECOND_OF_MINUTE, Long.valueOf(v / 1000L % 60L));
             t.put(ChronoField.NANO_OF_SECOND, Long.valueOf(v % 1000L * 1000000L));
         }
-        Long segDelDia = sacar(t, ChronoField.SECOND_OF_DAY);
-        if (segDelDia != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
-            long v = segDelDia.longValue();
+        Long secondOfDay = take(t, ChronoField.SECOND_OF_DAY);
+        if (secondOfDay != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
+            long v = secondOfDay.longValue();
             t.put(ChronoField.HOUR_OF_DAY, Long.valueOf(v / 3600L));
             t.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf(v / 60L % 60L));
             t.put(ChronoField.SECOND_OF_MINUTE, Long.valueOf(v % 60L));
         }
-        Long minDelDia = sacar(t, ChronoField.MINUTE_OF_DAY);
-        if (minDelDia != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
-            long v = minDelDia.longValue();
+        Long minuteOfDay = take(t, ChronoField.MINUTE_OF_DAY);
+        if (minuteOfDay != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
+            long v = minuteOfDay.longValue();
             t.put(ChronoField.HOUR_OF_DAY, Long.valueOf(v / 60L));
             t.put(ChronoField.MINUTE_OF_HOUR, Long.valueOf(v % 60L));
         }
-        Long micro = sacar(t, ChronoField.MICRO_OF_SECOND);
+        Long micro = take(t, ChronoField.MICRO_OF_SECOND);
         if (micro != null && !t.containsKey(ChronoField.NANO_OF_SECOND)) {
             t.put(ChronoField.NANO_OF_SECOND, Long.valueOf(micro.longValue() * 1000L));
         }
-        Long mili = sacar(t, ChronoField.MILLI_OF_SECOND);
-        if (mili != null && !t.containsKey(ChronoField.NANO_OF_SECOND)) {
-            t.put(ChronoField.NANO_OF_SECOND, Long.valueOf(mili.longValue() * 1000000L));
+        Long milli = take(t, ChronoField.MILLI_OF_SECOND);
+        if (milli != null && !t.containsKey(ChronoField.NANO_OF_SECOND)) {
+            t.put(ChronoField.NANO_OF_SECOND, Long.valueOf(milli.longValue() * 1000000L));
         }
 
-        // El reloj de doce horas. `12 AM` es la hora 0 y `12 PM` la hora 12: la conversion pasa por
-        // `HOUR_OF_AMPM` --que va 0..11-- justamente para no tener que tratar el 12 aparte dos veces.
-        Long relojDia = sacar(t, ChronoField.CLOCK_HOUR_OF_DAY);
-        if (relojDia != null) {
-            long v = relojDia.longValue();
-            if (estilo == ResolverStyle.STRICT && (v < 1L || v > 24L)) {
+        // The twelve-hour clock. `12 AM` is hour 0 and `12 PM` is hour 12: the conversion goes
+        // through `HOUR_OF_AMPM` --which runs 0..11-- precisely so as not to have to treat the 12
+        // apart twice.
+        Long clockOfDay = take(t, ChronoField.CLOCK_HOUR_OF_DAY);
+        if (clockOfDay != null) {
+            long v = clockOfDay.longValue();
+            if (style == ResolverStyle.STRICT && (v < 1L || v > 24L)) {
                 throw new DateTimeException("Invalid value for CLOCK_HOUR_OF_DAY: " + v);
             }
             t.put(ChronoField.HOUR_OF_DAY, Long.valueOf(v == 24L ? 0L : v));
         }
-        Long relojAmpm = sacar(t, ChronoField.CLOCK_HOUR_OF_AMPM);
-        if (relojAmpm != null) {
-            long v = relojAmpm.longValue();
-            if (estilo == ResolverStyle.STRICT && (v < 1L || v > 12L)) {
+        Long clockOfAmpm = take(t, ChronoField.CLOCK_HOUR_OF_AMPM);
+        if (clockOfAmpm != null) {
+            long v = clockOfAmpm.longValue();
+            if (style == ResolverStyle.STRICT && (v < 1L || v > 12L)) {
                 throw new DateTimeException("Invalid value for CLOCK_HOUR_OF_AMPM: " + v);
             }
             t.put(ChronoField.HOUR_OF_AMPM, Long.valueOf(v == 12L ? 0L : v));
         }
-        Long ampm = sacar(t, ChronoField.AMPM_OF_DAY);
-        Long horaAmpm = sacar(t, ChronoField.HOUR_OF_AMPM);
-        if (ampm != null && horaAmpm != null) {
+        Long ampm = take(t, ChronoField.AMPM_OF_DAY);
+        Long hourOfAmpm = take(t, ChronoField.HOUR_OF_AMPM);
+        if (ampm != null && hourOfAmpm != null) {
             t.put(ChronoField.HOUR_OF_DAY,
-                    Long.valueOf(ampm.longValue() * 12L + horaAmpm.longValue()));
-        } else if (horaAmpm != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
-            t.put(ChronoField.HOUR_OF_DAY, horaAmpm);
+                    Long.valueOf(ampm.longValue() * 12L + hourOfAmpm.longValue()));
+        } else if (hourOfAmpm != null && !t.containsKey(ChronoField.HOUR_OF_DAY)) {
+            t.put(ChronoField.HOUR_OF_DAY, hourOfAmpm);
         }
 
         Long h = t.get(ChronoField.HOUR_OF_DAY);
         if (h == null) {
             return null;
         }
-        long hora = h.longValue();
-        long minuto = valor(t, ChronoField.MINUTE_OF_HOUR);
-        long segundo = valor(t, ChronoField.SECOND_OF_MINUTE);
-        long nano = valor(t, ChronoField.NANO_OF_SECOND);
+        long time = h.longValue();
+        long minute = fieldValue(t, ChronoField.MINUTE_OF_HOUR);
+        long second = fieldValue(t, ChronoField.SECOND_OF_MINUTE);
+        long nano = fieldValue(t, ChronoField.NANO_OF_SECOND);
 
-        // `24:00:00` no es una hora: es la medianoche del dia siguiente. Se guarda como `00:00` mas
-        // un dia de exceso --que `parsedExcessDays` publica-- en vez de rechazarse, porque ISO-8601
-        // la escribe y rechazarla haria ilegible un texto valido.
-        int dias = excesoDelLector ? 1 : 0;
-        if (hora == 24L && minuto == 0L && segundo == 0L && nano == 0L
-                && estilo != ResolverStyle.STRICT) {
-            hora = 0L;
-            dias = dias + 1;
+        // `24:00:00` is not a time: it is the next day's midnight. It is kept as `00:00` plus one
+        // excess day --which `parsedExcessDays` publishes-- instead of being refused, because
+        // ISO-8601 writes it and refusing it would make a valid text unreadable.
+        int days = readerExcess ? 1 : 0;
+        if (time == 24L && minute == 0L && second == 0L && nano == 0L
+                && style != ResolverStyle.STRICT) {
+            time = 0L;
+            days = days + 1;
         }
-        if (laxo) {
-            // En modo laxo los desbordes se acumulan hacia arriba en vez de ser un error.
-            long nanoTotal = hora * 3600000000000L + minuto * 60000000000L
-                    + segundo * 1000000000L + nano;
-            long diasEnteros = Math.floorDiv(nanoTotal, 86400000000000L);
-            long resto = Math.floorMod(nanoTotal, 86400000000000L);
-            dias = dias + (int) diasEnteros;
-            excesoDias[0] = dias;
-            return LocalTime.ofNanoOfDay(resto);
+        if (lenient) {
+            // In lenient mode the overflows accumulate upwards instead of being an error.
+            long totalNanos = time * 3600000000000L + minute * 60000000000L
+                    + second * 1000000000L + nano;
+            long wholeDays = Math.floorDiv(totalNanos, 86400000000000L);
+            long remainder = Math.floorMod(totalNanos, 86400000000000L);
+            days = days + (int) wholeDays;
+            excessDays[0] = days;
+            return LocalTime.ofNanoOfDay(remainder);
         }
-        // El segundo intercalar existe en el texto y no en el reloj: se lee como `:59` y se anota.
-        if (segundo == 60L && estilo != ResolverStyle.STRICT) {
-            segundo = 59L;
+        // The leap second exists in the text and not on the clock: it is read as `:59` and written
+        // down.
+        if (second == 60L && style != ResolverStyle.STRICT) {
+            second = 59L;
         }
-        excesoDias[0] = dias;
-        return LocalTime.of((int) hora, (int) minuto, (int) segundo, (int) nano);
+        excessDays[0] = days;
+        return LocalTime.of((int) time, (int) minute, (int) second, (int) nano);
     }
 
-    private static long valor(Map<TemporalField, Long> t, TemporalField campo) {
-        Long v = t.get(campo);
+    private static long fieldValue(Map<TemporalField, Long> t, TemporalField field) {
+        Long v = t.get(field);
         return v == null ? 0L : v.longValue();
     }
 
-    // Se resuelve sobre una **copia**: el resolvedor consume el mapa que le dan, y los campos crudos
-    // tienen que seguir estando para el que los lea directo.
-    private static ChronoLocalDate resolverFecha(Map<TemporalField, Long> campos,
-            ResolverStyle estilo, Chronology cronologia, boolean anioSinEra) {
-        Map<TemporalField, Long> copia = new HashMap<TemporalField, Long>(campos);
-        if (anioSinEra) {
-            // La cronologia supondria la era corriente igual que arriba; se le saca el campo para
-            // que no lo haga.
-            copia.remove(ChronoField.YEAR_OF_ERA);
+    // It resolves over a **copy**: the resolver consumes the map it is handed, and the raw fields
+    // have to stay for whoever reads them directly.
+    private static ChronoLocalDate resolveDateFields(Map<TemporalField, Long> fields,
+            ResolverStyle style, Chronology chronology, boolean yearWithoutEra) {
+        Map<TemporalField, Long> copy = new HashMap<TemporalField, Long>(fields);
+        if (yearWithoutEra) {
+            // The chronology would assume the current era just as above; the field is taken away so
+            // that it does not.
+            copy.remove(ChronoField.YEAR_OF_ERA);
         }
-        ChronoLocalDate d = cronologia.resolveDate(copia, estilo);
+        ChronoLocalDate d = chronology.resolveDate(copy, style);
         if (d == null) {
-            d = resolverSemanaIso(campos);
+            d = resolveIsoWeek(fields);
         }
         return d;
     }
 
-    // La fecha de `ISO_WEEK_DATE`: `2024-W07-3`.
+    // `ISO_WEEK_DATE`'s date: `2024-W07-3`.
     //
-    // Vive aca y no en `IsoFields` porque los `resolve` de `TemporalField` no estan implementados en
-    // `java.time.temporal` --el paquete esta cerrado al 100 % de su API y no se toca en esta tanda--
-    // y sin esto `ISO_WEEK_DATE` escribiria un texto que despues no puede releer. Queda anotado como
-    // lo que hay que mover cuando `IsoField.resolve` exista.
-    private static LocalDate resolverSemanaIso(Map<TemporalField, Long> campos) {
-        Long anio = campos.get(IsoFields.WEEK_BASED_YEAR);
-        Long semana = campos.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-        Long dia = campos.get(ChronoField.DAY_OF_WEEK);
-        if (anio == null || semana == null || dia == null) {
+    // It lives here and not in `IsoFields` because `TemporalField`'s `resolve` methods are not
+    // implemented in `java.time.temporal` --the package is closed at 100 % of its API and is not
+    // touched in this round-- and without this `ISO_WEEK_DATE` would write a text it could not read
+    // back. Written down as what has to move once `IsoField.resolve` exists.
+    private static LocalDate resolveIsoWeek(Map<TemporalField, Long> fields) {
+        Long year = fields.get(IsoFields.WEEK_BASED_YEAR);
+        Long week = fields.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+        Long day = fields.get(ChronoField.DAY_OF_WEEK);
+        if (year == null || week == null || day == null) {
             return null;
         }
-        // El 4 de enero cae siempre en la semana 1 --esa es la definicion ISO-- asi que el lunes de
-        // la semana 1 es el 4 de enero corrido hacia atras hasta el lunes.
-        LocalDate cuatroDeEnero = LocalDate.of((int) anio.longValue(), 1, 4);
-        LocalDate lunesUno = cuatroDeEnero.minusDays(
-                (long) (cuatroDeEnero.getDayOfWeek().getValue() - 1));
-        return lunesUno.plusDays((semana.longValue() - 1L) * 7L + dia.longValue() - 1L);
+        // The 4th of January always falls in week 1 --that is the ISO definition-- so week 1's
+        // Monday is the 4th of January walked back to the Monday.
+        LocalDate fourthOfJanuary = LocalDate.of((int) year.longValue(), 1, 4);
+        LocalDate mondayOfWeekOne = fourthOfJanuary.minusDays(
+                (long) (fourthOfJanuary.getDayOfWeek().getValue() - 1));
+        return mondayOfWeekOne.plusDays((week.longValue() - 1L) * 7L + day.longValue() - 1L);
     }
 
     public boolean isSupported(TemporalField field) {
-        return field != null && this.campos.containsKey(field);
+        return field != null && this.fields.containsKey(field);
     }
 
     public long getLong(TemporalField field) {
-        Long v = this.campos.get(field);
+        Long v = this.fields.get(field);
         if (v == null) {
             throw new UnsupportedTemporalTypeException("Unsupported field: " + field);
         }
@@ -386,55 +392,55 @@ final class Parsed implements TemporalAccessor {
 
     public int get(TemporalField field) {
         long v = this.getLong(field);
-        ValueRange rango = field.range();
-        return (int) rango.checkValidIntValue(v, field);
+        ValueRange range = field.range();
+        return (int) range.checkValidIntValue(v, field);
     }
 
     public <R> R query(TemporalQuery<R> query) {
         if (query == TemporalQueries.localDate()) {
-            return (R) this.fecha;
+            return (R) this.date;
         }
         if (query == TemporalQueries.localTime()) {
-            return (R) this.hora;
+            return (R) this.time;
         }
         if (query == TemporalQueries.offset()) {
             return (R) this.offset;
         }
         if (query == TemporalQueries.zone() || query == TemporalQueries.zoneId()) {
-            return (R) this.zona;
+            return (R) this.zone;
         }
         if (query == TemporalQueries.chronology()) {
-            return (R) this.cronologia;
+            return (R) this.chronology;
         }
         return query.queryFrom(this);
     }
 
     public String toString() {
-        return this.campos.toString();
+        return this.fields.toString();
     }
 }
 
-// `DateTimeFormatter.parsedExcessDays()`: el dia que sobro de un `24:00`.
+// `DateTimeFormatter.parsedExcessDays()`: the day left over from a `24:00`.
 //
-// Es una clase y no una lambda porque la consulta tiene que ser **el mismo objeto siempre**: los
-// `query` de esta biblioteca se comparan por identidad, y una lambda nueva en cada llamada nunca
-// coincidiria con la que el `Parsed` reconoce.
-final class ConsultaExceso implements TemporalQuery<Period> {
+// It is a class and not a lambda because the query has to be **the same object always**: this
+// library's `query` calls are compared by identity, and a fresh lambda on every call would never
+// match the one `Parsed` recognizes.
+final class ExcessQuery implements TemporalQuery<Period> {
 
     public Period queryFrom(TemporalAccessor temporal) {
         if (temporal instanceof Parsed) {
-            return ((Parsed) temporal).exceso();
+            return ((Parsed) temporal).excess();
         }
         return Period.ZERO;
     }
 }
 
-// `DateTimeFormatter.parsedLeapSecond()`: si el texto decia `:60`.
-final class ConsultaBisiesto implements TemporalQuery<Boolean> {
+// `DateTimeFormatter.parsedLeapSecond()`: whether the text said `:60`.
+final class LeapSecondQuery implements TemporalQuery<Boolean> {
 
     public Boolean queryFrom(TemporalAccessor temporal) {
         if (temporal instanceof Parsed) {
-            return ((Parsed) temporal).bisiesto();
+            return ((Parsed) temporal).leapSecond();
         }
         return Boolean.FALSE;
     }

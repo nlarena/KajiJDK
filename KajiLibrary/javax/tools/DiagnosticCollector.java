@@ -20,8 +20,8 @@ public final class DiagnosticCollector<S> implements DiagnosticListener<S> {
         this.diagnostics.add(diagnostic);
     }
 
-    // La lista real del JDK es inmodificable; aca devolvemos la interna porque
-    // Collections.unmodifiableList no esta disponible de forma confiable.
+    // The JDK's real list is unmodifiable; here the internal one is returned because
+    // Collections.unmodifiableList is not reliably available.
     public List<Diagnostic<? extends S>> getDiagnostics() {
         return this.diagnostics;
     }

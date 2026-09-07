@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalAdjuster;
@@ -25,7 +26,7 @@ import java.time.zone.ZoneRulesException;
 // operacion, aunque hoy siempre de el mismo. El dia que haya reglas de verdad, el lugar donde
 // entran es `con(...)` y `ZonedDateTime.of`, y nada de lo de arriba se entera.
 public final class ZonedDateTime
-        implements Temporal, TemporalAdjuster, java.time.chrono.ChronoZonedDateTime {
+        implements Temporal, TemporalAdjuster, java.time.chrono.ChronoZonedDateTime, Serializable {
 
     private final LocalDateTime dateTime;
     private final ZoneOffset offset;

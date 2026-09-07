@@ -11,6 +11,7 @@ import javax.swing.JButton;
 import javax.swing.border.AbstractBorder;
 import javax.swing.border.Border;
 import javax.swing.plaf.BorderUIResource$CompoundBorderUIResource;
+import javax.swing.plaf.BorderUIResource$LineBorderUIResource;
 import javax.swing.plaf.UIResource;
 
 /**
@@ -63,6 +64,161 @@ public class BasicBorders {
 
     public static Border getTextFieldBorder() {
         return new FieldBorder(SOMBRA, SOMBRA_OSCURA, BRILLO, BRILLO_CLARO);
+    }
+
+    /**
+     * El borde de un panel dividido: una linea alrededor, y nada donde va el divisor.
+     *
+     * <p>El hueco del divisor es la parte interesante: el borde no dibuja su propio trazo ahi,
+     * porque el divisor tiene el suyo y los dos juntos se verian como una linea doble.
+     */
+    public static Border getSplitPaneBorder() {
+        return new SplitPaneBorder(BRILLO, SOMBRA_OSCURA);
+    }
+
+    /** El borde del divisor en si; una linea de un pixel de cada lado. */
+    public static Border getSplitPaneDividerBorder() {
+        return new SplitPaneDividerBorder(BRILLO, SOMBRA_OSCURA);
+    }
+
+    /** El de una barra de progreso: dos pixeles de linea. */
+    public static Border getProgressBarBorder() {
+        return new BorderUIResource$LineBorderUIResource(SOMBRA_OSCURA, 2);
+    }
+
+    /** El de una ventana interna: dos lineas por fuera y una por dentro. */
+    public static Border getInternalFrameBorder() {
+        return new BorderUIResource$CompoundBorderUIResource(
+                new BorderUIResource$LineBorderUIResource(SOMBRA_OSCURA, 2),
+                new BorderUIResource$LineBorderUIResource(SOMBRA, 1));
+    }
+
+    /**
+     * El borde de un panel dividido; ver {@link #getSplitPaneBorder}.
+     *
+     * <p>Los dos colores son publicos-protegidos y estan medidos: el claro arriba y a la izquierda,
+     * el oscuro abajo y a la derecha, que es lo que hace que el panel se vea hundido.
+     */
+    public static class SplitPaneBorder implements Border, UIResource {
+
+        protected Color highlight;
+        protected Color shadow;
+
+        public SplitPaneBorder(Color highlight, Color shadow) {
+            this.highlight = highlight;
+            this.shadow = shadow;
+        }
+
+        /**
+         * La linea de alrededor, salteando el ancho del divisor.
+         *
+         * <p>Si el componente no es un panel dividido se dibuja el rectangulo entero: es lo unico
+         * que se puede hacer sin saber donde esta el divisor.
+         */
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            if (!(c instanceof javax.swing.JSplitPane)) {
+                g.setColor(shadow);
+                g.drawRect(x, y, width - 1, height - 1);
+                return;
+            }
+            javax.swing.JSplitPane splitPane = (javax.swing.JSplitPane) c;
+            Component izq = splitPane.getLeftComponent();
+            Component der = splitPane.getRightComponent();
+            g.setColor(highlight);
+            g.drawLine(x, y, x + width - 1, y);
+            g.drawLine(x, y, x, y + height - 1);
+            g.setColor(shadow);
+            g.drawLine(x + width - 1, y, x + width - 1, y + height - 1);
+            g.drawLine(x, y + height - 1, x + width - 1, y + height - 1);
+            // El hueco: donde termina un hijo y empieza el otro no va nada.
+            if (izq != null && der != null) {
+                g.setColor(c.getBackground());
+                if (splitPane.getOrientation() == javax.swing.JSplitPane.HORIZONTAL_SPLIT) {
+                    int dx = izq.getWidth() + x;
+                    g.drawLine(dx, y, dx + splitPane.getDividerSize() - 1, y);
+                    g.drawLine(dx, y + height - 1, dx + splitPane.getDividerSize() - 1,
+                            y + height - 1);
+                } else {
+                    int dy = izq.getHeight() + y;
+                    g.drawLine(x, dy, x, dy + splitPane.getDividerSize() - 1);
+                    g.drawLine(x + width - 1, dy, x + width - 1,
+                            dy + splitPane.getDividerSize() - 1);
+                }
+            }
+        }
+
+        public Insets getBorderInsets(Component c) {
+            return new Insets(1, 1, 1, 1);
+        }
+
+        public boolean isBorderOpaque() {
+            return true;
+        }
+    }
+
+    /**
+     * El borde del divisor de un panel dividido.
+     *
+     * <p>No es publico en el JDK y aca tampoco: lo unico publico es
+     * {@link #getSplitPaneDividerBorder}, que devuelve uno. El nombre igual se ve por
+     * {@code getClass()}, asi que es el del JDK.
+     */
+    static class SplitPaneDividerBorder implements Border, UIResource {
+
+        Color highlight;
+        Color shadow;
+
+        SplitPaneDividerBorder(Color highlight, Color shadow) {
+            this.highlight = highlight;
+            this.shadow = shadow;
+        }
+
+        /** Una linea de cada lado, en el sentido perpendicular al que divide. */
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            Component padre = c.getParent();
+            boolean horizontal = true;
+            if (padre instanceof javax.swing.JSplitPane) {
+                horizontal = ((javax.swing.JSplitPane) padre).getOrientation()
+                        == javax.swing.JSplitPane.HORIZONTAL_SPLIT;
+            }
+            g.setColor(highlight);
+            if (horizontal) {
+                g.drawLine(x, y, x, y + height - 1);
+                g.setColor(shadow);
+                g.drawLine(x + width - 1, y, x + width - 1, y + height - 1);
+            } else {
+                g.drawLine(x, y, x + width - 1, y);
+                g.setColor(shadow);
+                g.drawLine(x, y + height - 1, x + width - 1, y + height - 1);
+            }
+        }
+
+        /**
+         * Uno de cada lado, en el sentido que divide.
+         *
+         * <p>Un divisor horizontal tiene sus lineas a izquierda y derecha, asi que sus insets son
+         * (0, 1, 0, 1); uno vertical, al reves. Y un componente que no es un divisor -- o uno que
+         * todavia no tiene panel -- se lleva uno de cada lado. Los tres casos estan medidos.
+         */
+        public Insets getBorderInsets(Component c) {
+            if (c instanceof BasicSplitPaneDivider) {
+                BasicSplitPaneUI ui = ((BasicSplitPaneDivider) c).getBasicSplitPaneUI();
+                if (ui != null) {
+                    javax.swing.JSplitPane sp = ui.getSplitPane();
+                    if (sp != null) {
+                        if (sp.getOrientation() == javax.swing.JSplitPane.HORIZONTAL_SPLIT) {
+                            return new Insets(0, 1, 0, 1);
+                        }
+                        return new Insets(1, 0, 1, 0);
+                    }
+                }
+            }
+            return new Insets(1, 1, 1, 1);
+        }
+
+        public boolean isBorderOpaque() {
+            return true;
+        }
     }
 
     /** El bisel de un boton: levantado en reposo, hundido al apretar, con marco si es el por omision. */

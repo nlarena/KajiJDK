@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Set;
@@ -28,7 +30,7 @@ import java.util.Set;
 // modelled. size/isEmpty/contains/add/remove/clear/iterator are declared here rather than
 // inherited, because the JDK's LinkedHashSet gets them from HashSet and AbstractCollection,
 // neither of which ours can extend without `super` calls (unsupported by our bytecode generator).
-public class LinkedHashSet<E> extends AbstractSet<E> implements Set<E>, SequencedSet<E> {
+public class LinkedHashSet<E> extends AbstractSet<E> implements Set<E>, SequencedSet<E>, Serializable, Cloneable {
 
     // The value every key maps to. Its identity is irrelevant — only "there is an entry here"
     // matters — so a single instance is shared by every element of every LinkedHashSet.

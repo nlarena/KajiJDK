@@ -6,45 +6,46 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.stream.Stream;
 
-// Una placa de red de esta maquina: su nombre, su indice, y las direcciones que tiene puestas.
+// A network interface of this machine: its name, its index, and the addresses set on it.
 //
 // ===========================================================================================
-// LO QUE ESTA CLASE PUEDE Y NO PUEDE HACER EN KajiJDK, Y POR QUE ESTA IGUAL
+// WHAT THIS CLASS CAN AND CANNOT DO IN KajiJDK, AND WHY IT IS HERE ALL THE SAME
 // ===========================================================================================
 //
-// Enumerar las placas de una maquina es una llamada al sistema operativo --`getifaddrs` en POSIX,
-// `GetAdaptersAddresses` en Windows-- y esta VM no expone ni una. No hay forma de averiguar que
-// placas hay, como se llaman, ni que direcciones tienen.
+// Enumerating a machine's interfaces is an operating-system call --`getifaddrs` on POSIX,
+// `GetAdaptersAddresses` on Windows-- and this VM exposes neither. There is no way to find out which
+// interfaces there are, what they are called, or what addresses they have.
 //
-// Entonces la pregunta es que hacer con los cuatro metodos que **buscan** placas
-// (`getNetworkInterfaces`, `getByName`, `getByIndex`, `getByInetAddress`). Hay tres salidas y dos
-// son mentiras:
+// So the question is what to do with the four methods that **look interfaces up**
+// (`getNetworkInterfaces`, `getByName`, `getByIndex`, `getByInetAddress`). There are three ways out
+// and two of them are lies:
 //
-//  - Devolver una lista **vacia** (o null en los que buscan una sola) seria afirmar algo falso:
-//    "esta maquina no tiene placas de red". No lo sabemos, y casi seguro que no es cierto.
-//  - Inventar una placa de loopback --"lo", indice 1, 127.0.0.1-- seria peor: son datos plausibles
-//    y falsos, que es la unica clase de dato que nadie va a ir a verificar.
-//  - **Tirar `SocketException`**, que es lo que se hace.
+//  - Returning an **empty** list (or null in the ones that look one up) would be asserting something
+//    false: "this machine has no network interfaces". We do not know that, and it is almost certainly
+//    untrue.
+//  - Inventing a loopback interface --"lo", index 1, 127.0.0.1-- would be worse: plausible and false
+//    data, which is the one kind of data nobody is going to go and verify.
+//  - **Throwing `SocketException`**, which is what is done.
 //
-// La tercera no es un rodeo: `SocketException` es una excepcion **chequeada** que estos cuatro
-// metodos ya declaran en el JDK, justamente para el caso de "no se pudo averiguar". El compilador
-// **obliga** a quien llama a escribir el `catch`, asi que no hay forma de que esto sorprenda en
-// produccion: se ve al compilar, que es cuando conviene enterarse. Es la misma forma que ya usa
-// `URL.openStream()` para un esquema que no sabe abrir.
+// The third is not a dodge: `SocketException` is a **checked** exception these four methods already
+// declare in the JDK, precisely for the "could not find out" case. The compiler **forces** the caller
+// to write the `catch`, so there is no way this can surprise anyone in production: it shows at compile
+// time, which is when it is best found out. It is the same shape `URL.openStream()` already uses for
+// a scheme it does not know how to open.
 //
-// Lo mismo vale para `isUp`, `isLoopback`, `isPointToPoint`, `supportsMulticast`,
-// `getHardwareAddress` y `getMTU`: todos declaran `SocketException` y todos consultan al sistema
-// operativo placa por placa.
+// The same holds for `isUp`, `isLoopback`, `isPointToPoint`, `supportsMulticast`,
+// `getHardwareAddress` and `getMTU`: they all declare `SocketException` and they all query the
+// operating system interface by interface.
 //
-// Lo que **si** es real y completo son los accesores de estado --`getName`, `getIndex`,
-// `getDisplayName`, `getInetAddresses`, `getInterfaceAddresses`, `getParent`, `isVirtual`,
-// `equals`, `hashCode`, `toString`--: son lectura de campos y comparacion, y operan exactamente
-// como en el JDK sobre cualquier instancia que exista.
+// What **is** real and complete are the state accessors --`getName`, `getIndex`, `getDisplayName`,
+// `getInetAddresses`, `getInterfaceAddresses`, `getParent`, `isVirtual`, `equals`, `hashCode`,
+// `toString`--: they read fields and compare, and they operate exactly as in the JDK over any
+// instance that exists.
 //
-// El efecto practico es que el tipo **se puede nombrar**, que es lo que hace falta para que
-// compilen las firmas que lo mencionan --`StandardSocketOptions.IP_MULTICAST_IF`,
-// `MulticastSocket.setNetworkInterface`, `InetSocketAddress` de scope id-- sin que ninguna de ellas
-// prometa datos que no hay.
+// The practical effect is that the type **can be named**, which is what is needed for the signatures
+// mentioning it to compile --`StandardSocketOptions.IP_MULTICAST_IF`,
+// `MulticastSocket.setNetworkInterface`, `InetSocketAddress`'s scope id-- without any of them
+// promising data that is not there.
 public final class NetworkInterface {
 
     private final String name;
@@ -55,8 +56,9 @@ public final class NetworkInterface {
     private final NetworkInterface parent;
     private final boolean virtual;
 
-    // Package-private, como en el JDK: las placas las fabrica la plataforma, no el usuario. Que sea
-    // asi es lo que garantiza que un `NetworkInterface` que exista describa una placa que existe.
+    // Package-private, as in the JDK: interfaces are manufactured by the platform, not by the user.
+    // That being so is what guarantees that a `NetworkInterface` that exists describes an interface
+    // that exists.
     NetworkInterface() {
         this("", -1, new InetAddress[0]);
     }
@@ -77,198 +79,198 @@ public final class NetworkInterface {
         this.virtual = false;
     }
 
-    /** El nombre con el que el sistema operativo la conoce ("eth0", "lo"). */
+    /** The name the operating system knows it by ("eth0", "lo"). */
     public String getName() {
         return this.name;
     }
 
     /**
-     * El nombre para mostrarle a una persona.
+     * The name to show a person.
      *
-     * <p>En Windows suele ser una frase larga; en Unix, el mismo que {@link #getName}.
+     * <p>On Windows it is usually a long phrase; on Unix, the same as {@link #getName}.
      */
     public String getDisplayName() {
         return this.displayName;
     }
 
     /**
-     * El indice de la placa, o -1 si el sistema no lo da.
+     * The interface's index, or -1 if the system does not give one.
      *
-     * <p>Es el numero que identifica la placa en las APIs de IPv6 --el "scope id" de una direccion
-     * link-local es este numero-- y por eso vale mas que el nombre para esos usos.
+     * <p>It is the number identifying the interface in the IPv6 APIs --a link-local address's "scope
+     * id" is this number-- and that is why it is worth more than the name for those uses.
      */
     public int getIndex() {
         return this.index;
     }
 
-    /** Las direcciones IP puestas en esta placa. */
+    /** The IP addresses set on this interface. */
     public Enumeration<InetAddress> getInetAddresses() {
         return Collections.enumeration(this.addrs);
     }
 
-    /** Lo mismo que {@link #getInetAddresses}, como flujo. */
+    /** The same as {@link #getInetAddresses}, as a stream. */
     public Stream<InetAddress> inetAddresses() {
         return this.addrs.stream();
     }
 
     /**
-     * Las direcciones **con su mascara y su broadcast**, que es mas de lo que dice
-     * {@link #getInetAddresses}.
+     * The addresses **with their mask and their broadcast**, which is more than
+     * {@link #getInetAddresses} says.
      */
     public List<InterfaceAddress> getInterfaceAddresses() {
         return this.bindings;
     }
 
-    /** Las sub-interfaces (alias, VLANs) que cuelgan de esta. */
+    /** The sub-interfaces (aliases, VLANs) hanging off this one. */
     public Enumeration<NetworkInterface> getSubInterfaces() {
         return Collections.enumeration(new ArrayList<NetworkInterface>());
     }
 
-    /** Lo mismo que {@link #getSubInterfaces}, como flujo. */
+    /** The same as {@link #getSubInterfaces}, as a stream. */
     public Stream<NetworkInterface> subInterfaces() {
         return new ArrayList<NetworkInterface>().stream();
     }
 
-    /** La placa de la que esta es sub-interfaz, o null si es una placa fisica. */
+    /** The interface this one is a sub-interface of, or null if it is a physical one. */
     public NetworkInterface getParent() {
         return this.parent;
     }
 
-    /** Si es una sub-interfaz y no una placa de verdad. */
+    /** Whether it is a sub-interface and not a real interface. */
     public boolean isVirtual() {
         return this.virtual;
     }
 
-    // ---- lo que necesita al sistema operativo ----
+    // ---- what needs the operating system ----
 
-    private static SocketException sinPlataforma() {
+    private static SocketException noPlatform() {
         return new SocketException(
-                "esta VM no expone la enumeracion de placas de red del sistema operativo");
+                "this VM does not expose the operating system's network interface enumeration");
     }
 
     /**
-     * Todas las placas de la maquina.
+     * Every interface on the machine.
      *
-     * @throws SocketException siempre en KajiJDK; ver la cabecera del archivo. Devolver una lista
-     *     vacia seria afirmar que la maquina no tiene placas, que es una afirmacion falsa; esto es
-     *     "no pude averiguarlo", que es la verdad y la que el contrato ya contempla.
+     * @throws SocketException always in KajiJDK; see the file's header. Returning an empty list would
+     *     be asserting that the machine has no interfaces, which is a false assertion; this is "I
+     *     could not find out", which is the truth and the one the contract already allows for.
      */
     public static Enumeration<NetworkInterface> getNetworkInterfaces() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * Lo mismo que {@link #getNetworkInterfaces}, como flujo.
+     * The same as {@link #getNetworkInterfaces}, as a stream.
      *
-     * @throws SocketException siempre en KajiJDK
+     * @throws SocketException always in KajiJDK
      */
     public static Stream<NetworkInterface> networkInterfaces() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * La placa que se llama {@code name}.
+     * The interface called {@code name}.
      *
-     * @throws SocketException siempre en KajiJDK. **No** devuelve null: null significa "esa placa
-     *     no existe", y eso no lo sabemos.
-     * @throws NullPointerException si {@code name} es null
+     * @throws SocketException always in KajiJDK. It does **not** return null: null means "that
+     *     interface does not exist", and we do not know that.
+     * @throws NullPointerException if {@code name} is null
      */
     public static NetworkInterface getByName(String name) throws SocketException {
         if (name == null) {
             throw new NullPointerException();
         }
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * La placa con ese indice.
+     * The interface with that index.
      *
-     * @throws SocketException siempre en KajiJDK
-     * @throws IllegalArgumentException si el indice es negativo
+     * @throws SocketException always in KajiJDK
+     * @throws IllegalArgumentException if the index is negative
      */
     public static NetworkInterface getByIndex(int index) throws SocketException {
         if (index < 0) {
             throw new IllegalArgumentException("Interface index can't be negative");
         }
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * La placa que tiene puesta esa direccion.
+     * The interface that has that address set on it.
      *
-     * @throws SocketException siempre en KajiJDK
-     * @throws NullPointerException si {@code addr} es null
+     * @throws SocketException always in KajiJDK
+     * @throws NullPointerException if {@code addr} is null
      */
     public static NetworkInterface getByInetAddress(InetAddress addr) throws SocketException {
         if (addr == null) {
             throw new NullPointerException();
         }
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * Si la placa esta levantada.
+     * Whether the interface is up.
      *
-     * @throws SocketException siempre en KajiJDK: el estado de una placa se consulta al sistema
-     *     operativo cada vez, no es un campo del objeto
+     * @throws SocketException always in KajiJDK: an interface's state is asked of the operating
+     *     system every time, it is not a field of the object
      */
     public boolean isUp() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * Si es la placa de loopback.
+     * Whether it is the loopback interface.
      *
-     * @throws SocketException siempre en KajiJDK
+     * @throws SocketException always in KajiJDK
      */
     public boolean isLoopback() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * Si es un enlace punto a punto (un tunel, un PPP).
+     * Whether it is a point-to-point link (a tunnel, a PPP).
      *
-     * @throws SocketException siempre en KajiJDK
+     * @throws SocketException always in KajiJDK
      */
     public boolean isPointToPoint() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * Si la placa hace multicast.
+     * Whether the interface does multicast.
      *
-     * @throws SocketException siempre en KajiJDK
+     * @throws SocketException always in KajiJDK
      */
     public boolean supportsMulticast() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * La direccion fisica (MAC) de la placa.
+     * The interface's physical (MAC) address.
      *
-     * @throws SocketException siempre en KajiJDK
+     * @throws SocketException always in KajiJDK
      */
     public byte[] getHardwareAddress() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
     /**
-     * El tamano maximo de paquete de la placa.
+     * The interface's maximum packet size.
      *
-     * @throws SocketException siempre en KajiJDK
+     * @throws SocketException always in KajiJDK
      */
     public int getMTU() throws SocketException {
-        throw sinPlataforma();
+        throw noPlatform();
     }
 
-    // ---- identidad ----
+    // ---- identity ----
 
     /**
-     * Mismo nombre y mismas direcciones.
+     * Same name and same addresses.
      *
-     * <p>El indice **no** entra en la comparacion, y eso es del JDK: el indice lo asigna el sistema
-     * y puede cambiar entre arranques, asi que dos objetos que describen la misma placa podrian
-     * traer indices distintos.
+     * <p>The index does **not** enter the comparison, and that is the JDK's doing: the index is
+     * assigned by the system and may change between boots, so two objects describing the same
+     * interface could carry different indices.
      */
     @Override
     public boolean equals(Object obj) {
@@ -294,7 +296,7 @@ public final class NetworkInterface {
         return this.name == null ? 0 : this.name.hashCode();
     }
 
-    /** {@code name:displayName (dir1 dir2 ...)}, el mismo formato que el JDK. */
+    /** {@code name:displayName (addr1 addr2 ...)}, the same format as the JDK. */
     @Override
     public String toString() {
         StringBuilder b = new StringBuilder();

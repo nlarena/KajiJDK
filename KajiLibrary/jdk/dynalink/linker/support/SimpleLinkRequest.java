@@ -6,12 +6,12 @@ import jdk.dynalink.CallSiteDescriptor;
 import jdk.dynalink.linker.LinkRequest;
 
 /**
- * La implementacion obvia de {@link LinkRequest}: guarda lo que le pasan.
+ * The obvious implementation of {@link LinkRequest}: it keeps what it is given.
  *
- * <p>Es inmutable, y por eso {@link #getArguments} copia el arreglo al salir igual que el
- * constructor lo copia al entrar. Sin las dos copias la inmutabilidad seria de mentira: quien
- * construyo el pedido, o quien leyo los argumentos, podria cambiarlos despues por debajo del
- * enlazador que los esta mirando.
+ * <p>It is immutable, and that is why {@link #getArguments} copies the array on the way out just as
+ * the constructor copies it on the way in. Without both copies the immutability would be a pretence:
+ * whoever built the request, or whoever read the arguments, could change them afterwards under the
+ * linker that is looking at them.
  *
  * @since 9
  */
@@ -22,11 +22,11 @@ public class SimpleLinkRequest implements LinkRequest {
     private final boolean callSiteUnstable;
 
     /**
-     * Un pedido nuevo.
+     * A new request.
      *
-     * @param callSiteDescriptor el descriptor del sitio
-     * @param callSiteUnstable si el sitio ya se reenlazo demasiadas veces
-     * @param arguments los argumentos de la invocacion
+     * @param callSiteDescriptor the site's descriptor
+     * @param callSiteUnstable whether the site has already been relinked too many times
+     * @param arguments the invocation's arguments
      */
     public SimpleLinkRequest(final CallSiteDescriptor callSiteDescriptor,
             final boolean callSiteUnstable, final Object... arguments) {

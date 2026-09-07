@@ -243,7 +243,7 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public java.net.Socket socket() {
-        return (java.net.Socket) jdk.internal.net.Adopcion.tcp(this.handle);
+        return (java.net.Socket) jdk.internal.net.Adoption.tcp(this.handle);
     }
 
     // ---- opciones ----------------------------------------------------------------------------

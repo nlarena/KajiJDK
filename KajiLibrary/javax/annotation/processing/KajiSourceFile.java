@@ -14,12 +14,12 @@ import java.io.OutputStream;
 // source, and openWriter() just hands it back. The VM (KajiFiler.nativeRegisterSourceFile) already
 // holds the same writer, so the round loop can recover the text once the processor is done.
 //
-// Implementa la interfaz `JavaFileObject` **completa** (que a su vez extiende `FileObject`): además
-// de `getName`/`openWriter` —lo único que el Filer usa de verdad— cumple el resto del contrato con
-// implementaciones mínimas pero honestas, con el comportamiento que documenta `SimpleJavaFileObject`
-// del JDK (la referencia para un file object que no vive en disco). `JavaFileObject.Kind` es un tipo
-// anidado de otra unidad de compilación, y nombrarlo era justo lo que el compilador no podía hacer
-// (#239/#267): al desbloquearse, esta clase quedó completa.
+// It implements the **complete** `JavaFileObject` interface (which in turn extends `FileObject`):
+// besides `getName`/`openWriter` —the only things the Filer really uses— it fulfils the rest of the
+// contract with minimal but honest implementations, with the behaviour the JDK's
+// `SimpleJavaFileObject` documents (the reference for a file object that does not live on disk).
+// `JavaFileObject.Kind` is a type nested in another compilation unit, and naming it was exactly what
+// the compiler could not do (#239/#267): once that was unblocked, this class became complete.
 class KajiSourceFile implements JavaFileObject {
 
     private final String name;
@@ -32,25 +32,24 @@ class KajiSourceFile implements JavaFileObject {
 
     // The name the processor asked to create ("Foo" for a top-level class Foo).
     /**
-     * El URI que identifica a esta fuente generada.
+     * The URI that identifies this generated source.
      *
-     * <p>Esquema `kaji:` y no `file:`, y a proposito: esta fuente **no esta en el disco** -- vive en
-     * el `StringWriter` que el `Filer` entrego. Un `file:` prometeria un archivo que nadie puede
-     * abrir.
+     * <p>A `kaji:` scheme and not `file:`, on purpose: this source **is not on disk** -- it lives in
+     * the `StringWriter` the `Filer` handed over. A `file:` would promise a file nobody can open.
      */
     public java.net.URI toUri() {
         return java.net.URI.create("kaji:///" + this.getName());
     }
 
     /**
-     * El anidamiento, o `null`: averiguarlo pide leer el texto generado, y esta clase no lo parsea.
-     * `null` es la respuesta que el contrato define para "no se".
+     * The nesting, or `null`: finding it out means reading the generated text, and this class does not
+     * parse it. `null` is the answer the contract defines for "not known".
      */
     public javax.lang.model.element.NestingKind getNestingKind() {
         return null;
     }
 
-    /** El nivel de acceso, o `null`. Misma razon que arriba. */
+    /** The access level, or `null`. The same reason as above. */
     public javax.lang.model.element.Modifier getAccessLevel() {
         return null;
     }
@@ -65,7 +64,7 @@ class KajiSourceFile implements JavaFileObject {
         return this.writer;
     }
 
-    // Un archivo que crea el Filer es siempre fuente.
+    // A file the Filer creates is always source.
     public Kind getKind() {
         return Kind.SOURCE;
     }
@@ -74,8 +73,8 @@ class KajiSourceFile implements JavaFileObject {
         return kind == Kind.SOURCE && this.name.equals(simpleName);
     }
 
-    // Lo que el procesador lleva escrito: es como el ciclo de APT recupera el texto generado sin
-    // volver a pasar por la VM. No declara `throws` (estrechar es válido, §8.4.8.3).
+    // What the processor has written so far: it is how APT's cycle recovers the generated text
+    // without going back through the VM. It declares no `throws` (narrowing is valid, §8.4.8.3).
     public CharSequence getCharContent(boolean ignoreEncodingErrors) {
         return this.writer.toString();
     }
@@ -84,23 +83,23 @@ class KajiSourceFile implements JavaFileObject {
         return new StringReader(this.writer.toString());
     }
 
-    // Los dos flujos de **bytes** NO se soportan, igual que en `SimpleJavaFileObject`: este objeto es
-    // texto en memoria y no hay codificación elegida con la que convertirlo sin inventarla. La
-    // `UnsupportedOperationException` es no-comprobada, así que no hace falta declararla.
+    // The two **byte** streams are NOT supported, just as in `SimpleJavaFileObject`: this object is
+    // text in memory and there is no chosen encoding to convert it with that would not be invented.
+    // `UnsupportedOperationException` is unchecked, so it does not have to be declared.
     public InputStream openInputStream() {
-        throw new UnsupportedOperationException("KajiSourceFile es texto en memoria, no bytes");
+        throw new UnsupportedOperationException("KajiSourceFile is text in memory, not bytes");
     }
 
     public OutputStream openOutputStream() {
-        throw new UnsupportedOperationException("KajiSourceFile es texto en memoria, no bytes");
+        throw new UnsupportedOperationException("KajiSourceFile is text in memory, not bytes");
     }
 
-    // Cero: el contrato dice "0 si no se sabe", y de un buffer en memoria no se sabe.
+    // Zero: the contract says "0 if not known", and of an in-memory buffer it is not known.
     public long getLastModified() {
         return 0L;
     }
 
-    // No hay nada que borrar.
+    // There is nothing to delete.
     public boolean delete() {
         return false;
     }

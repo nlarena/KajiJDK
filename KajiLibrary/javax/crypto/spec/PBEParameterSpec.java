@@ -3,12 +3,12 @@ package javax.crypto.spec;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * La sal y la cantidad de iteraciones de un cifrado basado en contrasena.
+ * The salt and the iteration count of a password-based encryption.
  *
- * <p>Los dos valores son lo que hace lento el ataque por diccionario: la sal impide precalcular
- * tablas y las iteraciones encarecen cada intento. Esta clase no los valida --ni el largo de la sal
- * ni un minimo de iteraciones-- porque el valor razonable depende del algoritmo y del ano, y
- * ponerle un piso ahora seria un numero que envejece mal.
+ * <p>The two values are what makes a dictionary attack slow: the salt prevents precomputed tables and
+ * the iterations make each attempt expensive. This class does not validate them --neither the salt's
+ * length nor a minimum number of iterations-- because the reasonable value depends on the algorithm
+ * and on the year, and putting a floor on it now would be a number that ages badly.
  */
 public class PBEParameterSpec implements AlgorithmParameterSpec {
 
@@ -17,37 +17,37 @@ public class PBEParameterSpec implements AlgorithmParameterSpec {
     private final AlgorithmParameterSpec paramSpec;
 
     /**
-     * @throws NullPointerException si la sal es nula
+     * @throws NullPointerException if the salt is null
      */
     public PBEParameterSpec(byte[] salt, int iterationCount) {
         this(salt, iterationCount, null);
     }
 
     /**
-     * Con parametros para el cifrador de abajo --el IV de un AES, por ejemplo--.
+     * With parameters for the underlying cipher --an AES's IV, for instance--.
      *
-     * @throws NullPointerException si la sal es nula
+     * @throws NullPointerException if the salt is null
      */
     public PBEParameterSpec(byte[] salt, int iterationCount, AlgorithmParameterSpec paramSpec) {
         if (salt == null) {
-            throw new NullPointerException("la sal no puede ser nula");
+            throw new NullPointerException("the salt cannot be null");
         }
         this.salt = IvParameterSpec.copy(salt, 0, salt.length);
         this.iterationCount = iterationCount;
         this.paramSpec = paramSpec;
     }
 
-    /** Una copia de la sal. */
+    /** A copy of the salt. */
     public byte[] getSalt() {
         return IvParameterSpec.copy(this.salt, 0, this.salt.length);
     }
 
-    /** Cuantas iteraciones. */
+    /** How many iterations. */
     public int getIterationCount() {
         return this.iterationCount;
     }
 
-    /** Los parametros del cifrador de abajo, o nulo si no hay. */
+    /** The underlying cipher's parameters, or null if there are none. */
     public AlgorithmParameterSpec getParameterSpec() {
         return this.paramSpec;
     }

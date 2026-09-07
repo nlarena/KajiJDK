@@ -1,5 +1,7 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.time.Instant;
 
 // KajiLibrary's java.util.Calendar (finding #267).
@@ -23,7 +25,7 @@ import java.time.Instant;
 //
 // A missing member is a legal subset; a member that lies is not. The same rule as ClassLoader
 // (#205) and ProtectionDomain (#267).
-public abstract class Calendar implements Comparable<Calendar> {
+public abstract class Calendar implements Comparable<Calendar>, Serializable, Cloneable {
 
     // --- field numbers (the index into `fields`) ---------------------------------------
 

@@ -3,57 +3,57 @@ package jdk.dynalink.linker;
 import jdk.dynalink.CallSiteDescriptor;
 
 /**
- * Lo que se le pide a un enlazador: el sitio de invocacion mas los argumentos reales.
+ * What a linker is asked for: the call site plus the actual arguments.
  *
- * <h2>Por que hacen falta los argumentos, si el sitio ya tiene los tipos</h2>
+ * <h2>Why the arguments are needed, if the site already has the types</h2>
  *
- * <p>Porque los tipos estaticos del sitio son los del lenguaje que llama, no los del objeto que
- * recibe. En un sitio {@code (Object,Object)Object} el descriptor no dice nada util; lo que
- * decide el enlace es que el receptor sea, en tiempo de ejecucion, una instancia de tal clase.
- * Esta interfaz es la que expone ese dato.
+ * <p>Because the site's static types are the calling language's, not the receiving object's. At a
+ * {@code (Object,Object)Object} site the descriptor says nothing useful; what decides the link is
+ * that the receiver is, at run time, an instance of such and such a class. This interface is what
+ * exposes that fact.
  *
- * <h2>Por que la inestabilidad viaja aca adentro</h2>
+ * <h2>Why instability travels in here</h2>
  *
- * <p>{@link #isCallSiteUnstable} le avisa al enlazador que este sitio ya cambio de opinion
- * demasiadas veces — es megamorfico. Un enlazador que lo sabe puede devolver algo mas generico y
- * mas barato en lugar de una invocacion especializada que va a quedar invalidada enseguida. Sin
- * este dato la unica estrategia posible seria especializar siempre, que es la peor para el caso
- * megamorfico.
+ * <p>{@link #isCallSiteUnstable} warns the linker that this site has already changed its mind too
+ * many times — it is megamorphic. A linker that knows can return something more generic and cheaper
+ * instead of a specialised invocation that will be invalidated straight away. Without this fact the
+ * only possible strategy would be to always specialise, which is the worst one for the megamorphic
+ * case.
  *
  * @since 9
  */
 public interface LinkRequest {
 
-    /** El descriptor del sitio de invocacion. */
+    /** The call site's descriptor. */
     CallSiteDescriptor getCallSiteDescriptor();
 
     /**
-     * Los argumentos de la invocacion que disparo el enlace.
+     * The arguments of the invocation that triggered the link.
      *
-     * <p>Devuelve una copia: son mutables y el enlazador no deberia poder tocar los originales.
+     * <p>Returns a copy: they are mutable and the linker should not be able to touch the originals.
      */
     Object[] getArguments();
 
     /**
-     * El primer argumento, o {@code null} si no hay ninguno.
+     * The first argument, or {@code null} if there is none.
      *
-     * <p>Es un atajo para el caso abrumadoramente mas comun, que es mirar el receptor. Tambien
-     * evita copiar el arreglo entero para leer una sola posicion.
+     * <p>It is a shortcut for the overwhelmingly commonest case, which is looking at the receiver. It
+     * also avoids copying the whole array to read a single position.
      */
     Object getReceiver();
 
-    /** Si el sitio ya se reenlazo tantas veces que conviene no especializar. */
+    /** Whether the site has been relinked so often that specialising is not worth it. */
     boolean isCallSiteUnstable();
 
     /**
-     * El mismo pedido con otro descriptor y otros argumentos.
+     * The same request with another descriptor and other arguments.
      *
-     * <p>Lo usa un enlazador que descompone una operacion en otra —por ejemplo, resolver el
-     * nombre de un metodo y despues delegar la invocacion— sin perder la marca de inestabilidad.
+     * <p>It is used by a linker that decomposes one operation into another --resolving a method's
+     * name and then delegating the invocation, say-- without losing the instability mark.
      *
-     * @param newCallSiteDescriptor el descriptor nuevo
-     * @param newArguments los argumentos nuevos
-     * @return el pedido derivado
+     * @param newCallSiteDescriptor the new descriptor
+     * @param newArguments the new arguments
+     * @return the derived request
      */
     LinkRequest replaceArguments(CallSiteDescriptor newCallSiteDescriptor, Object... newArguments);
 }

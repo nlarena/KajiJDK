@@ -1,5 +1,8 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
+
 // A {@link Deque} over a **circular array**: the elements occupy a contiguous run that wraps
 // around the end of the array, tracked by the index of the head. That is what makes both ends
 // O(1) — adding at the front just moves the head index backwards instead of shifting anything,
@@ -11,7 +14,7 @@ package java.util;
 //
 // Null elements are rejected, as in the JDK: null is the "empty" answer of peek/poll, so
 // storing one would make an absent element indistinguishable from a present null.
-public class ArrayDeque<E> extends AbstractCollection<E> implements Deque<E> {
+public class ArrayDeque<E> extends AbstractCollection<E> implements Deque<E>, Serializable, Cloneable {
 
     // The backing array; the live elements are the `size` slots starting at `head`, wrapping.
     private Object[] elements;

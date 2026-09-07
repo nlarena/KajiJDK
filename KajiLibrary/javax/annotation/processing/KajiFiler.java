@@ -12,14 +12,14 @@ import java.io.StringWriter;
 // the (name, writer) pair to the VM through the native bridge so the round loop can recover it, and
 // returns a KajiSourceFile wrapping the same writer for the processor to write into.
 //
-// QUE SOPORTA Y QUE NO — de las cuatro operaciones del contrato solo `createSourceFile` esta
-// implementada, porque es la unica que el round loop de la VM sabe recibir: lo que se registra por
-// el puente nativo se drena, se parsea, se compila y se reincorpora. Las otras tres no tienen a
-// donde ir: `createClassFile` pediria emitir bytecode que nadie recogeria, y
-// `createResource`/`getResource` pediria un `JavaFileManager` con locations reales, que este
-// compilador no expone. Tiran `UnsupportedOperationException` (no-comprobada, igual que los flujos
-// de bytes de `KajiSourceFile`) en vez de devolver un objeto que no escribe en ningun lado: fallar
-// fuerte es honesto, devolver un `FileObject` mudo seria mentir.
+// WHAT IT SUPPORTS AND WHAT IT DOES NOT — of the contract's four operations only `createSourceFile`
+// is implemented, because it is the only one the VM's round loop knows how to receive: what is
+// registered through the native bridge is drained, parsed, compiled and fed back in. The other three
+// have nowhere to go: `createClassFile` would ask for bytecode nobody would pick up, and
+// `createResource`/`getResource` would ask for a `JavaFileManager` with real locations, which this
+// compiler does not expose. They throw `UnsupportedOperationException` (unchecked, like
+// `KajiSourceFile`'s byte streams) instead of returning an object that writes nowhere: failing loudly
+// is honest, returning a mute `FileObject` would be lying.
 public class KajiFiler implements Filer {
 
     // Note: the interface declares `throws IOException`; we narrow to nothing (allowed, §8.4.8.3),
@@ -33,19 +33,19 @@ public class KajiFiler implements Filer {
 
     public JavaFileObject createClassFile(CharSequence name, Element... originatingElements) {
         throw new UnsupportedOperationException(
-                "KajiFiler solo genera fuentes: el round loop no recoge .class generados");
+                "KajiFiler only generates sources: the round loop does not pick up generated .class");
     }
 
     public FileObject createResource(JavaFileManager.Location location, CharSequence moduleAndPkg,
             CharSequence relativeName, Element... originatingElements) {
         throw new UnsupportedOperationException(
-                "KajiFiler no tiene un JavaFileManager con locations donde crear recursos");
+                "KajiFiler has no JavaFileManager with locations to create resources in");
     }
 
     public FileObject getResource(JavaFileManager.Location location, CharSequence moduleAndPkg,
             CharSequence relativeName) {
         throw new UnsupportedOperationException(
-                "KajiFiler no tiene un JavaFileManager con locations de donde leer recursos");
+                "KajiFiler has no JavaFileManager with locations to read resources from");
     }
 
     // Records this generated file with the VM: the interpreter pushes (name, heap offset of the

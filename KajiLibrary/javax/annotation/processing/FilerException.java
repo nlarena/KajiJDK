@@ -2,18 +2,18 @@ package javax.annotation.processing;
 
 import java.io.IOException;
 
-// El error que un {@link Filer} tira cuando se le pide algo que viola su contrato: crear dos veces
-// el mismo tipo, escribir sobre una fuente que ya existia, o un nombre que no es valido. Es una
-// `IOException` y no una no-comprobada a proposito: el `Filer` hace E/S, y quien genera codigo
-// tiene que decidir que hacer si no puede escribir.
+// The error a {@link Filer} throws when it is asked for something that violates its contract:
+// creating the same type twice, writing over a source that already existed, or a name that is not
+// valid. It is an `IOException` and not an unchecked one on purpose: the `Filer` does I/O, and
+// whoever generates code has to decide what to do if it cannot write.
 public class FilerException extends IOException {
 
-    // `static final` explicito, como en el resto de la biblioteca: el valor es el del JDK real para
-    // que un flujo serializado cruce en las dos direcciones.
+    // An explicit `static final`, as in the rest of the library: the value is the real JDK's so that a
+    // serialized stream crosses in both directions.
     static final long serialVersionUID = 8426423106453163293L;
 
     /**
-     * @param s la razon por la que la operacion del `Filer` no se pudo hacer
+     * @param s the reason the `Filer` operation could not be done
      */
     public FilerException(String s) {
         super(s);

@@ -8,48 +8,46 @@ import javax.lang.model.element.TypeElement;
 
 import java.util.Set;
 
-// El contrato que implementa todo procesador de anotaciones (JSR 269 §Processor).
+// The contract every annotation processor implements (JSR 269 §Processor).
 //
-// El **protocolo** es lo que hay que entender, y es rigido a proposito: la herramienta construye el
-// procesador con su constructor sin argumentos, le pregunta que soporta (las tres `getSupported*`),
-// le da `init(env)` **una sola vez**, y recien despues lo llama a `process(...)` una vez por ronda
-// hasta que no quede nada generado, mas una ronda final con `processingOver() == true`. Nunca al
-// reves: preguntar antes de `init` esta permitido, generar despues de la ronda final no.
+// The **protocol** is the thing to understand, and it is rigid on purpose: the tool builds the
+// processor with its no-argument constructor, asks it what it supports (the three `getSupported*`),
+// gives it `init(env)` **exactly once**, and only then calls `process(...)` once per round until
+// nothing more is generated, plus a final round with `processingOver() == true`. Never the other way
+// round: asking before `init` is allowed, generating after the final round is not.
 //
-// En este proyecto el que corre ese protocolo es la propia VM (`src/jvm/interpreter/apt.rs`); lo
-// normal es no implementar esta interfaz a mano sino extender `AbstractProcessor`.
+// In this project the one running that protocol is the VM itself (`src/jvm/interpreter/apt.rs`); the
+// normal thing is not to implement this interface by hand but to extend `AbstractProcessor`.
 public interface Processor {
 
-    /** Las opciones `-A` que este procesador entiende. */
+    /** The `-A` options this processor understands. */
     Set<String> getSupportedOptions();
 
     /**
-     * Los tipos de anotacion que este procesador quiere ver, por nombre completo. `"*"` significa
-     * todas.
+     * The annotation types this processor wants to see, by full name. `"*"` means all of them.
      */
     Set<String> getSupportedAnnotationTypes();
 
-    /** La ultima version del lenguaje que este procesador entiende. */
+    /** The latest version of the language this processor understands. */
     SourceVersion getSupportedSourceVersion();
 
     /**
-     * Le entrega el entorno. La herramienta lo llama exactamente una vez, antes de cualquier
-     * `process`.
+     * Hands it the environment. The tool calls it exactly once, before any `process`.
      */
     void init(ProcessingEnvironment processingEnv);
 
     /**
-     * Procesa una ronda.
+     * Processes one round.
      *
-     * @return `true` si este procesador **reclama** esas anotaciones, y entonces no se le ofrecen a
-     *         ningun otro procesador posterior. Devolver `true` de mas es la forma clasica de
-     *         romper a un procesador ajeno sin darse cuenta.
+     * @return `true` if this processor **claims** those annotations, in which case they are not
+     *         offered to any later processor. Returning `true` too eagerly is the classic way of
+     *         breaking someone else's processor without noticing.
      */
     boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv);
 
     /**
-     * Sugerencias de completado para el valor de un elemento de anotacion, para un IDE. Devolver
-     * una coleccion vacia es una respuesta valida y es lo que hace casi todo procesador.
+     * Completion suggestions for the value of an annotation element, for an IDE. Returning an empty
+     * collection is a valid answer and it is what almost every processor does.
      */
     Iterable<? extends Completion> getCompletions(Element element, AnnotationMirror annotation,
             ExecutableElement member, String userText);

@@ -11,84 +11,85 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-// El armador de `DateTimeFormatter`: se nombran los pedazos y el arma el formateador.
+// The `DateTimeFormatter` builder: the pieces are named and it builds the formatter.
 //
-// **Este es el modelo de verdad, y `ofPattern` es azucar sobre el.** La version anterior era al
-// reves: el formateador guardaba una cadena de patron y el armador la componia. Eso ponia un techo
-// duro --lo que una cadena de patron no puede decir, el armador no podia ofrecer-- y dejaba afuera
-// las secciones opcionales, el relleno y los nombres puestos a mano. Ahora `appendPattern` compila la
-// cadena a las **mismas piezas** que los `append*` producen, asi que las dos entradas no se pueden
-// desincronizar y el techo desaparecio.
+// **This is the real model, and `ofPattern` is sugar over it.** The earlier version was the other
+// way round: the formatter kept a pattern string and the builder composed it. That put a hard
+// ceiling on things --whatever a pattern string cannot say, the builder could not offer-- and left
+// out the optional sections, the padding and hand-supplied names. Now `appendPattern` compiles the
+// string into the **same parts** the `append*` methods produce, so the two entry points cannot
+// drift apart and the ceiling is gone.
 //
-// **Ya no falta nada, y el camino por el que se cerro es el mismo tres veces: traer el dato, no
-// inventarlo.** Ocho miembros estuvieron afuera porque pedian tablas de *texto* del CLDR --nombres,
-// no formatos-- y un `appendZoneText(FULL)` que escriba `Europe/Paris` no esta incompleto, esta mal:
-// dice "este es el nombre" y no lo es. Asi se cerro cada uno:
+// **Nothing is missing any more, and the road taken to close it was the same one three times: bring
+// the data, do not invent it.** Eight members were left out because they asked for CLDR *text*
+// tables --names, not formats-- and an `appendZoneText(FULL)` writing `Europe/Paris` is not
+// incomplete, it is wrong: it says "this is the name" and it is not. This is how each one was
+// closed:
 //
-//   - `appendLocalized(FormatStyle, FormatStyle)`, `getLocalizedDateTimePattern` en su forma de
-//     estilos y las cuatro `ofLocalized*` de `DateTimeFormatter`: el patron de una fecha corta
-//     --`M/d/yy` aca, `dd.MM.yy` alla-- aparecio en `java.text.PatronesLocales`. Ver
-//     `PiezaLocalizada`, donde esta la medicion que muestra que los dos caminos dan el mismo patron.
-//   - `ofLocalizedPattern(String)`, `getLocalizedDateTimePattern(String, ...)` y
-//     `appendLocalized(String)`: la lista de formatos disponibles de cada locale esta ahora en
-//     `PlantillasLocales`, extraida corriendo el JDK sobre las casi cuarenta y ocho mil plantillas
-//     que la gramatica admite. Lo que no esta en la tabla no se inventa: da `DateTimeException`,
-//     igual que alla.
-//   - `appendDayPeriodText`: los nombres y los cortes de cada idioma estan en `PeriodosDelDia`,
-//     extraidos pidiendole al JDK los 1440 minutos del dia en cada locale.
-//   - `appendZoneText` y `appendGenericZoneText` (dos formas cada uno): ver `PiezaZonaTexto`. No hizo
-//     falta tabla, y la razon es incomoda: `ZoneId.of` no construye ninguna zona con nombre en esta
-//     biblioteca, asi que la unica que un formateador puede recibir es un `ZoneOffset`, y para un
-//     desplazamiento el JDK escribe el identificador tal cual. **Eso es completo por lo que la
-//     biblioteca puede representar, no por lo que la API promete**: el dia que haya base de zonas,
-//     esos cuatro necesitan la tabla del CLDR y hoy quedarian mintiendo.
+//   - `appendLocalized(FormatStyle, FormatStyle)`, `getLocalizedDateTimePattern` in its style form
+//     and the four `ofLocalized*` of `DateTimeFormatter`: the pattern of a short date --`M/d/yy`
+//     here, `dd.MM.yy` there-- turned up in `java.text.PatronesLocales`. See `LocalizedPart`, which
+//     holds the measurement showing that the two routes give the same pattern.
+//   - `ofLocalizedPattern(String)`, `getLocalizedDateTimePattern(String, ...)` and
+//     `appendLocalized(String)`: the list of formats available in each locale now lives in
+//     `LocaleTemplates`, extracted by running the JDK over the nearly forty-eight thousand
+//     templates the grammar admits. What is not in the table is not invented: it gives
+//     `DateTimeException`, the same as over there.
+//   - `appendDayPeriodText`: each language's names and cut points are in `DayPeriods`, extracted by
+//     asking the JDK for the 1440 minutes of the day in each locale.
+//   - `appendZoneText` and `appendGenericZoneText` (two forms each): see `ZoneTextPart`. No table
+//     was needed, and the reason is uncomfortable: `ZoneId.of` builds no named zone in this
+//     library, so the only one a formatter can receive is a `ZoneOffset`, and for an offset the JDK
+//     writes the identifier as it stands. **That is complete for what the library can represent,
+//     not for what the API promises**: the day there is a zone database, those four need the CLDR
+//     table and today they would be left lying.
 //
-// `appendText(TemporalField, Map)` sigue siendo la salida para el que necesite nombres propios: pone
-// los suyos y el resultado es cierto por construccion.
+// `appendText(TemporalField, Map)` remains the way out for whoever needs their own names: they
+// supply them and the result is true by construction.
 
 public final class DateTimeFormatterBuilder {
 
-    private final DateTimeFormatterBuilder padre;
-    private final boolean opcional;
-    private final List<Pieza> piezas;
-    // La seccion en la que caen los `append`. Es `this` mientras no haya un `optionalStart` abierto;
-    // adentro de uno apunta al armador hijo. Vive solo en el armador raiz --que es el que el llamador
-    // tiene en la mano-- porque todos los `append` devuelven la raiz.
-    private DateTimeFormatterBuilder activo;
-    private int anchoRelleno;
-    private char relleno;
+    private final DateTimeFormatterBuilder parent;
+    private final boolean optional;
+    private final List<Part> parts;
+    // The section the `append` calls land in. It is `this` while no `optionalStart` is open; inside
+    // one it points at the child builder. It lives only in the root builder --the one the caller
+    // holds in their hand-- because every `append` returns the root.
+    private DateTimeFormatterBuilder active;
+    private int padWidth;
+    private char padChar;
 
     public DateTimeFormatterBuilder() {
         this(null, false);
     }
 
-    private DateTimeFormatterBuilder(DateTimeFormatterBuilder padre, boolean opcional) {
-        this.padre = padre;
-        this.opcional = opcional;
-        this.piezas = new ArrayList<Pieza>();
-        this.activo = this;
-        this.anchoRelleno = 0;
-        this.relleno = ' ';
+    private DateTimeFormatterBuilder(DateTimeFormatterBuilder parent, boolean optional) {
+        this.parent = parent;
+        this.optional = optional;
+        this.parts = new ArrayList<Part>();
+        this.active = this;
+        this.padWidth = 0;
+        this.padChar = ' ';
     }
 
-    private DateTimeFormatterBuilder agregar(Pieza pieza) {
-        DateTimeFormatterBuilder a = this.activo;
-        Pieza p = pieza;
-        if (a.anchoRelleno > 0) {
-            p = new PiezaRelleno(p, a.anchoRelleno, a.relleno);
-            a.anchoRelleno = 0;
+    private DateTimeFormatterBuilder add(Part part) {
+        DateTimeFormatterBuilder a = this.active;
+        Part p = part;
+        if (a.padWidth > 0) {
+            p = new PadPart(p, a.padWidth, a.padChar);
+            a.padWidth = 0;
         }
-        a.piezas.add(p);
+        a.parts.add(p);
         return this;
     }
 
-    // ---------------------------------------------------------------- numeros
+    // ---------------------------------------------------------------- numbers
 
     public DateTimeFormatterBuilder appendValue(TemporalField field) {
         if (field == null) {
             throw new NullPointerException("field");
         }
-        return this.agregar(new PiezaNumero(field, 1, 19, SignStyle.NORMAL));
+        return this.add(new NumberPart(field, 1, 19, SignStyle.NORMAL));
     }
 
     public DateTimeFormatterBuilder appendValue(TemporalField field, int width) {
@@ -99,7 +100,7 @@ public final class DateTimeFormatterBuilder {
             throw new IllegalArgumentException("The width must be from 1 to 19 inclusive but was "
                     + width);
         }
-        return this.agregar(new PiezaNumero(field, width, width, SignStyle.NOT_NEGATIVE));
+        return this.add(new NumberPart(field, width, width, SignStyle.NOT_NEGATIVE));
     }
 
     public DateTimeFormatterBuilder appendValue(TemporalField field, int minWidth, int maxWidth,
@@ -122,7 +123,7 @@ public final class DateTimeFormatterBuilder {
             throw new IllegalArgumentException("The maximum width must exceed or equal the minimum"
                     + " width but " + maxWidth + " < " + minWidth);
         }
-        return this.agregar(new PiezaNumero(field, minWidth, maxWidth, signStyle));
+        return this.add(new NumberPart(field, minWidth, maxWidth, signStyle));
     }
 
     public DateTimeFormatterBuilder appendValueReduced(TemporalField field, int width, int maxWidth,
@@ -130,7 +131,7 @@ public final class DateTimeFormatterBuilder {
         if (field == null) {
             throw new NullPointerException("field");
         }
-        return this.agregar(new PiezaNumeroReducido(field, width, maxWidth, baseValue, null));
+        return this.add(new ReducedNumberPart(field, width, maxWidth, baseValue, null));
     }
 
     public DateTimeFormatterBuilder appendValueReduced(TemporalField field, int width, int maxWidth,
@@ -141,7 +142,7 @@ public final class DateTimeFormatterBuilder {
         if (baseDate == null) {
             throw new NullPointerException("baseDate");
         }
-        return this.agregar(new PiezaNumeroReducido(field, width, maxWidth, 0, baseDate));
+        return this.add(new ReducedNumberPart(field, width, maxWidth, 0, baseDate));
     }
 
     public DateTimeFormatterBuilder appendFraction(TemporalField field, int minWidth, int maxWidth,
@@ -161,17 +162,17 @@ public final class DateTimeFormatterBuilder {
             throw new IllegalArgumentException("The maximum width must exceed or equal the minimum"
                     + " width but " + maxWidth + " < " + minWidth);
         }
-        return this.agregar(new PiezaFraccion(field, minWidth, maxWidth, decimalPoint));
+        return this.add(new FractionPart(field, minWidth, maxWidth, decimalPoint));
     }
 
-    // ---------------------------------------------------------------- texto
+    // ---------------------------------------------------------------- text
 
     public DateTimeFormatterBuilder appendText(TemporalField field) {
         return this.appendText(field, TextStyle.FULL);
     }
 
-    // Los nombres son los ingleses --lo unico que esta biblioteca tiene-- y con otro locale esta
-    // pieza **tira** en vez de escribirlos igual. El porque esta en `PiezaTexto`.
+    // The names are the English ones --the only set this library has-- and under another locale
+    // this part **throws** instead of writing them anyway. The why is in `TextPart`.
     public DateTimeFormatterBuilder appendText(TemporalField field, TextStyle textStyle) {
         if (field == null) {
             throw new NullPointerException("field");
@@ -179,10 +180,10 @@ public final class DateTimeFormatterBuilder {
         if (textStyle == null) {
             throw new NullPointerException("textStyle");
         }
-        return this.agregar(new PiezaTexto(field, textStyle));
+        return this.add(new TextPart(field, textStyle));
     }
 
-    // La forma que **no** depende de ningun dato de locale: los nombres los trae el llamador.
+    // The form that depends on **no** locale data: the caller brings the names.
     public DateTimeFormatterBuilder appendText(TemporalField field, Map<Long, String> textLookup) {
         if (field == null) {
             throw new NullPointerException("field");
@@ -190,14 +191,14 @@ public final class DateTimeFormatterBuilder {
         if (textLookup == null) {
             throw new NullPointerException("textLookup");
         }
-        return this.agregar(new PiezaTextoMapa(field,
+        return this.add(new MapTextPart(field,
                 new HashMap<Long, String>(textLookup)));
     }
 
-    // ---------------------------------------------------------------- literales
+    // ---------------------------------------------------------------- literals
 
     public DateTimeFormatterBuilder appendLiteral(char literal) {
-        return this.agregar(new PiezaLiteral(String.valueOf(literal)));
+        return this.add(new LiteralPart(String.valueOf(literal)));
     }
 
     public DateTimeFormatterBuilder appendLiteral(String literal) {
@@ -205,12 +206,12 @@ public final class DateTimeFormatterBuilder {
             throw new NullPointerException("literal");
         }
         if (literal.length() > 0) {
-            this.agregar(new PiezaLiteral(literal));
+            this.add(new LiteralPart(literal));
         }
         return this;
     }
 
-    // ---------------------------------------------------------------- zona y calendario
+    // ---------------------------------------------------------------- zone and calendar
 
     public DateTimeFormatterBuilder appendOffsetId() {
         return this.appendOffset("+HH:MM:ss", "Z");
@@ -223,78 +224,78 @@ public final class DateTimeFormatterBuilder {
         if (noOffsetText == null) {
             throw new NullPointerException("noOffsetText");
         }
-        return this.agregar(new PiezaOffset(pattern, noOffsetText));
+        return this.add(new OffsetPart(pattern, noOffsetText));
     }
 
     public DateTimeFormatterBuilder appendZoneId() {
-        return this.agregar(new PiezaZonaId(PiezaZonaId.ZONA));
+        return this.add(new ZoneIdPart(ZoneIdPart.ZONE));
     }
 
     public DateTimeFormatterBuilder appendZoneOrOffsetId() {
-        return this.agregar(new PiezaZonaId(PiezaZonaId.ZONA_U_OFFSET));
+        return this.add(new ZoneIdPart(ZoneIdPart.ZONE_OR_OFFSET));
     }
 
     public DateTimeFormatterBuilder appendZoneRegionId() {
-        return this.agregar(new PiezaZonaId(PiezaZonaId.REGION));
+        return this.add(new ZoneIdPart(ZoneIdPart.REGION));
     }
 
     public DateTimeFormatterBuilder appendChronologyId() {
-        return this.agregar(new PiezaCronologiaId());
+        return this.add(new ChronoIdPart());
     }
 
     /**
-     * El nombre del calendario.
+     * The calendar's name.
      *
-     * <p>Delega en {@link java.time.chrono.Chronology#getDisplayName}, como el JDK. Esa biblioteca
-     * no trae los nombres traducidos y cae siempre en su reserva --el id del calendario--; para el
-     * ISO coincide con el JDK.
+     * <p>Delegates to {@link java.time.chrono.Chronology#getDisplayName}, as the JDK does. That
+     * library does not ship the translated names and always falls back to its reserve --the
+     * calendar id--; for ISO it agrees with the JDK.
      *
-     * @throws NullPointerException si `textStyle` es nulo
+     * @throws NullPointerException if `textStyle` is null
      */
     public DateTimeFormatterBuilder appendChronologyText(TextStyle textStyle) {
         if (textStyle == null) {
             throw new NullPointerException("textStyle");
         }
-        return this.agregar(new PiezaCronologiaTexto(textStyle));
+        return this.add(new ChronoTextPart(textStyle));
     }
 
     /**
-     * Una fecha, una hora o las dos, pidiendo los campos por plantilla.
+     * A date, a time or both, asking for the fields by template.
      *
-     * <p>Una plantilla --`yMMMd`, `Hm`-- dice que campos se quieren y con cuanto detalle, y deja que
-     * el idioma decida el orden y los separadores. Es lo que hace falta cuando ninguno de los cuatro
-     * estilos sirve: pedir el mes y el dia sin el ano, por ejemplo.
+     * <p>A template --`yMMMd`, `Hm`-- says which fields are wanted and in how much detail, and lets
+     * the language decide the order and the separators. It is what is needed when none of the four
+     * styles will do: asking for the month and the day without the year, for instance.
      *
-     * <p>El patron se resuelve al usar el formateador y no al armarlo, asi que un
-     * {@link DateTimeFormatter#withLocale} posterior cambia el formato.
+     * <p>The pattern is resolved when the formatter is used and not when it is built, so a later
+     * {@link DateTimeFormatter#withLocale} changes the format.
      *
-     * @param requestedTemplate la plantilla
-     * @return este armador
-     * @throws NullPointerException si la plantilla es nula
-     * @throws IllegalArgumentException si la plantilla esta mal escrita
+     * @param requestedTemplate the template
+     * @return this builder
+     * @throws NullPointerException if the template is null
+     * @throws IllegalArgumentException if the template is malformed
      * @since 19
      */
     public DateTimeFormatterBuilder appendLocalized(String requestedTemplate) {
         if (requestedTemplate == null) {
             throw new NullPointerException("requestedTemplate");
         }
-        Plantilla.comprobar(requestedTemplate);
-        return this.agregar(new PiezaPlantilla(requestedTemplate));
+        Template.check(requestedTemplate);
+        return this.add(new TemplatePart(requestedTemplate));
     }
 
     /**
-     * El patron que ese idioma usa para esa plantilla.
+     * The pattern that language uses for that template.
      *
-     * <p>Ver {@code PlantillasLocales}, de donde sale la tabla, y {@code Plantilla}, que explica por
-     * que hay dos formas distintas de fallar.
+     * <p>See {@code LocaleTemplates}, where the table comes from, and {@code Template}, which
+     * explains why there are two different ways to fail.
      *
-     * @param requestedTemplate la plantilla
-     * @param chrono el calendario; no se usa para resolver la plantilla, pero no puede ser nulo
-     * @param locale en que idioma
-     * @return el patron
-     * @throws NullPointerException si alguno de los tres es nulo
-     * @throws IllegalArgumentException si la plantilla esta mal escrita
-     * @throws java.time.DateTimeException si ese idioma no tiene un patron para esa plantilla
+     * @param requestedTemplate the template
+     * @param chrono the calendar; it is not used to resolve the template, but it cannot be null
+     * @param locale in which language
+     * @return the pattern
+     * @throws NullPointerException if any of the three is null
+     * @throws IllegalArgumentException if the template is malformed
+     * @throws java.time.DateTimeException if that language has no pattern for that template
      * @since 19
      */
     public static String getLocalizedDateTimePattern(String requestedTemplate,
@@ -308,64 +309,64 @@ public final class DateTimeFormatterBuilder {
         if (locale == null) {
             throw new NullPointerException("locale");
         }
-        Plantilla.comprobar(requestedTemplate);
-        String patron = PlantillasLocales.patron(requestedTemplate, locale);
-        if (patron == null) {
+        Template.check(requestedTemplate);
+        String pattern = LocaleTemplates.pattern(requestedTemplate, locale);
+        if (pattern == null) {
             throw new java.time.DateTimeException("Requested template \"" + requestedTemplate
                     + "\" cannot be resolved in the locale \"" + locale + "\"");
         }
-        return patron;
+        return pattern;
     }
 
     /**
-     * El periodo del dia con palabras: "in the morning", "nachmittags", "madrugada".
+     * The period of the day in words: "in the morning", "nachmittags", "madrugada".
      *
-     * <p>No es AM/PM traducido: cada idioma parte el dia en los pedazos que nombra, que no son dos
-     * ni son parejos. Ver {@code PeriodosDelDia}, de donde salen los datos.
+     * <p>It is not AM/PM translated: each language splits the day into the pieces it names, which
+     * are neither two nor even. See {@code DayPeriods}, where the data comes from.
      *
-     * <p>Al parsear se resuelve al punto medio del tramo, que es lo que hace el JDK: el nombre de un
-     * periodo no dice que hora es.
+     * <p>While parsing it resolves to the midpoint of the stretch, which is what the JDK does: the
+     * name of a period does not say what time it is.
      *
-     * @param textStyle el estilo
-     * @return este armador
-     * @throws NullPointerException si `textStyle` es nulo
+     * @param textStyle the style
+     * @return this builder
+     * @throws NullPointerException if `textStyle` is null
      * @since 16
      */
     public DateTimeFormatterBuilder appendDayPeriodText(TextStyle textStyle) {
         if (textStyle == null) {
             throw new NullPointerException("textStyle");
         }
-        return this.agregar(new PiezaPeriodoDelDia(textStyle));
+        return this.add(new DayPeriodPart(textStyle));
     }
 
     /**
-     * El nombre de la zona, como se lo escribe en ese idioma.
+     * The zone's name, as it is written in that language.
      *
-     * <p>Ver {@code PiezaZonaTexto} para por que esto se puede cumplir sin la tabla de nombres del
-     * CLDR: la unica zona que un formateador puede recibir en esta biblioteca es un
-     * {@link java.time.ZoneOffset}, y para un desplazamiento el JDK escribe el identificador tal
-     * cual --`+05:30`, `Z`-- en cualquier idioma y en cualquier estilo.
+     * <p>See {@code ZoneTextPart} for why this can be fulfilled without the CLDR name table: the
+     * only zone a formatter can receive in this library is a {@link java.time.ZoneOffset}, and for
+     * an offset the JDK writes the identifier as it stands --`+05:30`, `Z`-- in any language and in
+     * any style.
      *
-     * @param textStyle el estilo
-     * @return este armador
-     * @throws NullPointerException si `textStyle` es nulo
+     * @param textStyle the style
+     * @return this builder
+     * @throws NullPointerException if `textStyle` is null
      */
     public DateTimeFormatterBuilder appendZoneText(TextStyle textStyle) {
         if (textStyle == null) {
             throw new NullPointerException("textStyle");
         }
-        return this.agregar(new PiezaZonaTexto(textStyle, null, false));
+        return this.add(new ZoneTextPart(textStyle, null, false));
     }
 
     /**
-     * Lo mismo, diciendo que zonas preferir cuando un nombre le corresponde a varias.
+     * The same, saying which zones to prefer when one name belongs to several.
      *
-     * <p>El conjunto no cambia nada mientras no haya nombres: solo sirve para desempatar.
+     * <p>The set changes nothing while there are no names: it only serves to break ties.
      *
-     * @param textStyle el estilo
-     * @param preferredZones las zonas a preferir
-     * @return este armador
-     * @throws NullPointerException si alguno de los dos es nulo
+     * @param textStyle the style
+     * @param preferredZones the zones to prefer
+     * @return this builder
+     * @throws NullPointerException if either of the two is null
      */
     public DateTimeFormatterBuilder appendZoneText(TextStyle textStyle,
             java.util.Set<java.time.ZoneId> preferredZones) {
@@ -375,54 +376,54 @@ public final class DateTimeFormatterBuilder {
         if (preferredZones == null) {
             throw new NullPointerException("preferredZones");
         }
-        return this.agregar(new PiezaZonaTexto(textStyle, preferredZones, false));
+        return this.add(new ZoneTextPart(textStyle, preferredZones, false));
     }
 
     /**
-     * El nombre de la zona sin distinguir horario de verano.
+     * The zone's name without telling summer time apart.
      *
-     * <p>"Hora del Pacifico" en vez de "hora estandar del Pacifico": es lo que se escribe cuando no
-     * hay un instante concreto que decida si el horario de verano esta puesto.
+     * <p>"Pacific Time" instead of "Pacific Standard Time": it is what gets written when there is
+     * no concrete instant to decide whether summer time is in force.
      *
-     * @param textStyle el estilo
-     * @return este armador
-     * @throws NullPointerException si `textStyle` es nulo
+     * @param textStyle the style
+     * @return this builder
+     * @throws NullPointerException if `textStyle` is null
      */
     public DateTimeFormatterBuilder appendGenericZoneText(TextStyle textStyle) {
         if (textStyle == null) {
             throw new NullPointerException("textStyle");
         }
-        return this.agregar(new PiezaZonaTexto(textStyle, null, true));
+        return this.add(new ZoneTextPart(textStyle, null, true));
     }
 
     /**
-     * Lo mismo, con zonas preferidas.
+     * The same, with preferred zones.
      *
-     * <p>El conjunto no se comprueba: el JDK tampoco lo comprueba en esta forma, a diferencia de
-     * {@link #appendZoneText(TextStyle, java.util.Set)}. La asimetria es suya y se copia.
+     * <p>The set is not checked: the JDK does not check it in this form either, unlike
+     * {@link #appendZoneText(TextStyle, java.util.Set)}. The asymmetry is theirs and it is copied.
      *
-     * @param textStyle el estilo
-     * @param preferredZones las zonas a preferir
-     * @return este armador
-     * @throws NullPointerException si `textStyle` es nulo
+     * @param textStyle the style
+     * @param preferredZones the zones to prefer
+     * @return this builder
+     * @throws NullPointerException if `textStyle` is null
      */
     public DateTimeFormatterBuilder appendGenericZoneText(TextStyle textStyle,
             java.util.Set<java.time.ZoneId> preferredZones) {
         if (textStyle == null) {
             throw new NullPointerException("textStyle");
         }
-        return this.agregar(new PiezaZonaTexto(textStyle, preferredZones, true));
+        return this.add(new ZoneTextPart(textStyle, preferredZones, true));
     }
 
     /**
-     * El desplazamiento de zona escrito con `GMT` adelante: `GMT+08:00`, `GMT+8`, `GMT`.
+     * The zone offset written with `GMT` in front: `GMT+08:00`, `GMT+8`, `GMT`.
      *
-     * <p>Solo admite {@link TextStyle#FULL} y {@link TextStyle#SHORT}. La palabra `GMT` es
-     * literal --tambien en el JDK, que tiene ahi un `TODO` sin resolver--, asi que las dos salidas
-     * coinciden en cualquier locale.
+     * <p>It admits {@link TextStyle#FULL} and {@link TextStyle#SHORT} only. The word `GMT` is a
+     * literal --in the JDK too, which has an unresolved `TODO` there-- so the two outputs agree in
+     * any locale.
      *
-     * @throws IllegalArgumentException si el estilo no es FULL ni SHORT
-     * @throws NullPointerException si `style` es nulo
+     * @throws IllegalArgumentException if the style is neither FULL nor SHORT
+     * @throws NullPointerException if `style` is null
      */
     public DateTimeFormatterBuilder appendLocalizedOffset(TextStyle style) {
         if (style == null) {
@@ -431,44 +432,45 @@ public final class DateTimeFormatterBuilder {
         if (style != TextStyle.FULL && style != TextStyle.SHORT) {
             throw new IllegalArgumentException("Style must be either full or short");
         }
-        return this.agregar(new PiezaOffsetLocalizado(style));
+        return this.add(new LocalizedOffsetPart(style));
     }
 
     /**
-     * Una fecha, una hora o las dos, con el formato que el locale usa para ese estilo.
+     * A date, a time or both, with the format the locale uses for that style.
      *
-     * <p>El patron se resuelve al usar el formateador y no al armarlo, asi que un
-     * {@link DateTimeFormatter#withLocale} posterior cambia el formato. Ver
+     * <p>The pattern is resolved when the formatter is used and not when it is built, so a later
+     * {@link DateTimeFormatter#withLocale} changes the format. See
      * {@link #getLocalizedDateTimePattern}.
      *
-     * @throws IllegalArgumentException si los dos estilos son nulos
+     * @throws IllegalArgumentException if both styles are null
      */
     public DateTimeFormatterBuilder appendLocalized(FormatStyle dateStyle, FormatStyle timeStyle) {
         if (dateStyle == null && timeStyle == null) {
             throw new IllegalArgumentException("Either the date or time style must be non-null");
         }
-        return this.agregar(new PiezaLocalizada(dateStyle, timeStyle));
+        return this.add(new LocalizedPart(dateStyle, timeStyle));
     }
 
     /**
-     * El patron que ese locale usa para una fecha y/o una hora de ese estilo.
+     * The pattern that locale uses for a date and/or a time of that style.
      *
-     * <p><strong>De donde sale.</strong> De la misma tabla que
-     * {@code DateFormat.getDateInstance(estilo, locale)}, que esta biblioteca si trae. Se verifico
-     * contra el JDK real --cuatro estilos, tres combinaciones, siete locales-- que los dos devuelven
-     * exactamente el mismo patron; no es una equivalencia supuesta.
+     * <p><strong>Where it comes from.</strong> From the same table as
+     * {@code DateFormat.getDateInstance(style, locale)}, which this library does ship. It was
+     * verified against the real JDK --four styles, three combinations, seven locales-- that the two
+     * return exactly the same pattern; it is not an assumed equivalence.
      *
-     * <p>La cronologia se recibe y se exige no nula, como en el JDK, pero no cambia el resultado:
-     * los patrones que hay son los del calendario ISO.
+     * <p>The chronology is taken and required to be non-null, as in the JDK, but it does not change
+     * the result: the only patterns there are are the ISO calendar's.
      *
-     * <p><strong>Un locale sin datos propios cae en el mas cercano que haya</strong>, que es como se
-     * comporta {@code java.text} en esta biblioteca: {@code en_GB} termina devolviendo los patrones
-     * de {@code en_US}. Cuales tienen datos propios lo dice
-     * {@link DecimalStyle#getAvailableLocales}. No es una respuesta inventada --sale de una tabla
-     * real-- pero tampoco es la del locale que se pidio, y conviene saberlo antes de creerle.
+     * <p><strong>A locale with no data of its own falls back to the nearest one there is</strong>,
+     * which is how {@code java.text} behaves in this library: {@code en_GB} ends up returning
+     * {@code en_US}'s patterns. Which ones have data of their own is told by
+     * {@link DecimalStyle#getAvailableLocales}. It is not an invented answer --it comes out of a
+     * real table-- but neither is it the requested locale's, and that is worth knowing before
+     * believing it.
      *
-     * @throws IllegalArgumentException si los dos estilos son nulos
-     * @throws NullPointerException si `chrono` o `locale` son nulos
+     * @throws IllegalArgumentException if both styles are null
+     * @throws NullPointerException if `chrono` or `locale` are null
      */
     public static String getLocalizedDateTimePattern(FormatStyle dateStyle, FormatStyle timeStyle,
             java.time.chrono.Chronology chrono, Locale locale) {
@@ -481,11 +483,11 @@ public final class DateTimeFormatterBuilder {
         if (dateStyle == null && timeStyle == null) {
             throw new IllegalArgumentException("Either dateStyle or timeStyle must be non-null");
         }
-        return PatronLocalizado.de(dateStyle, timeStyle, locale);
+        return LocalizedPattern.of(dateStyle, timeStyle, locale);
     }
 
     public DateTimeFormatterBuilder appendInstant() {
-        return this.agregar(new PiezaInstante(-2));
+        return this.add(new InstantPart(-2));
     }
 
     public DateTimeFormatterBuilder appendInstant(int fractionalDigits) {
@@ -493,104 +495,104 @@ public final class DateTimeFormatterBuilder {
             throw new IllegalArgumentException("The fractional digits must be from -1 to 9 inclusive"
                     + " but was " + fractionalDigits);
         }
-        return this.agregar(new PiezaInstante(fractionalDigits));
+        return this.add(new InstantPart(fractionalDigits));
     }
 
-    // ---------------------------------------------------------------- ajustes del parseo
+    // ---------------------------------------------------------------- parse settings
 
     public DateTimeFormatterBuilder parseCaseSensitive() {
-        return this.agregar(new PiezaAjuste(PiezaAjuste.SENSIBLE));
+        return this.add(new SettingsPart(SettingsPart.CASE_SENSITIVE));
     }
 
     public DateTimeFormatterBuilder parseCaseInsensitive() {
-        return this.agregar(new PiezaAjuste(PiezaAjuste.INSENSIBLE));
+        return this.add(new SettingsPart(SettingsPart.CASE_INSENSITIVE));
     }
 
     public DateTimeFormatterBuilder parseStrict() {
-        return this.agregar(new PiezaAjuste(PiezaAjuste.ESTRICTO));
+        return this.add(new SettingsPart(SettingsPart.STRICT));
     }
 
     public DateTimeFormatterBuilder parseLenient() {
-        return this.agregar(new PiezaAjuste(PiezaAjuste.LAXO));
+        return this.add(new SettingsPart(SettingsPart.LENIENT));
     }
 
     public DateTimeFormatterBuilder parseDefaulting(TemporalField field, long value) {
         if (field == null) {
             throw new NullPointerException("field");
         }
-        return this.agregar(new PiezaPorDefecto(field, value));
+        return this.add(new DefaultPart(field, value));
     }
 
-    // ---------------------------------------------------------------- relleno
+    // ---------------------------------------------------------------- padding
 
     public DateTimeFormatterBuilder padNext(int padWidth) {
         return this.padNext(padWidth, ' ');
     }
 
-    // Afecta **a la proxima pieza y a ninguna mas**. Es lo que dice el JDK, y es lo razonable: el
-    // relleno es del campo, no del formateador.
+    // It affects **the next part and no other**. That is what the JDK says, and it is the
+    // reasonable thing: the padding belongs to the field, not to the formatter.
     public DateTimeFormatterBuilder padNext(int padWidth, char padChar) {
         if (padWidth < 1) {
             throw new IllegalArgumentException("The pad width must be at least one but was "
                     + padWidth);
         }
-        this.activo.anchoRelleno = padWidth;
-        this.activo.relleno = padChar;
+        this.active.padWidth = padWidth;
+        this.active.padChar = padChar;
         return this;
     }
 
-    // ---------------------------------------------------------------- secciones opcionales
+    // ---------------------------------------------------------------- optional sections
 
     public DateTimeFormatterBuilder optionalStart() {
-        this.activo = new DateTimeFormatterBuilder(this.activo, true);
+        this.active = new DateTimeFormatterBuilder(this.active, true);
         return this;
     }
 
     public DateTimeFormatterBuilder optionalEnd() {
-        if (this.activo.padre == null) {
+        if (this.active.parent == null) {
             throw new IllegalStateException("Cannot call optionalEnd() as there was no previous call"
                     + " to optionalStart()");
         }
-        DateTimeFormatterBuilder cerrada = this.activo;
-        this.activo = cerrada.padre;
-        if (cerrada.piezas.size() > 0) {
-            this.agregar(cerrada.compuesta());
+        DateTimeFormatterBuilder closed = this.active;
+        this.active = closed.parent;
+        if (closed.parts.size() > 0) {
+            this.add(closed.composite());
         }
         return this;
     }
 
-    // ---------------------------------------------------------------- composicion
+    // ---------------------------------------------------------------- composition
 
     public DateTimeFormatterBuilder append(DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        return this.agregar(formatter.piezas());
+        return this.add(formatter.parts());
     }
 
     public DateTimeFormatterBuilder appendOptional(DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        return this.agregar(new PiezaCompuesta(new Pieza[] {formatter.piezas()}, true));
+        return this.add(new CompositePart(new Part[] {formatter.parts()}, true));
     }
 
-    private PiezaCompuesta compuesta() {
-        Pieza[] a = new Pieza[this.piezas.size()];
+    private CompositePart composite() {
+        Part[] a = new Part[this.parts.size()];
         int i = 0;
         while (i < a.length) {
-            a[i] = this.piezas.get(i);
+            a[i] = this.parts.get(i);
             i = i + 1;
         }
-        return new PiezaCompuesta(a, this.opcional);
+        return new CompositePart(a, this.optional);
     }
 
     public DateTimeFormatter toFormatter() {
-        // **Divergencia deliberada**: el JDK usa el locale por defecto de la maquina. Aca es
-        // `Locale.ROOT`, porque el unico juego de nombres que hay es el de la raiz, y tomar el locale
-        // de la maquina haria que `ofPattern("dd MMM yyyy")` tirara en cualquier equipo que no este
-        // en ingles --por una limitacion de datos que no tiene nada que ver con lo que el llamador
-        // pidio--. `toFormatter(Locale)` deja elegir explicitamente.
+        // **Deliberate divergence**: the JDK uses the machine's default locale. Here it is
+        // `Locale.ROOT`, because the only name set there is is the root's, and taking the machine's
+        // locale would make `ofPattern("dd MMM yyyy")` throw on any box that is not in English
+        // --over a data limitation that has nothing to do with what the caller asked for--.
+        // `toFormatter(Locale)` lets the choice be made explicitly.
         return this.toFormatter(Locale.ROOT);
     }
 
@@ -598,41 +600,41 @@ public final class DateTimeFormatterBuilder {
         if (locale == null) {
             throw new NullPointerException("locale");
         }
-        while (this.activo.padre != null) {
+        while (this.active.parent != null) {
             this.optionalEnd();
         }
-        return new DateTimeFormatter(this.compuesta(), locale, DecimalStyle.STANDARD,
+        return new DateTimeFormatter(this.composite(), locale, DecimalStyle.STANDARD,
                 ResolverStyle.SMART, null, null, null);
     }
 
-    // ---------------------------------------------------------------- el patron
+    // ---------------------------------------------------------------- the pattern
 
     public DateTimeFormatterBuilder appendPattern(String pattern) {
         if (pattern == null) {
             throw new NullPointerException("pattern");
         }
-        this.compilar(pattern);
+        this.compile(pattern);
         return this;
     }
 
-    // El compilador del lenguaje de patrones. Cada letra se traduce a las mismas piezas que el
-    // `append` correspondiente produce, y **las letras que necesitarian CLDR se rechazan con el
-    // motivo**: es preferible un error en el sitio donde se escribio el patron a un formateador que
-    // escribe en el idioma equivocado.
-    private void compilar(String p) {
+    // The pattern language's compiler. Each letter translates into the same parts the corresponding
+    // `append` produces, and **the letters that would need CLDR are rejected with the reason**: an
+    // error at the place where the pattern was written is preferable to a formatter that writes in
+    // the wrong language.
+    private void compile(String p) {
         int i = 0;
         while (i < p.length()) {
             char c = p.charAt(i);
             if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-                int inicio = i;
+                int start = i;
                 while (i < p.length() && p.charAt(i) == c) {
                     i = i + 1;
                 }
-                this.letra(c, i - inicio, p);
+                this.letter(c, i - start, p);
             } else if (c == '\'') {
                 i = i + 1;
                 StringBuilder lit = new StringBuilder();
-                boolean cerrada = false;
+                boolean closed = false;
                 while (i < p.length()) {
                     if (p.charAt(i) == '\'') {
                         if (i + 1 < p.length() && p.charAt(i + 1) == '\'') {
@@ -640,7 +642,7 @@ public final class DateTimeFormatterBuilder {
                             i = i + 2;
                         } else {
                             i = i + 1;
-                            cerrada = true;
+                            closed = true;
                             break;
                         }
                     } else {
@@ -648,12 +650,12 @@ public final class DateTimeFormatterBuilder {
                         i = i + 1;
                     }
                 }
-                if (!cerrada) {
+                if (!closed) {
                     throw new IllegalArgumentException("Pattern ends with an incomplete string"
                             + " literal: " + p);
                 }
                 if (lit.length() == 0) {
-                    // `''` suelto es una comilla literal.
+                    // A lone `''` is a literal quote.
                     this.appendLiteral('\'');
                 } else {
                     this.appendLiteral(lit.toString());
@@ -674,27 +676,27 @@ public final class DateTimeFormatterBuilder {
         }
     }
 
-    private static void noHayCldr(char c, String que) {
-        throw new IllegalArgumentException("Pattern letter '" + c + "' needs " + que
+    private static void noCldr(char c, String what) {
+        throw new IllegalArgumentException("Pattern letter '" + c + "' needs " + what
                 + ", which comes from CLDR locale data that this library does not ship."
                 + " Use a numeric field, or appendText(field, Map) with your own names.");
     }
 
-    private void letra(char c, int n, String patron) {
+    private void letter(char c, int n, String pattern) {
         if (c == 'u' || c == 'y') {
-            // `u` es el anio proleptico y `y` el anio de la era. Con dos letras los dos se recortan a
-            // los ultimos dos digitos, con la ventana 2000-2099.
-            TemporalField campo = c == 'u' ? ChronoField.YEAR : ChronoField.YEAR_OF_ERA;
+            // `u` is the proleptic year and `y` the year of era. With two letters both are cut down
+            // to the last two digits, with the 2000-2099 window.
+            TemporalField field = c == 'u' ? ChronoField.YEAR : ChronoField.YEAR_OF_ERA;
             if (n == 2) {
-                this.appendValueReduced(campo, 2, 2, 2000);
+                this.appendValueReduced(field, 2, 2, 2000);
             } else {
-                this.appendValue(campo, n, 10, n < 4 ? SignStyle.NORMAL : SignStyle.EXCEEDS_PAD);
+                this.appendValue(field, n, 10, n < 4 ? SignStyle.NORMAL : SignStyle.EXCEEDS_PAD);
             }
         } else if (c == 'M' || c == 'L') {
             if (n <= 2) {
                 this.appendValue(ChronoField.MONTH_OF_YEAR, n, 2, SignStyle.NOT_NEGATIVE);
             } else {
-                this.appendText(ChronoField.MONTH_OF_YEAR, estilo(n, c == 'L'));
+                this.appendText(ChronoField.MONTH_OF_YEAR, style(n, c == 'L'));
             }
         } else if (c == 'd') {
             this.appendValue(ChronoField.DAY_OF_MONTH, n, 2, SignStyle.NOT_NEGATIVE);
@@ -703,11 +705,11 @@ public final class DateTimeFormatterBuilder {
         } else if (c == 'g') {
             this.appendValue(JulianFields.MODIFIED_JULIAN_DAY, n, 19, SignStyle.NORMAL);
         } else if (c == 'E') {
-            this.appendText(ChronoField.DAY_OF_WEEK, estilo(n, false));
+            this.appendText(ChronoField.DAY_OF_WEEK, style(n, false));
         } else if (c == 'G') {
-            this.appendText(ChronoField.ERA, estilo(n, false));
+            this.appendText(ChronoField.ERA, style(n, false));
         } else if (c == 'a') {
-            this.appendText(ChronoField.AMPM_OF_DAY, estilo(n, false));
+            this.appendText(ChronoField.AMPM_OF_DAY, style(n, false));
         } else if (c == 'h') {
             this.appendValue(ChronoField.CLOCK_HOUR_OF_AMPM, n, 2, SignStyle.NOT_NEGATIVE);
         } else if (c == 'K') {
@@ -721,7 +723,7 @@ public final class DateTimeFormatterBuilder {
         } else if (c == 's') {
             this.appendValue(ChronoField.SECOND_OF_MINUTE, n, 2, SignStyle.NOT_NEGATIVE);
         } else if (c == 'S') {
-            // `S` es la fraccion, no el numero: `.5` es medio segundo y no cinco nanos.
+            // `S` is the fraction, not the number: `.5` is half a second and not five nanos.
             this.appendFraction(ChronoField.NANO_OF_SECOND, n, n, false);
         } else if (c == 'A') {
             this.appendValue(ChronoField.MILLI_OF_DAY, n, 19, SignStyle.NOT_NEGATIVE);
@@ -733,38 +735,39 @@ public final class DateTimeFormatterBuilder {
             if (n <= 2) {
                 this.appendValue(IsoFields.QUARTER_OF_YEAR, n, 2, SignStyle.NOT_NEGATIVE);
             } else {
-                noHayCldr(c, "quarter names");
+                noCldr(c, "quarter names");
             }
         } else if (c == 'V') {
             if (n != 2) {
                 throw new IllegalArgumentException("Pattern letter count must be 2 for 'V': "
-                        + patron);
+                        + pattern);
             }
             this.appendZoneId();
         } else if (c == 'v') {
-            noHayCldr(c, "generic zone names");
+            noCldr(c, "generic zone names");
         } else if (c == 'z') {
-            noHayCldr(c, "zone names");
+            noCldr(c, "zone names");
         } else if (c == 'O') {
-            noHayCldr(c, "localized offset text (\"GMT+8\")");
+            noCldr(c, "localized offset text (\"GMT+8\")");
         } else if (c == 'B') {
-            noHayCldr(c, "day period text (\"in the morning\")");
+            noCldr(c, "day period text (\"in the morning\")");
         } else if (c == 'w' || c == 'W' || c == 'e' || c == 'c') {
-            // La semana del anio depende de que dia empieza la semana y de cuantos dias tiene la
-            // primera, y las dos cosas cambian por region --dato del CLDR--. `IsoFields` da la
-            // version ISO, que si es fija: se llega por `appendValue(IsoFields.WEEK_OF_WEEK_BASED_YEAR, ...)`.
-            noHayCldr(c, "locale week rules (first day of week, minimal days in first week)");
+            // The week of the year depends on which day the week starts on and on how many days the
+            // first one has, and both change by region --CLDR data--. `IsoFields` gives the ISO
+            // version, which is fixed: it is reached through
+            // `appendValue(IsoFields.WEEK_OF_WEEK_BASED_YEAR, ...)`.
+            noCldr(c, "locale week rules (first day of week, minimal days in first week)");
         } else if (c == 'p') {
-            // El relleno se aplica a lo que venga despues, que es como el JDK lo define.
+            // The padding applies to whatever comes next, which is how the JDK defines it.
             this.padNext(n);
         } else if (c == 'x' || c == 'X' || c == 'Z') {
-            this.offsetDePatron(c, n, patron);
+            this.patternOffset(c, n, pattern);
         } else {
             throw new IllegalArgumentException("Unknown pattern letter: " + c);
         }
     }
 
-    private static TextStyle estilo(int n, boolean solo) {
+    private static TextStyle style(int n, boolean standalone) {
         TextStyle t;
         if (n == 5) {
             t = TextStyle.NARROW;
@@ -773,16 +776,16 @@ public final class DateTimeFormatterBuilder {
         } else {
             t = TextStyle.SHORT;
         }
-        return solo ? t.asStandalone() : t;
+        return standalone ? t.asStandalone() : t;
     }
 
-    private void offsetDePatron(char c, int n, String patron) {
-        String[] formas = {"+HHmm", "+HHMM", "+HH:MM", "+HHMMss", "+HH:MM:ss"};
+    private void patternOffset(char c, int n, String pattern) {
+        String[] forms = {"+HHmm", "+HHMM", "+HH:MM", "+HHMMss", "+HH:MM:ss"};
         if (c == 'Z') {
             if (n <= 3) {
                 this.appendOffset("+HHMM", "+0000");
             } else if (n == 4) {
-                noHayCldr(c, "localized offset text (\"GMT+8\")");
+                noCldr(c, "localized offset text (\"GMT+8\")");
             } else if (n == 5) {
                 this.appendOffset("+HH:MM:ss", "Z");
             } else {
@@ -793,8 +796,8 @@ public final class DateTimeFormatterBuilder {
         if (n < 1 || n > 5) {
             throw new IllegalArgumentException("Too many pattern letters: " + c);
         }
-        // `X` escribe `Z` para el cero; `x` lo escribe con numeros. Es la unica diferencia entre las
-        // dos letras, y por eso comparten la tabla de formas.
-        this.appendOffset(formas[n - 1], c == 'X' ? "Z" : "");
+        // `X` writes `Z` for zero; `x` writes it with digits. It is the only difference between the
+        // two letters, and that is why they share the table of forms.
+        this.appendOffset(forms[n - 1], c == 'X' ? "Z" : "");
     }
 }

@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Dictionary;
 import java.util.Enumeration;
 import java.util.Map;
@@ -43,7 +45,7 @@ import java.util.Map;
 // equals/hashCode are omitted too, and for a reason rather than for effort: Map equality is
 // defined over entry sets, and our `Map` has no entrySet to compare against an arbitrary
 // other Map with.
-public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
+public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Serializable, Cloneable {
 
     // The buckets. `table[i]` is the head of the chain for index i, or null for an empty
     // bucket. Package-private so the enumerator can walk it without going through the lock.

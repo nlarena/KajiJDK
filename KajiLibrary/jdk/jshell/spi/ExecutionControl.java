@@ -9,143 +9,144 @@ import java.util.Map;
 import java.util.ServiceLoader;
 
 /**
- * El motor que ejecuta lo que se escribe en `jshell`.
+ * The engine that runs what is typed into `jshell`.
  *
- * <p>Es la frontera entre la mitad que **compila** y la mitad que **corre**, y esa frontera existe
- * porque las dos suelen estar en procesos distintos: `jshell` compila cada fragmento a un `.class`
- * en su propia VM y se lo manda a otra para ejecutarlo. La razon es que el codigo que uno teclea en
- * una consola se cuelga, se rompe y llama a `System.exit`, y ninguna de las tres cosas puede
- * llevarse puesta la consola.
+ * <p>It is the border between the half that **compiles** and the half that **runs**, and that border
+ * exists because the two are usually in different processes: `jshell` compiles each snippet to a
+ * `.class` in its own VM and sends it to another one to execute. The reason is that code typed into
+ * a console hangs, breaks and calls `System.exit`, and none of those three may take the console down
+ * with it.
  *
- * <p>De ahi la forma de la interfaz, que si no se lee rara:
+ * <p>Hence the shape of the interface, which otherwise reads oddly:
  *
  * <ul>
- *   <li>{@link #load} y {@link #redefine} mandan **bytes**, no objetos: del otro lado no hay las
- *       mismas clases.
- *   <li>{@link #invoke} y {@link #varValue} devuelven **cadenas**: el valor real vive en la otra
- *       VM, y lo unico que puede cruzar es su representacion.
- *   <li>{@link #stop} existe aparte de `close`: cortar un fragmento colgado no es cerrar el motor.
+ *   <li>{@link #load} and {@link #redefine} send **bytes**, not objects: the same classes are not
+ *       there on the other side.
+ *   <li>{@link #invoke} and {@link #varValue} return **strings**: the real value lives in the other
+ *       VM, and the only thing that can cross is its representation.
+ *   <li>{@link #stop} exists apart from `close`: cutting off a hung snippet is not closing the
+ *       engine.
  * </ul>
  *
- * <p>Las excepciones anidadas dividen el mismo eje: {@link RunException} es "el codigo del usuario
- * fallo" --se muestra y la sesion sigue-- y {@link EngineTerminationException} es "el motor se
- * murio" --hay que rearmarlo.
+ * <p>The nested exceptions split along the same axis: {@link RunException} is "the user's code
+ * failed" --it is shown and the session goes on-- and {@link EngineTerminationException} is "the
+ * engine died" --it has to be rebuilt.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>La interfaz y sus diez tipos anidados estan enteros; los dos {@code generate} estaticos
- * tambien, y de verdad: buscan el proveedor con {@link ServiceLoader} y le pasan los parametros.
- * Lo que no hay es ningun proveedor instalado, asi que hoy lanzan
- * {@link IllegalArgumentException} por no encontrarlo --que es lo mismo que hace el JDK cuando se
- * nombra un motor que no esta.
+ * <p>The interface and its ten nested types are complete; so are the two static {@code generate}
+ * methods, and really so: they look the provider up with {@link ServiceLoader} and pass it the
+ * parameters. What there is not is any installed provider, so today they throw
+ * {@link IllegalArgumentException} for not finding one --which is exactly what the JDK does when an
+ * engine that is not there is named.
  *
  * @since 9
  */
 public interface ExecutionControl extends AutoCloseable {
 
     /**
-     * Carga esas clases en el motor.
+     * Loads those classes into the engine.
      *
-     * @param cbcs las clases, cada una con su nombre y sus bytes
-     * @throws ClassInstallException si alguna no se pudo cargar; la excepcion dice cuales si
-     * @throws NotImplementedException si el motor no sabe cargar clases
-     * @throws EngineTerminationException si el motor se murio
+     * @param cbcs the classes, each with its name and its bytes
+     * @throws ClassInstallException if any could not be loaded; the exception says which ones were
+     * @throws NotImplementedException if the engine cannot load classes
+     * @throws EngineTerminationException if the engine died
      */
     void load(ClassBytecodes[] cbcs)
             throws ClassInstallException, NotImplementedException, EngineTerminationException;
 
     /**
-     * Reemplaza el cuerpo de clases ya cargadas.
+     * Replaces the body of classes that are already loaded.
      *
-     * <p>Es lo que permite redefinir un metodo sin reiniciar la sesion. No todos los motores
-     * pueden: el que no puede lanza {@link NotImplementedException} y `jshell` recompila.
+     * <p>It is what allows a method to be redefined without restarting the session. Not every engine
+     * can: one that cannot throws {@link NotImplementedException} and `jshell` recompiles.
      *
-     * @throws ClassInstallException si alguna no se pudo redefinir
-     * @throws NotImplementedException si el motor no sabe redefinir
-     * @throws EngineTerminationException si el motor se murio
+     * @throws ClassInstallException if any could not be redefined
+     * @throws NotImplementedException if the engine cannot redefine
+     * @throws EngineTerminationException if the engine died
      */
     void redefine(ClassBytecodes[] cbcs)
             throws ClassInstallException, NotImplementedException, EngineTerminationException;
 
     /**
-     * Llama a un metodo estatico sin argumentos y devuelve su resultado como texto.
+     * Calls a static method with no arguments and returns its result as text.
      *
-     * @param className la clase
-     * @param methodName el metodo, estatico y sin argumentos
-     * @return el resultado ya convertido a texto en la VM que ejecuta
-     * @throws RunException si el codigo del usuario lanzo, se corto o no resolvio
-     * @throws EngineTerminationException si el motor se murio
-     * @throws InternalException si fallo la maquinaria, no el codigo del usuario
+     * @param className the class
+     * @param methodName the method, static and with no arguments
+     * @return the result, already turned into text in the executing VM
+     * @throws RunException if the user's code threw, was stopped or did not resolve
+     * @throws EngineTerminationException if the engine died
+     * @throws InternalException if the machinery failed, not the user's code
      */
     String invoke(String className, String methodName)
             throws RunException, EngineTerminationException, InternalException;
 
     /**
-     * El valor de una variable, como texto.
+     * A variable's value, as text.
      *
-     * @param className la clase que la declara
-     * @param varName el nombre de la variable
-     * @throws RunException si leerla lanzo
-     * @throws EngineTerminationException si el motor se murio
-     * @throws InternalException si fallo la maquinaria
+     * @param className the class that declares it
+     * @param varName the variable's name
+     * @throws RunException if reading it threw
+     * @throws EngineTerminationException if the engine died
+     * @throws InternalException if the machinery failed
      */
     String varValue(String className, String varName)
             throws RunException, EngineTerminationException, InternalException;
 
     /**
-     * Agrega una ruta al classpath del motor.
+     * Adds a path to the engine's classpath.
      *
-     * @throws EngineTerminationException si el motor se murio
-     * @throws InternalException si la ruta no se pudo agregar
+     * @throws EngineTerminationException if the engine died
+     * @throws InternalException if the path could not be added
      */
     void addToClasspath(String path) throws EngineTerminationException, InternalException;
 
     /**
-     * Corta lo que se este ejecutando.
+     * Stops whatever is executing.
      *
-     * <p>Se llama **desde otro hilo**: el que pidio la ejecucion esta bloqueado esperandola. El
-     * motor sigue vivo despues.
+     * <p>It is called **from another thread**: the one that asked for the execution is blocked
+     * waiting for it. The engine stays alive afterwards.
      *
-     * @throws EngineTerminationException si el motor se murio
-     * @throws InternalException si no se pudo cortar
+     * @throws EngineTerminationException if the engine died
+     * @throws InternalException if it could not be stopped
      */
     void stop() throws EngineTerminationException, InternalException;
 
     /**
-     * Una operacion propia de este motor, que la interfaz no cubre.
+     * An operation of this engine's own, which the interface does not cover.
      *
-     * <p>Es la valvula de escape del SPI: un motor con capacidades extra las expone por aca, y el
-     * cliente que las conozca las nombra por su cadena.
+     * <p>It is the SPI's escape hatch: an engine with extra capabilities exposes them here, and the
+     * client that knows them names them by their string.
      *
-     * @throws RunException si el codigo del usuario lanzo
-     * @throws EngineTerminationException si el motor se murio
-     * @throws InternalException si el motor no conoce ese comando
+     * @throws RunException if the user's code threw
+     * @throws EngineTerminationException if the engine died
+     * @throws InternalException if the engine does not know that command
      */
     Object extensionCommand(String command, Object arg)
             throws RunException, EngineTerminationException, InternalException;
 
     /**
-     * Cierra el motor.
+     * Closes the engine.
      *
-     * <p>Redeclarado sin {@code throws} --{@link AutoCloseable#close()} lo declara-- para que un
-     * `try`-con-recursos sobre un `ExecutionControl` no obligue a atrapar nada.
+     * <p>Redeclared without {@code throws} --{@link AutoCloseable#close()} declares it-- so that a
+     * try-with-resources over an `ExecutionControl` does not force anything to be caught.
      */
     @Override
     void close();
 
     /**
-     * El motor que nombre esa especificacion.
+     * The engine that specification names.
      *
-     * <p>La especificacion es {@code nombre} o {@code nombre:clave(valor),clave(valor)}. El nombre
-     * se busca entre los {@link ExecutionControlProvider} instalados; los parametros se le pasan
-     * encima de sus {@link ExecutionControlProvider#defaultParameters()}.
+     * <p>The specification is {@code name} or {@code name:key(value),key(value)}. The name is looked
+     * up among the installed {@link ExecutionControlProvider}s; the parameters are passed on top of
+     * its {@link ExecutionControlProvider#defaultParameters()}.
      *
-     * @param env el entorno que el motor usa para hablar con el usuario
-     * @param spec la especificacion
-     * @return el motor
-     * @throws IllegalArgumentException si la especificacion esta mal formada o nombra un motor que
-     *     no esta instalado
-     * @throws Throwable lo que sea que el proveedor lance al construirlo
+     * @param env the environment the engine uses to talk to the user
+     * @param spec the specification
+     * @return the engine
+     * @throws IllegalArgumentException if the specification is malformed or names an engine that is
+     *     not installed
+     * @throws Throwable whatever the provider throws while building it
      */
     static ExecutionControl generate(ExecutionEnv env, String spec) throws Throwable {
         if (env == null) {
@@ -154,23 +155,23 @@ public interface ExecutionControl extends AutoCloseable {
         if (spec == null) {
             throw new NullPointerException("spec");
         }
-        int corte = spec.indexOf(':');
-        String nombre = corte < 0 ? spec : spec.substring(0, corte);
-        Map<String, String> parametros = corte < 0
+        int colon = spec.indexOf(':');
+        String name = colon < 0 ? spec : spec.substring(0, colon);
+        Map<String, String> parameters = colon < 0
                 ? new HashMap<String, String>()
-                : parsearParametros(spec.substring(corte + 1));
-        return generate(env, nombre.trim(), parametros);
+                : parseParameters(spec.substring(colon + 1));
+        return generate(env, name.trim(), parameters);
     }
 
     /**
-     * El motor de ese nombre, con esos parametros.
+     * The engine of that name, with those parameters.
      *
-     * @param env el entorno que el motor usa para hablar con el usuario
-     * @param name el nombre del proveedor
-     * @param parameters los parametros, o `null` para los del proveedor
-     * @return el motor
-     * @throws IllegalArgumentException si no hay ningun proveedor con ese nombre
-     * @throws Throwable lo que sea que el proveedor lance al construirlo
+     * @param env the environment the engine uses to talk to the user
+     * @param name the provider's name
+     * @param parameters the parameters, or `null` for the provider's own
+     * @return the engine
+     * @throws IllegalArgumentException if there is no provider with that name
+     * @throws Throwable whatever the provider throws while building it
      */
     static ExecutionControl generate(ExecutionEnv env, String name, Map<String, String> parameters)
             throws Throwable {
@@ -191,29 +192,29 @@ public interface ExecutionControl extends AutoCloseable {
         throw new IllegalArgumentException("no ExecutionControlProvider named: " + name);
     }
 
-    /** Parte {@code clave(valor),clave(valor)}. De uso interno de los dos `generate`. */
-    private static Map<String, String> parsearParametros(String texto) {
+    /** Splits {@code key(value),key(value)}. For the two `generate` methods' internal use. */
+    private static Map<String, String> parseParameters(String text) {
         Map<String, String> out = new HashMap<String, String>();
         int i = 0;
-        int n = texto.length();
+        int n = text.length();
         while (i < n) {
-            int abre = texto.indexOf('(', i);
-            if (abre < 0) {
-                throw new IllegalArgumentException("expected '(' in: " + texto);
+            int open = text.indexOf('(', i);
+            if (open < 0) {
+                throw new IllegalArgumentException("expected '(' in: " + text);
             }
-            int cierra = texto.indexOf(')', abre);
-            if (cierra < 0) {
-                throw new IllegalArgumentException("expected ')' in: " + texto);
+            int close = text.indexOf(')', open);
+            if (close < 0) {
+                throw new IllegalArgumentException("expected ')' in: " + text);
             }
-            String clave = texto.substring(i, abre).trim();
-            if (clave.isEmpty()) {
-                throw new IllegalArgumentException("empty parameter name in: " + texto);
+            String key = text.substring(i, open).trim();
+            if (key.isEmpty()) {
+                throw new IllegalArgumentException("empty parameter name in: " + text);
             }
-            out.put(clave, texto.substring(abre + 1, cierra));
-            i = cierra + 1;
+            out.put(key, text.substring(open + 1, close));
+            i = close + 1;
             if (i < n) {
-                if (texto.charAt(i) != ',') {
-                    throw new IllegalArgumentException("expected ',' in: " + texto);
+                if (text.charAt(i) != ',') {
+                    throw new IllegalArgumentException("expected ',' in: " + text);
                 }
                 i++;
             }
@@ -222,10 +223,11 @@ public interface ExecutionControl extends AutoCloseable {
     }
 
     /**
-     * Una clase compilada, lista para mandar al motor.
+     * A compiled class, ready to send to the engine.
      *
-     * <p>{@link Serializable} porque tiene que cruzar a la otra VM; y por eso mismo copia los bytes
-     * al entrar y al salir, para que nadie modifique lo que ya se mando.
+     * <p>{@link Serializable} because it has to cross to the other VM; and for that same reason it
+     * copies the bytes on the way in and on the way out, so that nobody modifies what has already
+     * been sent.
      */
     final class ClassBytecodes implements Serializable {
 
@@ -235,36 +237,36 @@ public interface ExecutionControl extends AutoCloseable {
         private final byte[] bytecodes;
 
         /**
-         * Una clase con ese nombre y esos bytes.
+         * A class with that name and those bytes.
          *
-         * @param name el nombre binario
-         * @param bytecodes el contenido del `.class`; se copia
+         * @param name the binary name
+         * @param bytecodes the `.class` contents; it is copied
          */
         public ClassBytecodes(String name, byte[] bytecodes) {
             this.name = name;
             this.bytecodes = bytecodes.clone();
         }
 
-        /** Una copia de los bytes del `.class`. */
+        /** A copy of the `.class` bytes. */
         public byte[] bytecodes() {
             return this.bytecodes.clone();
         }
 
-        /** El nombre binario de la clase. */
+        /** The class's binary name. */
         public String name() {
             return this.name;
         }
     }
 
-    /** La raiz de todo lo que puede salir mal en un motor. */
+    /** The root of everything that can go wrong in an engine. */
     abstract class ExecutionControlException extends Exception {
 
         private static final long serialVersionUID = 1L;
 
         /**
-         * Con ese detalle.
+         * With that detail.
          *
-         * @param message el detalle
+         * @param message the detail
          */
         public ExecutionControlException(String message) {
             super(message);
@@ -272,10 +274,10 @@ public interface ExecutionControl extends AutoCloseable {
     }
 
     /**
-     * No se pudieron instalar todas las clases.
+     * Not all the classes could be installed.
      *
-     * <p>Trae **cuales si** entraron: la carga no es atomica, y `jshell` necesita saber que quedo
-     * a medio camino para no volver a mandarlo.
+     * <p>It carries **which ones did** get in: loading is not atomic, and `jshell` needs to know what
+     * was left half done so as not to send it again.
      */
     class ClassInstallException extends ExecutionControlException {
 
@@ -284,51 +286,51 @@ public interface ExecutionControl extends AutoCloseable {
         private final boolean[] installed;
 
         /**
-         * Con ese detalle y ese mapa de exito.
+         * With that detail and that success map.
          *
-         * @param message el detalle
-         * @param installed una posicion por clase, en el orden en que se mandaron
+         * @param message the detail
+         * @param installed one position per class, in the order they were sent
          */
         public ClassInstallException(String message, boolean[] installed) {
             super(message);
             this.installed = installed == null ? null : installed.clone();
         }
 
-        /** Que clases entraron, en el orden en que se mandaron. */
+        /** Which classes got in, in the order they were sent. */
         public boolean[] installed() {
             return this.installed == null ? null : this.installed.clone();
         }
     }
 
     /**
-     * El motor se murio: no se le puede pedir nada mas.
+     * The engine died: nothing more can be asked of it.
      *
-     * <p>Es la unica de la familia que **no** deja seguir la sesion. Las demas hablan del codigo
-     * del usuario o de un servicio que falta; esta habla del motor.
+     * <p>It is the only one in the family that does **not** let the session go on. The others speak
+     * of the user's code or of a missing service; this one speaks of the engine.
      */
     class EngineTerminationException extends ExecutionControlException {
 
         private static final long serialVersionUID = 1L;
 
         /**
-         * Con ese detalle.
+         * With that detail.
          *
-         * @param message el detalle
+         * @param message the detail
          */
         public EngineTerminationException(String message) {
             super(message);
         }
     }
 
-    /** Fallo la maquinaria del motor, no el codigo del usuario. */
+    /** The engine's machinery failed, not the user's code. */
     class InternalException extends ExecutionControlException {
 
         private static final long serialVersionUID = 1L;
 
         /**
-         * Con ese detalle.
+         * With that detail.
          *
-         * @param message el detalle
+         * @param message the detail
          */
         public InternalException(String message) {
             super(message);
@@ -336,19 +338,19 @@ public interface ExecutionControl extends AutoCloseable {
     }
 
     /**
-     * Este motor no implementa esa operacion.
+     * This engine does not implement that operation.
      *
-     * <p>Hereda de {@link InternalException} y no de la raiz: para el que llama es un fallo de la
-     * maquinaria, y quien no distingue los casos la maneja igual.
+     * <p>It inherits from {@link InternalException} and not from the root: to the caller it is a
+     * machinery failure, and whoever does not tell the cases apart handles it the same.
      */
     class NotImplementedException extends InternalException {
 
         private static final long serialVersionUID = 1L;
 
         /**
-         * Con ese detalle.
+         * With that detail.
          *
-         * @param message el detalle
+         * @param message the detail
          */
         public NotImplementedException(String message) {
             super(message);
@@ -356,11 +358,11 @@ public interface ExecutionControl extends AutoCloseable {
     }
 
     /**
-     * La ejecucion del codigo del usuario no llego a terminar bien.
+     * The user's code did not finish running properly.
      *
-     * <p>Abstracta y con constructor privado: la lista de subclases es cerrada --lanzo, no resolvio
-     * o se corto-- y un motor no puede inventar una cuarta. Es un tipo sellado escrito antes de que
-     * el lenguaje tuviera `sealed`.
+     * <p>Abstract and with a private constructor: the list of subclasses is closed --it threw, it did
+     * not resolve or it was stopped-- and an engine cannot invent a fourth. It is a sealed type
+     * written before the language had `sealed`.
      */
     abstract class RunException extends ExecutionControlException {
 
@@ -372,10 +374,10 @@ public interface ExecutionControl extends AutoCloseable {
     }
 
     /**
-     * El codigo del usuario lanzo una excepcion.
+     * The user's code threw an exception.
      *
-     * <p>Trae el **nombre** de la clase de la excepcion y no la excepcion: la clase vive en la otra
-     * VM y puede no existir en la de `jshell`.
+     * <p>It carries the exception class's **name** and not the exception: the class lives in the
+     * other VM and may not exist in `jshell`'s.
      */
     class UserException extends RunException {
 
@@ -384,11 +386,11 @@ public interface ExecutionControl extends AutoCloseable {
         private final String causeExceptionClass;
 
         /**
-         * Con ese detalle, esa clase y esa pila.
+         * With that detail, that class and that stack.
          *
-         * @param message el mensaje de la excepcion original
-         * @param causeExceptionClass el nombre de su clase
-         * @param stackElements su pila, tal como se vio en la otra VM
+         * @param message the original exception's message
+         * @param causeExceptionClass its class's name
+         * @param stackElements its stack, as seen in the other VM
          */
         public UserException(String message, String causeExceptionClass,
                 StackTraceElement[] stackElements) {
@@ -397,18 +399,18 @@ public interface ExecutionControl extends AutoCloseable {
             setStackTrace(stackElements);
         }
 
-        /** El nombre de la clase de la excepcion que lanzo el codigo del usuario. */
+        /** The name of the class of the exception the user's code threw. */
         public String causeExceptionClass() {
             return this.causeExceptionClass;
         }
     }
 
     /**
-     * El fragmento uso algo que todavia no esta definido.
+     * The snippet used something that is not defined yet.
      *
-     * <p>Es el caso que hace usable una consola: en `jshell` se puede escribir un metodo que llame
-     * a otro que aun no existe. El fragmento compila, y recien al ejecutarlo sale esto, con el
-     * identificador de lo que falta.
+     * <p>It is the case that makes a console usable: in `jshell` you can write a method calling
+     * another one that does not exist yet. The snippet compiles, and only on executing it does this
+     * come out, with the identifier of what is missing.
      */
     class ResolutionException extends RunException {
 
@@ -417,10 +419,10 @@ public interface ExecutionControl extends AutoCloseable {
         private final int id;
 
         /**
-         * Con ese identificador y esa pila.
+         * With that identifier and that stack.
          *
-         * @param id el identificador de lo que falta
-         * @param stackElements la pila, tal como se vio en la otra VM
+         * @param id the identifier of what is missing
+         * @param stackElements the stack, as seen in the other VM
          */
         public ResolutionException(int id, StackTraceElement[] stackElements) {
             super("resolution exception: " + id);
@@ -428,18 +430,18 @@ public interface ExecutionControl extends AutoCloseable {
             setStackTrace(stackElements);
         }
 
-        /** El identificador de lo que falta. */
+        /** The identifier of what is missing. */
         public int id() {
             return this.id;
         }
     }
 
-    /** Se corto la ejecucion con {@link ExecutionControl#stop()}. */
+    /** Execution was stopped with {@link ExecutionControl#stop()}. */
     class StoppedException extends RunException {
 
         private static final long serialVersionUID = 1L;
 
-        /** Sin detalle: no hay nada mas que decir que "lo cortaron". */
+        /** No detail: there is nothing more to say than "it was stopped". */
         public StoppedException() {
             super("stopped by user");
         }

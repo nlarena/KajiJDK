@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalAdjuster;
@@ -23,7 +24,7 @@ import java.time.temporal.ValueRange;
 // horario de verano, no hay reglas, no hay saltos. Es lo que se quiere para guardar un momento --un
 // registro, una marca de tiempo-- y lo que **no** se quiere para agendar algo a futuro, donde la
 // zona puede cambiar sus reglas antes de que llegue la fecha.
-public final class OffsetDateTime implements Temporal, TemporalAdjuster, Comparable<OffsetDateTime> {
+public final class OffsetDateTime implements Temporal, TemporalAdjuster, Comparable<OffsetDateTime>, Serializable {
 
     private final LocalDateTime dateTime;
     private final ZoneOffset offset;

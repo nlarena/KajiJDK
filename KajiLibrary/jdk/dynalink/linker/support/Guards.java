@@ -9,37 +9,37 @@ import java.util.logging.Logger;
 import jdk.dynalink.linker.LinkerServices;
 
 /**
- * Fabrica las guardas mas comunes: "el receptor es de esta clase", "no es nulo", "es un arreglo".
+ * Builds the commonest guards: "the receiver is of this class", "it is not null", "it is an array".
  *
- * <h2>Que es una guarda, en concreto</h2>
+ * <h2>What a guard is, concretely</h2>
  *
- * <p>Un metodo que devuelve {@code boolean} y toma un prefijo de los argumentos de la invocacion
- * que protege. Se evalua en cada llamada, asi que tiene que ser barato: comparar un puntero a
- * {@code Class}, o comparar contra {@code null}. Cualquier cosa mas cara que eso deberia ser un
- * switch point y no una guarda.
+ * <p>A method handle returning {@code boolean} and taking a prefix of the arguments of the invocation
+ * it protects. It is evaluated on every call, so it has to be cheap: comparing a pointer to a
+ * {@code Class}, or comparing against {@code null}. Anything dearer than that should be a switch
+ * point and not a guard.
  *
- * <h2>Las guardas que no hacen falta</h2>
+ * <h2>The guards that are not needed</h2>
  *
- * <p>Varios metodos de aca miran la firma del sitio y descubren que la pregunta ya esta contestada.
- * Si el sitio declara el parametro como {@code String} y se pide una guarda de "es un
- * {@code String}", el chequeo sobra: el verificador de la JVM ya lo garantiza. Si se pide una
- * guarda de "es un {@code Integer}" sobre un parametro declarado {@code String}, la guarda nunca
- * puede dar verdadero.
+ * <p>Several methods here look at the site's signature and find the question already answered. If the
+ * site declares the parameter as {@code String} and a guard of "it is a {@code String}" is asked for,
+ * the check is redundant: the JVM's verifier already guarantees it. If a guard of "it is an
+ * {@code Integer}" is asked for over a parameter declared {@code String}, the guard can never be
+ * true.
  *
- * <p>En los dos casos devuelven una constante en vez de un chequeo, y dejan un aviso en el
- * registro. La constante es la respuesta correcta; el aviso esta porque casi siempre significa que
- * el enlazador que la pidio se equivoco de firma, y sin el aviso eso no se notaria nunca.
+ * <p>In both cases they return a constant instead of a check, and leave a warning in the log. The
+ * constant is the right answer; the warning is there because it almost always means the linker that
+ * asked for it got the signature wrong, and without the warning that would never be noticed.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Las decisiones de arriba son reales y ocurren. Lo que todavia no hay es el fabricante de
- * handles: {@code MethodHandles} no puede construir uno sin soporte de la VM, asi que cualquier
- * metodo de aca termina en {@link UnsupportedOperationException} al llegar a ese punto.
+ * <p>The decisions above are real and they happen. What there is not yet is the handle factory:
+ * {@code MethodHandles} cannot build one without VM support, so any method here ends in
+ * {@link UnsupportedOperationException} on reaching that point.
  *
- * <p>Los handles de los chequeos se resuelven la primera vez que se los usa y no en el
- * inicializador estatico, que es donde los resuelve el JDK. La diferencia es solo cual excepcion
- * sale: asi sale la que nombra lo que falta, en lugar de un {@code ExceptionInInitializerError}
- * que la envuelve y hace que la clase quede inutilizable.
+ * <p>The checks' handles are resolved the first time they are used and not in the static
+ * initializer, which is where the JDK resolves them. The difference is only which exception comes
+ * out: this way the one that names what is missing comes out, instead of an
+ * {@code ExceptionInInitializerError} wrapping it and leaving the class unusable.
  *
  * @since 9
  */
@@ -51,248 +51,247 @@ public final class Guards {
     }
 
     /**
-     * Los handles de los chequeos, resueltos una sola vez y a demanda.
+     * The checks' handles, resolved once and on demand.
      *
-     * <p>Es el modismo del titular de inicializacion bajo demanda: la JVM garantiza que esta clase
-     * se inicializa la primera vez que se la toca y solo una vez, sin candado explicito.
+     * <p>It is the initialization-on-demand holder idiom: the JVM guarantees that this class is
+     * initialized the first time it is touched and only once, with no explicit lock.
      */
     private static final class Handles {
-        static final MethodHandle IS_OF_CLASS = propio("esDeClase", Class.class, Object.class);
-        static final MethodHandle IS_INSTANCE = propio("esInstancia", Class.class, Object.class);
-        static final MethodHandle IS_ARRAY = propio("esArreglo", Object.class);
-        static final MethodHandle IS_NULL = propio("esNulo", Object.class);
-        static final MethodHandle IS_NOT_NULL = propio("noEsNulo", Object.class);
-        static final MethodHandle IS_IDENTICAL = propio("esElMismo", Object.class, Object.class);
+        static final MethodHandle IS_OF_CLASS = own("checkClass", Class.class, Object.class);
+        static final MethodHandle IS_INSTANCE = own("checkInstance", Class.class, Object.class);
+        static final MethodHandle IS_ARRAY = own("checkArray", Object.class);
+        static final MethodHandle IS_NULL = own("checkNull", Object.class);
+        static final MethodHandle IS_NOT_NULL = own("checkNotNull", Object.class);
+        static final MethodHandle IS_IDENTICAL = own("checkIdentical", Object.class, Object.class);
 
-        private static MethodHandle propio(final String nombre, final Class<?>... params) {
-            return Lookup.findOwnStatic(MethodHandles.lookup(), nombre, Boolean.TYPE, params);
+        private static MethodHandle own(final String name, final Class<?>... params) {
+            return Lookup.findOwnStatic(MethodHandles.lookup(), name, Boolean.TYPE, params);
         }
     }
 
-    // Los chequeos propiamente dichos. Son metodos comunes: lo unico que Guards agrega es
-    // envolverlos en un handle de la forma que el sitio de invocacion necesita.
+    // The checks themselves. They are ordinary methods: all Guards adds is wrapping them in a handle
+    // of the shape the call site needs.
 
     @SuppressWarnings("unused")
-    private static boolean esDeClase(final Class<?> clazz, final Object obj) {
+    private static boolean checkClass(final Class<?> clazz, final Object obj) {
         return obj != null && obj.getClass() == clazz;
     }
 
     @SuppressWarnings("unused")
-    private static boolean esInstancia(final Class<?> clazz, final Object obj) {
+    private static boolean checkInstance(final Class<?> clazz, final Object obj) {
         return clazz.isInstance(obj);
     }
 
     @SuppressWarnings("unused")
-    private static boolean esArreglo(final Object obj) {
+    private static boolean checkArray(final Object obj) {
         return obj != null && obj.getClass().isArray();
     }
 
     @SuppressWarnings("unused")
-    private static boolean esNulo(final Object obj) {
+    private static boolean checkNull(final Object obj) {
         return obj == null;
     }
 
     @SuppressWarnings("unused")
-    private static boolean noEsNulo(final Object obj) {
+    private static boolean checkNotNull(final Object obj) {
         return obj != null;
     }
 
     @SuppressWarnings("unused")
-    private static boolean esElMismo(final Object obj1, final Object obj2) {
+    private static boolean checkIdentical(final Object obj1, final Object obj2) {
         return obj1 == obj2;
     }
 
     /**
-     * Una guarda de "el primer argumento es exactamente de esta clase", no de una subclase.
+     * A guard of "the first argument is exactly of this class", not of a subclass.
      *
-     * @param clazz la clase exacta
-     * @param type la firma del sitio
-     * @return la guarda, o una constante si la respuesta ya se sabe
+     * @param clazz the exact class
+     * @param type the site's signature
+     * @return the guard, or a constant if the answer is already known
      */
     public static MethodHandle isOfClass(final Class<?> clazz, final MethodType type) {
-        final Class<?> declarado = type.parameterType(0);
-        if (clazz == declarado) {
-            avisar("la guarda de clase exacta sobre {0} siempre da verdadero en {1}", clazz, type);
-            return constante(true, type);
+        final Class<?> declared = type.parameterType(0);
+        if (clazz == declared) {
+            warn("the exact-class guard on {0} is always true in {1}", clazz, type);
+            return constant(true, type);
         }
-        if (!declarado.isAssignableFrom(clazz)) {
-            avisar("la guarda de clase exacta sobre {0} nunca puede dar verdadero en {1}",
-                    clazz, type);
-            return constante(false, type);
+        if (!declared.isAssignableFrom(clazz)) {
+            warn("the exact-class guard on {0} can never be true in {1}", clazz, type);
+            return constant(false, type);
         }
-        return ligada(Handles.IS_OF_CLASS, clazz, 0, type);
+        return bound(Handles.IS_OF_CLASS, clazz, 0, type);
     }
 
     /**
-     * Una guarda de "el primer argumento es instancia de esta clase", subclases incluidas.
+     * A guard of "the first argument is an instance of this class", subclasses included.
      *
-     * @param clazz la clase
-     * @param type la firma del sitio
-     * @return la guarda, o una constante si la respuesta ya se sabe
+     * @param clazz the class
+     * @param type the site's signature
+     * @return the guard, or a constant if the answer is already known
      */
     public static MethodHandle isInstance(final Class<?> clazz, final MethodType type) {
         return isInstance(clazz, 0, type);
     }
 
     /**
-     * Una guarda de "el argumento en esa posicion es instancia de esta clase".
+     * A guard of "the argument at that position is an instance of this class".
      *
-     * @param clazz la clase
-     * @param pos la posicion del argumento
-     * @param type la firma del sitio
-     * @return la guarda, o una constante si la respuesta ya se sabe
+     * @param clazz the class
+     * @param pos the argument's position
+     * @param type the site's signature
+     * @return the guard, or a constant if the answer is already known
      */
     public static MethodHandle isInstance(final Class<?> clazz, final int pos,
             final MethodType type) {
-        final Class<?> declarado = type.parameterType(pos);
-        if (clazz.isAssignableFrom(declarado)) {
-            avisar("la guarda de instancia de {0} siempre da verdadero en {1}", clazz, type);
-            return constante(true, type);
+        final Class<?> declared = type.parameterType(pos);
+        if (clazz.isAssignableFrom(declared)) {
+            warn("the instance-of-{0} guard is always true in {1}", clazz, type);
+            return constant(true, type);
         }
-        if (!declarado.isAssignableFrom(clazz)) {
-            avisar("la guarda de instancia de {0} nunca puede dar verdadero en {1}", clazz, type);
-            return constante(false, type);
+        if (!declared.isAssignableFrom(clazz)) {
+            warn("the instance-of-{0} guard can never be true in {1}", clazz, type);
+            return constant(false, type);
         }
-        return ligada(Handles.IS_INSTANCE, clazz, pos, type);
+        return bound(Handles.IS_INSTANCE, clazz, pos, type);
     }
 
     /**
-     * Una guarda de "el argumento en esa posicion es un arreglo".
+     * A guard of "the argument at that position is an array".
      *
-     * @param pos la posicion del argumento
-     * @param type la firma del sitio
-     * @return la guarda, o una constante si la respuesta ya se sabe
+     * @param pos the argument's position
+     * @param type the site's signature
+     * @return the guard, or a constant if the answer is already known
      */
     public static MethodHandle isArray(final int pos, final MethodType type) {
-        final Class<?> declarado = type.parameterType(pos);
-        if (declarado.isArray()) {
-            avisar("la guarda de arreglo siempre da verdadero en la posicion {0} de {1}",
+        final Class<?> declared = type.parameterType(pos);
+        if (declared.isArray()) {
+            warn("the array guard is always true at position {0} of {1}",
                     Integer.valueOf(pos), type);
-            return constante(true, type);
+            return constant(true, type);
         }
-        // Object[] se usa como piso: si ni siquiera un arreglo de objetos entra en el tipo
-        // declarado, ningun arreglo puede llegar ahi.
-        if (!declarado.isAssignableFrom(Object[].class)) {
-            avisar("la guarda de arreglo nunca puede dar verdadero en la posicion {0} de {1}",
+        // Object[] is used as a floor: if not even an array of objects fits the declared type, no
+        // array can get there.
+        if (!declared.isAssignableFrom(Object[].class)) {
+            warn("the array guard can never be true at position {0} of {1}",
                     Integer.valueOf(pos), type);
-            return constante(false, type);
+            return constant(false, type);
         }
-        return enPosicion(Handles.IS_ARRAY, pos, type);
+        return atPosition(Handles.IS_ARRAY, pos, type);
     }
 
     /**
-     * Adapta una guarda a la firma de un sitio.
+     * Adapts a guard to a site's signature.
      *
-     * <p>La firma que le corresponde es la del sitio recortada a los parametros que la guarda mira
-     * —puede mirar menos— y devolviendo {@code boolean}.
+     * <p>The signature it takes is the site's, cut down to the parameters the guard looks at --it may
+     * look at fewer-- and returning {@code boolean}.
      *
-     * @param test la guarda
-     * @param type la firma del sitio
-     * @return la guarda adaptada
+     * @param test the guard
+     * @param type the site's signature
+     * @return the adapted guard
      */
     public static MethodHandle asType(final MethodHandle test, final MethodType type) {
-        return test.asType(tipoDeGuarda(test, type));
+        return test.asType(guardType(test, type));
     }
 
     /**
-     * Adapta una guarda a la firma de un sitio, con las conversiones de los lenguajes.
+     * Adapts a guard to a site's signature, with the languages' conversions.
      *
-     * @param linkerServices los servicios que aportan esas conversiones
-     * @param test la guarda
-     * @param type la firma del sitio
-     * @return la guarda adaptada
+     * @param linkerServices the services that contribute those conversions
+     * @param test the guard
+     * @param type the site's signature
+     * @return the adapted guard
      */
     public static MethodHandle asType(final LinkerServices linkerServices, final MethodHandle test,
             final MethodType type) {
-        return linkerServices.asType(test, tipoDeGuarda(test, type));
+        return linkerServices.asType(test, guardType(test, type));
     }
 
     /**
-     * Una guarda de "es exactamente de esta clase", de firma {@code (Object)boolean}.
+     * A guard of "it is exactly of this class", of signature {@code (Object)boolean}.
      *
-     * @param clazz la clase
-     * @return la guarda
+     * @param clazz the class
+     * @return the guard
      */
     public static MethodHandle getClassGuard(final Class<?> clazz) {
         return Handles.IS_OF_CLASS.bindTo(clazz);
     }
 
     /**
-     * Una guarda de "es instancia de esta clase", de firma {@code (Object)boolean}.
+     * A guard of "it is an instance of this class", of signature {@code (Object)boolean}.
      *
-     * @param clazz la clase
-     * @return la guarda
+     * @param clazz the class
+     * @return the guard
      */
     public static MethodHandle getInstanceOfGuard(final Class<?> clazz) {
         return Handles.IS_INSTANCE.bindTo(clazz);
     }
 
     /**
-     * Una guarda de "es este objeto y no otro", por identidad.
+     * A guard of "it is this object and no other", by identity.
      *
-     * <p>Sirve para enlazar contra un objeto en particular en vez de contra una clase, que es lo
-     * que hace falta en un lenguaje donde los metodos viven en la instancia.
+     * <p>It serves to link against one particular object instead of against a class, which is what is
+     * needed in a language where methods live in the instance.
      *
-     * @param obj el objeto
-     * @return la guarda
+     * @param obj the object
+     * @return the guard
      */
     public static MethodHandle getIdentityGuard(final Object obj) {
         return Handles.IS_IDENTICAL.bindTo(obj);
     }
 
     /**
-     * Una guarda de "es nulo", de firma {@code (Object)boolean}.
+     * A guard of "it is null", of signature {@code (Object)boolean}.
      *
-     * @return la guarda
+     * @return the guard
      */
     public static MethodHandle isNull() {
         return Handles.IS_NULL;
     }
 
     /**
-     * Una guarda de "no es nulo", de firma {@code (Object)boolean}.
+     * A guard of "it is not null", of signature {@code (Object)boolean}.
      *
-     * @return la guarda
+     * @return the guard
      */
     public static MethodHandle isNotNull() {
         return Handles.IS_NOT_NULL;
     }
 
-    private static MethodType tipoDeGuarda(final MethodHandle test, final MethodType type) {
+    private static MethodType guardType(final MethodHandle test, final MethodType type) {
         return type.dropParameterTypes(test.type().parameterCount(), type.parameterCount())
                 .changeReturnType(Boolean.TYPE);
     }
 
-    /** Fija la clase como primer argumento del chequeo y lo coloca en la posicion pedida. */
-    private static MethodHandle ligada(final MethodHandle test, final Class<?> clazz,
+    /** Fixes the class as the check's first argument and places it at the requested position. */
+    private static MethodHandle bound(final MethodHandle test, final Class<?> clazz,
             final int pos, final MethodType type) {
-        return enPosicion(test.bindTo(clazz), pos, type);
+        return atPosition(test.bindTo(clazz), pos, type);
     }
 
     /**
-     * Un chequeo unario puesto a mirar el argumento {@code pos} de un sitio de firma {@code type}.
+     * A unary check set to look at argument {@code pos} of a site of signature {@code type}.
      *
-     * <p>El reordenamiento es lo que hace el trabajo: {@code permuteArguments} con el arreglo
-     * {@code {pos}} dice que el unico parametro del chequeo se alimenta del argumento {@code pos},
-     * y que todos los demas se descartan.
+     * <p>The reordering is what does the work: {@code permuteArguments} with the array {@code {pos}}
+     * says that the check's only parameter is fed from argument {@code pos}, and that all the others
+     * are discarded.
      */
-    private static MethodHandle enPosicion(final MethodHandle test, final int pos,
+    private static MethodHandle atPosition(final MethodHandle test, final int pos,
             final MethodType type) {
         return MethodHandles.permuteArguments(
                 test.asType(test.type().changeParameterType(0, type.parameterType(pos))),
                 type.changeReturnType(Boolean.TYPE), new int[] { pos });
     }
 
-    /** Una guarda que ignora sus argumentos y siempre contesta lo mismo. */
-    private static MethodHandle constante(final boolean valor, final MethodType type) {
+    /** A guard that ignores its arguments and always answers the same. */
+    private static MethodHandle constant(final boolean value, final MethodType type) {
         return MethodHandles.permuteArguments(
-                MethodHandles.constant(Boolean.TYPE, Boolean.valueOf(valor)),
+                MethodHandles.constant(Boolean.TYPE, Boolean.valueOf(value)),
                 type.changeReturnType(Boolean.TYPE), new int[0]);
     }
 
-    private static void avisar(final String mensaje, final Object a, final Object b) {
+    private static void warn(final String message, final Object a, final Object b) {
         if (LOG.isLoggable(Level.WARNING)) {
-            LOG.log(Level.WARNING, mensaje, new Object[] { a, b });
+            LOG.log(Level.WARNING, message, new Object[] { a, b });
         }
     }
 }

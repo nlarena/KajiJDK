@@ -1,5 +1,8 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
+
 // A set of non-negative ints stored as *bits*: bit `i` of the backing `long[]` says whether
 // `i` is in the set. That is the whole idea, and it is why this class exists next to
 // {@link HashSet} — for a dense set of small integers a HashSet spends a node and a boxed
@@ -26,7 +29,7 @@ package java.util;
 //
 // Subset of the JDK's: toByteArray/valueOf(byte[]) and the NIO buffer factories, get(int,int),
 // previousClearBit, stream() and clone are not modelled.
-public class BitSet {
+public class BitSet implements Serializable, Cloneable {
 
     // The bits, six bits of index per word. Never null; may hold trailing zero words.
     private long[] words;

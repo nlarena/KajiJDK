@@ -1,37 +1,37 @@
 package javax.annotation.processing;
 
-// La fabrica de {@link Completion} (JSR 269). Es toda la clase: dos `of` estaticos y un
-// constructor privado para que nadie la instancie. La implementacion concreta va en una clase
-// anidada privada, igual que en el JDK real: `Completion` no expone constructor, y este es el unico
-// camino para obtener uno.
+// The factory of {@link Completion} (JSR 269). It is the whole class: two static `of` methods and a
+// private constructor so that nobody instantiates it. The concrete implementation goes in a private
+// nested class, just as in the real JDK: `Completion` exposes no constructor, and this is the only
+// road to one.
 public class Completions {
 
-    // Utilitaria: no se instancia.
+    // A utility class: it is not instantiated.
     private Completions() {
     }
 
     /**
-     * Un completado con valor y mensaje.
+     * A completion with a value and a message.
      *
-     * @param value el texto a insertar
-     * @param message la explicacion que lo acompana
+     * @param value the text to insert
+     * @param message the explanation that goes with it
      */
     public static Completion of(String value, String message) {
         return new SimpleCompletion(value, message);
     }
 
     /**
-     * Un completado sin mensaje: el mensaje queda en la cadena vacia, no en `null`.
+     * A completion with no message: the message is left as the empty string, not `null`.
      *
-     * <p>Es lo que hace el JDK real, y es la diferencia que importa: un `null` obligaria a todo
-     * consumidor a chequear, cuando "no tengo nada que explicar" ya se dice con "".
+     * <p>It is what the real JDK does, and it is the difference that matters: a `null` would force
+     * every consumer to check, when "I have nothing to explain" is already said by "".
      */
     public static Completion of(String value) {
         return new SimpleCompletion(value, "");
     }
 
-    // El unico implementador. Inmutable y sin validacion: el contrato no prohibe un valor nulo, y
-    // inventar una excepcion que el JDK no tira seria mentir sobre el comportamiento.
+    // The only implementor. Immutable and unvalidated: the contract does not forbid a null value, and
+    // inventing an exception the JDK does not throw would be lying about the behaviour.
     private static class SimpleCompletion implements Completion {
 
         private final String value;

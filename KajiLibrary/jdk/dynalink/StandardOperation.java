@@ -1,28 +1,29 @@
 package jdk.dynalink;
 
 /**
- * Los cinco verbos que dynalink sabe enlazar.
+ * The five verbs dynalink knows how to link.
  *
- * <p>Solos no dicen nada: un `GET` sin {@link Namespace} no especifica que se lee. La forma
- * completa se arma componiendo — `StandardOperation.GET.withNamespace(StandardNamespace.PROPERTY)`
- * — y por eso el enum no tiene ni un metodo propio.
+ * <p>On their own they say nothing: a `GET` with no {@link Namespace} does not specify what is being
+ * read. The complete form is assembled by composition —
+ * `StandardOperation.GET.withNamespace(StandardNamespace.PROPERTY)` — and that is why the enum has
+ * not a single method of its own.
  *
  * @since 9
  */
 public enum StandardOperation implements Operation {
 
-    /** Leer un valor del espacio de nombres indicado. */
+    /** Read a value from the given namespace. */
     GET,
 
-    /** Escribir un valor en el espacio de nombres indicado. */
+    /** Write a value into the given namespace. */
     SET,
 
-    /** Quitar un miembro del espacio de nombres indicado. */
+    /** Remove a member from the given namespace. */
     REMOVE,
 
-    /** Invocar el objeto receptor. */
+    /** Invoke the receiver object. */
     CALL,
 
-    /** Construir una instancia con el objeto receptor como constructor. */
+    /** Build an instance with the receiver object as the constructor. */
     NEW
 }

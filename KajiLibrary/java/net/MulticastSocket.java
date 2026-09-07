@@ -2,87 +2,87 @@ package java.net;
 
 import java.io.IOException;
 
-// Un `DatagramSocket` con las opciones de multicast encima.
+// A `DatagramSocket` with the multicast options on top.
 //
 // ===========================================================================================
-// LA MISMA LINEA QUE `DatagramSocket`, CORRIDA UN LUGAR
+// THE SAME LINE AS `DatagramSocket`, MOVED ALONG ONE PLACE
 // ===========================================================================================
 //
-// Todo lo que esta clase agrega sobre su padre son **opciones del socket**: el TTL de los
-// datagramas multicast, por que placa salen, y si se reciben los propios. Las tres son estado
-// local, se fijan antes de mandar nada, y entran completas.
+// Everything this class adds over its parent is **socket options**: the multicast datagrams' TTL,
+// which interface they go out through, and whether one's own are received. All three are local
+// state, are set before anything is sent, and are complete.
 //
-// **YA ENTRAN LOS CUATRO DE MEMBRESIA.** Esta cabecera decia que entrar a un grupo multicast --que
-// es mandarle un IGMP al router y quedar anotado en una tabla que vive afuera de este proceso-- no
-// se podia cumplir sin red, y era cierto mientras la VM no tuviera UDP. Ahora lo tiene, y los
-// cuatro anotan de verdad: si el sistema rechaza la membresia, sale una `IOException` en vez de un
-// silencio que dejaria al programa esperando datagramas que no van a llegar nunca.
+// **THE FOUR MEMBERSHIP METHODS NOW WORK.** This header used to say that joining a multicast group
+// --which means sending an IGMP to the router and being noted in a table that lives outside this
+// process-- could not be fulfilled without a network, and that was true while the VM had no UDP. It
+// has it now, and all four really do register: if the system refuses the membership, an
+// `IOException` comes out instead of a silence that would leave the program waiting for datagrams
+// that are never going to arrive.
 //
-// El trabajo esta en `DatagramSocket`, que es donde vive el socket. Los dos de aca que toman una
-// `InetAddress` a secas son los mismos con la placa que este socket tenga configurada -- que es
-// exactamente lo que el JDK documenta que hacen.
+// The work is in `DatagramSocket`, which is where the socket lives. The two here that take a bare
+// `InetAddress` are the same ones with whatever interface this socket has configured -- which is
+// exactly what the JDK documents them as doing.
 public class MulticastSocket extends DatagramSocket {
 
     private int timeToLive = 1;
-    private InetAddress interfaz;
-    private NetworkInterface placa;
-    private boolean loopbackDeshabilitado = false;
+    private InetAddress ifAddress;
+    private NetworkInterface netIf;
+    private boolean loopbackDisabled = false;
 
     /**
-     * Un socket multicast atado a un puerto cualquiera.
+     * A multicast socket bound to any port.
      *
-     * @throws IOException siempre en KajiJDK; ver la cabecera. Para un socket sin atar y
-     *     configurable, {@code new MulticastSocket(null)}.
+     * @throws IOException if it could not be bound
      */
     public MulticastSocket() throws IOException {
         super(new InetSocketAddress(0));
     }
 
     /**
-     * Un socket multicast atado a {@code port}.
+     * A multicast socket bound to {@code port}.
      *
-     * @throws IOException si no se pudo atar
+     * @throws IOException if it could not be bound
      */
     public MulticastSocket(int port) throws IOException {
         super(new InetSocketAddress(port));
     }
 
     /**
-     * Un socket multicast atado a {@code bindaddr}, o **sin atar** si es null.
+     * A multicast socket bound to {@code bindaddr}, or **unbound** if it is null.
      *
-     * <p>El caso de null anda entero: es el socket sobre el que se pueden fijar y leer todas las
-     * opciones de esta clase.
+     * <p>The null case works in full: it is the socket on which all this class's options can be set
+     * and read.
      *
-     * @throws IOException si no se pudo atar
+     * @throws IOException if it could not be bound
      */
     public MulticastSocket(SocketAddress bindaddr) throws IOException {
         super(bindaddr);
     }
 
     /**
-     * Cuantos saltos viven los datagramas multicast que salgan de aca.
+     * How many hops the multicast datagrams going out from here live for.
      *
-     * @throws IllegalArgumentException si no entra en 0..255
+     * @throws IllegalArgumentException if it does not fit 0..255
      */
     public void setTimeToLive(int ttl) throws IOException {
         if (ttl < 0 || ttl > 255) {
             throw new IllegalArgumentException("ttl out of range");
         }
-        this.chequearAbiertoIO();
+        this.checkOpenIO();
         this.timeToLive = ttl;
     }
 
-    /** El TTL de los datagramas multicast. Arranca en 1, que es el default de la plataforma. */
+    /** The multicast datagrams' TTL. It starts at 1, which is the platform's default. */
     public int getTimeToLive() throws IOException {
-        this.chequearAbiertoIO();
+        this.checkOpenIO();
         return this.timeToLive;
     }
 
     /**
-     * El TTL, en un byte.
+     * The TTL, in a byte.
      *
-     * @deprecated el TTL va de 0 a 255 y un `byte` de Java tiene signo, asi que 128 en adelante se
-     *     escriben negativos. Usar {@link #setTimeToLive(int)}.
+     * @deprecated the TTL runs from 0 to 255 and a Java `byte` is signed, so 128 upwards are written
+     *     negative. Use {@link #setTimeToLive(int)}.
      */
     @Deprecated
     public void setTTL(byte ttl) throws IOException {
@@ -90,9 +90,9 @@ public class MulticastSocket extends DatagramSocket {
     }
 
     /**
-     * El TTL, en un byte.
+     * The TTL, in a byte.
      *
-     * @deprecated ver {@link #setTTL(byte)}.
+     * @deprecated see {@link #setTTL(byte)}.
      */
     @Deprecated
     public byte getTTL() throws IOException {
@@ -100,28 +100,28 @@ public class MulticastSocket extends DatagramSocket {
     }
 
     /**
-     * Por que direccion local salen los datagramas multicast.
+     * Which local address the multicast datagrams go out through.
      *
-     * @throws SocketException si el socket esta cerrado
+     * @throws SocketException if the socket is closed
      */
     public void setInterface(InetAddress inf) throws SocketException {
-        this.chequearAbiertoSock();
+        this.checkOpenSocket();
         if (inf == null) {
             throw new SocketException("Invalid value");
         }
-        this.interfaz = inf;
+        this.ifAddress = inf;
     }
 
     /**
-     * La direccion local por la que salen los datagramas multicast.
+     * The local address the multicast datagrams go out through.
      *
-     * <p>Si no se fijo ninguna, la direccion comodin -- que es lo que devuelve el JDK cuando el
-     * sistema no eligio placa todavia.
+     * <p>If none was set, the wildcard address -- which is what the JDK returns when the system has
+     * not chosen an interface yet.
      */
     public InetAddress getInterface() throws SocketException {
-        this.chequearAbiertoSock();
-        if (this.interfaz != null) {
-            return this.interfaz;
+        this.checkOpenSocket();
+        if (this.ifAddress != null) {
+            return this.ifAddress;
         }
         try {
             return InetAddress.getByAddress(new byte[] {0, 0, 0, 0});
@@ -131,123 +131,123 @@ public class MulticastSocket extends DatagramSocket {
     }
 
     /**
-     * Por que placa salen los datagramas multicast.
+     * Which interface the multicast datagrams go out through.
      *
-     * <p>Es la version buena de {@link #setInterface}: una placa puede tener varias direcciones, y
-     * en IPv6 la placa es la unica forma de nombrar el enlace.
+     * <p>It is the good version of {@link #setInterface}: an interface may have several addresses,
+     * and in IPv6 the interface is the only way of naming the link.
      *
-     * @throws SocketException si el socket esta cerrado
+     * @throws SocketException if the socket is closed
      */
     public void setNetworkInterface(NetworkInterface netIf) throws SocketException {
-        this.chequearAbiertoSock();
+        this.checkOpenSocket();
         if (netIf == null) {
             throw new SocketException("Invalid value");
         }
-        this.placa = netIf;
+        this.netIf = netIf;
     }
 
     /**
-     * La placa fijada con {@link #setNetworkInterface}.
+     * The interface set with {@link #setNetworkInterface}.
      *
-     * @throws SocketException si no se fijo ninguna. El JDK devuelve ahi una placa marcador que
-     *     representa "la que elija el sistema"; aca no hay sistema que elija, y fabricar una placa
-     *     de mentira para devolverla seria inventar un dato. La excepcion es chequeada y el
-     *     contrato ya la declara.
+     * @throws SocketException if none was set. The JDK returns a placeholder interface there
+     *     representing "whichever the system chooses"; here there is no system to choose, and
+     *     manufacturing a fake interface to return would be inventing a fact. The exception is
+     *     checked and the contract already declares it.
      */
     public NetworkInterface getNetworkInterface() throws SocketException {
-        this.chequearAbiertoSock();
-        if (this.placa == null) {
+        this.checkOpenSocket();
+        if (this.netIf == null) {
             throw new SocketException("There is no multicast interface set");
         }
-        return this.placa;
+        return this.netIf;
     }
 
     /**
-     * Si se DESHABILITA la recepcion local de los propios datagramas multicast.
+     * Whether local reception of one's own multicast datagrams is DISABLED.
      *
-     * <p>Ojo con el sentido, que esta invertido y es del JDK: {@code true} significa "no me los
-     * mandes de vuelta". Esa inversion es justamente por lo que el metodo quedo deprecado.
+     * <p>Mind the sense, which is inverted and is the JDK's: {@code true} means "do not send them
+     * back to me". That inversion is precisely why the method was deprecated.
      *
-     * @deprecated usar {@code setOption(StandardSocketOptions.IP_MULTICAST_LOOP, ...)}, que se lee
-     *     al derecho.
+     * @deprecated use {@code setOption(StandardSocketOptions.IP_MULTICAST_LOOP, ...)}, which reads
+     *     the right way round.
      */
     @Deprecated
     public void setLoopbackMode(boolean disable) throws SocketException {
-        this.chequearAbiertoSock();
-        this.loopbackDeshabilitado = disable;
+        this.checkOpenSocket();
+        this.loopbackDisabled = disable;
     }
 
     /**
-     * Si la recepcion local esta deshabilitada.
+     * Whether local reception is disabled.
      *
-     * @deprecated ver {@link #setLoopbackMode}.
+     * @deprecated see {@link #setLoopbackMode}.
      */
     @Deprecated
     public boolean getLoopbackMode() throws SocketException {
-        this.chequearAbiertoSock();
-        return this.loopbackDeshabilitado;
+        this.checkOpenSocket();
+        return this.loopbackDisabled;
     }
 
-    private void chequearAbiertoSock() throws SocketException {
+    private void checkOpenSocket() throws SocketException {
         if (this.isClosed()) {
             throw new SocketException("Socket is closed");
         }
     }
 
-    private void chequearAbiertoIO() throws IOException {
+    private void checkOpenIO() throws IOException {
         if (this.isClosed()) {
             throw new SocketException("Socket is closed");
         }
     }
 
     /**
-     * Entra al grupo multicast {@code mcastaddr} por la placa configurada en este socket.
+     * Joins the multicast group {@code mcastaddr} through the interface configured on this socket.
      *
-     * <p>Es {@link DatagramSocket#joinGroup(SocketAddress, NetworkInterface)} con la placa que se
-     * haya fijado con {@link #setNetworkInterface} --o la que elija el sistema si no se fijo
-     * ninguna--, que es lo que el JDK documenta.
+     * <p>It is {@link DatagramSocket#joinGroup(SocketAddress, NetworkInterface)} with whatever
+     * interface was set with {@link #setNetworkInterface} --or the one the system chooses if none was
+     * set-- which is what the JDK documents.
      *
-     * @throws IOException si no se pudo entrar al grupo
-     * @throws IllegalArgumentException si la direccion no es multicast
-     * @deprecated como en el JDK: usar {@link DatagramSocket#joinGroup(SocketAddress,
-     *     NetworkInterface)}, que dice por que placa
+     * @throws IOException if the group could not be joined
+     * @throws IllegalArgumentException if the address is not multicast
+     * @deprecated as in the JDK: use {@link DatagramSocket#joinGroup(SocketAddress,
+     *     NetworkInterface)}, which says through which interface
      */
     @Deprecated
     public void joinGroup(InetAddress mcastaddr) throws IOException {
-        this.joinGroup(new InetSocketAddress(mcastaddr, 0), this.placa);
+        this.joinGroup(new InetSocketAddress(mcastaddr, 0), this.netIf);
     }
 
     /**
-     * Sale del grupo multicast {@code mcastaddr}. Ver {@link #joinGroup(InetAddress)}.
+     * Leaves the multicast group {@code mcastaddr}. See {@link #joinGroup(InetAddress)}.
      *
-     * @throws IOException si no se pudo salir del grupo
-     * @deprecated como en el JDK
+     * @throws IOException if the group could not be left
+     * @deprecated as in the JDK
      */
     @Deprecated
     public void leaveGroup(InetAddress mcastaddr) throws IOException {
-        this.leaveGroup(new InetSocketAddress(mcastaddr, 0), this.placa);
+        this.leaveGroup(new InetSocketAddress(mcastaddr, 0), this.netIf);
     }
 
     /**
-     * Manda ese datagrama con ese TTL, sin cambiar el TTL del socket.
+     * Sends that datagram with that TTL, without changing the socket's TTL.
      *
-     * <p>El TTL se pone antes de mandar y se restaura despues, que es lo que hace el JDK: el
-     * contrato dice que el TTL del socket queda como estaba.
+     * <p>The TTL is set before sending and restored afterwards, which is what the JDK does: the
+     * contract says the socket's TTL is left as it was.
      *
-     * @throws IOException si el datagrama no se pudo mandar
-     * @deprecated como en el JDK: usar {@link #setTimeToLive} y {@link DatagramSocket#send}
+     * @throws IOException if the datagram could not be sent
+     * @deprecated as in the JDK: use {@link #setTimeToLive} and {@link DatagramSocket#send}
      */
     @Deprecated
     public void send(DatagramPacket p, byte ttl) throws IOException {
-        this.chequearAbiertoIO();
-        int antes = this.timeToLive;
-        // El `& 0xFF` no es cosmetico: el parametro es un `byte` con signo y un TTL de 200 llega
-        // como -56. El JDK lo trata como sin signo, y sin esto un TTL alto seria negativo.
+        this.checkOpenIO();
+        int previous = this.timeToLive;
+        // The `& 0xFF` is not cosmetic: the parameter is a signed `byte` and a TTL of 200 arrives as
+        // -56. The JDK treats it as unsigned, and without this a high TTL would be negative.
         this.setTimeToLive(ttl & 0xFF);
         try {
             this.send(p);
         } finally {
-            this.setTimeToLive(antes);
+            this.setTimeToLive(previous);
         }
     }
 }

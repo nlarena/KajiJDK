@@ -3,12 +3,12 @@ package javax.crypto.spec;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * El IV y el largo de la etiqueta de autenticacion de GCM.
+ * GCM's IV and authentication tag length.
  *
- * <p>`tLen` esta **en bits**, no en bytes, y es el error clasico con esta clase: pasar 16 en vez de
- * 128 configura una etiqueta de dos bytes, que se puede adivinar. Por eso el constructor rechaza
- * los negativos, aunque no puede rechazar un 16 -- es un valor legal para otros usos y la clase no
- * sabe cual es el suyo.
+ * <p>`tLen` is **in bits**, not in bytes, and it is the classic mistake with this class: passing 16
+ * instead of 128 configures a two-byte tag, which can be guessed. That is why the constructor rejects
+ * negatives, although it cannot reject a 16 -- it is a legal value for other uses and the class does
+ * not know which one is its own.
  */
 public class GCMParameterSpec implements AlgorithmParameterSpec {
 
@@ -16,48 +16,48 @@ public class GCMParameterSpec implements AlgorithmParameterSpec {
     private final byte[] iv;
 
     /**
-     * @throws IllegalArgumentException si `tLen` es negativo o el IV es nulo
+     * @throws IllegalArgumentException if `tLen` is negative or the IV is null
      */
     public GCMParameterSpec(int tLen, byte[] iv) {
         if (iv == null) {
-            throw new IllegalArgumentException("el IV no puede ser nulo");
+            throw new IllegalArgumentException("the IV cannot be null");
         }
         if (tLen < 0) {
-            throw new IllegalArgumentException("el largo de la etiqueta no puede ser negativo");
+            throw new IllegalArgumentException("the tag length cannot be negative");
         }
         this.tLen = tLen;
         this.iv = IvParameterSpec.copy(iv, 0, iv.length);
     }
 
     /**
-     * El IV son `len` bytes a partir de `offset`.
+     * The IV is `len` bytes starting at `offset`.
      *
-     * @throws IllegalArgumentException si `tLen` es negativo, si el IV es nulo, o si el arreglo es
-     *     mas corto que `offset + len`
+     * @throws IllegalArgumentException if `tLen` is negative, if the IV is null, or if the array is
+     *     shorter than `offset + len`
      */
     public GCMParameterSpec(int tLen, byte[] iv, int offset, int len) {
         if (iv == null) {
-            throw new IllegalArgumentException("el IV no puede ser nulo");
+            throw new IllegalArgumentException("the IV cannot be null");
         }
         if (tLen < 0) {
-            throw new IllegalArgumentException("el largo de la etiqueta no puede ser negativo");
+            throw new IllegalArgumentException("the tag length cannot be negative");
         }
         if (offset < 0 || len < 0) {
-            throw new IllegalArgumentException("offset o largo negativos");
+            throw new IllegalArgumentException("negative offset or length");
         }
         if (iv.length - offset < len) {
-            throw new IllegalArgumentException("el IV es mas corto que offset + len");
+            throw new IllegalArgumentException("the IV is shorter than offset + len");
         }
         this.tLen = tLen;
         this.iv = IvParameterSpec.copy(iv, offset, len);
     }
 
-    /** El largo de la etiqueta, **en bits**. */
+    /** The tag length, **in bits**. */
     public int getTLen() {
         return this.tLen;
     }
 
-    /** Una copia del IV. */
+    /** A copy of the IV. */
     public byte[] getIV() {
         return IvParameterSpec.copy(this.iv, 0, this.iv.length);
     }

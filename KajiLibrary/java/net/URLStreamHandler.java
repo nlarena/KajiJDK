@@ -2,97 +2,99 @@ package java.net;
 
 import java.io.IOException;
 
-// El que sabe hablar UN protocolo: como se escribe una URL suya, y como se abre.
+// The one that knows how to speak ONE protocol: how a URL of its own is written, and how it is
+// opened.
 //
-// Es la pieza que hace extensible a `java.net.URL`. `URL` no sabe nada de `http` ni de `file`:
-// delega en el manejador del esquema, y por eso agregar un protocolo nuevo es escribir uno de estos
-// y registrarlo con una `URLStreamHandlerFactory`.
+// It is the piece that makes `java.net.URL` extensible. `URL` knows nothing about `http` or `file`:
+// it delegates to the scheme's handler, and that is why adding a new protocol means writing one of
+// these and registering it with a `URLStreamHandlerFactory`.
 //
 // ===========================================================================================
-// QUE ENTRA Y QUE NO
+// WHAT IT DOES AND WHAT IT DOES NOT DO
 // ===========================================================================================
 //
-// Entra la mitad que **compara y escribe** URLs, que es computo puro sobre las partes ya
-// separadas: `equals`, `hashCode`, `sameFile`, `hostsEqual`, `toExternalForm`, `getDefaultPort`.
-// Estan completas y con el mismo algoritmo del JDK.
+// The half that **compares and writes** URLs is here, which is pure computation over the already
+// separated parts: `equals`, `hashCode`, `sameFile`, `hostsEqual`, `toExternalForm`,
+// `getDefaultPort`. They are complete and use the JDK's own algorithm.
 //
-// `openConnection(URL)` queda **abstracto**, como en el JDK: es el metodo del que cuelga todo el
-// transporte, y declararlo abstracto no promete nada -- lo escribe quien implemente un protocolo.
-// `openConnection(URL, Proxy)` tira `UnsupportedOperationException`, que es **literalmente lo que
-// hace la clase base del JDK** ("Method not implemented."): un manejador que no sepa de proxies no
-// tiene que saber.
+// `openConnection(URL)` is left **abstract**, as in the JDK: it is the method the whole transport
+// hangs off, and declaring it abstract promises nothing -- whoever implements a protocol writes it.
+// `openConnection(URL, Proxy)` throws `UnsupportedOperationException`, which is **literally what the
+// JDK's base class does** ("Method not implemented."): a handler that knows nothing about proxies
+// does not have to.
 //
-// NO ENTRAN TRES, y la razon es la misma para los tres: `parseURL(URL,String,int,int)` y las dos
-// sobrecargas de `setURL`. Existen solo para **mutar los campos internos de una `URL`** -- son el
-// unico camino por el que el JDK deja que un tercero escriba adentro de una URL ya construida.
+// THREE MEMBERS DECLINE, and the reason is the same for all three: `parseURL(URL,String,int,int)`
+// and the two `setURL` overloads. They exist only to **mutate a `URL`'s internal fields** -- they are
+// the only road by which the JDK lets a third party write inside an already built URL.
 //
-// La `java.net.URL` de este arbol es **inmutable**: guarda la `URI` que la parseo y nada mas, y
-// toda su descomposicion sale de ahi (la cabecera de `URL.java` explica por que se delego el
-// parsing en `URI` en vez de tener dos parsers de la misma gramatica). No hay campos que escribir,
-// y agregarlos para que estos tres metodos existan seria romper la inmutabilidad de una clase que
-// se usa en todos lados para mejorar un conteo en tres.
+// This tree's `java.net.URL` is **immutable**: it keeps the `URI` that parsed it and nothing else,
+// and its whole decomposition comes from there (`URL.java`'s header explains why parsing was
+// delegated to `URI` instead of having two parsers of the same grammar). There are no fields to
+// write, and adding them so that these three methods could work would be breaking the immutability of
+// a class used everywhere in order to improve a count by three.
 //
-// La consecuencia hay que decirla derecho: **un `URLStreamHandler` escrito aca no puede parsear un
-// esquema con una sintaxis propia**. Puede compararlas, escribirlas y abrirlas; el parsing lo hace
-// `URI` para todos por igual. Faltando los tres metodos, un manejador que los necesite **no
-// compila**, que es cuando conviene enterarse.
+// The consequence has to be said straight: **a `URLStreamHandler` written here cannot parse a scheme
+// with a syntax of its own**. It can compare them, write them and open them; the parsing is done by
+// `URI` for everyone alike. The three methods are declared with their exact signatures --a subclass
+// that overrides them compiles-- and what declines is the inherited version, which would be lying if
+// it did nothing.
 //
-// `getHostAddress` si esta, y devuelve null siempre: su contrato es "la direccion del host, o null
-// si no se conoce", y aca no se conoce porque no hay resolutor (ver la cabecera de `InetAddress`).
-// Null es la respuesta verdadera, no un tapon -- y el JDK devuelve null exactamente igual cuando el
-// nombre no resuelve.
+// `getHostAddress` is here, and always returns null: its contract is "the host's address, or null if
+// it is not known", and here it is not known because there is no resolver (see `InetAddress`'s
+// header). Null is the true answer, not a plug -- and the JDK returns null in exactly the same way
+// when the name does not resolve.
 public abstract class URLStreamHandler {
 
     public URLStreamHandler() {
     }
 
     /**
-     * Abre la conexion a {@code u}.
+     * Opens the connection to {@code u}.
      *
-     * <p>Abstracto: es lo unico que esta clase no puede saber por su cuenta.
+     * <p>Abstract: it is the one thing this class cannot know on its own.
      */
     protected abstract URLConnection openConnection(URL u) throws IOException;
 
     /**
-     * Abre la conexion a {@code u} saliendo por {@code p}.
+     * Opens the connection to {@code u} going out through {@code p}.
      *
-     * <p>La clase base **no lo soporta y lo dice**, con este mismo texto, en el JDK: un manejador
-     * que sepa usar proxies lo sobreescribe.
+     * <p>The base class **does not support it and says so**, with this same text, in the JDK: a
+     * handler that knows how to use proxies overrides it.
      *
-     * @throws UnsupportedOperationException siempre, en la clase base
+     * @throws UnsupportedOperationException always, in the base class
      */
     protected URLConnection openConnection(URL u, Proxy p) throws IOException {
         throw new UnsupportedOperationException("Method not implemented.");
     }
 
     /**
-     * El puerto que se usa cuando la URL no dice ninguno, o -1 si el protocolo no tiene uno.
+     * The port used when the URL names none, or -1 if the protocol has none.
      *
-     * <p>-1 en la clase base: un protocolo generico no tiene puerto por convencion.
+     * <p>-1 in the base class: a generic protocol has no port by convention.
      */
     protected int getDefaultPort() {
         return -1;
     }
 
     /**
-     * Si las dos URLs nombran el mismo recurso, fragmento incluido.
+     * Whether the two URLs name the same resource, fragment included.
      *
-     * <p>Es {@link #sameFile} mas la comparacion del fragmento. Que el fragmento cuente aca y no en
-     * `sameFile` es la diferencia entre las dos: `#seccion2` es otra parte del mismo archivo.
+     * <p>It is {@link #sameFile} plus the fragment comparison. That the fragment counts here and not
+     * in `sameFile` is the difference between the two: `#section2` is another part of the same file.
      */
     protected boolean equals(URL u1, URL u2) {
         String ref1 = u1.getRef();
         String ref2 = u2.getRef();
-        boolean refsIguales = ref1 == null ? ref2 == null : ref1.equals(ref2);
-        return refsIguales && this.sameFile(u1, u2);
+        boolean sameRef = ref1 == null ? ref2 == null : ref1.equals(ref2);
+        return sameRef && this.sameFile(u1, u2);
     }
 
     /**
-     * El hash que corresponde a {@link #equals(URL, URL)}: suma de las partes.
+     * The hash matching {@link #equals(URL, URL)}: the sum of the parts.
      *
-     * <p>Suma y no combinacion posicional, igual que el JDK. El host entra en minusculas, porque un
-     * nombre de host no distingue mayusculas y dos escrituras del mismo host tienen que dar el
-     * mismo numero.
+     * <p>A sum and not a positional combination, just like the JDK. The host goes in lower case,
+     * because a host name is case-insensitive and two spellings of the same host have to give the
+     * same number.
      */
     protected int hashCode(URL u) {
         int h = 0;
@@ -122,11 +124,11 @@ public abstract class URLStreamHandler {
     }
 
     /**
-     * Si las dos URLs nombran el mismo archivo, **sin** mirar el fragmento.
+     * Whether the two URLs name the same file, **without** looking at the fragment.
      *
-     * <p>Compara protocolo, host, puerto efectivo y ruta. El puerto "efectivo" es el que trae la
-     * URL o, si no trae, el del protocolo: por eso {@code http://x/} y {@code http://x:80/} son el
-     * mismo archivo.
+     * <p>It compares protocol, host, effective port and path. The "effective" port is the one the URL
+     * carries or, failing that, the protocol's: that is why {@code http://x/} and {@code http://x:80/}
+     * are the same file.
      */
     protected boolean sameFile(URL u1, URL u2) {
         String p1 = u1.getProtocol();
@@ -148,14 +150,14 @@ public abstract class URLStreamHandler {
     }
 
     /**
-     * Si las dos URLs apuntan al mismo host.
+     * Whether the two URLs point at the same host.
      *
-     * <p>El JDK compara primero las direcciones IP --para que un nombre y su IP resulten el mismo
-     * host-- y recien si alguna no resuelve compara los nombres. Aca {@link #getHostAddress}
-     * siempre da null, asi que la comparacion es siempre por nombre, sin distinguir mayusculas.
+     * <p>The JDK compares the IP addresses first --so that a name and its IP come out the same host--
+     * and only if one of them does not resolve does it compare the names. Here {@link #getHostAddress}
+     * always gives null, so the comparison is always by name, case-insensitively.
      *
-     * <p>Eso hace esta comparacion **mas estricta** que la del JDK, nunca mas laxa: puede decir que
-     * dos URLs son de hosts distintos donde el JDK diria que son el mismo, y no al reves.
+     * <p>That makes this comparison **stricter** than the JDK's, never laxer: it may say two URLs are
+     * of different hosts where the JDK would say they are the same, and not the other way round.
      */
     protected boolean hostsEqual(URL u1, URL u2) {
         InetAddress a1 = this.getHostAddress(u1);
@@ -172,21 +174,21 @@ public abstract class URLStreamHandler {
     }
 
     /**
-     * La direccion IP del host de {@code u}, o null si no se conoce.
+     * The IP address of {@code u}'s host, or null if it is not known.
      *
-     * <p>Siempre null en KajiJDK: no hay resolutor de nombres. Null es una respuesta que el
-     * contrato ya contempla --el JDK la da cuando el nombre no resuelve-- y los dos llamadores de
-     * este metodo, {@link #hashCode} y {@link #hostsEqual}, tienen su camino alternativo escrito.
+     * <p>Always null in KajiJDK: there is no name resolver. Null is an answer the contract already
+     * allows for --the JDK gives it when the name does not resolve-- and this method's two callers,
+     * {@link #hashCode} and {@link #hostsEqual}, have their alternative path written.
      */
     protected InetAddress getHostAddress(URL u) {
         return null;
     }
 
     /**
-     * La URL escrita como texto.
+     * The URL written as text.
      *
-     * <p>Rearma {@code protocolo://autoridad + archivo + #fragmento}. Los pedazos que faltan se
-     * omiten enteros, con su separador: una URL sin autoridad no lleva las dos barras.
+     * <p>It reassembles {@code protocol://authority + file + #fragment}. The missing pieces are
+     * omitted whole, separator included: a URL with no authority carries no double slash.
      */
     protected String toExternalForm(URL u) {
         StringBuilder b = new StringBuilder();
@@ -207,49 +209,50 @@ public abstract class URLStreamHandler {
     }
 
     /**
-     * Parsea {@code spec} y le carga los componentes a {@code u}.
+     * Parses {@code spec} and loads the components into {@code u}.
      *
-     * <p>Es el protocolo con el que el JDK deja que un manejador entienda un esquema propio: la
-     * {@link URL} llega vacia, el manejador la parsea a su manera y la llena con {@link #setURL}.
+     * <p>It is the protocol by which the JDK lets a handler understand a scheme of its own: the
+     * {@link URL} arrives empty, the handler parses it its own way and fills it in with
+     * {@link #setURL}.
      *
-     * <h2>Por que aca no puede andar</h2>
+     * <h2>Why it cannot work here</h2>
      *
-     * <p>Porque la {@link URL} de esta biblioteca es <strong>inmutable</strong>: guarda un
-     * {@link java.net.URI} y una cadena, los dos {@code final}. No hay nada que llenar despues de
-     * construida, asi que el protocolo de "parsear y cargar" no tiene donde apoyarse.
+     * <p>Because this library's {@link URL} is <strong>immutable</strong>: it keeps a
+     * {@link java.net.URI} and a string, both {@code final}. There is nothing to fill in after it is
+     * built, so the "parse and load" protocol has nothing to rest on.
      *
-     * <p>No es una omision que se arregle escribiendo mas: seria cambiar la representacion de
-     * {@code URL}. Queda declarado con la firma exacta —una subclase que lo sobrescriba compila— y
-     * lo que declina es la version heredada, que mentiria si no hiciera nada.
+     * <p>It is not an omission that writing more would fix: it would mean changing {@code URL}'s
+     * representation. It is declared with the exact signature —a subclass that overrides it compiles—
+     * and what declines is the inherited version, which would be lying if it did nothing.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     protected void parseURL(URL u, String spec, int start, int limit) {
         throw new UnsupportedOperationException(
-                "la URL de esta biblioteca es inmutable: no se la puede llenar despues de creada");
+                "this library's URL is immutable: it cannot be filled in after it is created");
     }
 
     /**
-     * Le carga los componentes a {@code u}.
+     * Loads the components into {@code u}.
      *
-     * @throws UnsupportedOperationException siempre — ver {@link #parseURL}
+     * @throws UnsupportedOperationException always — see {@link #parseURL}
      */
     protected void setURL(URL u, String protocol, String host, int port, String authority,
             String userInfo, String path, String query, String ref) {
         throw new UnsupportedOperationException(
-                "la URL de esta biblioteca es inmutable: no se la puede llenar despues de creada");
+                "this library's URL is immutable: it cannot be filled in after it is created");
     }
 
     /**
-     * La forma vieja, de antes de que una URL distinguiera autoridad de host.
+     * The old form, from before a URL told authority and host apart.
      *
-     * @deprecated usar la de nueve argumentos, que separa {@code authority}, {@code userInfo} y
-     *     {@code query} en vez de meterlos en {@code file}
-     * @throws UnsupportedOperationException siempre — ver {@link #parseURL}
+     * @deprecated use the nine-argument one, which separates {@code authority}, {@code userInfo} and
+     *     {@code query} instead of stuffing them into {@code file}
+     * @throws UnsupportedOperationException always — see {@link #parseURL}
      */
     @Deprecated(since = "1.2")
     protected void setURL(URL u, String protocol, String host, int port, String file, String ref) {
         throw new UnsupportedOperationException(
-                "la URL de esta biblioteca es inmutable: no se la puede llenar despues de creada");
+                "this library's URL is immutable: it cannot be filled in after it is created");
     }
 }

@@ -4,12 +4,11 @@ import java.math.BigInteger;
 import java.security.spec.KeySpec;
 
 /**
- * Una clave publica Diffie-Hellman: el valor `y` mas los parametros `p` y `g` con los que se
- * calculo.
+ * A Diffie-Hellman public key: the value `y` plus the parameters `p` and `g` it was computed with.
  *
- * <p>Los parametros van adentro de la clave y no aparte porque una clave DH **no significa nada sin
- * ellos**: el mismo `y` con otro primo es otra clave. Es la diferencia con RSA, donde el modulo ya
- * viene en la clave.
+ * <p>The parameters go inside the key and not separately because a DH key **means nothing without
+ * them**: the same `y` with another prime is another key. It is the difference from RSA, where the
+ * modulus already comes in the key.
  */
 public class DHPublicKeySpec implements KeySpec {
 
@@ -17,24 +16,24 @@ public class DHPublicKeySpec implements KeySpec {
     private final BigInteger p;
     private final BigInteger g;
 
-    /** El valor publico `y`, con su primo y su generador. */
+    /** The public value `y`, with its prime and its generator. */
     public DHPublicKeySpec(BigInteger y, BigInteger p, BigInteger g) {
         this.y = y;
         this.p = p;
         this.g = g;
     }
 
-    /** El valor publico. */
+    /** The public value. */
     public BigInteger getY() {
         return this.y;
     }
 
-    /** El primo. */
+    /** The prime. */
     public BigInteger getP() {
         return this.p;
     }
 
-    /** El generador. */
+    /** The generator. */
     public BigInteger getG() {
         return this.g;
     }

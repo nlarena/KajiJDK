@@ -50,9 +50,9 @@ import java.util.Set;
 public class Socket implements Closeable {
 
     static {
-        // El puente que `java.nio.channels` usa para conseguir un `Socket` sobre un handle que ya
-        // tiene abierto. Se instala al cargar esta clase; ver `jdk.internal.net.Adopcion`.
-        jdk.internal.net.Adopcion.registrar(new AdopcionDeSockets());
+        // The bridge `java.nio.channels` uses to get a `Socket` over a handle it already has
+        // open. It is installed when this class loads; see `jdk.internal.net.Adoption`.
+        jdk.internal.net.Adoption.register(new SocketAdoption());
     }
 
     private static volatile SocketImplFactory factory;
@@ -737,8 +737,8 @@ public class Socket implements Closeable {
         return this.soTimeout;
     }
 
-    // Lo que `ServerSocket.implAccept` necesita para entregar un socket ya conectado.
-    void adoptar(int h) {
+    // What `ServerSocket.implAccept` needs in order to hand over an already connected socket.
+    void adopt(int h) {
         this.handle = h;
         this.connected = true;
         this.bound = true;

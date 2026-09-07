@@ -2,40 +2,41 @@ package java.net;
 
 import java.security.BasicPermission;
 
-// Los permisos "de red" que en realidad no son de red: son permisos para **reconfigurar la
-// plataforma**.
+// The "network" permissions that are not really about the network: they are permissions to
+// **reconfigure the platform**.
 //
-// Los nombres que define el JDK son cosas como "setDefaultAuthenticator", "setCookieHandler" o
-// "setProxySelector": todos ellos autorizan a instalar un callback global. Y ahi esta el motivo de
-// que existan -- quien puede reemplazar el `Authenticator` de la VM ve las contrasenas de todo el
-// mundo, y quien puede reemplazar el `ProxySelector` desvia todo el trafico. No hace falta ninguna
-// red para que eso sea peligroso, y no hace falta ninguna para representarlo.
+// The names the JDK defines are things like "setDefaultAuthenticator", "setCookieHandler" or
+// "setProxySelector": every one of them authorizes installing a global callback. And there lies the
+// reason they exist -- whoever can replace the VM's `Authenticator` sees everyone's passwords, and
+// whoever can replace the `ProxySelector` diverts all the traffic. No network is needed for that to
+// be dangerous, and none is needed to represent it.
 //
-// Toda la logica --nombres jerarquicos, comodin `*`, sin acciones-- la pone `BasicPermission`. Esta
-// clase existe para ser un **tipo distinto**: una politica que otorga "setDefaultAuthenticator" no
-// deberia otorgar de paso una propiedad del sistema con el mismo nombre.
+// All the logic --hierarchical names, the `*` wildcard, no actions-- is `BasicPermission`'s. This
+// class exists in order to be a **distinct type**: a policy granting "setDefaultAuthenticator" should
+// not also grant a system property with the same name.
 //
-// Nada omitido.
+// Nothing omitted.
 //
-// @deprecated El Security Manager quedo deprecado para remocion; estos permisos ya no se chequean.
+// @deprecated The Security Manager is deprecated for removal; these permissions are no longer
+// checked.
 @Deprecated
 public final class NetPermission extends BasicPermission {
 
     private static final long serialVersionUID = -8343910153355041693L;
 
     /**
-     * @throws IllegalArgumentException si el nombre es vacio
-     * @throws NullPointerException si el nombre es null
+     * @throws IllegalArgumentException if the name is empty
+     * @throws NullPointerException if the name is null
      */
     public NetPermission(String name) {
         super(name);
     }
 
     /**
-     * Como el otro constructor; {@code actions} se ignora porque esta clase no tiene acciones.
+     * Like the other constructor; {@code actions} is ignored because this class has no actions.
      *
-     * <p>Existe para la deserializacion y para encadenar desde subclases, no porque el argumento
-     * signifique algo.
+     * <p>It exists for deserialization and for chaining from subclasses, not because the argument
+     * means anything.
      */
     public NetPermission(String name, String actions) {
         super(name, actions);

@@ -6,23 +6,24 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
-// KajiLibrary's java.time.format.DecimalStyle — the symbols a DateTimeFormatter uses for numbers: the
-// zero digit, the positive/negative signs, and the decimal separator.
+// KajiLibrary's java.time.format.DecimalStyle — the symbols a DateTimeFormatter uses for numbers:
+// the zero digit, the positive/negative signs, and the decimal separator.
 //
-// Los cuatro simbolos que la clase guarda son **datos del llamador**: `withZeroDigit`,
-// `withDecimalSeparator` y los otros dos hacen exactamente lo que dicen, y el formateador los usa.
-// Esa mitad es completa.
+// The four symbols the class keeps are **the caller's data**: `withZeroDigit`,
+// `withDecimalSeparator` and the other two do exactly what they say, and the formatter uses them.
+// That half is complete.
 //
-// La otra mitad --de que locale salen-- es CLDR. `of(Locale)` y `ofDefaultLocale()` devuelven
-// `STANDARD` para cualquier locale, y eso es correcto para la enorme mayoria pero **no para todos**:
-// un locale con digitos indo-arabigos tiene otro cero, y aca no se lo va a dar. Queda como
-// aproximacion escrita y no como omision porque quitar `of(Locale)` --que el JDK usa para construir
-// cualquier `DateTimeFormatter`-- dejaria la clase sin punto de entrada.
+// The other half --which locale they come from-- is CLDR. `of(Locale)` and `ofDefaultLocale()`
+// return `STANDARD` for any locale, and that is right for the vast majority but **not for all**: a
+// locale with Indo-Arabic digits has a different zero, and it will not be given one here. It stands
+// as a written approximation and not as an omission because removing `of(Locale)` --which the JDK
+// uses to build any `DateTimeFormatter`-- would leave the class with no way in.
 //
-// `getAvailableLocales()` ya esta, y devuelve lo mismo que `DecimalFormatSymbols.getAvailableLocales()`
-// --que es literalmente lo que hace el JDK, con la misma delegacion--. La lista es corta porque la de
-// `java.text` es corta: son los locales para los que esta biblioteca trae datos. Eso no es inventar
-// nada; es informar cuantos hay, que es distinto de decir que hay mas.
+// `getAvailableLocales()` is here, and returns the same as
+// `DecimalFormatSymbols.getAvailableLocales()` --which is literally what the JDK does, with the
+// same delegation. The list is short because `java.text`'s is short: they are the locales this
+// library ships data for. That invents nothing; it reports how many there are, which is different
+// from saying there are more.
 public final class DecimalStyle {
 
     public static final DecimalStyle STANDARD = new DecimalStyle('0', '+', '-', '.');
@@ -48,9 +49,9 @@ public final class DecimalStyle {
     }
 
     /**
-     * Los locales para los que hay datos, que son los de {@link DecimalFormatSymbols}.
+     * The locales there is data for, which are {@link DecimalFormatSymbols}'s.
      *
-     * <p>El JDK hace esta misma delegacion. Lo que cambia es cuantos son.
+     * <p>The JDK makes this same delegation. What changes is how many there are.
      */
     public static Set<Locale> getAvailableLocales() {
         Locale[] l = DecimalFormatSymbols.getAvailableLocales();

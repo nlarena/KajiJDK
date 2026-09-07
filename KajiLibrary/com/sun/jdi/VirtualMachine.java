@@ -1,5 +1,11 @@
 package com.sun.jdi;
 
+import java.util.List;
+import java.util.Map;
+
+import com.sun.jdi.event.EventQueue;
+import com.sun.jdi.request.EventRequestManager;
+
 /**
  * La maquina virtual que se esta depurando, vista desde el depurador.
  *
@@ -14,15 +20,20 @@ package com.sun.jdi;
  * servicio. Un depurador serio pregunta antes de ofrecer la funcion en su interfaz, porque la
  * alternativa es enterarse con una excepcion en el medio de una sesion.
  *
- * <h2>A KajiLibrary subset</h2>
+ * <h2>La familia {@code mirrorOf}</h2>
  *
- * <p>Estan declarados los miembros que **no necesitan el resto de JDI**: las constantes de traza,
- * el control de ejecucion, las capacidades, el estrato por omision y los datos de identificacion.
+ * <p>Fabrica un valor <strong>en la maquina depurada</strong> a partir de uno de aca. Hace falta
+ * para pasarle argumentos a {@code ObjectReference.invokeMethod}: un {@code int} de este proceso no
+ * sirve, hay que crear el equivalente del otro lado.
  *
- * <p>Faltan los que devuelven otros reflejos --`allClasses`, `allThreads`, `eventQueue`,
- * `eventRequestManager`, la familia `mirrorOf`-- porque cada uno arrastra su parte de
- * `com.sun.jdi`, `com.sun.jdi.event` y `com.sun.jdi.request`, que todavia no estan. Se agregan
- * cuando esos paquetes existan; declararlos ahora con tipos inventados seria peor que no tenerlos.
+ * <p>{@link #mirrorOf(String)} es el caso que mas sorprende: crea un objeto {@code String} nuevo en
+ * la otra VM, con lo que eso implica --ocupa memoria alla y el recolector puede llevarselo--.
+ *
+ * <h2>Sobre esta interfaz en esta biblioteca</h2>
+ *
+ * <p>Estaba a medias con una nota que decia que los metodos que devuelven otros reflejos se
+ * agregarian cuando existieran {@code com.sun.jdi}, {@code com.sun.jdi.event} y
+ * {@code com.sun.jdi.request}. Ya existen, asi que estan.
  */
 public interface VirtualMachine extends Mirror {
 
@@ -112,7 +123,7 @@ public interface VirtualMachine extends Mirror {
      * Si una redefinicion puede agregar metodos.
      *
      * @deprecated Ninguna VM lo soporta desde hace mucho, y la especificacion de JDWP lo dejo de
-     *     lado. Da `false` siempre.
+     * lado. Da `false` siempre.
      */
     @Deprecated
     boolean canAddMethod();
@@ -205,4 +216,172 @@ public interface VirtualMachine extends Mirror {
      * @param traceFlags una combinacion `or` de las constantes `TRACE_*`
      */
     void setDebugTraceMode(int traceFlags);
+
+    /**
+     * Todas las clases cargadas en la maquina depurada.
+     *
+     * <p>En un programa real son miles, y cada una es un viaje. Casi siempre se quiere
+     * {@link #classesByName} en su lugar.
+     *
+     * @return las clases
+     */
+    List<ReferenceType> allClasses();
+
+    /**
+     * Las clases con ese nombre.
+     *
+     * <p>Devuelve una lista y no una sola: dos cargadores distintos pueden haber cargado clases del
+     * mismo nombre, y en un servidor de aplicaciones eso es lo normal, no la excepcion.
+     *
+     * @param className el nombre completo
+     * @return las clases con ese nombre, o una lista vacia
+     */
+    List<ReferenceType> classesByName(String className);
+
+    /**
+     * Todos los modulos de la maquina depurada.
+     *
+     * @return los modulos
+     * @since 9
+     */
+    default List<ModuleReference> allModules() {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Reemplaza el codigo de unas clases sin reiniciar la VM.
+     *
+     * <p>Es lo que hace posible "recargar en caliente". Tiene un limite duro: se puede cambiar el
+     * cuerpo de un metodo y no la <strong>forma</strong> de la clase --agregar un campo, cambiar
+     * una firma, tocar la jerarquia--. Los marcos que ya estaban en la pila siguen ejecutando el
+     * codigo viejo, y por eso {@code Method.isObsolete} existe.
+     *
+     * @param classToBytes las clases y su bytecode nuevo
+     */
+    void redefineClasses(Map<? extends ReferenceType, byte[]> classToBytes);
+
+    /**
+     * Todos los hilos de la maquina depurada.
+     *
+     * @return los hilos
+     */
+    List<ThreadReference> allThreads();
+
+    /**
+     * Los grupos de hilos que no tienen padre.
+     *
+     * @return los grupos raiz
+     */
+    List<ThreadGroupReference> topLevelThreadGroups();
+
+    /**
+     * La cola por donde llegan los eventos.
+     *
+     * @return la cola
+     */
+    EventQueue eventQueue();
+
+    /**
+     * El gestor con el que se piden los eventos.
+     *
+     * @return el gestor
+     */
+    EventRequestManager eventRequestManager();
+
+    /**
+     * Cuantas instancias vivas hay de cada uno de esos tipos.
+     *
+     * <p>Contarlas obliga a recorrer el monton de la otra VM, asi que es caro y puede pausarla. El
+     * arreglo devuelto se corresponde posicion a posicion con la lista que se paso.
+     *
+     * @param types los tipos a contar
+     * @return la cantidad de instancias de cada uno
+     */
+    long[] instanceCounts(List<? extends ReferenceType> types);
+
+    /**
+     * Un {@code boolean} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    BooleanValue mirrorOf(boolean value);
+
+    /**
+     * Un {@code byte} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    ByteValue mirrorOf(byte value);
+
+    /**
+     * Un {@code char} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    CharValue mirrorOf(char value);
+
+    /**
+     * Un {@code short} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    ShortValue mirrorOf(short value);
+
+    /**
+     * Un {@code int} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    IntegerValue mirrorOf(int value);
+
+    /**
+     * Un {@code long} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    LongValue mirrorOf(long value);
+
+    /**
+     * Un {@code float} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    FloatValue mirrorOf(float value);
+
+    /**
+     * Un {@code double} de la maquina depurada con ese valor.
+     *
+     * @param value el valor
+     * @return el reflejo
+     */
+    DoubleValue mirrorOf(double value);
+
+    /**
+     * Un {@code String} <strong>nuevo</strong> en la maquina depurada.
+     *
+     * <p>Crea un objeto alla, no un valor: ocupa memoria en la otra VM y su recolector puede
+     * llevarselo mientras se lo esta usando. Para eso esta
+     * {@code ObjectReference.disableCollection}.
+     *
+     * @param value el texto
+     * @return el reflejo
+     */
+    StringReference mirrorOf(String value);
+
+    /**
+     * El valor {@code void} de la maquina depurada.
+     *
+     * <p>Existe porque un metodo que no devuelve nada igual tiene que poder informar
+     * <strong>algo</strong> como resultado de {@code invokeMethod}, y ese algo es este.
+     *
+     * @return el reflejo de void
+     */
+    VoidValue mirrorOfVoid();
 }

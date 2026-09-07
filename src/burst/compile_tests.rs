@@ -143,8 +143,10 @@ fn call_at_raw(compiled: &CompiledCode, locals: &[i64], entry_pc: i64) -> (Outco
     // buffer is a live, initialised `[i64]` at least `locals.len()` long, which is the marshalling
     // contract (`touched_locals` indices are all `< max_locals == locals.len()`), and `entry_pc`
     // is 0 or one of the code's own `osr_entries` at every call site below.
-    let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
-    let raw = f(buffer.as_mut_ptr(), entry_pc);
+    let f: extern "system" fn(*mut i64, i64, i64) -> i64 = unsafe { mem.as_fn() };
+    // The frame budget: generous, because no program here makes a real call. The one group that
+    // does builds its own harness, where the number is the thing under test.
+    let raw = f(buffer.as_mut_ptr(), entry_pc, 16);
     // The boundary contract in one line: the status word says *how* it ended, and the result slot
     // holds *what* it handed back. Reading them together here is what keeps every assertion below
     // reading as one fact.
@@ -155,6 +157,605 @@ fn call_at_raw(compiled: &CompiledCode, locals: &[i64], entry_pc: i64) -> (Outco
         RawOutcome::AllocFailed(key) => Outcome::AllocFailed(key),
     };
     (outcome, buffer)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Group 4: **a real call**, at the level where both sides of it can be held still.
+//
+// The whole-VM statement of this group is in `jit_tests`; what these add is the half a running VM
+// cannot hold still — the callee's record, the frame budget and the buffer are all arguments here,
+// so "what happens when the callee is not compiled" or "when the budget is one short" is a value
+// rather than a situation to arrange.
+//
+// **How a call is forced instead of an expansion.** [`Unit`] identity is the compiler's cycle
+// check: a callee already on the path from the root cannot be expanded, because it would expand
+// into itself for ever. So both bodies below are given the *same* unit, which is exactly what a
+// recursion looks like to the compiler — and the callee is then compiled separately, as its own
+// root, which is exactly what a recursion is at run time.
+// ---------------------------------------------------------------------------------------------
+
+/// A callee: compiled, mapped, and holding the record a caller jumps through.
+struct Called {
+    /// Kept alive for as long as the record points into it.
+    mem: ExecMem,
+    record: Box<super::compile::NativeRecord>,
+    compiled: CompiledCode,
+}
+
+impl Called {
+    /// Compiles and maps `code`, and fills in a record for it.
+    fn new(code: &[u8], max_locals: usize, descriptor: &str) -> Called {
+        let poll = &POLL as *const _ as usize;
+        let compiled = compile_shaped(code, max_locals, descriptor, true, &|_| None, Heap::default(), poll)
+            .expect("the callee programs here are all inside the subset");
+        Called::of(compiled)
+    }
+
+    /// The same, for a compilation that is already in hand — a callee that is itself a caller.
+    fn of(compiled: CompiledCode) -> Called {
+        let mem = ExecMem::from_code(&compiled.code).expect("map the callee W^X");
+        let record = Box::new(super::compile::NativeRecord {
+            code: mem.as_ptr() as u64,
+            frames: u64::from(compiled.frame_depth),
+        });
+        Called { mem, record, compiled }
+    }
+
+    /// The address a caller bakes in.
+    fn address(&self) -> usize {
+        let _ = &self.mem;
+        std::ptr::from_ref::<super::compile::NativeRecord>(&*self.record) as usize
+    }
+}
+
+/// Compiles a caller whose one invoke is a **real call** to `callee`.
+///
+/// The callee's shape is handed to the resolver exactly as the VM would hand it over, with the same
+/// unit as the caller — which is what makes the expansion impossible and the call the only answer.
+/// The callee's shape as the VM would hand it over: its body, its `max_locals`, its descriptor and
+/// how many operands the call consumes.
+type CalleeShape<'a> = (&'a [u8], usize, &'a str, usize);
+
+fn caller_calling(
+    code: &[u8],
+    max_locals: usize,
+    descriptor: &str,
+    callee: &Called,
+    shape: CalleeShape,
+) -> CompiledCode {
+    let (callee_code, callee_locals, callee_descriptor, arg_slots) = shape;
+    super::compile::compile(
+        &Method { unit: 7, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| {
+                Some(vec![super::compile::Callee {
+                    // The same unit as the caller: the cycle check refuses the expansion, and the
+                    // call is what is left.
+                    method: Method {
+                        unit: 7,
+                        code: callee_code,
+                        max_locals: callee_locals,
+                        descriptor: callee_descriptor,
+                        is_static: true,
+                        has_handlers: false,
+                    },
+                    arg_slots,
+                    guard: super::compile::Guard::Static,
+                    record: Some(callee.address()),
+                }])
+            },
+            heap: Heap::default(),
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .expect("the caller programs here are all inside the subset")
+}
+
+/// Runs `caller` with `budget` frames of headroom, over a buffer long enough for every region a
+/// chain of these calls can stack up.
+fn call_native(caller: &CompiledCode, callee: &Called, locals: &[i64], budget: i64) -> (Outcome, Vec<i64>) {
+    let mem = ExecMem::from_code(&caller.code).expect("map the caller W^X");
+    let mut buffer: Vec<i64> = locals.to_vec();
+    // The caller's whole region, then one per level below it — generously, since the deepest chain
+    // here is three and the assertions index only the first two regions.
+    let need = 4 * (caller.buffer_slots as usize + callee.compiled.buffer_slots as usize) + 8;
+    buffer.resize(buffer.len().max(need), 0);
+    // SAFETY: as `call_at_raw`, plus the second region a real call writes into — which is why the
+    // buffer is sized for a whole chain of compilations rather than for one.
+    let f: extern "system" fn(*mut i64, i64, i64) -> i64 = unsafe { mem.as_fn() };
+    let raw = f(buffer.as_mut_ptr(), 0, budget);
+    let outcome = match Status::unpack(raw) {
+        RawOutcome::Returned => Outcome::Returned(buffer[caller.result_base as usize]),
+        RawOutcome::Deopt(key) => Outcome::Deopt(key),
+        RawOutcome::Safepoint(key) => Outcome::Safepoint(key),
+        RawOutcome::AllocFailed(key) => Outcome::AllocFailed(key),
+    };
+    (outcome, buffer)
+}
+
+/// The site a real call comes back through when its callee could not finish.
+fn link_site(compiled: &CompiledCode) -> &ResumeSite {
+    compiled.resume_sites.iter().find(|s| s.native.is_some()).expect("a compilation with a real call has one")
+}
+
+/// `f(x) = x * 3 + 1`, as a callee. The `+ 1` is there so a result read from the wrong place cannot
+/// accidentally be a multiple of the argument.
+const CALLEE_TRIPLE: [u8; 7] = [ILOAD_0, BIPUSH, 3, IMUL, ICONST_1, IADD, IRETURN];
+
+/// `g(x) = 100 + f(x)`, with the invoke at pc 3. The `100` is pushed **before** the argument, so it
+/// is a live operand underneath it at the invoke — which is what a rebuilt caller frame has to hand
+/// back, and what a clobbered operand-stack cache would lose.
+const CALLER_ADD: [u8; 8] = [BIPUSH, 100, ILOAD_0, 0xb8, 0x00, 0x01, IADD, IRETURN];
+
+#[test]
+fn una_llamada_nativa_real_devuelve_el_valor_del_callee() {
+    let callee = Called::new(&CALLEE_TRIPLE, 1, "(I)I");
+    let caller = caller_calling(&CALLER_ADD, 1, "(I)I", &callee, (&CALLEE_TRIPLE, 1, "(I)I", 1));
+    assert_eq!(caller.native_sites, 1, "the invoke is a call, not an expansion");
+    // 100 + (5 * 3 + 1), and 100 + (-1 * 3 + 1).
+    assert_eq!(call_native(&caller, &callee, &[5], 8).0, Outcome::Returned(116));
+    assert_eq!(call_native(&caller, &callee, &[-1], 8).0, Outcome::Returned(98));
+}
+
+#[test]
+fn un_callee_sin_codigo_deopta_en_el_invoke_con_los_argumentos_puestos() {
+    let mut callee = Called::new(&CALLEE_TRIPLE, 1, "(I)I");
+    let caller = caller_calling(&CALLER_ADD, 1, "(I)I", &callee, (&CALLEE_TRIPLE, 1, "(I)I", 1));
+    // A record still holding zero is a callee that is not compiled — the ordinary case for a method
+    // whose own counter has not tripped yet, and the reason a site is never refused for it.
+    callee.record.code = 0;
+    let (outcome, buffer) = call_native(&caller, &callee, &[5], 8);
+    // The deopt names the **invoke**, whose instruction has not run...
+    assert_eq!(outcome, Outcome::Deopt(3));
+    // ...so the interpreter finds the whole expression on the stack, arguments included: it is
+    // going to make the call itself.
+    assert_eq!(spilled(&caller, &buffer, 3), vec![100, 5]);
+}
+
+/// Compiles a caller whose one invoke is a **dispatched** real call — the milestone F3 shape.
+///
+/// Everything is as [`caller_calling`] arranges it (same unit, so the expansion is refused by the
+/// cycle check and the call is what is left) except the two things this milestone adds: the
+/// [`Guard`] the site checks before it reads the record, and a heap for that guard to read the
+/// receiver's header out of.
+fn caller_calling_dispatched(
+    code: &[u8],
+    descriptor: &str,
+    callee: &Called,
+    shape: CalleeShape,
+    guard: super::compile::Guard,
+    heap: Heap,
+) -> CompiledCode {
+    let (callee_code, callee_locals, callee_descriptor, arg_slots) = shape;
+    super::compile::compile(
+        &Method { unit: 7, code, max_locals: 2, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| {
+                Some(vec![super::compile::Callee {
+                    method: Method {
+                        unit: 7,
+                        code: callee_code,
+                        max_locals: callee_locals,
+                        descriptor: callee_descriptor,
+                        is_static: true,
+                        has_handlers: false,
+                    },
+                    arg_slots,
+                    guard,
+                    record: Some(callee.address()),
+                }])
+            },
+            heap,
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .expect("the caller programs here are all inside the subset")
+}
+
+/// The mirror offset the guard below is compiled against. Any `u32`; what matters is that it does
+/// not fit a signed 32-bit immediate, so a `cmp r, imm32` that truncated it would be wrong here and
+/// right for every small heap — which is exactly the mistake the emitter routes through `T2` to
+/// avoid.
+const DISPATCH_MIRROR: u32 = 0xBEEF_0001;
+
+/// `f(receiver, x) = x * 3 + 1`. The receiver is local 0 and is never read: what this callee is for
+/// is being *selected* by it.
+const DISPATCHED_TRIPLE: [u8; 7] = [ILOAD_1, BIPUSH, 3, IMUL, ICONST_1, IADD, IRETURN];
+
+/// `g(r, x) = 100 + r.f(x)`, with the `invokevirtual` at pc 4. The `100` is pushed **before** the
+/// receiver, so it is a live operand underneath the whole call at the invoke — which is what a
+/// deopt has to hand back untouched.
+const CALLER_DISPATCHED: [u8; 9] =
+    [BIPUSH, 100, ALOAD_0, ILOAD_1, 0xb6, 0x00, 0x01, IADD, IRETURN];
+
+/// The shape of the callee above, as the VM hands it over: two operands consumed (receiver + arg).
+const DISPATCHED_SHAPE: CalleeShape =
+    (&DISPATCHED_TRIPLE, 2, "(Ljava/lang/Object;I)I", 2);
+
+#[test]
+fn una_llamada_nativa_despachada_entra_cuando_la_guarda_acierta() {
+    let mut heap = FakeHeap::new();
+    // The receiver: an object in the "other" buffer whose header word is the class the site is
+    // compiled against.
+    heap.write(512, DISPATCH_MIRROR as i32);
+    let callee = Called::new(&DISPATCHED_TRIPLE, 2, "(Ljava/lang/Object;I)I");
+    let caller = caller_calling_dispatched(
+        &CALLER_DISPATCHED,
+        "(Ljava/lang/Object;I)I",
+        &callee,
+        DISPATCHED_SHAPE,
+        super::compile::Guard::ExactClass(DISPATCH_MIRROR),
+        heap.bases(),
+    );
+    // The site is a **call**, not an expansion — without this the test would pass against a
+    // compiler that inlined the callee and never emitted a guard in front of a call at all.
+    assert_eq!(caller.native_sites, 1, "the dispatched invoke is a call, not an expansion");
+    // 100 + (5 * 3 + 1), and 100 + (-1 * 3 + 1).
+    assert_eq!(call_native(&caller, &callee, &[512, 5], 8).0, Outcome::Returned(116));
+    assert_eq!(call_native(&caller, &callee, &[512, -1], 8).0, Outcome::Returned(98));
+}
+
+#[test]
+fn una_llamada_nativa_despachada_deopta_cuando_el_receptor_es_de_otra_clase() {
+    let mut heap = FakeHeap::new();
+    heap.write(512, DISPATCH_MIRROR as i32);
+    // A second object, of a class this site has never seen. Nothing else about it differs — which
+    // is the point: the only thing that may decide is the header word.
+    heap.write(640, DISPATCH_MIRROR as i32 + 1);
+    let callee = Called::new(&DISPATCHED_TRIPLE, 2, "(Ljava/lang/Object;I)I");
+    let caller = caller_calling_dispatched(
+        &CALLER_DISPATCHED,
+        "(Ljava/lang/Object;I)I",
+        &callee,
+        DISPATCHED_SHAPE,
+        super::compile::Guard::ExactClass(DISPATCH_MIRROR),
+        heap.bases(),
+    );
+    let (outcome, buffer) = call_native(&caller, &callee, &[640, 5], 8);
+    // The deopt names the **invoke**, whose instruction has not run...
+    assert_eq!(outcome, Outcome::Deopt(4));
+    // ...so the interpreter finds the whole expression on the stack — the operand underneath, the
+    // receiver and the argument — and dispatches the call by its own full path.
+    assert_eq!(spilled(&caller, &buffer, 4), vec![100, 640, 5]);
+    // And the class that *is* the site's still enters, so a miss is a miss and not a disabled site.
+    assert_eq!(call_native(&caller, &callee, &[512, 5], 8).0, Outcome::Returned(116));
+}
+
+#[test]
+fn una_llamada_nativa_despachada_trata_al_receptor_nulo_como_un_miss() {
+    let mut heap = FakeHeap::new();
+    heap.write(512, DISPATCH_MIRROR as i32);
+    let callee = Called::new(&DISPATCHED_TRIPLE, 2, "(Ljava/lang/Object;I)I");
+    let caller = caller_calling_dispatched(
+        &CALLER_DISPATCHED,
+        "(Ljava/lang/Object;I)I",
+        &callee,
+        DISPATCHED_SHAPE,
+        super::compile::Guard::ExactClass(DISPATCH_MIRROR),
+        heap.bases(),
+    );
+    // `null` is tested **before** the header is read, so the guard never touches `eden_base + 0`.
+    // The interpreter re-executes the invoke and raises the `NullPointerException` for it — this
+    // tier raises nothing.
+    let (outcome, buffer) = call_native(&caller, &callee, &[0, 5], 8);
+    assert_eq!(outcome, Outcome::Deopt(4));
+    assert_eq!(spilled(&caller, &buffer, 4), vec![100, 0, 5]);
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// **El caché polimórfico de sitio de llamada**: un sitio que vio `n` clases expande `n` cuerpos y
+// los pone detrás de una cadena de comparaciones, en vez de hornear una sola clase y deoptar con
+// todas las demás.
+//
+// # Por qué los cuatro cuerpos hacen aritmética distinta
+//
+// Porque una cadena mal armada —el brazo de la clase 2 cayendo en el cuerpo de la clase 1— es
+// **inobservable** si los cuerpos calculan lo mismo. El instrumento del banco (`bench/BkOps.java`)
+// tiene cuatro clases con cuerpos idénticos letra por letra, a propósito, porque ahí lo que se mide
+// es el despacho y no el trabajo; acá es al revés, y cada clase devuelve un número que ninguna otra
+// puede devolver. `100 + f(5)` da 116, 127, 138 y 159 según qué cuerpo corra, así que un brazo
+// cruzado no es una estadística sino una respuesta equivocada.
+// ---------------------------------------------------------------------------------------------
+
+/// Los espejos de las cuatro clases de la cadena, y el de una quinta que la cadena no conoce.
+///
+/// Todos por encima de `i32::MAX` por la razón de [`DISPATCH_MIRROR`]: un `cmp r, imm32` que
+/// truncara sería correcto en cualquier heap chico y equivocado acá. Y todos distintos entre sí en
+/// los cuatro bytes, para que contar apariciones del inmediato en el código emitido cuente
+/// **comparaciones** y no coincidencias.
+const PIC_MIRRORS: [u32; 4] = [0xBEEF_0011, 0xBEEF_0022, 0xBEEF_0033, 0xBEEF_0044];
+const PIC_STRANGER: u32 = 0xBEEF_0055;
+
+/// `f(receiver, x) = x * 3 + 1`, y sus tres hermanos con multiplicador y sumando propios. El
+/// receptor es el local 0 y ninguno lo lee: lo único que hace es **seleccionarlos**.
+const PIC_BODY_A: [u8; 8] = [ILOAD_1, BIPUSH, 3, IMUL, BIPUSH, 1, IADD, IRETURN];
+const PIC_BODY_B: [u8; 8] = [ILOAD_1, BIPUSH, 5, IMUL, BIPUSH, 2, IADD, IRETURN];
+const PIC_BODY_C: [u8; 8] = [ILOAD_1, BIPUSH, 7, IMUL, BIPUSH, 3, IADD, IRETURN];
+const PIC_BODY_D: [u8; 8] = [ILOAD_1, BIPUSH, 11, IMUL, BIPUSH, 4, IADD, IRETURN];
+
+/// Los cuatro brazos, en el orden en que el perfil los vio — que es el orden en que la cadena
+/// compara.
+const PIC_ARMS: [(u32, &[u8]); 4] = [
+    (PIC_MIRRORS[0], &PIC_BODY_A),
+    (PIC_MIRRORS[1], &PIC_BODY_B),
+    (PIC_MIRRORS[2], &PIC_BODY_C),
+    (PIC_MIRRORS[3], &PIC_BODY_D),
+];
+
+/// `100 + r.f(5)` para cada uno de los cuatro cuerpos, en el orden de [`PIC_ARMS`].
+const PIC_ANSWERS: [i64; 4] = [116, 127, 138, 159];
+
+/// Dónde vive el receptor de la clase `k` en el heap falso — en el buffer de "los otros", bien
+/// lejos de Eden, con su espejo escrito en la palabra de cabecera.
+fn pic_receiver(heap: &mut FakeHeap, k: usize, mirror: u32) -> i64 {
+    let offset = 512 + 64 * k;
+    heap.write(offset, mirror as i32);
+    offset as i64
+}
+
+/// Compila `g(r, x) = 100 + r.f(x)` con un sitio que ha visto exactamente las clases de `arms`.
+///
+/// Cada brazo lleva su **propia** unidad, distinta de la del llamador y de la de los demás: es lo
+/// que hace que el chequeo de ciclo no los rechace y que los `n` cuerpos se expandan de verdad. El
+/// `record` es `None` a propósito — si la expansión no ocurriera, no habría llamada real a la que
+/// caer y la compilación fallaría acá en vez de pasar el test por otro camino.
+fn caller_with_chain(arms: &[(u32, &'static [u8])], heap: Heap) -> CompiledCode {
+    let alternatives: Vec<super::compile::Callee> = arms
+        .iter()
+        .enumerate()
+        .map(|(i, &(mirror, code))| super::compile::Callee {
+            method: Method {
+                unit: 10 + i,
+                code,
+                max_locals: 2,
+                descriptor: "(Ljava/lang/Object;I)I",
+                is_static: true,
+                has_handlers: false,
+            },
+            arg_slots: 2,
+            guard: super::compile::Guard::ExactClass(mirror),
+            record: None,
+        })
+        .collect();
+    super::compile::compile(
+        &Method {
+            unit: 7,
+            code: &CALLER_DISPATCHED,
+            max_locals: 2,
+            descriptor: "(Ljava/lang/Object;I)I",
+            is_static: true,
+            has_handlers: false,
+        },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| Some(alternatives.clone()),
+            heap,
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .expect("the caller and its arms are all inside the subset")
+}
+
+/// Cuántas veces aparece el patrón de cuatro bytes de `value` en el código emitido — o sea, cuántas
+/// veces se materializó ese espejo como inmediato, que es una comparación de la cadena cada vez.
+fn pic_immediates(code: &[u8], value: u32) -> usize {
+    code.windows(4).filter(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == value).count()
+}
+
+#[test]
+fn pic_la_cadena_despacha_cada_clase_a_su_propio_cuerpo() {
+    let mut heap = FakeHeap::new();
+    let receivers: Vec<i64> =
+        PIC_MIRRORS.iter().enumerate().map(|(k, &m)| pic_receiver(&mut heap, k, m)).collect();
+    let caller = caller_with_chain(&PIC_ARMS, heap.bases());
+    // La cadena **expande**, no llama: sin esto el test pasaría contra un compilador que emitiera
+    // cuatro llamadas reales y ninguna guarda de clase.
+    assert_eq!(caller.native_sites, 0, "los cuatro brazos son expansiones");
+    // Y cada clase cae en su propio cuerpo. Cuatro respuestas distintas, una por brazo: un brazo
+    // cruzado devuelve el número de otro y esto lo dice.
+    for (k, (&receiver, &want)) in receivers.iter().zip(&PIC_ANSWERS).enumerate() {
+        assert_eq!(
+            call_at_raw(&caller, &[receiver, 5], 0).0,
+            Outcome::Returned(want),
+            "la clase {k} despachó al cuerpo equivocado"
+        );
+    }
+}
+
+#[test]
+fn pic_una_clase_que_la_cadena_no_conoce_deopta_en_el_invoke() {
+    let mut heap = FakeHeap::new();
+    let receivers: Vec<i64> =
+        PIC_MIRRORS.iter().enumerate().map(|(k, &m)| pic_receiver(&mut heap, k, m)).collect();
+    // La quinta clase: aparece **después** de compilar, que es el caso que el perfil no puede
+    // haber visto. Nada la distingue de las otras cuatro salvo la palabra de cabecera.
+    let stranger = pic_receiver(&mut heap, 4, PIC_STRANGER);
+    let caller = caller_with_chain(&PIC_ARMS, heap.bases());
+    let (outcome, buffer) = call_at_raw(&caller, &[stranger, 5], 0);
+    // Caerse del final de la cadena es un deopt en el **invoke**, cuya instrucción no corrió...
+    assert_eq!(outcome, Outcome::Deopt(4), "una clase fuera de la cadena tiene que deoptar");
+    // ...así que el intérprete encuentra la expresión entera en la pila —el operando de abajo, el
+    // receptor y el argumento— y hace la llamada por su camino completo.
+    assert_eq!(spilled(&caller, &buffer, 4), vec![100, stranger, 5]);
+    // Y las cuatro que sí están siguen entrando: un miss es un miss, no un sitio apagado.
+    for (&receiver, &want) in receivers.iter().zip(&PIC_ANSWERS) {
+        assert_eq!(call_at_raw(&caller, &[receiver, 5], 0).0, Outcome::Returned(want));
+    }
+}
+
+#[test]
+fn pic_el_receptor_nulo_es_un_miss_antes_de_leer_la_cabecera() {
+    let mut heap = FakeHeap::new();
+    for (k, &m) in PIC_MIRRORS.iter().enumerate() {
+        pic_receiver(&mut heap, k, m);
+    }
+    let caller = caller_with_chain(&PIC_ARMS, heap.bases());
+    // El `null` se prueba **antes** de leer la cabecera, así que la cadena no toca `eden_base + 0`
+    // ni una sola vez por brazo. El intérprete re-ejecuta el invoke y tira la
+    // `NullPointerException`; este nivel no tira nada.
+    let (outcome, buffer) = call_at_raw(&caller, &[0, 5], 0);
+    assert_eq!(outcome, Outcome::Deopt(4));
+    assert_eq!(spilled(&caller, &buffer, 4), vec![100, 0, 5]);
+}
+
+#[test]
+fn pic_un_sitio_monomorfico_sigue_emitiendo_una_sola_comparacion() {
+    let mut heap = FakeHeap::new();
+    let receiver = pic_receiver(&mut heap, 0, PIC_MIRRORS[0]);
+    let mono = caller_with_chain(&PIC_ARMS[..1], heap.bases());
+    // **La afirmación es sobre el código emitido, no sobre el resultado.** Un sitio que vio una
+    // sola clase materializa su espejo **una** vez: si la cadena se emitiera igual para `n = 1`, o
+    // si el perfil se ensanchara solo, esto lo dice sin depender de que el programa siga dando el
+    // mismo número (que lo daría).
+    assert_eq!(pic_immediates(&mono.code, PIC_MIRRORS[0]), 1, "una clase, una comparación");
+    for &other in &PIC_MIRRORS[1..] {
+        assert_eq!(pic_immediates(&mono.code, other), 0, "y ninguna comparación de más");
+    }
+    assert_eq!(call_at_raw(&mono, &[receiver, 5], 0).0, Outcome::Returned(PIC_ANSWERS[0]));
+
+    // Y el mismo sitio con cuatro clases emite exactamente cuatro comparaciones — una por clase, no
+    // una por brazo más una de repuesto, y ninguna clase comparada dos veces.
+    let poly = caller_with_chain(&PIC_ARMS, heap.bases());
+    for &mirror in &PIC_MIRRORS {
+        assert_eq!(pic_immediates(&poly.code, mirror), 1, "cada clase se compara una vez");
+    }
+}
+
+#[test]
+fn pic_un_sitio_megamorfico_rechaza_el_metodo() {
+    // Lo que el perfil contesta cuando se desborda —más clases distintas que ways— es `None`, y
+    // `None` es lo mismo que contesta para un sitio frío o un `invokedynamic`: el compilador no
+    // tiene nada que compilar acá y rechaza el método entero.
+    //
+    // Rechazar es la respuesta correcta y no la cómoda. Una cadena que no cubre el sitio se paga en
+    // cada llamada **y además** deopta, y un deopt retira la entrada on-stack del método: el bucle
+    // se perdería igual, pagando las guardas antes.
+    let error = super::compile::compile(
+        &Method {
+            unit: 7,
+            code: &CALLER_DISPATCHED,
+            max_locals: 2,
+            descriptor: "(Ljava/lang/Object;I)I",
+            is_static: true,
+            has_handlers: false,
+        },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            heap: Heap::default(),
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    );
+    assert!(matches!(error, Err(super::compile::Ineligible::Opcode { pc: 4, opcode: 0xb6 })), "{error:?}");
+}
+
+#[test]
+fn un_presupuesto_de_frames_insuficiente_deopta_en_el_invoke() {
+    let callee = Called::new(&CALLEE_TRIPLE, 1, "(I)I");
+    let caller = caller_calling(&CALLER_ADD, 1, "(I)I", &callee, (&CALLEE_TRIPLE, 1, "(I)I", 1));
+    // The site needs one frame for the caller's own chain plus the callee's `frame_depth` (1), so
+    // two is enough and one is not. This is the whole of how a runaway recursion is stopped: the
+    // call is handed back to the side that counts frames.
+    assert_eq!(call_native(&caller, &callee, &[5], 2).0, Outcome::Returned(116));
+    assert_eq!(call_native(&caller, &callee, &[5], 1).0, Outcome::Deopt(3));
+    assert_eq!(call_native(&caller, &callee, &[5], 0).0, Outcome::Deopt(3));
+}
+
+#[test]
+fn un_deopt_del_callee_vuelve_bajo_la_clave_de_enlace_y_sin_los_argumentos() {
+    // `f(x) = 7 / x`, which deopts at the `idiv` when `x` is zero — a guard, not an exception:
+    // native code refuses and the interpreter is the one that throws.
+    const DIVIDES: [u8; 5] = [BIPUSH, 7, ILOAD_0, IDIV, IRETURN];
+    let callee = Called::new(&DIVIDES, 1, "(I)I");
+    let caller = caller_calling(&CALLER_ADD, 1, "(I)I", &callee, (&DIVIDES, 1, "(I)I", 1));
+    // A divisor that is fine: 100 + 7 / 2.
+    assert_eq!(call_native(&caller, &callee, &[2], 8).0, Outcome::Returned(103));
+
+    // And one that is not. The callee stops, returns, and the caller hands the same *reason* back
+    // under **its own** key — the second site of this call, the one that says the call was made.
+    let site = link_site(&caller);
+    let link = site.native.expect("the link site names its slot").link as usize;
+    let (outcome, buffer) = call_native(&caller, &callee, &[0], 8);
+    assert_eq!(outcome, Outcome::Deopt(site.key));
+    assert_ne!(site.key, 3, "the two sites of one call are different keys");
+    // The caller resumes at the invoke with its own operand still there and the argument **gone**:
+    // the argument is the callee's local now, and a state carrying both would push it twice.
+    assert_eq!(site.pc, 3);
+    assert_eq!(site.stack.len(), 1, "the operand under the argument, and not the argument");
+    assert_eq!(buffer[caller.stack_base as usize], 100);
+    // The link slot holds the callee's own status word, whose low half is a resume key **of the
+    // callee's compilation** — the `idiv`'s pc.
+    assert_eq!(buffer[link], Status::deopt_value(3));
+    // And the callee's own state is in the region just past this compilation's.
+    let sub = caller.buffer_slots as usize;
+    assert_eq!(buffer[sub], 0, "the callee's local 0 is the argument the call wrote");
+    assert_eq!(buffer[sub + callee.compiled.stack_base as usize], 7, "and its operand stack spilled");
+    // The callee's own resume site hands back **every** local, not only the ones it touched: the
+    // frame it names does not exist on the interpreter's side, so there is nothing to leave alone.
+    let inner = site_at(&callee.compiled, 3);
+    assert_eq!(inner.frame_locals.len(), 1, "a complete map, one entry per local slot");
+}
+
+#[test]
+fn el_callee_de_una_llamada_real_recibe_un_presupuesto_menor_que_el_del_llamador() {
+    // A callee that calls *nothing* cannot observe its own budget, so the observation is made one
+    // level down: `top` calls `middle`, and `middle` is itself a caller whose own site needs two
+    // frames. With a generous budget the whole chain fits; with two, the **inner** site cannot pay
+    // and deopts — which comes back through the outer link rather than as the outer site's own
+    // deopt, and that difference is the whole assertion.
+    let bottom = Called::new(&CALLEE_TRIPLE, 1, "(I)I");
+    let middle = Called::of(caller_calling(&CALLER_ADD, 1, "(I)I", &bottom, (&CALLEE_TRIPLE, 1, "(I)I", 1)));
+    let top = caller_calling(&CALLER_ADD, 1, "(I)I", &middle, (&CALLER_ADD, 1, "(I)I", 1));
+    // 100 + (100 + (5 * 3 + 1))
+    assert_eq!(call_native(&top, &middle, &[5], 8).0, Outcome::Returned(216));
+    let (outcome, _) = call_native(&top, &middle, &[5], 2);
+    assert_eq!(outcome, Outcome::Deopt(link_site(&top).key), "the inner site could not pay");
+    // One short again, one level out: the outer site itself cannot pay, and the key is the *other*
+    // one — the site that says the call was never made.
+    assert_eq!(call_native(&top, &middle, &[5], 1).0, Outcome::Deopt(3));
 }
 
 /// The resume site at `pc` — what the interpreter would be handed if native code stopped there.
@@ -1455,6 +2056,71 @@ fn aastore_stores_the_exact_type_records_the_barrier_and_deopts_for_everything_e
 }
 
 #[test]
+fn an_aastores_full_barrier_log_is_a_capacity_exit_and_its_type_guard_is_still_a_deopt() {
+    // **The two exits of one `aastore`, at one pc, asserted against each other** — which is the
+    // whole of the fix and the only assertion that can tell it from what was there before.
+    //
+    // Both facts have to be checked in the *same* compilation, because either alone is satisfied by
+    // a wrong answer: "the capacity exit reports `ALLOC`" passes if every exit of the instruction
+    // reports `ALLOC` (and then a covariant store would stop retiring a loop it cannot run), and
+    // "the type guard reports `DEOPT`" passes if every exit reports `DEOPT` (which is exactly the
+    // bug — a full log closing the method's on-stack entry, `bench/BkRefA` at 1.7x against
+    // `bench/BkRefW`'s 112x).
+    //
+    // The program stores `local1` into `local0[0]` in a **counted** loop, one iteration longer than
+    // the log is deep — counted for the reason the `putfield` twin of this test is counted: a
+    // compilation that recorded nothing would spin for ever, and a hanging test says much less than
+    // a failing one.
+    let mut heap = FakeHeap::new();
+    heap.array(2000, &[0]); // an Old array...
+    heap.write(2000, ARRAY_CLASS as i32); // ...of the profiled class
+    heap.write(100, ELEMENT_CLASS as i32); // a young value of the element class
+    heap.write(120, 0x0777); // ...and a young value of some *other* class
+
+    //  0: iconst_0; istore_2                                 i = 0
+    //  2: iload_2; sipush n; if_icmpge +13 (-> 19: return)    <- the loop
+    //  9: aload_0; iconst_0; aload_1; aastore                 arr[0] = v
+    // 13: iinc 2 1; goto -14 (-> 2)
+    // 19: return
+    let n = super::compile::BARRIER_LOG_RECORDS as i32 + 8;
+    let code = [
+        ICONST_0, ISTORE_2, // 0..1
+        ILOAD_2, SIPUSH, (n >> 8) as u8, n as u8, IF_ICMPGE, 0x00, 0x0d, // 2..8
+        ALOAD_0, ICONST_0, ALOAD_1, AASTORE, // 9..12
+        IINC, 0x02, 0x01, GOTO, 0xff, 0xf2, // 13..18
+        RETURN, // 19
+    ];
+    let d = "([Ljava/lang/Object;Ljava/lang/Object;)V";
+    let compiled = compile_astore(&code, 3, d, heap.bases()).unwrap();
+    assert_eq!(compiled.barrier_records, super::compile::BARRIER_LOG_RECORDS, "an aastore stores a reference");
+
+    // (1) **The capacity exit.** An Old array and a young value, so every iteration passes the
+    // filter and the log fills at the 256th — and the exit is an `ALLOC`, because the trampoline
+    // drains the log on the way out and the next excursion starts with room.
+    let (outcome, buffer) = call_at(&compiled, &[2000, 100, 0], 0);
+    assert_eq!(
+        outcome,
+        Outcome::AllocFailed(12),
+        "a full barrier log is a capacity exit — a DEOPT here retires the method's on-stack entry \
+         for a condition that clears by itself, which is what made BkRefA 65x slower than BkRefW"
+    );
+    // ...and it loses nothing on the way out: every pair recorded is a store that provably happened,
+    // because the capacity check precedes both the record and the store.
+    let log = barrier_log(&compiled, &buffer);
+    assert_eq!(log.len(), super::compile::BARRIER_LOG_RECORDS as usize, "the log is full to its capacity");
+    assert!(log.iter().all(|&pair| pair == (2000, 100)), "every pair is the store that was made");
+
+    // (2) **The type guard, at the very same pc, is still a `DEOPT`** — and it must stay one: a
+    // covariant store is a speculation this tier got wrong, it recurs every iteration without
+    // throwing, and re-entering the loop on stack would pay the crossing for ever.
+    let before = heap.read(2000 + 12); // what the run above left in the slot
+    let (outcome, buffer) = call_at(&compiled, &[2000, 120, 0], 0);
+    assert_eq!(outcome, Outcome::Deopt(12), "a value of the wrong class is a failed speculation");
+    assert!(barrier_log(&compiled, &buffer).is_empty(), "and it stopped before recording anything");
+    assert_eq!(heap.read(2000 + 12), before, "and before storing anything");
+}
+
+#[test]
 fn an_aastore_with_no_profile_refuses_its_method() {
     // The resolver's `None` — a site the interpreter has never executed, so there is no array class
     // to build a guard from. Refusing the whole method is the same answer a never-dispatched call
@@ -1933,7 +2599,7 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| {
-                    Some(super::compile::Callee {
+                    Some(vec![super::compile::Callee {
                         method: Method {
                             unit: 1,
                             code: callee,
@@ -1944,7 +2610,8 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
                         },
                         arg_slots: 2,
                         guard: super::compile::Guard::Static,
-                    })
+                    record: None,
+                    }])
                 },
                 heap: heap.bases(),
                 array_store: &|_, _| None,
@@ -3102,7 +3769,7 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
                 field: &|_, _, _| None,
                 instance: &|_, _| None,
                 array: &|_, _| None,
-                invoke: &|_, _, _| Some(super::compile::Callee {
+                invoke: &|_, _, _| Some(vec![super::compile::Callee {
                     method: Method {
                         unit: 1,
                         code: &callee,
@@ -3113,7 +3780,8 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
                     },
                     arg_slots: 2,
                     guard: super::compile::Guard::Static,
-                }),
+                    record: None,
+                }]),
                 heap: heap.bases(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -4833,7 +5501,7 @@ fn un_callee_inlineado_recibe_un_long_en_el_medio() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| {
-                Some(super::compile::Callee {
+                Some(vec![super::compile::Callee {
                     method: Method {
                         unit: 1,
                         code: &callee,
@@ -4847,7 +5515,8 @@ fn un_callee_inlineado_recibe_un_long_en_el_medio() {
                     // en slots es todo el asunto.
                     arg_slots: 3,
                     guard: super::compile::Guard::Static,
-                })
+                    record: None,
+                }])
             },
             heap: heap.bases(),
             array_store: &|_, _| None,
@@ -4898,7 +5567,7 @@ fn un_callee_cuyos_argumentos_no_entran_en_sus_locales_se_rechaza() {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| {
-                    Some(super::compile::Callee {
+                    Some(vec![super::compile::Callee {
                         method: Method {
                             unit: 1,
                             code: &callee,
@@ -4909,7 +5578,8 @@ fn un_callee_cuyos_argumentos_no_entran_en_sus_locales_se_rechaza() {
                         },
                         arg_slots: 3,
                         guard: super::compile::Guard::Static,
-                    })
+                    record: None,
+                    }])
                 },
                 heap: heap.bases(),
                 array_store: &|_, _| None,

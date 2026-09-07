@@ -76,7 +76,14 @@ public class Dimension extends Dimension2D implements java.io.Serializable {
         return sum * (sum + 1) / 2 + this.width;
     }
 
+    /**
+     * El nombre de la clase real y las dos medidas.
+     *
+     * <p>La clase real, no {@code java.awt.Dimension} fijo: una {@code DimensionUIResource} tiene
+     * que decir que lo es. Es lo que hace visible de donde salio un tamano --del aspecto o del
+     * programa-- cuando se lo imprime.
+     */
     public String toString() {
-        return "java.awt.Dimension[width=" + this.width + ",height=" + this.height + "]";
+        return getClass().getName() + "[width=" + this.width + ",height=" + this.height + "]";
     }
 }

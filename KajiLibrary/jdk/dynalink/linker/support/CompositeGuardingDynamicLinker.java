@@ -10,15 +10,15 @@ import jdk.dynalink.linker.LinkRequest;
 import jdk.dynalink.linker.LinkerServices;
 
 /**
- * Varios enlazadores presentados como uno solo: se prueban en orden hasta que alguno conteste.
+ * Several linkers presented as one: they are tried in order until one answers.
  *
- * <p>Es la composicion mas simple posible, y su costo es lineal: un pedido que ningun enlazador
- * sabe manejar recorre la lista entera antes de rendirse. Para el caso en que todos los
- * componentes sepan decidir por el tipo del receptor conviene
- * {@link CompositeTypeBasedGuardingDynamicLinker}, que aprovecha eso para saltear la mayoria.
+ * <p>It is the simplest composition there is, and its cost is linear: a request no linker knows how
+ * to handle walks the whole list before giving up. For the case where every component can decide by
+ * the receiver's type, {@link CompositeTypeBasedGuardingDynamicLinker} is preferable — it uses that
+ * to skip most of them.
  *
- * <p>La lista se copia en el constructor: la composicion es inmutable y no se puede reordenar
- * despues de armada.
+ * <p>The list is copied in the constructor: the composition is immutable and cannot be reordered
+ * once built.
  *
  * @since 9
  */
@@ -27,9 +27,9 @@ public class CompositeGuardingDynamicLinker implements GuardingDynamicLinker {
     private final GuardingDynamicLinker[] linkers;
 
     /**
-     * Compone los enlazadores en el orden en que vienen.
+     * Composes the linkers in the order they arrive in.
      *
-     * @param linkers los enlazadores
+     * @param linkers the linkers
      */
     public CompositeGuardingDynamicLinker(
             final Iterable<? extends GuardingDynamicLinker> linkers) {
@@ -41,9 +41,9 @@ public class CompositeGuardingDynamicLinker implements GuardingDynamicLinker {
     }
 
     /**
-     * Lo que conteste el primer enlazador que sepa manejar el pedido.
+     * Whatever the first linker that knows how to handle the request answers.
      *
-     * @return la invocacion, o {@code null} si ninguno supo
+     * @return the invocation, or {@code null} if none of them knew
      */
     public GuardedInvocation getGuardedInvocation(final LinkRequest linkRequest,
             final LinkerServices linkerServices) throws Exception {

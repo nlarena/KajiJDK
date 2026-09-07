@@ -64,6 +64,16 @@ public class JPanel extends JComponent {
     }
 
     /** La clave con la que el `LookAndFeel` busca el aspecto de un panel: {@code "PanelUI"}. */
+    /** El aspecto instalado. */
+    public javax.swing.plaf.PanelUI getUI() {
+        return (javax.swing.plaf.PanelUI) ui;
+    }
+
+    /** Instala ese aspecto. */
+    public void setUI(javax.swing.plaf.PanelUI ui) {
+        super.setUI(ui);
+    }
+
     public String getUIClassID() {
         return "PanelUI";
     }

@@ -7,16 +7,16 @@ import java.lang.annotation.Annotation;
 import java.util.HashSet;
 import java.util.Set;
 
-// Soporte mínimo del round loop de APT (JSR 269, fase 2): una implementación concreta de
-// RoundEnvironment que el driver construye una vez por ronda. `over` distingue la ronda final
-// (processingOver == true), que es lo único que el MVP necesita exponer; los conjuntos de
-// elementos raíz / anotados devuelven vacío hasta que exista la reificación de elementos (fase 3).
+// Minimal support for APT's round loop (JSR 269, phase 2): a concrete implementation of
+// RoundEnvironment that the driver builds once per round. `over` tells the final round apart
+// (processingOver == true), which is the only thing the MVP needs to expose; the sets of root /
+// annotated elements return empty until element reification exists (phase 3).
 //
-// `errorRaised()` devuelve `false` siempre, y es la respuesta correcta y no un placeholder: el
-// round loop de este proyecto **aborta** apenas una excepción escapa de un `process()`, así que
-// nunca hay una ronda siguiente que pueda ver un error de la anterior. Además el `Messager` de acá
-// escribe a la consola de trazas y no lleva la cuenta de errores, con lo cual no hay ninguna otra
-// fuente de la que un error pudiera venir.
+// `errorRaised()` always returns `false`, and that is the correct answer and not a placeholder: this
+// project's round loop **aborts** as soon as an exception escapes a `process()`, so there is never a
+// next round that could see an error from the previous one. Besides, the `Messager` here writes to
+// the trace console and keeps no error count, so there is no other source an error could come
+// from.
 public class RoundEnvironmentImpl implements RoundEnvironment {
     private final boolean over;
     public RoundEnvironmentImpl(boolean over) { this.over = over; }

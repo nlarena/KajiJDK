@@ -6,80 +6,79 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 /**
- * Las reglas de conversion entre tipos de Java, escritas para que un enlazador pueda consultarlas.
+ * Java's conversion rules between types, written down so that a linker can consult them.
  *
- * <h2>Por que hace falta preguntarselo a alguien</h2>
+ * <h2>Why they have to be asked of someone</h2>
  *
- * <p>Porque el compilador de Java aplica estas reglas en tiempo de compilacion y despues no quedan
- * en ningun lado. Un enlazador dinamico decide en tiempo de ejecucion si un argumento entra en un
- * parametro, y para eso necesita las mismas reglas como <strong>datos</strong>.
- * {@code Class.isAssignableFrom} solo cubre las referencias; todo lo que tenga que ver con
- * primitivos, encajonado o ampliacion numerica queda afuera.
+ * <p>Because the Java compiler applies these rules at compile time and afterwards they are left
+ * nowhere. A dynamic linker decides at run time whether an argument fits a parameter, and for that it
+ * needs the same rules as <strong>data</strong>. {@code Class.isAssignableFrom} only covers
+ * references; everything to do with primitives, boxing or numeric widening is left out.
  *
- * <h2>Las tres preguntas, que no son la misma</h2>
+ * <h2>The three questions, which are not the same one</h2>
  *
- * <p>{@link #isSubtype} es la relacion de subtipo de la JLS 4.10: incluye los primitivos, donde
- * {@code int} es subtipo de {@code long}, pero <strong>no</strong> incluye el encajonado — un
- * {@code int} no es subtipo de {@code Integer}.
+ * <p>{@link #isSubtype} is JLS 4.10's subtype relation: it includes primitives, where {@code int} is
+ * a subtype of {@code long}, but it does <strong>not</strong> include boxing — an {@code int} is not
+ * a subtype of {@code Integer}.
  *
- * <p>{@link #isMethodInvocationConvertible} es la de la JLS 5.3, que es la que decide si una
- * llamada compila: agrega encajonar y desencajonar. Es mas permisiva que la anterior.
+ * <p>{@link #isMethodInvocationConvertible} is JLS 5.3's, the one that decides whether a call
+ * compiles: it adds boxing and unboxing. It is more permissive than the previous one.
  *
- * <p>{@link #isConvertibleWithoutLoss} es mas <strong>restrictiva</strong> que las dos: pregunta si
- * el valor sobrevive intacto. {@code long} a {@code double} es conversion valida y pierde
- * informacion, porque la mantisa de un {@code double} tiene 53 bits y un {@code long} tiene 64.
+ * <p>{@link #isConvertibleWithoutLoss} is more <strong>restrictive</strong> than both: it asks
+ * whether the value survives intact. {@code long} to {@code double} is a valid conversion and it
+ * loses information, because a {@code double}'s mantissa has 53 bits and a {@code long} has 64.
  *
- * <p>Las tres se necesitan para cosas distintas: la segunda para saber si una sobrecarga es
- * aplicable, la tercera para decidir si conviene recortar el valor de retorno de un enlace.
+ * <p>All three are needed for different things: the second to know whether an overload is applicable,
+ * the third to decide whether narrowing a link's return value is a good idea.
  *
  * @since 9
  */
 public final class TypeUtilities {
 
-    /** De primitivo a su caja. Incluye {@code void}, que tiene {@code Void}. */
-    private static final Map<Class<?>, Class<?>> CAJAS;
-    /** La inversa. */
-    private static final Map<Class<?>, Class<?>> PRIMITIVOS;
-    /** Por nombre: {@code "int"} a {@code int.class}. */
-    private static final Map<String, Class<?>> POR_NOMBRE;
+    /** From primitive to its wrapper. It includes {@code void}, which has {@code Void}. */
+    private static final Map<Class<?>, Class<?>> WRAPPERS;
+    /** The inverse. */
+    private static final Map<Class<?>, Class<?>> PRIMITIVES;
+    /** By name: {@code "int"} to {@code int.class}. */
+    private static final Map<String, Class<?>> BY_NAME;
 
     static {
-        // IdentityHashMap y no HashMap: las claves son objetos Class, que son unicos por
-        // definicion. Comparar por identidad evita llamar a hashCode y equals de Class.
-        final Map<Class<?>, Class<?>> cajas = new IdentityHashMap<Class<?>, Class<?>>(9);
-        cajas.put(Void.TYPE, Void.class);
-        cajas.put(Boolean.TYPE, Boolean.class);
-        cajas.put(Byte.TYPE, Byte.class);
-        cajas.put(Character.TYPE, Character.class);
-        cajas.put(Short.TYPE, Short.class);
-        cajas.put(Integer.TYPE, Integer.class);
-        cajas.put(Long.TYPE, Long.class);
-        cajas.put(Float.TYPE, Float.class);
-        cajas.put(Double.TYPE, Double.class);
-        CAJAS = Collections.unmodifiableMap(cajas);
+        // IdentityHashMap and not HashMap: the keys are Class objects, which are unique by
+        // definition. Comparing by identity avoids calling Class's hashCode and equals.
+        final Map<Class<?>, Class<?>> wrappers = new IdentityHashMap<Class<?>, Class<?>>(9);
+        wrappers.put(Void.TYPE, Void.class);
+        wrappers.put(Boolean.TYPE, Boolean.class);
+        wrappers.put(Byte.TYPE, Byte.class);
+        wrappers.put(Character.TYPE, Character.class);
+        wrappers.put(Short.TYPE, Short.class);
+        wrappers.put(Integer.TYPE, Integer.class);
+        wrappers.put(Long.TYPE, Long.class);
+        wrappers.put(Float.TYPE, Float.class);
+        wrappers.put(Double.TYPE, Double.class);
+        WRAPPERS = Collections.unmodifiableMap(wrappers);
 
-        final Map<Class<?>, Class<?>> primitivos = new IdentityHashMap<Class<?>, Class<?>>(9);
-        final Map<String, Class<?>> porNombre = new HashMap<String, Class<?>>(9);
-        for (final Map.Entry<Class<?>, Class<?>> e : cajas.entrySet()) {
-            primitivos.put(e.getValue(), e.getKey());
-            porNombre.put(e.getKey().getName(), e.getKey());
+        final Map<Class<?>, Class<?>> primitives = new IdentityHashMap<Class<?>, Class<?>>(9);
+        final Map<String, Class<?>> byName = new HashMap<String, Class<?>>(9);
+        for (final Map.Entry<Class<?>, Class<?>> e : wrappers.entrySet()) {
+            primitives.put(e.getValue(), e.getKey());
+            byName.put(e.getKey().getName(), e.getKey());
         }
-        PRIMITIVOS = Collections.unmodifiableMap(primitivos);
-        POR_NOMBRE = Collections.unmodifiableMap(porNombre);
+        PRIMITIVES = Collections.unmodifiableMap(primitives);
+        BY_NAME = Collections.unmodifiableMap(byName);
     }
 
     private TypeUtilities() {
     }
 
     /**
-     * Si un valor de {@code sourceType} se puede pasar donde se espera {@code targetType}.
+     * Whether a value of {@code sourceType} can be passed where {@code targetType} is expected.
      *
-     * <p>Es la conversion por invocacion de metodo de la JLS 5.3: identidad, ampliacion de
-     * primitivo, ampliacion de referencia, encajonado y desencajonado.
+     * <p>It is JLS 5.3's method invocation conversion: identity, primitive widening, reference
+     * widening, boxing and unboxing.
      *
-     * @param sourceType el tipo del valor
-     * @param targetType el tipo del parametro
-     * @return si la llamada es legal
+     * @param sourceType the value's type
+     * @param targetType the parameter's type
+     * @return whether the call is legal
      */
     public static boolean isMethodInvocationConvertible(final Class<?> sourceType,
             final Class<?> targetType) {
@@ -88,100 +87,101 @@ public final class TypeUtilities {
         }
         if (sourceType.isPrimitive()) {
             if (targetType.isPrimitive()) {
-                return esSubtipoPropio(sourceType, targetType);
+                return isProperSubtype(sourceType, targetType);
             }
-            return encajonaYAmplia(sourceType, targetType);
+            return boxAndWiden(sourceType, targetType);
         }
         if (targetType.isPrimitive()) {
-            // Desencajonar y despues ampliar el primitivo. Solo sale de una caja exacta: un
-            // Number generico no se desencajona, porque en tiempo de ejecucion podria ser
-            // cualquiera de las ocho.
-            final Class<?> desencajonado = PRIMITIVOS.get(sourceType);
-            return desencajonado != null
-                    && (desencajonado == targetType || esSubtipoPropio(desencajonado, targetType));
+            // Unbox and then widen the primitive. It only comes out of an exact wrapper: a generic
+            // Number is not unboxed, because at run time it could be any of the eight.
+            final Class<?> unboxed = PRIMITIVES.get(sourceType);
+            return unboxed != null
+                    && (unboxed == targetType || isProperSubtype(unboxed, targetType));
         }
         return false;
     }
 
     /**
-     * Si un valor de {@code sourceType} entra en {@code targetType} sin perder informacion.
+     * Whether a value of {@code sourceType} fits {@code targetType} without losing information.
      *
-     * @param sourceType el tipo del valor
-     * @param targetType el tipo de llegada
-     * @return si la conversion es exacta
+     * @param sourceType the value's type
+     * @param targetType the type to arrive at
+     * @return whether the conversion is exact
      */
     public static boolean isConvertibleWithoutLoss(final Class<?> sourceType,
             final Class<?> targetType) {
-        // Que el destino sea void basta: el valor se descarta, y descartarlo no pierde nada que
-        // alguien vaya a mirar despues. Vale hasta para boolean, que no se convierte a nada mas.
+        // The target being void is enough: the value is discarded, and discarding it loses nothing
+        // anyone is going to look at later. It holds even for boolean, which converts to nothing else.
         if (targetType.isAssignableFrom(sourceType) || targetType == void.class) {
             return true;
         }
         if (sourceType.isPrimitive()) {
             if (sourceType == void.class) {
-                // Al reves no: de void solo sale el null, y el unico tipo que lo recibe entero
-                // es Object. Ni siquiera Void, que ademas de null admitiria una instancia.
+                // Not the other way round: out of void comes only null, and the only type that
+                // receives it whole is Object. Not even Void, which besides null would admit an
+                // instance.
                 return targetType == Object.class;
             }
             if (targetType.isPrimitive()) {
-                return ensanchaSinPerdida(sourceType, targetType);
+                return widensWithoutLoss(sourceType, targetType);
             }
-            return encajonaYAmplia(sourceType, targetType);
+            return boxAndWiden(sourceType, targetType);
         }
-        // De referencia a primitivo nunca, aunque la caja sea la exacta: el null no tiene donde ir.
+        // From reference to primitive never, even with the exact wrapper: the null has nowhere to go.
         return false;
     }
 
     /**
-     * La relacion de subtipo de la JLS 4.10, primitivos incluidos.
+     * JLS 4.10's subtype relation, primitives included.
      *
-     * <p>No incluye el encajonado: {@code int} no es subtipo de {@code Integer}. Para eso esta
-     * {@link #isMethodInvocationConvertible}.
+     * <p>It does not include boxing: {@code int} is not a subtype of {@code Integer}. That is what
+     * {@link #isMethodInvocationConvertible} is for.
      *
-     * @param subType el candidato a subtipo
-     * @param superType el candidato a supertipo
-     * @return si el primero es subtipo del segundo
+     * @param subType the subtype candidate
+     * @param superType the supertype candidate
+     * @return whether the first is a subtype of the second
      */
     public static boolean isSubtype(final Class<?> subType, final Class<?> superType) {
-        // Cubre clases, interfaces y arreglos, y tambien la identidad entre primitivos.
+        // It covers classes, interfaces and arrays, and identity between primitives too.
         if (superType.isAssignableFrom(subType)) {
             return true;
         }
         if (superType.isPrimitive() && subType.isPrimitive()) {
-            return esSubtipoPropio(subType, superType);
+            return isProperSubtype(subType, superType);
         }
         return false;
     }
 
     /**
-     * Encajonar y despues ampliar la referencia, que la JLS 5.3 cuenta como un solo paso.
+     * Box and then widen the reference, which JLS 5.3 counts as a single step.
      *
-     * <p>El origen ya se sabe primitivo cuando se llega aca, asi que la caja existe siempre.
+     * <p>The source is already known to be primitive by the time this is reached, so the wrapper
+     * always exists.
      */
-    private static boolean encajonaYAmplia(final Class<?> sourceType, final Class<?> targetType) {
-        return targetType.isAssignableFrom(CAJAS.get(sourceType));
+    private static boolean boxAndWiden(final Class<?> sourceType, final Class<?> targetType) {
+        return targetType.isAssignableFrom(WRAPPERS.get(sourceType));
     }
 
     /**
-     * El subtipado entre primitivos de la JLS 4.10.1, sin la identidad.
+     * JLS 4.10.1's subtyping between primitives, without identity.
      *
-     * <p>La cadena es {@code double > float > long > int > {char, short} > byte}, cerrada por
-     * transitividad, y coincide con la ampliacion de primitivo de la JLS 5.1.2 — por eso un solo
-     * metodo contesta las dos preguntas.
+     * <p>The chain is {@code double > float > long > int > {char, short} > byte}, closed under
+     * transitivity, and it coincides with JLS 5.1.2's primitive widening — which is why a single
+     * method answers both questions.
      *
-     * <p>Los llamadores ya descartaron la identidad antes de llegar, asi que este metodo no la
-     * vuelve a mirar. Eso tiene una consecuencia visible: con un tipo que no esta en la cadena,
-     * como {@code void}, las ramas escritas por negacion contestan que si. {@code byte} resulta
-     * subtipo de {@code void} y {@code int} no. Es un artefacto de como esta escrita la tabla, y
-     * se reproduce a proposito porque es lo que el JDK contesta.
+     * <p>The callers have already ruled out identity before getting here, so this method does not
+     * look at it again. That has one visible consequence: with a type outside the chain, such as
+     * {@code void}, the branches written by negation answer yes. {@code byte} comes out a subtype of
+     * {@code void} and {@code int} does not. It is an artefact of how the table is written, and it is
+     * reproduced on purpose because it is what the JDK answers.
      */
-    private static boolean esSubtipoPropio(final Class<?> subType, final Class<?> superType) {
+    private static boolean isProperSubtype(final Class<?> subType, final Class<?> superType) {
         if (superType == boolean.class || subType == boolean.class) {
             return false;
         }
-        // Los tres chicos se escriben por lo que NO alcanzan, y los tres grandes por lo que si.
-        // No es capricho: byte no llega a char porque char no tiene signo, y char no llega a
-        // byte ni a short porque ellos no llegan a 65535. Fuera de ese triangulo, todo sube.
+        // The three small ones are written by what they do NOT reach, and the three big ones by what
+        // they do. It is not a whim: byte does not reach char because char is unsigned, and char does
+        // not reach byte or short because those do not reach 65535. Outside that triangle, all go up.
         if (subType == byte.class) {
             return superType != char.class;
         }
@@ -205,80 +205,80 @@ public final class TypeUtilities {
     }
 
     /**
-     * Las ampliaciones que la JLS 5.1.2 marca como exactas.
+     * The widenings JLS 5.1.2 marks as exact.
      *
-     * <p>Son las de {@link #esSubtipoPropio} menos tres: {@code int} a {@code float},
-     * {@code long} a {@code float} y {@code long} a {@code double}. En esos casos la mantisa del
-     * destino no alcanza para todos los valores del origen y el resultado se redondea — sigue
-     * siendo una conversion legal, pero ya no es el mismo numero.
+     * <p>They are {@link #isProperSubtype}'s minus three: {@code int} to {@code float}, {@code long}
+     * to {@code float} and {@code long} to {@code double}. In those cases the target's mantissa is
+     * not enough for every value of the source and the result is rounded — it is still a legal
+     * conversion, but it is no longer the same number.
      */
-    private static boolean ensanchaSinPerdida(final Class<?> de, final Class<?> a) {
-        if (a == boolean.class || de == boolean.class) {
+    private static boolean widensWithoutLoss(final Class<?> from, final Class<?> to) {
+        if (to == boolean.class || from == boolean.class) {
             return false;
         }
-        // char queda afuera en las dos direcciones, y esa es la sorpresa de esta tabla: char a
-        // int conserva todos los bits. Lo que no conserva es el significado — un caracter pasa a
-        // ser el numero de su punto de codigo — y esta pregunta es sobre el valor, no sobre los
-        // bits. La JLS llama a esa conversion ampliacion; el JDK no la llama exacta.
-        if (a == char.class || de == char.class) {
+        // char is left out in both directions, and that is this table's surprise: char to int keeps
+        // every bit. What it does not keep is the meaning — a character becomes the number of its
+        // code point — and this question is about the value, not about the bits. The JLS calls that
+        // conversion a widening; the JDK does not call it exact.
+        if (to == char.class || from == char.class) {
             return false;
         }
-        if (de == byte.class) {
+        if (from == byte.class) {
             return true;
         }
-        if (de == short.class) {
-            return a != byte.class;
+        if (from == short.class) {
+            return to != byte.class;
         }
-        if (de == int.class) {
-            // int a float no: la mantisa de un float tiene 24 bits y el int tiene 32.
-            return a == long.class || a == double.class;
+        if (from == int.class) {
+            // int to float no: a float's mantissa has 24 bits and the int has 32.
+            return to == long.class || to == double.class;
         }
-        if (de == float.class) {
-            return a == double.class;
+        if (from == float.class) {
+            return to == double.class;
         }
-        // long no llega exacto ni a float ni a double: le sobran bits contra las dos mantisas.
+        // long reaches neither float nor double exactly: it has bits to spare against both mantissas.
         return false;
     }
 
     /**
-     * El primitivo que se llama asi, o {@code null}.
+     * The primitive with that name, or {@code null}.
      *
-     * <p>{@code "void"} cuenta: es el nombre de {@code void.class}.
+     * <p>{@code "void"} counts: it is the name of {@code void.class}.
      *
-     * @param name el nombre, por ejemplo {@code "int"}
-     * @return el {@code Class} del primitivo, o {@code null} si el nombre no es de uno
+     * @param name the name, for instance {@code "int"}
+     * @return the primitive's {@code Class}, or {@code null} if the name is not one
      */
     public static Class<?> getPrimitiveTypeByName(final String name) {
-        return POR_NOMBRE.get(name);
+        return BY_NAME.get(name);
     }
 
     /**
-     * El primitivo que hay dentro de una caja, o {@code null} si no es una caja.
+     * The primitive inside a wrapper, or {@code null} if it is not a wrapper.
      *
-     * @param wrapperType la caja, por ejemplo {@code Integer.class}
-     * @return el primitivo, o {@code null}
+     * @param wrapperType the wrapper, for instance {@code Integer.class}
+     * @return the primitive, or {@code null}
      */
     public static Class<?> getPrimitiveType(final Class<?> wrapperType) {
-        return PRIMITIVOS.get(wrapperType);
+        return PRIMITIVES.get(wrapperType);
     }
 
     /**
-     * La caja de un primitivo, o {@code null} si el tipo no es primitivo.
+     * The wrapper of a primitive, or {@code null} if the type is not primitive.
      *
-     * @param primitiveType el primitivo, por ejemplo {@code int.class}
-     * @return la caja, o {@code null}
+     * @param primitiveType the primitive, for instance {@code int.class}
+     * @return the wrapper, or {@code null}
      */
     public static Class<?> getWrapperType(final Class<?> primitiveType) {
-        return CAJAS.get(primitiveType);
+        return WRAPPERS.get(primitiveType);
     }
 
     /**
-     * Si el tipo es una de las nueve cajas.
+     * Whether the type is one of the nine wrappers.
      *
-     * @param type el tipo
-     * @return si es una caja
+     * @param type the type
+     * @return whether it is a wrapper
      */
     public static boolean isWrapperType(final Class<?> type) {
-        return PRIMITIVOS.containsKey(type);
+        return PRIMITIVES.containsKey(type);
     }
 }

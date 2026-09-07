@@ -1,5 +1,8 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
+
 // Un conjunto ordenado, apoyado en un {@link TreeMap} — exactamente como lo arma el JDK. Un
 // conjunto es un mapa cuyos valores no dicen nada, asi que cada elemento se guarda como clave
 // apuntando a un unico objeto centinela compartido; todo el trabajo (orden, balanceo, busqueda
@@ -16,7 +19,7 @@ package java.util;
 // El mismo mecanismo da las vistas de clave de un mapa: `TreeMap.navigableKeySet()` devuelve un
 // TreeSet sobre el mapa, con `noAdd` puesto. Es la unica diferencia entre un conjunto y la vista
 // de claves de un mapa: la vista **no** puede agregar, porque no sabria que valor poner.
-public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E> {
+public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Serializable, Cloneable {
 
     // El unico valor al que apunta toda clave. Su identidad no importa — solo cuenta que "hay una
     // entrada aca" — asi que una instancia alcanza para todos los elementos de todos los TreeSet.

@@ -43,11 +43,11 @@ public class ServerSocket implements Closeable {
     /** El socket a la escucha de la VM, o -1 si todavia no se ato. */
     private int handle = -1;
 
-    // Lo que necesita un `ServerSocketChannel` para entregar el socket que lo envuelve: el canal ya
-    // tiene el descriptor abierto, y este objeto pasa a compartirlo. De paquete a proposito --nadie
-    // de afuera tiene por que saber que un socket es un numero-- y por eso el puente
-    // `jdk.internal.net.Adopcion`.
-    void adoptar(int h) {
+    // What a `ServerSocketChannel` needs in order to hand over the socket that wraps it: the channel
+    // already has the descriptor open, and this object comes to share it. Package-private on purpose
+    // --nobody outside has any reason to know a socket is a number-- and hence the
+    // `jdk.internal.net.Adoption` bridge.
+    void adopt(int h) {
         this.handle = h;
         this.bound = true;
     }
@@ -417,6 +417,6 @@ public class ServerSocket implements Closeable {
         if (h < 0) {
             throw new IOException("accept failed");
         }
-        s.adoptar(h);
+        s.adopt(h);
     }
 }

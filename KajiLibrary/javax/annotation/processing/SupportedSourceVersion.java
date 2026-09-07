@@ -8,17 +8,17 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// La ultima version del lenguaje que un procesador declara soportar. La lee
-// `AbstractProcessor.getSupportedSourceVersion()` por reflexion.
+// The latest version of the language a processor declares it supports.
+// `AbstractProcessor.getSupportedSourceVersion()` reads it by reflection.
 //
-// AVISO — igual que `@SupportedOptions` y `@SupportedAnnotationTypes`: en esta VM no se puede leer
-// en tiempo de ejecucion (ver el encabezado de `AbstractProcessor`), asi que
-// `getSupportedSourceVersion()` cae siempre en su valor por defecto.
+// WARNING — the same as `@SupportedOptions` and `@SupportedAnnotationTypes`: in this VM it cannot be
+// read at run time (see `AbstractProcessor`'s header), so `getSupportedSourceVersion()` always falls
+// back to its default value.
 @Documented
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SupportedSourceVersion {
 
-    /** La version soportada. */
+    /** The supported version. */
     SourceVersion value();
 }

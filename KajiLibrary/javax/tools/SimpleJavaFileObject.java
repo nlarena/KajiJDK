@@ -8,26 +8,26 @@ import java.net.URI;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 
-// Base conveniente para escribir un JavaFileObject: guarda el URI y el Kind, y da un cuerpo
-// por defecto a todo lo demas. Casi todos los metodos tiran UnsupportedOperationException a
-// proposito — es la subclase la que decide cual sabe contestar. Eso es lo que hace el JDK, no
-// una simplificacion nuestra.
+// A convenient base for writing a JavaFileObject: it keeps the URI and the Kind, and gives a
+// default body to everything else. Almost every method throws UnsupportedOperationException on
+// purpose — it is the subclass that decides which ones it can answer. That is what the JDK does, not
+// a simplification of ours.
 //
-// Esta clase quedo afuera en la primera pasada del paquete: sin `java.net.URI` se caian sus
-// dos campos y su UNICO constructor, y javac habria sintetizado un `SimpleJavaFileObject()`
-// sin argumentos que la API real no tiene. Se prefirio la ausencia a la firma inventada.
-// Ahora `java.net.URI` existe y la clase entra completa.
+// This class was left out on the package's first pass: without `java.net.URI` its two fields and its
+// ONLY constructor fell away, and javac would have synthesized a no-argument `SimpleJavaFileObject()`
+// that the real API does not have. Absence was preferred to an invented signature. Now `java.net.URI`
+// exists and the class goes in complete.
 //
-// NOTA de escritura: el tipo anidado se nombra `JavaFileObject$Kind`, por su nombre BINARIO.
-// Escrito `JavaFileObject.Kind` no resuelve (#101) y con `import` degrada en silencio a
-// `Object` (#239). El nombre binario emite el descriptor exacto, y es lo que hace el propio
-// `javac` del JDK cuando la clase viene del classpath. Sacar el `$` cuando se arregle #101.
-// LIMITACION FORZADA (#104): los cinco metodos de I/O y `getCharContent` van SIN
-// `throws IOException`, a diferencia del JDK. No es una decision: el `throws` de un metodo
-// leido de un `.class` del classpath se ignora, y entonces el override legal se rechaza
-// ("declara lanzar IOException, mas ancho que lo que permite FileObject"). El descriptor
-// emitido es identico -- lo unico que falta es el atributo `Exceptions`. Es el mismo rodeo
-// que ya usaron `JavaFileManager.flush`/`close`. Restaurar cuando se arregle #104.
+// A NOTE ON WRITING IT: the nested type is named `JavaFileObject$Kind`, by its BINARY name. Written
+// `JavaFileObject.Kind` it does not resolve (#101) and with an `import` it silently degrades to
+// `Object` (#239). The binary name emits the exact descriptor, and it is what the JDK's own `javac`
+// does when the class comes from the classpath. Drop the `$` once #101 is fixed.
+// FORCED LIMITATION (#104): the five I/O methods and `getCharContent` go WITHOUT
+// `throws IOException`, unlike the JDK. It is not a decision: the `throws` of a method read from a
+// `.class` on the classpath is ignored, and then the legal override is rejected ("declares that it
+// throws IOException, wider than what FileObject allows"). The emitted descriptor is identical -- the
+// only thing missing is the `Exceptions` attribute. It is the same detour `JavaFileManager.flush`
+// and `close` already used. Restore it once #104 is fixed.
 public class SimpleJavaFileObject implements JavaFileObject {
 
     protected final URI uri;
@@ -42,8 +42,8 @@ public class SimpleJavaFileObject implements JavaFileObject {
         return this.uri;
     }
 
-    // El camino del URI; para un URI opaco (mailto:...) no hay camino y vale su parte
-    // especifica, que es lo que hace el JDK.
+    // The URI's path; for an opaque URI (mailto:...) there is no path and its scheme-specific part
+    // stands in, which is what the JDK does.
     public String getName() {
         String p = this.uri.getPath();
         if (p == null) {
@@ -72,7 +72,7 @@ public class SimpleJavaFileObject implements JavaFileObject {
         throw new UnsupportedOperationException();
     }
 
-    // 0 significa "desconocido", no "epoch": es el contrato del JDK.
+    // 0 means "unknown", not "epoch": it is the JDK's contract.
     public long getLastModified() {
         return 0L;
     }
@@ -85,9 +85,9 @@ public class SimpleJavaFileObject implements JavaFileObject {
         return this.kind;
     }
 
-    // "es este el archivo de `simpleName`, con la extension que le toca a `kind`". El JDK
-    // compara contra el ultimo segmento del nombre; aca se hace igual, a mano, porque nuestro
-    // String no tiene endsWith ni lastIndexOf.
+    // "is this `simpleName`'s file, with the extension `kind` calls for". The JDK compares against
+    // the name's last segment; here it is done the same way, by hand, because our String has neither
+    // endsWith nor lastIndexOf.
     public boolean isNameCompatible(String simpleName, JavaFileObject$Kind kind) {
         if (kind != this.kind) {
             return false;
@@ -100,7 +100,7 @@ public class SimpleJavaFileObject implements JavaFileObject {
         return tail.equals(expected.toString());
     }
 
-    // null = "no se sabe", que es lo que devuelve la base del JDK.
+    // null = "not known", which is what the JDK's base returns.
     public NestingKind getNestingKind() {
         return null;
     }
@@ -118,9 +118,9 @@ public class SimpleJavaFileObject implements JavaFileObject {
         return sb.toString();
     }
 
-    // Un objeto de archivo cuyo contenido ya esta en memoria: el caso de "compilame este
-    // String". El JDK usa una anonima; aca es una clase nombrada del mismo archivo, que es
-    // detalle interno y por lo tanto libre.
+    // A file object whose contents are already in memory: the "compile me this String" case. The JDK
+    // uses an anonymous class; here it is a named class in the same file, which is an internal detail
+    // and therefore free.
     public static JavaFileObject forSource(URI uri, String content) {
         return new SourceFromString(uri, content);
     }
@@ -138,7 +138,7 @@ public class SimpleJavaFileObject implements JavaFileObject {
         }
     }
 
-    // Lo que sigue al ultimo '/' — nuestro String no tiene lastIndexOf.
+    // What follows the last '/' — our String has no lastIndexOf.
     private static String lastSegment(String s) {
         int len = s.length();
         int cut = -1;

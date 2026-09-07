@@ -1,17 +1,17 @@
 package java.net;
 
-// Quien fabrica la implementacion que hay debajo de un socket.
+// The one that manufactures the implementation underneath a socket.
 //
-// Un solo metodo, y su razon de ser es que `Socket` y `ServerSocket` no traigan su transporte
-// cableado adentro: se instala una fabrica y todos los sockets nuevos pasan a usar otra
-// implementacion --un tunel, un socket de prueba, un transporte propio-- sin tocar el codigo que
-// los usa.
+// A single method, and its reason for being is that `Socket` and `ServerSocket` should not carry
+// their transport wired inside them: a factory is installed and every new socket starts using another
+// implementation --a tunnel, a test socket, a transport of one's own-- without touching the code that
+// uses them.
 //
-// En KajiJDK no hay `Socket` ni `ServerSocket` que la consulten (no hay nativos de red), pero la
-// interfaz no promete que los haya: promete que **si** alguien fabrica un `SocketImpl`, se lo pide
-// por aca. Eso es cierto tal como esta escrito.
+// In KajiJDK there is no `Socket` or `ServerSocket` consulting it (there are no network natives), but
+// the interface does not promise there are: it promises that **if** anyone manufactures a
+// `SocketImpl`, it is asked for here. That is true exactly as written.
 public interface SocketImplFactory {
 
-    /** Una implementacion nueva, sin crear todavia el socket del sistema. */
+    /** A fresh implementation, without creating the system socket yet. */
     SocketImpl createSocketImpl();
 }

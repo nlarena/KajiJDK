@@ -1,6 +1,6 @@
 package java.lang.ref;
 
-import java.lang.ref.Reference; // redundante (mismo paquete); workaround del class-finder, ver WeakReference
+import java.lang.ref.Reference; // redundant (same package); class-finder workaround, see WeakReference
 
 // KajiLibrary's java.lang.ref.ReferenceQueue — the queue References are enqueued onto once
 // their referent dies. A singly-linked stack threaded through Reference.next: the GC

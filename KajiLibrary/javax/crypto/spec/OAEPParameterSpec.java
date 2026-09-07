@@ -4,21 +4,21 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.MGF1ParameterSpec;
 
 /**
- * Los parametros de OAEP: que hash, que funcion de mascara y que etiqueta.
+ * OAEP's parameters: which hash, which mask function and which label.
  *
- * <p>Los dos hashes son independientes y por eso son dos campos: el del mensaje y el de la funcion
- * de mascara pueden ser distintos, y en la practica muchas veces lo son porque el receptor espera
- * una combinacion concreta. Configurar mal cualquiera de los dos hace que el descifrado falle sin
- * decir por que, que es lo esperable de un relleno que no debe filtrar informacion.
+ * <p>The two hashes are independent and that is why they are two fields: the message's and the mask
+ * function's can be different, and in practice they often are because the receiver expects a
+ * particular combination. Getting either of them wrong makes decryption fail without saying why,
+ * which is what is to be expected of a padding that must not leak information.
  *
- * <p>{@link #DEFAULT} es SHA-1 con MGF1-SHA-1 y etiqueta vacia, que es lo que PKCS#1 define como
- * omision. **No es una recomendacion**: SHA-1 esta obsoleto y una aplicacion nueva deberia elegir
- * SHA-256 explicitamente. Esta ahi porque el estandar lo define asi y porque hace falta para
- * interoperar con lo que ya existe.
+ * <p>{@link #DEFAULT} is SHA-1 with MGF1-SHA-1 and an empty label, which is what PKCS#1 defines as
+ * the default. **It is not a recommendation**: SHA-1 is obsolete and a new application should choose
+ * SHA-256 explicitly. It is there because the standard defines it that way and because it is needed
+ * to interoperate with what already exists.
  */
 public class OAEPParameterSpec implements AlgorithmParameterSpec {
 
-    /** SHA-1, MGF1 con SHA-1 y etiqueta vacia. Ver la nota de la clase. */
+    /** SHA-1, MGF1 with SHA-1 and an empty label. See the class's note. */
     public static final OAEPParameterSpec DEFAULT = new OAEPParameterSpec(
             "SHA-1", "MGF1", MGF1ParameterSpec.SHA1, PSource.PSpecified.DEFAULT);
 
@@ -28,19 +28,19 @@ public class OAEPParameterSpec implements AlgorithmParameterSpec {
     private final PSource pSrc;
 
     /**
-     * @throws NullPointerException si alguno de los tres nombres o la fuente son nulos --`mgfSpec`
-     *     si puede ser nulo, y significa que la funcion de mascara no lleva parametros--
+     * @throws NullPointerException if either of the two names or the source are null --`mgfSpec` may
+     *     be null, and it means the mask function takes no parameters--
      */
     public OAEPParameterSpec(String mdName, String mgfName, AlgorithmParameterSpec mgfSpec,
             PSource pSrc) {
         if (mdName == null) {
-            throw new NullPointerException("el algoritmo de digesto no puede ser nulo");
+            throw new NullPointerException("the digest algorithm cannot be null");
         }
         if (mgfName == null) {
-            throw new NullPointerException("el algoritmo de mascara no puede ser nulo");
+            throw new NullPointerException("the mask algorithm cannot be null");
         }
         if (pSrc == null) {
-            throw new NullPointerException("la fuente de la etiqueta no puede ser nula");
+            throw new NullPointerException("the label's source cannot be null");
         }
         this.mdName = mdName;
         this.mgfName = mgfName;
@@ -48,22 +48,22 @@ public class OAEPParameterSpec implements AlgorithmParameterSpec {
         this.pSrc = pSrc;
     }
 
-    /** El hash del mensaje. */
+    /** The message's hash. */
     public String getDigestAlgorithm() {
         return this.mdName;
     }
 
-    /** La funcion generadora de mascara. */
+    /** The mask generation function. */
     public String getMGFAlgorithm() {
         return this.mgfName;
     }
 
-    /** Los parametros de la funcion de mascara, o nulo si no lleva. */
+    /** The mask function's parameters, or null if it takes none. */
     public AlgorithmParameterSpec getMGFParameters() {
         return this.mgfSpec;
     }
 
-    /** De donde sale la etiqueta. */
+    /** Where the label comes from. */
     public PSource getPSource() {
         return this.pSrc;
     }

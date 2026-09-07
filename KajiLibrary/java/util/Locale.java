@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -42,7 +44,7 @@ import java.util.stream.Stream;
 //
 // El resto -- construir, parsear, componer etiquetas, extensiones, filtrado RFC 4647 -- es
 // mecanismo y no datos, y esta entero.
-public final class Locale {
+public final class Locale implements Serializable, Cloneable {
 
     // Las dos letras que identifican una extension con nombre propio.
     public static final char UNICODE_LOCALE_EXTENSION = 'u';

@@ -1,22 +1,22 @@
 package java.net;
 
-// Quien sabe fabricar el manejador de un protocolo.
+// The one that knows how to manufacture a protocol's handler.
 //
-// Es el punto de extension que hace a `java.net.URL` abierta: la clase no trae un manejador por
-// protocolo cableado adentro, sino que le pregunta a la fabrica instalada. Asi un programa puede
-// ensenarle a `URL` un esquema que la plataforma no conoce --`classpath:`, `res:`, uno propio-- sin
-// tocar `URL`.
+// It is the extension point that makes `java.net.URL` open: the class does not carry a handler per
+// protocol wired inside it, it asks the installed factory instead. That way a program can teach `URL`
+// a scheme the platform does not know --`classpath:`, `res:`, one of its own-- without touching
+// `URL`.
 //
-// Un solo metodo, y devolver null es parte del contrato: significa "de ese protocolo no se nada",
-// y ahi `URL` sigue con sus manejadores internos.
+// A single method, and returning null is part of the contract: it means "I know nothing about that
+// protocol", and there `URL` goes on with its internal handlers.
 //
-// Computacion pura: nada omitido.
+// Pure computation: nothing omitted.
 public interface URLStreamHandlerFactory {
 
     /**
-     * El manejador de {@code protocol}, o null si esta fabrica no conoce ese protocolo.
+     * The handler for {@code protocol}, or null if this factory does not know that protocol.
      *
-     * @param protocol el esquema, en minusculas y sin los dos puntos ("http", "file")
+     * @param protocol the scheme, in lower case and without the colon ("http", "file")
      */
     URLStreamHandler createURLStreamHandler(String protocol);
 }

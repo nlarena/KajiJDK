@@ -8,13 +8,13 @@ import java.util.Locale;
 // merely describe it.
 public interface Diagnostic<S> {
 
-    // Se usa para posicion/linea/columna cuando la informacion no esta disponible.
+    // Used for position/line/column when the information is not available.
     //
-    // `public static final` va EXPLICITO a proposito. El javac congelado no aplica los
-    // modificadores implicitos de campo de interfaz (JLS 9.3): escrito como `long NOPOS = -1L;`
-    // emite el campo con flags 0x0000, sin ConstantValue, y mete el inicializador en un
-    // `public <init>()V` sintetizado DENTRO de la interfaz (que ademas hace putstatic sobre un
-    // campo no estatico). Con los modificadores escritos sale correcto. Ver el informe.
+    // `public static final` is written EXPLICITLY on purpose. The frozen javac does not apply the
+    // implicit modifiers of an interface field (JLS 9.3): written as `long NOPOS = -1L;` it emits
+    // the field with flags 0x0000, with no ConstantValue, and puts the initializer into a
+    // synthesized `public <init>()V` INSIDE the interface (which also does a putstatic on a
+    // non-static field). With the modifiers written out it comes out correct. See the report.
     public static final long NOPOS = -1L;
 
     Kind getKind();

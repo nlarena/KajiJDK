@@ -41,9 +41,9 @@ final class ByteCodec {
      * @return the assembled value, zero-extended
      */
     static long read(byte[] a, int at, int count, boolean bigEndian) {
-        // El sufijo L no es cosmetico: nuestro javac no emite `i2l` en la conversion de
-        // asignacion, asi que `long value = 0;` deja un int en el slot y la primera operacion
-        // larga revienta ("expected a long on the operand stack, found Int(0)").
+        // The L suffix is not cosmetic: our javac does not emit `i2l` on the assignment conversion,
+        // so `long value = 0;` leaves an int in the slot and the first long operation blows up
+        // ("expected a long on the operand stack, found Int(0)").
         long value = 0L;
         int i = 0;
         while (i < count) {

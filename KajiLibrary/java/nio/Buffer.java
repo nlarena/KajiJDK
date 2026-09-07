@@ -242,17 +242,17 @@ public abstract class Buffer {
      */
     public abstract Buffer duplicate();
 
-    // ---- helpers para las subclases ----
+    // ---- helpers for the subclasses ----
 
-    // ---- el trabajo real de los siete mutadores de indices ----
+    // ---- the real work of the seven index mutators ----
     //
-    // Cada subclase tipada vuelve a declarar `position(int)`, `limit(int)`, `mark()`, `reset()`,
-    // `clear()`, `flip()` y `rewind()` para devolver SU tipo (asi una cadena de llamadas no se
-    // degrada a `Buffer`). En el JDK esos override llaman a `super.position(...)`; nuestro javac
-    // todavia no genera `invokespecial` para `super.metodo()` ("el generador de bytecode todavia
-    // no soporta `super`"), asi que el cuerpo vive aca, en metodos `final` que nadie sobreescribe,
-    // y tanto Buffer como las subclases los invocan por nombre. Es el mismo codigo una sola vez;
-    // lo unico que se pierde es la forma de escribirlo.
+    // Every typed subclass redeclares `position(int)`, `limit(int)`, `mark()`, `reset()`, `clear()`,
+    // `flip()` and `rewind()` so as to return ITS own type (that way a chain of calls does not
+    // degrade to `Buffer`). In the JDK those overrides call `super.position(...)`; our javac does not
+    // yet generate `invokespecial` for `super.method()` ("the bytecode generator does not support
+    // `super` yet"), so the body lives here, in `final` methods nobody overrides, and both Buffer and
+    // the subclasses invoke them by name. It is the same code exactly once; the only thing lost is
+    // the way of writing it.
 
     final void setPosition(int newPosition) {
         if (newPosition > limit || newPosition < 0) {

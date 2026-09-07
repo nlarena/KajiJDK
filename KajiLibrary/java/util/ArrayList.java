@@ -3,6 +3,8 @@ package java.util;
 // Same-package imports work around... no longer needed for finding #4, but the classes are
 // referenced by simple name so they must be resolvable; compiled with `-cp KajiLibrary` so
 // List/Iterator bind to KajiLibrary's own (subset) types rather than the JDK's.
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.List;
 import java.util.Iterator;
 
@@ -10,7 +12,8 @@ import java.util.Iterator;
 // Object[] that doubles when full, with O(1) indexed access and amortised O(1) append.
 // Insertion/removal in the middle shift the tail via a copy; `iterator()` walks by index
 // through an anonymous Iterator that captures the list.
-public class ArrayList<E> extends AbstractList<E> implements List<E> {
+public class ArrayList<E> extends AbstractList<E>
+        implements List<E>, RandomAccess, Serializable, Cloneable {
 
     private Object[] elementData;
     private int size;

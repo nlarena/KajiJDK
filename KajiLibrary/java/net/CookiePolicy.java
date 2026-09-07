@@ -1,25 +1,25 @@
 package java.net;
 
-// La decision de aceptar o no una cookie.
+// The decision of whether to accept a cookie.
 //
-// Es una interfaz de un solo metodo con tres implementaciones ya hechas, y las tres constantes son
-// la parte util: `ACCEPT_ORIGINAL_SERVER` --la que usa `CookieManager` por defecto-- es la unica
-// defensa que trae la plataforma contra que un servidor le ponga cookies a otro dominio. Sin ella,
-// un aviso embebido en una pagina podria escribir cookies de la pagina que lo hospeda.
+// It is a single-method interface with three ready-made implementations, and the three constants are
+// the useful part: `ACCEPT_ORIGINAL_SERVER` --the one `CookieManager` uses by default-- is the only
+// defence the platform ships against one server setting cookies for another domain. Without it, an
+// ad embedded in a page could write cookies for the page hosting it.
 //
-// La politica se separa del almacen a proposito: guardar y decidir son dos decisiones distintas, y
-// una aplicacion suele querer cambiar solo una de las dos.
+// The policy is separated from the store on purpose: keeping and deciding are two different
+// decisions, and an application usually wants to change only one of the two.
 //
-// Decidir es computacion pura. Nada omitido.
+// Deciding is pure computation. Nothing omitted.
 public interface CookiePolicy {
 
-    /** Acepta todas. Util para pruebas; en produccion es una politica sin defensa. */
+    /** Accepts them all. Useful for tests; in production it is a policy with no defence. */
     CookiePolicy ACCEPT_ALL = (uri, cookie) -> true;
 
-    /** No acepta ninguna. */
+    /** Accepts none. */
     CookiePolicy ACCEPT_NONE = (uri, cookie) -> false;
 
-    /** Solo del servidor que la manda: el dominio de la cookie tiene que cubrir al host de la URI. */
+    /** Only from the server that sends it: the cookie's domain has to cover the URI's host. */
     CookiePolicy ACCEPT_ORIGINAL_SERVER = (uri, cookie) -> {
         if (uri == null || cookie == null) {
             return false;
@@ -27,6 +27,6 @@ public interface CookiePolicy {
         return HttpCookie.domainMatches(cookie.getDomain(), uri.getHost());
     };
 
-    /** Si {@code cookie}, llegada desde {@code uri}, se guarda. */
+    /** Whether {@code cookie}, arrived from {@code uri}, is kept. */
     boolean shouldAccept(URI uri, HttpCookie cookie);
 }

@@ -1,10 +1,11 @@
 package java.net;
 
-// Un NoRouteToHostException: no hay camino hacia el host (tipicamente un firewall que descarta en silencio, o una red caida).
+// A NoRouteToHostException: there is no route to the host (typically a firewall dropping silently, or
+// a network that is down).
 //
-// Subclase de `SocketException` por la misma razon que la madre existe aca (ver `SocketException`):
-// nombra un modo de falla, no promete poder producirlo. Quien atrapa `SocketException` la atrapa
-// tambien, que es de lo que se trata la jerarquia.
+// A subclass of `SocketException` for the same reason its parent exists here (see `SocketException`):
+// it names a failure mode, it does not promise to be able to produce it. Whoever catches
+// `SocketException` catches it too, which is what the hierarchy is about.
 public class NoRouteToHostException extends SocketException {
 
     private static final long serialVersionUID = -1897550894873493790L;

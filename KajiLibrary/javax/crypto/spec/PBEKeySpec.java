@@ -4,17 +4,18 @@ import java.security.spec.KeySpec;
 import java.util.Arrays;
 
 /**
- * Una contrasena --y opcionalmente su sal, iteraciones y largo de clave-- para derivar una clave.
+ * A password --and optionally its salt, iterations and key length-- for deriving a key.
  *
- * <p><strong>La contrasena es un `char[]` y no un `String`, y esa es la idea entera de esta
- * clase.</strong> Un `String` es inmutable y vive en el pool hasta que el recolector lo levante:
- * una contrasena ahi queda en memoria un tiempo que nadie controla, y aparece en un volcado. Un
- * arreglo se puede **borrar**, y {@link #clearPassword} es lo que lo hace.
+ * <p><strong>The password is a `char[]` and not a `String`, and that is this class's whole
+ * idea.</strong> A `String` is immutable and lives in the pool until the collector picks it up: a
+ * password there stays in memory for a time nobody controls, and shows up in a dump. An array can be
+ * **wiped**, and {@link #clearPassword} is what does it.
  *
- * <p>Por eso el constructor copia el arreglo y `getPassword` devuelve otra copia: el llamador puede
- * borrar el suyo enseguida sin romper este objeto. Y por eso `getPassword` **tira** despues de
- * `clearPassword` en vez de devolver ceros -- devolver una contrasena en blanco como si fuera valida
- * es la clase de error que no se nota hasta que algo se cifra con la clave equivocada.
+ * <p>That is why the constructor copies the array and `getPassword` returns another copy: the caller
+ * can wipe its own straight away without breaking this object. And that is why `getPassword`
+ * **throws** after `clearPassword` instead of returning zeros -- returning a blank password as if it
+ * were valid is the kind of error that goes unnoticed until something is encrypted with the wrong
+ * key.
  */
 public class PBEKeySpec implements KeySpec {
 
@@ -24,7 +25,7 @@ public class PBEKeySpec implements KeySpec {
     private final int keyLength;
 
     /**
-     * Solo la contrasena. Un nulo se toma como contrasena vacia, que es lo que hace el JDK.
+     * The password alone. A null is taken as an empty password, which is what the JDK does.
      */
     public PBEKeySpec(char[] password) {
         this.password = password == null ? new char[0] : copy(password);
@@ -34,39 +35,39 @@ public class PBEKeySpec implements KeySpec {
     }
 
     /**
-     * Con sal e iteraciones.
+     * With salt and iterations.
      *
-     * @throws NullPointerException si la sal es nula
-     * @throws IllegalArgumentException si la sal esta vacia o las iteraciones no son positivas
+     * @throws NullPointerException if the salt is null
+     * @throws IllegalArgumentException if the salt is empty or the iterations are not positive
      */
     public PBEKeySpec(char[] password, byte[] salt, int iterationCount) {
         this(password, salt, iterationCount, 0, false);
     }
 
     /**
-     * Con sal, iteraciones y largo de clave en bits.
+     * With salt, iterations and key length in bits.
      *
-     * @throws NullPointerException si la sal es nula
-     * @throws IllegalArgumentException si la sal esta vacia, o si las iteraciones o el largo no son
-     *     positivos
+     * @throws NullPointerException if the salt is null
+     * @throws IllegalArgumentException if the salt is empty, or if the iterations or the length are
+     *     not positive
      */
     public PBEKeySpec(char[] password, byte[] salt, int iterationCount, int keyLength) {
         this(password, salt, iterationCount, keyLength, true);
     }
 
     private PBEKeySpec(char[] password, byte[] salt, int iterationCount, int keyLength,
-            boolean conLargo) {
+            boolean withLength) {
         if (salt == null) {
-            throw new NullPointerException("la sal no puede ser nula");
+            throw new NullPointerException("the salt cannot be null");
         }
         if (salt.length == 0) {
-            throw new IllegalArgumentException("la sal no puede estar vacia");
+            throw new IllegalArgumentException("the salt cannot be empty");
         }
         if (iterationCount <= 0) {
-            throw new IllegalArgumentException("las iteraciones tienen que ser positivas");
+            throw new IllegalArgumentException("the iterations have to be positive");
         }
-        if (conLargo && keyLength <= 0) {
-            throw new IllegalArgumentException("el largo de clave tiene que ser positivo");
+        if (withLength && keyLength <= 0) {
+            throw new IllegalArgumentException("the key length has to be positive");
         }
         this.password = password == null ? new char[0] : copy(password);
         this.salt = IvParameterSpec.copy(salt, 0, salt.length);
@@ -81,11 +82,11 @@ public class PBEKeySpec implements KeySpec {
     }
 
     /**
-     * Borra la contrasena de la memoria.
+     * Wipes the password from memory.
      *
-     * <p>Se sobrescribe con ceros **antes** de soltar la referencia: soltarla sola dejaria los
-     * caracteres en el monton hasta que el recolector pase, que es justo lo que esta clase existe
-     * para evitar.
+     * <p>It is overwritten with zeros **before** the reference is dropped: dropping it alone would
+     * leave the characters on the heap until the collector came by, which is exactly what this class
+     * exists to avoid.
      */
     public final synchronized void clearPassword() {
         if (this.password != null) {
@@ -95,28 +96,28 @@ public class PBEKeySpec implements KeySpec {
     }
 
     /**
-     * Una copia de la contrasena.
+     * A copy of the password.
      *
-     * @throws IllegalStateException si ya se llamo a {@link #clearPassword}
+     * @throws IllegalStateException if {@link #clearPassword} has already been called
      */
     public final synchronized char[] getPassword() {
         if (this.password == null) {
-            throw new IllegalStateException("la contrasena ya se borro");
+            throw new IllegalStateException("the password has already been wiped");
         }
         return copy(this.password);
     }
 
-    /** Una copia de la sal, o nulo si no tiene. */
+    /** A copy of the salt, or null if it has none. */
     public final byte[] getSalt() {
         return this.salt == null ? null : IvParameterSpec.copy(this.salt, 0, this.salt.length);
     }
 
-    /** Cuantas iteraciones, o cero si no se dieron. */
+    /** How many iterations, or zero if none were given. */
     public final int getIterationCount() {
         return this.iterationCount;
     }
 
-    /** El largo de clave en bits, o cero si no se dio. */
+    /** The key length in bits, or zero if none was given. */
     public final int getKeyLength() {
         return this.keyLength;
     }

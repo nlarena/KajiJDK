@@ -1,33 +1,33 @@
 package java.net;
 
-// Un proxy: por donde salir en vez de ir derecho al destino.
+// A proxy: where to go out through instead of straight to the destination.
 //
-// La clase es un par (tipo, direccion) inmutable, y la validacion del constructor es lo unico que
-// tiene de interesante: `DIRECT` no admite direccion --ir derecho no tiene intermediario-- y los
-// otros dos tipos la exigen. Los dos casos se rechazan con el mismo mensaje porque son el mismo
-// error: el tipo y la direccion no se corresponden.
+// The class is an immutable (type, address) pair, and the constructor's validation is the only
+// interesting thing about it: `DIRECT` admits no address --going straight has no intermediary-- and
+// the other two types require one. Both cases are rejected with the same message because they are the
+// same error: the type and the address do not match.
 //
-// Que exista `NO_PROXY` como constante en vez de aceptar null es a proposito: un `select()` que
-// pueda devolver "sin proxy" como un elemento mas de la lista es mas simple que uno que devuelva
-// listas vacias o nulls.
+// That `NO_PROXY` exists as a constant instead of accepting null is on purpose: a `select()` that can
+// return "no proxy" as just another element of the list is simpler than one that returns empty lists
+// or nulls.
 //
-// Describir un proxy no es usarlo: esto es un valor, no una conexion. Nada omitido.
+// Describing a proxy is not using it: this is a value, not a connection. Nothing omitted.
 public class Proxy {
 
-    /** Los tres tipos de proxy que la plataforma sabe nombrar. */
+    /** The three kinds of proxy the platform can name. */
     public enum Type {
 
-        /** Sin proxy: conexion directa. */
+        /** No proxy: a direct connection. */
         DIRECT,
 
-        /** Proxy de alto nivel, tipicamente HTTP o FTP. */
+        /** A high-level proxy, typically HTTP or FTP. */
         HTTP,
 
-        /** Proxy SOCKS (v4 o v5). */
+        /** A SOCKS proxy (v4 or v5). */
         SOCKS;
     }
 
-    /** El proxy que no es un proxy: representa "conexion directa". */
+    /** The proxy that is not a proxy: it represents "direct connection". */
     public static final Proxy NO_PROXY = new Proxy();
 
     private final Type type;
@@ -39,9 +39,9 @@ public class Proxy {
     }
 
     /**
-     * Un proxy de ese tipo en esa direccion.
+     * A proxy of that type at that address.
      *
-     * @throws IllegalArgumentException si el tipo es {@code DIRECT}, o si la direccion no es una
+     * @throws IllegalArgumentException if the type is {@code DIRECT}, or if the address is not an
      *     {@link InetSocketAddress}
      */
     public Proxy(Type type, SocketAddress sa) {
@@ -57,7 +57,7 @@ public class Proxy {
         return this.type;
     }
 
-    /** La direccion del proxy, o null si es {@code DIRECT}. */
+    /** The proxy's address, or null if it is {@code DIRECT}. */
     public SocketAddress address() {
         return this.sa;
     }

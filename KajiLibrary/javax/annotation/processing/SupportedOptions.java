@@ -6,19 +6,19 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// Las opciones (`-Aclave=valor`) que un procesador declara entender. La lee
-// `AbstractProcessor.getSupportedOptions()` por reflexion.
+// The options (`-Akey=value`) a processor declares it understands.
+// `AbstractProcessor.getSupportedOptions()` reads it by reflection.
 //
-// AVISO — en esta VM esta anotacion NO se puede leer en tiempo de ejecucion. Nuestro javac no emite
-// `RuntimeVisibleAnnotations` cuando el tipo de la anotacion se resuelve desde el **classpath** (ver
-// el encabezado de `AbstractProcessor`), que es siempre el caso para un procesador de usuario. La
-// declaracion es correcta y sirve como documentacion y para el javac real; `getSupportedOptions()`
-// devolvera el conjunto vacio hasta que el compilador se arregle.
+// WARNING — in this VM this annotation CANNOT be read at run time. Our javac does not emit
+// `RuntimeVisibleAnnotations` when the annotation's type resolves from the **classpath** (see
+// `AbstractProcessor`'s header), which is always the case for a user's processor. The declaration is
+// correct and serves as documentation and for the real javac; `getSupportedOptions()` will return the
+// empty set until the compiler is fixed.
 @Documented
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SupportedOptions {
 
-    /** Los nombres de las opciones. */
+    /** The options' names. */
     String[] value();
 }

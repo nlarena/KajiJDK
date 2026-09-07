@@ -1121,16 +1121,16 @@
  },
  {
   "pkg": "javax.swing.plaf.basic",
-  "clases": 50,
+  "clases": 59,
   "clasesJdk": 59,
-  "miembros": 980,
+  "miembros": 1623,
   "miembrosJdk": 1623
  },
  {
   "pkg": "javax.swing.plaf.metal",
-  "clases": 2,
+  "clases": 35,
   "clasesJdk": 35,
-  "miembros": 6,
+  "miembros": 499,
   "miembrosJdk": 499
  },
  {
@@ -1149,9 +1149,9 @@
  },
  {
   "pkg": "javax.swing.plaf.synth",
-  "clases": 9,
+  "clases": 51,
   "clasesJdk": 51,
-  "miembros": 270,
+  "miembros": 806,
   "miembrosJdk": 806
  },
  {

@@ -2,6 +2,7 @@ package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4). `Map.Entry` is imported
 // rather than written `Map.Entry`, because a qualified nested type is not resolved (finding #101).
+import java.io.Serializable;
 import java.util.Map;
 
 // A hash map that also remembers the **order its keys were first inserted in**. It is the map
@@ -40,7 +41,7 @@ import java.util.Map;
 // LinkedHashMap gets them from HashMap and ours cannot extend KajiLibrary's HashMap: overriding
 // `put` would have to call `super.put`, and our javac's bytecode generator has no `super` call.
 public class LinkedHashMap<K, V> extends AbstractMap<K, V>
-        implements Map<K, V>, SequencedMap<K, V> {
+        implements Map<K, V>, SequencedMap<K, V>, Serializable {
 
     // The buckets: each holds a chain of entries linked by `next`.
     private LhmEntry<K, V>[] table;

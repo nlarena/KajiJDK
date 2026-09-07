@@ -7,57 +7,58 @@ import java.util.Optional;
 import jdk.jshell.JShellConsole;
 
 /**
- * Lo que `jshell` le presta a un {@link ExecutionControl} para que haga su trabajo.
+ * What `jshell` lends an {@link ExecutionControl} so that it can do its job.
  *
- * <p>Es la direccion contraria del SPI: {@link ExecutionControl} es lo que el motor le ofrece a
- * `jshell`, y esto es lo que `jshell` le ofrece al motor. Y lo que le ofrece son las tres cosas que
- * el motor no puede fabricarse solo:
+ * <p>It is the SPI's other direction: {@link ExecutionControl} is what the engine offers `jshell`,
+ * and this is what `jshell` offers the engine. And what it offers are the three things the engine
+ * cannot make for itself:
  *
  * <ul>
- *   <li>los flujos del usuario, que el motor tiene que **conectar** a la VM donde ejecuta;
- *   <li>las opciones extra con las que arrancar esa VM;
- *   <li>una forma de avisar que se murio, que es {@link #closeDown()}.
+ *   <li>the user's streams, which the engine has to **connect** to the VM it executes in;
+ *   <li>the extra options to start that VM with;
+ *   <li>a way to report that it has died, which is {@link #closeDown()}.
  * </ul>
  *
- * <p>Lo implementa `jshell`, no el motor.
+ * <p>It is implemented by `jshell`, not by the engine.
  *
  * @since 9
  */
 public interface ExecutionEnv {
 
-    /** De donde el codigo del usuario lee. */
+    /** Where the user's code reads from. */
     InputStream userIn();
 
-    /** Donde el codigo del usuario escribe. */
+    /** Where the user's code writes. */
     PrintStream userOut();
 
-    /** Donde el codigo del usuario escribe sus errores. */
+    /** Where the user's code writes its errors. */
     PrintStream userErr();
 
     /**
-     * Las opciones extra para la VM remota.
+     * The extra options for the remote VM.
      *
-     * <p>Salen de los `-R` de la linea de comandos. El motor las agrega a las suyas si lanza una VM
-     * aparte, y las ignora si ejecuta en el mismo proceso.
+     * <p>They come from the command line's `-R`. The engine adds them to its own if it launches a
+     * separate VM, and ignores them if it executes in the same process.
      */
     List<String> extraRemoteVMOptions();
 
     /**
-     * Avisa que el motor se murio.
+     * Reports that the engine has died.
      *
-     * <p>Lo llama el **motor**, no `jshell`: es como le cuenta que se quedo sin VM del otro lado y
-     * que hay que rearmarlo. `jshell` lo usa para no seguir mandandole fragmentos.
+     * <p>It is called by the **engine**, not by `jshell`: it is how it tells `jshell` that it has run
+     * out of VM on the other side and has to be rebuilt. `jshell` uses it to stop sending it
+     * snippets.
      */
     void closeDown();
 
     /**
-     * La consola que ve el codigo del usuario, si hay una.
+     * The console the user's code sees, if there is one.
      *
-     * <p>Vacio significa que no hay consola, y no que no se sepa: el codigo del usuario que llame a
-     * `System.console()` tiene que recibir `null`.
+     * <p>Empty means there is no console, not that it is unknown: user code calling
+     * `System.console()` has to receive `null`.
      *
-     * <p>Es `default` porque llego con Java 22, y un motor escrito antes tiene que seguir
-     * compilando.
+     * <p>It is `default` because it arrived with Java 22, and an engine written earlier has to go on
+     * compiling.
      */
     default Optional<JShellConsole> console() {
         return Optional.empty();

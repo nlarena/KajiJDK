@@ -1,6 +1,7 @@
 package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -32,7 +33,7 @@ import java.util.Iterator;
 // to the constructor. Null elements are rejected: null is `poll`'s "empty" answer.
 //
 // Subset of the JDK's: no Spliterator, no bulk operations, no serialization.
-public class PriorityQueue<E> extends AbstractQueue<E> {
+public class PriorityQueue<E> extends AbstractQueue<E> implements Serializable {
 
     // The heap, laid out breadth-first: index 0 is the root, i.e. the minimum.
     private Object[] queue;

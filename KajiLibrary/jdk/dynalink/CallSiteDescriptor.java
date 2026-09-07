@@ -6,19 +6,18 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * Todo lo que se sabe de un sitio de invocacion dinamico en tiempo de enlace: quien lo escribio
- * (el {@link Lookup}), que quiere hacer (la {@link Operation}) y con que firma
- * (el {@link MethodType}).
+ * Everything known about a dynamic call site at link time: who wrote it (the {@link Lookup}), what it
+ * wants to do (the {@link Operation}) and with what signature (the {@link MethodType}).
  *
- * <p>Es un **tipo de valor**: inmutable, comparable, y con "modificadores" que devuelven una
- * instancia nueva. El par publico/protegido de cada modificador no es duplicacion: el `final`
- * publico ({@link #changeMethodType}) contiene las invariantes, y el `protected`
- * ({@link #changeMethodTypeInternal}) es el que una subclase redefine para preservar sus propios
- * campos. La subclase no puede saltearse el chequeo, y el chequeo no puede impedirle extender.
+ * <p>It is a **value type**: immutable, comparable, and with "modifiers" that return a new instance.
+ * The public/protected pair of each modifier is not duplication: the public `final`
+ * ({@link #changeMethodType}) holds the invariants, and the `protected` one
+ * ({@link #changeMethodTypeInternal}) is the one a subclass redefines to preserve its own fields.
+ * The subclass cannot skip the check, and the check cannot stop it from extending.
  *
- * <p>Las invariantes solo se verifican cuando `getClass() != CallSiteDescriptor.class`, es decir,
- * solo contra subclases: la implementacion base las cumple por construccion y pagar el costo en
- * el camino comun no tendria sentido.
+ * <p>The invariants are only verified when `getClass() != CallSiteDescriptor.class`, that is, only
+ * against subclasses: the base implementation meets them by construction and paying the cost on the
+ * common path would make no sense.
  *
  * @since 9
  */
@@ -42,10 +41,10 @@ public class CallSiteDescriptor extends SecureLookupSupplier {
     }
 
     /**
-     * El mismo descriptor con otra firma.
+     * The same descriptor with another signature.
      *
-     * @throws AssertionError si una subclase redefinio {@link #changeMethodTypeInternal} de
-     *         forma que cambie la clase, el lookup o la operacion.
+     * @throws AssertionError if a subclass redefined {@link #changeMethodTypeInternal} in a way that
+     *         changes the class, the lookup or the operation.
      */
     public final CallSiteDescriptor changeMethodType(final MethodType newMethodType) {
         final CallSiteDescriptor changed = changeMethodTypeInternal(newMethodType);
@@ -59,16 +58,16 @@ public class CallSiteDescriptor extends SecureLookupSupplier {
         return changed;
     }
 
-    /** El punto de extension de {@link #changeMethodType}; una subclase copia aca sus campos. */
+    /** The extension point of {@link #changeMethodType}; a subclass copies its fields here. */
     protected CallSiteDescriptor changeMethodTypeInternal(final MethodType newMethodType) {
         return new CallSiteDescriptor(getLookupPrivileged(), operation, newMethodType);
     }
 
     /**
-     * El mismo descriptor con otra operacion.
+     * The same descriptor with another operation.
      *
-     * @throws AssertionError si una subclase redefinio {@link #changeOperationInternal} de forma
-     *         que cambie la clase, el lookup o la firma.
+     * @throws AssertionError if a subclass redefined {@link #changeOperationInternal} in a way that
+     *         changes the class, the lookup or the signature.
      */
     public final CallSiteDescriptor changeOperation(final Operation newOperation) {
         getLookup();
@@ -83,14 +82,14 @@ public class CallSiteDescriptor extends SecureLookupSupplier {
         return changed;
     }
 
-    /** El punto de extension de {@link #changeOperation}. */
+    /** The extension point of {@link #changeOperation}. */
     protected CallSiteDescriptor changeOperationInternal(final Operation newOperation) {
         return new CallSiteDescriptor(getLookupPrivileged(), newOperation, methodType);
     }
 
     /**
-     * Igualdad por valor, con la clase exacta como parte del contrato: un descriptor de una
-     * subclase nunca es igual a uno base, porque la subclase puede llevar estado propio.
+     * Equality by value, with the exact class as part of the contract: a subclass's descriptor is
+     * never equal to a base one, because the subclass may carry state of its own.
      */
     @Override
     public boolean equals(final Object obj) {
@@ -107,8 +106,8 @@ public class CallSiteDescriptor extends SecureLookupSupplier {
                 && lookupsEqual(getLookupPrivileged(), other.getLookupPrivileged());
     }
 
-    // Dos lookups son el mismo si dan el mismo acceso desde la misma clase; `Lookup` no define
-    // `equals`, asi que la comparacion tiene que ser explicita.
+    // Two lookups are the same if they give the same access from the same class; `Lookup` does not
+    // define `equals`, so the comparison has to be explicit.
     private static boolean lookupsEqual(final Lookup l1, final Lookup l2) {
         return l1.lookupClass() == l2.lookupClass() && l1.lookupModes() == l2.lookupModes();
     }
@@ -139,8 +138,8 @@ public class CallSiteDescriptor extends SecureLookupSupplier {
                 () -> caller + " must not change the descriptor's lookup");
     }
 
-    // `assert` de verdad, no el del `-ea`: estas invariantes protegen a un enlazador de una
-    // subclase ajena mal escrita, y desactivarlas convertiria el error en corrupcion silenciosa.
+    // A real assert, not the `-ea` kind: these invariants protect a linker from someone else's
+    // badly written subclass, and switching them off would turn the error into silent corruption.
     private static void alwaysAssert(final boolean cond, final Supplier<String> errorMessage) {
         if (!cond) {
             throw new AssertionError(errorMessage.get());

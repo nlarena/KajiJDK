@@ -9,194 +9,194 @@ import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 
-// El transporte que hay debajo de un socket TCP, separado del socket mismo.
+// The transport underneath a TCP socket, separated from the socket itself.
 //
 // ===========================================================================================
-// QUE ES ESTA CLASE, Y POR QUE PUEDE ESTAR SIN QUE HAYA RED
+// WHAT THIS CLASS IS, AND WHY IT CAN BE HERE WITH NO NETWORK
 // ===========================================================================================
 //
-// `Socket` es lo que usa el programa; `SocketImpl` es lo que **hace el trabajo**. La separacion es
-// vieja y sigue siendo util: cambiando la implementacion se cambia el transporte sin tocar una linea
-// del codigo que abre conexiones.
+// `Socket` is what the program uses; `SocketImpl` is what **does the work**. The separation is old
+// and still useful: changing the implementation changes the transport without touching a line of the
+// code that opens connections.
 //
-// Todos los metodos que tocan la red --`create`, `connect`, `bind`, `listen`, `accept`, `close`,
-// `getInputStream`, `available`, `sendUrgentData`-- son **abstractos**. Esta clase no los escribe:
-// declara que alguien los va a escribir. Eso es exactamente lo que es en el JDK, y es la unica
-// forma honesta de que el tipo exista en una VM sin sockets: **no hay aca un solo metodo que
-// prometa conectar**. Hay una lista de lo que haria falta implementar.
+// Every method that touches the network --`create`, `connect`, `bind`, `listen`, `accept`, `close`,
+// `getInputStream`, `available`, `sendUrgentData`-- is **abstract**. This class does not write them:
+// it declares that someone is going to. That is exactly what it is in the JDK, and it is the only
+// honest way for the type to exist in a VM with no sockets: **there is not one method here that
+// promises to connect**. There is a list of what would have to be implemented.
 //
-// Lo poco concreto que trae son accesores de campos (`getInetAddress`, `getPort`, `getLocalPort`,
-// `getFileDescriptor`), el `toString`, y las traducciones entre las dos formas de nombrar opciones
-// --la vieja de `SocketOptions`, con enteros, y la nueva de `SocketOption<T>`, con tipos--. Nada de
-// eso toca la red: son campos y un `switch`.
+// The little that is concrete are field accessors (`getInetAddress`, `getPort`, `getLocalPort`,
+// `getFileDescriptor`), the `toString`, and the translations between the two ways of naming options
+// --the old `SocketOptions` one, with integers, and the new `SocketOption<T>` one, with types.
+// None of that touches the network: it is fields and a `switch`.
 //
-// `shutdownInput`/`shutdownOutput` y `setPerformancePreferences` se declaran con el mismo cuerpo que
-// en el JDK: los dos primeros tiran `IOException("Method not implemented!")` --es la implementacion
-// base del JDK, no un stub de KajiJDK-- y el tercero no hace nada, porque son sugerencias que una
-// implementacion puede ignorar por contrato.
+// `shutdownInput`/`shutdownOutput` and `setPerformancePreferences` are declared with the same body as
+// in the JDK: the first two throw `IOException("Method not implemented!")` --it is the JDK's base
+// implementation, not a KajiJDK stub-- and the third does nothing, because they are suggestions an
+// implementation may ignore by contract.
 //
 // ===========================================================================================
-// QUIEN LA IMPLEMENTA
+// WHO IMPLEMENTS IT
 // ===========================================================================================
 //
-// **Nadie, en este arbol.** No hay `Socket` ni `ServerSocket`, y no los va a haber sin nativos de
-// red: un `Socket.connect()` que no conecte pero tampoco falle es lo peor que se puede escribir.
-// Esta clase es el lugar por donde entraria un transporte el dia que exista uno.
+// **Nobody, in this tree.** `Socket` and `ServerSocket` are here now and they talk to the VM's
+// network natives directly, without going through a `SocketImpl`; this class is the door a
+// replaceable transport would come in through the day someone writes one.
 //
-// Los veintiocho miembros estan.
+// All twenty-eight members are here.
 public abstract class SocketImpl implements SocketOptions {
 
-    /** El descriptor del socket del sistema, o null si todavia no se creo. */
+    /** The system socket's descriptor, or null if it has not been created yet. */
     protected FileDescriptor fd;
 
-    /** La direccion del otro extremo. */
+    /** The far end's address. */
     protected InetAddress address;
 
-    /** El puerto del otro extremo. */
+    /** The far end's port. */
     protected int port;
 
-    /** El puerto de este lado. */
+    /** This side's port. */
     protected int localport;
 
     public SocketImpl() {
     }
 
     /**
-     * Crea el socket del sistema.
+     * Creates the system socket.
      *
-     * @param stream true para TCP, false para UDP
-     * @throws IOException si no se pudo crear
+     * @param stream true for TCP, false for UDP
+     * @throws IOException if it could not be created
      */
     protected abstract void create(boolean stream) throws IOException;
 
     /**
-     * Conecta a {@code host}:{@code port}, resolviendo el nombre.
+     * Connects to {@code host}:{@code port}, resolving the name.
      *
-     * @throws IOException si no se pudo conectar o el nombre no resolvio
+     * @throws IOException if it could not connect or the name did not resolve
      */
     protected abstract void connect(String host, int port) throws IOException;
 
     /**
-     * Conecta a esa direccion y puerto.
+     * Connects to that address and port.
      *
-     * @throws IOException si no se pudo conectar
+     * @throws IOException if it could not connect
      */
     protected abstract void connect(InetAddress address, int port) throws IOException;
 
     /**
-     * Conecta con limite de tiempo.
+     * Connects with a time limit.
      *
-     * @param timeout milisegundos, o 0 para esperar sin limite
-     * @throws IOException si no se pudo conectar o se acabo el tiempo
+     * @param timeout milliseconds, or 0 to wait without limit
+     * @throws IOException if it could not connect or the time ran out
      */
     protected abstract void connect(SocketAddress address, int timeout) throws IOException;
 
     /**
-     * Ata el socket a una direccion y un puerto locales.
+     * Binds the socket to a local address and port.
      *
-     * @throws IOException si el puerto esta tomado o la direccion no es de esta maquina
+     * @throws IOException if the port is taken or the address does not belong to this machine
      */
     protected abstract void bind(InetAddress host, int port) throws IOException;
 
     /**
-     * Empieza a aceptar conexiones, encolando hasta {@code backlog} sin atender.
+     * Starts accepting connections, queueing up to {@code backlog} unattended.
      *
-     * @throws IOException si no se pudo
+     * @throws IOException if it could not
      */
     protected abstract void listen(int backlog) throws IOException;
 
     /**
-     * Espera una conexion entrante y la deja en {@code s}.
+     * Waits for an incoming connection and leaves it in {@code s}.
      *
-     * <p>El resultado se escribe **en el parametro** y no se devuelve, que es de las firmas mas
-     * confusas del JDK: `s` llega vacio y sale conectado.
+     * <p>The result is written **into the parameter** and not returned, which is one of the JDK's
+     * most confusing signatures: `s` arrives empty and comes out connected.
      *
-     * @throws IOException si fallo la espera
+     * @throws IOException if the wait failed
      */
     protected abstract void accept(SocketImpl s) throws IOException;
 
     /**
-     * El flujo para leer de la conexion.
+     * The stream for reading from the connection.
      *
-     * @throws IOException si no se puede abrir
+     * @throws IOException if it cannot be opened
      */
     protected abstract InputStream getInputStream() throws IOException;
 
     /**
-     * El flujo para escribir a la conexion.
+     * The stream for writing to the connection.
      *
-     * @throws IOException si no se puede abrir
+     * @throws IOException if it cannot be opened
      */
     protected abstract OutputStream getOutputStream() throws IOException;
 
     /**
-     * Cuantos bytes se pueden leer sin bloquear.
+     * How many bytes can be read without blocking.
      *
-     * @throws IOException si fallo la consulta
+     * @throws IOException if the query failed
      */
     protected abstract int available() throws IOException;
 
     /**
-     * Cierra el socket.
+     * Closes the socket.
      *
-     * @throws IOException si fallo el cierre
+     * @throws IOException if the close failed
      */
     protected abstract void close() throws IOException;
 
     /**
-     * Cierra la mitad de lectura dejando abierta la de escritura.
+     * Closes the reading half, leaving the writing one open.
      *
-     * <p>El cuerpo base tira, igual que en el JDK: no toda implementacion sabe cerrar media
-     * conexion, y las que saben pisan el metodo.
+     * <p>The base body throws, just as in the JDK: not every implementation knows how to close half a
+     * connection, and the ones that do override the method.
      *
-     * @throws IOException siempre, en la implementacion base
+     * @throws IOException always, in the base implementation
      */
     protected void shutdownInput() throws IOException {
         throw new IOException("Method not implemented!");
     }
 
     /**
-     * Cierra la mitad de escritura dejando abierta la de lectura.
+     * Closes the writing half, leaving the reading one open.
      *
-     * @throws IOException siempre, en la implementacion base
+     * @throws IOException always, in the base implementation
      */
     protected void shutdownOutput() throws IOException {
         throw new IOException("Method not implemented!");
     }
 
-    /** El descriptor del sistema, o null si el socket no se creo. */
+    /** The system's descriptor, or null if the socket was not created. */
     protected FileDescriptor getFileDescriptor() {
         return this.fd;
     }
 
-    /** La direccion del otro extremo. */
+    /** The far end's address. */
     protected InetAddress getInetAddress() {
         return this.address;
     }
 
-    /** El puerto del otro extremo. */
+    /** The far end's port. */
     protected int getPort() {
         return this.port;
     }
 
     /**
-     * Si esta implementacion sabe mandar datos urgentes.
+     * Whether this implementation knows how to send urgent data.
      *
-     * <p>La base dice que no, y es la respuesta correcta para una clase que no implementa nada: la
-     * que sepa, pisa el metodo. Decir que si obligaria a `sendUrgentData` a funcionar.
+     * <p>The base says no, and it is the right answer for a class that implements nothing: the one
+     * that knows overrides the method. Saying yes would oblige `sendUrgentData` to work.
      */
     protected boolean supportsUrgentData() {
         return false;
     }
 
     /**
-     * Manda un byte fuera de banda.
+     * Sends a byte out of band.
      *
-     * @throws IOException si fallo el envio
+     * @throws IOException if the send failed
      */
     protected abstract void sendUrgentData(int data) throws IOException;
 
-    /** El puerto de este lado. */
+    /** This side's port. */
     protected int getLocalPort() {
         return this.localport;
     }
@@ -208,30 +208,30 @@ public abstract class SocketImpl implements SocketOptions {
     }
 
     /**
-     * Sugiere que le importa mas a esta conexion, en importancia relativa.
+     * Suggests what matters most to this connection, in relative importance.
      *
-     * <p>No hace nada, aca y en el JDK: son **sugerencias**, y el contrato dice explicitamente que
-     * una implementacion puede ignorarlas. Un cuerpo vacio no es un hueco tapado; es la
-     * implementacion base.
+     * <p>It does nothing, here and in the JDK: they are **suggestions**, and the contract says
+     * explicitly that an implementation may ignore them. An empty body is not a papered-over gap; it
+     * is the base implementation.
      */
     protected void setPerformancePreferences(int connectionTime, int latency, int bandwidth) {
     }
 
     /**
-     * Fija una opcion nombrada con la forma nueva, la de {@link SocketOption}.
+     * Sets an option named the new way, {@link SocketOption}'s.
      *
-     * <p>**La implementacion base tira siempre**, despues de chequear que el nombre no sea null. No
-     * es un hueco de KajiJDK: es literalmente lo que hace el JDK, y esta bien que lo haga. Esta
-     * clase tiene dos vocabularios de opciones --el viejo de enteros que hereda de
-     * {@link SocketOptions}, y este-- y **no los puentea**, porque una implementacion que solo
-     * atienda el viejo no tiene por que aceptar los nombres del nuevo. Traducir de uno al otro por
-     * su cuenta haria que una opcion pareciera soportada cuando la subclase nunca la considero.
+     * <p>**The base implementation always throws**, after checking that the name is not null. It is
+     * not a KajiJDK gap: it is literally what the JDK does, and it is right that it should. This
+     * class has two option vocabularies --the old integer one it inherits from {@link SocketOptions},
+     * and this one-- and it **does not bridge them**, because an implementation that only serves the
+     * old one has no reason to accept the new one's names. Translating from one to the other on its
+     * own would make an option look supported when the subclass never considered it.
      *
-     * <p>La subclase que quiera soportarlos pisa este metodo y {@link #supportedOptions}.
+     * <p>A subclass that wants to support them overrides this method and {@link #supportedOptions}.
      *
-     * @throws UnsupportedOperationException siempre, en la implementacion base
-     * @throws NullPointerException          si {@code name} es null
-     * @throws IOException                   si el socket la rechaza
+     * @throws UnsupportedOperationException always, in the base implementation
+     * @throws NullPointerException          if {@code name} is null
+     * @throws IOException                   if the socket refuses it
      */
     protected <T> void setOption(SocketOption<T> name, T value) throws IOException {
         Objects.requireNonNull(name);
@@ -239,13 +239,13 @@ public abstract class SocketImpl implements SocketOptions {
     }
 
     /**
-     * El valor de una opcion nombrada con la forma nueva.
+     * The value of an option named the new way.
      *
-     * <p>Tira siempre en la base, por la misma razon que {@link #setOption(SocketOption, Object)}.
+     * <p>It always throws in the base, for the same reason as {@link #setOption(SocketOption, Object)}.
      *
-     * @throws UnsupportedOperationException siempre, en la implementacion base
-     * @throws NullPointerException          si {@code name} es null
-     * @throws IOException                   si el socket no la puede leer
+     * @throws UnsupportedOperationException always, in the base implementation
+     * @throws NullPointerException          if {@code name} is null
+     * @throws IOException                   if the socket cannot read it
      */
     protected <T> T getOption(SocketOption<T> name) throws IOException {
         Objects.requireNonNull(name);
@@ -253,10 +253,10 @@ public abstract class SocketImpl implements SocketOptions {
     }
 
     /**
-     * Las opciones que esta implementacion entiende.
+     * The options this implementation understands.
      *
-     * <p>**El conjunto vacio**, igual que el JDK, y por la misma razon: la clase base no atiende
-     * ninguna opcion de la forma nueva. La subclase que atienda alguna la declara aca.
+     * <p>**The empty set**, just like the JDK, and for the same reason: the base class serves no
+     * option of the new form. A subclass that serves one declares it here.
      */
     protected Set<SocketOption<?>> supportedOptions() {
         return Collections.emptySet();

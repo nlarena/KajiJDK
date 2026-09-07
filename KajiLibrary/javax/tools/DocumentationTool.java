@@ -9,18 +9,17 @@ import java.util.concurrent.Callable;
 // manager and diagnostic plumbing wholesale, and adds only what documentation needs — a
 // doclet class to run, and its own output/doclet/taglet/snippet locations.
 //
-// OMITIDOS (salida (a), omitir el miembro):
-// Las dos omisiones que la nota anterior listaba --`getStandardFileManager` por falta de
-// `java.nio.charset`, y la clausula `implements JavaFileManager.Location` del anidado por no poder
-// nombrar un tipo anidado de otra unidad-- ya no aplican: las dos cosas existen.
+// The two omissions the earlier note listed --`getStandardFileManager`, for want of
+// `java.nio.charset`, and the nested enum's `implements JavaFileManager.Location` clause, for not
+// being able to name a type nested in another unit-- no longer apply: both things exist.
 public interface DocumentationTool extends Tool, OptionChecker {
 
     /**
-     * El gestor de archivos estandar de esta herramienta.
+     * This tool's standard file manager.
      *
-     * <p>Los tres argumentos son los tres canales por los que una herramienta habla con el mundo: a
-     * donde van los diagnosticos, en que idioma, y con que codificacion se leen las fuentes. `null`
-     * en cualquiera de ellos significa "lo que el sistema use por defecto".
+     * <p>The three arguments are the three channels a tool talks to the world through: where the
+     * diagnostics go, in which language, and with which encoding the sources are read. `null` in any
+     * of them means "whatever the system uses by default".
      */
     StandardJavaFileManager getStandardFileManager(
             DiagnosticListener<? super JavaFileObject> diagnosticListener, Locale locale,
@@ -33,7 +32,7 @@ public interface DocumentationTool extends Tool, OptionChecker {
                               Iterable<String> options,
                               Iterable<? extends JavaFileObject> compilationUnits);
 
-    // Lo mismo que CompilationTask, para documentacion: configurable hasta que se llama.
+    // The same as CompilationTask, for documentation: configurable until it is called.
     public interface DocumentationTask extends Callable<Boolean> {
 
         void addModules(Iterable<String> moduleNames);
@@ -43,7 +42,7 @@ public interface DocumentationTool extends Tool, OptionChecker {
         Boolean call();
     }
 
-    // Las cuatro ubicaciones que solo tienen sentido documentando.
+    // The four locations that only make sense while documenting.
     public enum Location implements JavaFileManager.Location {
 
         DOCUMENTATION_OUTPUT,

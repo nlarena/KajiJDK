@@ -4,18 +4,18 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-// El cache de respuestas de toda la VM.
+// The whole VM's response cache.
 //
-// Mismo patron que `CookieHandler` y `Authenticator`: abstracta con un registro estatico, porque
-// quien hace el pedido esta demasiado abajo para recibir el cache por parametro.
+// The same pattern as `CookieHandler` and `Authenticator`: abstract with a static registry, because
+// whoever makes the request is too far down to receive the cache as a parameter.
 //
-// Los dos metodos son las dos mitades del ciclo. `get` se llama **antes** de conectar: si devuelve
-// una `CacheResponse`, no hay conexion. `put` se llama **despues** de recibir, y devuelve el canal
-// donde escribir --o null, que significa "esta no la guardes"--. Decidir que se guarda es del cache,
-// no del cliente, y por eso `put` puede negarse.
+// The two methods are the cycle's two halves. `get` is called **before** connecting: if it returns a
+// `CacheResponse`, there is no connection. `put` is called **after** receiving, and returns the
+// channel to write into --or null, which means "do not store this one". Deciding what is stored is
+// the cache's business, not the client's, and that is why `put` may refuse.
 //
-// El registro y la consulta son computacion pura y estan enteros. Lo que falta en KajiJDK es un
-// cliente HTTP que llame a esto; eso no es parte de este contrato. Nada omitido.
+// The registry and the lookup are pure computation and are complete. What KajiJDK lacks is an HTTP
+// client to call this; that is not part of this contract. Nothing omitted.
 public abstract class ResponseCache {
 
     private static ResponseCache theResponseCache;
@@ -23,32 +23,32 @@ public abstract class ResponseCache {
     public ResponseCache() {
     }
 
-    /** El cache instalado, o null si no hay ninguno. */
+    /** The installed cache, or null if there is none. */
     public static synchronized ResponseCache getDefault() {
         return theResponseCache;
     }
 
-    /** Instala el cache de toda la VM; null lo desinstala. */
+    /** Installs the whole VM's cache; null uninstalls it. */
     public static synchronized void setDefault(ResponseCache responseCache) {
         theResponseCache = responseCache;
     }
 
     /**
-     * La respuesta guardada para ese pedido, o null si no hay ninguna utilizable.
+     * The stored response for that request, or null if there is no usable one.
      *
-     * @param uri            el recurso que se esta pidiendo
-     * @param rqstMethod     el metodo del pedido ("GET")
-     * @param rqstHeaders    los headers del pedido, que pueden cambiar que respuesta aplica
-     * @throws IOException si falla la lectura del cache
+     * @param uri            the resource being asked for
+     * @param rqstMethod     the request's method ("GET")
+     * @param rqstHeaders    the request's headers, which may change which response applies
+     * @throws IOException if reading from the cache fails
      */
     public abstract CacheResponse get(URI uri, String rqstMethod, Map<String, List<String>> rqstHeaders)
             throws IOException;
 
     /**
-     * Ofrece al cache guardar la respuesta de {@code conn}.
+     * Offers the cache the chance to store {@code conn}'s response.
      *
-     * @return donde escribir el cuerpo, o null si el cache decide no guardarla
-     * @throws IOException si falla la escritura
+     * @return where to write the body, or null if the cache decides not to store it
+     * @throws IOException if writing fails
      */
     public abstract CacheRequest put(URI uri, URLConnection conn) throws IOException;
 }

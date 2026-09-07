@@ -9581,6 +9581,28 @@ Una anonima en el cuerpo de un metodo si anda; en el inicializador de un campo d
 no. **No able cual de las dos cosas es el disparador** --si el inicializador de campo o que el
 contenedor sea una interfaz-- y lo digo asi en vez de completar la explicacion.
 
+> **Contestado (2026-09-04, sesion de biblioteca).** Es **el inicializador de campo**, no la
+> interfaz. Cuatro casos, mismo cuerpo anonimo, con `--emit`:
+>
+> | donde esta la anonima | resultado |
+> |---|---|
+> | cuerpo de un metodo | compila |
+> | inicializador de un campo **estatico de una clase** | **falla** |
+> | inicializador de un campo **de instancia de una clase** | **falla** |
+> | bloque `static { }` | compila |
+>
+> O sea que no hace falta una interfaz para reproducirlo, y alcanza con una clase comun. El cuarto
+> caso es el que mas dice sobre donde mirar: un `static { }` es lo mismo que un inicializador de
+> campo estatico despues de bajarlo a sentencias, y ahi la anonima si se emite. La ruta de
+> inicializadores de campo no esta pasando por esa bajada.
+>
+> **De paso, el rodeo mas barato:** mover la asignacion a un bloque `static { }`. No hace falta
+> nombrar la clase.
+>
+> Salio escribiendo `jdk.dynalink.beans.StaticClass`, cuya cache es un `ClassValue` anonimo en un
+> campo estatico. Ahi preferi la clase nombrada igual, porque ademas se lee mejor en un volcado de
+> pila.
+
 Rodeo aplicado: una clase de paquete con nombre al final del archivo. Ademas de compilar, se lee
 mejor en un volcado de pila que un `ClassTransform$1`.
 
@@ -10675,3 +10697,2413 @@ veintipico de tipos de `java.sql.Types` a nombres de clase Java. Es el uso natur
 al lado. Peor de leer y equivalente.
 
 Repro: `repros/finding_503/Finding503.java` -- cuatro controles que compilan y uno que falla.
+
+**Manifestacion 2026-09-05** (`javax/swing/JScrollBar.java`): `case VERTICAL:` con la constante
+**heredada de la interfaz `java.awt.Adjustable`**, que se lee de un `.class`. Confirma que la
+frontera no es "otra clase" sino "otra unidad de compilacion": una constante heredada del propio
+supertipo falla igual que una calificada. Resuelto con `if`/`else`.
+
+## Tanda: `javax.swing` visual -- cajas y desplazamiento (sesion de biblioteca, 2026-09-05)
+
+### #506 ⬜ -- los modificadores de acceso de un miembro leido de un `.class` no se chequean
+
+```java
+JViewport vp = ...;
+vp.computeBlit(...);       // protected: el JDK lo rechaza, nosotros lo compilamos
+vp.isViewSizeSet;          // protected
+vp.scrollMode;             // private
+vp.createLayoutManager();  // de paquete
+```
+
+Da igual el modificador: si el miembro viene de **otra unidad de compilacion** —leido de un
+`.class`—, se puede usar desde cualquier clase. El JDK 25 rechaza las seis lineas del repro con
+`has protected access` / `has private access`; nuestro `javac` emite las seis sin una palabra.
+
+**Lo que separa lo que se chequea de lo que no es de donde sale el miembro:**
+
+| forma | nuestro `javac` | JDK |
+|---|---|---|
+| `private` de **otra clase del mismo archivo** | (no probado en esta tanda) | rechaza |
+| `protected` de otro paquete, sobre una instancia ajena | **compila** | rechaza |
+| `protected` de otro paquete, desde una subclase sobre una instancia ajena | **compila** | rechaza |
+| `private` de otro paquete | **compila** | rechaza |
+| de paquete, desde otro paquete | **compila** | rechaza |
+| `protected` heredado, sobre `this` (subclase) | compila | compila |
+| `public` de otro paquete | compila | compila |
+
+O sea: el chequeo de accesibilidad no esta mirando los `access_flags` del miembro cuando el tipo se
+resuelve desde el classpath. Es la **misma familia que #491** —un tipo del classpath se vuelve
+visible sin importar—: las dos veces, lo que llega leido de un `.class` entra con mas permisos de
+los que declara.
+
+**Por que importa aunque "de mas nunca rompe un programa correcto".** Un programa correcto no lo
+nota, pero la biblioteca si: es exactamente el chequeo que impide que una clase de prueba toque el
+estado interno de otra, y sin el una prueba puede pasar apoyandose en algo que el JDK no deja
+escribir. Esta sesion lo descubrio asi: `java/pintura/Vista.java` llamaba a `computeBlit` desde
+afuera, compilaba, y el JDK del oraculo diferencial se negaba a compilar el mismo archivo. Sin el
+oraculo, la prueba habria "pasado" midiendo algo que en Java no se puede escribir.
+
+**Mientras tanto:** en las pruebas, llegar a lo protegido por una subclase, que es lo que Java pide.
+
+Repro: `repros/finding_506/Finding506.java` -- seis accesos que el JDK rechaza y tres controles
+legales.
+
+---
+
+### Manifestacion de #493 con dano nuevo (2026-09-05): gana un tipo anidado del paquete, y la clase interna pierde su instancia externa
+
+`javax/swing/JScrollPane.java` importa `javax.swing.plaf.UIResource` y declara
+
+```java
+protected class ScrollBar extends JScrollBar implements UIResource { ... }
+```
+
+`UIResource` resolvio a **`javax.swing.ScrollPaneLayout.UIResource`** —un tipo anidado de otra clase
+del mismo paquete, que ademas es una **clase**, no una interfaz— en vez de a la interfaz importada.
+Es el sintoma A de #493, con dos agravantes que no estaban anotados:
+
+1. Se acepta `implements` sobre una **clase**. El JDK da *"no es una interfaz"*; nosotros emitimos el
+   `.class` con esa clase en `interfaces`.
+2. Al hacerlo, la clase interna **pierde su campo `this$0`**: el constructor sigue recibiendo la
+   instancia externa pero no la guarda, y toda llamada sin calificar a un metodo de la clase externa
+   sale como `aload_0; invokevirtual <metodo>` **sobre la interna**. Compila sin una palabra y
+   revienta al ejecutarse:
+
+```
+Exception in thread "main" java.lang.NoSuchMethodError
+   // getUnitIncrement -> aload_0; invokevirtual getViewport()   (owner: JScrollPane$ScrollBar)
+```
+
+La segunda parte es la cara: el error no aparece donde esta la ambiguedad sino en cualquier metodo
+de la interna, y solo en ejecucion. Con el nombre calificado —`implements javax.swing.plaf.UIResource`—
+la misma clase sale con `this$0` y con `getfield this$0; invokevirtual JScrollPane.getViewport`.
+
+**Como salio.** Escribiendo `JScrollPane.ScrollBar`, la barra que le pregunta al contenido cuanto
+desplazar. La prueba diferencial de pintura la ejecuto: el JDK dio los numeros y nosotros abortamos.
+
+**Mientras tanto:** el nombre calificado en la clausula `implements`.
+
+### #507 ⬜ -- `--emit` no soporta un `new` calificado por una instancia (`e.new Interna()`)
+
+```java
+Externa e = new Externa();
+Externa.Interna i = e.new Interna();   // "un `new` de un tipo que no se pudo resolver"
+```
+
+La forma calificada de crear una clase interna desde afuera de la externa (JLS 15.9) no llega al
+generador. Desde adentro de la externa —`new Interna()`— anda, y esa es la unica forma que la
+biblioteca necesita hoy; la calificada aparecio escribiendo el repro de la manifestacion de #493.
+
+Es de la familia de **#20** (un `new` con nombre calificado se compilaba mal), pero por otro lado:
+ahi el nombre calificaba el **tipo** (`new java.lang.Object()`), aca califica la **instancia
+externa**.
+
+### #508 ⬜ -- una clase interna de una clase de nivel superior no puede crear a una hermana
+
+```java
+public class Externa {           // de nivel superior
+    class Hermana { Hermana(int v) { } }
+    class Otra {
+        Hermana crea() { return new Hermana(1); }   // error de compilacion
+    }
+}
+```
+
+```
+error: no se encontró un constructor `Hermana(int)` aplicable
+  método Hermana.Hermana(Externa, int) no es aplicable
+```
+
+La instancia envolvente de `new Hermana(1)` es implicita (`Externa.this`, JLS 15.9.2) y el
+compilador no la pone: pide el constructor de dos argumentos que el mismo genero. **Falla igual
+desde un metodo y desde un constructor**, y da lo mismo que las clases sean `final`, `public` o de
+paquete.
+
+**La delimitacion es inesperada y es lo mas util del hallazgo:**
+
+| forma | `--emit` |
+|---|---|
+| externa **de nivel superior**, interna crea a su hermana | **falla** |
+| externa **anidada** (`static class Externa` dentro de otra), interna crea a su hermana | compila |
+| la externa crea a su propia interna (`new Uno()` en un metodo de la externa) | compila |
+| la hermana es `static` | compila |
+
+O sea: el mecanismo de instancia envolvente implicita esta, y funciona un nivel mas abajo. Lo que
+falla es resolverla cuando el que la provee es la clase de nivel superior.
+
+**Y no hay como escribirla a mano**, porque la forma calificada `Externa.this.new Hermana(1)` es
+justo lo que **#507** no soporta. Las dos juntas dejan sin salida a esa figura.
+
+**Como salio.** Escribiendo `javax.swing.text.StringContent` y `javax.swing.text.StyleContext`, que
+son dos clases de nivel superior con varias internas que se crean entre si —marcas de posicion,
+enumeradores—. Es una figura comun en el JDK.
+
+**Mientras tanto:** declarar `static` la clase hermana cuando no necesita la instancia externa, que
+es lo que se hizo en las dos. Cuando la necesita, no hay forma de escribirlo.
+
+Repro: `repros/finding_508/Finding508.java` -- dos formas que fallan, tres controles que compilan.
+
+### #511 ⬜ -- en una clase interna, `this(...)` cuenta la instancia externa y puede llamarse a si mismo
+
+```java
+public class Externa {
+    class Interna {
+        Interna(String a, Object b) { }
+        Interna(Object b) { this(null, b); }   // deberia llamar al de dos argumentos
+    }
+}
+```
+
+El `.class` sale sin una palabra, y el constructor de un argumento se llama **a si mismo**:
+
+```
+Finding509$Interna(Finding509, java.lang.Object);
+   0: aload_0
+   1: aconst_null
+   2: aload_2
+   3: invokespecial  // Method "<init>":(LFinding509;Ljava/lang/Object;)V   <- el mismo
+   6: return
+```
+
+La resolucion de `this(null, b)` se hace contra la firma **generada** —que lleva la instancia
+externa adelante— en vez de la declarada: los dos argumentos escritos entran como "externa" y "b",
+y el candidato que elige es el de un argumento, o sea el mismo constructor.
+
+**Delimitacion:**
+
+| forma | resultado |
+|---|---|
+| clase **interna** (no estatica), `this(...)` encadenado | **recursion infinita** |
+| clase anidada **estatica**, `this(...)` encadenado | anda |
+| clase de **nivel superior**, `this(...)` encadenado | anda |
+
+O sea: solo pasa donde hay instancia externa que agregar, que es exactamente donde la firma
+declarada y la generada difieren.
+
+**Es el peor sintoma de los que llevamos**: no hay error de compilacion, no hay `.class` invalido
+que el verificador rechace, y el programa muere con `StackOverflowError` en el primer `new`, lejos
+del constructor que lo causo.
+
+**Como salio.** Escribiendo `javax.swing.text.StyleContext.NamedStyle`, que tiene tres
+constructores encadenados —la figura mas comun que hay—. `new StyleContext()` se colgaba.
+
+**Mientras tanto:** no encadenar constructores en una clase interna; poner el cuerpo comun en un
+metodo privado y que cada constructor lo llame.
+
+Repro: `repros/finding_511/Finding511.java` -- una forma que se cuelga y dos controles que andan.
+
+### #510 ⬜ -- un `for` que declara dos variables no compila
+
+```java
+for (int i = 0, n = 5; i < n; i++) { ... }
+```
+
+```
+error: no se encuentra el símbolo: i
+```
+
+El inicializador de un `for` admite una declaracion con **varios declaradores** (JLS 14.14.1).
+Nosotros procesamos el primero y perdemos el alcance: ni `n` existe, ni `i` se ve desde la
+condicion.
+
+| forma | `--emit` |
+|---|---|
+| `for (int i = 0, n = 5; i < n; i++)` | **falla**: no se encuentra `i` |
+| `for (i = 0, n = 5; i < n; i++)` con las dos ya declaradas | **falla**: se esperaba Semi |
+| `for (int i = 0; i < n; i++, s++)` (coma en el AVANCE) | compila |
+| `for (int i = 0; i < n; i++)` con `n` afuera | compila |
+| `int a = 1, b = 2;` como sentencia suelta | compila |
+
+Tres cosas se leen de la tabla. Primero: los declaradores multiples andan en una sentencia normal y
+no en el `for`. Segundo: la coma **no** es el problema en general -- en el avance del mismo `for`
+compila --, solo en el inicializador. Tercero, y es lo que mas dice: las dos formas que fallan
+fallan en **etapas distintas**. La de declaracion pasa el analizador y pierde el alcance; la de
+asignacion ni siquiera parsea. Atras hay dos caminos, no uno.
+
+Apunta a que el inicializador del `for` se analiza por un camino aparte que se quedo con un solo
+elemento, y que ese camino ademas distingue entre declarar y asignar.
+
+**Como salio.** Escribiendo `javax.swing.text.ParagraphView`, en un recorrido de `Segment` —la
+forma `for (int i = seg.offset, max = seg.offset + seg.count; ...)` es la que usa medio
+`javax.swing.text`—. La segunda forma aparecio despues, escribiendo `javax.swing.JList`
+(`for (i = 0, c = dm.getSize(); ...)`), y es la que mostro que son dos caminos y no uno.
+
+**Mientras tanto:** sacar la segunda variable afuera del `for`.
+
+Repro: `repros/finding_510/Finding510.java` -- la forma con declaracion y dos controles; y
+`Finding510b.java` -- la forma con asignacion y los dos controles que la acotan.
+
+### #512 ⬜ -- una clase anidada no hereda el permiso de su envolvente sobre un `protected` de otro paquete
+
+```java
+package pa;
+public class Base { protected void avisar() { } }
+```
+
+```java
+package pb;
+import pa.Base;
+public class Hija extends Base {
+    static class Interna {
+        private final Hija h;
+        Interna(Hija h) { this.h = h; }
+        void usar() { h.avisar(); }      // <-- rechazado
+    }
+}
+```
+
+```
+error: el metodo `avisar` es `protected` en `Base` y no es accesible desde `Interna`
+```
+
+`javac` del JDK 25 lo acepta. La JLS 6.6.2.1 dice que un `protected` de otro paquete se puede tocar
+dentro del **cuerpo** de una subclase `S`, siempre que el tipo del calificador sea `S` o una
+subclase suya. El cuerpo de `S` incluye a sus clases anidadas: `Interna` esta adentro de `Hija` y el
+calificador es de tipo `Hija`, asi que el acceso es legal.
+
+Nosotros parece que preguntamos si la clase **que contiene la expresion** (`Interna`) es subclase de
+`Base`, en lugar de recorrer sus envolventes. Es la misma confusion entre "clase actual" y "clase de
+nivel superior" que ya aparece en #507 y #508, pero del lado del chequeo de acceso y no del emisor.
+
+| forma | `--emit` | `javac` del JDK |
+|---|---|---|
+| `h.avisar()` desde `Interna` (anidada en `Hija`) | **falla** | compila |
+| `avisar()` desde un metodo de `Hija` | compila | compila |
+| `avisar()` desde una anidada, si `Base` esta en el mismo paquete | compila | compila |
+
+La ultima fila es la que lo delata: el mismo codigo pasa o no segun el paquete de la superclase, o
+sea que el camino que falla es el de `protected`-entre-paquetes y no el de las clases anidadas en
+general.
+
+Vale la pena leerlo junto con **#506**: alla los modificadores de un miembro leido de un `.class` no
+se chequean *nunca*, y aca uno se chequea *de mas*. Los dos apuntan a que el control de acceso no
+tiene un solo lugar donde vive.
+
+**Como salio.** Escribiendo `javax.swing.text.DefaultFormatter`: su filtro de documento llama a
+`invalidEdit()`, que es `protected` en `javax.swing.JFormattedTextField.AbstractFormatter`. En el
+JDK el filtro es una clase interna del formateador; aca es anidada estatica por #507/#508, y ahi
+salto.
+
+**Mientras tanto:** un reenvio de paquete en la clase envolvente
+(`void avisarDesdeAdentro() { avisar(); }`) y llamar a ese.
+
+Repro: `repros/finding_512/` -- `pa/Base.java` y `pb/Hija.java`, con el control del mismo paquete
+descrito en la cabecera.
+
+### #513 ⬜ -- en un `case`, una constante de la clase envolvente no se pliega desde una clase anidada
+
+```java
+public class C {
+    private static final char CH = '#';
+    static class A {
+        static int f(char c) {
+            switch (c) { case CH: return 1; default: return 0; }
+        }
+    }
+}
+```
+
+```
+error: el generador de bytecode todavia no soporta un `case` que no es una constante entera
+```
+
+Cuatro formas, y el par que importa son las dos ultimas:
+
+| forma | `--emit` |
+|---|---|
+| `case CH:` en un metodo de la clase envolvente | compila |
+| `c == CH` en la anidada (no es un `case`) | compila |
+| `case CH:` en la anidada | **falla** |
+| `case C.CH:` en la anidada, calificado | compila |
+
+El mismo nombre, en la misma clase anidada, pliega o no segun si se lo califica. No es cosa del tipo
+`char`: con un `int` falla igual. Y no es que el nombre no se resuelva, porque la segunda fila lo
+resuelve sin problema fuera de un `case`.
+
+O sea: el plegado de la etiqueta de un `case` tiene su propia busqueda de nombres, y esa busqueda no
+sube por las clases envolventes. La resolucion general de expresiones si lo hace. Son dos caminos, y
+solo uno esta completo.
+
+Es pariente de **#503** (un `case` con una constante leida de un `.class` tampoco se pliega) pero no
+es lo mismo: alla la constante viene de otro archivo compilado, aca esta en la misma unidad. Los dos
+terminan en el mismo error, lo que sugiere que el plegado de `case` tiene un solo lugar donde
+pregunta "¿esto es una constante entera?" y varias formas de llegar ahi con la respuesta en blanco.
+
+**Como salio.** Escribiendo `javax.swing.text.MaskFormatter`: los ocho caracteres de la mascara
+(`#`, `U`, `L`, `A`, `?`, `*`, `H`) son constantes de la clase, y el `switch` que decide si un
+caracter es valido vive en la clase anidada `MaskCharacter`.
+
+**Mientras tanto:** calificar el nombre (`MaskFormatter.DIGIT_KEY`).
+
+Repro: `repros/finding_513/Finding513.java` -- dos formas que fallan y tres controles que compilan.
+
+## Tanda: `jdk.dynalink.support`, `jdk.dynalink.beans` y `jdk.jfr` (sesion de biblioteca, 2026-09-04)
+
+### #504 -- `--emit` no le pone a un `@interface` su supertipo implicito `Annotation` (javac) -- ABIERTO
+
+```java
+static void recibe(Class<? extends Annotation> c) { }
+static void a() { recibe(MiAnotacion.class); }   // --emit: "no se encontro un metodo aplicable"
+```
+
+Sin `--emit` compila; con `--emit` falla. El JDK 25 compila el archivo entero. La JLS 9.6 dice que
+declarar un tipo de anotacion crea una interfaz que **implicitamente** extiende
+`java.lang.annotation.Annotation`.
+
+**Lo que separa lo que anda de lo que no es de donde sale el `@interface`:**
+
+| de donde sale | `--emit` |
+|---|---|
+| anidado en el mismo archivo | **falla** |
+| en otro archivo del **mismo lote** | **falla** |
+| leido de un `.class` ya compilado | compila |
+| cualquiera de los tres, **sin** `--emit` | compila |
+
+El eje no es el anidamiento ni el paquete: es **fuente contra `.class`**. Un `.class` trae
+`java/lang/annotation/Annotation` explicito en su tabla de interfaces; el simbolo que se arma desde
+fuente lo tiene solo del lado del chequeo.
+
+**Es la tercera de la misma familia**, junto con #502 y #503: la ruta de emision resuelve menos que
+la de chequeo, y las tres veces el sintoma es que el generador rechaza algo que el chequeo acepto.
+#503 es el reflejo exacto de esta (ahi lo que falla viene de un `.class` y lo que anda viene de
+fuente), lo que sugiere que no es un simbolo mal armado sino **dos tablas de simbolos distintas**,
+cada una completa en lo suyo. Vale la pena mirarlas de a tres.
+
+**Consecuencia practica, y por lo que conviene que este anotado:** compilar un paquete entero en una
+sola invocacion --que es la forma recomendada de arrancar un paquete desde cero, y esta escrita asi
+mas arriba en este archivo-- es justamente la que falla. De a un archivo por vez anda, porque para
+cuando se llega al que usa la anotacion ya existe su `.class`. La pasada doble que usa esta sesion
+lo resuelve sin que haya que pensarlo.
+
+**Como salio.** Escribiendo `jdk.jfr`, que son 26 anotaciones y 14 clases que las usan: practicamente
+todo el paquete pasa por este caso.
+
+Repro: `repros/finding_504/` -- `Anot504.java` mas `Uso504.java`, con dos casos que fallan y dos
+controles que compilan.
+
+### #505 -- `Field.getAnnotations()` devuelve vacio siempre (VM/biblioteca) -- ABIERTO
+
+`java.lang.reflect.Field` no lee las anotaciones del campo. `Method` y `Class` si.
+
+| que se pregunta | resultado |
+|---|---|
+| `Class.getAnnotations()` | anda |
+| `Method.getDeclaredAnnotations()` | anda (tiene su `declaredAnnotations0()` nativo) |
+| `Field.getDeclaredAnnotations()` | **devuelve un arreglo vacio, siempre** |
+| `Field.getAnnotation(X)` | **devuelve `null`, siempre** |
+
+**No es del compilador.** Nuestro javac emite bien el atributo: el `javap` del JDK 25 abre un
+`.class` nuestro y muestra el `RuntimeVisibleAnnotations` del campo con su valor. El que no lo lee
+es el lado de la reflexion.
+
+**Ya estaba anotado en el propio archivo**, en `KajiLibrary/java/lang/reflect/Field.java`:
+
+> *"A KajiLibrary subset: field-level RUNTIME annotation reflection is not wired (Class-level is; see
+> Class.getAnnotation). A field carrying no runtime annotation -- the common case -- gets the right
+> empty answer; one that does would need a field-attribute native like the class one."*
+
+Lo que aporta esta entrada es **el precio**, que hasta ahora no estaba medido: es lo unico que separa
+a `jdk.jfr.EventType` de coincidir con el JDK. El diferencial contra el JDK 25 da
+**1 discrepancia sobre 14**, y es exactamente esta: los cuatro campos implicitos de todo evento
+—que esta biblioteca arma a mano— coinciden, y los declarados por el usuario pierden su
+`@Label`, su `@Description` y su tipo de contenido.
+
+Un evento con `@Label("Ruta") String ruta` queda con la etiqueta en `null`. La grabacion no
+mentiria, le faltaria; pero es un caso donde la ausencia se nota mucho, porque la etiqueta es lo
+unico que una herramienta muestra.
+
+**El arreglo es el que el propio comentario describe**: un nativo de atributos de campo, igual al que
+ya tiene `Method` en `declaredAnnotations0()`. Es trabajo de VM, no de biblioteca.
+
+Repro y regresion: `java/RefAnn.java` (`nFieldAnns` da 0 y tendria que dar 1) y `java/JFX.java`
+(diferencial de `EventType` contra el JDK; hoy 1 de 14, tendria que dar 0).
+
+---
+
+## Tanda: `sun.misc` (sesion de biblioteca, 2026-09-05)
+
+Cerrado en 3/3 clases y 118/118 miembros. Sin hallazgos de compilador. Dos decisiones que conviene
+que queden escritas, porque un lector futuro las va a cuestionar con razon.
+
+### Por que los 107 metodos de `Unsafe` lanzan, y no devuelven cero
+
+Porque cada uno **es** una primitiva de la VM. Leer un campo por su desplazamiento en bytes,
+reservar memoria fuera del monton, crear un objeto sin llamar a su constructor o suspender un hilo
+no son cosas implementables en Java -- si lo fueran, `Unsafe` no existiria.
+
+Devolver ceros y no escribir nada seria el peor caso de la casa: un `compareAndSwapInt` que contesta
+`true` sin haber cambiado nada produce estructuras concurrentes **silenciosamente corruptas**, y el
+sintoma aparece a mil lineas de distancia.
+
+Lo que si esta es la forma: la clase, las firmas exactas (sacadas de `javap -p`, no de memoria) y el
+campo privado `theUnsafe` con su nombre textual, que es por donde el ecosistema entero la alcanza por
+reflexion. Codigo que la use compila.
+
+`getUnsafe()` lanza `SecurityException("Unsafe")`, y eso **no es un agregado**: es lo que hace el JDK
+para cualquier llamador que no este cargado por el cargador del sistema, o sea para todo el codigo de
+aplicacion.
+
+### Las constantes `ARRAY_*_BASE_OFFSET`, `ARRAY_*_INDEX_SCALE` y `ADDRESS_SIZE` valen cero
+
+Describen la disposicion en memoria que la VM elige para cada tipo de arreglo, y esta VM no la
+expone. Valen cero, que **no es un desplazamiento ni una escala posible**: ningun arreglo empieza en
+el byte 0 de su propio objeto, porque antes esta la cabecera. O sea que el valor se lee como "no se
+sabe" y no como un dato.
+
+Se calculan en un bloque estatico y no como literales, igual que en el JDK. No es cosmetico: una
+constante de compilacion se **incrusta** en quien la lee, y entonces recompilar `Unsafe` el dia que
+la VM sepa contestar no arreglaria a los que ya la habian leido.
+
+Que un cero no pueda causar dano callado no es casualidad y es el argumento que sostiene la decision:
+**todos** los metodos que consumirian esos numeros --los `get`/`put` por desplazamiento-- lanzan. No
+hay forma de que un calculo hecho con ellos termine leyendo la memoria equivocada, porque nunca llega
+a leerla.
+
+### `Signal` falla en el constructor
+
+Mismo criterio que `com.sun.security.auth.module.UnixSystem`. El numero de una senal se lo asigna el
+sistema operativo al nombre y no es portable: `SIGUSR1` es 10 en Linux sobre x86 y 30 en macOS.
+
+El dano de inventarlo seria concreto y dificil de diagnosticar: un numero equivocado no da error,
+instala el manejador sobre **otra** senal. Un programa que cree atender `SIGTERM` y en realidad
+atiende otra cosa se comporta de forma inexplicable, y el sintoma no apunta a la causa.
+
+Las dos marcas `SIG_DFL` y `SIG_IGN` son clases con nombre y no anonimas, por #482.
+
+---
+
+## Tanda: `com.sun.jdi`, `com.sun.jdi.event`, `com.sun.jdi.request` (sesion de biblioteca, 2026-09-05)
+
+### #509 -- compilando en LOTE, un `import` explicito pierde y el tipo equivocado va al DESCRIPTOR (javac) -- ABIERTO, **miscompilacion silenciosa**
+
+```java
+package uso;
+import base.Field;              // un tipo propio, en su propio paquete
+public interface Uso506 {
+    Field devuelve();
+}
+```
+
+```
+bin/javac.exe --emit base/Field.java uso/Uso506.java   -> descriptor ()Ljava/lang/reflect/Field;   MAL
+bin/javac.exe --emit base/Field.java                   -> ok
+bin/javac.exe --emit uso/Uso506.java                   -> descriptor ()Lbase/Field;                BIEN
+```
+
+El JDK 25, compilando los dos archivos juntos, emite `()Lbase/Field;`.
+
+**Esta es la unica de esta familia que no avisa.** #502, #503 y #504 fallan con un error de
+compilacion: molestan y se ven. Esta **compila sin decir nada** y deja un `.class` cuyo descriptor
+nombra una clase que no es. El sintoma aparece mucho despues, al cargar: `NoSuchMethodError` o
+`AbstractMethodError` en algo que "obviamente" esta ahi.
+
+**Lo que dispara.** Los tres a la vez:
+
+1. varios archivos en **una sola invocacion**;
+2. el tipo referenciado se esta compilando **desde fuente en ese mismo lote**;
+3. su nombre simple colisiona con uno de `java.lang.reflect` (`Field`, `Method`, `Type`,
+   `Parameter`, `Module`...).
+
+El `import` explicito de un solo tipo --que la JLS 6.4.1 pone por encima de cualquier otra cosa-- se
+ignora. La resolucion parece consultar una tabla global del lote antes que los imports del archivo.
+
+**Es de la misma familia que #502, #503 y #504** --todas son diferencias entre resolver desde fuente
+y resolver desde `.class`, o entre chequeo y emision-- y esta cuarta sugiere que el problema comun es
+mas grande que cada sintoma: **hay dos tablas de simbolos y no coinciden**. Con cuatro sintomas
+distintos apuntando al mismo lugar, vale la pena atacar la causa y no cada caso.
+
+> **Nota de numeracion.** Este finding se escribio primero como #506 y se renumero a #509: otra
+> sesion tomo #506, #507 y #508 mientras esta escribia. Es el error que la cabecera de este archivo
+> advierte, y la leccion es que revisar el numero mas alto **al empezar** no alcanza: hay que
+> revisarlo otra vez al escribir.
+
+**Como salio, y por que casi se me pasa.** Escribiendo `com.sun.jdi`: `WatchpointEvent.field()`
+devuelve `com.sun.jdi.Field` y el lote emitio `java.lang.reflect.Field`. Lo cazo `verpkg.py`, que
+compara descriptores contra el JDK y lo reporto como miembro faltante. Sin esa comprobacion el
+paquete habria pasado como cerrado.
+
+**El rodeo, y una advertencia sobre el consejo que este archivo daba:** compilar **de a un archivo
+por vez**, en varias pasadas hasta punto fijo. Mas arriba, en la nota de #504, este archivo
+recomienda compilar un paquete entero de una para arrancarlo desde cero. Con #506 eso **no es
+seguro**: puede dejar descriptores mal sin avisar. La pasada multiple de a un archivo es la unica
+forma en que las dos cosas quedan bien.
+
+Repro: `repros/finding_509/` -- `base/Field.java` y `uso/Uso506.java`, con el control de un tipo que
+no colisiona.
+
+---
+
+## Tanda: cierre de `javax.swing.text` (sesion de biblioteca, 2026-09-05)
+
+El paquete quedo en **63/63 clases, 1144/1144 miembros**. Se agregaron `DefaultCaret`,
+`DefaultHighlighter`, `AbstractWriter`, `StyledEditorKit`, `TableView`, `AsyncBoxView`,
+`DefaultTextUI` y los seis formateadores, mas `javax.swing.JFormattedTextField` y
+`javax.swing.plaf.basic.BasicTextUI`, que hacian falta para poder escribirlos.
+
+Tres hallazgos nuevos del compilador: **#512**, **#513** y **#514**.
+
+### Lo que encontro el oraculo diferencial, y que no habria encontrado el censo
+
+El censo compara firmas: dice si una clase esta y si tiene sus miembros. No dice si hacen lo mismo.
+Esta tanda agrego dos pruebas de comportamiento (`java/texto/Vistas.java` y `java/texto/Form1.java`)
+y las dos encontraron errores que el censo daba por buenos. Vale la pena anotarlos porque los cinco
+tienen la misma forma: **una version razonable que no es la del JDK**.
+
+**1. `CompositeView.getViewIndexAtPosition` preguntaba a los hijos.** Nosotros haciamos busqueda
+binaria sobre las vistas hijas; el JDK hace `getElement().getElementIndex(pos)`. Parece lo mismo y
+no lo es: una vista que todavia no armo a sus hijos (o que los descarto, como hace `ZoneView`)
+contestaba que la posicion no existe. La prueba lo vio como `-1` donde el JDK decia `3`.
+
+**2. `BoxView.layoutMajorAxis` truncaba donde el JDK redondea.** Nosotros delegabamos en
+`SizeRequirements.calculateTiledPositions`, que trunca el ajuste de cada hijo. El JDK tiene su
+propia cuenta con `Math.round`. Con tres hijos y 35 pixeles de sobrante eso da **un pixel** de
+diferencia en el ultimo hijo, justo el que tiene que llegar al borde. Truncar deja una franja sin
+pintar abajo de todo, y ninguna prueba de pixeles lo habia agarrado porque las cajas que veniamos
+midiendo repartian sin resto.
+
+**3. `MaskFormatter.valueToString` no validaba.** Nosotros dabamos formato y listo; el JDK tira
+`ParseException` si un caracter no entra en su posicion. La diferencia importa: acomodar en silencio
+un caracter que no corresponde **cambia el valor** sin que nadie se entere.
+
+**4. La `H` de la mascara pasa a mayuscula.** Como la `U`. No estaba en ninguna documentacion que
+mirara; salio de sondear el JDK.
+
+**5. El orden entre convertir el tipo y chequear el rango.** Un `NumberFormat` devuelve siempre
+`Long` o `Double`. Si el rango se compara antes de convertir a la clase pedida, `Integer.compareTo`
+recibe un `Long` y sale una `ClassCastException` en lugar de un rango mal. El JDK convierte primero
+y, por las dudas, envuelve la `ClassCastException` en `ParseException`. Nosotros comparabamos
+primero y la prueba murio con `ClassCastException` a mitad de camino.
+
+**La leccion, que ya sabiamos y esta tanda la volvio a cobrar:** una clase que compila y cuyo censo
+da COMPLETO puede estar mintiendo en los cinco lugares de arriba. Lo unico que los encontro fue
+correr el mismo programa en las dos maquinas virtuales y comparar la salida.
+
+### #514 ⬜ -- el nombre binario de un anidado no resuelve si el tipo esta en el mismo lote
+
+```
+bin/javac.exe --emit pq/Conjunto.java pq/Constantes.java     # EN LOTE
+  pq/Constantes.java:6: error: no se encuentra el simbolo: Conjunto$Atributo
+
+bin/javac.exe --emit pq/Conjunto.java                        # primero
+bin/javac.exe --emit -cp . pq/Constantes.java                # despues, contra el .class
+  compila
+```
+
+Aca el `javac` del JDK **no es el arbitro**, y conviene decirlo antes que nada: el `$` no es el
+separador de tipos anidados en el fuente de Java, asi que el JDK rechaza las dos formas. Escribir
+nombres binarios en el fuente es una **extension nuestra**, y `KajiLibrary` la usa en todas partes
+(`import java.text.Format$Field;`, `implements DocumentEvent$ElementChange`).
+
+El defecto es que la extension no es consistente consigo misma:
+
+| de donde viene el tipo anidado | `Externa$Anidada` | `Externa.Anidada` |
+|---|---|---|
+| de un `.class` del classpath | resuelve | resuelve |
+| de otro archivo del **mismo lote** | **no resuelve** | resuelve |
+| del mismo archivo | resuelve | resuelve |
+
+La ultima columna acota el problema: el nombre punteado, que es el de Java, resuelve siempre. Lo
+que no consulta a los tipos del lote es **solo** el camino que traduce la forma binaria. Asi que no
+es que el modo lote tenga una tabla de simbolos incompleta en general -- es que la extension tiene
+su propia busqueda y esa busqueda no mira ahi.
+
+O sea que compilar `A.java B.java` y compilar `A.java` y despues `B.java` no dan lo mismo. Es la
+misma familia que **#509** de esta misma jornada (en lote, un `import` explicito pierde y el tipo
+equivocado va al descriptor): las dos veces el modo lote tiene una tabla de simbolos menos completa
+que el modo de a un archivo. Alla el sintoma es un tipo equivocado en silencio; aca es un simbolo
+que no aparece. El segundo es preferible, porque al menos se nota.
+
+**Como salio.** Al cerrar la tanda, recompilando el paquete entero de una:
+`bin/javac.exe --emit -cp KajiLibrary KajiLibrary/javax/swing/text/*.java` falla en
+`StyleConstants.java:397` por `AttributeSet$CharacterAttribute`. Los dos archivos son viejos y no se
+tocaron en esta sesion: el modo de a un archivo, que es el que usa la construccion, nunca lo mostro.
+
+**Mientras tanto:** escribir el nombre punteado, que es ademas el de Java. Tambien sirve compilar
+de a un archivo, o poner el tipo del que se depende en un lote anterior.
+
+Repro: `repros/finding_514/pq/` -- `Conjunto.java` y `Constantes.java`, con las dos invocaciones en
+la cabecera.
+
+### Sobre las clases internas
+
+`TableView.TableRow`, `TableView.TableCell`, `AsyncBoxView.ChildState` y
+`AsyncBoxView.ChildLocator` son clases **internas** en el JDK y aca son anidadas estaticas que
+reciben a la envolvente como primer parametro. No es una eleccion de estilo: es #507 y #508. Da la
+casualidad de que la firma que queda es exactamente la que el JDK genera en el archivo compilado
+(`TableRow(TableView, Element)`), asi que el censo no ve diferencia; lo que cambia es el **fuente**,
+y por eso `java/texto/Vistas.java` pide las filas por `createTableRow` en lugar de construirlas:
+escrito a mano, el mismo archivo no compilaria en las dos bibliotecas.
+
+### Estado de las pruebas al cerrar
+
+| prueba | resultado |
+|---|---|
+| `java/texto/Doc1.java` | 32/32 lineas iguales |
+| `java/texto/Doc2.java` | 45/45 lineas iguales |
+| `java/texto/Vistas.java` (nueva) | 46/46 lineas iguales |
+| `java/texto/Form1.java` (nueva) | 86/86 lineas iguales |
+| `java/pintura/Cajas,Vista,Barra,Desplazador` | 0 pixeles de diferencia |
+
+`java/pintura/Figuras.java` (46 de 968) y `Pinta.java` (18 de 800) siguen con la divergencia
+conocida del muestreo del centro del pixel en ovalos y poligonos; no es de esta tanda.
+
+### #515 ⬜ -- el constructor por omision se genera sin comprobar que exista `super()`
+
+```java
+public class Base {
+    public Base(Object carga) { ... }        // unico constructor
+}
+
+public abstract class Hija extends Base {    // sin constructor propio
+    public abstract int f();
+}
+```
+
+El javac real lo rechaza:
+
+```
+error: constructor Base in class Base cannot be applied to given types;
+  required: Object
+  found:    no arguments
+```
+
+El nuestro lo acepta y emite:
+
+```
+public pq.Hija();
+  Code:
+     0: aload_0
+     1: invokespecial #32   // Method pq/Base."<init>":()V
+     4: return
+```
+
+Ese metodo no existe. La JLS 8.8.9 dice que el constructor por omision tiene el cuerpo
+`super();` y que **es un error de compilacion si la superclase no tiene un constructor sin
+argumentos accesible**. Nosotros generamos el cuerpo y no hacemos la comprobacion.
+
+**El archivo emitido es invalido.** Corriendolo en la JVM real:
+
+```
+Exception in thread "main" java.lang.NoSuchMethodError: pq.Base: method 'void <init>()' not found
+	at pq.Hija.<init>(Hija.java)
+```
+
+**Y nuestra VM lo ejecuta igual.** `bin/run-headless.exe repros/finding_515/pq/Uso.class run`
+devuelve 7, o sea que resuelve un `<init>()V` que no esta en el archivo compilado de `Base`. Son dos
+cosas distintas y las dos hacen falta arreglarlas: el compilador tendria que negarse a emitir esto,
+y la VM tendria que negarse a cargarlo. Con las dos como estan, el error solo aparece cuando el
+archivo sale de casa.
+
+| forma | javac real | el nuestro |
+|---|---|---|
+| hija sin constructor, base solo con `Base(Object)` | **error** | compila, `.class` invalido |
+| hija con `Hija(Object c) { super(c); }` | compila | compila |
+| base con constructor vacio ademas | compila | compila |
+
+**Como salio.** Escribiendo `jdk.incubator.vector`. `Vector`, `VectorMask` y `VectorShuffle`
+heredan de `VectorSupport$Vector` y hermanas, que toman la carga util y no tienen constructor vacio.
+El generador no emitia constructor --en el JDK son de paquete, asi que no estan en el censo-- y las
+tres clases "compilaron" con un `super()` inventado. Se noto recien al preguntarse por que el censo
+daba bien pero nada se podia instanciar.
+
+**Mientras tanto:** escribir el constructor a mano siempre que la superclase no tenga uno vacio.
+
+Repro: `repros/finding_515/pq/` -- `Base.java`, `Hija.java` (falla en el javac real y aca no),
+`Control.java` (el mismo caso con el constructor escrito, compila en los dos) y `Uso.java` +
+`Main515.java`, que muestran el `NoSuchMethodError` en la JVM real.
+
+---
+
+## Tanda: `javax.swing.text.html`, su analizador y `rtf` (sesion de biblioteca, 2026-09-05)
+
+Cuatro paquetes cerrados de una vez, todos verificados contra el JDK:
+
+| paquete | clases | miembros |
+|---|---|---|
+| `javax.swing.text` | 63/63 | 1144/1144 |
+| `javax.swing.text.html` | 17/17 | 242/242 |
+| `javax.swing.text.html.parser` | 10/10 | 177/177 |
+| `javax.swing.text.rtf` | 1/1 | 6/6 |
+
+### La DTD: como se verifico algo que el JDK guarda en binario
+
+El analizador de HTML no sirve sin la DTD de HTML 3.2 -- ochenta y ocho elementos con sus modelos de
+contenido, exclusiones, inclusiones y atributos, mas doscientas cincuenta y cinco entidades. El JDK
+la guarda en un archivo binario (`html32.bdtd`) adentro de su imagen. Copiarlo no era una opcion; y
+escribir la tabla a mano sin poder comprobarla habria sido escribir seiscientas lineas de datos y
+esperar que estuvieran bien.
+
+El camino fue en dos pasos, y el segundo es el que da la garantia:
+
+1. **`java/texto/Dtd1.java`** implementa `DTD.read`, el lector del formato binario, y lee el archivo
+   del JDK *en las dos maquinas virtuales*. Resultado: **610/610 lineas iguales**. Eso prueba que
+   nuestro lector entiende el formato exactamente igual.
+2. La tabla de `Html32.java` se genero desde esa lectura ya verificada. Despues,
+   **`java/texto/Dtd2.java`** compara la DTD que arma cada biblioteca --  la del JDK desde su
+   archivo, la nuestra desde la tabla escrita -- pidiendosela a `ParserDelegator`, que las dos
+   registran con el mismo nombre. Resultado: **610/610 iguales**.
+
+El segundo archivo es identico en las dos maquinas y no toca ningun recurso del JDK. Es el que queda
+como prueba de regresion; el primero se conserva porque es el que valida el lector del formato.
+
+### El analizador: donde coincide y donde no
+
+**`java/texto/Html4.java`** le da catorce fragmentos de HTML a las dos bibliotecas y anota todo lo
+que el analizador avisa. **160 de 163 lineas iguales**, y las tres que difieren son todas
+`errores=N`.
+
+El arbol coincide entero, y eso incluye las partes que no son obvias:
+
+- Las etiquetas que nadie escribio. `hola mundo` a secas produce, en las dos,
+  `html` implicito, `head` implicito abierto y cerrado, y `body` implicito. El `head` es el
+  interesante: aparece porque el modelo de `html` es `(head, body, plaintext?)` y hay que saltearlo
+  en orden, no porque alguien lo pidiera.
+- Los espacios. En HTML los espacios seguidos valen por uno y los pegados al borde de un bloque no
+  valen nada, pero dentro de un `<pre>` valen todos. Ademas el ultimo espacio de un texto se
+  descarta o no **segun que etiqueta venga despues**: `a <b>c</b>` conserva el espacio y
+  `  x  </p>` no. Eso obligo a leer el nombre de la etiqueta antes de soltar el texto pendiente.
+- La forma corta de SGML. `<ul compact>` es `compact="compact"`, no `compact="#DEFAULT"`, y la
+  diferencia sale de buscar el nombre entre los *valores* permitidos de los atributos del elemento.
+  Para eso existe `Element.getAttributeByValue`, que hasta entonces parecia un metodo sin uso.
+
+**Lo que no coincide** son tres cuentas de errores: el JDK avisa uno mas en dos casos y dos donde
+nosotros avisamos uno. No es el arbol: es *cuando* se considera que hubo un error. El JDK tiene sus
+propias reglas de recuperacion, con mensajes como `start.missing` que se disparan en momentos que no
+se deducen de la DTD. Queda abierto y esta anotado en el propio archivo de prueba.
+
+Los errores se cuentan y se informan al final de cada caso, no linea por linea. Eso fue una decision
+de la prueba, no una forma de tapar la diferencia: mezclados con el arbol, un error de mas movia
+todas las lineas siguientes y una sola diferencia se veia como ciento cuarenta.
+
+### Cinco valores que hubo que medir, no deducir
+
+Ninguno de estos sale de leer la especificacion:
+
+1. **Las banderas de las 74 etiquetas de HTML.** Que `table` arme bloque y no corte la linea, que
+   `br` corte sin armar bloque, que `textarea` sea preformateado igual que `pre`. Se midieron una por
+   una y se comparan en `java/texto/Html1.java` (97/97).
+2. **El orden de `getAllTags` y `getAllAttributeKeys`.** No es alfabetico: `strike` viene antes que
+   `s` porque asi estan declaradas.
+3. **Las 67 propiedades de CSS con su valor por omision y si se heredan.** El color de la letra se
+   hereda y el de fondo no, y eso no se deduce de nada (`java/texto/Html2.java`, 80/80).
+4. **Cuatro elementos que el constructor de `DTD` crea sin documentar** -- `style`, `link`,
+   `script`, `unknown` --. No es un detalle de estilo: `getElement` numera a cada elemento nuevo por
+   orden de aparicion, y las exclusiones se guardan como conjuntos de esos numeros. Sin esos cuatro,
+   la DTD leida quedaba corrida y las exclusiones apuntaban a otros elementos. Se descubrio porque
+   `Dtd1` mostraba el elemento 11 con nombre distinto en cada lado.
+5. **La forma exacta de `StyleSheet.stringToColor`**: acepta los dieciseis nombres de CSS sin
+   distinguir mayusculas pero **no** recorta espacios (` red` es invalido), `#ff00` es verde porque
+   se leen hasta seis digitos como un solo numero, `#f00` duplica cada digito, y `rgb(a,2,3)` da
+   `(2,3,0)` porque busca corridas de digitos. Cada una se comprobo antes de escribirla
+   (`java/texto/Html3.java`, 125/125).
+
+### Lo que quedo afuera, dicho de frente
+
+- **`<select>` y `<textarea>` no arman su control.** Necesitan `JComboBox`, `JList` y `JTextArea`,
+  que esta biblioteca todavia no tiene. `FormView` devuelve nulo y lo dice en su javadoc; lo mismo
+  `HTMLWriter.selectContent`. Poner un campo de texto en su lugar habria compilado y habria mostrado
+  algo que no es una lista.
+- **`StyleSheet` no hace el modelo de caja completo**: calcula margenes y pinta fondos, pero no
+  bordes con estilo ni imagenes de fondo.
+- **`RTFEditorKit` no lee tablas, imagenes ni tipografias con nombre**: son la parte del formato que
+  necesita tablas de recursos al principio del archivo.
+
+En los tres casos el javadoc dice que falta y por que. Es la regla de siempre: un miembro que falta
+es un subconjunto legal; uno que miente compila y revienta despues.
+
+### Un hallazgo del compilador
+
+**#514**, arriba: el nombre binario de un tipo anidado (`Externa$Anidada`) no resuelve cuando el tipo
+viene en el mismo lote de compilacion. Salio al recompilar `javax/swing/text/*.java` de una sola vez
+con dos archivos que no se habian tocado. El control que lo acota es que el nombre punteado si
+resuelve en el lote, y eso permitio compilar `HTMLDocument` y `HTMLEditorKit` juntos, que se
+referencian mutuamente.
+
+Ademas volvieron a aparecer **#503** (una constante leida de un `.class` no se pliega en un `case`)
+tres veces y **#510** (dos variables en un `for`) dos veces. Las dos tienen rodeo conocido.
+
+---
+
+## Tanda: desbloquear `javax.swing` (sesion de biblioteca, 2026-09-05)
+
+El paquete `javax.swing` traba a todos los que dependen de el: `javax.swing.plaf` no puede declarar
+un aspecto sin su componente, y `plaf.basic` no puede dibujarlo. Esta tanda escribio las clases que
+mas trababan.
+
+| paquete | antes | despues |
+|---|---|---|
+| `javax.swing` | 50/134 clases, 1148 miembros | **70/134, 1685** |
+| `javax.swing.plaf` | 14/42 clases, 53 miembros | **37/42, 91** |
+
+### Las tres que faltaban
+
+La tanda anterior dejo dos huecos documentados en `javax.swing.text.html` porque faltaban
+`JComboBox`, `JList` y `JTextArea`. Los tres ya estan, y los dos huecos estan cerrados:
+`FormView.crearSeleccion` arma la lista de verdad y `HTMLWriter.selectContent` escribe sus opciones.
+
+Con ellos vino la rebanada entera de listas: `ListModel`, `AbstractListModel`, `DefaultListModel`,
+`ComboBoxModel`, `MutableComboBoxModel`, `DefaultComboBoxModel`, `ListSelectionModel` ya estaba,
+`DefaultListSelectionModel`, `ListCellRenderer`, `DefaultListCellRenderer`, `ComboBoxEditor`,
+`SingleSelectionModel` y `DefaultSingleSelectionModel`.
+
+### Los mapas de atajos, y la parte de `JComponent` que destraban
+
+`ActionMap`, `InputMap` y `ComponentInputMap` no son componentes y sin embargo eran el tapon mas
+grande: sin ellos, `JComponent` no podia tener su parte de teclado -- catorce miembros -- ni podian
+existir las tres clases `...UIResource` de `plaf`.
+
+Ahora `JComponent` tiene las tres tablas de atajos, las dos formas de registrar (la vieja de
+`registerKeyboardAction` y la de los mapas), y `processKeyBinding`. La vieja se implemento *sobre*
+la nueva: lo que se registra a la antigua se ve despues en `getInputMap`, que es lo que hace que las
+dos formas convivan sin dos tablas paralelas.
+
+### Cinco errores que encontro la comparacion
+
+`java/texto/Lista1.java` (68/68) y `java/texto/Panel1.java` (35/35) comparan estado **y avisos**.
+Los avisos son donde estaban casi todos los errores:
+
+1. **`setLeadSelectionIndex` con el ancla no elegida.** Arrastrar desde un renglon elegido y desde
+   uno no elegido no son simetricos: en el segundo caso, el tramo que esta en los dos rangos tiene
+   que quedar DESmarcado. Es un solo booleano, y sin el arrastrar hacia atras marcaba en lugar de
+   desmarcar.
+2. **`setSelectionMode` con la seleccion vacia.** Los extremos valen centinelas
+   (`Integer.MAX_VALUE`), y usarlos como indices reservaba un conjunto de dos mil millones de bits.
+3. **`keys()` con la tabla vacia devuelve nulo**, no un arreglo de cero. Lo hace el JDK y hay codigo
+   que distingue "no hay tabla" de "hay tabla sin nada".
+4. **`clearSelection` no mueve el ancla ni el guia.** Los dos dicen por donde venia el usuario;
+   borrar lo elegido no borra ese recorrido.
+5. **`JTabbedPane` sacaba la solapa equivocada.** `Container.remove(Component)` busca el indice del
+   hijo y llama a `remove(int)`, que en un panel con solapas saca una *solapa*. Los dos indices no
+   son el mismo numero. El JDK lo evita llamando a `super.remove(i)` con el indice de hijo; aca eso
+   quedo en un metodo con nombre, `sacarHijo`, porque el rodeo necesita explicacion.
+
+Los dos primeros y el ultimo hacian fallar el programa, no solo dar un resultado distinto.
+
+### Lo que no se compara, y por que
+
+`Panel1.java` no compara **cuantos hijos tiene un `JSplitPane`**: el JDK cuenta uno mas porque su
+aspecto agrega la division como hijo. No es una diferencia de la clase sino de que alla hay un
+aspecto instalado y aca todavia no. Esta dicho en el javadoc de la prueba para que nadie lo
+"arregle" agregando un hijo de mentira.
+
+En cambio si se comparo `isValidateRoot`, y ahi la primera version estaba mal: se habia razonado que
+mover la division cambia lo que el panel pide, y no es asi -- el panel reparte un espacio fijo, y lo
+que pase adentro de un lado no cambia lo que ocupa. El JDK devuelve `true`. Es un buen ejemplo de
+por que el razonamiento no reemplaza a la medicion.
+
+### Lo que queda trabado
+
+Cinco clases de `plaf` esperan a su componente: `FileChooserUI` (`JFileChooser`), `LayerUI`
+(`JLayer`), `OptionPaneUI` (`JOptionPane`), `PopupMenuUI` (`JPopupMenu` y `Popup`) y `TreeUI`
+(`JTree` y `javax.swing.tree.TreePath`). `javax.swing.filechooser` ya esta completo, asi que
+`JFileChooser` es el que menos trabajo tiene por delante.
+
+### Del compilador
+
+Volvio a aparecer **#510** en una forma que no estaba anotada: la coma del inicializador de un `for`
+falla de **dos maneras distintas** segun que se escriba.
+
+| forma | resultado |
+|---|---|
+| `for (int i = 0, c = n; ...)` | error de simbolo: `i` no se ve en la condicion |
+| `for (i = 0, c = n; ...)` | error de sintaxis: "se esperaba Semi, se encontro Comma" |
+| `for (int i = 0; i < n; i++, s++)` | **compila** |
+
+La tercera fila es la que acota: la coma no es el problema en general, solo en el inicializador. Y
+las dos primeras fallan en etapas distintas -- una pasa el analizador y pierde el alcance, la otra
+ni siquiera parsea --, asi que atras hay dos caminos, no uno.
+
+---
+
+## Tanda: `javax.swing.plaf` casi cerrado (sesion de biblioteca, 2026-09-05)
+
+Segunda pasada de desbloqueo. `javax.swing.plaf` paso de 37/42 a **40/42**; los dos que faltan
+esperan a `JDialog`.
+
+| paquete | antes de esta tanda | despues |
+|---|---|---|
+| `javax.swing` | 70/134 clases, 1685 miembros | **77/134, 2011** |
+| `javax.swing.plaf` | 37/42 clases, 91 miembros | **40/42, 136** |
+| `javax.swing.tree` | 3/17 clases, 25 miembros | **12/17, 215** |
+
+### Tres aspectos destrabados, tres caminos distintos
+
+**`LayerUI` y `JLayer`** se necesitan mutuamente y no necesitan nada mas, asi que se escribieron y
+compilaron juntos. Es la clase que permite decorar un componente sin heredar de el: en lugar de una
+subclase por decoracion -- que no se pueden combinar --, se envuelve, y dos decoraciones se apilan
+envolviendo dos veces. La clase es final justamente para que nadie vuelva al camino de heredar.
+
+**`PopupMenuUI`** necesito una cadena: `JSeparator`, `JMenuItem`, `Popup`, `PopupFactory` y
+`JPopupMenu`. Lo interesante es por que hay una fabrica de ventanitas y no un constructor: un
+desplegable se dibuja adentro de la ventana si entra y en una ventana propia si no, y esa decision
+no la puede tomar quien lo abre. La fabrica ademas permite reusarlas.
+
+**`TreeUI`** necesito medio paquete `javax.swing.tree`: `MutableTreeNode`, `TreeModel`,
+`RowMapper`, `TreeCellRenderer`, `TreeCellEditor`, `DefaultMutableTreeNode`, `DefaultTreeModel`,
+`TreeSelectionModel`, `DefaultTreeSelectionModel`, y `JTree`.
+
+### Lo que separa un arbol de una lista
+
+Vale anotarlo porque explica media docena de decisiones:
+
+- **La seleccion son caminos, no filas.** Un camino sigue siendo el mismo si se despliega algo mas
+  arriba; una fila no. Por eso `DefaultTreeSelectionModel` guarda las dos representaciones y las
+  mantiene en acuerdo, y por eso existe `RowMapper`: el modelo de seleccion no puede saber en que
+  fila cae un camino, porque eso depende de lo desplegado, que es de la vista.
+- **Lo desplegado es del arbol, no del modelo.** Dos arboles sobre los mismos datos pueden tener
+  desplegadas cosas distintas.
+- **Ser hoja tiene dos definiciones.** No tener hijos, o no permitirlos. La diferencia se ve en una
+  carpeta vacia: con la primera se ve como un archivo, con la segunda lleva el triangulito.
+  `DefaultTreeModel.setAsksAllowsChildren` elige, y por omision usa la primera.
+- **Se avisa antes de desplegar y se puede vetar.** Es lo que permite cargar los hijos al desplegar
+  -- y negarse si la carga falla -- en lugar de tener el arbol entero en memoria.
+
+### El unico error que encontro la comparacion
+
+`java/texto/Arbol1.java` (27/27) paso a la primera. `Arbol2.java` fallo en una sola linea, y en algo
+que no se habria notado sin comparar: **el orden de los caminos adentro del aviso de seleccion**. El
+JDK pone primero los que entran y despues los que salen; la primera version hacia al reves.
+
+No cambia que quedo elegido, y sin embargo se ve: el evento lleva los caminos en un arreglo con un
+`isAddedPath(i)` paralelo, y quien lo recorra los recibe en ese orden. Un oyente que procese el
+primero y corte -- para reaccionar solo a lo que se acaba de elegir -- haria lo contrario de lo que
+espera.
+
+### Lo que sigue trabado
+
+Dos clases de `plaf`: `FileChooserUI` y `OptionPaneUI`. Las dos esperan a `JDialog`, que arrastra
+`JRootPane` y con el la cadena de paneles de una ventana. Es el proximo tapon, y es uno solo para
+las dos.
+
+`javax.swing.filechooser` ya esta completo, asi que del lado de `JFileChooser` no falta nada mas.
+
+---
+
+## Tanda: `javax.swing.plaf` cerrado — el escritorio y los dialogos (sesion de biblioteca, 2026-09-05)
+
+`javax.swing.plaf` quedo **42/42 clases, 147/147 miembros: COMPLETO**. Los dos tapones que quedaban
+—`FileChooserUI` y `OptionPaneUI`— se destrabaron escribiendo lo que los nombra: `JFileChooser`,
+y para el panel de opciones tambien `JInternalFrame`, `JDesktopPane`, `DesktopManager` y
+`DefaultDesktopManager`, porque `JOptionPane` los nombra en `createInternalFrame` y en
+`getDesktopPaneForComponent`.
+
+`javax.swing` paso de 77 a 86 clases (2011 → 2571 miembros).
+
+### Cuatro cosas que el JDK hace y no se habrian deducido
+
+- **`JDesktopPane.setDragMode` no valida nada.** Su documentacion promete un
+  `IllegalArgumentException` para un modo desconocido; el codigo no lo lanza. Un `setDragMode(7)`
+  se guarda y `getDragMode()` devuelve 7. Se copio el codigo, no la promesa, y queda dicho en el
+  javadoc del metodo.
+- **Sacar la ventana activa del escritorio no la olvida.** Despues de `remove(f)` —y hasta despues
+  de `removeAll()`— `getSelectedFrame()` sigue devolviendo la que se fue. La primera version la
+  ponia en nulo "para no dejar un fantasma", y estaba mal: el JDK deja el fantasma. Quien limpia es
+  el administrador de escritorio al cerrar.
+- **Una ventana interna no se puede activar si no se ve.** `setSelected(true)` sobre una ventana que
+  no esta en pantalla no hace nada —ni avisa, ni lanza—; desactivar, en cambio, se puede siempre.
+  Sin esa regla, media prueba diferencial daba distinto sin que se entendiera por que.
+- **Cambiar de modo de seleccion en el selector limpia la eleccion en las dos direcciones.** Al
+  prender la eleccion multiple llama a `setSelectedFile(null)`; al apagarla, a
+  `setSelectedFiles(null)`. La primera version solo limpiaba al apagar, que es lo que uno deduciria.
+
+### El agujero que abrio el selector de archivos: `user.home`
+
+`new JFileChooser()` reventaba con `NullPointerException: path cannot be null` antes de mostrar
+nada. La causa no estaba en Swing: **la VM no contestaba `user.home`**, y
+`FileSystemView.getDefaultDirectory()` la usa para saber donde abrir.
+
+Se agregaron `user.home` y `user.name` a la costura de propiedades (`getProperty0` en
+`natives.rs`, y la lista de claves que siembra `System.initProperties`). En Windows salen de
+`USERPROFILE`/`USERNAME`; en el resto, de `HOME`/`USER`.
+
+Es la misma forma de ausencia que ya habia tenido `java.io.tmpdir`: una propiedad que no se puede
+derivar de una constante, que nadie extrana hasta que una clase de mas arriba se apoya en ella.
+
+**El `bin/` congelado todavia no la tiene**: la correccion esta en `target/release/`. Las pruebas de
+esta tanda se corrieron contra ese binario, con la variable `KAJI_RUN` que ahora entienden los dos
+oraculos. Refrescar `bin/` es la receta de `bin/FROZEN.md` y no se hizo aca.
+
+### Lo que no se compara, y por que
+
+- **Todo lo que sale del aspecto instalado.** El JDK arma un `BasicDesktopPaneUI` con su
+  administrador, un icono de ventana, el filtro de "todos los archivos" y el texto de los botones;
+  esta biblioteca no instala delegados de aspecto, asi que esas consultas dan nulo. Es la brecha
+  conocida de `plaf.basic`/`plaf.metal`, no de estas clases.
+- **Los avisos `ancestor` y `wasIconOnce`.** Los dispara el aspecto del JDK al reaccionar a un
+  cambio; el espia de la prueba los saltea con un comentario que dice por que.
+- **El arrastre de una ventana interna.** Los dos modos del JDK pintan directo —con contorno sobre
+  el escritorio, en vivo sobre la ventana del sistema— y sin pantalla los dos revientan antes de
+  mover nada. Se compara `setBoundsForFrame`, que es donde termina el arrastre.
+- **Los dialogos.** No bloquean, igual que `java.awt.Dialog`: esta biblioteca no reparte eventos de
+  ventana. Los atajos `showXxxDialog` arman todo y devuelven `CLOSED_OPTION`, que es lo que
+  corresponde a un dialogo cerrado sin elegir. Esta dicho en el javadoc de `JOptionPane` y no se
+  disimula.
+
+### Estado de las pruebas al cerrar
+
+`java/texto/Escrit1.java` 39/39 y `Opcion1.java` 60/60, las dos nuevas. El resto de la suite de
+comportamiento sigue verde salvo `Html4.java` (160/163, las tres lineas de `errores=N` de la
+recuperacion del analizador). La suite de pixeles, sin cambios respecto de la tanda anterior.
+
+### Del compilador
+
+Nada nuevo. Toda la tanda compilo sin tropezar con ningun hallazgo abierto, incluida una clase
+anidada estatica con constructor que recibe la externa (`JInternalFrame.JDesktopIcon`), que es
+exactamente la forma que el JDK emite.
+
+---
+
+## Tanda: los spinners, y el formato localizado de `java.time` (sesion de biblioteca, 2026-09-05)
+
+Dos frentes. `javax.swing` paso de 86 a **96 clases** (2571 → 2744 miembros) con la familia del
+spinner completa; `java.time.format` paso de **124/141 a 133/141** miembros.
+
+### Los spinners: seis clases, y una trampa que solo se ve midiendo
+
+`SpinnerModel`, `AbstractSpinnerModel`, `SpinnerNumberModel`, `SpinnerListModel`,
+`SpinnerDateModel` y `JSpinner` con sus cuatro editores anidados.
+
+Lo que hay que entender del modelo numerico, y que no se deduce leyendo la firma: **la aritmetica la
+manda el tipo del valor de ahora, no el del paso**. Un modelo que arranca en `Integer.valueOf(0)`
+con paso `Double.valueOf(0.5)` avanza de a cero, porque el paso entra por `longValue()`. Esta medido
+contra el JDK y esta en la prueba, porque es exactamente la clase de cosa que uno "arregla" sin
+darse cuenta de que estaba bien.
+
+Tres cosas mas que salieron de la comparacion y no del razonamiento:
+
+- **Los limites se comparan con `compareTo`, no se convierten.** Un tope `Double` sobre un valor
+  `Integer` revienta con `ClassCastException` adentro del constructor. Parece un descuido del JDK y
+  es lo que hace.
+- **`Byte` en 127 con paso 1 da -128**, y el modelo lo entrega sin quejarse: la suma se hace en
+  `long` y se recorta al tipo del valor.
+- **Cambiar la lista de un `SpinnerListModel` vuelve la posicion a cero**, aunque el valor que habia
+  siga estando en la lista nueva. Guarda una posicion, no un valor.
+
+### Dos agujeros que el spinner destapo, los dos fuera de `javax.swing`
+
+Ninguno de los dos era del spinner; los dos impedian construirlo.
+
+- **`JComponent` no se ponia el locale.** El JDK se lo pone en el constructor
+  (`setLocale(JComponent.getDefaultLocale())`), y sin eso `getLocale()` sobre un componente todavia
+  no agregado a nada lanza `IllegalComponentStateException` -- que es lo que hace un componente de
+  AWT sin padre. `JSpinner.NumberEditor` pregunta por el locale para elegir el formato de numeros, y
+  moria ahi.
+- **`JTextComponent` se quedaba sin cursor.** En el JDK el cursor es propiedad del aspecto:
+  `BasicTextUI` le pasa uno al instalarse, y por eso el campo nunca es nulo. Sin delegados de
+  aspecto, `caret` quedaba nulo para siempre y cualquier `setCaretPosition` -- que el JDK **tampoco**
+  protege -- reventaba. `DefaultFormatter.install` hace exactamente eso, asi que
+  `JFormattedTextField` era inusable de punta a punta. Ahora el constructor le pone un
+  `DefaultCaret`. La unica diferencia observable va en la direccion buena: `getCaret()` devuelve un
+  cursor en vez de nulo, que es lo mismo que devuelve el JDK apenas se le instala el aspecto.
+
+### `java.time.format`: el argumento seguia siendo bueno, pero el dato aparecio
+
+El encabezado de `DateTimeFormatterBuilder` decia que doce miembros estaban afuera porque piden
+datos del CLDR, y ponia en la misma bolsa dos cosas distintas: los **nombres** (de zona, de periodo
+del dia) y los **patrones** (el formato de una fecha corta en cada locale).
+
+Los nombres siguen afuera, y por el mismo motivo de siempre. Los patrones no: **`java.text` ya los
+trae**, en `PatronesLocales`, extraidos del JDK 25. Y no es una equivalencia supuesta -- se midio
+para cuatro estilos, tres combinaciones y siete locales que
+`DateTimeFormatterBuilder.getLocalizedDateTimePattern` devuelve **exactamente** el mismo patron que
+`((SimpleDateFormat) DateFormat.getXxxInstance(estilo, locale)).toPattern()`. Tiene sentido: los dos
+leen la misma fila del CLDR, y las letras que aparecen ahi significan lo mismo en los dos paquetes.
+
+Nueve miembros nuevos: las cuatro `ofLocalized*`, `appendLocalized(FormatStyle, FormatStyle)`,
+`getLocalizedDateTimePattern` en su forma de estilos, `appendLocalizedOffset`,
+`appendChronologyText` y `DecimalStyle.getAvailableLocales`.
+
+Dos detalles que valen la pena:
+
+- **`appendLocalizedOffset` escribe `GMT` literal, y eso no es una aproximacion nuestra**: el JDK
+  tiene ahi mismo un `// TODO: get localized version of 'GMT'` sin resolver. Copiar el codigo y no la
+  intencion es lo que hace que las dos salidas coincidan en cualquier locale.
+- **El patron se resuelve al usar el formateador, no al armarlo.** Por eso `appendLocalized` es una
+  pieza con cache por locale y no un `appendPattern` compilado en el constructor: un `withLocale`
+  posterior tiene que cambiar el formato, y lo hace.
+
+**Lo que queda afuera son ocho miembros, y todos por lo mismo**: nombres de zona (`appendZoneText` y
+`appendGenericZoneText`, dos formas cada uno), periodos del dia (`appendDayPeriodText`) y las
+plantillas tipo `yMMMd` (`ofLocalizedPattern`, `getLocalizedDateTimePattern(String, ...)`,
+`appendLocalized(String)`), que se resuelven contra otra tabla del CLDR --la de formatos
+disponibles-- distinta de la de los cuatro estilos y que no se deduce de ella.
+
+**Y una advertencia escrita en el javadoc, porque es la unica parte incomoda:** un locale sin datos
+propios cae en el mas cercano que haya. `getLocalizedDateTimePattern(SHORT, null, ISO, Locale.UK)`
+devuelve los patrones de `en_US`. No es una respuesta inventada -- sale de una tabla real -- pero
+tampoco es la del locale que se pidio. Cuales tienen datos propios lo dice el
+`DecimalStyle.getAvailableLocales` recien agregado, que es justamente para eso.
+
+### Un arreglo chico en `java.text`
+
+`DecimalFormatSymbols.getAvailableLocales()` y su gemelo de `DateFormatSymbols` devolvian, para el
+tag `und`, un locale cuyo **idioma se llamaba literalmente "und"**. `und` es el tag BCP-47 de "sin
+determinar" y el locale que le corresponde es `ROOT`, que es lo que devuelve
+`Locale.forLanguageTag("und")` y lo que el JDK pone en esa lista. Se noto porque
+`DecimalStyle.getAvailableLocales().contains(Locale.ROOT)` daba falso de un lado y verdadero del
+otro.
+
+### Sobre la prueba diferencial y la codificacion
+
+`java/texto/Fmt1.java` escapa todo lo que no sea ASCII imprimible. No es cosmetico: varios de estos
+patrones traen caracteres que no se ven -- el ingles separa el a.m./p.m. con U+202F -- y el JDK real,
+con la salida redirigida a una tuberia, los convierte en signos de pregunta. Sin escapar, la
+comparacion medía la consola y no la biblioteca.
+
+### Estado de las pruebas al cerrar
+
+`Spin1.java` 82/82 y `Fmt1.java` 106/106, las dos nuevas. El resto de la suite de comportamiento
+verde salvo `Html4.java` (160/163, lo de siempre). Sin cambios en la de pixeles.
+
+### Del compilador
+
+Nada nuevo en toda la tanda.
+
+---
+
+## Tanda: deslizante, progreso, items con estado y barra de herramientas (sesion de biblioteca, 2026-09-05)
+
+Seis clases mas en `javax.swing`: `JSlider`, `JProgressBar`, `JCheckBoxMenuItem`,
+`JRadioButtonMenuItem`, `JToolTip` y `JToolBar` (con su `Separator`), mas
+`JComponent.createToolTip`, que estaba ausente solo porque faltaba `JToolTip`. **102/134 clases,
+2915/3642 miembros.**
+
+### Cuatro cosas que el JDK hace y que yo habia escrito al reves
+
+Las cuatro salieron de `java/texto/Ctrl1.java`, ninguna del censo.
+
+- **`JSlider.setModel(null)` se acepta.** Yo lo rechazaba con `IllegalArgumentException` "porque un
+  deslizante sin modelo no tiene sentido". El JDK no valida: guarda el nulo, avisa el cambio, y lo
+  que revienta despues es la primera llamada que le pregunte algo al modelo. Rechazarlo aca cambia
+  **en que llamada aparece el error**, que es la clase de diferencia que se paga cara.
+- **`setValueIsAdjusting` no avisa por propiedad.** Solo por accesibilidad. Yo disparaba un
+  `firePropertyChange("adjusting", ...)` que en el JDK no existe, asi que un oyente de propiedades
+  veia un evento de mas.
+- **`JProgressBar.getPercentComplete()` con rango vacio devuelve `NaN`.** Yo lo protegia devolviendo
+  cero. Cero seria mas comodo y dice "esta al principio", que no es lo mismo que "la pregunta no
+  tiene respuesta"; el JDK divide y deja que salga lo que salga.
+- **El `JProgressBar` construido sin modelo nunca se anotaba en el suyo**, asi que
+  `addChangeListener` no recibia nada. El censo no lo ve -- el metodo existe y devuelve lo que
+  corresponde -- y la comparacion lo canta en la primera linea.
+
+Y un error de transcripcion: el mensaje del JDK es `"Label increment must be > 0"`; yo habia
+copiado un `"incremement"` que no esta.
+
+### Un tropiezo de diseno con `BoxLayout`
+
+`JToolBar` acomoda con un `BoxLayout`, y un `BoxLayout` **se ata al contenedor que le pasan en el
+constructor**: acomodar otro tira `AWTError: BoxLayout can't be shared`. La primera version hacia
+que el acomodador de la barra *heredara* de `BoxLayout` con destino nulo, y moria al primer uso.
+
+El JDK lo **envuelve** en vez de heredarlo, y por un motivo que se entiende recien cuando se lo ve:
+girar la barra obliga a armar un `BoxLayout` nuevo, y envolviendolo se puede reemplazar el de
+adentro sin cambiar el acomodador que la barra tiene puesto.
+
+### Lo que no se compara, y por que
+
+Todo lo que sale del aspecto instalado, otra vez:
+
+- **El salto a la marca del deslizante.** Sorprende que sea del aspecto y no del control:
+  `BasicSliderUI.calculateThumbLocation` corrige el valor al recalcular donde va la perilla. Con
+  `snapToTicks` prendido, poner 8 en un deslizante con marcas cada 5 deja el valor en 10 -- y lo hace
+  el aspecto, no `JSlider`. Sin aspecto queda en 8, que es lo que `JSlider` sola hace.
+- **El tamano de un `JToolBar.Separator` sin medida propia.** Lo pone el aspecto (10x10 en Metal);
+  aca queda nulo.
+
+### Estado de las pruebas al cerrar
+
+`java/texto/Ctrl1.java` 78/78. El resto de la suite de comportamiento verde salvo `Html4.java`
+(160/163). Pixeles sin cambios.
+
+### Del compilador
+
+Nada nuevo.
+
+---
+
+### #516 ⬜ -- un campo **heredado** con comodin `? super T` pierde la cota inferior al capturarse
+
+`KajiLibrary/repros/finding_516/Finding516.java`
+
+```java
+static class Caja<T> {
+    void tomar(Caja<? extends T> otra) { }
+}
+
+static class Base<M> {
+    Caja<? super M> propio = null;
+}
+
+static class Hija<M> extends Base<M> {
+    void a(Caja<? extends M> v) {
+        propio.tomar(v);        // <- error
+    }
+}
+```
+
+```
+error: no se encontró un método `tomar(Caja<cap#0 of M>)` aplicable
+  método Caja.tomar(Caja<? extends cap#1 of Object>) no es aplicable
+```
+
+El JDK lo compila. Y tiene que compilarlo: `propio` es `Caja<? super M>`, asi que su captura `CAP`
+cumple `M <: CAP`; el parametro de `tomar` es entonces `Caja<? extends CAP>`, y `Caja<? extends M>`
+esta contenido en el porque `M <: CAP`.
+
+**Donde esta la pista, y es explicita**: el mensaje dice `cap#1 of Object`. La captura de
+`? super M` se hizo **como si el comodin no tuviera cota inferior**. Sin `M <: cap#1` la contencion
+no se puede probar, y el metodo "no aplica".
+
+**Lo que lo dispara es la herencia, no el comodin ni el arreglo.** Cuatro variantes, aislando de a
+una:
+
+| variante | resultado |
+|---|---|
+| el `Caja<? super M>` llega como **parametro** del metodo | compila |
+| el `Caja<? super M>` es un **campo de la misma clase** | compila |
+| el `Caja<? super M>[]` es un **arreglo de la misma clase**, y se accede `arreglo[0]` | compila |
+| el `Caja<? super M>` es un **campo heredado** de una superclase generica | **falla** |
+| el `Caja<? super M>[]` heredado se devuelve por un **metodo heredado** | compila |
+
+Las tres primeras descartan la captura en general, los arreglos y los comodines: los tres mecanismos
+andan por separado. La quinta descarta la herencia en general. Lo que queda es preciso: **la
+sustitucion del tipo de un CAMPO al mirarlo desde la subclase**. Al reemplazar la `M` de `Base<M>`
+por la `M` de `Hija<M>` se conserva la cota superior del comodin y se pierde la inferior; con el
+tipo de retorno de un metodo heredado, la misma sustitucion sale bien.
+
+Y no es solo la llamada: el campo heredado tampoco se puede **copiar a una variable local** de su
+propio tipo declarado --`Caja<? super M>[] fs = arr;` da "tipo incompatible en fs"--, lo que
+confirma que el problema esta en el tipo que se le atribuye al campo y no en la comprobacion de
+argumentos.
+
+**Donde aparecio.** En `javax.swing.RowFilter`: sus `orFilter` y `andFilter` guardan
+`RowFilter<? super M, ? super I>[]` en una superclase comun (`CompoundFilter`) y lo recorren desde
+las subclases. Es la forma exacta del JDK.
+
+**El rodeo, y es barato:** un accesor. La superclase expone el arreglo por un metodo y las subclases
+lo leen por ahi. No hay que cambiar ningun tipo ni descartar ningun generico -- que es lo que habia
+intentado primero, y ademas no alcanzaba: con el arreglo declarado crudo, este compilador **tampoco
+borra la firma del miembro**, asi que `include` seguia pidiendo el tipo parametrizado.
+
+---
+
+### #517 ⬜ -- llamar un metodo sobre el resultado de un comodin, sin variable intermedia, no compila
+
+`KajiLibrary/repros/finding_517/Finding517.java`
+
+```java
+static int comodinExtends(List<? extends X> l) {
+    return l.get(0).valor();       // <- error
+}
+```
+
+```
+error: el generador de bytecode todavía no soporta una llamada que no resolvió a ningún método
+```
+
+El JDK compila las cuatro variantes; este compilador falla en las tres que pasan por un comodin:
+
+| variante | resultado |
+|---|---|
+| `List<X>` -- sin comodin | compila |
+| `List<? extends X>` guardado antes en una local `X x` | compila |
+| `List<? extends X>`, llamada directa | **falla** |
+| `List<? super X>`, llamada directa, y el metodo es de `Object` | **falla** |
+| `List<?>`, llamada directa, metodo de `Object` | **falla** |
+
+**Lo que la tabla dice.** No es el comodin en si -- la segunda fila usa el mismo `List<? extends X>`
+y anda --, ni el metodo -- la cuarta llama a `hashCode()`, que esta en `Object` y siempre existe --,
+ni el sentido del comodin. Es la **llamada sobre un receptor cuyo tipo es una captura**: al buscarle
+los metodos a `cap#N`, no encuentra los del tipo capturado.
+
+Se ve en el mensaje mismo, que no es un error de tipos sino del generador de bytecode: la resolucion
+paso, no encontro nada, y el error aparece recien al emitir.
+
+**El rodeo, y es una linea:** guardar el resultado en una variable local declarada con el tipo sin
+comodin, y llamar sobre ella. Es lo que hace `javax.swing.DefaultRowSorter` en `getSortKeys` y en su
+comparador de filas.
+
+**Relacionado con #516**, que tambien es la captura de un comodin perdiendo informacion, pero en el
+otro lado: alla se pierde la cota inferior de un comodin heredado, aca se pierden los miembros del
+tipo capturado. Puede que sean la misma raiz vista de dos lados.
+
+---
+
+## Tanda: tamanos, filtros y orden de filas (sesion de biblioteca, 2026-09-05)
+
+Tres clases mas: `SizeSequence`, `RowFilter` (con `Entry` y `ComparisonType`) y `DefaultRowSorter`
+(con `ModelWrapper`). **106/134 clases, 2965/3642 miembros.** Las tres son logica pura -- no tocan
+pantalla ni aspecto -- asi que `java/texto/Filas1.java` (77/77) cubre todo lo que hacen, bordes
+incluidos.
+
+### Dos hallazgos nuevos del compilador, y son primos
+
+Los dos aparecieron escribiendo `RowFilter` y `DefaultRowSorter`, que son las primeras clases de la
+biblioteca con comodines anidados en serio.
+
+- **#516**: un campo **heredado** cuyo tipo lleva `? super T` pierde la cota inferior al capturarse.
+  Cinco variantes aisladas dejan el disparador en un solo lugar: la sustitucion del tipo de un
+  **campo** al mirarlo desde la subclase. El mismo tipo devuelto por un **metodo** heredado se
+  sustituye bien, y ese es el rodeo.
+- **#517**: llamar un metodo **directamente** sobre el resultado de algo con tipo comodin no
+  compila -- ni siquiera `hashCode()` sobre un `List<?>`. Guardarlo antes en una local del tipo sin
+  comodin lo arregla.
+
+Puede que sean la misma raiz vista de dos lados: en los dos casos la captura de un comodin pierde
+informacion, alla la cota inferior y aca los miembros del tipo capturado.
+
+### Cinco cosas que el JDK hace y que hubo que medir
+
+- **`setMaxSortKeys` no recorta las claves que ya hay.** Bajar el tope a dos con tres claves puestas
+  las deja las tres; el tope se aplica recien en el proximo clic. La primera version recortaba y
+  reordenaba, que es reordenar la tabla como efecto de un ajuste que no habla del orden actual.
+- **`RowFilter.dateFilter` lee la fecha en la fabrica**, antes de llegar al filtro. Por eso una fecha
+  nula sale como `NullPointerException` y un tipo nulo como `IllegalArgumentException`. La asimetria
+  es del JDK.
+- **`orFilter(null)` tampoco valida**: revienta al pedirle el iterador. Un elemento nulo adentro si,
+  y con mayuscula -- `"Filter must be non-null"` --, que no es la misma palabra que usan las otras
+  dos comprobaciones de la clase.
+- **`regexFilter` no comprueba la expresion**: se la pasa a `Pattern.compile`, que revienta sola.
+- **La comprobacion de columnas gana sobre la de nulos.** `numberFilter(EQUAL, null, -1)` tira
+  `"Index must be >= 0"`, no el error del nulo, porque el constructor de la clase base corre primero.
+
+### `DefaultRowSorter.ModelWrapper` es protegida, no publica
+
+`javap` la muestra publica -- ese es el modificador del archivo de clase --, pero el atributo de
+clases internas dice protegida y es lo que el compilador hace valer. Se noto porque la prueba no
+podia nombrarla desde afuera. La version de la biblioteca ahora coincide, y la prueba la extiende
+desde adentro de su subclase del ordenador, que es como se usa de verdad.
+
+### La unica diferencia que queda, y esta dicha en el javadoc
+
+`SizeSequence.setSize` con un indice **negativo**. El JDK guarda un arbol de sumas parciales en vez
+de los tamanos, y un indice negativo termina sumandole el tamano pedido a la entrada cero:
+`setSize(-1, 100)` sobre una secuencia que empieza en 5 la deja en 105. Es un efecto de su estructura
+interna, no una regla, y copiarlo seria copiar la corrupcion. Aca el indice fuera de rango no hace
+nada, y queda escrito en el javadoc del metodo porque es la unica diferencia observable entre las dos
+implementaciones.
+
+### Y una diferencia que no era de estas clases
+
+La primera version de la prueba filtraba por expresion regular sobre una columna de fechas, y daba
+distinto. No era `RowFilter`: era `Date.toString()`, que del lado del JDK sale en la zona horaria
+local -- `Wed Dec 31 21:00:01 GMT-03:00 1969` -- y del nuestro no. Queda anotado aca porque la prueba
+se cambio para no depender de eso, no porque este resuelto.
+
+---
+
+### #518 ⬜ -- la invocacion calificada del constructor de la superclase (`externa.super(...)`) no se analiza
+
+`KajiLibrary/repros/finding_518/Finding518.java`
+
+```java
+static class Hija extends Externa.Interna {
+    Hija(Externa e) {
+        e.super(1);        // <- error
+    }
+}
+```
+
+```
+error: se esperaba un identificador, se encontró Super
+```
+
+No llega al generador: falla en el **analizador**. Es la forma que exige JLS 8.8.7.1 cuando una clase
+extiende una clase interna de otra y no esta adentro de ella -- sin decirle cual es la instancia
+externa, la subclase no se puede construir.
+
+**Hermana de #507**, que es la otra mitad del mismo par: alla `e.new Interna()` para *crear*, aca
+`e.super(...)` para *heredar*. Las dos califican una instancia externa y a las dos les falta lo
+mismo.
+
+**Donde aparecio.** En `javax.swing.DefaultCellEditor`: sus tres delegados extienden
+`EditorDelegate`, que en el JDK es una clase interna. **El rodeo es el de siempre en esta
+biblioteca** --y no es un rodeo, es lo que el JDK emite--: `EditorDelegate` se escribe como anidada
+*estatica* con la externa como primer parametro del constructor, que es exactamente la firma que
+`javap` muestra del JDK (`protected DefaultCellEditor$EditorDelegate(DefaultCellEditor)`).
+
+---
+
+## Tanda: bordes, editores de celda y seis clases chicas (sesion de biblioteca, 2026-09-05)
+
+Diez clases mas: `BorderFactory`, `AbstractCellEditor`, `DefaultCellEditor` (con `EditorDelegate`),
+`OverlayLayout`, `CellRendererPane`, `GrayFilter`, `InputVerifier`, `Renderer`, `SwingContainer` y
+`UIClientPropertyKey`, mas `JComponent.setInputVerifier`/`getInputVerifier`.
+**116/134 clases, 3063/3642 miembros.**
+
+`java/texto/Borde1.java` 92/92.
+
+### Un hallazgo nuevo del compilador
+
+**#518**: la invocacion calificada del constructor de la superclase --`externa.super(...)`-- no se
+analiza. Es la hermana de **#507**: alla `e.new Interna()` para *crear*, aca `e.super(...)` para
+*heredar*; las dos califican una instancia externa. Aparecio en los tres delegados de
+`DefaultCellEditor`, que extienden una clase interna del editor.
+
+El rodeo es el de siempre en esta biblioteca, y no es un rodeo: `EditorDelegate` se escribe anidada
+*estatica* con la externa como primer parametro, que es exactamente la firma que `javap` muestra del
+JDK.
+
+### Lo que importa de `BorderFactory`, y solo se ve por identidad
+
+La clase existe **por el compartir**, no por comodidad: un borde no guarda a que componente
+pertenece, asi que los que no llevan parametros se arman una vez y se devuelven siempre. La prueba
+lo compara con `==`, que es la unica manera de verlo, y verifica tambien los casos de borde: el surco
+pedido por tipo `LOWERED` es el mismo objeto que el sin tipo, el `RAISED` no; un relieve con un tipo
+que no existe devuelve `null` en vez de tirar.
+
+### Dos huecos que quedan dichos, no tapados
+
+- **`DefaultCellEditor.getTableCellEditorComponent` no le copia el borde al tilde.** El JDK le pide a
+  la tabla el dibujante de la celda y le copia borde y fondo, para que al empezar a editar no se vea
+  un parpadeo. Aca `JTable` sigue siendo un lugar reservado y no hay a quien preguntarle. Es lo unico
+  que falta del metodo y se nota solo en pantalla; esta escrito en su javadoc.
+- **El borde interior de un `TitledBorder` sin borde propio lo pone el aspecto.** Sale de
+  `UIManager`, asi que la prueba compara que haya uno y no cual es.
+
+### El javadoc de `JComponent` estaba desactualizado
+
+Su seccion "lo que no esta" listaba `InputMap`, `ActionMap`, `JPopupMenu`, `TransferHandler`,
+`JToolTip` y `JRootPane` como ausentes. Los seis existen desde hace varias tandas y los miembros que
+los nombran tambien. Quedaba diciendo que faltan sesenta miembros cuando faltan pocos, y esa clase de
+documento envejecido es peor que no tener ninguno: se lo lee y se le cree. Reescrita.
+
+### Sobre el trabajo en paralelo
+
+El censo mostro que `UIManager`, `UIDefaults`, `LookAndFeel` y `Painter` aparecieron sin que esta
+sesion los escribiera, y que `LookAndFeel.java` y `plaf/metal/MetalBorders.java` estan modificados.
+Es la otra sesion trabajando en el aspecto Metal -- justamente la brecha que estas tandas vienen
+anotando como "sin aspecto instalado". No se toco nada de eso. Cuando ese trabajo aterrice, varias de
+las notas de "esto no se compara porque sale del aspecto" van a poder revisarse.
+
+---
+
+## Tanda: los resortes (sesion de biblioteca, 2026-09-05)
+
+`Spring` y `SpringLayout` (con `Constraints`). **118/134 clases, 3102/3642 miembros.**
+`java/texto/Res1.java` 58/58.
+
+Son dos clases chicas de superficie y densas de comportamiento: casi todo lo que hacen es aritmetica
+con cuatro numeros y un reparto por tension. Nada de esto depende del aspecto, asi que la prueba
+cubre el ciento por ciento.
+
+### Cuatro cosas que salieron de medir y no de razonar
+
+- **`Spring.sum` y `Spring.minus` no comprueban nulos**; `scale`, `width` y `height` si. La
+  asimetria no tiene explicacion en el diseño y esta ahi: sumar con un nulo devuelve un resorte que
+  revienta despues, al usarlo.
+- **La suma no respeta el centinela.** `sum(constant(UNSET), constant(5)).getPreferredValue()` da
+  `UNSET + 5`, no `UNSET`. La primera version tenia un `addChecked` que lo trataba aparte, que es
+  mas prolijo y da otro numero.
+- **El maximo de `Spring.width` se recorta a `Short.MAX_VALUE`.** Un componente sin tope devuelve
+  `Integer.MAX_VALUE`, y con eso la primera suma se desborda y da negativo. Recortar es lo que
+  mantiene las cuentas sanas, y hay que saberlo porque el numero que sale no es el que el componente
+  dijo.
+- **Un resorte inmovil tiene tension infinita o NaN.** Su rango es cero y la tension es una
+  division. Sale asi y esta bien que salga.
+
+### Lo que hizo falta entender de `SpringLayout`, y costo dos vueltas
+
+**Primera vuelta: los getters derivan.** `getWidth()` no devuelve el campo: si nadie puso el ancho
+pero si el oeste y el este, lo calcula. La primera version guardaba la derivacion solo en
+`getConstraint(String)` y dejaba los cuatro getters devolviendo el campo crudo, y entonces un
+componente atado por sus dos bordes quedaba de ancho cero -- que es exactamente el caso para el que
+uno usa este acomodador.
+
+**Segunda vuelta: atar a otro componente guarda una referencia viva, no una foto.** Es la pieza que
+hace que todo lo demas funcione. `putConstraint(WEST, a, 5, EAST, b)` no guarda el resorte que el
+borde este de `b` tenia en ese instante: guarda "el borde este de `b`", resuelto cada vez. Sin eso,
+mover `b` no mueve `a` -- y, sobre todo, **un ciclo deja de ser un ciclo**: atar A a B y B a A daba
+dos posiciones perfectamente razonables, calculadas a partir de una foto vieja. El JDK devuelve
+`UNSET` para las dos, que es la respuesta correcta a una pregunta sin solucion.
+
+Y una decision chica con la misma forma: **`UNSET` no se traduce a cero al colocar**. Un componente
+atrapado en un ciclo queda en una posicion absurda, que es visible y se investiga; un cero se
+confunde con "esta arriba a la izquierda" y no se investiga nunca.
+
+### Un tropiezo mio, no del compilador
+
+Dos veces perdi tiempo con lo que parecia un `.class` desactualizado: codigo corregido que seguia
+comportandose como el viejo. **Era `| head -4`**: al cortar la salida de `javac`, `head` cierra la
+tuberia, el compilador recibe SIGPIPE y muere antes de escribir los ultimos archivos. Queda anotado
+porque el sintoma -- comportamiento viejo con fuente nueva -- se parece muchisimo a un hallazgo del
+compilador y no lo es.
+
+### Del compilador
+
+Nada nuevo.
+
+---
+
+### #519 ⬜ -- un argumento con comodin no entra por el constructor de una clase generica
+
+`KajiLibrary/repros/finding_519/Finding519.java`
+
+```java
+static class Caja<E> {
+    Caja(Collection<? extends E> c) { }
+    void meter(Collection<? extends E> c) { }
+}
+
+static Caja<Object> porConstructor(Vector<?> v) {
+    return new Caja<Object>(v);      // <- error
+}
+```
+
+```
+error: no se encontró un constructor `Caja(Vector<?>)` aplicable
+  método Caja.Caja(Collection<? extends Object>) no es aplicable
+    (los argumentos no coinciden: Vector<?> no se convierte a Collection<? extends Object>)
+```
+
+El JDK lo compila, y tiene que compilarlo: la captura de `?` es algun `CAP <: Object`, asi que
+`Vector<CAP>` es un `Collection<? extends Object>`.
+
+**Tres variantes descartan casi todo:**
+
+| variante | resultado |
+|---|---|
+| **constructor** de la clase generica, argumento con comodin | **falla** |
+| el mismo constructor, argumento sin comodin (`List<String>`) | compila |
+| el mismo tipo de parametro por **metodo** de instancia, argumento con comodin | compila |
+| un metodo **estatico** con `Collection<? extends Object>`, argumento con comodin | compila |
+
+O sea: no es el comodin, no es el tipo del parametro, no es la sustitucion de `E`. Es la
+**resolucion de constructores** la que no aplica la captura del argumento antes de comparar.
+
+**Donde aparecio.** En `javax.swing.table.DefaultTableModel`, escribiendo
+`new Vector<Object>(v)` con `v` de tipo `Vector<?>` -- que es literalmente lo que hace el JDK.
+
+**El rodeo:** armar el vector vacio y volcarlo con `addAll`, que es un metodo y por lo tanto pasa.
+
+**Familia de #516 y #517.** Los tres son la captura de un comodin perdiendo informacion, cada uno en
+un lugar distinto del compilador: la sustitucion de un campo heredado, la busqueda de miembros sobre
+un receptor capturado, y ahora la resolucion de constructores.
+
+---
+
+## Tanda: `javax.swing.tree` cerrado y casi todo `javax.swing.table` (sesion de biblioteca, 2026-09-05)
+
+**`javax.swing.tree` quedo COMPLETO: 17/17 clases, 386/386 miembros.** `javax.swing.table` paso de
+5/12 a 10/12 (78 → 179 miembros). Faltan dos, y las dos esperan a `JTable`:
+`DefaultTableCellRenderer` y `JTableHeader`.
+
+Pruebas nuevas: `java/texto/Cache1.java` 76/76 y `java/texto/Tabla1.java` 67/67.
+
+### Las caches de disposicion del arbol
+
+`AbstractLayoutCache` y sus dos implementaciones traducen entre <em>caminos</em> --que identifican un
+nodo y no cambian-- y <em>filas</em> --donde ese nodo aparece, que cambia cada vez que se despliega
+algo mas arriba--. Es la mitad de `javax.swing.tree` que no necesita pantalla, y la prueba la cubre
+entera.
+
+El JDK las implementa como dos arboles internos distintos, cada uno optimizado para su caso. Aca la
+parte que decide *cuales* son las filas es una sola (`NucleoDeCache`, no publica) y lo unico que las
+distingue es como se calcula la *altura* de cada una: una multiplicacion con altura fija, una suma
+con altura variable. Desde afuera da lo mismo, y separar las dos preguntas es lo que permite probar
+la traduccion sin haber dibujado nada.
+
+**Una asimetria del JDK que hubo que medir:** sin medidor de nodos, `getBounds` devuelve **nulo** en
+la cache de altura fija y un **rectangulo vacio** en la de altura variable. No hay razon de diseño;
+es asi y esta escrito en el javadoc de la variable.
+
+### Cinco cosas del paquete de tablas que salieron de medir
+
+- **`TableColumn.setWidth` avisa con el nombre `"width"`, no con `COLUMN_WIDTH_PROPERTY`.** Esa
+  constante publica vale `"columWidth"` -- un error de tipeo del JDK que quedo congelado por
+  compatibilidad -- y **nadie la usa**. Nuestra version avisaba con la constante, asi que el modelo
+  de columnas no se enteraba de un cambio de ancho y el ancho total quedaba viejo. El censo no lo ve;
+  la comparacion lo canta.
+- **`DefaultTableModel.moveRow` rota el tramo entero afectado**, no el bloque que se mueve, y el
+  desplazamiento es `to - start` -- no `to - first`. Con el bloque yendo hacia atras las dos formulas
+  se separan y una de ellas no mueve nada.
+- **El constructor con filas negativas no valida**: el error sale del `Vector` que intenta crear, con
+  su mensaje. De paso se noto que nuestro `java.util.Vector` decia `"Illegal Capacity"` sin el
+  numero, y el JDK lo incluye.
+- **`TableRowSorter.useToString` da falso casi siempre.** Una columna de texto se compara con el
+  `Collator` del idioma sobre los valores, y una de cualquier tipo comparable por su orden natural;
+  solo cae en el texto una columna cuyo tipo no es comparable. Es al reves de lo que hace
+  `DefaultRowSorter`, y por un motivo claro: alla no hay de donde saber el tipo de la columna, aca
+  si.
+- **Los nombres de columna por omision son los de una hoja de calculo**: A, B, ... Z, AA, AB. La
+  cuenta es `column % 26` con `column = column / 26 - 1`, y el `- 1` es lo que hace que despues de Z
+  venga AA y no BA.
+
+### Un hallazgo nuevo del compilador
+
+**#519**: un argumento con comodin no entra por el **constructor** de una clase generica.
+`new Vector<Object>(v)` con `v` de tipo `Vector<?>` -- que es literalmente lo que hace el JDK -- no
+compila, mientras que la misma conversion por metodo si. Cuatro variantes dejan el disparador en la
+resolucion de constructores.
+
+Es el tercero de la familia: **#516** (la sustitucion de un campo heredado pierde la cota inferior de
+un comodin), **#517** (los miembros de un tipo capturado no se encuentran) y ahora este. Los tres son
+la captura de un comodin perdiendo informacion, cada uno en un lugar distinto del compilador. Si
+alguna vez se arregla la captura de raiz, conviene revisar los tres juntos.
+
+### Lo que queda dicho y no tapado
+
+`DefaultTreeCellRenderer.firePropertyChange` deja pasar solo `"text"`. El JDK deja pasar tambien la
+tipografia y el color **cuando el texto es HTML**, porque entonces la vista de HTML tiene que
+rearmarse; esa rama pide `BasicHTML`, que no esta. Sin ella el texto sigue siendo texto y la rama no
+haria nada.
+
+---
+
+### #520 ⬜ -- un literal de clase de un tipo INEXISTENTE compila y da `Object.class`, **miscompilacion silenciosa**
+
+`KajiLibrary/repros/finding_520/Finding520.java`
+
+```java
+Class<?> c = NoExisteEstaClase.class;
+System.out.println("el literal dio: " + c);   // -> class java.lang.Object
+```
+
+El JDK dice `cannot find symbol`. Este compilador **no dice nada** y emite `Object.class`.
+
+**Es de los peores de la lista**, y no por el sintoma sino por la forma: no hay error, no hay
+advertencia, el programa arranca, y lo que hace esta mal. Un error de compilacion se arregla en
+treinta segundos; esto se arregla despues de una tarde de mirar por que una tabla dibuja iconos
+donde va texto.
+
+**Donde aparecio, y es exactamente ese caso.** `javax.swing.JTable.createDefaultRenderers` registra
+un dibujante por tipo de columna:
+
+```java
+defaultRenderersByColumnClass.put(Object.class, new DefaultTableCellRenderer.UIResource());
+...
+defaultRenderersByColumnClass.put(Icon.class, new IconRenderer());
+defaultRenderersByColumnClass.put(ImageIcon.class, new IconRenderer());   // <- ImageIcon no existe
+```
+
+`ImageIcon` todavia no esta escrito en esta biblioteca. El literal se volvio `Object.class`, la
+ultima linea **piso la primera**, y toda columna de texto paso a dibujarse con el dibujante de
+iconos -- que no muestra nada. Lo encontro la prueba diferencial, no el compilador y no el censo.
+
+**El rodeo** mientras tanto: no nombrar tipos que no estan. Que es una regla imposible de seguir,
+porque justamente el punto es que no avisa cuando uno lo hace.
+
+**Prioridad alta**, con **#509** -- el otro que miscompila en silencio -- por delante de cualquier
+hallazgo que sea "no compila algo que deberia".
+
+
+### #522 ⬜ -- una clase interna que llama a un metodo **heredado** de la externa compila y revienta, **miscompilacion silenciosa**
+
+Una clase interna no estatica puede llamar sin calificar a los metodos de la clase que la contiene.
+Si el metodo lo **declara** esa clase, anda. Si lo **hereda**, compila igual y en ejecucion sale
+`NoSuchMethodError`.
+
+```java
+static class Base {
+    String saludo() { return "hola"; }
+}
+
+static class Externa extends Base {
+    String propio() { return "soy propio"; }
+
+    class Interna {
+        String usarPropio()   { return propio(); }   // anda
+        String usarHeredado() { return saludo(); }   // NoSuchMethodError
+    }
+}
+```
+
+El JDK real imprime las dos lineas. Aca la segunda tira `java.lang.NoSuchMethodError`, sin ningun
+aviso al compilar.
+
+Lo que se ve en el bytecode es que la llamada sale contra `Externa` --el tipo estatico del `this`
+externo-- en vez de contra el tipo que declara el metodo. Para `propio()` eso da lo mismo; para
+`saludo()`, `Externa` no tiene esa entrada y la resolucion falla. La forma normal de emitirlo es
+buscar el metodo por la cadena de herencia y usar como duenio la clase que lo declara, que es lo que
+hace javac.
+
+**Por que importa mas que otros.** Este es el patron de casi todas las clases anidadas de Swing: un
+`Handler` adentro de un `XxxUI` que llama a `getComponent()`, `getFileChooser()`, `isLeaf()` --
+metodos que el UI hereda de su `BasicXxxUI` --. Aparecio escribiendo
+`MetalFileChooserUI.FilterComboBoxModel`, cuyo constructor llama a `getFileChooser()`, heredado de
+`BasicFileChooserUI`. Compila limpio y el modelo revienta al construirse.
+
+**Rodeo.** Guardar lo que haga falta en un campo de la clase externa, o pasarlo por parametro al
+constructor de la interna. En `MetalFileChooserUI` se paso el selector por parametro.
+
+**Repro:** `KajiLibrary/repros/finding_522/Finding522.java`
+
+### #521 ⬜ -- `"texto" + unEnvoltorio` desempaqueta en vez de usar `String.valueOf(Object)`
+
+`KajiLibrary/repros/finding_521/Finding521.java`
+
+```java
+Integer i = null;
+System.out.println("a=" + i);        // JDK: "a=null"   |   aca: NullPointerException
+
+Object o = (Integer) null;
+System.out.println("d=" + o);        // los dos: "d=null"
+```
+
+La especificacion dice que en una concatenacion un operando de tipo referencia se convierte con
+`String.valueOf(Object)`, y esa conversion contesta `"null"`. **Nunca se desempaqueta**:
+desempaquetar es lo que se hace para aritmetica, no para concatenar.
+
+Este compilador desempaqueta cuando el tipo estatico es un envoltorio --`Integer`, y presumiblemente
+los otros siete--, asi que un nulo revienta. Con el **mismo valor** guardado en un `Object` anda y
+escribe `null`, que es la prueba de que el problema es la sobrecarga elegida y no el nulo en si.
+
+**Donde aparecio.** `BasicSliderUI.getLowestValue()` devuelve `Integer` y es nulo cuando el
+deslizador no tiene tabla de etiquetas -- que es el caso comun --. La prueba diferencial imprimia
+ese valor y reventaba; el JDK escribe `null` sin chistar.
+
+**El rodeo**: `String.valueOf((Object) x)`, o guardar en una variable de tipo `Object` antes de
+concatenar. Los dos estan en el reproductor.
+
+**No es de los silenciosos** -- tira, no miscompila calladito --, pero es codigo Java valido que se
+rompe, y el rodeo es feo de recordar: nadie escribe un cast a `Object` para imprimir un numero.
+
+---
+
+## Tanda: `JTable` (sesion de biblioteca, 2026-09-05)
+
+**`javax.swing.table` quedo COMPLETO: 12/12 clases, 243/243 miembros.** `javax.swing` paso de 3102 a
+**3281 miembros** -- los 179 de `JTable`, que dejo de ser un lugar reservado.
+
+`java/texto/Tabla2.java` 121/121.
+
+Con esto se cierran tres cosas que venian anotadas como pendientes: los cinco miembros de `JTable`
+que faltaban en `javax.swing`, `DefaultTableCellRenderer` y `JTableHeader` en `javax.swing.table`, y
+el paso que le faltaba a `DefaultCellEditor.getTableCellEditorComponent` -- el que le copia el borde
+y el fondo al tilde para que la celda no parpadee al empezar a editar.
+
+### El hallazgo del dia, y es feo
+
+**#520: un literal de clase de un tipo que no existe compila y da `Object.class`.** Sin error, sin
+advertencia. Lo encontro esta misma tanda, de la peor manera posible:
+
+```java
+defaultRenderersByColumnClass.put(Object.class, new DefaultTableCellRenderer.UIResource());
+...
+defaultRenderersByColumnClass.put(ImageIcon.class, new IconRenderer());   // ImageIcon no existe
+```
+
+`ImageIcon` todavia no esta escrito. El literal se volvio `Object.class`, la ultima linea **piso la
+primera**, y toda columna de texto paso a dibujarse con el dibujante de iconos, que no muestra nada.
+Lo encontro la prueba diferencial; el compilador no dijo una palabra y el censo tampoco lo ve.
+
+Va con **#509** en la categoria de los que miscompilan en silencio, que es la unica categoria que
+importa mas que "no compila algo que deberia".
+
+### Cinco cosas que salieron de medir
+
+- **El editor de base no es un campo de texto pelado.** Es uno que construye el valor del tipo de la
+  columna a partir de lo escrito, buscando su constructor de un `String`: escribir 77 en una columna
+  de `Integer` devuelve un `Integer`, no la cadena `"77"`. Nuestra primera version guardaba el texto,
+  y el modelo terminaba con tipos mezclados sin que nada fallara.
+- **Hay cuatro dibujantes de base, no uno**: texto, numeros a la derecha, fechas formateadas y un
+  tilde. Y el de `Object` es un `UIResource`, no un `DefaultTableCellRenderer` pelado -- la marca es
+  como el aspecto dice "este lo puse yo" y se lo puede reemplazar al cambiar de aspecto.
+- **`getRowHeight(int)` no valida el indice.** Con alturas por fila puestas, una fila que no existe
+  devuelve cero en vez de tirar. Se implemento con `SizeSequence`, que es lo que usa el JDK y que ya
+  estaba escrito de la tanda anterior.
+- **`setAutoResizeMode` con un modo desconocido no hace nada**, ni valida ni cambia: se ignora en
+  silencio.
+- **`getScrollableTracksViewportWidth` es cierto salvo con el ajuste apagado.** Es lo que decide si
+  aparece la barra horizontal, y explica por que `AUTO_RESIZE_OFF` es el unico modo con scroll
+  lateral.
+
+### Los nombres de las clases anidadas privadas
+
+`NumberRenderer`, `DoubleRenderer`, `DateRenderer`, `IconRenderer`, `BooleanRenderer`,
+`GenericEditor`, `NumberEditor` y `BooleanEditor` llevan los mismos nombres que en el JDK aunque sean
+privadas, y eso rompe la costumbre de la casa de nombrar en castellano lo interno. El motivo es
+concreto: **el nombre se ve por `getClass()`**, y la prueba diferencial lo compara. Cambiarlo seria
+una diferencia observable sin ninguna ganancia.
+
+### Lo que queda dicho y no tapado
+
+- **La impresion.** `getPrintable` devuelve algo que sabe dibujar la tabla pagina por pagina sobre
+  cualquier `Graphics`; los `print(...)` arman el trabajo y fallan al pedir la impresora, que es lo
+  que hace el JDK sin servicio de impresion.
+- **El dibujante de titulos del encabezado.** El del JDK es una clase de `sun.swing` con borde
+  propio; aca es el de celda, centrado. Se compara que haya uno y no cual es.
+- **El reparto fino de anchos al arrastrar el borde de una columna** lo hace el aspecto. Aca
+  `doLayout` reparte proporcionalmente al ancho preferido, que es correcto y no es lo mismo pixel a
+  pixel.
+
+## Tanda: `javax.swing` CERRADO (sesion de biblioteca, 2026-09-06)
+
+**`javax.swing` quedo COMPLETO: 134/134 clases, 3642/3642 miembros.** Con esto son quince paquetes
+de Swing cerrados; quedan afuera `plaf.basic`, `plaf.metal` y `plaf.synth`, que son otra sesion.
+
+Las dieciseis clases que faltaban: `ImageIcon`, `InternalFrameFocusTraversalPolicy`,
+`SortingFocusTraversalPolicy`, `LayoutFocusTraversalPolicy`, `FocusManager`, `DefaultFocusManager`,
+`JWindow`, `JApplet`, `JTextPane`, `DebugGraphics`, `LayoutStyle`, `ToolTipManager`,
+`RepaintManager`, `ProgressMonitor`, `ProgressMonitorInputStream` y `GroupLayout`. Mas los huecos
+sueltos de `SwingUtilities` (17 miembros), `JFrame` (los 18 del panel raiz), `JComponent`,
+`JPanel`, `JSplitPane`, `ListSelectionModel`, `TransferHandler`, `JColorChooser` y `LookAndFeel`.
+
+`java/texto/Cierre1.java` 73/73.
+
+### Lo que salio de medir
+
+- **`GroupLayout` no tiene estado "sin describir".** Los dos ejes arrancan con un grupo paralelo
+  `LEADING` vacio, puestos en el constructor. Un acomodador recien creado mide `0x0` en los tres
+  tamanos en vez de tirar `IllegalStateException`, que es lo que haciamos.
+- **`layoutContainer` es el unico que no mira de quien es el contenedor.** `preferredLayoutSize`,
+  `minimumLayoutSize`, `maximumLayoutSize`, `invalidateLayout`, `getLayoutAlignmentX` y
+  `getLayoutAlignmentY` tiran `IllegalArgumentException` con un contenedor ajeno; `layoutContainer`
+  acomoda el suyo igual, sin decir nada. Medido con los nueve metodos de una.
+- **El booleano de `checkSize` es "esto es un componente", no "esto es el minimo".** Es la
+  diferencia entre `addComponent(c)` --que pasa `DEFAULT_SIZE` en los tres-- andando o tirando
+  `Invalid size` en el maximo. Un componente admite `DEFAULT_SIZE` y `PREFERRED_SIZE` en los dos
+  extremos porque hay a quien preguntarle; un hueco solo admite `PREFERRED_SIZE`.
+- **`RepaintManager` no anota nada de lo que no se ve.** Si el componente no tiene padre, o algun
+  ancestro esta escondido o todavia no tiene ventana, `addDirtyRegion` descarta el rectangulo. Sin
+  pantalla eso significa que `getDirtyRegion` siempre devuelve el rectangulo vacio y que
+  `markCompletelyDirty` seguido de `isCompletelyDirty` da `false`. Parece un bug y es el JDK: esta
+  medido con un panel suelto, con uno dentro de otro, y con los dos dentro de un `JFrame` sin
+  mostrar. Los tres dan vacio.
+- **`getDoubleBufferMaximumSize` de omision es la union de todas las pantallas**, y
+  `Integer.MAX_VALUE x Integer.MAX_VALUE` cuando no hay ninguna. Nuestro `4096x4096` era inventado.
+  El valor no se puede comparar en una prueba diferencial porque depende del monitor de quien la
+  corra; se compara que haya uno y que se pueda cambiar.
+- **`LayoutStyle.getInstance()` sale del aspecto instalado.** En el JDK es el de Metal, y sus
+  numeros --6 entre cosas relacionadas, 12 entre grupos, 12 contra el borde-- son los que ahora da
+  el nuestro sin aspecto. Un componente nulo **no** se rechaza: revienta con `NullPointerException`
+  al usarlo.
+- **`SortingFocusTraversalPolicy` es asimetrico con el ciclo de foco.** `getComponentAfter` y
+  `getComponentBefore` exigen que el contenedor sea raiz de ciclo o proveedor de politica;
+  `getFirstComponent`, `getLastComponent` y `getDefaultComponent` contestan de cualquier contenedor.
+  Tiene sentido: "que sigue" solo existe dentro de un ciclo.
+- **Los cinco metodos de accesibilidad de `SwingUtilities` no comprueban nada.** Llaman
+  `c.getAccessibleContext()` derecho: con nulo revientan. Nuestra version preguntaba primero por
+  `instanceof Accessible`, que es mas prolijo y no es lo que hace.
+- **`ImageIcon` guarda la descripcion aunque la imagen falle.** Nuestro toolkit devuelve `null`
+  donde el del JDK devuelve una imagen que despues no carga; el resultado visible tiene que ser el
+  mismo, asi que ahora se anota la descripcion y se deja la carga en `ERRORED` con las medidas
+  en -1.
+
+### El hueco grande que esto destapo, y que el censo no ve
+
+**Ninguna clase de Swing implementa `Accessible` todavia.** Ni `JComponent`, ni `JPanel`, ni
+ninguna. `Component.getAccessibleContext()` devuelve `null` y `AccessibleAWTComponent` no implementa
+`AccessibleComponent`, asi que los cinco metodos de `SwingUtilities` contestan "no hay nada" donde
+el JDK contesta el contexto de verdad: `getAccessibleIndexInParent` da -1 en vez de 0, y
+`getAccessibleAt` da `null` en vez del componente.
+
+El censo cuenta `javax.swing` COMPLETO igual, porque **el censo no mira los `implements`** --es la
+misma limitacion anotada para `Serializable` en `java.lang` y `java.util`--. Asi que el numero
+3642/3642 es cierto y no alcanza: falta el `getAccessibleContext()` de cada clase y su clase anidada
+`AccessibleXxx`. Es una tanda entera, no una linea, y queda anotada aca para que no se pierda entre
+el "COMPLETO" del censo.
+
+`Cierre1` compara lo unico que hoy es comparable de esa parte: que los cinco metodos revientan con
+nulo. Lo que contestan con un componente que si tiene contexto queda para esa tanda.
+
+### Lo que queda dicho y no tapado
+
+- **Mostrar el cartel de ayuda, mostrar el de progreso, y el destello de `DebugGraphics`.** Las tres
+  necesitan pantalla y mouse. Estan escritas y no se prueban.
+- **`getPreferredGap` e `INDENT`.** El valor de sangria del JDK sale del aspecto; el nuestro es 12,
+  que es el mismo que `UNRELATED`, y esta dicho en la clase.
+
+## Tanda: `javax.swing.plaf.basic`, primera mitad (sesion de biblioteca, 2026-09-06)
+
+**De 14/59 clases a 41/59; de 271 a 600 miembros.** Veintisiete clases nuevas, en cinco grupos:
+
+- **Los que no dibujan casi nada:** `BasicPanelUI`, `BasicSeparatorUI`,
+  `BasicPopupMenuSeparatorUI`, `BasicToolBarSeparatorUI`, `BasicRootPaneUI`, `BasicToolTipUI`,
+  `BasicIconFactory`, `BasicHTML`.
+- **La familia de texto:** `BasicTextFieldUI`, `BasicTextAreaUI`, `BasicEditorPaneUI`,
+  `BasicTextPaneUI`, `BasicPasswordFieldUI`, `BasicFormattedTextFieldUI`.
+- **Los menus:** `BasicMenuItemUI`, `BasicMenuUI`, `BasicMenuBarUI`, `BasicPopupMenuUI`,
+  `BasicCheckBoxMenuItemUI`, `BasicRadioButtonMenuItemUI`, `DefaultMenuLayout`.
+- **La lista y el combo:** `BasicListUI`, `ComboPopup`, `BasicComboBoxRenderer`,
+  `BasicComboBoxEditor`.
+- **Dos sueltos:** `BasicTableHeaderUI` y `BasicDesktopPaneUI`.
+
+Pruebas: `java/texto/Plaf1.java` 51/51, `Plaf2.java` 24/24, `Plaf3.java` 41/41, `Plaf4.java` 38/38,
+`Plaf5.java` 18/18.
+
+### Cinco bugs de biblioteca que destaparon estas clases
+
+- **`AWTKeyStroke.toString` imprimia el numero del modificador.** `"0 pressed Enter"` donde el JDK
+  dice `"pressed ENTER"`. Son dos errores en uno: los modificadores van con su nombre --y en un
+  orden fijo, que es el que el analizador vuelve a leer-- y la tecla va con el nombre de su
+  constante `VK_`, que no es lo mismo que `KeyEvent.getKeyText`. El nombre sale por reflexion sobre
+  `KeyEvent`, como en el JDK: son casi doscientas constantes y una tabla escrita a mano que se
+  olvide de una daria un nombre equivocado en vez de faltar.
+- **`KeyStroke` se guardaba solo la mascara nueva.** `ctrl O` daba 128 y el JDK da 130: las dos
+  mascaras, la nueva y la vieja. Poner solo la nueva parece lo correcto y deja sin nombre a todo lo
+  que lee la vieja -- el texto del acelerador de un item de menu, sin ir mas lejos, que se mostraba
+  como `"O"` en vez de `"Ctrl-O"`.
+- **`BasicTextUI.installDefaults` no instalaba ni fuente ni colores ni margen.** El sintoma no era
+  un color feo: era un `NullPointerException` al medir un `JTextArea`, porque sin fuente
+  `getFontMetrics(null)` revienta. Ahora pone Dialog 12, blanco, (51,51,51) y el margen que le
+  toca al prefijo -- cero en los campos y en el area, tres en los dos paneles de edicion --.
+- **`new JTextPane()` reventaba.** `setEditorKit` llama a `install` y recien despues a
+  `setDocument`; en ese hueco el documento todavia es uno plano, y `StyledEditorKit` lo casteaba a
+  `StyledDocument` sin mirar. El JDK tiene la guarda y nosotros no.
+- **`JMenuItem` apagaba el pintado del borde con `setBorderPainted(false)`**, que lo marca como
+  decision del programa. El JDK usa la via del aspecto, que no marca nada: con la nuestra, ningun
+  UI podia volver a prenderlo nunca mas.
+
+Y un agregado que hacia falta para todo lo anterior: **`JComponent.setUIProperty` ahora consulta
+`customSetUIProperty`**, el gancho que ya estaba escrito en `JPasswordField` y que nadie llamaba.
+Sin el, instalar el caracter de eco tiraba `IllegalArgumentException`.
+
+### Lo raro que salio de medir
+
+- **`BasicSeparatorUI.getMinimumSize` devuelve `null`**, no un tamano. Y sus dos campos protegidos
+  `shadow` y `highlight` quedan en nulo para siempre: nadie los escribe y `paint` no los mira,
+  porque pinta con el frente y el fondo del componente. Son de una version anterior y quedaron.
+- **`createUI` no siempre comparte.** Los separadores devuelven una instancia nueva cada vez; el
+  cartel de ayuda, el panel y el panel raiz devuelven siempre la misma. No hay regla: hay que
+  medirlo clase por clase.
+- **El tamano de un item de menu termina siempre en impar.** Si el ancho o el alto quedan pares se
+  les suma uno. Parece un error de redondeo y es a proposito: los iconos de tilde van centrados, y
+  un ancho par los deja medio pixel corridos. La formula se ajusto contra doce casos medidos
+  --texto vacio, con icono, con tilde, tres aceleradores, menu suelto y menu de barra-- y da el
+  numero exacto en los doce.
+- **`BasicMenuUI` no engancha ninguno de sus dos escuchas.** `createChangeListener` y
+  `createMenuListener` devuelven `null`, y los dos campos protegidos quedan en nulo despues de
+  instalar. Medido.
+- **`BasicMenuBarUI` contesta `null` a los tres tamanos**, no solo al minimo y al maximo.
+- **`BorderlessTextField.setBorder` no filtra nada.** La comprobacion dice
+  `b instanceof UIResource` y la intencion era rechazar los bordes del aspecto, pero adentro de
+  `BasicComboBoxEditor` el nombre `UIResource` resuelve a la clase anidada
+  `BasicComboBoxEditor.UIResource`, no a `javax.swing.plaf.UIResource`. Un borde nunca es instancia
+  de esa, asi que siempre pasa. Esta medido y se copia con el mismo tipo: cambiarlo dejaria a los
+  combos sin el borde que el JDK si les pone.
+- **`RepaintManager` ya lo habiamos visto y `BasicListUI` lo repite**: `convertYToRow` con una
+  coordenada mas arriba del principio devuelve la <em>ultima</em> fila, no -1. El recorrido no
+  encuentra nada y se queda con la ultima.
+- **`BasicToolTipUI` suma seis pixeles al ancho del texto** que no salen de ninguna propiedad, y un
+  cartel sin texto no reserva alto de linea: mide 2 x 2, solo el borde.
+- **`BasicTableHeaderUI` no suma la separacion entre columnas.** El JDK tiene ahi un comentario que
+  dice que la suman los que llaman, y ninguno la suma: el ancho preferido es la suma pelada de los
+  anchos de columna. Con la separacion, el encabezado quedaria dos pixeles mas ancho que la tabla.
+- **`BasicDesktopPaneUI` tiene diecinueve acciones y ninguna tecla atada**, y sus cinco campos
+  `KeyStroke` protegidos quedan en nulo -- la misma historia que `shadow` y `highlight` en
+  `BasicSeparatorUI` --. Y su tamano preferido es `null`: un escritorio ocupa lo que le den.
+
+### El hueco que aparece en cada prueba de aspecto
+
+**Las metricas de fuente no miran ni el estilo ni el cuerpo.** `KajiFontMetrics` sustituye toda
+`Font` por la misma cara --es una decision documentada del rasterizador, y es lo que hace que las
+pruebas de pintura den 0.00%--, pero eso significa que Dialog negrita 12 mide lo mismo que Dialog
+plano 10. Los menus escriben en negrita y las listas tambien, asi que sus anchos no coinciden con
+los del JDK: "Abrir" mide 25 aca y 28 alla.
+
+Lo que hacen `Plaf3` y `Plaf4` es no comparar el ancho crudo sino **la formula**: la prueba rehace
+la cuenta con las metricas del propio componente y pregunta si el UI dio ese numero. Eso da `true`
+de los dos lados, y si la cuenta del UI se equivoca en un gap deja de darlo. El alto si se compara
+crudo, porque sale del alto de linea, que es el mismo.
+
+### Lo que queda dicho y no tapado
+
+- **Sin tabla de aspecto, los iconos son los del basico.** El tilde de un item marcable mide 9 x 9
+  aca y 10 x 10 en Metal; el punto de opcion 6 x 6 contra 10 x 10. Las dos flechas si coinciden
+  (4 x 8), y por eso los items comunes y los menus si dan el ancho exacto.
+- **Los bordes de los componentes de texto no se instalan.** Vienen de la tabla del aspecto y no
+  hay ninguna; el margen si se instala. En la linea de base no se nota, porque los margenes
+  simetricos se cancelan en la cuenta.
+- **Las dos orientaciones que envuelven de `BasicListUI`** se acomodan por columnas de ancho fijo;
+  el JDK ademas reparte los sobrantes de la ultima columna.
+
+### Lo que falta de `javax.swing.plaf.basic`
+
+Dieciocho clases, y son las grandes: `BasicTreeUI`, `BasicTabbedPaneUI`, `BasicSliderUI`,
+`BasicFileChooserUI`, `BasicOptionPaneUI`, `BasicComboBoxUI` y `BasicComboPopup`,
+`BasicSplitPaneUI` y su divisor, `BasicInternalFrameUI` y su barra de titulo, `BasicTableUI`,
+`BasicToolBarUI`, `BasicProgressBarUI`, `BasicSpinnerUI`, `BasicColorChooserUI`,
+`BasicDesktopIconUI` y `BasicDirectoryModel`. Despues de eso, `plaf.metal` (2/35) y
+`plaf.synth` (9/51).
+
+`BasicDesktopIconUI` quedo para esa tanda y no por tamano: su `iconPane` <em>es</em> un
+`BasicInternalFrameTitlePane`, asi que no se puede escribir antes que la barra de titulo.
+
+## Tanda: `javax.swing.plaf.basic`, segunda mitad (sesion de biblioteca, 2026-09-06)
+
+**De 41/59 clases a 49/59; de 600 a 938 miembros.** Ocho clases nuevas: `BasicDirectoryModel`,
+`BasicProgressBarUI`, `BasicSpinnerUI`, `BasicTableUI`, `BasicSplitPaneUI`,
+`BasicSplitPaneDivider`, `BasicComboPopup` y `BasicComboBoxUI`. Mas los cuatro bordes que le
+faltaban a `BasicBorders` y su clase publica `SplitPaneBorder`.
+
+Pruebas: `java/texto/Plaf5.java` 28/28, `Plaf6.java` 32/32, `Plaf7.java` 31/31, `Plaf8.java` 27/27.
+
+### El hallazgo de la tanda: `new File(padre, hijo)` mata un hilo secundario
+
+**Reproductor nuevo en `java/BxDbgF.java`, y falla tres de tres veces.** El hilo entra, llega al
+`new File(File, String)` y desaparece: no tira nada --un `catch (Throwable)` alrededor no atrapa
+nada--, `join` vuelve enseguida como si hubiera terminado bien, y en el hilo principal la misma
+llamada con el mismo camino anda siempre.
+
+Lo delata como problema de recoleccion y no de logica la sensibilidad al camino: `C:/tmp` anda,
+`C:/dir0/.../dir13` no; pero el mismo camino que falla solo, anda si antes corrieron otros hilos. La
+entrada no decide -- decide en que momento cae el minor GC --.
+
+Es mejor reproductor que `BxDbgT` y `BxDbgY`, que fallan alrededor de la mitad de las veces y
+necesitan el Eden lleno: este es un solo hilo, sin preparar nada, y no depende de la excepcion
+espuria.
+
+**Lo primero que rompio es `BasicDirectoryModel`**, cuyo cargador hace exactamente eso en otro hilo.
+Aca se lee en el hilo que llama y esta dicho en la clase; cuando el problema de la VM se arregle,
+vuelve a ser un hilo. La diferencia que se ve es a favor: en el JDK `getSize()` puede contestar cero
+justo despues de crear el modelo, y aca ya esta.
+
+### Tres bugs de biblioteca mas
+
+- **`Dimension.toString` decia siempre `java.awt.Dimension`.** Una `DimensionUIResource` mentia
+  sobre su clase, y con eso se perdia de donde salio un tamano. Ahora usa `getClass().getName()`,
+  como el JDK.
+- **`JTable` ponia los tres colores del aspecto como colores del programa.** Azul, blanco y gris,
+  sin marcar, asi que `BasicTableUI.installDefaults` no podia reemplazarlos. Ahora van marcados y
+  con los valores medidos en Metal; los tres son los que en el JDK pone el aspecto y no el
+  constructor.
+- **`BasicToolBarSeparatorUI` marcaba su tamano de omision como del aspecto.** La tabla del JDK
+  guarda ahi un `Dimension` pelado, y la diferencia se ve: `getSeparatorSize().toString()` dice el
+  nombre de la clase, y despues del primer instalado un segundo ya no lo pisa.
+
+### Lo raro que salio de medir
+
+- **`BasicProgressBarUI.getBox` revienta si la barra todavia no fue indeterminada.** Las medidas
+  internas que necesita se calculan al <em>entrar</em> en modo indeterminado, y antes son nulas. El
+  JDK tira `NullPointerException` ahi y se copia: una subclase que llame a `getBox` fuera de
+  `paintIndeterminate` tiene que romperse igual en las dos bibliotecas.
+- **El ancho minimo de una barra de progreso horizontal es diez pixeles y no le suma los margenes**,
+  mientras que el preferido si. Medido con dos bordes distintos.
+- **`getPreferredSize` de la barra copia el tamano interno a un `Dimension` pelado.** Lo que
+  devuelve `getPreferredInnerHorizontal` es del aspecto; el tamano preferido de un componente no lo
+  es, y se nota al imprimirlo.
+- **`BasicTableHeaderUI` no suma la separacion entre columnas.** El JDK tiene ahi un comentario que
+  dice que la suman los que llaman, y ninguno la suma.
+- **`BasicSpinnerUI` y `BasicDesktopPaneUI` contestan `null` al tamano preferido**, y
+  `BasicSplitPaneUI.getInsets` tambien. No es un olvido: contesta el acomodador.
+- **Doce campos protegidos de `BasicSplitPaneUI` quedan en nulo** --siete `KeyStroke` y cinco
+  `ActionListener`--, la misma historia que `shadow` y `highlight` en `BasicSeparatorUI`.
+- **El divisor de un panel dividido no suelta los botoncitos de un toque.** Apagar la opcion no los
+  quita: siguen siendo dos hijos del divisor. Medido.
+- **Los insets del borde del divisor dependen de la orientacion**: (0, 1, 0, 1) en horizontal,
+  (1, 0, 1, 0) en vertical, y (1, 1, 1, 1) si el componente no es un divisor.
+- **La flechita de un combo es cuadrada**: su ancho en la cuenta del tamano es el <em>alto</em> del
+  renglon, no su ancho preferido. Con `squareButton` apagado si se le pregunta a ella.
+- **`BasicComboBoxUI.isNavigationKey` dice que si solo a las flechas de arriba y abajo.** Ni Re Pag,
+  ni Av Pag, ni Enter.
+
+### Tres tropiezos del compilador, todos ya conocidos
+
+- **#517** otra vez: `list.setCellRenderer(comboBox.getRenderer())` no compila cuando el tipo trae
+  comodines. Sale con una variable suelta.
+- **#519** otra vez, en un `super(...)`: `super(combo.getModel())` tampoco. Sale poniendo el modelo
+  despues del constructor.
+- **#518** otra vez: una clase interna no estatica no recibe la instancia externa en el `new`. Todas
+  las anidadas de esta tanda son estaticas con la externa como primer parametro, que ademas da la
+  misma firma que el JDK -- `DragController(BasicSplitPaneDivider, MouseEvent)`,
+  `BasicVerticalLayoutManager(BasicSplitPaneUI)`, `MouseHandler(BasicSplitPaneDivider)` --.
+
+### Lo que falta de `javax.swing.plaf.basic`
+
+Diez clases, y son las mas grandes de todas: `BasicTreeUI`, `BasicTabbedPaneUI`, `BasicSliderUI`,
+`BasicFileChooserUI`, `BasicOptionPaneUI`, `BasicToolBarUI`, `BasicColorChooserUI`,
+`BasicInternalFrameUI` con su `BasicInternalFrameTitlePane`, y `BasicDesktopIconUI`, que depende de
+la barra de titulo -- su `iconPane` <em>es</em> una --. Despues, `plaf.metal` (2/35) y
+`plaf.synth` (9/51).
+
+## Tanda: `javax.swing.plaf.basic`, los dialogos y la barra (sesion de biblioteca, 2026-09-06)
+
+**De 49/59 clases a 52/59; de 938 a 1058 miembros.** Tres clases: `BasicOptionPaneUI`,
+`BasicToolBarUI` y `BasicColorChooserUI`. Prueba: `java/texto/Plaf9.java` 38/38.
+
+### Lo que salio de medir
+
+- **El tamano minimo de un dialogo no se calcula: son 262 x 90, escritos.** Estan en
+  `MinimumWidth` y `MinimumHeight`, que son publicos justamente para que un aspecto los pueda
+  mirar. Un dialogo mas chico se ve como un error aunque su contenido entre.
+- **`getButtons` no devuelve botones.** Devuelve descripciones, y quien las convierte en algo
+  apretable es `addButtonComponents`. La diferencia importa porque el panel acepta que le pasen
+  cualquier objeto como opcion --una cadena, un icono, un componente ya hecho--.
+- **`createSeparator` devuelve `null`**: es un gancho para el aspecto que quiera una linea entre el
+  mensaje y los botones, y el basico no la dibuja.
+- **`getMaxCharactersPerLineCount` es `Integer.MAX_VALUE`**: el basico corta el texto solo por
+  saltos de linea.
+- **`setBorderToRollover` y `setBorderToNonRollover` solo pisan un borde que sea `UIResource`**, y
+  el que ellos ponen no lo es. La consecuencia sorprende y esta medida: **cambiar de juego de bordes
+  en caliente funciona una sola vez por boton**. Nuestra primera version comparaba tambien contra el
+  otro borde y por eso si cambiaba las dos veces.
+- **`BasicToolBarUI.canDock` revienta con un componente nulo**: pregunta si el punto cae adentro sin
+  comprobar nada primero.
+- **Instalar un segundo `BasicColorChooserUI` sobre un selector que ya tiene uno revienta en el
+  JDK**: al reemplazar los paneles, el anterior los desinstala con su referencia al selector ya en
+  nulo. La prueba no lo hace, y queda anotado.
+
+### Lo que queda dicho
+
+- **Los iconos de los cuatro tipos de mensaje** --informacion, pregunta, advertencia, error-- son
+  imagenes de 32 x 32 que vienen de la tabla del aspecto. Sin tabla, `getIconForType` devuelve
+  `null` y el dialogo mide menos de ancho que el del JDK.
+- **`BasicColorChooserUI.createDefaultChoosers` devuelve un arreglo vacio.** Los cinco paneles del
+  JDK son componentes interactivos de verdad --deslizadores, campos con formato, un diagrama de
+  color que se pinta y se arrastra--, y `ColorChooserComponentFactory.getDefaultChooserPanels` lo
+  dice tirando `UnsupportedOperationException`. Devolver ninguno es un subconjunto legal; dejar que
+  la excepcion salga por `installUI` haria que ni siquiera se pueda construir el componente. El
+  andamiaje --la muestra, los escuchas, el reemplazo de paneles-- si esta, que es lo que hace util
+  un selector con paneles puestos por el programa.
+- **Sacar la barra de herramientas a flotar** necesita una ventana de verdad. Lo que se prueba es el
+  estado: los colores, los bordes, y que `isFloating` diga que no.
+
+### Y despues, el deslizador
+
+`BasicSliderUI` se escribio a continuacion: **53/59 clases, 1152/1623 miembros**, con
+`java/texto/Plaf10.java` 20/20.
+
+Toda la clase gira alrededor de seis rectangulos que se calculan en cadena --foco, contenido, pista,
+marcas, etiquetas, pulgar--, y la cadena se rehace entera cada vez, no de a partes: rehacer la mitad
+seria mas rapido y dejaria pares que no se corresponden. **Los rectangulos pueden tener ancho
+negativo y esta bien**: un deslizador sin tamano da una pista de ancho -10, porque el buffer de
+cinco pixeles de cada lado se resta de un contenido que mide cero. Esta medido y no se corrige --
+corregirlo daria posiciones de pulgar distintas de las del JDK apenas el deslizador tenga tamano --.
+
+Y de ahi salio el **hallazgo #521**: `"texto" + unInteger` desempaqueta en vez de usar
+`String.valueOf(Object)`, asi que un envoltorio nulo revienta. `getLowestValue()` devuelve `Integer`
+y es nulo cuando no hay tabla de etiquetas, que es el caso comun; la prueba lo imprimia y reventaba.
+Ver la entrada del hallazgo.
+
+### Lo que falta de `javax.swing.plaf.basic`
+
+Seis clases: `BasicTreeUI`, `BasicTabbedPaneUI`, `BasicFileChooserUI`, `BasicInternalFrameUI` con su
+`BasicInternalFrameTitlePane`, y `BasicDesktopIconUI`, que depende de la barra de titulo. Despues,
+`plaf.metal` (2/35) y `plaf.synth` (9/51).
+
+
+## Tanda: `javax.swing.plaf.basic` CERRADO (sesion de biblioteca, 2026-09-06)
+
+**59/59 clases, 1623/1623 miembros.** Las ultimas seis clases fueron `BasicInternalFrameUI` con su
+`BasicInternalFrameTitlePane`, `BasicDesktopIconUI`, `BasicTabbedPaneUI`, `BasicFileChooserUI` y
+`BasicTreeUI`, con `java/texto/Plaf11.java` 28/28, `Plaf12.java` 18/18, `Plaf13.java` 15/15,
+`Plaf14.java` 72/72 y `Plaf15.java` 29/29.
+
+Ningun tropiezo del compilador en esta tanda: las seis clases compilaron a la primera. Los que ya
+estaban anotados --el resultado comodin que necesita un local (#517), el `super(...)` con una
+llamada adentro (#519), la clase interna que necesita el externo explicito (#518)-- se esquivaron
+sin volver a pisarlos.
+
+### El arbol no sabe donde esta ninguna fila
+
+`BasicTreeUI` no guarda coordenadas: las guarda `treeState`, un `AbstractLayoutCache`. Todo lo que
+el UI contesta sobre posiciones se lo pregunta a esa tabla, y **cual de las dos tablas se elige
+depende de un solo numero**: con `rowHeight` positivo se usa `FixedHeightLayoutCache`, que resuelve
+"que fila esta en la coordenada y" con una division; con cero, `VariableHeightLayoutCache`, que
+tiene que recorrer. `getRowHeight()` del basico devuelve **cero**, que no significa "las filas miden
+cero" sino "cada una lo que necesite".
+
+De ahi sale que `setLargeModel(true)` **no alcanza para nada si el alto de fila es cero**: el metodo
+lo fuerza a `false`. Esta medido y la prueba lo cubre.
+
+### Un bug de biblioteca: `JTree` no aceptaba su propia propiedad
+
+`LookAndFeel.installProperty(tree, "rowHeight", 0)` tiraba
+`IllegalArgumentException: property "rowHeight" cannot be set using this method`. `JTree` es la otra
+clase --junto a `JPasswordField`-- que agrega una propiedad a la lista corta que un aspecto puede
+proponer, y no tenia el gancho `customSetUIProperty`. Ahora lo tiene, con la misma regla de siempre:
+si el programa ya llamo a `setRowHeight`, la propuesta del aspecto se descarta.
+
+### Lo que salio de medir, y que ninguna documentacion dice
+
+- **La caja de la manija esta centrada, y el intervalo es abierto por izquierda.** El borde sale de
+  `getRowX(fila, profundidad) - rightChildIndent - ancho/2 + insets.left`, y acepta
+  `x > borde && x <= borde + ancho`. Con el arbol por omision y el icono de Metal --18 x 18-- la
+  fila 1 acepta de -1 a 16, y la raiz de -21 a -4. Los dos intervalos miden dieciocho, no
+  diecinueve. La primera version usaba `+1` y comparaba cerrado por los dos lados; daba un pixel
+  corrido y la prueba lo pesco.
+- **`updateCellEditor` no tira el editor cuando el arbol deja de ser editable.** Toma el que el
+  arbol tenga, sea o no editable; solo fabrica uno cuando no hay ninguno **y** el arbol es editable.
+  Medido: `setEditable(false)` deja el `DefaultTreeCellEditor` puesto y baja `createdCellEditor` a
+  `false`. Volver a hacerlo editable devuelve el mismo editor, que es el punto.
+- **`labelsHaveSameBaselines()` sin tabla de etiquetas contesta `false`, y con la tabla vacia
+  `true`.** Suena al reves y no lo es: sin tabla no hay linea de base compartida de la cual colgar
+  nada; con una tabla vacia no hay ninguna etiqueta que desmienta. Las dos, medidas.
+- **`createMouseWheelListener()` devuelve siempre el mismo objeto, y no es un `MouseWheelHandler`.**
+  El JDK junto sus escuchas internos en una clase privada `Handler` y de ahi sale la rueda;
+  `MouseWheelHandler` sigue siendo publica --alguien pudo haberla extendido-- pero lo unico que hace
+  es delegar. Observable por `getClass().getName()` y por identidad, y las dos cosas se comparan.
+- **El pulgar del deslizador basico mide 11 x 20 parado y 20 x 11 acostado.**
+- **`ensureRowsAreVisible` con varias filas no pide el bloque entero**: pide desde la primera y tan
+  alto como la parte visible. Pedir mas de lo que entra haria que el arbol muestre el final del
+  tramo y esconda el principio, que es justo al reves de lo que quiere quien acaba de abrir una
+  rama.
+
+### El reloj que faltaba en dos clases
+
+`BasicScrollBarUI` tenia una nota que decia que el desplazamiento continuo no estaba porque no habia
+`javax.swing.Timer`. Ya lo hay, asi que se escribieron `scrollTimer`, `scrollListener` y
+`ScrollListener`, con los tiempos del JDK: **300 ms hasta el primer repique y 60 entre repiques**.
+
+Lo interesante de `ScrollListener` es la segunda condicion de parada. La primera --llegar al tope--
+es obvia. La segunda es que **el pulgar alcance al cursor**: al apretar la pista el pulgar viene
+hacia el cursor de a una pantalla, y si no se parara lo pasaria de largo y el contenido seguiria
+corriendo bajo un dedo quieto. Por eso mira `currentMouseX`/`currentMouseY` del escucha de la pista
+y no el evento del reloj.
+
+En `BasicScrollPaneUI` la nota decia lo mismo de la rueda, y tambien quedo vieja: `MouseWheelEvent`
+y `MouseWheelListener` estan. La rueda mueve la barra vertical y, **si no hay o no se ve, la
+horizontal**, que es lo que hace usable un panel ancho y bajo donde la unica barra es la de abajo.
+El evento se consume apenas se decide cual barra mover, aun antes de moverla: consumirlo es lo que
+evita que el panel de mas afuera se desplace con el mismo giro.
+
+### Lo que queda dicho y no tapado
+
+- **Las dos manijas del arbol** --expandida y colapsada-- vienen de la tabla del aspecto. Sin tabla
+  quedan en `null`, el arbol se dibuja sin manijas y el ancho preferido es menor que el del JDK. La
+  caja de deteccion cae de dieciocho pixeles a ocho, que es la reserva que el propio JDK usa cuando
+  no hay icono; por eso la prueba compara **donde cae el borde**, que se calcula igual en los dos, y
+  no anchos absolutos.
+- **Ningun alto en pixeles se compara crudo** en `Plaf14` ni en `Plaf15`: dependen de la fuente, y
+  `KajiFontMetrics` todavia sustituye una sola cara. Lo que se compara son las relaciones --que dos
+  etiquetas iguales midan lo mismo, que la fila 1 este mas abajo que la 0 y pegada a ella-- que si
+  tienen que dar igual.
+- **Una etiqueta con `<html>uno<br>dos</html>` mide un renglon aca y dos en el JDK.** Es del armado
+  del HTML, no del deslizador: lo que si coincide, y se compara, es que las dos etiquetas comparten
+  linea de base igual.
+
+### Lo que sigue
+
+`javax.swing.plaf.metal` (2/35) y `javax.swing.plaf.synth` (9/51).
+
+
+## Tanda: `plaf.metal` y `plaf.synth` CERRADOS (sesion de biblioteca, 2026-09-06)
+
+**`javax.swing.plaf.metal`: 35/35 clases, 499/499 miembros.**
+**`javax.swing.plaf.synth`: 51/51 clases, 806/806 miembros.**
+
+Con esto quedan cerrados los tres paquetes de aspecto grafico. Pruebas nuevas:
+`java/texto/Metal1.java` 77/77, `Metal2.java` 34/34, `Metal3.java` 34/34, `Metal4.java` 63/63,
+`Metal5.java` 46/46 y `Synth1.java` 53/53.
+
+### El hallazgo de la tanda: #522, y es de los feos
+
+Una clase interna no estatica que llama sin calificar a un metodo **heredado** de la clase que la
+contiene compila limpio y revienta con `NoSuchMethodError`. Si el metodo lo declara esa misma clase,
+anda.
+
+Importa mas que otros porque **es el patron de casi todas las clases anidadas de Swing**: un
+`Handler` adentro de un `XxxUI` que llama a `getComponent()` o `getFileChooser()`, heredados del
+`BasicXxxUI`. Aparecio en `MetalFileChooserUI.FilterComboBoxModel`, cuyo constructor pide el
+selector; el modelo reventaba al construirse. Ver la entrada del hallazgo.
+
+El otro tropiezo fue el **#400** en una variante nueva: `Externa.super.metodo()` desde una clase
+interna tampoco lo acepta el parser, igual que `Interfaz.super.metodo()`. Se esquivo guardando el
+delegado en un campo de la clase de afuera, en `MetalComboBoxUI`, `MetalToolBarUI` y
+`MetalInternalFrameTitlePane`. Y en `MetalTabbedPaneUI`, el **#513**: un `case
+SwingConstants.LEFT` no pliega la constante, asi que ese `switch` se escribio con `if`.
+
+### Ocho colores y de ahi sale todo Metal
+
+`MetalTheme` no guarda cuarenta colores: guarda **ocho** -- tres primarios, tres secundarios,
+blanco y negro -- y los otros cuarenta y pico de metodos son nombres para combinaciones de esos
+ocho. Los primarios son con lo que el tema marca lo elegido y el foco; los secundarios son los
+grises de la chapa. Dentro de cada terna, el 1 es el mas oscuro y el 3 el mas claro, siempre, y de
+eso depende que un boton salga con relieve y no hundido.
+
+Escribir `DefaultMetalTheme` -- el tema Steel -- son entonces **veinte lineas**: seis colores y seis
+tipografias. Los seis colores son multiplos de `0x33`, y eso no es gusto: es la paleta segura de
+216 colores de los monitores de 256. Metal nacio para verse igual en cualquier maquina.
+
+`OceanTheme` redefine los seis y cinco derivados. Cada uno de los cinco tiene su motivo y ninguno
+es cosmetico: el negro pasa a `(51,51,51)` y con eso se corre todo el texto de golpe; el escritorio
+pasa a blanco porque el `primary2` de Ocean es un celeste claro y no dejaria ver nada apoyado
+encima; y dos textos apagados vuelven al gris `153` porque derivarlos de Ocean los daria celestes,
+y un texto apagado tiene que verse apagado, no de otro color.
+
+### Lo que salio de medir en Metal
+
+- **`CheckBox.select` no existe en la tabla, y `CheckBox.focus` si.** Una casilla de Metal tiene
+  color de foco y **no tiene** color de seleccion. No es un olvido: una casilla no se rellena al
+  elegirse, se le dibuja una tilde. Solo se ve mirando la tabla, y por eso los cuatro botones de
+  Metal leen sus colores por clave con su prefijo en vez de tener constantes.
+- **Con Ocean, el boton de un desplegable es siempre solo la flecha**, sea o no editable. Con Steel
+  depende. Ocean dibuja el desplegable como un campo con una flecha al lado y no como un boton
+  unico, que es lo que `MetalComboBoxButton` hace con Steel.
+- **Una barra de desplazamiento pegada a un panel es dos pixeles mas fina que una suelta**: 15
+  contra 17. Los dos pixeles son el marco que no dibuja, porque ya lo puso el panel. De ahi salen
+  los otros dos numeros, que se calculan del ancho: el pulgar minimo es un cuadrado de ese lado y el
+  largo preferido es `ancho * 3 + 10`.
+- **Los botones de esa barra reparten el pixel que sobra de forma asimetrica.** Con ancho 16, el de
+  arriba mide `16x14` siempre; el de abajo, `16x14` pegado y `16x15` suelto. Es siempre el boton del
+  extremo lejano el que lo recupera, porque el borde que se ahorra es el otro.
+- **`MetalSliderUI.getTickLength()` devuelve once y el campo `tickLength` vale seis.** La cuenta es
+  `tickLength + TICK_BUFFER + 1`: seis de raya, cuatro de aire y uno de la linea de la pista.
+- **`labelsHaveSameBaselines()` sin tabla de etiquetas contesta `false`, y con la tabla vacia
+  `true`.** Suena al reves y no lo es.
+- **`uninstallDefaults` de los botones de Metal no suelta los tres colores.** No puede: el UI lo
+  comparten todos los botones del programa, y soltarlos al desinstalar uno dejaria a los demas sin
+  color.
+- **Los tres iconos del arbol -- manija, carpeta, hoja -- se fabrican nuevos cada vez** y los otros
+  veintiuno se comparten. Son justo los tres que **no** son `UIResource`: un arbol puede quedarselos
+  aunque cambie el aspecto, y compartirlos haria que dos arboles con temas distintos se pisaran el
+  icono.
+- **`MetalFileChooserUI.getDirectoryName()` es `null` siempre y `setDirectoryName` no hace nada.**
+  Metal no tiene campo de carpeta: tiene el desplegable de ruta, y una ruta no se escribe a mano.
+  El de archivo si existe, y de ahi que `getFileName()` conteste cadena vacia donde el basico
+  contesta `null`.
+
+### Synth es el paquete mas regular que se escribio hasta ahora
+
+Cuarenta clases con la misma forma: extender el `BasicXxxUI` que toca, implementar `SynthUI`, y
+agregar seis metodos siempre iguales. Se generaron con un script y las notas de cada clase se
+escribieron a mano; lo unico verdaderamente propio de cada una es de que region saca su estilo.
+
+La idea de fondo es la separacion entre **fondo y contenido**. El fondo -- y el borde -- los pinta
+el estilo, que sabe en que estado esta el componente; el contenido lo sigue pintando el aspecto
+basico. Por eso `update` no es "pintar el fondo y llamar a `paint`" como en el basico, sino dos
+pasos con dos duenios distintos.
+
+Y de ahi sale lo que Synth puede y ningun otro paquete: un pulgar de deslizador que **cambia de
+tamano** entre estados, porque su icono es un `SynthIcon` y el tamano se pregunta con el contexto.
+Una tabla sin lineas de grilla, porque la grilla es una region y no un color. Un panel de solapas
+con cuatro regiones, que resuelve en cuatro imagenes lo que a Metal le lleva media clase de casos
+especiales.
+
+### Lo que salio de medir en Synth
+
+- **Instalar cualquier interfaz grafica de Synth sin haber cargado un archivo de estilos tira
+  `NullPointerException`**, y eso es lo correcto: Synth no tiene aspecto por omision, y ese es el
+  punto del paquete. La prueba lo compara.
+- **`getContext` de una interfaz sin instalar contesta con estilo nulo en vez de reventar**, aunque
+  el constructor publico de `SynthContext` exija los tres argumentos. Hay un constructor interno que
+  no valida, y las clases del paquete lo usan porque necesitan el contexto **antes** de tener el
+  estilo: es con ese contexto que se lo piden a la fabrica.
+- **La region sale del componente y no de una constante fija.** Importa en las cadenas de herencia:
+  `SynthCheckBoxUI` hereda `getContext` de `SynthButtonUI` y tiene que contestar `CheckBox`, no
+  `Button`.
+- **Apretado no se suma a encendido: lo reemplaza.** Un boton apretado da `4`, no `5`. Y apagado
+  pisa todo, apretado incluido: da `8`. En cambio elegido y con-el-cursor-encima si se suman
+  (`513`, `515`). Son tres reglas distintas en el mismo metodo y ninguna se deduce.
+- **`SynthSliderUI` y `SynthInternalFrameUI` no tienen constructor sin argumentos**, y el que
+  tienen es `protected`. Un deslizador de Synth necesita el componente desde el principio para poder
+  preguntarle su estado.
+
+### Lo que queda dicho y no tapado
+
+- **Los quince iconos de imagen de `OceanTheme`** son GIF que el JDK carga del jar. De las 67
+  entradas que el tema agrega, esta biblioteca escribe 52; las quince que faltan no tienen de donde
+  salir. Los cinco de la barra de titulo si estan: esos el JDK tambien los dibuja.
+- **De los veinticuatro iconos que se le agregaron a `MetalIconFactory`, dos son mapas medidos y
+  los otros veintidos estan dibujados.** Tienen el tamano exacto del JDK, la misma clase y la misma
+  respuesta a `instanceof UIResource`; lo que no es identico es el pixel. La distincion esta
+  documentada a proposito: un tamano equivocado corre todo el dibujo de alrededor, y un trazo
+  distinto adentro de un icono de 16 x 16 no corre nada.
+- **`MetalLookAndFeel.initComponentDefaults` pone las entradas que se derivan del tema y no las mil
+  del JDK.** Faltan los atajos de teclado, que necesitan la lista completa de acciones por
+  componente, y las entradas de icono. La tabla del JDK tiene 642 entradas.
+- **Los componentes de `MetalFileChooserUI` no se arman**: la lista, los dos desplegables y los
+  botones necesitan once iconos que no estan. Lo que si contesta bien es todo lo que no dibuja.
+- **La decoracion de ventana de `MetalRootPaneUI` no se arma.** Necesita una ventana de verdad y
+  esta VM no tiene ventanas.
+
+### Un bug de biblioteca que esto destapo
+
+`BasicArrowButton` no ponia `setFocusable(false)`. El JDK lo hace, y por lo tanto ninguna flecha de
+barra de desplazamiento toma el foco. Ahora tampoco aca.
+
+### Lo que sigue
+
+Los tres paquetes de `javax.swing.plaf` estan completos: `basic` 59/59, `metal` 35/35, `synth`
+51/51.

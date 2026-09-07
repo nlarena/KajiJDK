@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalField;
 import java.time.temporal.TemporalAdjuster;
@@ -9,7 +10,7 @@ import java.time.temporal.ChronoField;
 // KajiLibrary's java.time.MonthDay — a month-and-day, e.g. --08-04, without a year (a recurring
 // annual date like a birthday). Immutable. Implements TemporalAccessor (read-only — a MonthDay
 // isn't a full Temporal), TemporalAdjuster and Comparable. A KajiLibrary subset.
-public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Comparable<MonthDay> {
+public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Comparable<MonthDay>, Serializable {
 
     private final int month;
     private final int day;

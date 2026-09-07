@@ -7,44 +7,45 @@ import java.util.Map;
 import java.util.prefs.Preferences;
 
 /**
- * Arma y corre la herramienta `jshell` desde adentro de un programa.
+ * Builds and runs the `jshell` tool from inside a program.
  *
- * <p>Es la unica forma soportada de embeber la consola: `jshell` como comando es una envoltura
- * fina sobre esto. Sirve para un IDE que quiera una consola integrada, o para un tutorial que
- * arranque una sesion con clases suyas ya cargadas.
+ * <p>It is the only supported way of embedding the console: `jshell` as a command is a thin wrapper
+ * over this. It serves an IDE that wants an integrated console, or a tutorial that starts a session
+ * with its own classes already loaded.
  *
- * <h2>Por que hay tantos flujos</h2>
+ * <h2>Why there are so many streams</h2>
  *
- * <p>`jshell` mezcla **tres** conversaciones que en un programa comun serian una: lo que la
- * herramienta le dice al usuario, lo que el codigo del usuario imprime, y los diagnosticos. Por
- * eso {@link #out(PrintStream, PrintStream, PrintStream)} toma tres y no uno: un IDE quiere pintar
- * cada cosa distinto, y con un solo flujo no puede separarlas.
+ * <p>`jshell` mixes **three** conversations that in an ordinary program would be one: what the tool
+ * says to the user, what the user's code prints, and the diagnostics. That is why
+ * {@link #out(PrintStream, PrintStream, PrintStream)} takes three and not one: an IDE wants to paint
+ * each of them differently, and with a single stream it cannot tell them apart.
  *
- * <p>{@link #in(InputStream, InputStream)} toma dos por la misma razon al reves: lo que el usuario
- * teclea en la consola y lo que el **codigo del usuario** lee de `System.in` no son la misma
- * entrada.
+ * <p>{@link #in(InputStream, InputStream)} takes two for the same reason the other way round: what
+ * the user types into the console and what the **user's code** reads from `System.in` are not the
+ * same input.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #builder()} lanza {@link UnsupportedOperationException}. No es una pieza que falte:
- * `jshell` es un compilador incremental mas una VM remota mas un protocolo entre las dos, y nada de
- * eso esta en esta biblioteca.
+ * <p>{@link #builder()} throws {@link UnsupportedOperationException}. It is not a missing piece:
+ * `jshell` is an incremental compiler plus a remote VM plus a protocol between the two, and none of
+ * that is in this library.
  *
- * <p>La interfaz esta entera igual --con los dos {@code default} implementados-- porque es lo que
- * un programa compila contra ella. Devolver un armador que aceptara toda la configuracion y
- * fallara recien en {@code run()} seria peor: el programa creeria que la consola esta y se
- * enteraria de que no en el momento en que ya no puede hacer nada al respecto.
+ * <p>The interface is complete all the same --with the two {@code default} methods implemented--
+ * because it is what a program compiles against. Returning a builder that accepted the whole
+ * configuration and failed only at {@code run()} would be worse: the program would believe the
+ * console was there and would find out it was not at the moment when it can no longer do anything
+ * about it.
  *
  * @since 9
  */
 public interface JavaShellToolBuilder {
 
     /**
-     * Un armador nuevo.
+     * A new builder.
      *
-     * <p><b>No implementado en esta biblioteca.</b> Ver la nota de la interfaz.
+     * <p><b>Not implemented in this library.</b> See the interface's note.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     static JavaShellToolBuilder builder() {
         throw new UnsupportedOperationException(
@@ -53,116 +54,113 @@ public interface JavaShellToolBuilder {
     }
 
     /**
-     * Los dos flujos de entrada: el de los comandos y el que ve el codigo del usuario.
+     * The two input streams: the one for the commands and the one the user's code sees.
      *
-     * @param cmdIn de donde salen los comandos y los fragmentos que se teclean
-     * @param userIn lo que el codigo del usuario lee de `System.in`, o `null` para que sea el
-     *     mismo que `cmdIn`
+     * @param cmdIn where the commands and the snippets typed in come from
+     * @param userIn what the user's code reads from `System.in`, or `null` for it to be the same as
+     *     `cmdIn`
      */
     JavaShellToolBuilder in(InputStream cmdIn, InputStream userIn);
 
     /**
-     * Un solo flujo de salida para las tres conversaciones.
+     * A single output stream for all three conversations.
      *
-     * @param output donde va todo lo que sale
+     * @param output where everything that comes out goes
      */
     JavaShellToolBuilder out(PrintStream output);
 
     /**
-     * Los tres flujos de salida por separado. Ver la nota de la interfaz.
+     * The three output streams separately. See the interface's note.
      *
-     * @param cmdOut lo que la herramienta le dice al usuario
-     * @param console el eco de la consola
-     * @param userOut lo que el codigo del usuario imprime
+     * @param cmdOut what the tool says to the user
+     * @param console the console's echo
+     * @param userOut what the user's code prints
      */
     JavaShellToolBuilder out(PrintStream cmdOut, PrintStream console, PrintStream userOut);
 
     /**
-     * Un solo flujo de error.
+     * A single error stream.
      *
-     * @param error donde van los diagnosticos y los errores del codigo del usuario
+     * @param error where the diagnostics and the user code's errors go
      */
     JavaShellToolBuilder err(PrintStream error);
 
     /**
-     * Los dos flujos de error por separado.
+     * The two error streams separately.
      *
-     * @param cmdErr los diagnosticos de la herramienta
-     * @param userErr lo que el codigo del usuario escribe en `System.err`
+     * @param cmdErr the tool's diagnostics
+     * @param userErr what the user's code writes to `System.err`
      */
     JavaShellToolBuilder err(PrintStream cmdErr, PrintStream userErr);
 
     /**
-     * Donde se guardan el historial y las opciones entre sesiones.
+     * Where the history and the options are kept between sessions.
      *
-     * @param prefs el nodo de preferencias
+     * @param prefs the preferences node
      */
     JavaShellToolBuilder persistence(Preferences prefs);
 
     /**
-     * Lo mismo, en un mapa en memoria.
+     * The same, in an in-memory map.
      *
-     * <p>Sirve para una sesion que no tiene que dejar rastro, y para las pruebas.
+     * <p>It serves a session that is to leave no trace, and the tests.
      */
     JavaShellToolBuilder persistence(Map<String, String> prefsMap);
 
     /**
-     * Las variables de entorno que ve el codigo del usuario.
+     * The environment variables the user's code sees.
      *
-     * @param env el entorno, o `null` para el del proceso
+     * @param env the environment, or `null` for the process's own
      */
     JavaShellToolBuilder env(Map<String, String> env);
 
-    /** El idioma de los mensajes de la herramienta. */
+    /** The language of the tool's messages. */
     JavaShellToolBuilder locale(Locale locale);
 
     /**
-     * Si el indicador y el eco tienen que salir por el flujo de salida.
+     * Whether the prompt and the echo have to come out through the output stream.
      *
-     * <p>Con `true` la sesion se puede transcribir entera leyendo un solo flujo, que es lo que
-     * necesita una prueba automatica. Por omision es `false`, porque en una terminal el eco lo hace
-     * la terminal y saldria doble.
+     * <p>With `true` the whole session can be transcribed by reading a single stream, which is what
+     * an automated test needs. It is `false` by default, because in a terminal the echo is the
+     * terminal's job and it would come out twice.
      */
     JavaShellToolBuilder promptCapture(boolean capture);
 
     /**
-     * Si hay que tratar la entrada como una terminal interactiva.
+     * Whether the input is to be treated as an interactive terminal.
      *
-     * <p>Por omision no cambia nada: la herramienta lo detecta sola. Este metodo es para forzarlo
-     * cuando la deteccion no puede acertar --una entrada redirigida que igual quiere edicion de
-     * linea.
+     * <p>By default it changes nothing: the tool detects it on its own. This method is for forcing it
+     * when the detection cannot get it right --a redirected input that wants line editing anyway.
      */
     default JavaShellToolBuilder interactiveTerminal(boolean interactiveTerminal) {
         return this;
     }
 
     /**
-     * El tamanio de la ventana, para las herramientas que no tienen una terminal de la que
-     * averiguarlo.
+     * The window's size, for the tools that have no terminal to find it out from.
      *
-     * <p>Por omision no cambia nada, como {@link #interactiveTerminal}.
+     * <p>By default it changes nothing, like {@link #interactiveTerminal}.
      */
     default JavaShellToolBuilder windowSize(int columns, int rows) {
         return this;
     }
 
     /**
-     * Corre la herramienta con esos argumentos de linea de comandos.
+     * Runs the tool with those command-line arguments.
      *
-     * <p>Bloquea hasta que la sesion termina.
+     * <p>It blocks until the session ends.
      *
-     * @throws Exception lo que sea que falle al correrla
+     * @throws Exception whatever fails while running it
      */
     void run(String... arguments) throws Exception;
 
     /**
-     * Corre la herramienta y devuelve su codigo de salida.
+     * Runs the tool and returns its exit code.
      *
-     * <p>Por omision es {@link #run} y un cero: {@code run} avisa de los fallos lanzando, asi que
-     * si volvio es que salio bien. Una implementacion que sepa distinguir grados de fallo lo
-     * redefine.
+     * <p>By default it is {@link #run} and a zero: {@code run} reports failures by throwing, so if it
+     * came back it went well. An implementation that can tell degrees of failure apart redefines it.
      *
-     * @throws Exception lo que sea que falle al correrla
+     * @throws Exception whatever fails while running it
      */
     default int start(String... arguments) throws Exception {
         run(arguments);

@@ -1,38 +1,37 @@
 package jdk.dynalink;
 
 /**
- * Lo que un sitio de invocacion dinamico quiere hacer.
+ * What a dynamic call site wants to do.
  *
- * <p>Una operacion es un **dato**, no una accion: describe la intencion (leer, escribir, llamar,
- * construir) sin decidir sobre quien ni como. La decoracion es por composicion y en un orden
- * fijo — primero el espacio de nombres, despues el nombre — de modo que
- * `GET.withNamespace(PROPERTY).named("x")` da un `NamedOperation` que envuelve un
- * `NamespaceOperation` que envuelve `GET`. El orden inverso esta prohibido por los
- * constructores de {@link NamespaceOperation}, y por eso desarmar una operacion es siempre
- * el mismo par de pasos: {@link NamedOperation#getBaseOperation} y despues
+ * <p>An operation is **data**, not an action: it describes the intent (read, write, call, construct)
+ * without deciding on whom or how. Decoration is by composition and in a fixed order — namespace
+ * first, name afterwards — so that `GET.withNamespace(PROPERTY).named("x")` gives a `NamedOperation`
+ * wrapping a `NamespaceOperation` wrapping `GET`. The reverse order is forbidden by
+ * {@link NamespaceOperation}'s constructors, and that is why taking an operation apart is always the
+ * same pair of steps: {@link NamedOperation#getBaseOperation} and then
  * {@link NamespaceOperation#getBaseOperation}.
  *
- * <p>La interfaz no tiene metodos abstractos: una implementacion solo tiene que existir y saber
- * compararse. Los cinco verbos del lenguaje estan en {@link StandardOperation}.
+ * <p>The interface has no abstract methods: an implementation only has to exist and know how to
+ * compare itself. The language's five verbs are in {@link StandardOperation}.
  *
  * @since 9
  */
 public interface Operation {
 
-    /** Esta operacion, restringida a un unico espacio de nombres. */
+    /** This operation, restricted to a single namespace. */
     default NamespaceOperation withNamespace(final Namespace namespace) {
         return withNamespaces(namespace);
     }
 
     /**
-     * Esta operacion sobre varios espacios de nombres, **en orden de preferencia**: el enlazador
-     * prueba el primero que pueda satisfacer y solo baja al siguiente si no encontro nada.
+     * This operation over several namespaces, **in order of preference**: the linker tries the first
+     * one it can satisfy and only moves on to the next if it found nothing.
      */
     default NamespaceOperation withNamespaces(final Namespace... namespaces) {
         return new NamespaceOperation(this, namespaces);
     }
 
-    /** Esta operacion con un nombre fijo, conocido en tiempo de enlace. */
+    /** This operation with a fixed name, known at link time. */
     default NamedOperation named(final Object name) {
         return new NamedOperation(this, name);
     }

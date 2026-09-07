@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Set;
@@ -35,7 +37,7 @@ import java.util.Set;
 //
 // Also omitted: the varargs `of(E, E...)`, clone, and the bulk Collection operations our
 // `Collection` does not have.
-public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements Set<E> {
+public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements Set<E>, Serializable, Cloneable {
 
     // The enum type this set holds. Package-private, as in the JDK — and assigned by the
     // subclass rather than passed to this constructor: our javac cannot resolve a `super(...)`

@@ -4,27 +4,26 @@ package javax.tools;
 // ships, without naming an implementation class. It is a pure static factory: the private
 // constructor is the point, there is nothing to instantiate.
 //
-// Los dos getters devuelven `null`, y eso NO es un stub: el contrato del JDK dice
-// explicitamente que devuelven null cuando la plataforma no provee la herramienta, y KajiJDK
-// no expone todavia su compilador por esta API (el javac vive en `bin/javac.exe`, no como un
-// javax.tools.JavaCompiler). Un caller correcto ya tiene que chequear null.
+// The two getters return `null`, and that is NOT a stub: the JDK's contract explicitly says they
+// return null when the platform does not provide the tool, and KajiJDK does not yet expose its
+// compiler through this API (javac lives in `bin/javac.exe`, not as a javax.tools.JavaCompiler). A
+// correct caller has to check for null anyway.
 //
-// OMITIDO (salida (a), omitir el miembro):
-//   - `ClassLoader getSystemToolClassLoader()` — no existe java.lang.ClassLoader en
-//     KajiLibrary. Es el unico miembro publico que se cae.
+// `ClassLoader getSystemToolClassLoader()` used to be missing, because java.lang.ClassLoader did not
+// exist in KajiLibrary. It exists now and so does the member.
 public class ToolProvider {
 
-    // Nadie instancia un ToolProvider.
+    // Nobody instantiates a ToolProvider.
     private ToolProvider() {
     }
 
     /**
-     * El cargador desde el que se cargaron las herramientas del sistema.
+     * The loader the system tools were loaded from.
      *
-     * <p>Devuelve el cargador unico. En el JDK esto podia ser un cargador **aparte** --las
-     * herramientas vivian en `tools.jar`, fuera del classpath de la aplicacion-- y por eso el metodo
-     * existe; desde que las herramientas son un modulo mas, el JDK devuelve `null`. Aca hay un solo
-     * cargador y devolverlo es lo mas informativo.
+     * <p>It returns the one loader there is. In the JDK this could be a **separate** loader --the
+     * tools lived in `tools.jar`, outside the application's classpath-- and that is why the method
+     * exists; since the tools became just another module, the JDK returns `null`. Here there is a
+     * single loader and returning it is the most informative answer.
      */
     public static ClassLoader getSystemToolClassLoader() {
         return ClassLoader.getSystemClassLoader();

@@ -4,27 +4,27 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-// Quien decide, para cada URI, por que proxy salir.
+// The one that decides, for each URI, which proxy to go out through.
 //
-// La abstraccion tiene dos metodos y el segundo es el que la gente ignora: `connectFailed` es como
-// el selector **aprende**. Si `select` propuso tres proxies y el primero no anduvo, el que intento
-// conectarse tiene que avisarlo, y recien ahi el selector puede dejar de proponerlo. Sin ese
-// camino de vuelta, un proxy caido se sigue eligiendo para siempre.
+// The abstraction has two methods and the second is the one people ignore: `connectFailed` is how the
+// selector **learns**. If `select` proposed three proxies and the first did not work, whoever tried
+// to connect has to say so, and only then can the selector stop proposing it. Without that road back,
+// a downed proxy goes on being chosen forever.
 //
 // ===========================================================================================
-// EL SELECTOR POR DEFECTO EN KajiJDK
+// THE DEFAULT SELECTOR IN KajiJDK
 // ===========================================================================================
 //
-// En el JDK real, `getDefault()` devuelve un selector que lee la configuracion de proxies del
-// sistema (`http.proxyHost` y companiia, o el registro de Windows). Aca devuelve uno que contesta
-// siempre `DIRECT`.
+// In the real JDK, `getDefault()` returns a selector that reads the system's proxy configuration
+// (`http.proxyHost` and company, or the Windows registry). Here it returns one that always answers
+// `DIRECT`.
 //
-// Eso no es una mentira, es la verdad de esta VM: no hay conexiones que enrutar, asi que no hay
-// configuracion de proxy que leer, y "salis derecho" es la respuesta correcta y completa. El
-// contrato de `select` es "decime por donde salir", y este selector lo cumple. Distinto seria un
-// `select` que tirara `UnsupportedOperationException`: eso si dejaria colgado a quien lo llama.
+// That is not a lie, it is this VM's truth: there are no connections to route, so there is no proxy
+// configuration to read, and "you go straight out" is the correct and complete answer. `select`'s
+// contract is "tell me where to go out through", and this selector fulfils it. A `select` throwing
+// `UnsupportedOperationException` would be a different matter: that would leave its caller stranded.
 //
-// `setDefault` funciona de verdad, asi que quien quiera otra politica la instala y anda.
+// `setDefault` really works, so whoever wants another policy installs it and it runs.
 public abstract class ProxySelector {
 
     private static volatile ProxySelector theProxySelector = new StaticProxySelector(null);
@@ -32,41 +32,41 @@ public abstract class ProxySelector {
     public ProxySelector() {
     }
 
-    /** El selector en uso, o null si alguien instalo null. */
+    /** The selector in use, or null if someone installed null. */
     public static ProxySelector getDefault() {
         return theProxySelector;
     }
 
-    /** Instala el selector que va a usar toda la VM. */
+    /** Installs the selector the whole VM is going to use. */
     public static void setDefault(ProxySelector ps) {
         theProxySelector = ps;
     }
 
     /**
-     * Los proxies por los que se puede llegar a {@code uri}, en orden de preferencia.
+     * The proxies {@code uri} can be reached through, in order of preference.
      *
-     * <p>Nunca devuelve una lista vacia: si no hay proxy, devuelve una lista con
+     * <p>It never returns an empty list: if there is no proxy, it returns a list holding
      * {@link Proxy#NO_PROXY}.
      */
     public abstract List<Proxy> select(URI uri);
 
     /**
-     * Aviso de que no se pudo conectar a {@code sa}. Ver la cabecera: sin esto el selector no
-     * aprende.
+     * Notice that {@code sa} could not be connected to. See the header: without this the selector
+     * does not learn.
      */
     public abstract void connectFailed(URI uri, SocketAddress sa, IOException ioe);
 
     /**
-     * Un selector que propone siempre el mismo proxy para http y https, y conexion directa para
-     * cualquier otro esquema.
+     * A selector that always proposes the same proxy for http and https, and a direct connection for
+     * any other scheme.
      *
-     * @param proxyAddress la direccion del proxy, o null para "siempre directo"
+     * @param proxyAddress the proxy's address, or null for "always direct"
      */
     public static ProxySelector of(InetSocketAddress proxyAddress) {
         return new StaticProxySelector(proxyAddress);
     }
 
-    // Un selector que no aprende nada porque no tiene nada que aprender: su respuesta es constante.
+    // A selector that learns nothing because it has nothing to learn: its answer is constant.
     private static class StaticProxySelector extends ProxySelector {
 
         private static final List<Proxy> NO_PROXY_LIST =
@@ -85,7 +85,7 @@ public abstract class ProxySelector {
         }
 
         public void connectFailed(URI uri, SocketAddress sa, IOException e) {
-            // No hay estado que actualizar.
+            // There is no state to update.
         }
 
         public List<Proxy> select(URI uri) {

@@ -4,20 +4,20 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-// El almacen que usa `CookieManager` cuando no le dan otro: todo en memoria y nada en disco.
+// The store `CookieManager` uses when it is not given another: all in memory and nothing on disk.
 //
-// No es publica y no forma parte de la API -- se llega a ella por `new CookieManager()` y se la usa
-// a traves de `CookieStore`. El JDK hace exactamente lo mismo con una clase del mismo nombre.
+// It is not public and is not part of the API -- it is reached through `new CookieManager()` and used
+// through `CookieStore`. The JDK does exactly the same with a class of the same name.
 //
-// Guarda cada cookie junto con la **URI efectiva** de donde vino, que es la URI recortada a esquema
-// y host ("http://ejemplo.org"). El recorte es lo que hace que dos paginas del mismo sitio compartan
-// cookies sin que la ruta ni el puerto las separen; las reglas de ruta las aplica `CookieManager`
-// mas arriba, que es donde corresponde.
+// It keeps each cookie together with the **effective URI** it came from, which is the URI cut down to
+// scheme and host ("http://example.org"). The trimming is what lets two pages of the same site share
+// cookies without the path or the port separating them; the path rules are applied by `CookieManager`
+// further up, which is where they belong.
 final class InMemoryCookieStore implements CookieStore {
 
-    // Una lista y no un mapa: el almacen es chico y toda operacion interesante --matcheo de
-    // dominios, descarte de vencidas-- recorre igual. Un indice por dominio aca solo agregaria un
-    // estado mas que mantener coherente.
+    // A list and not a map: the store is small and every interesting operation --domain matching,
+    // discarding expired ones-- walks it anyway. An index by domain here would only add one more
+    // piece of state to keep consistent.
     private final List<URI> uris = new ArrayList<URI>();
     private final List<HttpCookie> cookies = new ArrayList<HttpCookie>();
 
@@ -29,16 +29,16 @@ final class InMemoryCookieStore implements CookieStore {
             throw new NullPointerException("cookie is null");
         }
         synchronized (this) {
-            // Una cookie con el mismo nombre, dominio y ruta es **la misma** cookie con otro valor,
-            // asi que pisa a la anterior en vez de sumarse.
+            // A cookie with the same name, domain and path is **the same** cookie with another
+            // value, so it overwrites the previous one instead of adding to it.
             int i = this.cookies.indexOf(cookie);
             while (i >= 0) {
                 this.cookies.remove(i);
                 this.uris.remove(i);
                 i = this.cookies.indexOf(cookie);
             }
-            // maxAge cero significa "vencida al nacer": es como un servidor borra una cookie.
-            // Guardarla seria guardar exactamente lo que pidio que se borre.
+            // A maxAge of zero means "expired at birth": it is how a server deletes a cookie.
+            // Storing it would be storing exactly what it asked to have deleted.
             if (cookie.getMaxAge() != 0) {
                 this.cookies.add(cookie);
                 this.uris.add(effectiveUri(uri));
@@ -59,14 +59,14 @@ final class InMemoryCookieStore implements CookieStore {
             int i = 0;
             while (i < this.cookies.size()) {
                 HttpCookie c = this.cookies.get(i);
-                // Una cookie marcada `Secure` no sale por un enlace que no lo es: ese es todo su
-                // proposito.
+                // A cookie marked `Secure` does not go out over a link that is not: that is its
+                // entire purpose.
                 if (secureLink || !c.getSecure()) {
                     boolean matches;
                     if (c.getDomain() != null) {
                         matches = HttpCookie.domainMatches(c.getDomain(), host);
                     } else {
-                        // Sin dominio, solo vuelve al mismo sitio del que vino.
+                        // With no domain, it only goes back to the same site it came from.
                         matches = eff != null && eff.equals(this.uris.get(i));
                     }
                     if (matches && !out.contains(c)) {
@@ -127,8 +127,8 @@ final class InMemoryCookieStore implements CookieStore {
         }
     }
 
-    // Las vencidas se sacan al consultar y no con un temporizador: un almacen que no se consulta no
-    // le importa a nadie, y un hilo de limpieza seria mas maquinaria que beneficio.
+    // The expired ones are removed on lookup and not by a timer: a store nobody consults matters to
+    // nobody, and a cleaning thread would be more machinery than benefit.
     private void purge() {
         int i = 0;
         while (i < this.cookies.size()) {
@@ -141,9 +141,9 @@ final class InMemoryCookieStore implements CookieStore {
         }
     }
 
-    // La URI recortada a esquema y host. Si no se puede armar, se guarda la original: es preferible
-    // una clave demasiado especifica --que solo hace que la cookie vuelva a menos lugares-- a
-    // perderla.
+    // The URI cut down to scheme and host. If it cannot be built, the original is kept: a key that is
+    // too specific --which only makes the cookie go back to fewer places-- is preferable to losing
+    // it.
     private static URI effectiveUri(URI uri) {
         if (uri == null) {
             return null;

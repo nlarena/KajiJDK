@@ -1,8 +1,8 @@
 package java.lang.ref;
 
-// Los imports del mismo paquete son redundantes en Java, pero por ahora el class-finder del
-// javac propio no auto-carga una referencia **sin cualificar** de una clase que solo está en el
-// classpath (no en la unidad de fuente ni en la lista `JAVA_LANG`). Workaround hasta que se arregle.
+// Same-package imports are redundant in Java, but for now the project javac's class-finder does not
+// auto-load an **unqualified** reference to a class that only lives on the classpath (not in the
+// source unit nor in the `JAVA_LANG` list). Workaround until that is fixed.
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 

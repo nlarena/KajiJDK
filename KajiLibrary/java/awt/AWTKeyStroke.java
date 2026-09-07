@@ -90,8 +90,8 @@ public class AWTKeyStroke implements Serializable {
         if (keyChar == null) {
             throw new IllegalArgumentException("keyChar cannot be null");
         }
-        return unico(new AWTKeyStroke(keyChar.charValue(), KeyEvent.VK_UNDEFINED, modifiers,
-                false));
+        return unico(new AWTKeyStroke(keyChar.charValue(), KeyEvent.VK_UNDEFINED,
+                conLasDosMascaras(modifiers), false));
     }
 
     /**
@@ -102,7 +102,54 @@ public class AWTKeyStroke implements Serializable {
      */
     public static AWTKeyStroke getAWTKeyStroke(int keyCode, int modifiers,
             boolean onKeyRelease) {
-        return unico(new AWTKeyStroke(KeyEvent.CHAR_UNDEFINED, keyCode, modifiers, onKeyRelease));
+        return unico(new AWTKeyStroke(KeyEvent.CHAR_UNDEFINED, keyCode,
+                conLasDosMascaras(modifiers), onKeyRelease));
+    }
+
+    /**
+     * Los modificadores con sus dos mascaras: la nueva y la vieja.
+     *
+     * <p>Cada modificador de teclado tiene dos constantes en {@code InputEvent}: la nueva
+     * ({@code CTRL_DOWN_MASK}) y la de antes ({@code CTRL_MASK}, en desuso). Un atajo lleva las dos
+     * puestas, y no es redundancia inutil: hay codigo que sigue leyendo la vieja --el texto del
+     * acelerador de un item de menu, sin ir mas lejos, que sale de
+     * {@code KeyEvent.getKeyModifiersText}--, y con la vieja en cero se queda sin nombre de
+     * modificador y el acelerador se muestra como {@code "O"} en vez de {@code "Ctrl-O"}.
+     *
+     * <p>Los botones del mouse no entran: {@code BUTTON2_MASK} y {@code BUTTON3_MASK} valen lo
+     * mismo que {@code ALT_MASK} y {@code META_MASK}, y agregarlas inventaria modificadores que
+     * nadie pidio. Esta medido: {@code ctrl O} da 130 y {@code ctrl shift S} da 195.
+     */
+    private static int conLasDosMascaras(int modifiers) {
+        if ((modifiers & java.awt.event.InputEvent.SHIFT_DOWN_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.SHIFT_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.CTRL_DOWN_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.CTRL_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.META_DOWN_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.META_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.ALT_DOWN_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.ALT_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.ALT_GRAPH_DOWN_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.ALT_GRAPH_MASK;
+        }
+        // Y al reves, para quien todavia pase las viejas.
+        if ((modifiers & java.awt.event.InputEvent.SHIFT_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.SHIFT_DOWN_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.CTRL_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.CTRL_DOWN_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.META_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.META_DOWN_MASK;
+        }
+        if ((modifiers & java.awt.event.InputEvent.ALT_MASK) != 0) {
+            modifiers |= java.awt.event.InputEvent.ALT_DOWN_MASK;
+        }
+        return modifiers;
     }
 
     /** El atajo de esa tecla al apretarla. */
@@ -294,12 +341,94 @@ public class AWTKeyStroke implements Serializable {
                 && that.modifiers == this.modifiers && that.onKeyRelease == this.onKeyRelease;
     }
 
+    /**
+     * El atajo escrito como lo lee {@link #getAWTKeyStroke(String)}.
+     *
+     * <p>Los dos formatos son el mismo: {@code "ctrl released ENTER"} sale de aca y vuelve a
+     * entrar por el analizador sin perder nada. Por eso los modificadores se escriben con su
+     * nombre --{@code shift ctrl meta alt altGraph button1 button2 button3}, en ese orden-- y la
+     * tecla con el nombre de su constante {@code VK_} sin el prefijo, que no es lo mismo que
+     * {@link KeyEvent#getKeyText}: esa devuelve texto para mostrarle a una persona y esta el
+     * nombre exacto de la constante.
+     */
     public String toString() {
         if (this.keyCode == KeyEvent.VK_UNDEFINED) {
-            return this.modifiers + " typed " + this.keyChar;
+            return textoDeModificadores(this.modifiers) + "typed " + this.keyChar;
         }
-        return this.modifiers + " " + (this.onKeyRelease ? "released" : "pressed") + " "
-                + KeyEvent.getKeyText(this.keyCode);
+        return textoDeModificadores(this.modifiers)
+                + (this.onKeyRelease ? "released" : "pressed") + " "
+                + nombreDeTecla(this.keyCode);
+    }
+
+    /** Los modificadores en el orden que espera el analizador; cada uno con un espacio atras. */
+    private static String textoDeModificadores(int modifiers) {
+        StringBuilder buf = new StringBuilder();
+        if ((modifiers & java.awt.event.InputEvent.SHIFT_DOWN_MASK) != 0) {
+            buf.append("shift ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.CTRL_DOWN_MASK) != 0) {
+            buf.append("ctrl ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.META_DOWN_MASK) != 0) {
+            buf.append("meta ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.ALT_DOWN_MASK) != 0) {
+            buf.append("alt ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.ALT_GRAPH_DOWN_MASK) != 0) {
+            buf.append("altGraph ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.BUTTON1_DOWN_MASK) != 0) {
+            buf.append("button1 ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.BUTTON2_DOWN_MASK) != 0) {
+            buf.append("button2 ");
+        }
+        if ((modifiers & java.awt.event.InputEvent.BUTTON3_DOWN_MASK) != 0) {
+            buf.append("button3 ");
+        }
+        return buf.toString();
+    }
+
+    /** Los nombres ya buscados; buscar por reflexion 189 campos por atajo seria caro. */
+    private static final Map<Integer, String> NOMBRES = new HashMap<Integer, String>();
+
+    /**
+     * El nombre de la constante {@code VK_} de esa tecla, sin el prefijo.
+     *
+     * <p>Sale por reflexion sobre {@link KeyEvent} y no de una tabla escrita a mano: son casi
+     * doscientas constantes, y una tabla que se olvide de una da un nombre equivocado en vez de
+     * faltar. {@code "UNKNOWN"} si no hay ninguna, que es lo que contesta el JDK.
+     */
+    private static String nombreDeTecla(int keyCode) {
+        Integer clave = Integer.valueOf(keyCode);
+        synchronized (NOMBRES) {
+            String ya = NOMBRES.get(clave);
+            if (ya != null) {
+                return ya;
+            }
+        }
+        int esperados = java.lang.reflect.Modifier.PUBLIC | java.lang.reflect.Modifier.STATIC
+                | java.lang.reflect.Modifier.FINAL;
+        java.lang.reflect.Field[] campos = KeyEvent.class.getDeclaredFields();
+        for (int i = 0; i < campos.length; i++) {
+            try {
+                if (campos[i].getModifiers() == esperados
+                        && campos[i].getType() == Integer.TYPE
+                        && campos[i].getName().startsWith("VK_")
+                        && campos[i].getInt(KeyEvent.class) == keyCode) {
+                    String nombre = campos[i].getName().substring(3);
+                    synchronized (NOMBRES) {
+                        NOMBRES.put(clave, nombre);
+                    }
+                    return nombre;
+                }
+            } catch (IllegalAccessException e) {
+                // Un campo publico de una clase publica siempre es accesible; si algun dia no lo
+                // fuera, se sigue con el que viene en vez de romper el toString.
+            }
+        }
+        return "UNKNOWN";
     }
 
     /**

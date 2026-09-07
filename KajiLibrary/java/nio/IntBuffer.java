@@ -666,23 +666,23 @@ public abstract class IntBuffer extends Buffer implements Comparable<IntBuffer> 
 class HeapIntBuffer extends IntBuffer {
 
     /**
-     * El constructor **completo**: el arreglo, los cuatro indices, el desplazamiento, y el segmento
-     * de memoria del que este buffer es una vista.
+     * The **full** constructor: the array, the four indices, the offset, and the memory segment this
+     * buffer is a view over.
      *
-     * <p>Existe porque el JDK lo declara, y estuvo afuera hasta ahora por una razon concreta: nombra
-     * `java.lang.foreign.MemorySegment`, que no existia en esta biblioteca. Ahora existe.
+     * <p>It exists because the JDK declares it, and it was left out until now for a concrete reason:
+     * it names `java.lang.foreign.MemorySegment`, which did not exist in this library. Now it does.
      *
-     * <p><strong>El segmento se acepta y no se guarda</strong>, y conviene decir por que eso no
-     * pierde nada aca. En el JDK ese campo es lo que hace que `MemorySegment.ofBuffer(buffer)`
-     * devuelva **el mismo** segmento del que el buffer salio. Esta biblioteca lo reconstruye desde el
-     * arreglo de respaldo, asi que `ofBuffer` sigue dando una vista correcta de los mismos bytes; lo
-     * unico que se pierde es la **identidad** del segmento, que ningun metodo publico expone.
+     * <p><strong>The segment is accepted and not kept</strong>, and it is worth saying why that loses
+     * nothing here. In the JDK that field is what makes `MemorySegment.ofBuffer(buffer)` return **the
+     * same** segment the buffer came from. This library rebuilds it from the backing array, so
+     * `ofBuffer` still gives a correct view of the same bytes; the only thing lost is the segment's
+     * **identity**, which no public method exposes.
      *
-     * <p>Los indices se fijan en el orden que el contrato de `Buffer` obliga --limite antes que
-     * posicion-- porque una posicion no puede pasar del limite, y hacerlo al reves fallaria fijando
-     * un estado que despues iba a ser valido.
+     * <p>The indices are set in the order `Buffer`'s contract forces --limit before position--
+     * because a position cannot go past the limit, and doing it the other way round would fail while
+     * setting a state that was going to be valid afterwards.
      *
-     * @param mark la marca, o negativo si no hay
+     * @param mark the mark, or negative if there is none
      */
     protected HeapIntBuffer(int[] buf, int mark, int pos, int lim, int cap, int off,
             java.lang.foreign.MemorySegment segment) {

@@ -12,70 +12,70 @@ import jdk.dynalink.linker.LinkerServices;
 import jdk.dynalink.linker.TypeBasedGuardingDynamicLinker;
 
 /**
- * Compone enlazadores que deciden por el tipo del receptor, con una cache por clase.
+ * Composes linkers that decide by the receiver's type, with a cache per class.
  *
- * <h2>Que gana sobre {@link CompositeGuardingDynamicLinker}</h2>
+ * <h2>What it gains over {@link CompositeGuardingDynamicLinker}</h2>
  *
- * <p>Que no recorre la lista. La primera vez que aparece un receptor de cierta clase pregunta a
- * todos cual la acepta y se guarda la respuesta; a partir de ahi va derecho a los que sirven. En
- * una cadena de veinte enlazadores donde uno solo entiende {@code String}, esto es la diferencia
- * entre veinte preguntas por enlace y una.
+ * <p>That it does not walk the list. The first time a receiver of a given class shows up it asks
+ * everyone who accepts it and keeps the answer; from then on it goes straight to the ones that serve.
+ * In a chain of twenty linkers where only one understands {@code String}, that is the difference
+ * between twenty questions per link and one.
  *
- * <p>La cache es un {@link ClassValue}, no un mapa: queda colgada de la propia clase y desaparece
- * cuando la clase se descarga. Con un mapa comun, las clases cargadas dinamicamente —que en un
- * lenguaje de scripting son muchas— no se podrian liberar nunca.
+ * <p>The cache is a {@link ClassValue}, not a map: it hangs off the class itself and disappears when
+ * the class is unloaded. With an ordinary map, dynamically loaded classes --and in a scripting
+ * language there are many-- could never be freed.
  *
  * @since 9
  */
 public class CompositeTypeBasedGuardingDynamicLinker implements TypeBasedGuardingDynamicLinker {
 
-    private final ClaseAEnlazadores claseAEnlazadores;
+    private final LinkersByClass linkersByClass;
 
-    /** La cache: para cada clase, cuales de los enlazadores la aceptan. */
-    private static final class ClaseAEnlazadores
+    /** The cache: for each class, which of the linkers accept it. */
+    private static final class LinkersByClass
             extends ClassValue<List<TypeBasedGuardingDynamicLinker>> {
 
-        private static final List<TypeBasedGuardingDynamicLinker> NINGUNO =
+        private static final List<TypeBasedGuardingDynamicLinker> NONE =
                 Collections.emptyList();
 
-        private final TypeBasedGuardingDynamicLinker[] enlazadores;
-        /** Listas de un solo elemento, precalculadas: el caso de lejos mas frecuente. */
-        private final List<List<TypeBasedGuardingDynamicLinker>> solos;
+        private final TypeBasedGuardingDynamicLinker[] linkers;
+        /** Precomputed single-element lists: by far the commonest case. */
+        private final List<List<TypeBasedGuardingDynamicLinker>> singletons;
 
-        ClaseAEnlazadores(final TypeBasedGuardingDynamicLinker[] enlazadores) {
-            this.enlazadores = enlazadores;
+        LinkersByClass(final TypeBasedGuardingDynamicLinker[] linkers) {
+            this.linkers = linkers;
             final List<List<TypeBasedGuardingDynamicLinker>> s =
-                    new ArrayList<List<TypeBasedGuardingDynamicLinker>>(enlazadores.length);
-            for (int i = 0; i < enlazadores.length; i++) {
-                s.add(Collections.singletonList(enlazadores[i]));
+                    new ArrayList<List<TypeBasedGuardingDynamicLinker>>(linkers.length);
+            for (int i = 0; i < linkers.length; i++) {
+                s.add(Collections.singletonList(linkers[i]));
             }
-            this.solos = s;
+            this.singletons = s;
         }
 
         protected List<TypeBasedGuardingDynamicLinker> computeValue(final Class<?> clazz) {
-            List<TypeBasedGuardingDynamicLinker> lista = NINGUNO;
-            for (int i = 0; i < enlazadores.length; i++) {
-                if (!enlazadores[i].canLinkType(clazz)) {
+            List<TypeBasedGuardingDynamicLinker> list = NONE;
+            for (int i = 0; i < linkers.length; i++) {
+                if (!linkers[i].canLinkType(clazz)) {
                     continue;
                 }
-                if (lista == NINGUNO) {
-                    lista = solos.get(i);
+                if (list == NONE) {
+                    list = singletons.get(i);
                 } else {
-                    if (lista.size() == 1) {
-                        // Recien aca deja de servir la lista precalculada, que es inmutable.
-                        lista = new ArrayList<TypeBasedGuardingDynamicLinker>(lista);
+                    if (list.size() == 1) {
+                        // Only here does the precomputed list, which is immutable, stop serving.
+                        list = new ArrayList<TypeBasedGuardingDynamicLinker>(list);
                     }
-                    lista.add(enlazadores[i]);
+                    list.add(linkers[i]);
                 }
             }
-            return lista;
+            return list;
         }
     }
 
     /**
-     * Compone los enlazadores en el orden en que vienen.
+     * Composes the linkers in the order they arrive in.
      *
-     * @param linkers los enlazadores
+     * @param linkers the linkers
      */
     public CompositeTypeBasedGuardingDynamicLinker(
             final Iterable<? extends TypeBasedGuardingDynamicLinker> linkers) {
@@ -84,30 +84,29 @@ public class CompositeTypeBasedGuardingDynamicLinker implements TypeBasedGuardin
         for (final TypeBasedGuardingDynamicLinker linker : linkers) {
             l.add(Objects.requireNonNull(linker));
         }
-        this.claseAEnlazadores = new ClaseAEnlazadores(
+        this.linkersByClass = new LinkersByClass(
                 l.toArray(new TypeBasedGuardingDynamicLinker[l.size()]));
     }
 
-    /** Si alguno de los compuestos acepta esa clase. */
+    /** Whether any of the composed ones accepts that class. */
     public boolean canLinkType(final Class<?> type) {
-        return !claseAEnlazadores.get(type).isEmpty();
+        return !linkersByClass.get(type).isEmpty();
     }
 
     /**
-     * Lo que conteste el primero de los enlazadores que aceptan la clase del receptor.
+     * Whatever the first of the linkers accepting the receiver's class answers.
      *
-     * <p>Sin receptor no hay clase por la cual decidir, y entonces devuelve {@code null} sin
-     * preguntarle a nadie: un enlazador basado en tipos no tiene nada que decir de una invocacion
-     * sin argumentos.
+     * <p>With no receiver there is no class to decide by, and so it returns {@code null} without
+     * asking anyone: a type-based linker has nothing to say about an invocation with no arguments.
      */
     public GuardedInvocation getGuardedInvocation(final LinkRequest linkRequest,
             final LinkerServices linkerServices) throws Exception {
-        final Object receptor = linkRequest.getReceiver();
-        if (receptor == null) {
+        final Object receiver = linkRequest.getReceiver();
+        if (receiver == null) {
             return null;
         }
         for (final TypeBasedGuardingDynamicLinker linker
-                : claseAEnlazadores.get(receptor.getClass())) {
+                : linkersByClass.get(receiver.getClass())) {
             final GuardedInvocation invocation =
                     linker.getGuardedInvocation(linkRequest, linkerServices);
             if (invocation != null) {
@@ -118,44 +117,44 @@ public class CompositeTypeBasedGuardingDynamicLinker implements TypeBasedGuardin
     }
 
     /**
-     * Agrupa los tramos consecutivos de enlazadores basados en tipo, dejando el resto igual.
+     * Groups the consecutive runs of type-based linkers, leaving the rest as they are.
      *
-     * <p>El orden importa y por eso solo agrupa <strong>consecutivos</strong>: si entre dos
-     * enlazadores por tipo hay uno comun, juntar los dos primeros los adelantaria por encima de
-     * el, y la cadena dejaria de significar lo que su autor escribio.
+     * <p>The order matters and that is why it only groups <strong>consecutive</strong> ones: if there
+     * is an ordinary linker between two type-based ones, joining the first two would move them ahead
+     * of it, and the chain would stop meaning what its author wrote.
      *
-     * @param linkers los enlazadores, en orden
-     * @return la lista optimizada, del mismo largo o mas corta
+     * @param linkers the linkers, in order
+     * @return the optimised list, of the same length or shorter
      */
     public static List<GuardingDynamicLinker> optimize(
             final Iterable<? extends GuardingDynamicLinker> linkers) {
-        final List<GuardingDynamicLinker> salida = new ArrayList<GuardingDynamicLinker>();
-        final List<TypeBasedGuardingDynamicLinker> tramo =
+        final List<GuardingDynamicLinker> out = new ArrayList<GuardingDynamicLinker>();
+        final List<TypeBasedGuardingDynamicLinker> run =
                 new ArrayList<TypeBasedGuardingDynamicLinker>();
         for (final GuardingDynamicLinker linker : linkers) {
             Objects.requireNonNull(linker);
             if (linker instanceof TypeBasedGuardingDynamicLinker) {
-                tramo.add((TypeBasedGuardingDynamicLinker) linker);
+                run.add((TypeBasedGuardingDynamicLinker) linker);
             } else {
-                cerrarTramo(salida, tramo);
-                salida.add(linker);
+                closeRun(out, run);
+                out.add(linker);
             }
         }
-        cerrarTramo(salida, tramo);
-        return salida;
+        closeRun(out, run);
+        return out;
     }
 
-    private static void cerrarTramo(final List<GuardingDynamicLinker> salida,
-            final List<TypeBasedGuardingDynamicLinker> tramo) {
-        if (tramo.isEmpty()) {
+    private static void closeRun(final List<GuardingDynamicLinker> out,
+            final List<TypeBasedGuardingDynamicLinker> run) {
+        if (run.isEmpty()) {
             return;
         }
-        if (tramo.size() == 1) {
-            // Uno solo no se envuelve: la cache no ahorraria nada y agregaria una indireccion.
-            salida.addAll(tramo);
+        if (run.size() == 1) {
+            // A single one is not wrapped: the cache would save nothing and would add an indirection.
+            out.addAll(run);
         } else {
-            salida.add(new CompositeTypeBasedGuardingDynamicLinker(tramo));
+            out.add(new CompositeTypeBasedGuardingDynamicLinker(run));
         }
-        tramo.clear();
+        run.clear();
     }
 }

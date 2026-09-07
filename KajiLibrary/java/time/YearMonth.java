@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalField;
 import java.time.temporal.TemporalUnit;
@@ -10,7 +11,7 @@ import java.time.temporal.ChronoUnit;
 
 // KajiLibrary's java.time.YearMonth — a year-and-month, e.g. 2026-08, without a day. Immutable.
 // Implements Temporal, TemporalAdjuster and Comparable. A KajiLibrary subset.
-public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<YearMonth> {
+public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<YearMonth>, Serializable {
 
     private final int year;
     private final int month;

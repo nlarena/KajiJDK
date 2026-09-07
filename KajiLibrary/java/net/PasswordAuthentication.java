@@ -1,16 +1,16 @@
 package java.net;
 
-// Un usuario y una contrasena, para devolverle a un `Authenticator`.
+// A user name and a password, to hand back to an `Authenticator`.
 //
-// La contrasena se guarda como `char[]` y no como `String`, y eso no es estilo: un `String` es
-// inmutable y queda vivo hasta que el recolector lo levante, o sea que la contrasena se queda dando
-// vueltas en memoria sin que nadie pueda borrarla. Un arreglo se puede sobreescribir.
+// The password is kept as a `char[]` and not as a `String`, and that is not style: a `String` is
+// immutable and stays alive until the collector picks it up, that is, the password hangs about in
+// memory with nobody able to wipe it. An array can be overwritten.
 //
-// El constructor **copia** el arreglo --para que quien lo paso pueda limpiar el suyo-- pero
-// `getPassword()` devuelve el interno sin copiar, para que el que lo consume pueda limpiarlo cuando
-// termine. La asimetria es del JDK y es deliberada.
+// The constructor **copies** the array --so that whoever passed it can clear their own-- but
+// `getPassword()` returns the internal one without copying, so that whoever consumes it can clear it
+// when done. The asymmetry is the JDK's and it is deliberate.
 //
-// Nada omitido: esto es un par de valores.
+// Nothing omitted: this is a pair of values.
 public final class PasswordAuthentication {
 
     private final String userName;
@@ -25,7 +25,7 @@ public final class PasswordAuthentication {
         return this.userName;
     }
 
-    /** El arreglo interno, no una copia: ver la cabecera. */
+    /** The internal array, not a copy: see the header. */
     public char[] getPassword() {
         return this.password;
     }

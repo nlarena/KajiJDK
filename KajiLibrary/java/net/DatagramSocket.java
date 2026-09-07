@@ -53,9 +53,9 @@ public class DatagramSocket implements Closeable {
     /** El socket de la VM, o -1 si este no se ato. */
     int handle = -1;
 
-    // Lo que necesita un `DatagramChannel` para entregar el socket que lo envuelve. Ver
-    // `ServerSocket.adoptar`.
-    void adoptar(int h) {
+    // What a `DatagramChannel` needs in order to hand over the socket that wraps it. See
+    // `ServerSocket.adopt`.
+    void adopt(int h) {
         this.handle = h;
         this.bound = true;
     }

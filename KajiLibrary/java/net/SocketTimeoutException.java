@@ -2,13 +2,13 @@ package java.net;
 
 import java.io.InterruptedIOException;
 
-// Se vencio el plazo de una operacion de socket.
+// A socket operation's deadline expired.
 //
-// Hereda de `InterruptedIOException`, no de `SocketException`, y ahi esta todo el sentido de la
-// clase: `InterruptedIOException` trae `bytesTransferred`, o sea **cuanto se alcanzo a mover antes
-// de cortar**. Un timeout no invalida el socket -- lo que ya paso, paso -- y quien lo atrapa suele
-// querer seguir desde donde quedo. Si colgara de `SocketException` diria "el socket murio", que es
-// otra cosa.
+// It inherits from `InterruptedIOException`, not from `SocketException`, and there lies the whole
+// point of the class: `InterruptedIOException` carries `bytesTransferred`, that is, **how much was
+// moved before the cut**. A timeout does not invalidate the socket -- what happened, happened -- and
+// whoever catches it usually wants to go on from where it stopped. Hanging off `SocketException` it
+// would say "the socket died", which is a different thing.
 public class SocketTimeoutException extends InterruptedIOException {
 
     private static final long serialVersionUID = -8846654841826352300L;

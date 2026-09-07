@@ -1,6 +1,8 @@
 package java.util;
 
 // Compiled with `-cp KajiLibrary` so Map binds to KajiLibrary's own (subset) type.
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Map;
 
 // KajiLibrary's java.util.HashMap<K,V> — a hash table keyed by `hashCode`/`equals`. This
@@ -9,7 +11,7 @@ import java.util.Map;
 // marks an empty bucket; removal re-inserts the trailing cluster to preserve the probe
 // invariant. (Null keys are not supported, unlike the JDK.) Map has no iteration in our subset,
 // so no helper class is needed.
-public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
+public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Serializable, Cloneable {
 
     /**
      * La clave null vive aparte de la tabla.

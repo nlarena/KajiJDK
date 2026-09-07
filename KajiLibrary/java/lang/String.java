@@ -1,5 +1,6 @@
 package java.lang;
 
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.lang.constant.ConstantDesc;
 import java.lang.invoke.MethodHandles;
@@ -38,7 +39,8 @@ import java.util.stream.Stream;
  * - the varargs forms (`format`, `join`, `formatted`) are declared over arrays instead,
  * because `ACC_VARARGS` is never emitted (finding #118).
  */
-public final class String implements Comparable<String>, CharSequence, ConstantDesc {
+public final class String
+        implements Serializable, Comparable<String>, CharSequence, ConstantDesc {
 
     /**
      * Case-insensitive order, as a shared comparator. Declared here because the JDK does, but

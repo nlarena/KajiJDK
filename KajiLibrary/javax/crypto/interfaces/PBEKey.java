@@ -3,41 +3,43 @@ package javax.crypto.interfaces;
 import javax.crypto.SecretKey;
 
 /**
- * KajiLibrary's javax.crypto.interfaces.PBEKey -- una clave derivada de una contrasena.
+ * KajiLibrary's javax.crypto.interfaces.PBEKey -- a key derived from a password.
  *
- * <p>Expone las tres piezas de la derivacion, y las tres estan aca por un motivo distinto:
+ * <p>It exposes the three pieces of the derivation, and each of the three is here for a different
+ * reason:
  *
  * <ul>
- *   <li>{@link #getPassword} -- lo unico que la persona recuerda. Devuelve {@code char[]} y no
- *       {@code String} <b>a proposito</b>: un arreglo se puede sobreescribir despues de usarlo, y una
- *       cadena queda en el pool de literales hasta que el recolector la levante, si es que la
- *       levanta. Cada llamada tiene que devolver una copia nueva, para que borrarla no rompa la
- *       clave;
- *   <li>{@link #getSalt} -- lo que hace que la misma contrasena de dos personas de claves distintas.
- *       Sin sal, una tabla precalculada rompe todas las cuentas de una sola pasada, y por eso la sal
- *       <b>no es secreta</b>: se guarda junto al resultado;
- *   <li>{@link #getIterationCount} -- cuantas veces se repite la funcion. Es lo unico que hace cara
- *       la derivacion, y es la unica defensa contra alguien que prueba contrasenas por fuerza bruta.
- *       Un numero de los noventa --mil vueltas-- hoy no protege nada.
+ *   <li>{@link #getPassword} -- the only thing the person remembers. It returns {@code char[]} and
+ *       not {@code String} <b>on purpose</b>: an array can be overwritten after use, and a string
+ *       stays in the literal pool until the collector picks it up, if it ever does. Every call has to
+ *       return a fresh copy, so that wiping it does not break the key;
+ *   <li>{@link #getSalt} -- what makes the same password give two people different keys. Without
+ *       salt, a precomputed table breaks every account in a single pass, and that is why the salt
+ *       <b>is not secret</b>: it is stored next to the result;
+ *   <li>{@link #getIterationCount} -- how many times the function is repeated. It is the only thing
+ *       that makes the derivation expensive, and it is the only defence against someone trying
+ *       passwords by brute force. A number from the nineties --a thousand rounds-- protects nothing
+ *       today.
  * </ul>
  *
- * <p>Que todo esto sea consultable es incomodo desde el punto de vista de la seguridad y es
- * necesario: sin la sal y las vueltas no se puede volver a derivar la misma clave, y sin poder
- * volver a derivarla no se puede descifrar nada.
+ * <p>That all of this is queryable is uncomfortable from a security point of view and it is
+ * necessary: without the salt and the rounds the same key cannot be derived again, and without being
+ * able to derive it again nothing can be decrypted.
  */
 public interface PBEKey extends SecretKey {
 
     /**
-     * De 2000. Es parte del API publico: cambiarlo rompe la deserializacion de claves ya guardadas.
+     * From 2000. It is part of the public API: changing it breaks the deserialization of keys already
+     * stored.
      */
     static final long serialVersionUID = -1430015993304333921L;
 
-    /** La contrasena, en una copia nueva. Ver la nota de la clase sobre por que no es un String. */
+    /** The password, in a fresh copy. See the class's note on why it is not a String. */
     char[] getPassword();
 
-    /** La sal, o null si no tiene. No es secreta. */
+    /** The salt, or null if it has none. It is not secret. */
     byte[] getSalt();
 
-    /** Cuantas vueltas de derivacion. Ver la nota de la clase. */
+    /** How many rounds of derivation. See the class's note. */
     int getIterationCount();
 }

@@ -1,5 +1,8 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
+
 // A doubly-linked list: every element is a node holding its neighbours, so inserting or
 // removing at a known position is O(1) — no shifting, unlike {@link ArrayList}. The price is
 // that reaching position *i* costs a walk, and every element pays for two extra references.
@@ -11,7 +14,7 @@ package java.util;
 //
 // `get(int)` walks from the *nearer* end, which halves the average walk — the same trick the
 // JDK plays.
-public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>, Deque<E> {
+public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>, Deque<E>, Serializable, Cloneable {
 
     private LinkedNode<E> first;
     private LinkedNode<E> last;

@@ -2,11 +2,11 @@ package java.net;
 
 import java.io.IOException;
 
-// El otro extremo hablo el protocolo mal: la conexion esta viva, lo que llego no tiene sentido.
+// The far end spoke the protocol wrongly: the connection is alive, what arrived makes no sense.
 //
-// No hereda de `SocketException` a proposito, y no es un descuido del JDK: `SocketException` es
-// "el socket fallo" y esto es "el socket anduvo y el mensaje estaba roto". Son dos capas distintas,
-// y quien atrapa una casi nunca quiere la otra.
+// It does not inherit from `SocketException` on purpose, and it is not an oversight of the JDK's:
+// `SocketException` is "the socket failed" and this is "the socket worked and the message was
+// broken". They are two different layers, and whoever catches one hardly ever wants the other.
 public class ProtocolException extends IOException {
 
     private static final long serialVersionUID = 8207694371842273524L;

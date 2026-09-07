@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalField;
 import java.time.temporal.TemporalUnit;
@@ -12,7 +13,7 @@ import java.time.format.DateTimeFormatter;
 // KajiLibrary's java.time.LocalTime — a time of day (hour/minute/second/nano) without date or zone.
 // Immutable value type. Arithmetic wraps within a 24h day (via nano-of-day). Implements Temporal,
 // TemporalAdjuster and Comparable. A KajiLibrary subset (toString/parse and some fields deferred).
-public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<LocalTime> {
+public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<LocalTime>, Serializable {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
     private static final long NANOS_PER_DAY = 86400L * NANOS_PER_SECOND;

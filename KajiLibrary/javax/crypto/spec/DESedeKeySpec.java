@@ -4,63 +4,63 @@ import java.security.InvalidKeyException;
 import java.security.spec.KeySpec;
 
 /**
- * Una clave Triple DES: veinticuatro bytes, o sea tres claves DES puestas una detras de la otra.
+ * A Triple DES key: twenty-four bytes, that is, three DES keys placed one after another.
  *
- * <p>No tiene `isWeak`, y la ausencia es deliberada: la debilidad de Triple DES no esta en las
- * claves individuales sino en que dos de las tres sean iguales --con eso degenera a DES simple-- y
- * eso no es lo que `isWeak` de {@link DESKeySpec} mide. Comprobar solo las tres por separado daria
- * una falsa tranquilidad.
+ * <p>It has no `isWeak`, and the absence is deliberate: Triple DES's weakness is not in the
+ * individual keys but in two of the three being equal --with that it degenerates into plain DES-- and
+ * that is not what {@link DESKeySpec}'s `isWeak` measures. Checking only the three separately would
+ * give false comfort.
  */
 public class DESedeKeySpec implements KeySpec {
 
-    /** Los bytes que una clave Triple DES ocupa. */
+    /** The bytes a Triple DES key takes up. */
     public static final int DES_EDE_KEY_LEN = 24;
 
     private final byte[] key;
 
     /**
-     * @throws InvalidKeyException si el arreglo tiene menos de veinticuatro bytes
-     * @throws NullPointerException si es nulo
+     * @throws InvalidKeyException if the array has fewer than twenty-four bytes
+     * @throws NullPointerException if it is null
      */
     public DESedeKeySpec(byte[] key) throws InvalidKeyException {
         this(key, 0);
     }
 
     /**
-     * La clave son los veinticuatro bytes a partir de `offset`.
+     * The key is the twenty-four bytes starting at `offset`.
      *
-     * @throws InvalidKeyException si quedan menos de veinticuatro bytes desde `offset`
-     * @throws NullPointerException si el arreglo es nulo
+     * @throws InvalidKeyException if fewer than twenty-four bytes are left from `offset`
+     * @throws NullPointerException if the array is null
      */
     public DESedeKeySpec(byte[] key, int offset) throws InvalidKeyException {
         if (key == null) {
-            throw new NullPointerException("la clave no puede ser nula");
+            throw new NullPointerException("the key cannot be null");
         }
         if (key.length - offset < DES_EDE_KEY_LEN) {
             throw new InvalidKeyException(
-                    "una clave Triple DES son " + DES_EDE_KEY_LEN + " bytes desde el offset");
+                    "a Triple DES key is " + DES_EDE_KEY_LEN + " bytes from the offset");
         }
         this.key = IvParameterSpec.copy(key, offset, DES_EDE_KEY_LEN);
     }
 
-    /** Una copia de los veinticuatro bytes. */
+    /** A copy of the twenty-four bytes. */
     public byte[] getKey() {
         return IvParameterSpec.copy(this.key, 0, DES_EDE_KEY_LEN);
     }
 
     /**
-     * Si las tres claves DES de adentro tienen sus bits de paridad puestos.
+     * Whether the three DES keys inside have their parity bits set.
      *
-     * @throws InvalidKeyException si quedan menos de veinticuatro bytes desde `offset`
-     * @throws NullPointerException si el arreglo es nulo
+     * @throws InvalidKeyException if fewer than twenty-four bytes are left from `offset`
+     * @throws NullPointerException if the array is null
      */
     public static boolean isParityAdjusted(byte[] key, int offset) throws InvalidKeyException {
         if (key == null) {
-            throw new NullPointerException("la clave no puede ser nula");
+            throw new NullPointerException("the key cannot be null");
         }
         if (key.length - offset < DES_EDE_KEY_LEN) {
             throw new InvalidKeyException(
-                    "una clave Triple DES son " + DES_EDE_KEY_LEN + " bytes desde el offset");
+                    "a Triple DES key is " + DES_EDE_KEY_LEN + " bytes from the offset");
         }
         return DESKeySpec.isParityAdjusted(key, offset)
                 && DESKeySpec.isParityAdjusted(key, offset + 8)

@@ -3,20 +3,19 @@ package javax.crypto.interfaces;
 import javax.crypto.spec.DHParameterSpec;
 
 /**
- * KajiLibrary's javax.crypto.interfaces.DHKey -- lo que comparten las dos mitades de una clave
- * Diffie-Hellman.
+ * KajiLibrary's javax.crypto.interfaces.DHKey -- what the two halves of a Diffie-Hellman key share.
  *
- * <p>Un solo metodo, y lo que devuelve es la parte del acuerdo que <b>no es secreta y tiene que
- * coincidir</b>: el modulo primo y la base. Sin los mismos parametros de los dos lados no hay
- * secreto compartido, asi que esto se transmite en claro junto con la clave publica.
+ * <p>A single method, and what it returns is the part of the agreement that <b>is not secret and has
+ * to match</b>: the prime modulus and the base. Without the same parameters on both sides there is no
+ * shared secret, so this travels in the clear along with the public key.
  *
- * <p>Que los parametros sean publicos no significa que den lo mismo. Elegir un modulo chico, o uno
- * que no sea primo seguro, deja el intercambio al alcance de un ataque de logaritmo discreto
- * precalculado -- que es exactamente lo que hizo caer a los primos de 1024 bits que se usaban de
- * memoria por todos lados.
+ * <p>That the parameters are public does not mean they are all the same. Choosing a small modulus, or
+ * one that is not a safe prime, leaves the exchange within reach of a precomputed discrete-logarithm
+ * attack -- which is exactly what brought down the 1024-bit primes that were used from memory
+ * everywhere.
  */
 public interface DHKey {
 
-    /** El modulo, la base y el largo del exponente privado. */
+    /** The modulus, the base and the length of the private exponent. */
     DHParameterSpec getParams();
 }

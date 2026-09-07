@@ -7,32 +7,33 @@ import java.lang.invoke.MethodType;
 import jdk.dynalink.linker.MethodHandleTransformer;
 
 /**
- * Impide que los objetos internos de un lenguaje se escapen a quien lo hospeda.
+ * Keeps a language's internal objects from escaping into its host.
  *
- * <h2>El problema</h2>
+ * <h2>The problem</h2>
  *
- * <p>Un lenguaje que corre sobre la JVM casi siempre representa sus valores con clases propias —
- * una cadena de scripting no tiene por que ser un {@code String} de Java. Mientras esos objetos
- * circulan adentro del lenguaje esta bien. El problema aparece en el borde: un metodo Java que
- * recibe {@code Object} y devuelve {@code Object} puede terminar guardando en una coleccion un
- * objeto que solo el lenguaje sabe interpretar.
+ * <p>A language running on the JVM almost always represents its values with classes of its own — a
+ * scripting string has no reason to be a Java {@code String}. While those objects circulate inside
+ * the language that is fine. The problem appears at the border: a Java method taking {@code Object}
+ * and returning {@code Object} may end up storing in a collection an object only the language knows
+ * how to interpret.
  *
- * <p>La solucion podria ser acordarse de convertir en cada punto de salida. Nadie se acuerda
- * siempre. Esta clase lo hace de una vez para todos los handles.
+ * <p>The solution could be to remember to convert at every exit point. Nobody remembers every time.
+ * This class does it once and for all method handles.
  *
- * <h2>Por que solo toca los parametros {@code Object}</h2>
+ * <h2>Why it only touches the {@code Object} parameters</h2>
  *
- * <p>Porque los demas ya estan tipados: un parametro declarado {@code String} no puede recibir un
- * objeto interno del lenguaje, el verificador no lo permitiria. {@code Object} es exactamente el
- * lugar por donde algo sin tipo puede pasar, y por eso es el unico que hay que filtrar. Lo mismo
- * del lado del retorno, y lo mismo con {@code Object[]} para el parametro variable.
+ * <p>Because the rest are already typed: a parameter declared {@code String} cannot receive an
+ * internal object of the language, the verifier would not allow it. {@code Object} is exactly the
+ * place something untyped can get through, and that is why it is the only one that has to be
+ * filtered. The same on the return side, and the same with {@code Object[]} for the variable
+ * parameter.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Las decisiones de que filtrar son reales y ocurren. Aplicarlas necesita
- * {@code MethodHandles.filterArguments}, que todavia no se puede fabricar sin soporte de la VM: si
- * hay algo que filtrar, el metodo termina en {@link UnsupportedOperationException}. Un handle sin
- * nada que filtrar vuelve intacto, sin tocar el fabricante.
+ * <p>The decisions about what to filter are real and they happen. Applying them needs
+ * {@code MethodHandles.filterArguments}, which cannot yet be built without VM support: if there is
+ * anything to filter, the method ends in {@link UnsupportedOperationException}. A handle with nothing
+ * to filter comes back untouched, without going near the factory.
  *
  * @since 9
  */
@@ -42,75 +43,75 @@ public class DefaultInternalObjectFilter implements MethodHandleTransformer {
     private final MethodHandle returnFilter;
 
     /**
-     * Los dos filtros, cualquiera de los dos opcional.
+     * The two filters, either of them optional.
      *
-     * @param parameterFilter que aplicar a los argumentos que entran, o {@code null}
-     * @param returnFilter que aplicar al valor que sale, o {@code null}
-     * @throws IllegalArgumentException si alguno no es de tipo {@code (Object)Object}
+     * @param parameterFilter what to apply to the incoming arguments, or {@code null}
+     * @param returnFilter what to apply to the outgoing value, or {@code null}
+     * @throws IllegalArgumentException if either is not of type {@code (Object)Object}
      */
     public DefaultInternalObjectFilter(final MethodHandle parameterFilter,
             final MethodHandle returnFilter) {
-        this.parameterFilter = revisar(parameterFilter, "parameterFilter");
-        this.returnFilter = revisar(returnFilter, "returnFilter");
+        this.parameterFilter = check(parameterFilter, "parameterFilter");
+        this.returnFilter = check(returnFilter, "returnFilter");
     }
 
     /**
-     * Un filtro tiene que ser {@code (Object)Object}.
+     * A filter has to be {@code (Object)Object}.
      *
-     * <p>La exigencia no es burocratica: el filtro se va a insertar donde habia un {@code Object},
-     * asi que si tomara o devolviera otra cosa la firma del handle resultante no cerraria. Es mas
-     * util fallar aca, con el nombre del argumento, que en el medio de un enlace.
+     * <p>The requirement is not red tape: the filter is going to be inserted where an {@code Object}
+     * was, so if it took or returned anything else the resulting handle's signature would not add up.
+     * Failing here, with the argument's name, is more useful than failing in the middle of a link.
      */
-    private static MethodHandle revisar(final MethodHandle filtro, final String nombre) {
-        if (filtro == null) {
+    private static MethodHandle check(final MethodHandle filter, final String name) {
+        if (filter == null) {
             return null;
         }
-        final MethodType tipo = filtro.type();
-        if (tipo.parameterCount() != 1 || tipo.parameterType(0) != Object.class
-                || tipo.returnType() != Object.class) {
-            throw new IllegalArgumentException(nombre + " tiene que ser de tipo (Object)Object");
+        final MethodType type = filter.type();
+        if (type.parameterCount() != 1 || type.parameterType(0) != Object.class
+                || type.returnType() != Object.class) {
+            throw new IllegalArgumentException(name + " must be of type (Object)Object");
         }
-        return filtro;
+        return filter;
     }
 
     /**
-     * El handle con los filtros puestos donde hacen falta.
+     * The handle with the filters put where they are needed.
      *
-     * @param target el handle original
-     * @return el filtrado, o el mismo si no habia nada que filtrar
+     * @param target the original handle
+     * @return the filtered one, or the same one if there was nothing to filter
      */
     public MethodHandle transform(final MethodHandle target) {
-        final MethodType tipo = target.type();
-        final boolean variable = target.isVarargsCollector();
-        // El ultimo parametro de un handle de aridad variable es el arreglo, y se trata aparte:
-        // lo que hay que filtrar son sus elementos, no el arreglo.
-        final int fijos = tipo.parameterCount() - (variable ? 1 : 0);
+        final MethodType type = target.type();
+        final boolean varargs = target.isVarargsCollector();
+        // The last parameter of a variable-arity handle is the array, and it is handled apart: what
+        // has to be filtered is its elements, not the array.
+        final int fixed = type.parameterCount() - (varargs ? 1 : 0);
 
-        MethodHandle[] filtros = null;
+        MethodHandle[] filters = null;
         if (parameterFilter != null) {
-            for (int i = 0; i < fijos; i++) {
-                if (tipo.parameterType(i) == Object.class) {
-                    if (filtros == null) {
-                        filtros = new MethodHandle[fijos];
+            for (int i = 0; i < fixed; i++) {
+                if (type.parameterType(i) == Object.class) {
+                    if (filters == null) {
+                        filters = new MethodHandle[fixed];
                     }
-                    filtros[i] = parameterFilter;
+                    filters[i] = parameterFilter;
                 }
             }
         }
 
-        MethodHandle salida = target;
-        if (filtros != null) {
-            salida = MethodHandles.filterArguments(target, 0, filtros);
+        MethodHandle result = target;
+        if (filters != null) {
+            result = MethodHandles.filterArguments(target, 0, filters);
         }
-        if (returnFilter != null && tipo.returnType() == Object.class) {
-            salida = MethodHandles.filterReturnValue(salida, returnFilter);
+        if (returnFilter != null && type.returnType() == Object.class) {
+            result = MethodHandles.filterReturnValue(result, returnFilter);
         }
-        if (variable && salida != target) {
-            // filterArguments y filterReturnValue devuelven handles de aridad fija: hay que
-            // volver a marcarlo como variable o el sitio dejaria de poder pasarle argumentos
-            // sueltos, que es la unica razon por la que era variable.
-            salida = salida.asVarargsCollector(tipo.parameterType(fijos));
+        if (varargs && result != target) {
+            // filterArguments and filterReturnValue return fixed-arity handles: it has to be marked
+            // variable again or the site would stop being able to pass it loose arguments, which is
+            // the only reason it was variable.
+            result = result.asVarargsCollector(type.parameterType(fixed));
         }
-        return salida;
+        return result;
     }
 }

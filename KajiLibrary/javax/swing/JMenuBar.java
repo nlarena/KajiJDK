@@ -1,31 +1,239 @@
 package javax.swing;
 
+import java.awt.Component;
+import java.awt.Graphics;
+import java.awt.Insets;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.swing.plaf.ComponentUI;
+import javax.swing.plaf.MenuBarUI;
+
 /**
- * <strong>Un lugar reservado, no una implementación.</strong> Esta biblioteca no trae Swing.
+ * La barra de menu de una ventana.
  *
- * <p>En Swing de verdad, `JMenuBar` es la barra de menús de una ventana: guarda los `JMenu`, lleva
- * cuál está abierto, y participa de la navegación por teclado a través de `MenuElement`.
+ * <h2>Es un contenedor y un elemento de menu</h2>
  *
- * <p><strong>Existe por un solo motivo</strong>: es el tipo del parámetro de
- * {@code java.awt.Desktop.setDefaultMenuBar}, el único método de todo `java.awt` cuya firma nombra
- * un tipo de Swing. Ese método pone la barra de menús del programa en la del sistema —la franja de
- * arriba de macOS— y en esta biblioteca tira {@code UnsupportedOperationException} como todo lo
- * demás de {@code Desktop}, porque no hay escritorio. O sea que este tipo se nombra y nunca se usa.
+ * <p>Como contenedor tiene a los {@link JMenu} de arriba; como {@link MenuElement} participa del
+ * recorrido con el teclado y el mouse. Lo segundo es lo que hace que moverse con las flechas entre
+ * dos menus de la barra funcione: el recorrido pasa por la barra, no salta de un menu al otro.
  *
- * <p><strong>Qué falta, dicho de frente:</strong> todos sus miembros, y las dos interfaces que
- * implementa de verdad —{@code javax.accessibility.Accessible} y {@link MenuElement}—. La segunda se
- * dejó afuera a propósito: implementarla obliga a traer `MenuSelectionManager`, que a su vez trae
- * `EventListenerList` y los eventos de cambio, o sea a empezar Swing por la puerta de atrás. La
- * primera se podría haber puesto casi gratis, pero mezclar media interfaz de verdad con una clase
- * vacía es peor que ser parejo: esto es un nombre con la jerarquía correcta, y se anuncia como tal.
+ * <h2>El menu de ayuda</h2>
  *
- * @see JComponent
+ * <p>{@link #setHelpMenu} existe porque en algunos sistemas ese menu va pegado a la derecha. No
+ * esta implementado -- ni en el JDK -- y lanza {@code Error}: es preferible a guardarlo y no
+ * hacerle nada, que dejaria al programa creyendo que lo puso.
  */
-public class JMenuBar extends JComponent {
+public class JMenuBar extends JComponent implements Accessible, MenuElement {
 
-    private static final long serialVersionUID = -8191026883931977036L;
+    private static final String uiClassID = "MenuBarUI";
 
-    /** Una barra de menús. */
+    private transient SingleSelectionModel selectionModel;
+    private boolean paintBorder = true;
+    private Insets margin = null;
+    private AccessibleContext accessibleContext;
+
+    /** Una barra vacia. */
     public JMenuBar() {
+        super();
+        setSelectionModel(new DefaultSingleSelectionModel());
+        setFocusTraversalKeysEnabled(false);
+        updateUI();
+    }
+
+    public MenuBarUI getUI() {
+        return (MenuBarUI) ui;
+    }
+
+    public void setUI(MenuBarUI ui) {
+        super.setUI(ui);
+    }
+
+    public void updateUI() {
+    }
+
+    public String getUIClassID() {
+        return uiClassID;
+    }
+
+    /** Cual menu de la barra esta abierto. */
+    public SingleSelectionModel getSelectionModel() {
+        return selectionModel;
+    }
+
+    public void setSelectionModel(SingleSelectionModel model) {
+        SingleSelectionModel oldValue = selectionModel;
+        this.selectionModel = model;
+        firePropertyChange("selectionModel", oldValue, model);
+    }
+
+    public JMenu add(JMenu c) {
+        super.add(c);
+        return c;
+    }
+
+    /**
+     * El menu numero tal.
+     *
+     * <p>Devuelve nulo si en esa posicion hay algo que no es un menu; la barra puede tener otros
+     * componentes.
+     */
+    public JMenu getMenu(int index) {
+        Component c = getComponentAtIndex(index);
+        if (c instanceof JMenu) {
+            return (JMenu) c;
+        }
+        return null;
+    }
+
+    public int getMenuCount() {
+        return getComponentCount();
+    }
+
+    /**
+     * El menu de ayuda.
+     *
+     * @throws Error siempre; ver la nota de la clase.
+     */
+    public void setHelpMenu(JMenu menu) {
+        throw new Error("setHelpMenu() not yet implemented.");
+    }
+
+    /**
+     * El menu de ayuda.
+     *
+     * @throws Error siempre.
+     */
+    public JMenu getHelpMenu() {
+        throw new Error("getHelpMenu() not yet implemented.");
+    }
+
+    /**
+     * El componente numero tal.
+     *
+     * @deprecated Usar {@link java.awt.Container#getComponent(int)}.
+     */
+    @Deprecated
+    public Component getComponentAtIndex(int i) {
+        if (i < 0 || i >= getComponentCount()) {
+            return null;
+        }
+        return getComponent(i);
+    }
+
+    public int getComponentIndex(Component c) {
+        int ncomponents = this.getComponentCount();
+        Component[] component = this.getComponents();
+        for (int i = 0; i < ncomponents; i++) {
+            if (component[i] == c) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Abre ese menu de la barra. */
+    public void setSelected(Component sel) {
+        SingleSelectionModel model = getSelectionModel();
+        int index = getComponentIndex(sel);
+        model.setSelectedIndex(index);
+    }
+
+    /** Si algun menu de la barra esta abierto. */
+    public boolean isSelected() {
+        return selectionModel.isSelected();
+    }
+
+    public boolean isBorderPainted() {
+        return paintBorder;
+    }
+
+    public void setBorderPainted(boolean b) {
+        boolean oldValue = paintBorder;
+        paintBorder = b;
+        firePropertyChange("borderPainted", oldValue, paintBorder);
+        if (b != oldValue) {
+            revalidate();
+            repaint();
+        }
+    }
+
+    protected void paintBorder(Graphics g) {
+        if (isBorderPainted()) {
+            super.paintBorder(g);
+        }
+    }
+
+    public void setMargin(Insets m) {
+        Insets old = margin;
+        this.margin = m;
+        firePropertyChange("margin", old, m);
+        if (old == null || !old.equals(m)) {
+            revalidate();
+            repaint();
+        }
+    }
+
+    public Insets getMargin() {
+        if (margin == null) {
+            return new Insets(0, 0, 0, 0);
+        }
+        return margin;
+    }
+
+    public void processMouseEvent(MouseEvent event, MenuElement[] path,
+            MenuSelectionManager manager) {
+    }
+
+    public void processKeyEvent(KeyEvent e, MenuElement[] path,
+            MenuSelectionManager manager) {
+    }
+
+    /** El recorrido dejo la barra: se cierra lo que hubiera abierto. */
+    public void menuSelectionChanged(boolean isIncluded) {
+        if (!isIncluded) {
+            getSelectionModel().clearSelection();
+        }
+    }
+
+    /** Los menus de la barra que participan del recorrido. */
+    public MenuElement[] getSubElements() {
+        java.util.Vector<MenuElement> tmp = new java.util.Vector<MenuElement>();
+        for (int i = 0; i < getComponentCount(); i++) {
+            Component c = getComponent(i);
+            if (c instanceof MenuElement) {
+                tmp.addElement((MenuElement) c);
+            }
+        }
+        MenuElement[] result = new MenuElement[tmp.size()];
+        tmp.copyInto(result);
+        return result;
+    }
+
+    public Component getComponent() {
+        return this;
+    }
+
+    protected String paramString() {
+        return super.paramString();
+    }
+
+    public AccessibleContext getAccessibleContext() {
+        return accessibleContext;
+    }
+
+    protected boolean processKeyBinding(KeyStroke ks, KeyEvent e, int condition,
+            boolean pressed) {
+        return super.processKeyBinding(ks, e, condition, pressed);
+    }
+
+    public void addNotify() {
+        super.addNotify();
+    }
+
+    public void removeNotify() {
+        super.removeNotify();
     }
 }

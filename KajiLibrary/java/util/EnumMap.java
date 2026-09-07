@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package import works around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Map;
 
 // A {@link Map} whose keys are the constants of a single enum type — and which therefore does
@@ -32,7 +34,7 @@ import java.util.Map;
 // Subset of the JDK's: the collection views (keySet/values/entrySet), putAll, the
 // `EnumMap(Map)` constructor (our `Map` has no iteration to copy through) and clone are not
 // modelled. Iteration in ordinal order would be the natural seam to add next.
-public class EnumMap<K extends Enum, V> implements Map<K, V> {
+public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Cloneable {
 
     // Stands in for a null value in the array, so that `vals[i] == null` can keep its one clear
     // meaning: nothing is mapped here. A reference-typed `static final` is safe; a primitive one

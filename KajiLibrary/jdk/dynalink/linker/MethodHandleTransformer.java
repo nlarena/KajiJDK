@@ -3,11 +3,11 @@ package jdk.dynalink.linker;
 import java.lang.invoke.MethodHandle;
 
 /**
- * Envuelve un metodo con algo que se le agrega a todos por igual.
+ * Wraps a method handle with something added to all of them alike.
  *
- * <p>El uso previsto es el filtro de objetos internos: un lenguaje que representa sus valores con
- * clases propias no quiere que esas clases se escapen a quien lo hospeda, y en vez de acordarse
- * de convertir en cada punto de salida instala una transformacion que lo hace en todos.
+ * <p>The intended use is the internal-object filter: a language that represents its values with
+ * classes of its own does not want those classes escaping to its host, and instead of remembering to
+ * convert at every exit point it installs a transformation that does it at all of them.
  *
  * @since 9
  */
@@ -15,10 +15,10 @@ import java.lang.invoke.MethodHandle;
 public interface MethodHandleTransformer {
 
     /**
-     * El metodo transformado.
+     * The transformed method handle.
      *
-     * @param target el metodo original
-     * @return el transformado; nunca {@code null}
+     * @param target the original method handle
+     * @return the transformed one; never {@code null}
      */
     MethodHandle transform(MethodHandle target);
 }

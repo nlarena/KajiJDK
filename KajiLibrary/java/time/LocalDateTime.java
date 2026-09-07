@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalField;
 import java.time.temporal.TemporalUnit;
@@ -13,7 +14,7 @@ import java.time.format.DateTimeFormatter;
 // and a LocalTime. Immutable. Time arithmetic that crosses midnight carries into the date. A
 // KajiLibrary subset (toString/parse and some conversions deferred).
 public final class LocalDateTime implements Temporal, TemporalAdjuster,
-        Comparable<LocalDateTime>, java.time.chrono.ChronoLocalDateTime {
+        Comparable<LocalDateTime>, java.time.chrono.ChronoLocalDateTime, Serializable {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
     private static final long NANOS_PER_DAY = 86400L * NANOS_PER_SECOND;

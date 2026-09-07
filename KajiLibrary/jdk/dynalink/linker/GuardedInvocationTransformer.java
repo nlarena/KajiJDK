@@ -1,17 +1,17 @@
 package jdk.dynalink.linker;
 
 /**
- * Ve cada invocacion ya enlazada, con el pedido que la produjo, y puede cambiarla.
+ * Sees every already-linked invocation, together with the request that produced it, and may change
+ * it.
  *
- * <h2>Por que no es un {@link MethodHandleTransformer}</h2>
+ * <h2>Why it is not a {@link MethodHandleTransformer}</h2>
  *
- * <p>Porque recibe el {@link LinkRequest} y los {@link LinkerServices} ademas del metodo. Eso lo
- * habilita a decidir <strong>segun el sitio</strong>: envolver solo las lecturas de propiedad,
- * agregar una guarda extra cuando el receptor es de cierta clase, contar invocaciones por
- * operacion. Un transformador de metodos a secas no tiene con que distinguir.
+ * <p>Because it receives the {@link LinkRequest} and the {@link LinkerServices} besides the method
+ * handle. That lets it decide <strong>per site</strong>: wrap property reads only, add an extra
+ * guard when the receiver is of a certain class, count invocations per operation. A plain method
+ * transformer has nothing to tell them apart with.
  *
- * <p>Es el punto de enganche que usa quien hospeda a Dynalink para instrumentar todos los enlaces
- * sin tocar ningun enlazador.
+ * <p>It is the hook the Dynalink host uses to instrument every link without touching any linker.
  *
  * @since 9
  */
@@ -19,12 +19,12 @@ package jdk.dynalink.linker;
 public interface GuardedInvocationTransformer {
 
     /**
-     * La invocacion transformada.
+     * The transformed invocation.
      *
-     * @param inv la invocacion enlazada
-     * @param linkRequest el pedido que la produjo
-     * @param linkerServices los servicios del que hospeda
-     * @return la transformada, o {@code inv} si no hay nada que cambiar
+     * @param inv the linked invocation
+     * @param linkRequest the request that produced it
+     * @param linkerServices the host's services
+     * @return the transformed one, or {@code inv} if there is nothing to change
      */
     GuardedInvocation filter(GuardedInvocation inv, LinkRequest linkRequest,
             LinkerServices linkerServices);

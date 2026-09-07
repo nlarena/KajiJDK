@@ -1,0 +1,76 @@
+# Linea base del hito F-bench: razon off/on NORMALIZADA contra el gemelo de efecto cero.
+#
+# Que es cada numero: mediana(JIT off) / mediana(JIT on) del tratamiento, dividida por la misma
+# razon de su gemelo. >1 = el JIT gana; <1 = el JIT pierde; ~1 = no hay senal sobre el ruido.
+#
+# Como se regenera:  cargo test --release --lib bench_jit -- --ignored --nocapture
+# y se pega el bloque "linea base" que imprime. NUNCA se reescribe sola: una linea base que se
+# actualiza a si misma no detecta ninguna regresion.
+#
+# Umbral de lectura: +-12%, que es el techo MEDIDO del ruido de layout de esta maquina, no un
+# numero elegido. Por debajo de eso una diferencia no se distingue de haber reenlazado el crate.
+#
+# CORRIDA DE REFERENCIA
+#   green, 10 repeticiones medidas en cuadrado latino (+1 de calentamiento descartada), 182 s.
+#   Piso de ruido de esa tanda, medido: las razones off/on de los cinco gemelos cayeron entre
+#   0.939x y 1.039x, o sea +-6%. Toda fila cuyo numero caiga adentro de ese intervalo NO sostiene
+#   ninguna afirmacion. Una tanda anterior, con la maquina ocupada, dio gemelos entre 0.87x y 1.14x:
+#   el piso depende de lo que este haciendo la maquina y hay que releerlo en cada tanda, no
+#   heredarlo de este archivo.
+#
+# COMO LEER ESTOS CINCO NUMEROS
+#   BkArith / BkRefW / BkMono / BkMega estan dos ordenes de magnitud sobre el piso: el JIT gana y no
+#   hay duda posible. BkRefA es el unico que se lee de otra manera, y su nota esta abajo.
+#
+# BkRefA: 1.731 -> 21.94 (2026-09-06). El primero de los dos numeros que se movieron por un cambio
+#   Que era: el brazo de `aastore` mandaba su guarda de capacidad de la write barrier al MISMO
+#   destino que sus guardas de tipo, o sea reportaba Status::DEOPT. Un log lleno no es una
+#   especulacion fallada --el trampolin lo drena al salir y la excursion siguiente arranca vacia--
+#   pero un DEOPT cierra la entrada on-stack del metodo para siempre. `step` hace 600 aastore por
+#   llamada y el log tiene 256 registros, asi que se llenaba a mitad de camino y el metodo quedaba
+#   cerrado en la PRIMERA de sus 1000 llamadas: 1000 deopts, el resto interpretado.
+#   Que se hizo: separar las dos salidas. Las guardas de tipo siguen reportando DEOPT (una covariante
+#   recurre sin tirar excepcion, y es exactamente para eso que existe el retiro de OSR); el log lleno
+#   reporta ALLOC, que es lo que ya hacian `new` y el `putfield` de referencia.
+#   Contadores, misma fila, antes -> despues:  deopt 1000 -> 0,  alloc 0 -> 2000.
+#   Medido dos tandas seguidas: 21.94x y 22.07x normalizado, con gemelos entre 0.969x y 1.032x
+#   (piso +-3%). No llega al 112x de BkRefW y no tiene por que: el arreglo de BkRefA vive en Old y
+#   el valor en Eden, asi que cada store PASA el filtro y cuesta un registro --2000 cruces de
+#   frontera y medio millon de barreras reales replayadas--, mientras que el objeto de BkRefW es
+#   joven y no registra nada en toda la corrida (0 salidas alloc, 33 entradas nativas). Son dos
+#   costos distintos, no la misma fila a dos velocidades.
+#
+#   Los otros numeros NO se tocaron en esa tanda: se movieron por ruido de maquina (BkRefW
+#   leyo 90x, 128x y 137x en tres tandas del mismo binario), y pisarlos con la lectura de un dia
+#   seria bajar la linea base al ruido en vez de a un cambio.
+#
+# BkMega: 2.140 -> 147.4 (2026-09-06), y es el segundo numero que se movio por un cambio.
+#   Que era: el perfil de receptor guardaba UNA clase por sitio (`receiver_classes`, un espejo por
+#   pc) y la guarda era UNA comparacion (`Guard::ExactClass`). `step` hace `ops[i & 3].f(acc)` con
+#   cuatro clases rotando en orden estricto, asi que la guarda fallaba en la primera iteracion, el
+#   metodo deoptaba, se retiraba su entrada on-stack y el bucle corria interpretado. Cada `f()` se
+#   ponia caliente por su cuenta y se entraba desde el interprete: 1000 deopts y 300876 entradas
+#   nativas, una por invocacion, pagando la frontera cada vez.
+#   Que se hizo: el cache de sitio pasa a ser POLIMORFICO. El perfil guarda hasta RECEIVER_WAYS = 4
+#   clases distintas por sitio, el sitio expande un cuerpo por clase y la guarda es una cadena de
+#   comparaciones que deopta solo si no coincide ninguna. Un sitio con mas clases que ways se marca
+#   megamorfico y RECHAZA el metodo: una cadena que no lo cubre se paga en cada llamada y deopta
+#   igual.
+#   Contadores, misma fila, antes -> despues:  compila 5 -> 1,  nativas 300876 -> 1000,
+#   OSR 1 -> 1,  deopt 1000 -> 0. Son exactamente los contadores de BkMono, que es lo que tienen que
+#   ser: BkMono y BkMega son el mismo programa con los mismos cuerpos.
+#   Medido dos tandas seguidas: 138.96x y 155.83x normalizado (se anota la media, 147.4), con
+#   gemelos entre 0.936x y 1.066x (piso +-6%). BkMono, que es el control de regresion de este
+#   cambio, leyo 179.55x y 197.55x contra 200.52x antes: dentro del ruido de layout, y su codigo
+#   emitido es el mismo (un sitio monomorfico sigue emitiendo UNA comparacion, asertado sobre los
+#   bytes en `pic_un_sitio_monomorfico_sigue_emitiendo_una_sola_comparacion`).
+#   Por que 4 ways y no 2: medido. Con RECEIVER_WAYS = 2 el sitio de `step` desborda en su tercera
+#   llamada, el perfil contesta megamorfico, `step` NO compila, y la fila leyo 2.22x normalizado con
+#   299876 entradas nativas y 0 OSR -- o sea la forma de antes del arreglo. Con 4 entra.
+#
+#   Los otros tres numeros NO se tocaron.
+BkArith	144.263
+BkRefW	111.592
+BkRefA	21.940
+BkMono	162.206
+BkMega	147.395

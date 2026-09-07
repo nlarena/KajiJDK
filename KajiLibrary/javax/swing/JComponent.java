@@ -47,24 +47,25 @@ import javax.swing.plaf.ComponentUI;
  *
  * <h2>Lo que <em>no</em> esta, y por que</h2>
  *
- * <p>Sesenta de los ciento cuarenta y cinco miembros del JDK quedan afuera, y cada grupo por una
- * razon concreta, no por pereza:
+ * <p>Casi todo esta. Lo que falta es lo que necesita cosas que esta biblioteca todavia no tiene, y
+ * cada grupo por una razon concreta:
  *
  * <ul>
- * <li>Las <strong>acciones por teclado</strong> —{@code registerKeyboardAction}, {@code InputMap},
- *     {@code ActionMap}— necesitan {@code KeyStroke} y {@code Action}, que son un subsistema propio
- *     y no estan.</li>
- * <li>El <strong>foco</strong> mas alla de lo que AWT ya da: {@code InputVerifier},
- *     {@code getNextFocusableComponent}, necesitan un {@code KeyboardFocusManager} que decida.</li>
- * <li><strong>Menus emergentes</strong>, <strong>transferencia</strong>, <strong>tooltips
- *     visibles</strong> y {@code getRootPane} nombran clases que no existen todavia
- *     ({@code JPopupMenu}, {@code TransferHandler}, {@code JToolTip}, {@code JRootPane}).</li>
+ * <li>El <strong>recorrido del foco</strong> mas alla de lo que AWT ya da -- por ejemplo
+ *     {@code getNextFocusableComponent} -- necesita un {@code KeyboardFocusManager} que decida.
+ *     {@link #setInputVerifier} si esta: guarda y devuelve el verificador, que es todo lo que este
+ *     componente hace con el; quien lo consulta al mover el foco es el administrador que falta.</li>
  * <li>{@code paintImmediately} y el repintado diferido pasan por un {@code RepaintManager} que
  *     dibuja en una <em>pantalla</em>. Esta VM no tiene una: un componente se pinta cuando alguien
  *     le pasa un {@link Graphics}, tipicamente el de una {@code BufferedImage}, y eso es lo que
  *     {@link #paint} hace bien. {@link #repaint} y {@link #revalidate} siguen existiendo con el
  *     significado que pueden tener sin pantalla, y lo dicen.</li>
  * </ul>
+ *
+ * <p>Las acciones por teclado, los menus emergentes, la transferencia y los carteles de ayuda
+ * estuvieron en esta lista y ya no: {@code InputMap}, {@code ActionMap}, {@code JPopupMenu},
+ * {@code TransferHandler}, {@code JToolTip} y {@code JRootPane} existen, y los miembros que los
+ * nombran tambien.
  *
  * <p>El criterio es el de siempre: un miembro que falta es un subconjunto legal; uno que fingiera
  * tener un {@code KeyboardFocusManager} detras compila y revienta despues.
@@ -97,6 +98,18 @@ public abstract class JComponent extends Container implements Serializable {
     /** La clave de propiedad de cliente bajo la que vive el texto de ayuda. */
     public static final String TOOL_TIP_TEXT_KEY = "ToolTipText";
 
+    /**
+     * La clave con la que se guarda el verificador de entrada.
+     *
+     * <p>Va en las propiedades de cliente y no en un campo, como en el JDK: son pocos los
+     * componentes que tienen verificador, y un campo mas por componente en una pantalla con
+     * cientos se nota.
+     */
+    private static final String INPUT_VERIFIER_KEY = "_InputVerifier";
+
+    /** La clave con la que se guarda el menu emergente; ver {@link #getComponentPopupMenu}. */
+    private static final String POPUP_MENU_KEY = "_ComponentPopupMenu";
+
     /** El aspecto instalado, o {@code null} si el componente se dibuja y se mide solo. */
     protected transient ComponentUI ui;
 
@@ -120,9 +133,18 @@ public abstract class JComponent extends Container implements Serializable {
     private boolean paintingForPrint;
     private VetoableChangeSupport vetoableChangeSupport;
 
-    /** Un componente vacio, no opaco, sin borde ni aspecto. */
+    /**
+     * Un componente vacio, no opaco, sin borde ni aspecto.
+     *
+     * <p>Le pone de entrada la localidad por omision de Swing. Sin eso, {@code getLocale()} sobre
+     * un componente todavia no agregado a nada lanzaria {@code IllegalComponentStateException}, que
+     * es lo que hace un componente de AWT sin padre; un componente de Swing tiene que poder
+     * contestar por su idioma antes de estar en pantalla, porque de ahi salen los formatos con los
+     * que se arma a si mismo.
+     */
     public JComponent() {
         super();
+        setLocale(JComponent.getDefaultLocale());
     }
 
     // -- el aspecto -----------------------------------------------------------------------------
@@ -691,6 +713,19 @@ public abstract class JComponent extends Container implements Serializable {
         return getToolTipText();
     }
 
+    /**
+     * El cartel con el que se muestra la ayuda de este componente.
+     *
+     * <p>Se sobreescribe para devolver una subclase de {@link JToolTip} cuando el cartel de base no
+     * alcanza. El cartel queda apuntando a este componente, que es de donde el aspecto le toma la
+     * tipografia y los colores.
+     */
+    public JToolTip createToolTip() {
+        JToolTip tip = new JToolTip();
+        tip.setComponent(this);
+        return tip;
+    }
+
     /** Donde mostrar la ayuda; {@code null} deja elegir a quien la muestre. */
     public java.awt.Point getToolTipLocation(MouseEvent event) {
         return null;
@@ -738,6 +773,71 @@ public abstract class JComponent extends Container implements Serializable {
 
     public boolean isRequestFocusEnabled() {
         return this.requestFocusEnabled;
+    }
+
+    /**
+     * El menu que aparece al hacer clic derecho sobre este componente.
+     *
+     * <p>Nulo significa "el del contenedor", pero solo si {@code getInheritsPopupMenu} lo permite:
+     * ver {@link #getComponentPopupMenu}, que resuelve las dos cosas juntas.
+     */
+    public void setComponentPopupMenu(JPopupMenu popup) {
+        if (popup != null) {
+            enableEvents(java.awt.AWTEvent.MOUSE_EVENT_MASK);
+        }
+        JPopupMenu oldPopup = (JPopupMenu) getClientProperty(POPUP_MENU_KEY);
+        putClientProperty(POPUP_MENU_KEY, popup);
+        firePropertyChange("componentPopupMenu", oldPopup, popup);
+    }
+
+    /**
+     * El menu que corresponde a este componente.
+     *
+     * <p>Si no tiene uno propio y hereda, se lo pide al padre; si no hereda, devuelve nulo. Es lo
+     * que hace que un panel entero comparta un menu sin ponerselo a cada hijo, y que un hijo que no
+     * quiere ninguno pueda decirlo.
+     */
+    public JPopupMenu getComponentPopupMenu() {
+        if (!getInheritsPopupMenu()) {
+            return (JPopupMenu) getClientProperty(POPUP_MENU_KEY);
+        }
+        JPopupMenu popup = (JPopupMenu) getClientProperty(POPUP_MENU_KEY);
+        if (popup == null) {
+            java.awt.Container parent = getParent();
+            while (popup == null) {
+                if (parent instanceof JComponent) {
+                    popup = ((JComponent) parent).getComponentPopupMenu();
+                    return popup;
+                }
+                if (parent == null) {
+                    return null;
+                }
+                parent = parent.getParent();
+            }
+        }
+        return popup;
+    }
+
+    /** El panel raiz que lo contiene, o nulo. */
+    public JRootPane getRootPane() {
+        return SwingUtilities.getRootPane(this);
+    }
+
+    /**
+     * Quien decide si este componente puede soltar el foco.
+     *
+     * <p>Nulo -- que es lo de entrada -- significa que puede siempre. Ver {@link InputVerifier},
+     * sobre todo la parte de que un verificador que dice que no encierra el foco.
+     */
+    public void setInputVerifier(InputVerifier inputVerifier) {
+        InputVerifier viejo = (InputVerifier) getClientProperty(INPUT_VERIFIER_KEY);
+        putClientProperty(INPUT_VERIFIER_KEY, inputVerifier);
+        firePropertyChange("inputVerifier", viejo, inputVerifier);
+    }
+
+    /** El verificador, o {@code null} si no tiene. */
+    public InputVerifier getInputVerifier() {
+        return (InputVerifier) getClientProperty(INPUT_VERIFIER_KEY);
     }
 
     /** Si el verificador de entrada del componente que pierde el foco debe correr antes. */
@@ -995,6 +1095,9 @@ public abstract class JComponent extends Container implements Serializable {
      * esta llamada respeta eso y, al terminar, deja el recuerdo como estaba.
      */
     void setUIProperty(String propertyName, Object value) {
+        if (customSetUIProperty(propertyName, value)) {
+            return;
+        }
         if ("opaque".equals(propertyName)) {
             if (!opaquePuesto) {
                 setOpaque(((Boolean) value).booleanValue());
@@ -1009,5 +1112,334 @@ public abstract class JComponent extends Container implements Serializable {
             throw new IllegalArgumentException("property \"" + propertyName
                     + "\" cannot be set using this method");
         }
+    }
+
+    /**
+     * El gancho para las propiedades que solo entiende una subclase.
+     *
+     * <p>{@link JPasswordField} lo usa para el caracter de eco. Cada una que lo redefine tiene que
+     * respetar la misma regla que {@link #setUIProperty}: si el usuario ya puso esa propiedad a
+     * mano, el aspecto no la pisa.
+     *
+     * @return `true` si la subclase se hizo cargo; `false` para seguir con las de siempre
+     */
+    boolean customSetUIProperty(String propertyName, Object value) {
+        return false;
+    }
+
+    // ---- atajos de teclado ----
+
+    private InputMap[] mapasEntrada = new InputMap[3];
+    private ActionMap mapaAcciones;
+    private TransferHandler transferHandler;
+    private java.awt.Component nextFocusableComponent;
+    private boolean inheritsPopupMenu;
+
+    /**
+     * La tabla de atajos de esa condicion.
+     *
+     * <p>Las tres condiciones son tres tablas distintas, no tres filtros sobre una: un atajo que
+     * vale con el foco puesto y uno que vale en toda la ventana no se estorban, y separarlas es lo
+     * que permite que el aspecto ponga los suyos sin pisar los del programa.
+     *
+     * @throws IllegalArgumentException si la condicion no es una de las tres.
+     */
+    public final InputMap getInputMap(int condition) {
+        int i = indiceDeCondicion(condition);
+        if (mapasEntrada[i] == null) {
+            if (condition == WHEN_IN_FOCUSED_WINDOW) {
+                mapasEntrada[i] = new ComponentInputMap(this);
+            } else {
+                mapasEntrada[i] = new InputMap();
+            }
+        }
+        return mapasEntrada[i];
+    }
+
+    /** La tabla de la condicion de siempre: con el foco puesto. */
+    public final InputMap getInputMap() {
+        return getInputMap(WHEN_FOCUSED);
+    }
+
+    /**
+     * Cambia la tabla de esa condicion.
+     *
+     * @throws IllegalArgumentException si la condicion no existe, o si la tabla de
+     *     {@code WHEN_IN_FOCUSED_WINDOW} no es un {@link ComponentInputMap}.
+     */
+    public final void setInputMap(int condition, InputMap map) {
+        int i = indiceDeCondicion(condition);
+        if (condition == WHEN_IN_FOCUSED_WINDOW && map != null
+                && !(map instanceof ComponentInputMap)) {
+            throw new IllegalArgumentException(
+                    "WHEN_IN_FOCUSED_WINDOW InputMaps must be of type ComponentInputMap");
+        }
+        mapasEntrada[i] = map;
+    }
+
+    private static int indiceDeCondicion(int condition) {
+        if (condition == WHEN_FOCUSED) {
+            return 0;
+        }
+        if (condition == WHEN_ANCESTOR_OF_FOCUSED_COMPONENT) {
+            return 1;
+        }
+        if (condition == WHEN_IN_FOCUSED_WINDOW) {
+            return 2;
+        }
+        throw new IllegalArgumentException("condition must be one of "
+                + "JComponent.WHEN_IN_FOCUSED_WINDOW, JComponent.WHEN_FOCUSED or "
+                + "JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT");
+    }
+
+    /** La tabla de nombre a accion del componente. */
+    public final ActionMap getActionMap() {
+        if (mapaAcciones == null) {
+            mapaAcciones = new ActionMap();
+        }
+        return mapaAcciones;
+    }
+
+    public final void setActionMap(ActionMap am) {
+        mapaAcciones = am;
+    }
+
+    /**
+     * Ata una tecla a un oyente, con un nombre.
+     *
+     * <p>Es la forma vieja, de antes de que existieran los dos mapas. Sigue andando porque se
+     * implementa <em>sobre</em> ellos: guarda una envoltura en el mapa de entrada y la misma
+     * envoltura como accion. Por eso lo que se registra asi se ve despues en
+     * {@link #getInputMap}.
+     */
+    public void registerKeyboardAction(java.awt.event.ActionListener anAction,
+            String aCommand, KeyStroke aKeyStroke, int aCondition) {
+        InputMap entrada = getInputMap(aCondition);
+        if (entrada != null) {
+            ActionMap acciones = getActionMap();
+            EnvoltorioDeOyente envoltorio = new EnvoltorioDeOyente(anAction, aCommand);
+            entrada.put(aKeyStroke, envoltorio);
+            acciones.put(envoltorio, envoltorio);
+        }
+    }
+
+    public void registerKeyboardAction(java.awt.event.ActionListener anAction,
+            KeyStroke aKeyStroke, int aCondition) {
+        registerKeyboardAction(anAction, null, aKeyStroke, aCondition);
+    }
+
+    /** Saca esa tecla de las tres condiciones. */
+    public void unregisterKeyboardAction(KeyStroke aKeyStroke) {
+        ActionMap acciones = getActionMap();
+        for (int i = 0; i < 3; i++) {
+            InputMap entrada = mapasEntrada[i];
+            if (entrada != null) {
+                Object nombre = entrada.get(aKeyStroke);
+                entrada.remove(aKeyStroke);
+                if (nombre != null && acciones != null) {
+                    acciones.remove(nombre);
+                }
+            }
+        }
+    }
+
+    /** Todas las teclas atadas, de las tres condiciones y sin repetir. */
+    public KeyStroke[] getRegisteredKeyStrokes() {
+        java.util.ArrayList<KeyStroke> todas = new java.util.ArrayList<KeyStroke>();
+        for (int i = 0; i < 3; i++) {
+            if (mapasEntrada[i] != null) {
+                KeyStroke[] ks = mapasEntrada[i].allKeys();
+                if (ks != null) {
+                    for (int j = 0; j < ks.length; j++) {
+                        if (!todas.contains(ks[j])) {
+                            todas.add(ks[j]);
+                        }
+                    }
+                }
+            }
+        }
+        return todas.toArray(new KeyStroke[todas.size()]);
+    }
+
+    /** En que condicion esta atada esa tecla, o -1. */
+    public int getConditionForKeyStroke(KeyStroke aKeyStroke) {
+        for (int i = 0; i < 3; i++) {
+            if (mapasEntrada[i] != null && mapasEntrada[i].get(aKeyStroke) != null) {
+                return condicionDeIndice(i);
+            }
+        }
+        return -1;
+    }
+
+    private static int condicionDeIndice(int i) {
+        if (i == 0) {
+            return WHEN_FOCUSED;
+        }
+        if (i == 1) {
+            return WHEN_ANCESTOR_OF_FOCUSED_COMPONENT;
+        }
+        return WHEN_IN_FOCUSED_WINDOW;
+    }
+
+    /** El oyente atado a esa tecla, o nulo. */
+    public java.awt.event.ActionListener getActionForKeyStroke(KeyStroke aKeyStroke) {
+        ActionMap acciones = getActionMap();
+        if (acciones == null) {
+            return null;
+        }
+        for (int i = 0; i < 3; i++) {
+            if (mapasEntrada[i] != null) {
+                Object nombre = mapasEntrada[i].get(aKeyStroke);
+                if (nombre != null) {
+                    Action a = acciones.get(nombre);
+                    if (a instanceof EnvoltorioDeOyente) {
+                        return ((EnvoltorioDeOyente) a).oyente;
+                    }
+                    return a;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Vacia las tres tablas de entrada y la de acciones. */
+    public void resetKeyboardActions() {
+        for (int i = 0; i < 3; i++) {
+            if (mapasEntrada[i] != null) {
+                mapasEntrada[i].clear();
+            }
+        }
+        if (mapaAcciones != null) {
+            mapaAcciones.clear();
+        }
+    }
+
+    /**
+     * Busca esa tecla en la tabla de esa condicion y dispara su accion.
+     *
+     * <p>Devuelve si la atendio. Ese resultado es lo que hace que la tecla no siga viajando hacia
+     * arriba: un atajo que se atendio no tiene que llegar tambien al padre.
+     */
+    protected boolean processKeyBinding(KeyStroke ks, java.awt.event.KeyEvent e, int condition,
+            boolean pressed) {
+        InputMap entrada = mapasEntrada[indiceDeCondicion(condition)];
+        ActionMap acciones = mapaAcciones;
+        if (entrada == null || acciones == null || !isEnabled()) {
+            return false;
+        }
+        Object nombre = entrada.get(ks);
+        if (nombre == null) {
+            return false;
+        }
+        Action a = acciones.get(nombre);
+        if (a == null || !a.isEnabled()) {
+            return false;
+        }
+        a.actionPerformed(new java.awt.event.ActionEvent(this,
+                java.awt.event.ActionEvent.ACTION_PERFORMED, ""));
+        return true;
+    }
+
+    /**
+     * Una accion que envuelve a un oyente, para la forma vieja de registrar.
+     *
+     * <p>Se usa como clave y como valor en el mapa de acciones: asi cada registro tiene una clave
+     * unica sin inventar nombres que puedan chocar con los del aspecto.
+     */
+    static class EnvoltorioDeOyente extends AbstractAction {
+
+        final java.awt.event.ActionListener oyente;
+        private final String comando;
+
+        EnvoltorioDeOyente(java.awt.event.ActionListener oyente, String comando) {
+            this.oyente = oyente;
+            this.comando = comando;
+        }
+
+        public void actionPerformed(java.awt.event.ActionEvent e) {
+            if (oyente != null) {
+                oyente.actionPerformed(new java.awt.event.ActionEvent(e.getSource(),
+                        e.getID(), comando, e.getModifiers()));
+            }
+        }
+    }
+
+    /** Quien maneja arrastrar y soltar sobre este componente. */
+    public void setTransferHandler(TransferHandler newHandler) {
+        TransferHandler oldHandler = transferHandler;
+        transferHandler = newHandler;
+        firePropertyChange("transferHandler", oldHandler, newHandler);
+    }
+
+    public TransferHandler getTransferHandler() {
+        return transferHandler;
+    }
+
+    /** Si el componente es de Swing y se dibuja sin ventana propia del sistema. */
+    public static boolean isLightweightComponent(java.awt.Component c) {
+        return c.isLightweight();
+    }
+
+    /**
+     * Si el componente atiende el tabulador el mismo.
+     *
+     * @deprecated Lo decide el sistema de foco, no el componente.
+     */
+    @Deprecated
+    public boolean isManagingFocus() {
+        return false;
+    }
+
+    /**
+     * A quien pasarle el foco con el tabulador.
+     *
+     * @deprecated Lo decide el sistema de foco.
+     */
+    @Deprecated
+    public java.awt.Component getNextFocusableComponent() {
+        return nextFocusableComponent;
+    }
+
+    /**
+     * A quien pasarle el foco con el tabulador.
+     *
+     * @deprecated Ver {@link #getNextFocusableComponent}.
+     */
+    @Deprecated
+    public void setNextFocusableComponent(java.awt.Component aComponent) {
+        java.awt.Component oldValue = nextFocusableComponent;
+        nextFocusableComponent = aComponent;
+        firePropertyChange("nextFocusableComponent", oldValue, aComponent);
+    }
+
+    /** Si el menu contextual se hereda del padre cuando este no tiene uno. */
+    public void setInheritsPopupMenu(boolean value) {
+        boolean oldValue = inheritsPopupMenu;
+        inheritsPopupMenu = value;
+        firePropertyChange("inheritsPopupMenu", oldValue, value);
+    }
+
+    public boolean getInheritsPopupMenu() {
+        return inheritsPopupMenu;
+    }
+
+    /**
+     * Donde abrir el menu contextual.
+     *
+     * <p>Nulo significa "donde esta el mouse". Devolver un punto sirve para que el menu de un
+     * renglon de tabla se abra en el renglon y no donde se hizo clic.
+     */
+    public java.awt.Point getPopupLocation(java.awt.event.MouseEvent event) {
+        return null;
+    }
+
+    /**
+     * Le avisa al componente que una de sus tablas de atajos cambio.
+     *
+     * <p>La llama {@link ComponentInputMap}. Aca no hay nada que rehacer todavia porque no existe
+     * la tabla de atajos por ventana; el gancho esta para que la tabla pueda avisar sin saber si
+     * alguien la escucha.
+     */
+    void componentInputMapChanged(ComponentInputMap inputMap) {
     }
 }

@@ -6,13 +6,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// Marca codigo que **genero** una herramienta, para distinguirlo del que escribio una persona.
+// Marks code a tool **generated**, to tell it apart from the code a person wrote.
 //
-// La retencion es SOURCE, y esa es la decision de diseno que importa: la marca le sirve al que lee
-// el fuente y a las herramientas que lo procesan, no a nadie en tiempo de ejecucion, asi que no
-// tiene por que sobrevivir al compilador. (Es tambien la razon por la que el aviso de retencion que
-// llevan `@SupportedOptions` y compania no aplica aca: esta anotacion nunca pretendio ser visible en
-// ejecucion.)
+// The retention is SOURCE, and that is the design decision that matters: the mark is of use to
+// whoever reads the source and to the tools that process it, not to anyone at run time, so it has no
+// reason to survive the compiler. (It is also why the retention warning `@SupportedOptions` and
+// company carry does not apply here: this annotation never claimed to be visible at run time.)
 @Documented
 @Retention(RetentionPolicy.SOURCE)
 @Target({ ElementType.PACKAGE, ElementType.TYPE, ElementType.METHOD, ElementType.CONSTRUCTOR,
@@ -20,14 +19,14 @@ import java.lang.annotation.Target;
 public @interface Generated {
 
     /**
-     * El o los nombres del generador. El JDK recomienda el nombre completo de la clase que genero
-     * el codigo, para que sea rastreable.
+     * The generator's name or names. The JDK recommends the full name of the class that generated the
+     * code, so that it is traceable.
      */
     String[] value();
 
-    /** La fecha de generacion, en ISO 8601. Vacia si la herramienta no la puso. */
+    /** The generation date, in ISO 8601. Empty if the tool did not set it. */
     String date() default "";
 
-    /** Cualquier comentario que la herramienta quiera dejar. */
+    /** Whatever comment the tool wants to leave. */
     String comments() default "";
 }

@@ -6,42 +6,43 @@ import java.security.spec.AlgorithmParameterSpec;
 import javax.crypto.spec.DHParameterSpec;
 
 /**
- * KajiLibrary's javax.crypto.interfaces.DHPrivateKey -- la mitad privada de un Diffie-Hellman.
+ * KajiLibrary's javax.crypto.interfaces.DHPrivateKey -- the private half of a Diffie-Hellman.
  *
- * <p>El valor es {@link #getX}, el exponente privado. Es el unico numero del intercambio que no sale
- * de la maquina: todo lo demas --el modulo, la base, la clave publica del otro-- viaja en claro y no
- * sirve de nada sin este.
+ * <p>The value is {@link #getX}, the private exponent. It is the only number in the exchange that
+ * does not leave the machine: everything else --the modulus, the base, the other side's public key--
+ * travels in the clear and is worth nothing without this one.
  *
- * <p>Que la interfaz lo <b>exponga</b> vale la pena mirarlo. Una clave que vive en un token o en un
- * modulo de hardware no puede contestar {@code getX}, y por eso ese tipo de claves implementa
- * {@code PrivateKey} pero no esta interfaz. Pedir un {@code DHPrivateKey} es, de hecho, pedir que el
- * secreto este en memoria.
+ * <p>That the interface <b>exposes</b> it is worth a look. A key living in a token or a hardware
+ * module cannot answer {@code getX}, and that is why that kind of key implements {@code PrivateKey}
+ * but not this interface. Asking for a {@code DHPrivateKey} is, in fact, asking for the secret to be
+ * in memory.
  *
- * <h2>Por que {@code getParams} tiene un default que devuelve null</h2>
+ * <h2>Why {@code getParams} has a default returning null</h2>
  *
- * <p>{@link DHKey} declara {@code getParams()} devolviendo {@link DHParameterSpec}, y
- * {@code AsymmetricKey} trae otro con default devolviendo {@link AlgorithmParameterSpec}. Los dos
- * tienen la misma firma --el primero es una redefinicion covariante del segundo-- y Java exige que
- * una interfaz que hereda de las dos ramas <b>resuelva el empate</b> a mano.
+ * <p>{@link DHKey} declares {@code getParams()} returning {@link DHParameterSpec}, and
+ * {@code AsymmetricKey} brings another one with a default returning {@link AlgorithmParameterSpec}.
+ * The two have the same signature --the first is a covariant override of the second-- and Java
+ * requires an interface inheriting from both branches to <b>resolve the tie</b> by hand.
  *
- * <p>Este default es esa resolucion, y devuelve null porque no tiene de donde sacar nada: una
- * interfaz no tiene estado. Es el mismo default que el JDK, y significa lo que dice --"esta clave no
- * publica sus parametros"-- asi que quien implemente de verdad tiene que redefinirlo.
+ * <p>This default is that resolution, and it returns null because it has nowhere to take anything
+ * from: an interface has no state. It is the same default as the JDK's, and it means what it says
+ * --"this key does not publish its parameters"-- so whoever implements it for real has to override
+ * it.
  */
 public interface DHPrivateKey extends DHKey, PrivateKey {
 
     /**
-     * De 1998, cuando la serializacion cruzaba versiones a mano.
+     * From 1998, when serialization crossed versions by hand.
      *
-     * <p>Es parte del API publico y no se puede cambiar: cambiarlo rompe la deserializacion de
-     * cualquier clave guardada con la version anterior.
+     * <p>It is part of the public API and cannot be changed: changing it breaks the deserialization
+     * of any key stored with the previous version.
      */
     static final long serialVersionUID = 2211791113380396553L;
 
-    /** El exponente privado. Ver la nota de la clase. */
+    /** The private exponent. See the class's note. */
     BigInteger getX();
 
-    /** Resuelve el empate entre las dos ramas; ver la nota de la clase. */
+    /** Resolves the tie between the two branches; see the class's note. */
     default DHParameterSpec getParams() {
         return null;
     }

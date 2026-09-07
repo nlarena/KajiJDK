@@ -1,5 +1,8 @@
 package java.util;
 
+import java.lang.Cloneable;
+import java.io.Serializable;
+
 // A map kept in **sorted** key order by a red-black tree — where {@link HashMap} scatters
 // keys by hash and can only answer "is this key here?", this one keeps them ordered, so it
 // also answers "what is the smallest key?" and could walk a range. The cost is O(log n) per
@@ -24,7 +27,7 @@ package java.util;
 // claves de un mapa **ordenado** salia en orden de hash. `values()` y `entrySet()` heredaban ese
 // desorden por construirse sobre el; ahora recorren el arbol.
 public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>,
-        TmWalk<K, V> {
+        TmWalk<K, V>, Serializable, Cloneable {
 
     private TmNode<K, V> root;
     private int size;

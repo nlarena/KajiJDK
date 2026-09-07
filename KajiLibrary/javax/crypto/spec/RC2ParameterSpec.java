@@ -4,15 +4,15 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.util.Arrays;
 
 /**
- * Los parametros de RC2: los bits efectivos de la clave y, si el modo lo pide, un IV de ocho bytes.
+ * RC2's parameters: the key's effective bits and, if the mode calls for it, an eight-byte IV.
  *
- * <p>Los "bits efectivos" son una particularidad de RC2 que conviene entender: la clave puede tener
- * el largo que sea, pero el algoritmo la expande a una fuerza declarada aparte. Una clave de 128
- * bits con `effectiveKeyBits` en 40 es una clave de 40 bits -- el numero de arriba es el que manda.
+ * <p>The "effective bits" are a peculiarity of RC2 worth understanding: the key may be of whatever
+ * length, but the algorithm expands it to a strength declared separately. A 128-bit key with
+ * `effectiveKeyBits` at 40 is a 40-bit key -- the number above is the one that rules.
  *
- * <p>Tiene `equals` y `hashCode` propios, que la mayoria de las clases de este paquete no tienen.
- * No es un descuido de las otras: es que RC2 se usa en formatos donde hay que comparar dos juegos
- * de parametros para decidir si describen el mismo cifrado.
+ * <p>It has `equals` and `hashCode` of its own, which most of this package's classes do not. It is
+ * not an oversight in the others: it is that RC2 is used in formats where two sets of parameters have
+ * to be compared to decide whether they describe the same cipher.
  */
 public class RC2ParameterSpec implements AlgorithmParameterSpec {
 
@@ -21,47 +21,48 @@ public class RC2ParameterSpec implements AlgorithmParameterSpec {
     private final int effectiveKeyBits;
     private final byte[] iv;
 
-    /** Sin IV: para los modos que no lo usan. */
+    /** With no IV: for the modes that do not use one. */
     public RC2ParameterSpec(int effectiveKeyBits) {
         this.effectiveKeyBits = effectiveKeyBits;
         this.iv = null;
     }
 
     /**
-     * @throws IllegalArgumentException si el IV es nulo o tiene menos de ocho bytes
+     * @throws IllegalArgumentException if the IV is null or has fewer than eight bytes
      */
     public RC2ParameterSpec(int effectiveKeyBits, byte[] iv) {
         this(effectiveKeyBits, iv, 0);
     }
 
     /**
-     * El IV son los ocho bytes a partir de `offset`.
+     * The IV is the eight bytes starting at `offset`.
      *
-     * @throws IllegalArgumentException si el IV es nulo o quedan menos de ocho bytes desde `offset`
+     * @throws IllegalArgumentException if the IV is null or fewer than eight bytes are left from
+     *     `offset`
      */
     public RC2ParameterSpec(int effectiveKeyBits, byte[] iv, int offset) {
         if (iv == null) {
-            throw new IllegalArgumentException("el IV no puede ser nulo");
+            throw new IllegalArgumentException("the IV cannot be null");
         }
         if (iv.length - offset < IV_LEN) {
             throw new IllegalArgumentException(
-                    "el IV de RC2 son " + IV_LEN + " bytes desde el offset");
+                    "an RC2 IV is " + IV_LEN + " bytes from the offset");
         }
         this.effectiveKeyBits = effectiveKeyBits;
         this.iv = IvParameterSpec.copy(iv, offset, IV_LEN);
     }
 
-    /** Los bits efectivos. Ver la nota de la clase. */
+    /** The effective bits. See the class's note. */
     public int getEffectiveKeyBits() {
         return this.effectiveKeyBits;
     }
 
-    /** Una copia del IV, o nulo si no tiene. */
+    /** A copy of the IV, or null if it has none. */
     public byte[] getIV() {
         return this.iv == null ? null : IvParameterSpec.copy(this.iv, 0, IV_LEN);
     }
 
-    /** Igualdad por bits efectivos e IV. */
+    /** Equality by effective bits and IV. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

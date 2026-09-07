@@ -4,32 +4,22 @@ package javax.tools;
 // i.e. one that knows whether it holds source, bytecode, documentation or something else.
 // Everything a compiler reads or writes travels through this interface.
 //
-// OMITIDOS (salida (a), omitir el miembro), por tipos que no existen en KajiLibrary:
-//   - `javax.lang.model.element.NestingKind getNestingKind()` — no hay NestingKind
-//     (javax/lang/model/element solo tiene Element, ElementKind, Name, TypeElement).
-//   - `javax.lang.model.element.Modifier getAccessLevel()` — no hay Modifier ahi tampoco.
-// Ambos volverian con el tipo cambiado a Object; preferimos la ausencia.
+// Two members used to be missing here, for types that did not exist in KajiLibrary:
+// `NestingKind getNestingKind()` and `Modifier getAccessLevel()`, both from
+// javax.lang.model.element. Bringing them back with the type changed to Object would have been a
+// false signature, so they stayed out until the types arrived. They are both here now.
 //
-// --- javax.tools.SimpleJavaFileObject: OMITIDA ENTERA (salida (b)) ---------------------------
-//
-// SimpleJavaFileObject es la implementacion canonica de esta interfaz, y no esta en el paquete
-// a proposito. No es un descuido ni falta de tiempo: no queda nada de ella que se pueda
-// declarar sin mentir.
-//
-//   - Su estado son dos campos, `protected final URI uri` y `protected final Kind kind`.
-//     `java.net.URI` no existe en KajiLibrary (java.net esta en cero clases) y `Kind` es un
-//     tipo anidado de OTRA unidad de compilacion, que el javac congelado no puede nombrar.
-//   - Su UNICO constructor es `protected SimpleJavaFileObject(URI, Kind)`. Al caerse, javac
-//     sintetizaria un `public SimpleJavaFileObject()` — un miembro publico que la API real NO
-//     tiene. Eso es precisamente una declaracion falsa, no una ausencia.
-//   - `implements JavaFileObject` tampoco sobrevive: sin poder declarar `getKind` ni
-//     `isNameCompatible`, el javac rechaza la clase concreta por no implementar la interfaz.
-//
-// Lo que quedaria es una clase sin relacion con JavaFileObject, sin su estado, sin su
-// constructor y con uno inventado. El nombre seria lo unico correcto. Se omite.
+// javax.tools.SimpleJavaFileObject, this interface's canonical implementation, was left out of the
+// package for the same reason and it is back too. It was not an oversight: its two fields are
+// `protected final URI uri` and `protected final Kind kind`, and its ONLY constructor is
+// `protected SimpleJavaFileObject(URI, Kind)`. With `java.net.URI` missing, that constructor fell
+// away and javac would have synthesized a `public SimpleJavaFileObject()` — a public member the real
+// API does NOT have, which is a false declaration and not an absence. What would have been left was
+// a class unrelated to JavaFileObject, without its state, without its constructor and with an
+// invented one; the name would have been the only correct thing about it.
 public interface JavaFileObject extends FileObject {
 
-    // El "que clase de archivo es esto", con la extension canonica que le corresponde.
+    // The "what kind of file is this", with the canonical extension that goes with it.
     public enum Kind {
         SOURCE(".java"),
         CLASS(".class"),
@@ -46,19 +36,19 @@ public interface JavaFileObject extends FileObject {
     Kind getKind();
 
     /**
-     * El anidamiento de la clase principal de este objeto, o `null` si no se sabe.
+     * The nesting of this object's main class, or `null` if it is not known.
      *
-     * <p>`null` es la respuesta correcta y la mas comun: averiguarlo exige **leer** el archivo, y
-     * este metodo existe para las fuentes generadas, donde quien las genero ya lo sabe. Devolver un
-     * valor inventado seria peor que decir "no se".
+     * <p>`null` is the right answer and the commonest one: finding it out means **reading** the file,
+     * and this method exists for generated sources, where whoever generated them already knows.
+     * Returning an invented value would be worse than saying "I do not know".
      */
     javax.lang.model.element.NestingKind getNestingKind();
 
     /**
-     * El nivel de acceso de la clase principal, o `null` si no se sabe.
+     * The main class's access level, or `null` if it is not known.
      *
-     * <p>Solo cuatro valores tienen sentido --`public`, `protected`, `private` y `null` para el de
-     * paquete-- y vale la misma nota que arriba: `null` no es un hueco.
+     * <p>Only four values make sense --`public`, `protected`, `private` and `null` for
+     * package-private-- and the same note as above applies: `null` is not a gap.
      */
     javax.lang.model.element.Modifier getAccessLevel();
 

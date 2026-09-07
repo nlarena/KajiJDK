@@ -1,5 +1,7 @@
 package java.net;
 
+import java.io.Serializable;
+
 // KajiLibrary's java.net.URL (finding #267).
 //
 // It exists because `jakarta.persistence.spi.PersistenceUnitInfo` returns them
@@ -28,7 +30,7 @@ package java.net;
 // cuando el protocolo no esta cubierto.
 //
 // A missing member is a legal subset; a member that lies is not.
-public final class URL {
+public final class URL implements Serializable {
 
     private final URI uri;
     private final String spec;

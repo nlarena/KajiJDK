@@ -1,12 +1,14 @@
 package java.time;
 
+import java.io.Serializable;
+
 // KajiLibrary's java.time.ZoneOffset — a fixed offset from UTC/Greenwich, e.g. +05:30. A value
 // type. A KajiLibrary subset: it does NOT extend ZoneId (which would pull in ZoneRules and the
 // timezone database) and omits the Temporal accessors; it is a Comparable offset with its
 // factory methods, getTotalSeconds/getId, and value semantics.
 public final class ZoneOffset extends ZoneId
         implements Comparable<ZoneOffset>, java.time.temporal.TemporalAccessor,
-        java.time.temporal.TemporalAdjuster {
+        java.time.temporal.TemporalAdjuster, Serializable {
 
     public static final ZoneOffset UTC = ZoneOffset.ofTotalSeconds(0);
     public static final ZoneOffset MIN = ZoneOffset.ofTotalSeconds(-18 * 3600);

@@ -1079,9 +1079,9 @@
  },
  {
   "pkg": "javax.swing",
-  "clases": 30,
+  "clases": 42,
   "clasesJdk": 134,
-  "miembros": 685,
+  "miembros": 970,
   "miembrosJdk": 3642
  },
  {
@@ -1114,16 +1114,16 @@
  },
  {
   "pkg": "javax.swing.plaf",
-  "clases": 10,
+  "clases": 13,
   "clasesJdk": 42,
-  "miembros": 36,
+  "miembros": 39,
   "miembrosJdk": 147
  },
  {
   "pkg": "javax.swing.plaf.basic",
-  "clases": 8,
+  "clases": 12,
   "clasesJdk": 59,
-  "miembros": 107,
+  "miembros": 220,
   "miembrosJdk": 1623
  },
  {
@@ -1373,9 +1373,9 @@
  },
  {
   "pkg": "jdk.dynalink.beans",
-  "clases": 0,
+  "clases": 3,
   "clasesJdk": 3,
-  "miembros": 0,
+  "miembros": 17,
   "miembrosJdk": 17
  },
  {
@@ -1415,16 +1415,16 @@
  },
  {
   "pkg": "jdk.jfr",
-  "clases": 0,
+  "clases": 40,
   "clasesJdk": 40,
-  "miembros": 0,
+  "miembros": 160,
   "miembrosJdk": 160
  },
  {
   "pkg": "jdk.jfr.consumer",
-  "clases": 0,
+  "clases": 13,
   "clasesJdk": 13,
-  "miembros": 0,
+  "miembros": 109,
   "miembrosJdk": 109
  },
  {
@@ -1464,9 +1464,9 @@
  },
  {
   "pkg": "jdk.management.jfr",
-  "clases": 0,
+  "clases": 6,
   "clasesJdk": 6,
-  "miembros": 0,
+  "miembros": 84,
   "miembrosJdk": 84
  },
  {
@@ -1618,9 +1618,9 @@
  },
  {
   "pkg": "sun.misc",
-  "clases": 0,
+  "clases": 3,
   "clasesJdk": 3,
-  "miembros": 0,
+  "miembros": 118,
   "miembrosJdk": 118
  },
  {

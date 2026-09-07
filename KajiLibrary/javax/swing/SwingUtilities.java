@@ -571,4 +571,294 @@ public class SwingUtilities implements SwingConstants {
     public static boolean isEventDispatchThread() {
         return EventQueue.isDispatchThread();
     }
+
+    // -- coordenadas de pantalla -----------------------------------------------------------------
+
+    /**
+     * Pasa ese punto de las coordenadas del componente a las de la pantalla.
+     *
+     * <p>Modifica el punto que se le da; no devuelve uno nuevo. Es la forma vieja de Swing y se
+     * conserva porque cambiarla romperia a quien la usa.
+     *
+     * @throws java.awt.IllegalComponentStateException si el componente no esta en pantalla
+     */
+    public static void convertPointToScreen(Point p, Component c) {
+        Component comp = c;
+        int x = 0;
+        int y = 0;
+        while (comp != null) {
+            x = x + comp.getX();
+            y = y + comp.getY();
+            if (comp instanceof Window) {
+                comp = null;
+            } else {
+                comp = comp.getParent();
+            }
+        }
+        p.x = p.x + x;
+        p.y = p.y + y;
+    }
+
+    /**
+     * Pasa ese punto de las coordenadas de la pantalla a las del componente.
+     *
+     * <p>Modifica el punto; ver {@link #convertPointToScreen}.
+     *
+     * @throws java.awt.IllegalComponentStateException si el componente no esta en pantalla
+     */
+    public static void convertPointFromScreen(Point p, Component c) {
+        Component comp = c;
+        int x = 0;
+        int y = 0;
+        while (comp != null) {
+            x = x + comp.getX();
+            y = y + comp.getY();
+            if (comp instanceof Window) {
+                comp = null;
+            } else {
+                comp = comp.getParent();
+            }
+        }
+        p.x = p.x - x;
+        p.y = p.y - y;
+    }
+
+    // -- buscar hacia arriba ---------------------------------------------------------------------
+
+    /** El panel raiz que contiene a ese componente, o nulo. */
+    public static JRootPane getRootPane(Component c) {
+        if (c instanceof RootPaneContainer) {
+            return ((RootPaneContainer) c).getRootPane();
+        }
+        for (Component p = c; p != null; p = p.getParent()) {
+            if (p instanceof JRootPane) {
+                return (JRootPane) p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * El padre, salteando el panel de un {@link JViewport}.
+     *
+     * <p>Un componente adentro de un panel con barras tiene por padre a un {@code JViewport}, que es
+     * una pieza de plomeria y no lo que uno considera "el contenedor". Este metodo salta ese paso.
+     */
+    public static Container getUnwrappedParent(Component component) {
+        Container parent = component.getParent();
+        while (parent instanceof JViewport) {
+            parent = parent.getParent();
+        }
+        return parent;
+    }
+
+    /** Lo que hay adentro de ese viewport, salteando otro viewport si lo hubiera. */
+    public static Component getUnwrappedView(JViewport viewport) {
+        Component view = viewport.getView();
+        while (view instanceof JViewport) {
+            view = ((JViewport) view).getView();
+        }
+        return view;
+    }
+
+    /**
+     * El componente con el foco adentro de esa ventana, o nulo.
+     *
+     * @deprecated Como en el JDK: usar {@code KeyboardFocusManager.getFocusOwner()}, que sabe la
+     *     respuesta sin recorrer nada.
+     */
+    @Deprecated
+    public static Component findFocusOwner(Component c) {
+        Component focusOwner = java.awt.KeyboardFocusManager
+                .getCurrentKeyboardFocusManager().getFocusOwner();
+        for (Component temp = focusOwner; temp != null; temp = temp.getParent()) {
+            if (temp == c) {
+                return focusOwner;
+            }
+        }
+        return null;
+    }
+
+    // -- mapas del aspecto ------------------------------------------------------------------------
+
+    /**
+     * Reemplaza el mapa de acciones que puso el aspecto, dejando el del programa.
+     *
+     * <p>Los mapas se encadenan: el del programa arriba y el del aspecto abajo. Cambiar de aspecto
+     * tiene que cambiar solo el de abajo, y para eso hay que recorrer la cadena hasta encontrar el
+     * primero que sea un recurso de aspecto. Es lo que hacen estos cuatro metodos, y es la razon de
+     * que existan.
+     */
+    public static void replaceUIActionMap(JComponent component, ActionMap uiActionMap) {
+        ActionMap map = component.getActionMap();
+        while (map != null) {
+            ActionMap parent = map.getParent();
+            if (parent == null || parent instanceof javax.swing.plaf.UIResource) {
+                map.setParent(uiActionMap);
+                return;
+            }
+            map = parent;
+        }
+    }
+
+    /** El mapa de acciones que puso el aspecto, o nulo. */
+    public static ActionMap getUIActionMap(JComponent component) {
+        ActionMap map = component.getActionMap();
+        while (map != null) {
+            if (map instanceof javax.swing.plaf.UIResource) {
+                return map;
+            }
+            map = map.getParent();
+        }
+        return null;
+    }
+
+    /** Reemplaza el mapa de teclas del aspecto; ver {@link #replaceUIActionMap}. */
+    public static void replaceUIInputMap(JComponent component, int type, InputMap uiInputMap) {
+        InputMap map = component.getInputMap(type);
+        while (map != null) {
+            InputMap parent = map.getParent();
+            if (parent == null || parent instanceof javax.swing.plaf.UIResource) {
+                map.setParent(uiInputMap);
+                return;
+            }
+            map = parent;
+        }
+    }
+
+    /** El mapa de teclas que puso el aspecto, o nulo. */
+    public static InputMap getUIInputMap(JComponent component, int condition) {
+        InputMap map = component.getInputMap(condition);
+        while (map != null) {
+            if (map instanceof javax.swing.plaf.UIResource) {
+                return map;
+            }
+            map = map.getParent();
+        }
+        return null;
+    }
+
+    /**
+     * Le da esa tecla a esa accion, si la accion esta prendida.
+     *
+     * <p>Una accion apagada no se ejecuta y devuelve falso, y eso es lo que hace que una atadura a
+     * una accion apagada cuente como si no existiera -- que es como Swing deja que una atadura de
+     * un componente le gane a la de su contenedor.
+     */
+    public static boolean notifyAction(Action action, KeyStroke ks, java.awt.event.KeyEvent event,
+            Object sender, int modifiers) {
+        if (action == null) {
+            return false;
+        }
+        if (!action.isEnabled()) {
+            return false;
+        }
+        Object commandO = action.getValue(Action.ACTION_COMMAND_KEY);
+        String command = (commandO != null) ? commandO.toString() : null;
+        action.actionPerformed(new java.awt.event.ActionEvent(sender,
+                java.awt.event.ActionEvent.ACTION_PERFORMED, command,
+                event.getWhen(), modifiers));
+        return true;
+    }
+
+    /**
+     * Le ofrece esa tecla a los componentes de la ventana donde ocurrio.
+     *
+     * <p>Es el ultimo paso del reparto de teclas: el que atiende las ataduras de tipo
+     * "cuando la ventana tiene el foco", que son las que hacen andar los atajos de menu sin que el
+     * menu tenga el foco.
+     */
+    public static boolean processKeyBindings(java.awt.event.KeyEvent event) {
+        if (event == null) {
+            return false;
+        }
+        Component component = event.getComponent();
+        for (Component c = component; c != null; c = c.getParent()) {
+            if (c instanceof JComponent) {
+                if (((JComponent) c).processKeyBinding(
+                        KeyStroke.getKeyStrokeForEvent(event), event,
+                        JComponent.WHEN_IN_FOCUSED_WINDOW, event.getID()
+                                == java.awt.event.KeyEvent.KEY_PRESSED)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // -- accesibilidad -----------------------------------------------------------------------------
+
+    /**
+     * Cuantos hijos accesibles tiene ese componente.
+     *
+     * <p>No son los mismos que los hijos de AWT: un componente puede exponer como accesibles cosas
+     * que no son componentes -- las filas de una tabla, por ejemplo -- y esconder las que son puro
+     * andamiaje.
+     */
+    public static int getAccessibleChildrenCount(Component c) {
+        javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
+        if (ac != null) {
+            return ac.getAccessibleChildrenCount();
+        }
+        return 0;
+    }
+
+    /** El hijo accesible numero {@code i}; ver {@link #getAccessibleChildrenCount}. */
+    public static javax.accessibility.Accessible getAccessibleChild(Component c, int i) {
+        javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
+        if (ac != null) {
+            return ac.getAccessibleChild(i);
+        }
+        return null;
+    }
+
+    /** Que lugar ocupa entre los hijos accesibles de su padre, o -1. */
+    public static int getAccessibleIndexInParent(Component c) {
+        javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
+        if (ac != null) {
+            return ac.getAccessibleIndexInParent();
+        }
+        return -1;
+    }
+
+    /** El objeto accesible que cae en ese punto, o nulo. */
+    public static javax.accessibility.Accessible getAccessibleAt(Component c, Point p) {
+        javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
+        if (ac != null) {
+            javax.accessibility.AccessibleComponent acomp = ac.getAccessibleComponent();
+            if (acomp != null) {
+                return acomp.getAccessibleAt(p);
+            }
+        }
+        return null;
+    }
+
+    /** El estado accesible del componente -- visible, habilitado, elegido --, o nulo. */
+    public static javax.accessibility.AccessibleStateSet getAccessibleStateSet(Component c) {
+        javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
+        if (ac != null) {
+            return ac.getAccessibleStateSet();
+        }
+        return null;
+    }
+
+    // -- la ventana duena compartida ---------------------------------------------------------------
+
+    /**
+     * La ventana escondida de la que cuelgan los dialogos y ventanas sin dueno.
+     *
+     * <p>No es publica -- en el JDK tampoco --: es plomeria. Una ventana del sistema necesita
+     * depender de otra, y crear una por cada dialogo sin dueno gastaria una ventana real cada vez.
+     *
+     * @throws java.awt.HeadlessException si no hay pantalla
+     */
+    static java.awt.Frame getSharedOwnerFrame() {
+        if (ownerFrame == null) {
+            ownerFrame = new java.awt.Frame();
+            ownerFrame.setUndecorated(true);
+        }
+        return ownerFrame;
+    }
+
+    private static java.awt.Frame ownerFrame;
 }

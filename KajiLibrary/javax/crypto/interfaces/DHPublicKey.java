@@ -5,30 +5,31 @@ import java.security.PublicKey;
 import javax.crypto.spec.DHParameterSpec;
 
 /**
- * KajiLibrary's javax.crypto.interfaces.DHPublicKey -- la mitad publica de un Diffie-Hellman.
+ * KajiLibrary's javax.crypto.interfaces.DHPublicKey -- the public half of a Diffie-Hellman.
  *
- * <p>El valor es {@link #getY}, que es la base elevada al exponente privado, modulo el primo. Se
- * manda en claro: quien lo intercepte no puede sacar el exponente de vuelta sin resolver un
- * logaritmo discreto, y ese es todo el truco.
+ * <p>The value is {@link #getY}, which is the base raised to the private exponent, modulo the prime.
+ * It is sent in the clear: whoever intercepts it cannot get the exponent back without solving a
+ * discrete logarithm, and that is the whole trick.
  *
- * <p>Lo que este numero <b>no</b> hace es probar quien es el otro. Un Diffie-Hellman crudo no
- * autentica a nadie: dos partes terminan con el mismo secreto, y si alguien se puso en el medio, con
- * dos secretos distintos y las dos partes contentas. Por eso en la practica siempre va firmado por
- * algo -- un certificado, una clave conocida-- y usarlo pelado es el error clasico.
+ * <p>What this number does <b>not</b> do is prove who the other side is. A raw Diffie-Hellman
+ * authenticates nobody: two parties end up with the same secret, and if someone got in the middle,
+ * with two different secrets and both parties happy. That is why in practice it always goes signed by
+ * something --a certificate, a known key-- and using it bare is the classic mistake.
  *
- * <p>Su {@code getParams} resuelve el mismo empate que en {@link DHPrivateKey}; ver la nota de alla.
+ * <p>Its {@code getParams} resolves the same tie as in {@link DHPrivateKey}; see the note over there.
  */
 public interface DHPublicKey extends DHKey, PublicKey {
 
     /**
-     * De 1998. Es parte del API publico: cambiarlo rompe la deserializacion de claves ya guardadas.
+     * From 1998. It is part of the public API: changing it breaks the deserialization of keys already
+     * stored.
      */
     static final long serialVersionUID = -6628103563352519193L;
 
-    /** La base elevada al exponente privado, modulo el primo. Ver la nota de la clase. */
+    /** The base raised to the private exponent, modulo the prime. See the class's note. */
     BigInteger getY();
 
-    /** Resuelve el empate entre las dos ramas; ver {@link DHPrivateKey#getParams}. */
+    /** Resolves the tie between the two branches; see {@link DHPrivateKey#getParams}. */
     default DHParameterSpec getParams() {
         return null;
     }

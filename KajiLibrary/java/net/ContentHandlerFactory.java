@@ -1,16 +1,16 @@
 package java.net;
 
-// De un tipo MIME al objeto que sabe interpretar un cuerpo de ese tipo.
+// From a MIME type to the object that knows how to interpret a body of that type.
 //
-// La factoria es el punto de extension de `URLConnection.getContent()`: sin una instalada, una
-// conexion no sabe convertir bytes en objetos y lo dice tirando. Con una, `getContent()` sobre un
-// `image/png` puede devolver una imagen en vez de un flujo.
+// The factory is `URLConnection.getContent()`'s extension point: with none installed, a connection
+// does not know how to turn bytes into objects and says so by throwing. With one, `getContent()` over
+// an `image/png` can return an image instead of a stream.
 public interface ContentHandlerFactory {
 
     /**
-     * El manejador para {@code mimetype}, o null si esta factoria no conoce ese tipo.
+     * The handler for {@code mimetype}, or null if this factory does not know that type.
      *
-     * <p>Devolver null no es un error: significa "yo no", y quien pregunta sigue buscando.
+     * <p>Returning null is not an error: it means "not me", and whoever asked goes on looking.
      */
     ContentHandler createContentHandler(String mimetype);
 }

@@ -1,38 +1,37 @@
 package java.net;
 
-// El lugar donde la aplicacion deja sus credenciales para cuando alguien se las pida.
+// The place where an application leaves its credentials for when someone asks for them.
 //
-// El diseno es al reves de lo que uno esperaria y por una buena razon: la aplicacion **no** entrega
-// credenciales, entrega un objeto al que se le van a pedir. Asi el que necesita autenticarse
-// --historicamente `HttpURLConnection`-- no tiene que recibirlas por parametro atravesando diez
-// capas de API que no tienen nada que ver, y la aplicacion decide en el momento si las da, si abre
-// un dialogo, o si no contesta.
+// The design is the other way round from what one would expect, and for a good reason: the
+// application does **not** hand over credentials, it hands over an object that will be asked for
+// them. That way whoever needs to authenticate --historically `HttpURLConnection`-- does not have to
+// receive them as a parameter through ten layers of unrelated API, and the application decides on the
+// spot whether to give them, to open a dialog, or not to answer.
 //
-// Los `getRequesting*` son `protected` porque son **para la subclase**: cuando le preguntan, el
-// authenticator los consulta para saber quien pregunta y decidir. Que sean campos de instancia
-// mutados antes de cada llamada, en vez de parametros del metodo, es una decision vieja del JDK y
-// es la razon de todos los `synchronized` de aca: dos hilos preguntando a la vez se pisarian los
-// campos.
+// The `getRequesting*` methods are `protected` because they are **for the subclass**: when it is
+// asked, the authenticator consults them to learn who is asking and decide. That they are instance
+// fields mutated before each call, instead of method parameters, is an old JDK decision and is the
+// reason for all the `synchronized` here: two threads asking at once would trample the fields.
 //
 // ===========================================================================================
-// POR QUE ESTA CLASE ES HONESTA SIN RED
+// WHY THIS CLASS IS HONEST WITH NO NETWORK
 // ===========================================================================================
 //
-// Un `Authenticator` no se conecta a nada. Es un registro con un callback: `setDefault` guarda,
-// `requestPasswordAuthentication` consulta. Sin nadie registrado devuelve null, que es exactamente
-// lo que hace el JDK. Todo lo que promete esta API se puede cumplir aca al cien por ciento -- lo que
-// falta en KajiJDK es un **cliente** que la use, y eso no es parte de este contrato.
+// An `Authenticator` connects to nothing. It is a registry with a callback: `setDefault` stores,
+// `requestPasswordAuthentication` consults. With nobody registered it returns null, which is exactly
+// what the JDK does. Everything this API promises can be fulfilled here a hundred per cent -- what
+// KajiJDK lacks is a **client** to use it, and that is not part of this contract.
 //
-// Nada omitido.
+// Nothing omitted.
 public abstract class Authenticator {
 
-    /** Quien esta pidiendo autenticacion: el servidor de destino, o un proxy en el camino. */
+    /** Who is asking for authentication: the destination server, or a proxy on the way. */
     public enum RequestorType {
 
-        /** Un proxy. */
+        /** A proxy. */
         PROXY,
 
-        /** El servidor al que se queria llegar. */
+        /** The server one was trying to reach. */
         SERVER;
     }
 
@@ -61,17 +60,17 @@ public abstract class Authenticator {
         this.requestingAuthType = RequestorType.SERVER;
     }
 
-    /** Instala el authenticator de toda la VM. */
+    /** Installs the whole VM's authenticator. */
     public static synchronized void setDefault(Authenticator a) {
         theAuthenticator = a;
     }
 
-    /** El authenticator instalado, o null si no hay ninguno. */
+    /** The installed authenticator, or null if there is none. */
     public static Authenticator getDefault() {
         return theAuthenticator;
     }
 
-    /** Le pide credenciales al authenticator instalado; null si no hay ninguno o si no las da. */
+    /** Asks the installed authenticator for credentials; null if there is none or it gives none. */
     public static PasswordAuthentication requestPasswordAuthentication(
             InetAddress addr, int port, String protocol, String prompt, String scheme) {
         return requestPasswordAuthentication(
@@ -79,7 +78,7 @@ public abstract class Authenticator {
                 RequestorType.SERVER);
     }
 
-    /** Como la anterior, pero identificando al host por nombre ademas de por direccion. */
+    /** Like the previous one, but identifying the host by name as well as by address. */
     public static PasswordAuthentication requestPasswordAuthentication(
             String host, InetAddress addr, int port, String protocol, String prompt,
             String scheme) {
@@ -88,7 +87,7 @@ public abstract class Authenticator {
                 RequestorType.SERVER);
     }
 
-    /** Como la anterior, mas la URL que gatillo el pedido y quien lo pide. */
+    /** Like the previous one, plus the URL that triggered the request and who is asking. */
     public static PasswordAuthentication requestPasswordAuthentication(
             String host, InetAddress addr, int port, String protocol, String prompt,
             String scheme, URL url, RequestorType reqType) {
@@ -97,10 +96,10 @@ public abstract class Authenticator {
     }
 
     /**
-     * Como la anterior, pero preguntandole a un authenticator concreto en vez de al instalado.
+     * Like the previous one, but asking a specific authenticator instead of the installed one.
      *
-     * <p>Existe para que una biblioteca pueda tener su propio authenticator sin pisarle el global a
-     * la aplicacion que la usa.
+     * <p>It exists so that a library can have its own authenticator without trampling the global one
+     * of the application using it.
      */
     public static PasswordAuthentication requestPasswordAuthentication(
             Authenticator authenticator, String host, InetAddress addr, int port, String protocol,
@@ -123,7 +122,7 @@ public abstract class Authenticator {
         }
     }
 
-    /** Le pide credenciales a **esta** instancia, sin pasar por el authenticator instalado. */
+    /** Asks **this** instance for credentials, without going through the installed authenticator. */
     public PasswordAuthentication requestPasswordAuthenticationInstance(
             String host, InetAddress addr, int port, String protocol, String prompt,
             String scheme, URL url, RequestorType reqType) {
@@ -141,12 +140,12 @@ public abstract class Authenticator {
         }
     }
 
-    /** El nombre del host que pide, o null si solo se dio la direccion. */
+    /** The name of the host asking, or null if only the address was given. */
     protected final String getRequestingHost() {
         return this.requestingHost;
     }
 
-    /** La direccion del que pide, o null si solo se dio el nombre. */
+    /** The address of the one asking, or null if only the name was given. */
     protected final InetAddress getRequestingSite() {
         return this.requestingSite;
     }
@@ -155,35 +154,36 @@ public abstract class Authenticator {
         return this.requestingPort;
     }
 
-    /** El protocolo de la conexion ("http", "ftp"...). */
+    /** The connection's protocol ("http", "ftp"...). */
     protected final String getRequestingProtocol() {
         return this.requestingProtocol;
     }
 
-    /** El texto que el servidor mando para mostrarle al usuario (el "realm" de HTTP Basic). */
+    /** The text the server sent to be shown to the user (HTTP Basic's "realm"). */
     protected final String getRequestingPrompt() {
         return this.requestingPrompt;
     }
 
-    /** El esquema de autenticacion ("basic", "digest"...). */
+    /** The authentication scheme ("basic", "digest"...). */
     protected final String getRequestingScheme() {
         return this.requestingScheme;
     }
 
     /**
-     * Lo que la subclase pisa para entregar credenciales. Devolver null significa "no las doy", y
-     * es la respuesta por defecto: un authenticator que no pisa nada no autentica nada.
+     * What the subclass overrides in order to hand over credentials. Returning null means "I am not
+     * giving them", and it is the default answer: an authenticator that overrides nothing
+     * authenticates nothing.
      */
     protected PasswordAuthentication getPasswordAuthentication() {
         return null;
     }
 
-    /** La URL que gatillo el pedido, o null si no se dio. */
+    /** The URL that triggered the request, or null if none was given. */
     protected URL getRequestingURL() {
         return this.requestingURL;
     }
 
-    /** Si el que pide es el servidor o un proxy. */
+    /** Whether the one asking is the server or a proxy. */
     protected RequestorType getRequestorType() {
         return this.requestingAuthType;
     }

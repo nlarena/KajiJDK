@@ -1,10 +1,11 @@
 package java.net;
 
-// Un BindException: no se pudo asignar la direccion local pedida (el puerto ya esta tomado, o la direccion no es de esta maquina).
+// A BindException: the requested local address could not be assigned (the port is already taken, or
+// the address does not belong to this machine).
 //
-// Subclase de `SocketException` por la misma razon que la madre existe aca (ver `SocketException`):
-// nombra un modo de falla, no promete poder producirlo. Quien atrapa `SocketException` la atrapa
-// tambien, que es de lo que se trata la jerarquia.
+// A subclass of `SocketException` for the same reason its parent exists here (see `SocketException`):
+// it names a failure mode, it does not promise to be able to produce it. Whoever catches
+// `SocketException` catches it too, which is what the hierarchy is about.
 public class BindException extends SocketException {
 
     private static final long serialVersionUID = -5945005768251722951L;

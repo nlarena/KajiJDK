@@ -22,155 +22,154 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-// El formateador de `java.time`: escribe un valor temporal como texto y vuelve a leerlo.
+// The `java.time` formatter: writes a temporal value as text and reads it back.
 //
-// **Formatea y parsea exactamente el mismo lenguaje**, y esa simetria es a proposito: lo que este
-// formateador escribe, lo vuelve a leer. No hay ninguna pieza que sepa solo una de las dos cosas.
+// **It formats and parses exactly the same language**, and that symmetry is deliberate: whatever
+// this formatter writes, it reads back. There is no part that only knows one of the two.
 //
-// Adentro no hay una cadena de patron: hay una lista de piezas (`Pieza`), y `ofPattern` es un
-// compilador a esa lista. El porque esta escrito en `Pieza` y en `DateTimeFormatterBuilder`; lo que
-// importa desde afuera es la consecuencia, que es que los `ISO_*` de aca son los de verdad --con sus
-// secciones opcionales-- y no aproximaciones.
+// Inside there is no pattern string: there is a list of parts (`Part`), and `ofPattern` is a
+// compiler into that list. The why is written in `Part` and in `DateTimeFormatterBuilder`; what
+// matters from outside is the consequence, which is that the `ISO_*` here are the real ones --with
+// their optional sections-- and not approximations.
 //
-// **LOS SEIS MIEMBROS QUE NO ESTAN, Y EL CRITERIO.**
+// **THE ONE PLACE WHERE THE DATA IS MISSING, AND THE CRITERION.**
 //
-// `ofLocalizedDate`, `ofLocalizedTime`, los dos `ofLocalizedDateTime` y `ofLocalizedPattern` piden lo
-// mismo: **el patron que un locale usa** para una fecha corta, media, larga o completa. Ese patron no
-// se deduce de nada, es un dato: `M/d/yy` en los Estados Unidos, `d/M/yy` en la Argentina,
-// `yyyy/MM/dd` en el Japon, y para `FULL` ademas con el nombre del dia adelante. Esta biblioteca no
-// trae los datos del CLDR, y **no hay un patron por defecto que sea correcto**: cualquiera que se
-// elija acierta para un locale y miente para los otros ciento y pico. Un `ofLocalizedDate(SHORT)` que
-// devolviera `dd/MM/yyyy` no seria una version incompleta de la respuesta correcta, seria una
-// respuesta equivocada con la forma de la correcta, y el que la llame se entera en produccion.
+// `ofLocalizedDate`, `ofLocalizedTime`, both `ofLocalizedDateTime` and `ofLocalizedPattern` all ask
+// for the same thing: **the pattern a locale uses** for a short, medium, long or full date. That
+// pattern is not derived from anything, it is data: `M/d/yy` in the United States, `d/M/yy` in
+// Argentina, `yyyy/MM/dd` in Japan, and for `FULL` with the day name in front as well. This library
+// does not ship the CLDR data, and **there is no default pattern that is correct**: whichever one
+// is chosen is right for one locale and lies for the other hundred-odd. An `ofLocalizedDate(SHORT)`
+// returning `dd/MM/yyyy` would not be an incomplete version of the right answer, it would be a
+// wrong answer with the shape of the right one, and the caller finds out in production.
 //
-// La distincion, que es la que gobierna todo el paquete: **no es que falte el dato, es que inventarlo
-// seria mentir**. Donde el dato falta pero la respuesta no depende de el, el miembro esta: los
-// `ISO_*` son fijos por norma y no miran el locale; `withLocale` guarda el locale y lo devuelve
-// igual; `appendText(field, Map)` deja poner los nombres propios. Lo unico que se queda afuera es lo
-// que **es** una consulta al CLDR.
+// The distinction, which governs the whole package: **it is not that the data is missing, it is
+// that making it up would be lying**. Where the data is missing but the answer does not depend on
+// it, the member is here: the `ISO_*` are fixed by standard and do not look at the locale;
+// `withLocale` keeps the locale and gives it back unchanged; `appendText(field, Map)` lets the
+// caller supply the names. So these factories are here and none of them invents anything: the four
+// by style resolve their pattern through `java.text.DateFormat`, and `ofLocalizedPattern` through
+// `LocaleTemplates`, a table extracted by running the JDK over every template the grammar admits.
+// What is not in the table is not made up: it throws `DateTimeException`, the same as over there.
 //
-// `localizedBy(Locale)` tambien queda afuera, por una razon distinta y mas fina: no es "el
-// formateador con otro locale" --eso es `withLocale`-- sino "el formateador con las extensiones
-// Unicode del locale aplicadas": `u-ca` el calendario, `u-nu` el sistema de numeracion, `u-rg` la
-// region de formato, `u-tz` la zona. De las cuatro, aca se podrian honrar dos. Un `localizedBy` que
-// aplica la mitad de lo que promete y calla la otra mitad es peor que no tenerlo, porque el que lo
-// llama cree que aplico las cuatro.
+// `localizedBy(Locale)` follows the same rule from the other side: it is not "the formatter with
+// another locale" --that is `withLocale`-- but "the formatter with the locale's Unicode extensions
+// applied": `u-ca` the calendar, `u-nu` the numbering system, `u-rg` the format region, `u-tz` the
+// zone. Of the four, two are honoured here, and **the javadoc says which two and why the other two
+// are not**, so the caller is never left believing all four were applied.
 //
-// **Lo que si depende del locale es una sola pieza**: la de los nombres (`MMM`, `EEEE`, `a`, `G`).
-// Con `Locale.ROOT` o ingles escribe los nombres ingleses, que es lo correcto; con cualquier otro
-// **tira** un `DateTimeException` que dice que falta el dato, en vez de escribir el ingles bajo otra
-// bandera. El razonamiento completo esta en `PiezaTexto`.
+// **What does depend on the locale is a single part**: the one with the names (`MMM`, `EEEE`, `a`,
+// `G`). With `Locale.ROOT` or English it writes the English names, which is correct; with any other
+// it **throws** a `DateTimeException` saying the data is missing, instead of writing English under
+// another flag. The full reasoning is in `TextPart`.
 public final class DateTimeFormatter {
 
-    // ---- los predefinidos ----------------------------------------------------------------------
+    // ---- the predefined ones --------------------------------------------------------------------
     //
-    // Los quince del JDK, armados con el mismo armador que cualquiera puede usar. Ninguno mira el
-    // locale: ISO-8601 y el RFC 1123 fijan el texto, y ahi no hay nada que traducir. `RFC_1123` usa
-    // `appendText(field, Map)` con los nombres del RFC precisamente por eso: no son "los nombres en
-    // ingles", son los nombres que el formato exige, y con un mapa explicito lo dicen.
+    // The JDK's fifteen, built with the same builder anyone can use. None of them looks at the
+    // locale: ISO-8601 and RFC 1123 fix the text, and there is nothing to translate there.
+    // `RFC_1123` uses `appendText(field, Map)` with the RFC's names precisely for that reason: they
+    // are not "the English names", they are the names the format demands, and an explicit map says
+    // so.
 
-    public static final DateTimeFormatter ISO_LOCAL_DATE = isoFechaLocal();
+    public static final DateTimeFormatter ISO_LOCAL_DATE = isoLocalDate();
 
-    public static final DateTimeFormatter ISO_OFFSET_DATE = isoFechaConOffset();
+    public static final DateTimeFormatter ISO_OFFSET_DATE = isoOffsetDate();
 
-    public static final DateTimeFormatter ISO_DATE = isoFecha();
+    public static final DateTimeFormatter ISO_DATE = isoDate();
 
-    public static final DateTimeFormatter ISO_LOCAL_TIME = isoHoraLocal();
+    public static final DateTimeFormatter ISO_LOCAL_TIME = isoLocalTime();
 
-    public static final DateTimeFormatter ISO_OFFSET_TIME = isoHoraConOffset();
+    public static final DateTimeFormatter ISO_OFFSET_TIME = isoOffsetTime();
 
-    public static final DateTimeFormatter ISO_TIME = isoHora();
+    public static final DateTimeFormatter ISO_TIME = isoTime();
 
-    public static final DateTimeFormatter ISO_LOCAL_DATE_TIME = isoFechaHoraLocal();
+    public static final DateTimeFormatter ISO_LOCAL_DATE_TIME = isoLocalDateTime();
 
-    public static final DateTimeFormatter ISO_OFFSET_DATE_TIME = isoFechaHoraConOffset();
+    public static final DateTimeFormatter ISO_OFFSET_DATE_TIME = isoOffsetDateTime();
 
-    public static final DateTimeFormatter ISO_ZONED_DATE_TIME = isoFechaHoraConZona();
+    public static final DateTimeFormatter ISO_ZONED_DATE_TIME = isoZonedDateTime();
 
-    public static final DateTimeFormatter ISO_DATE_TIME = isoFechaHora();
+    public static final DateTimeFormatter ISO_DATE_TIME = isoDateTime();
 
-    public static final DateTimeFormatter ISO_ORDINAL_DATE = isoOrdinal();
+    public static final DateTimeFormatter ISO_ORDINAL_DATE = isoOrdinalDate();
 
-    public static final DateTimeFormatter ISO_WEEK_DATE = isoSemana();
+    public static final DateTimeFormatter ISO_WEEK_DATE = isoWeekDate();
 
-    public static final DateTimeFormatter ISO_INSTANT = isoInstante();
+    public static final DateTimeFormatter ISO_INSTANT = isoInstant();
 
-    public static final DateTimeFormatter BASIC_ISO_DATE = isoBasico();
+    public static final DateTimeFormatter BASIC_ISO_DATE = basicIsoDate();
 
     public static final DateTimeFormatter RFC_1123_DATE_TIME = rfc1123();
 
-    private static final TemporalQuery<Period> EXCESO = new ConsultaExceso();
+    private static final TemporalQuery<Period> EXCESS = new ExcessQuery();
 
-    private static final TemporalQuery<Boolean> BISIESTO = new ConsultaBisiesto();
+    private static final TemporalQuery<Boolean> LEAP_SECOND = new LeapSecondQuery();
 
-    private final PiezaCompuesta piezas;
+    private final CompositePart parts;
     private final Locale locale;
-    private final DecimalStyle simbolos;
-    private final ResolverStyle resolutor;
-    private final Set<TemporalField> camposResolutor;
-    private final Chronology cronologia;
-    private final ZoneId zona;
+    private final DecimalStyle symbols;
+    private final ResolverStyle resolverStyle;
+    private final Set<TemporalField> resolverFields;
+    private final Chronology chronology;
+    private final ZoneId zone;
 
-    DateTimeFormatter(PiezaCompuesta piezas, Locale locale, DecimalStyle simbolos,
-            ResolverStyle resolutor, Set<TemporalField> camposResolutor, Chronology cronologia,
-            ZoneId zona) {
-        this.piezas = piezas;
+    DateTimeFormatter(CompositePart parts, Locale locale, DecimalStyle symbols,
+            ResolverStyle resolverStyle, Set<TemporalField> resolverFields, Chronology chronology,
+            ZoneId zone) {
+        this.parts = parts;
         this.locale = locale;
-        this.simbolos = simbolos;
-        this.resolutor = resolutor;
-        this.camposResolutor = camposResolutor;
-        this.cronologia = cronologia;
-        this.zona = zona;
+        this.symbols = symbols;
+        this.resolverStyle = resolverStyle;
+        this.resolverFields = resolverFields;
+        this.chronology = chronology;
+        this.zone = zone;
     }
 
-    PiezaCompuesta piezas() {
-        return this.piezas;
+    CompositePart parts() {
+        return this.parts;
     }
 
-    // ---- fabricas ------------------------------------------------------------------------------
+    // ---- factories ------------------------------------------------------------------------------
 
     public static DateTimeFormatter ofPattern(String pattern) {
         return new DateTimeFormatterBuilder().appendPattern(pattern).toFormatter();
     }
 
-    // El locale se guarda y se devuelve tal cual; lo unico que cambia con el son los nombres, y esos
-    // solo existen en ingles. Un patron sin nombres da el mismo texto en cualquier locale.
+    // The locale is stored and given back as it stands; the only thing that changes with it are the
+    // names, and those exist in English only. A pattern with no names gives the same text in any
+    // locale.
     public static DateTimeFormatter ofPattern(String pattern, Locale locale) {
         return new DateTimeFormatterBuilder().appendPattern(pattern).toFormatter(locale);
     }
 
-    // Las cuatro fabricas de formato localizado.
+    // The four localized-format factories.
     //
-    // **Aca si se toma el locale de la maquina**, y no `Locale.ROOT` como `toFormatter()`. No es una
-    // inconsistencia: lo que estas cuatro piden *es* el formato del locale, asi que ignorarlo seria
-    // no hacer lo que dicen. `toFormatter()` elige ROOT porque un patron escrito a mano no habla de
-    // ningun locale en particular. El JDK usa la misma categoria FORMAT que se usa aca.
+    // **Here the machine's locale IS taken**, and not `Locale.ROOT` the way `toFormatter()` does.
+    // It is not an inconsistency: what these four ask for *is* the locale's format, so ignoring it
+    // would be failing to do what they say. `toFormatter()` picks ROOT because a hand-written
+    // pattern speaks of no locale in particular. The JDK uses the same FORMAT category used here.
     //
-    // El patron sale del locale; los **nombres** que ese patron pida --`MMMM`, `EEEE`-- siguen
-    // saliendo del unico juego que hay, el ingles. Un `ofLocalizedDate(FULL)` bajo un locale no
-    // ingles se arma bien y tira al usarlo, diciendo cual es el nombre que falta.
-    private static DateTimeFormatter localizado(FormatStyle fecha, FormatStyle hora) {
-        return new DateTimeFormatterBuilder().appendLocalized(fecha, hora)
+    // The pattern comes from the locale; the **names** that pattern asks for --`MMMM`, `EEEE`--
+    // still come from the only set there is, the English one. An `ofLocalizedDate(FULL)` under a
+    // non-English locale builds fine and throws on use, saying which name is missing.
+    private static DateTimeFormatter localized(FormatStyle date, FormatStyle time) {
+        return new DateTimeFormatterBuilder().appendLocalized(date, time)
                 .toFormatter(Locale.getDefault(Locale.Category.FORMAT))
                 .withChronology(IsoChronology.INSTANCE);
     }
 
     /**
-     * El formato de fecha de ese estilo en el locale de la maquina.
+     * The format the machine's locale uses for that template.
      *
-     * @throws NullPointerException si `dateStyle` es nulo
-     */
-    /**
-     * El formato que el locale de la maquina usa para esa plantilla.
+     * <p>A template --`yMMMd`, `Hm`-- says which fields are wanted and in how much detail, and lets
+     * the language decide the order and the separators. It is what is needed when none of the four
+     * styles will do; see {@link DateTimeFormatterBuilder#appendLocalized(String)}.
      *
-     * <p>Una plantilla --`yMMMd`, `Hm`-- dice que campos se quieren y con cuanto detalle, y deja que
-     * el idioma decida el orden y los separadores. Es lo que hace falta cuando ninguno de los cuatro
-     * estilos sirve; ver {@link DateTimeFormatterBuilder#appendLocalized(String)}.
-     *
-     * @param requestedTemplate la plantilla
-     * @return el formateador
-     * @throws NullPointerException si la plantilla es nula
-     * @throws IllegalArgumentException si la plantilla esta mal escrita
+     * @param requestedTemplate the template
+     * @return the formatter
+     * @throws NullPointerException if the template is null
+     * @throws IllegalArgumentException if the template is malformed
      * @since 19
      */
     public static DateTimeFormatter ofLocalizedPattern(String requestedTemplate) {
@@ -181,41 +180,46 @@ public final class DateTimeFormatter {
                 .toFormatter(Locale.getDefault(Locale.Category.FORMAT));
     }
 
+    /**
+     * The date format of that style in the machine's locale.
+     *
+     * @throws NullPointerException if `dateStyle` is null
+     */
     public static DateTimeFormatter ofLocalizedDate(FormatStyle dateStyle) {
         if (dateStyle == null) {
             throw new NullPointerException("dateStyle");
         }
-        return localizado(dateStyle, null);
+        return localized(dateStyle, null);
     }
 
     /**
-     * El formato de hora de ese estilo en el locale de la maquina.
+     * The time format of that style in the machine's locale.
      *
-     * @throws NullPointerException si `timeStyle` es nulo
+     * @throws NullPointerException if `timeStyle` is null
      */
     public static DateTimeFormatter ofLocalizedTime(FormatStyle timeStyle) {
         if (timeStyle == null) {
             throw new NullPointerException("timeStyle");
         }
-        return localizado(null, timeStyle);
+        return localized(null, timeStyle);
     }
 
     /**
-     * El formato de fecha y hora de ese estilo, el mismo para las dos.
+     * The date and time format of that style, the same one for both.
      *
-     * @throws NullPointerException si `dateTimeStyle` es nulo
+     * @throws NullPointerException if `dateTimeStyle` is null
      */
     public static DateTimeFormatter ofLocalizedDateTime(FormatStyle dateTimeStyle) {
         if (dateTimeStyle == null) {
             throw new NullPointerException("dateTimeStyle");
         }
-        return localizado(dateTimeStyle, dateTimeStyle);
+        return localized(dateTimeStyle, dateTimeStyle);
     }
 
     /**
-     * El formato de fecha y hora, con un estilo para cada una.
+     * The date and time format, with a style for each.
      *
-     * @throws NullPointerException si alguno de los dos es nulo
+     * @throws NullPointerException if either of the two is null
      */
     public static DateTimeFormatter ofLocalizedDateTime(FormatStyle dateStyle,
             FormatStyle timeStyle) {
@@ -225,21 +229,21 @@ public final class DateTimeFormatter {
         if (timeStyle == null) {
             throw new NullPointerException("timeStyle");
         }
-        return localizado(dateStyle, timeStyle);
+        return localized(dateStyle, timeStyle);
     }
 
-    // Las dos consultas que solo tienen sentido sobre el resultado de un parseo. Devuelven **la misma
-    // instancia siempre**: se comparan por identidad, y una nueva en cada llamada no coincidiria
-    // nunca con la que el resultado reconoce (fue un bug real en `TemporalQueries`).
+    // The two queries that only make sense over the result of a parse. They return **the same
+    // instance every time**: they are compared by identity, and a new one on each call would never
+    // match the one the result recognizes (it was a real bug in `TemporalQueries`).
     public static final TemporalQuery<Period> parsedExcessDays() {
-        return EXCESO;
+        return EXCESS;
     }
 
     public static final TemporalQuery<Boolean> parsedLeapSecond() {
-        return BISIESTO;
+        return LEAP_SECOND;
     }
 
-    // ---- copias con un ajuste cambiado ---------------------------------------------------------
+    // ---- copies with one setting changed --------------------------------------------------------
 
     public Locale getLocale() {
         return this.locale;
@@ -252,229 +256,230 @@ public final class DateTimeFormatter {
         if (locale.equals(this.locale)) {
             return this;
         }
-        return new DateTimeFormatter(this.piezas, locale, this.simbolos, this.resolutor,
-                this.camposResolutor, this.cronologia, this.zona);
+        return new DateTimeFormatter(this.parts, locale, this.symbols, this.resolverStyle,
+                this.resolverFields, this.chronology, this.zone);
     }
 
     /**
-     * Una copia con el locale puesto **y con la cronologia y los simbolos deducidos de el**.
+     * A copy with the locale set **and with the chronology and the symbols derived from it**.
      *
-     * <p>Es lo que la distingue de {@link #withLocale}, y la diferencia no es de matiz: `withLocale`
-     * cambia el locale y **conserva** lo que le hayan puesto a mano, mientras que esta lo
-     * **sobreescribe** con lo que el locale dice. Un formateador con cronologia tailandesa puesta a
-     * mano sigue siendo tailandes despues de `withLocale(FRANCE)`, y pasa a ISO despues de
-     * `localizedBy(FRANCE)`.
+     * <p>That is what tells it apart from {@link #withLocale}, and the difference is not one of
+     * nuance: `withLocale` changes the locale and **keeps** whatever was set by hand, while this
+     * one **overwrites** it with what the locale says. A formatter with a Thai chronology set by
+     * hand is still Thai after `withLocale(FRANCE)`, and becomes ISO after `localizedBy(FRANCE)`.
      *
-     * <p>De donde sale cada cosa, que se verifico contra el JDK real y no se supuso:
+     * <p>Where each thing comes from, verified against the real JDK and not assumed:
      *
      * <ul>
-     * <li><strong>Cronologia</strong>: de la extension Unicode `u-ca` del locale si la trae, y si no
-     *     del calendario que ese locale usa por omision --que es lo que hace
-     *     {@link Chronology#ofLocale}--. Nunca queda en `null`: `localizedBy` de un locale comun deja
-     *     ISO, no "sin cronologia".</li>
-     * <li><strong>Simbolos</strong>: {@link DecimalStyle#of}, que lee la extension `u-nu`.</li>
-     * <li><strong>Zona</strong>: **se conserva la que habia**, salvo que el locale traiga `u-tz`. No
-     *     se limpia como la cronologia, y eso sorprende hasta que se lo mide.</li>
+     * <li><strong>Chronology</strong>: from the locale's `u-ca` Unicode extension if it carries
+     *     one, and otherwise from the calendar that locale uses by default --which is what
+     *     {@link Chronology#ofLocale} does--. It never ends up `null`: `localizedBy` of an ordinary
+     *     locale leaves ISO, not "no chronology".</li>
+     * <li><strong>Symbols</strong>: {@link DecimalStyle#of}, which reads the `u-nu` extension.</li>
+     * <li><strong>Zone</strong>: **the one that was there is kept**, unless the locale carries
+     *     `u-tz`. It is not cleared the way the chronology is, and that is surprising until it is
+     *     measured.</li>
      * </ul>
      *
-     * <p><strong>La unica aproximacion, dicha:</strong> la extension `u-tz` se ignora. Sus valores
-     * son identificadores cortos de CLDR --`uslax` por `America/Los_Angeles`-- y la tabla que los
-     * traduce son unas cuatrocientas cincuenta filas de datos opacos, sin regla que los derive.
-     * Inventarla de memoria daria justo lo que este paquete evita en todos lados: nombres de zona
-     * plausibles y equivocados. Un locale con `u-tz` conserva la zona que tenia, que es la misma
-     * respuesta que da un locale sin extension.
+     * <p><strong>The one approximation, stated:</strong> the `u-tz` extension is ignored. Its
+     * values are short CLDR identifiers --`uslax` for `America/Los_Angeles`-- and the table
+     * translating them is some four hundred and fifty rows of opaque data with no rule to derive
+     * them. Inventing it from memory would give exactly what this package avoids everywhere:
+     * plausible and wrong zone names. A locale with `u-tz` keeps the zone it had, which is the same
+     * answer a locale with no extension gives.
      *
-     * @throws NullPointerException si `locale` es nulo
+     * @throws NullPointerException if `locale` is null
      */
     public DateTimeFormatter localizedBy(Locale locale) {
         if (locale == null) {
             throw new NullPointerException("locale");
         }
-        Chronology cron = Chronology.ofLocale(locale);
-        DecimalStyle simbolos = DecimalStyle.of(locale);
-        return new DateTimeFormatter(this.piezas, locale, simbolos, this.resolutor,
-                this.camposResolutor, cron, this.zona);
+        Chronology chrono = Chronology.ofLocale(locale);
+        DecimalStyle symbols = DecimalStyle.of(locale);
+        return new DateTimeFormatter(this.parts, locale, symbols, this.resolverStyle,
+                this.resolverFields, chrono, this.zone);
     }
 
     public DecimalStyle getDecimalStyle() {
-        return this.simbolos;
+        return this.symbols;
     }
 
     public DateTimeFormatter withDecimalStyle(DecimalStyle decimalStyle) {
         if (decimalStyle == null) {
             throw new NullPointerException("decimalStyle");
         }
-        if (decimalStyle.equals(this.simbolos)) {
+        if (decimalStyle.equals(this.symbols)) {
             return this;
         }
-        return new DateTimeFormatter(this.piezas, this.locale, decimalStyle, this.resolutor,
-                this.camposResolutor, this.cronologia, this.zona);
+        return new DateTimeFormatter(this.parts, this.locale, decimalStyle, this.resolverStyle,
+                this.resolverFields, this.chronology, this.zone);
     }
 
     public Chronology getChronology() {
-        return this.cronologia;
+        return this.chronology;
     }
 
     public DateTimeFormatter withChronology(Chronology chrono) {
-        if (chrono == null ? this.cronologia == null : chrono.equals(this.cronologia)) {
+        if (chrono == null ? this.chronology == null : chrono.equals(this.chronology)) {
             return this;
         }
-        return new DateTimeFormatter(this.piezas, this.locale, this.simbolos, this.resolutor,
-                this.camposResolutor, chrono, this.zona);
+        return new DateTimeFormatter(this.parts, this.locale, this.symbols, this.resolverStyle,
+                this.resolverFields, chrono, this.zone);
     }
 
     public ZoneId getZone() {
-        return this.zona;
+        return this.zone;
     }
 
-    // Al escribir, convierte el valor a esta zona --si trae un instante-- y si no, se la presta: un
-    // `LocalDateTime` no sabe donde esta, y con `withZone` pasa a saberlo. Al leer, es la zona que
-    // vale cuando el texto no trajo ninguna, que es lo que permite sacar un `ZonedDateTime` de un
-    // texto sin zona.
+    // When writing, it converts the value to this zone --if it carries an instant-- and otherwise
+    // lends the zone to it: a `LocalDateTime` does not know where it is, and with `withZone` it
+    // comes to know. When reading, it is the zone that applies when the text carried none, which is
+    // what allows a `ZonedDateTime` to come out of text with no zone.
     public DateTimeFormatter withZone(ZoneId zone) {
-        if (zone == null ? this.zona == null : zone.equals(this.zona)) {
+        if (zone == null ? this.zone == null : zone.equals(this.zone)) {
             return this;
         }
-        return new DateTimeFormatter(this.piezas, this.locale, this.simbolos, this.resolutor,
-                this.camposResolutor, this.cronologia, zone);
+        return new DateTimeFormatter(this.parts, this.locale, this.symbols, this.resolverStyle,
+                this.resolverFields, this.chronology, zone);
     }
 
     public ResolverStyle getResolverStyle() {
-        return this.resolutor;
+        return this.resolverStyle;
     }
 
     public DateTimeFormatter withResolverStyle(ResolverStyle resolverStyle) {
         if (resolverStyle == null) {
             throw new NullPointerException("resolverStyle");
         }
-        if (resolverStyle.equals(this.resolutor)) {
+        if (resolverStyle.equals(this.resolverStyle)) {
             return this;
         }
-        return new DateTimeFormatter(this.piezas, this.locale, this.simbolos, resolverStyle,
-                this.camposResolutor, this.cronologia, this.zona);
+        return new DateTimeFormatter(this.parts, this.locale, this.symbols, resolverStyle,
+                this.resolverFields, this.chronology, this.zone);
     }
 
     public Set<TemporalField> getResolverFields() {
-        return this.camposResolutor;
+        return this.resolverFields;
     }
 
     public DateTimeFormatter withResolverFields(TemporalField... resolverFields) {
-        Set<TemporalField> juego = null;
+        Set<TemporalField> set = null;
         if (resolverFields != null) {
-            juego = new HashSet<TemporalField>();
+            set = new HashSet<TemporalField>();
             int i = 0;
             while (i < resolverFields.length) {
-                juego.add(resolverFields[i]);
+                set.add(resolverFields[i]);
                 i = i + 1;
             }
         }
-        return new DateTimeFormatter(this.piezas, this.locale, this.simbolos, this.resolutor,
-                juego, this.cronologia, this.zona);
+        return new DateTimeFormatter(this.parts, this.locale, this.symbols, this.resolverStyle,
+                set, this.chronology, this.zone);
     }
 
     public DateTimeFormatter withResolverFields(Set<TemporalField> resolverFields) {
-        Set<TemporalField> juego = null;
+        Set<TemporalField> set = null;
         if (resolverFields != null) {
-            juego = new HashSet<TemporalField>(resolverFields);
+            set = new HashSet<TemporalField>(resolverFields);
         }
-        return new DateTimeFormatter(this.piezas, this.locale, this.simbolos, this.resolutor,
-                juego, this.cronologia, this.zona);
+        return new DateTimeFormatter(this.parts, this.locale, this.symbols, this.resolverStyle,
+                set, this.chronology, this.zone);
     }
 
-    // ---- escribir ------------------------------------------------------------------------------
+    // ---- writing --------------------------------------------------------------------------------
 
     public String format(TemporalAccessor temporal) {
-        StringBuilder salida = new StringBuilder(32);
-        this.escribir(temporal, salida);
-        return salida.toString();
+        StringBuilder out = new StringBuilder(32);
+        this.printTo(temporal, out);
+        return out.toString();
     }
 
     public void formatTo(TemporalAccessor temporal, Appendable appendable) {
         if (appendable == null) {
             throw new NullPointerException("appendable");
         }
-        // El JDK no declara `throws IOException` aca y envuelve: quien pide formatear a un
-        // `Appendable` no tiene por que atrapar E/S, y `DateTimeException` es la excepcion de este
-        // paquete. El error no se pierde, cambia de forma.
+        // The JDK does not declare `throws IOException` here and wraps instead: whoever asks to
+        // format into an `Appendable` has no reason to catch I/O, and `DateTimeException` is this
+        // package's exception. The error is not lost, it changes shape.
         try {
             appendable.append(this.format(temporal));
         } catch (java.io.IOException e) {
-            throw new java.time.DateTimeException("fallo al escribir en el destino", e);
+            throw new java.time.DateTimeException("failed to write to the destination", e);
         }
     }
 
-    private void escribir(TemporalAccessor temporal, StringBuilder salida) {
+    private void printTo(TemporalAccessor temporal, StringBuilder out) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
         }
-        CtxImprimir ctx = new CtxImprimir(this.ajustar(temporal), this.locale, this.simbolos);
-        this.piezas.imprimir(ctx, salida);
+        PrintContext ctx = new PrintContext(this.adjust(temporal), this.locale, this.symbols);
+        this.parts.print(ctx, out);
     }
 
-    // El valor tal como las piezas lo ven: con los campos deducidos, y con los reemplazos de
-    // `withZone` y `withChronology` ya aplicados.
-    private TemporalAccessor ajustar(TemporalAccessor temporal) {
-        // Se envuelve **primero** para deducir, y recien despues se mira si hay un instante: un
-        // `Instant` de esta biblioteca no contesta `INSTANT_SECONDS` por si mismo, y sin la
-        // envoltura `withZone` no lo reconoceria como convertible.
-        TemporalAccessor base = new TemporalDerivado(temporal, null, null);
-        if (this.zona != null && !this.zona.equals(base.query(TemporalQueries.zoneId()))
+    // The value as the parts see it: with the derived fields, and with the replacements from
+    // `withZone` and `withChronology` already applied.
+    private TemporalAccessor adjust(TemporalAccessor temporal) {
+        // It is wrapped **first** to derive, and only then is it checked for an instant: an
+        // `Instant` from this library does not answer `INSTANT_SECONDS` by itself, and without the
+        // wrapper `withZone` would not recognize it as convertible.
+        TemporalAccessor base = new DerivedTemporal(temporal, null, null);
+        if (this.zone != null && !this.zone.equals(base.query(TemporalQueries.zoneId()))
                 && base.isSupported(ChronoField.INSTANT_SECONDS)) {
-            // Con un instante a mano el cambio de zona es una conversion de verdad: la fecha y la
-            // hora que salen son las de **ese** lugar. Sin instante lo unico honesto es prestarle la
-            // zona al valor, sin mover la hora --que es lo que hace `TemporalDerivado`--.
-            base = ZonedDateTime.ofInstant(Instant.from(base), this.zona);
+            // With an instant at hand the change of zone is a real conversion: the date and the
+            // time that come out are **that** place's. With no instant the only honest thing is to
+            // lend the zone to the value without moving the time --which is what `DerivedTemporal`
+            // does--.
+            base = ZonedDateTime.ofInstant(Instant.from(base), this.zone);
         }
-        return new TemporalDerivado(base, this.cronologia, this.zona);
+        return new DerivedTemporal(base, this.chronology, this.zone);
     }
 
-    // ---- leer ----------------------------------------------------------------------------------
+    // ---- reading --------------------------------------------------------------------------------
 
     /**
-     * Lee `text` con este formateador y devuelve los campos que encontro.
+     * Reads `text` with this formatter and returns the fields it found.
      *
-     * <p>Lo que vuelve **no es una fecha**: es el conjunto de campos que el texto traia, ya
-     * resueltos --anio+mes+dia se convierten en el dia epoch, hora+minuto en el nano del dia-- pero
-     * sin decidir en que clase entran. Esa decision es del que llama, y por eso existe la otra
-     * version: `parse(texto, LocalDate::from)`.
+     * <p>What comes back **is not a date**: it is the set of fields the text carried, already
+     * resolved --year+month+day become the epoch day, hour+minute the nano of day-- but with no
+     * decision about which class they go into. That decision belongs to the caller, and that is why
+     * the other version exists: `parse(text, LocalDate::from)`.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja
+     * @throws java.time.format.DateTimeParseException if the text does not fit
      */
     public TemporalAccessor parse(CharSequence text) {
-        return this.parseTodo(text);
+        return this.parseWhole(text);
     }
 
     /**
-     * Lee `text` y arma con el lo que `query` pida.
+     * Reads `text` and builds out of it whatever `query` asks for.
      *
-     * <p>Es la forma que usan los `parse(texto, formateador)` de `LocalDate`, `LocalTime` y las
-     * demas: cada una pasa su propio `from`.
+     * <p>It is the form used by the `parse(text, formatter)` of `LocalDate`, `LocalTime` and the
+     * rest: each one passes its own `from`.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja, o si lo que encaja no
-     *     alcanza para lo que `query` pide
+     * @throws java.time.format.DateTimeParseException if the text does not fit, or if what fits is
+     *     not enough for what `query` asks for
      */
     public <T> T parse(CharSequence text, TemporalQuery<T> query) {
         if (query == null) {
             throw new NullPointerException("query");
         }
-        Parsed parsed = this.parseTodo(text);
+        Parsed parsed = this.parseWhole(text);
         try {
             return query.queryFrom(parsed);
         } catch (DateTimeException e) {
-            // El texto encajo pero no traia lo que hacia falta --un patron de solo hora al que le
-            // piden una fecha--. Se reetiqueta como error de parseo porque desde afuera es lo mismo:
-            // el texto no dio lo que se pedia. El mensaje original va adentro.
+            // The text fitted but did not carry what was needed --a time-only pattern asked for a
+            // date--. It is relabelled as a parse error because from outside it is the same thing:
+            // the text did not give what was asked for. The original message goes inside.
             throw new DateTimeParseException(
                     "Text '" + text + "' could not be parsed: " + e.getMessage(), text, 0);
         }
     }
 
     /**
-     * Lee desde `position` y **deja el resto**, moviendo `position` hasta donde llego.
+     * Reads from `position` and **leaves the rest**, moving `position` to where it got.
      *
-     * <p>A diferencia de los otros `parse`, no exige haber consumido el texto entero: es la forma
-     * que sirve para leer una fecha que esta adentro de un texto mas largo. Un error no tira: se
-     * anota en `position.getErrorIndex()` y se devuelve `null`.
+     * <p>Unlike the other `parse` methods, it does not require the whole text to be consumed: it is
+     * the form that serves to read a date sitting inside a longer text. An error does not throw: it
+     * is noted in `position.getErrorIndex()` and `null` is returned.
      */
     public TemporalAccessor parse(CharSequence text, ParsePosition position) {
         if (text == null) {
@@ -484,17 +489,17 @@ public final class DateTimeFormatter {
             throw new NullPointerException("position");
         }
         String t = text.toString();
-        CtxParseo ctx = this.leer(t, position);
-        // **Tira, no devuelve `null`.** Es lo que hace el JDK, aunque la posicion tenga un
-        // `errorIndex` donde anotarlo: la version que no tira es `parseUnresolved`. Que las dos
-        // tomen un `ParsePosition` no las hace la misma operacion --esta resuelve, y resolver puede
-        // fallar por una razon que un indice no sabe contar--.
+        ParseContext ctx = this.read(t, position);
+        // **It throws, it does not return `null`.** That is what the JDK does, even though the
+        // position has an `errorIndex` to note it in: the version that does not throw is
+        // `parseUnresolved`. That both take a `ParsePosition` does not make them the same operation
+        // --this one resolves, and resolving can fail for a reason an index cannot tell--.
         if (ctx == null) {
             throw new DateTimeParseException("Text '" + t + "' could not be parsed at index "
                     + position.getErrorIndex(), text, position.getErrorIndex());
         }
         try {
-            return this.resolver(ctx);
+            return this.resolve(ctx);
         } catch (DateTimeParseException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -505,11 +510,11 @@ public final class DateTimeFormatter {
     }
 
     /**
-     * Lo mismo que `parse(text, position)` pero **sin resolver**: los campos crudos, tal como el
-     * texto los trajo.
+     * The same as `parse(text, position)` but **without resolving**: the raw fields, as the text
+     * carried them.
      *
-     * <p>Sirve para mirar que decia el texto antes de que la cronologia decida que significa. Un
-     * error no tira: se anota en `position`.
+     * <p>It serves to see what the text said before the chronology decides what it means. An error
+     * does not throw: it is noted in `position`.
      */
     public TemporalAccessor parseUnresolved(CharSequence text, ParsePosition position) {
         if (text == null) {
@@ -518,23 +523,24 @@ public final class DateTimeFormatter {
         if (position == null) {
             throw new NullPointerException("position");
         }
-        CtxParseo ctx = this.leer(text.toString(), position);
+        ParseContext ctx = this.read(text.toString(), position);
         if (ctx == null) {
             return null;
         }
-        return new Crudo(ctx);
+        return new Unresolved(ctx);
     }
 
     /**
-     * Lee el texto y devuelve **la primera** de `queries` que se pueda armar con lo que trajo.
+     * Reads the text and returns **the first** of `queries` that can be built out of what it
+     * carried.
      *
-     * <p>Para eso estan las secciones opcionales: `ISO_DATE_TIME` lee un texto con zona o sin ella, y
-     * `parseBest(t, ZonedDateTime::from, LocalDateTime::from)` devuelve lo que el texto de verdad
-     * decia en vez de forzar el mas rico y fallar. El orden manda: se prueban de mas especifico a
-     * menos.
+     * <p>That is what the optional sections are for: `ISO_DATE_TIME` reads text with a zone or
+     * without one, and `parseBest(t, ZonedDateTime::from, LocalDateTime::from)` returns what the
+     * text really said instead of forcing the richest and failing. The order rules: they are tried
+     * from most specific to least.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja, o si ninguna de las
-     *     consultas se puede armar
+     * @throws java.time.format.DateTimeParseException if the text does not fit, or if none of the
+     *     queries can be built
      */
     public TemporalAccessor parseBest(CharSequence text, TemporalQuery<?>... queries) {
         if (text == null) {
@@ -544,7 +550,7 @@ public final class DateTimeFormatter {
             throw new IllegalArgumentException(
                     "At least two queries must be specified");
         }
-        Parsed parsed = this.parseTodo(text);
+        Parsed parsed = this.parseWhole(text);
         int i = 0;
         while (i < queries.length) {
             try {
@@ -557,13 +563,13 @@ public final class DateTimeFormatter {
                 + "' could not be parsed: unable to obtain any of the requested types", text, 0);
     }
 
-    private Parsed parseTodo(CharSequence text) {
+    private Parsed parseWhole(CharSequence text) {
         if (text == null) {
             throw new NullPointerException("text");
         }
         String t = text.toString();
         ParsePosition pos = new ParsePosition(0);
-        CtxParseo ctx = this.leer(t, pos);
+        ParseContext ctx = this.read(t, pos);
         if (ctx == null) {
             int i = pos.getErrorIndex();
             throw new DateTimeParseException(
@@ -575,7 +581,7 @@ public final class DateTimeFormatter {
                     text, pos.getIndex());
         }
         try {
-            return this.resolver(ctx);
+            return this.resolve(ctx);
         } catch (DateTimeParseException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -584,10 +590,10 @@ public final class DateTimeFormatter {
         }
     }
 
-    private CtxParseo leer(String t, ParsePosition pos) {
-        CtxParseo ctx = new CtxParseo(this.locale, this.simbolos,
-                this.resolutor != ResolverStyle.LENIENT, this.cronologia, null);
-        int r = this.piezas.parsear(ctx, t, pos.getIndex());
+    private ParseContext read(String t, ParsePosition pos) {
+        ParseContext ctx = new ParseContext(this.locale, this.symbols,
+                this.resolverStyle != ResolverStyle.LENIENT, this.chronology, null);
+        int r = this.parts.parse(ctx, t, pos.getIndex());
         if (r < 0) {
             pos.setErrorIndex(~r);
             return null;
@@ -596,48 +602,48 @@ public final class DateTimeFormatter {
         return ctx;
     }
 
-    private Parsed resolver(CtxParseo ctx) {
-        return new Parsed(ctx, this.resolutor, this.camposResolutor, this.zona, this.cronologia);
+    private Parsed resolve(ParseContext ctx) {
+        return new Parsed(ctx, this.resolverStyle, this.resolverFields, this.zone, this.chronology);
     }
 
-    // ---- puente con java.text ------------------------------------------------------------------
+    // ---- bridge with java.text ------------------------------------------------------------------
 
     /**
-     * Este formateador visto como un `java.text.Format`.
+     * This formatter seen as a `java.text.Format`.
      *
-     * <p>**Solo escribe.** El `java.text.Format` de esta biblioteca es la mitad de formateo de la
-     * jerarquia --`parseObject` no esta declarado ahi-- asi que el objeto que vuelve cumple entero el
-     * contrato que su tipo declara. La mitad de lectura se hace por `parse(texto, ParsePosition)`,
-     * que es la misma operacion sin el intermediario.
+     * <p>**It only writes.** This library's `java.text.Format` is the formatting half of the
+     * hierarchy --`parseObject` is not declared there-- so the object that comes back fulfils in
+     * full the contract its type declares. The reading half is done through `parse(text,
+     * ParsePosition)`, which is the same operation without the middleman.
      */
     public Format toFormat() {
-        return new FormatoDeFecha(this, null);
+        return new FormatAdapter(this, null);
     }
 
     /**
-     * Como `toFormat()`, pero el resultado que se le pide al parseo ya viene fijado.
+     * Like `toFormat()`, but the result asked of the parse is fixed up front.
      */
     public Format toFormat(TemporalQuery<?> parseQuery) {
         if (parseQuery == null) {
             throw new NullPointerException("parseQuery");
         }
-        return new FormatoDeFecha(this, parseQuery);
+        return new FormatAdapter(this, parseQuery);
     }
 
     public String toString() {
-        return this.piezas.toString();
+        return this.parts.toString();
     }
 
-    // ---- los predefinidos, armados -------------------------------------------------------------
+    // ---- the predefined ones, built -------------------------------------------------------------
 
-    private static DateTimeFormatter estricto(DateTimeFormatterBuilder b) {
-        // Los `ISO_*` resuelven en `STRICT` --como en el JDK-- porque ISO-8601 no admite un 31 de
-        // febrero ni redondearlo al 28: un texto que no es una fecha tiene que fallar.
+    private static DateTimeFormatter strict(DateTimeFormatterBuilder b) {
+        // The `ISO_*` resolve in `STRICT` --as in the JDK-- because ISO-8601 admits neither a 31st
+        // of February nor rounding it down to the 28th: text that is not a date has to fail.
         return b.toFormatter(Locale.ROOT).withResolverStyle(ResolverStyle.STRICT)
                 .withChronology(IsoChronology.INSTANCE);
     }
 
-    private static DateTimeFormatterBuilder fechaLocal() {
+    private static DateTimeFormatterBuilder localDate() {
         return new DateTimeFormatterBuilder()
                 .appendValue(ChronoField.YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
                 .appendLiteral('-')
@@ -646,7 +652,7 @@ public final class DateTimeFormatter {
                 .appendValue(ChronoField.DAY_OF_MONTH, 2);
     }
 
-    private static DateTimeFormatterBuilder horaLocal() {
+    private static DateTimeFormatterBuilder localTime() {
         return new DateTimeFormatterBuilder()
                 .appendValue(ChronoField.HOUR_OF_DAY, 2)
                 .appendLiteral(':')
@@ -660,48 +666,49 @@ public final class DateTimeFormatter {
                 .optionalEnd();
     }
 
-    private static DateTimeFormatterBuilder fechaHoraLocal() {
-        return fechaLocal().appendLiteral('T').append(ISO_LOCAL_TIME);
+    private static DateTimeFormatterBuilder localDateTime() {
+        return localDate().appendLiteral('T').append(ISO_LOCAL_TIME);
     }
 
-    private static DateTimeFormatter isoFechaLocal() {
-        return estricto(fechaLocal());
+    private static DateTimeFormatter isoLocalDate() {
+        return strict(localDate());
     }
 
-    private static DateTimeFormatter isoFechaConOffset() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE).appendOffsetId());
+    private static DateTimeFormatter isoOffsetDate() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE).appendOffsetId());
     }
 
-    private static DateTimeFormatter isoFecha() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE)
+    private static DateTimeFormatter isoDate() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE)
                 .optionalStart().appendOffsetId().optionalEnd());
     }
 
-    private static DateTimeFormatter isoHoraLocal() {
-        return estricto(horaLocal());
+    private static DateTimeFormatter isoLocalTime() {
+        return strict(localTime());
     }
 
-    private static DateTimeFormatter isoHoraConOffset() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_LOCAL_TIME).appendOffsetId());
+    private static DateTimeFormatter isoOffsetTime() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_LOCAL_TIME).appendOffsetId());
     }
 
-    private static DateTimeFormatter isoHora() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_LOCAL_TIME)
+    private static DateTimeFormatter isoTime() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_LOCAL_TIME)
                 .optionalStart().appendOffsetId().optionalEnd());
     }
 
-    private static DateTimeFormatter isoFechaHoraLocal() {
-        return estricto(fechaHoraLocal());
+    private static DateTimeFormatter isoLocalDateTime() {
+        return strict(localDateTime());
     }
 
-    private static DateTimeFormatter isoFechaHoraConOffset() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE_TIME).appendOffsetId());
+    private static DateTimeFormatter isoOffsetDateTime() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE_TIME).appendOffsetId());
     }
 
-    // El `[Europe/Paris]` va **despues** del desplazamiento y adentro de una seccion opcional: un
-    // `OffsetDateTime` sale sin corchetes y un `ZonedDateTime` con ellos, del mismo formateador.
-    private static DateTimeFormatter isoFechaHoraConZona() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_OFFSET_DATE_TIME)
+    // The `[Europe/Paris]` goes **after** the offset and inside an optional section: an
+    // `OffsetDateTime` comes out without brackets and a `ZonedDateTime` with them, from the same
+    // formatter.
+    private static DateTimeFormatter isoZonedDateTime() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_OFFSET_DATE_TIME)
                 .optionalStart()
                 .appendLiteral('[')
                 .parseCaseSensitive()
@@ -710,8 +717,8 @@ public final class DateTimeFormatter {
                 .optionalEnd());
     }
 
-    private static DateTimeFormatter isoFechaHora() {
-        return estricto(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE_TIME)
+    private static DateTimeFormatter isoDateTime() {
+        return strict(new DateTimeFormatterBuilder().append(ISO_LOCAL_DATE_TIME)
                 .optionalStart()
                 .appendOffsetId()
                 .optionalStart()
@@ -723,8 +730,8 @@ public final class DateTimeFormatter {
                 .optionalEnd());
     }
 
-    private static DateTimeFormatter isoOrdinal() {
-        return estricto(new DateTimeFormatterBuilder()
+    private static DateTimeFormatter isoOrdinalDate() {
+        return strict(new DateTimeFormatterBuilder()
                 .appendValue(ChronoField.YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
                 .appendLiteral('-')
                 .appendValue(ChronoField.DAY_OF_YEAR, 3)
@@ -733,8 +740,8 @@ public final class DateTimeFormatter {
                 .optionalEnd());
     }
 
-    private static DateTimeFormatter isoSemana() {
-        return estricto(new DateTimeFormatterBuilder()
+    private static DateTimeFormatter isoWeekDate() {
+        return strict(new DateTimeFormatterBuilder()
                 .appendValue(IsoFields.WEEK_BASED_YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
                 .appendLiteral("-W")
                 .appendValue(IsoFields.WEEK_OF_WEEK_BASED_YEAR, 2)
@@ -745,15 +752,16 @@ public final class DateTimeFormatter {
                 .optionalEnd());
     }
 
-    private static DateTimeFormatter isoInstante() {
+    private static DateTimeFormatter isoInstant() {
         return new DateTimeFormatterBuilder().parseCaseInsensitive().appendInstant()
                 .toFormatter(Locale.ROOT).withResolverStyle(ResolverStyle.STRICT);
     }
 
-    // Sin separadores: los tres campos son de ancho fijo y por eso se pueden pegar. El offset va en
-    // modo laxo porque `+0000` y `Z` son los dos legales y el estricto rechazaria uno.
-    private static DateTimeFormatter isoBasico() {
-        return estricto(new DateTimeFormatterBuilder()
+    // No separators: the three fields are of fixed width and that is why they can be run together.
+    // The offset goes in lenient mode because `+0000` and `Z` are both legal and strict would
+    // reject one of them.
+    private static DateTimeFormatter basicIsoDate() {
+        return strict(new DateTimeFormatterBuilder()
                 .appendValue(ChronoField.YEAR, 4)
                 .appendValue(ChronoField.MONTH_OF_YEAR, 2)
                 .appendValue(ChronoField.DAY_OF_MONTH, 2)
@@ -764,41 +772,41 @@ public final class DateTimeFormatter {
                 .optionalEnd());
     }
 
-    // Los nombres del RFC 1123 van por `appendText(field, Map)` y no por el juego ingles: el RFC los
-    // fija, no los toma del locale. Con un mapa explicito el formateador dice exactamente eso, y
-    // sigue funcionando con cualquier `withLocale`.
+    // The RFC 1123 names go through `appendText(field, Map)` and not through the English set: the
+    // RFC fixes them, it does not take them from the locale. With an explicit map the formatter
+    // says exactly that, and it keeps working under any `withLocale`.
     private static DateTimeFormatter rfc1123() {
-        Map<Long, String> dias = new HashMap<Long, String>();
-        dias.put(Long.valueOf(1L), "Mon");
-        dias.put(Long.valueOf(2L), "Tue");
-        dias.put(Long.valueOf(3L), "Wed");
-        dias.put(Long.valueOf(4L), "Thu");
-        dias.put(Long.valueOf(5L), "Fri");
-        dias.put(Long.valueOf(6L), "Sat");
-        dias.put(Long.valueOf(7L), "Sun");
-        Map<Long, String> meses = new HashMap<Long, String>();
-        meses.put(Long.valueOf(1L), "Jan");
-        meses.put(Long.valueOf(2L), "Feb");
-        meses.put(Long.valueOf(3L), "Mar");
-        meses.put(Long.valueOf(4L), "Apr");
-        meses.put(Long.valueOf(5L), "May");
-        meses.put(Long.valueOf(6L), "Jun");
-        meses.put(Long.valueOf(7L), "Jul");
-        meses.put(Long.valueOf(8L), "Aug");
-        meses.put(Long.valueOf(9L), "Sep");
-        meses.put(Long.valueOf(10L), "Oct");
-        meses.put(Long.valueOf(11L), "Nov");
-        meses.put(Long.valueOf(12L), "Dec");
+        Map<Long, String> days = new HashMap<Long, String>();
+        days.put(Long.valueOf(1L), "Mon");
+        days.put(Long.valueOf(2L), "Tue");
+        days.put(Long.valueOf(3L), "Wed");
+        days.put(Long.valueOf(4L), "Thu");
+        days.put(Long.valueOf(5L), "Fri");
+        days.put(Long.valueOf(6L), "Sat");
+        days.put(Long.valueOf(7L), "Sun");
+        Map<Long, String> months = new HashMap<Long, String>();
+        months.put(Long.valueOf(1L), "Jan");
+        months.put(Long.valueOf(2L), "Feb");
+        months.put(Long.valueOf(3L), "Mar");
+        months.put(Long.valueOf(4L), "Apr");
+        months.put(Long.valueOf(5L), "May");
+        months.put(Long.valueOf(6L), "Jun");
+        months.put(Long.valueOf(7L), "Jul");
+        months.put(Long.valueOf(8L), "Aug");
+        months.put(Long.valueOf(9L), "Sep");
+        months.put(Long.valueOf(10L), "Oct");
+        months.put(Long.valueOf(11L), "Nov");
+        months.put(Long.valueOf(12L), "Dec");
         return new DateTimeFormatterBuilder()
                 .parseCaseInsensitive()
                 .parseLenient()
                 .optionalStart()
-                .appendText(ChronoField.DAY_OF_WEEK, dias)
+                .appendText(ChronoField.DAY_OF_WEEK, days)
                 .appendLiteral(", ")
                 .optionalEnd()
                 .appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
                 .appendLiteral(' ')
-                .appendText(ChronoField.MONTH_OF_YEAR, meses)
+                .appendText(ChronoField.MONTH_OF_YEAR, months)
                 .appendLiteral(' ')
                 .appendValue(ChronoField.YEAR, 4)
                 .appendLiteral(' ')
@@ -817,64 +825,64 @@ public final class DateTimeFormatter {
     }
 }
 
-// Los campos tal como el texto los trajo, sin resolver. Es lo que devuelve `parseUnresolved`.
-final class Crudo implements TemporalAccessor {
+// The fields as the text carried them, unresolved. It is what `parseUnresolved` returns.
+final class Unresolved implements TemporalAccessor {
 
-    private final Map<TemporalField, Long> campos;
-    private final ZoneId zona;
-    private final Chronology cronologia;
+    private final Map<TemporalField, Long> fields;
+    private final ZoneId zone;
+    private final Chronology chronology;
 
-    Crudo(CtxParseo ctx) {
-        this.campos = ctx.campos;
-        this.zona = ctx.zona != null ? ctx.zona : ctx.offset;
-        this.cronologia = ctx.cronologia;
+    Unresolved(ParseContext ctx) {
+        this.fields = ctx.fields;
+        this.zone = ctx.zone != null ? ctx.zone : ctx.offset;
+        this.chronology = ctx.chronology;
     }
 
-    public boolean isSupported(TemporalField campo) {
-        return campo != null && this.campos.containsKey(campo);
+    public boolean isSupported(TemporalField field) {
+        return field != null && this.fields.containsKey(field);
     }
 
-    public long getLong(TemporalField campo) {
-        Long v = this.campos.get(campo);
+    public long getLong(TemporalField field) {
+        Long v = this.fields.get(field);
         if (v == null) {
             throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: "
-                    + campo);
+                    + field);
         }
         return v.longValue();
     }
 
-    public int get(TemporalField campo) {
-        return campo.range().checkValidIntValue(this.getLong(campo), campo);
+    public int get(TemporalField field) {
+        return field.range().checkValidIntValue(this.getLong(field), field);
     }
 
-    public <R> R query(TemporalQuery<R> consulta) {
-        if (consulta == TemporalQueries.zoneId() || consulta == TemporalQueries.zone()) {
-            return (R) this.zona;
+    public <R> R query(TemporalQuery<R> query) {
+        if (query == TemporalQueries.zoneId() || query == TemporalQueries.zone()) {
+            return (R) this.zone;
         }
-        if (consulta == TemporalQueries.chronology()) {
-            return (R) this.cronologia;
+        if (query == TemporalQueries.chronology()) {
+            return (R) this.chronology;
         }
-        return consulta.queryFrom(this);
+        return query.queryFrom(this);
     }
 
     public String toString() {
-        return this.campos.toString();
+        return this.fields.toString();
     }
 }
 
 // `DateTimeFormatter.toFormat()`.
 //
-// Solo escribe, porque `java.text.Format` de esta biblioteca solo declara la mitad de escritura. El
-// `parseQuery` se guarda para que el objeto sea el que el llamador pidio --dos `toFormat` con
-// consultas distintas no son iguales-- aunque hoy no haya un `parseObject` que lo use.
-final class FormatoDeFecha extends Format {
+// It only writes, because this library's `java.text.Format` declares only the writing half. The
+// `parseQuery` is kept so that the object is the one the caller asked for --two `toFormat` with
+// different queries are not equal-- even though there is no `parseObject` today to use it.
+final class FormatAdapter extends Format {
 
-    private final DateTimeFormatter formateador;
-    private final TemporalQuery<?> consulta;
+    private final DateTimeFormatter formatter;
+    private final TemporalQuery<?> query;
 
-    FormatoDeFecha(DateTimeFormatter formateador, TemporalQuery<?> consulta) {
-        this.formateador = formateador;
-        this.consulta = consulta;
+    FormatAdapter(DateTimeFormatter formatter, TemporalQuery<?> query) {
+        this.formatter = formatter;
+        this.query = query;
     }
 
     public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
@@ -887,7 +895,7 @@ final class FormatoDeFecha extends Format {
         if (!(obj instanceof TemporalAccessor)) {
             throw new IllegalArgumentException("Format target must implement TemporalAccessor");
         }
-        toAppendTo.append(this.formateador.format((TemporalAccessor) obj));
+        toAppendTo.append(this.formatter.format((TemporalAccessor) obj));
         return toAppendTo;
     }
 }

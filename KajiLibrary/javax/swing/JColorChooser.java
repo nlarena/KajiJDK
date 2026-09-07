@@ -197,4 +197,146 @@ public class JColorChooser extends JComponent {
     public void setSelectionModel(ColorSelectionModel newModel) {
         this.selectionModel = newModel;
     }
+
+    // -- el dialogo ------------------------------------------------------------------------------
+
+    /**
+     * Abre un dialogo modal para elegir un color.
+     *
+     * @return el color elegido, o nulo si el usuario cancelo
+     * @throws java.awt.HeadlessException si no hay pantalla
+     */
+    public static Color showDialog(java.awt.Component component, String title,
+            Color initialColor) throws java.awt.HeadlessException {
+        return showDialog(component, title, initialColor, true);
+    }
+
+    /**
+     * Lo mismo, pudiendo esconder el panel de transparencia.
+     *
+     * <p><strong>Aca el dialogo no bloquea</strong>, igual que en {@link JOptionPane} y por el mismo
+     * motivo: esta biblioteca no reparte eventos de ventana. Se arma todo, se muestra y se devuelve
+     * nulo, que es lo que corresponde a un dialogo cerrado sin elegir.
+     *
+     * @return el color elegido, o nulo si el usuario cancelo
+     * @throws java.awt.HeadlessException si no hay pantalla
+     */
+    public static Color showDialog(java.awt.Component component, String title, Color initialColor,
+            boolean colorTransparencySelectionEnabled) throws java.awt.HeadlessException {
+        final JColorChooser pane = new JColorChooser(initialColor != null ? initialColor
+                : Color.white);
+        ColorTracker ok = new ColorTracker(pane);
+        JDialog dialog = createDialog(component, title, true, pane, ok, null);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return ok.getColor();
+    }
+
+    /**
+     * Arma el dialogo que contiene a ese selector, con sus tres botones.
+     *
+     * <p>Los dos oyentes son los de Aceptar y Cancelar; cualquiera de los dos puede ser nulo. El
+     * boton de Restablecer devuelve el color al que tenia al abrirse, y no necesita oyente porque no
+     * cierra nada.
+     *
+     * @throws java.awt.HeadlessException si no hay pantalla
+     */
+    public static JDialog createDialog(java.awt.Component c, String title, boolean modal,
+            JColorChooser chooserPane, java.awt.event.ActionListener okListener,
+            java.awt.event.ActionListener cancelListener) throws java.awt.HeadlessException {
+        java.awt.Window duena = (c == null) ? null : SwingUtilities.getWindowAncestor(c);
+        JDialog dialog;
+        if (duena instanceof java.awt.Dialog) {
+            dialog = new JDialog((java.awt.Dialog) duena, title, modal);
+        } else if (duena instanceof java.awt.Frame) {
+            dialog = new JDialog((java.awt.Frame) duena, title, modal);
+        } else {
+            dialog = new JDialog((java.awt.Frame) null, title, modal);
+        }
+        java.awt.Container contenido = dialog.getContentPane();
+        contenido.setLayout(new java.awt.BorderLayout());
+        contenido.add(chooserPane, java.awt.BorderLayout.CENTER);
+
+        JPanel botones = new JPanel();
+        JButton aceptar = new JButton(UIManager.getString("ColorChooser.okText") != null
+                ? UIManager.getString("ColorChooser.okText") : "OK");
+        JButton cancelar = new JButton(UIManager.getString("ColorChooser.cancelText") != null
+                ? UIManager.getString("ColorChooser.cancelText") : "Cancel");
+        JButton restablecer = new JButton(UIManager.getString("ColorChooser.resetText") != null
+                ? UIManager.getString("ColorChooser.resetText") : "Reset");
+        if (okListener != null) {
+            aceptar.addActionListener(okListener);
+        }
+        aceptar.addActionListener(new CierraElDialogo(dialog));
+        if (cancelListener != null) {
+            cancelar.addActionListener(cancelListener);
+        }
+        cancelar.addActionListener(new CierraElDialogo(dialog));
+        restablecer.addActionListener(new Restablece(chooserPane, chooserPane.getColor()));
+        botones.add(aceptar);
+        botones.add(cancelar);
+        botones.add(restablecer);
+        contenido.add(botones, java.awt.BorderLayout.SOUTH);
+        dialog.pack();
+        return dialog;
+    }
+
+    /** El aspecto instalado. */
+    public javax.swing.plaf.ColorChooserUI getUI() {
+        return (javax.swing.plaf.ColorChooserUI) ui;
+    }
+
+    /** Instala ese aspecto. */
+    public void setUI(javax.swing.plaf.ColorChooserUI ui) {
+        super.setUI(ui);
+    }
+
+    /** Se queda con el color al aceptar; nulo si nunca se acepto. */
+    private static class ColorTracker implements java.awt.event.ActionListener {
+
+        private final JColorChooser chooser;
+        private Color color;
+
+        ColorTracker(JColorChooser c) {
+            chooser = c;
+        }
+
+        public void actionPerformed(java.awt.event.ActionEvent e) {
+            color = chooser.getColor();
+        }
+
+        Color getColor() {
+            return color;
+        }
+    }
+
+    /** Cierra el dialogo; es lo que hacen los dos botones que terminan. */
+    private static class CierraElDialogo implements java.awt.event.ActionListener {
+
+        private final JDialog dialogo;
+
+        CierraElDialogo(JDialog d) {
+            dialogo = d;
+        }
+
+        public void actionPerformed(java.awt.event.ActionEvent e) {
+            dialogo.setVisible(false);
+        }
+    }
+
+    /** Devuelve el color al que tenia al abrirse. */
+    private static class Restablece implements java.awt.event.ActionListener {
+
+        private final JColorChooser chooser;
+        private final Color original;
+
+        Restablece(JColorChooser c, Color original) {
+            this.chooser = c;
+            this.original = original;
+        }
+
+        public void actionPerformed(java.awt.event.ActionEvent e) {
+            chooser.setColor(original);
+        }
+    }
 }

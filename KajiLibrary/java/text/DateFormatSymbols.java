@@ -1,5 +1,6 @@
 package java.text;
 
+import java.io.Serializable;
 import java.util.Locale;
 
 /**
@@ -29,7 +30,7 @@ import java.util.Locale;
  *           mínima, así que {@code getZoneStrings} devuelve pocas filas y con nombres de
  *           desplazamiento. Es lo que la biblioteca sabe; decirlo así es el punto.
  */
-public class DateFormatSymbols implements Cloneable {
+public class DateFormatSymbols implements Cloneable, Serializable {
 
     private static String[] tags() {
         return new String[] {"und", "en-US", "es-AR", "de-DE", "fr-FR", "ja-JP"};
@@ -270,6 +271,11 @@ public class DateFormatSymbols implements Cloneable {
             }
             if (dash > 0) {
                 out[i] = new Locale(tag.substring(0, dash), tag.substring(dash + 1, tag.length()));
+            } else if (tag.equals("und")) {
+                // `und` es el tag BCP-47 de "sin determinar", y el locale que le corresponde es
+                // ROOT --no uno cuyo idioma se llame literalmente "und"--. Es lo que devuelve
+                // `Locale.forLanguageTag("und")`, y lo que el JDK pone en esta lista.
+                out[i] = Locale.ROOT;
             } else {
                 out[i] = new Locale(tag);
             }

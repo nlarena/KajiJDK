@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalAdjuster;
 import java.time.temporal.TemporalAmount;
@@ -13,7 +14,7 @@ import java.time.temporal.ChronoUnit;
 // (so it supports plus/minus over units and cooperates with Duration.addTo), TemporalAdjuster and
 // Comparable. A KajiLibrary subset: the field/unit support covers what our ChronoField/ChronoUnit
 // subset offers (NANO_OF_SECOND; NANOS/MILLIS/SECONDS/MINUTES/HOURS/DAYS); toString/ISO deferred.
-public final class Instant implements Temporal, TemporalAdjuster, Comparable<Instant> {
+public final class Instant implements Temporal, TemporalAdjuster, Comparable<Instant>, Serializable {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
 

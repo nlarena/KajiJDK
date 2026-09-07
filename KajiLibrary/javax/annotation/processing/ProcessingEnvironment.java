@@ -5,59 +5,57 @@ import javax.lang.model.SourceVersion;
 import java.util.Locale;
 import java.util.Map;
 
-// El unico canal por el que un procesador habla con la herramienta que lo corre (JSR 269). Se lo
-// entrega `Processor.init(env)` una sola vez, y de ahi salen todos los servicios: el `Filer` para
-// generar, el `Messager` para reportar, las opciones y el idioma.
+// The only channel a processor talks to the tool running it through (JSR 269). `Processor.init(env)`
+// hands it over exactly once, and every service comes out of it: the `Filer` to generate, the
+// `Messager` to report, the options and the language.
 //
-// QUE FALTA Y POR QUE — el contrato real tiene tambien `getElementUtils()` y `getTypeUtils()`, que
-// devuelven `javax.lang.model.util.Elements` y `javax.lang.model.util.Types`. Ese paquete
-// (`javax.lang.model.util`) **no existe todavia en KajiLibrary**, y declarar los metodos con un tipo
-// de retorno inexistente no compila. Se dejan afuera hasta que ese paquete este: un miembro que
-// falta es un subconjunto legal.
+// `getElementUtils()` and `getTypeUtils()` used to be missing here, and not by decision: they return
+// `javax.lang.model.util.Elements` and `javax.lang.model.util.Types`, and that package did not exist
+// in KajiLibrary. A method whose return type has to be substituted for another is a different method
+// with the right name put on top of it, so they stayed undeclared. The package exists now and so do
+// they.
 //
-// El implementador de este proyecto es `ProcessingEnvironmentImpl`.
+// This project's implementor is `ProcessingEnvironmentImpl`.
 public interface ProcessingEnvironment {
 
     /**
-     * Las opciones `-Aclave=valor` que recibio la herramienta. Una opcion sin `=` mapea a `null`,
-     * que no es lo mismo que ausente: la diferencia entre "-Adebug" y no pasarla.
+     * The `-Akey=value` options the tool received. An option with no `=` maps to `null`, which is not
+     * the same as absent: the difference between "-Adebug" and not passing it.
      */
     Map<String, String> getOptions();
 
-    /** Por donde reportar. */
+    /** Where to report. */
     Messager getMessager();
 
-    /** Por donde generar. */
+    /** Where to generate. */
     Filer getFiler();
 
-    /** La version del lenguaje de los fuentes de esta corrida. */
+    /** The language version of this run's sources. */
     SourceVersion getSourceVersion();
 
-    /** El idioma en el que conviene escribir los mensajes, o `null` si no hay uno. */
+    /** The language the messages had best be written in, or `null` if there is none. */
     Locale getLocale();
 
     /**
-     * Si la corrida tiene las features en preview habilitadas.
+     * Whether the run has preview features enabled.
      *
-     * <p>`default` y no abstracto en el contrato: se agrego despues de que existieran
-     * implementaciones, y "no" es la respuesta conservadora correcta para cualquiera que no sepa.
+     * <p>`default` and not abstract in the contract: it was added after implementations existed, and
+     * "no" is the correct conservative answer for anyone who does not know.
      */
     default boolean isPreviewEnabled() {
         return false;
     }
 
     /**
-     * Las utilidades para consultar **elementos**.
+     * The utilities for querying **elements**.
      *
-     * <p>Estaban afuera hasta ahora, y no por decision: devuelven
-     * {@link javax.lang.model.util.Elements}, que no existia en esta biblioteca. Un metodo cuyo tipo
-     * de retorno hay que sustituir por otro es otro metodo con el nombre correcto puesto encima, asi
-     * que quedaba sin declarar. Ya existe.
+     * <p>See the note at the top of the file for why this was out until now.
      *
-     * <p>Lo que el compilador entregue aca es cosa suya; la interfaz solo dice que lo entrega.
+     * <p>What the compiler hands over here is its own business; the interface only says that it hands
+     * it over.
      */
     javax.lang.model.util.Elements getElementUtils();
 
-    /** Las utilidades para consultar **tipos**. Mismo caso que {@link #getElementUtils()}. */
+    /** The utilities for querying **types**. The same case as {@link #getElementUtils()}. */
     javax.lang.model.util.Types getTypeUtils();
 }

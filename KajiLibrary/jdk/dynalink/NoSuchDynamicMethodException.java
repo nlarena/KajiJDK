@@ -1,10 +1,10 @@
 package jdk.dynalink;
 
 /**
- * No hay ningun miembro que satisfaga la operacion pedida en el sitio de invocacion.
+ * No member satisfies the operation requested at the call site.
  *
- * <p>Es la forma que toma un `NoSuchMethodError` cuando el metodo se busca en tiempo de
- * ejecucion: `unchecked`, porque el codigo que la provoca no declara que puede fallar asi.
+ * <p>It is the shape a `NoSuchMethodError` takes when the method is looked up at run time:
+ * unchecked, because the code that provokes it does not declare that it can fail this way.
  *
  * @since 9
  */

@@ -1,5 +1,6 @@
 package java.time;
 
+import java.io.Serializable;
 import java.util.List;
 import java.util.ArrayList;
 import java.time.temporal.TemporalAmount;
@@ -10,7 +11,7 @@ import java.time.temporal.ChronoUnit;
 // KajiLibrary's java.time.Period — a date-based amount of years, months and days (each independent,
 // unlike Duration's normalised seconds). Immutable. Implements TemporalAmount so `date.plus(period)`
 // works. A KajiLibrary subset (the JDK adds between/parse/toString/multipliedBy).
-public final class Period implements TemporalAmount, java.time.chrono.ChronoPeriod {
+public final class Period implements TemporalAmount, java.time.chrono.ChronoPeriod, Serializable {
 
     private final int years;
     private final int months;

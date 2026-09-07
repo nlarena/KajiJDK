@@ -1,5 +1,7 @@
 package java.math;
 
+import java.io.Serializable;
+
 // KajiLibrary's java.math.MathContext — how many significant digits to keep, and how to round when
 // dropping the rest. It is the pair that turns BigDecimal's exact arithmetic into a bounded one.
 //
@@ -9,7 +11,7 @@ package java.math;
 //
 // The three named contexts are the IEEE-754 decimal formats: 7, 16 and 34 significant digits, all
 // with HALF_EVEN, which is the rounding that does not drift.
-public final class MathContext {
+public final class MathContext implements Serializable {
 
     // Built with `RoundingMode.valueOf(...)` rather than reading `RoundingMode.HALF_EVEN`: a
     // cross-class read of a static field emits `getfield` and traps at runtime (finding #110),

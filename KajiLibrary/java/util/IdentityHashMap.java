@@ -1,6 +1,8 @@
 package java.util;
 
 // Same-package import works around the frozen javac's finder (finding #4).
+import java.lang.Cloneable;
+import java.io.Serializable;
 import java.util.Map;
 
 // A map that compares keys with `==` and never with `equals` — and hashes them with
@@ -33,7 +35,7 @@ import java.util.Map;
 //
 // Subset of the JDK's: putAll, the collection views (keySet/values/entrySet) and clone are not
 // modelled.
-public class IdentityHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
+public class IdentityHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Serializable, Cloneable {
 
     // `null` is a perfectly good identity, but a null slot is also how the table says "empty",
     // so a null key is stored as this sentinel and translated back on the way out. A

@@ -5,34 +5,34 @@ import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.tools.Diagnostic;
 
-// El Messager del round loop de este proyecto: escribe por el mismo puente nativo que usa AptTrace,
-// que es la consola del intérprete y lo que `AptOutcome.console` termina capturando. Así un
-// procesador puede reportar sin `System.out.println` (que todavía no compila en este javac).
+// This project's round-loop Messager: it writes through the same native bridge AptTrace uses, which
+// is the interpreter's console and what `AptOutcome.console` ends up capturing. That way a processor
+// can report without `System.out.println` (which does not compile yet in this javac).
 //
-// El formato es `KIND: mensaje`, y cuando hay contexto se agrega ` en <elemento>` — no más que eso:
-// esta implementación **no** puede subrayar una posición en el fuente, porque el round loop no le
-// pasa la unidad de compilación ni las posiciones. Poner un número de línea inventado sería peor
-// que no ponerlo.
+// The format is `KIND: message`, and when there is context ` at <element>` is appended — no more than
+// that: this implementation **cannot** underline a position in the source, because the round loop
+// passes it neither the compilation unit nor the positions. Putting an invented line number would be
+// worse than putting none.
 //
-// Lo que este Messager NO hace, y conviene saberlo: un `Kind.ERROR` **no** hace fallar la
-// compilación. En el JDK real ese es el efecto principal de reportar un error; acá el round loop no
-// mira los mensajes, así que un error es una línea en la consola y nada más. Es la razón por la que
-// `RoundEnvironmentImpl.errorRaised()` puede devolver `false` con la conciencia tranquila.
+// What this Messager does NOT do, and it is worth knowing: a `Kind.ERROR` does **not** make the
+// compilation fail. In the real JDK that is the main effect of reporting an error; here the round
+// loop does not look at the messages, so an error is a line on the console and nothing more. It is
+// the reason `RoundEnvironmentImpl.errorRaised()` can return `false` with a clear conscience.
 class AptMessager implements Messager {
 
-    // El puente: `AptTrace.trace` es el native que ya existe para que un procesador imprima.
+    // The bridge: `AptTrace.trace` is the native that already exists so that a processor can print.
     private static void emit(Diagnostic.Kind kind, CharSequence msg, String where) {
-        String texto = kind.toString() + ": " + String.valueOf(msg);
+        String text = kind.toString() + ": " + String.valueOf(msg);
         if (where != null) {
-            texto = texto + " en " + where;
+            text = text + " at " + where;
         }
-        AptTrace.trace(texto);
+        AptTrace.trace(text);
     }
 
-    // El nombre de un elemento para el mensaje, o null si no hay elemento. Se usa `toString()` y no
-    // `getSimpleName()` porque la reificación de elementos es parcial y `toString` es lo único que
-    // todo Element de acá contesta.
-    private static String nombre(Element e) {
+    // An element's name for the message, or null if there is no element. `toString()` is used and not
+    // `getSimpleName()` because element reification is partial and `toString` is the only thing every
+    // Element here answers.
+    private static String name(Element e) {
         if (e == null) {
             return null;
         }
@@ -44,15 +44,15 @@ class AptMessager implements Messager {
     }
 
     public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e) {
-        emit(kind, msg, nombre(e));
+        emit(kind, msg, name(e));
     }
 
     public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a) {
-        emit(kind, msg, nombre(e));
+        emit(kind, msg, name(e));
     }
 
     public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a,
             AnnotationValue v) {
-        emit(kind, msg, nombre(e));
+        emit(kind, msg, name(e));
     }
 }
