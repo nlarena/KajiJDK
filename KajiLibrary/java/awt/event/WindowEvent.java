@@ -3,54 +3,56 @@ package java.awt.event;
 import java.awt.Window;
 
 /**
- * Le pasó algo a una ventana: se abrió, se cerró, se minimizó, ganó o perdió el foco.
+ * Something happened to a window: it opened, it closed, it was minimized, it gained or lost the
+ * focus.
  *
- * <p>La distinción que más se usa mal es entre {@code WINDOW_CLOSING} y {@code WINDOW_CLOSED}. El
- * primero es el **pedido**: llega cuando el usuario aprieta la cruz, la ventana todavía está, y es
- * donde se pregunta si quiere guardar o se decide no cerrar. El segundo llega cuando ya se cerró y
- * no hay nada que decidir.
+ * <p>The distinction most often got wrong is between {@code WINDOW_CLOSING} and
+ * {@code WINDOW_CLOSED}. The first is the **request**: it arrives when the user hits the cross, the
+ * window is still there, and it is where they are asked whether they want to save or it is decided
+ * not to close. The second arrives once it has closed and there is nothing left to decide.
  *
- * <p>La "ventana opuesta" es la otra parte del cambio de foco: al perderlo, cuál se lo llevó; al
- * ganarlo, a cuál se lo sacó. Es `null` cuando la otra ventana es de otra aplicación.
+ * <p>The "opposite window" is the other side of the focus change: on losing it, which one took it;
+ * on gaining it, which one it was taken from. It is `null` when the other window belongs to another
+ * application.
  */
 public class WindowEvent extends ComponentEvent {
 
     private static final long serialVersionUID = -1567959133147912127L;
 
-    /** Pasó a ser la ventana activa. */
+    /** It became the active window. */
     public static final int WINDOW_ACTIVATED = 205;
 
-    /** La ventana ya se cerró. */
+    /** The window has already closed. */
     public static final int WINDOW_CLOSED = 202;
 
-    /** El usuario pidió cerrarla; todavía está abierta. */
+    /** The user asked to close it; it is still open. */
     public static final int WINDOW_CLOSING = 201;
 
-    /** Dejó de ser la ventana activa. */
+    /** It stopped being the active window. */
     public static final int WINDOW_DEACTIVATED = 206;
 
-    /** Se restauró. */
+    /** It was restored. */
     public static final int WINDOW_DEICONIFIED = 204;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int WINDOW_FIRST = 200;
 
-    /** Ganó el foco del teclado. */
+    /** It gained the keyboard focus. */
     public static final int WINDOW_GAINED_FOCUS = 207;
 
-    /** Se minimizó. */
+    /** It was minimized. */
     public static final int WINDOW_ICONIFIED = 203;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int WINDOW_LAST = 209;
 
-    /** Perdió el foco del teclado. */
+    /** It lost the keyboard focus. */
     public static final int WINDOW_LOST_FOCUS = 208;
 
-    /** La ventana se abrió por primera vez. */
+    /** The window was opened for the first time. */
     public static final int WINDOW_OPENED = 200;
 
-    /** Cambió entre normal, minimizada y maximizada. */
+    /** It changed between normal, minimized and maximized. */
     public static final int WINDOW_STATE_CHANGED = 209;
 
     private final Window opposite;
@@ -58,9 +60,9 @@ public class WindowEvent extends ComponentEvent {
     private final int newState;
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public WindowEvent(Window source, int id, Window opposite, int oldState, int newState) {
         super(source, id);
@@ -70,33 +72,33 @@ public class WindowEvent extends ComponentEvent {
     }
 
     /**
-     * Con la ventana opuesta, para los cambios de foco.
+     * With the opposite window, for the focus changes.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public WindowEvent(Window source, int id, Window opposite) {
         this(source, id, opposite, 0, 0);
     }
 
     /**
-     * Con los dos estados, para los cambios de estado.
+     * With both states, for the state changes.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public WindowEvent(Window source, int id, int oldState, int newState) {
         this(source, id, null, oldState, newState);
     }
 
     /**
-     * Sólo con la ventana y el identificador.
+     * With the window and the identifier alone.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public WindowEvent(Window source, int id) {
         this(source, id, null, 0, 0);
     }
 
-    /** La ventana a la que le pasó. */
+    /** The window it happened to. */
     public Window getWindow() {
         if (this.source instanceof Window) {
             return (Window) this.source;
@@ -104,47 +106,47 @@ public class WindowEvent extends ComponentEvent {
         return null;
     }
 
-    /** La otra parte del cambio de foco, o `null` si es de otra aplicación. */
+    /** The other side of the focus change, or `null` if it belongs to another application. */
     public Window getOppositeWindow() {
         return this.opposite;
     }
 
-    /** Cómo estaba antes. */
+    /** How it was before. */
     public int getOldState() {
         return this.oldState;
     }
 
-    /** Cómo quedó. */
+    /** How it ended up. */
     public int getNewState() {
         return this.newState;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == WINDOW_OPENED) {
-            tipo = "WINDOW_OPENED";
+            type = "WINDOW_OPENED";
         } else if (this.id == WINDOW_CLOSING) {
-            tipo = "WINDOW_CLOSING";
+            type = "WINDOW_CLOSING";
         } else if (this.id == WINDOW_CLOSED) {
-            tipo = "WINDOW_CLOSED";
+            type = "WINDOW_CLOSED";
         } else if (this.id == WINDOW_ICONIFIED) {
-            tipo = "WINDOW_ICONIFIED";
+            type = "WINDOW_ICONIFIED";
         } else if (this.id == WINDOW_DEICONIFIED) {
-            tipo = "WINDOW_DEICONIFIED";
+            type = "WINDOW_DEICONIFIED";
         } else if (this.id == WINDOW_ACTIVATED) {
-            tipo = "WINDOW_ACTIVATED";
+            type = "WINDOW_ACTIVATED";
         } else if (this.id == WINDOW_DEACTIVATED) {
-            tipo = "WINDOW_DEACTIVATED";
+            type = "WINDOW_DEACTIVATED";
         } else if (this.id == WINDOW_GAINED_FOCUS) {
-            tipo = "WINDOW_GAINED_FOCUS";
+            type = "WINDOW_GAINED_FOCUS";
         } else if (this.id == WINDOW_LOST_FOCUS) {
-            tipo = "WINDOW_LOST_FOCUS";
+            type = "WINDOW_LOST_FOCUS";
         } else if (this.id == WINDOW_STATE_CHANGED) {
-            tipo = "WINDOW_STATE_CHANGED";
+            type = "WINDOW_STATE_CHANGED";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + ",opposite=" + this.opposite + ",oldState=" + this.oldState + ",newState="
+        return type + ",opposite=" + this.opposite + ",oldState=" + this.oldState + ",newState="
                 + this.newState;
     }
 }

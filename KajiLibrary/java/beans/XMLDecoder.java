@@ -5,39 +5,39 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.util.List;
 
-// La contraparte de XMLEncoder: lee el documento y devuelve los objetos que describe.
+// XMLEncoder's counterpart: it reads the document and returns the objects it describes.
 //
-// El grafo no se "deserializa" — se **reconstruye ejecutando**. Cada elemento del documento es una
-// llamada (`Statement`/`Expression`) y leer es correrlas en orden: `<object class="Foo">` es
-// `new Foo()`, `<void property="x">` es `setX(...)`, `<object idref="f0"/>` es "el mismo objeto de
-// antes". Por eso un archivo de beans no depende de campos privados ni de un serialVersionUID:
-// depende de que la clase siga teniendo el constructor y los setters que el archivo nombra.
+// The graph is not "deserialized" -- it is **rebuilt by executing**. Each element of the document is
+// a call (`Statement`/`Expression`) and reading is running them in order: `<object class="Foo">` is
+// `new Foo()`, `<void property="x">` is `setX(...)`, `<object idref="f0"/>` is "the same object as
+// before". That is why a bean file does not depend on private fields nor on a serialVersionUID: it
+// depends on the class still having the constructor and the setters the file names.
 //
-// El valor del elemento `<java>` es **este decodificador**. Suena raro hasta que se mira lo que
-// XMLEncoder escribe para el owner: `<void id="X0" property="owner"/>`, que es `getOwner()` sobre
-// el valor de `<java>`. Poniendo ahi al decodificador esa llamada resuelve al owner que se le paso
-// al constructor, que es justo el sentido de la palabra: "el objeto que este documento espera que
-// le den al leerlo". Es lo mismo que hace el JDK.
+// The `<java>` element's value is **this decoder**. It sounds odd until one looks at what XMLEncoder
+// writes for the owner: `<void id="X0" property="owner"/>`, which is `getOwner()` on `<java>`'s
+// value. Putting the decoder there makes that call resolve to the owner handed to the constructor,
+// which is exactly what the word means: "the object this document expects to be given when it is
+// read". It is the same thing the JDK does.
 //
-// La lectura es entera y de una: el primer `readObject()` analiza todo el documento, arma el grafo
-// y despues va entregando los objetos uno por uno. No podria ser perezosa — un `idref` puede
-// apuntar a algo que se define mas abajo dentro de la misma raiz — y el JDK tampoco lo es.
-// Agotada la lista, `readObject()` tira ArrayIndexOutOfBoundsException, que es como el JDK dice
-// "no hay mas".
+// Reading happens whole and at once: the first `readObject()` parses the entire document, builds the
+// graph and then hands the objects over one by one. It could not be lazy -- an `idref` may point at
+// something defined further down inside the same root -- and the JDK's is not either. Once the list
+// is exhausted, `readObject()` throws ArrayIndexOutOfBoundsException, which is how the JDK says
+// "there are no more".
 //
-// ## De donde saca el XML
+// ## Where it gets the XML from
 //
-// **No hay un parser SAX del sistema.** En este arbol `org.xml.sax` son interfaces sin ninguna
-// implementacion: `XMLReaderFactory` no tiene a quien instanciar. Asi que el analisis lo hace
-// `AnalizadorXml`, el analizador propio de este paquete, que lee el dialecto de la persistencia de
-// beans y nada mas —sin DTD, sin espacios de nombres, sin entidades del documento—. Es una
-// limitacion declarada del alcance del parser, no del formato: todo lo que XMLEncoder escribe entra.
+// **There is no system SAX parser.** In this tree `org.xml.sax` are interfaces with no
+// implementation at all: `XMLReaderFactory` has nobody to instantiate. So the parsing is done by
+// `XmlParser`, this package's own parser, which reads the bean persistence dialect and nothing else
+// --no DTD, no namespaces, no document entities. It is a declared limitation of the parser's scope,
+// not of the format: everything XMLEncoder writes fits.
 //
-// Sobre el constructor que recibe un `org.xml.sax.InputSource`: se atienden las dos formas en que
-// una fuente TRAE el documento —un flujo de bytes o un Reader— y, si solo trae un system id, se lo
-// abre como archivo (aceptando el prefijo `file:`) y si no como URL. Un system id que ningun
-// `URLStreamHandler` sepa abrir falla con IOException donde el JDK lo resolveria, y eso es
-// exactamente lo que le falta a `java.net` en este arbol, no algo que este metodo decida.
+// On the constructor that receives an `org.xml.sax.InputSource`: both ways in which a source BRINGS
+// the document are attended to --a byte stream or a Reader-- and, if it only brings a system id, it
+// is opened as a file (accepting the `file:` prefix) and otherwise as a URL. A system id no
+// `URLStreamHandler` knows how to open fails with IOException where the JDK would resolve it, and
+// that is exactly what `java.net` lacks in this tree, not something this method decides.
 public class XMLDecoder implements AutoCloseable {
 
     private final InputStream in;
@@ -71,9 +71,8 @@ public class XMLDecoder implements AutoCloseable {
         this.loader = cl;
     }
 
-    // Una fuente SAX. Se le pide el contenido en el orden en que la especificacion dice que hay
-    // que mirarlo: primero el flujo de caracteres, despues el de bytes, y recien al final el
-    // system id.
+    // A SAX source. Its content is asked for in the order the specification says it has to be
+    // looked at: first the character stream, then the byte one, and only lastly the system id.
     public XMLDecoder(org.xml.sax.InputSource is) {
         if (is == null) {
             throw new IllegalArgumentException("input source is null");
@@ -90,9 +89,9 @@ public class XMLDecoder implements AutoCloseable {
         this.in = s;
     }
 
-    // `file:/x/y` y `/x/y` van derecho al sistema de archivos; cualquier otra cosa se intenta como
-    // URL. Abrirlo aca y no en el primer readObject es lo que permite que el error salga como una
-    // IllegalArgumentException del constructor, que es donde el llamador lo espera.
+    // `file:/x/y` and `/x/y` go straight to the file system; anything else is tried as a URL.
+    // Opening it here and not in the first readObject is what lets the error come out as an
+    // IllegalArgumentException from the constructor, which is where the caller expects it.
     private static InputStream openSystemId(String systemId) {
         if (systemId == null) {
             throw new IllegalArgumentException("input source carries neither a stream nor a system id");
@@ -113,7 +112,7 @@ public class XMLDecoder implements AutoCloseable {
             }
             return new java.net.URL(systemId).openStream();
         } catch (IOException ex) {
-            throw new IllegalArgumentException("no se pudo abrir " + systemId + ": " + ex);
+            throw new IllegalArgumentException("could not open " + systemId + ": " + ex);
         }
     }
 
@@ -121,11 +120,11 @@ public class XMLDecoder implements AutoCloseable {
         this.exceptionListener = exceptionListener;
     }
 
-    // Nunca null: sin uno puesto a mano, el que imprime y sigue. Es la misma promesa que hace
-    // Encoder y la que el JDK documenta.
+    // Never null: with none set by hand, the one that prints and carries on. It is the same promise
+    // Encoder makes and the one the JDK documents.
     public ExceptionListener getExceptionListener() {
         return this.exceptionListener != null
-            ? this.exceptionListener : Delegados.LISTENER_POR_DEFECTO;
+            ? this.exceptionListener : Delegates.DEFAULT_LISTENER;
     }
 
     public void setOwner(Object owner) {
@@ -136,8 +135,8 @@ public class XMLDecoder implements AutoCloseable {
         return this.owner;
     }
 
-    // El siguiente objeto del documento. Agotados, ArrayIndexOutOfBoundsException: el JDK usa esa
-    // misma excepcion como fin de lista, y quien lee en bucle la atrapa para cortar.
+    // The document's next object. Once they run out, ArrayIndexOutOfBoundsException: the JDK uses
+    // that very exception as end of list, and whoever reads in a loop catches it to stop.
     public Object readObject() {
         if (this.objects == null) {
             this.parse();
@@ -145,9 +144,9 @@ public class XMLDecoder implements AutoCloseable {
         return this.objects[this.index++];
     }
 
-    // Cierra la entrada. Antes analiza, porque un documento puede no tener ningun objeto de primer
-    // nivel y consistir solo en llamadas sobre el owner: si cerrar no analizara, esas llamadas no
-    // pasarian nunca.
+    // It closes the input. It parses first, because a document may have no top-level object at all
+    // and consist only of calls on the owner: if closing did not parse, those calls would never
+    // happen.
     public void close() {
         if (this.objects == null) {
             this.parse();
@@ -171,9 +170,9 @@ public class XMLDecoder implements AutoCloseable {
         }
         BeansHandler handler = new BeansHandler(this, this.exceptionListener, this.loader);
         try {
-            NodoXml root = this.reader != null
-                ? AnalizadorXml.parseText(AnalizadorXml.readAll(this.reader))
-                : AnalizadorXml.analizar(this.in);
+            XmlNode root = this.reader != null
+                ? XmlParser.parseText(XmlParser.readAll(this.reader))
+                : XmlParser.parseDocument(this.in);
             handler.startDocument();
             replay(root, handler);
             List<Object> l = handler.objects();
@@ -183,15 +182,15 @@ public class XMLDecoder implements AutoCloseable {
         }
     }
 
-    // El arbol que devolvio el analizador, contado al manejador como si lo hubiera dictado un
-    // parser SAX. Va por `content` y no por `hijos`/`texto` porque el orden entre el texto y los
-    // elementos es informacion: dentro de un `<string>` decide donde queda cada pedazo.
-    private static void replay(NodoXml node, BeansHandler handler) {
-        handler.open(node.nombre, node.atributos);
+    // The tree the parser returned, told to the handler as if a SAX parser had dictated it. It goes
+    // through `content` and not through `children`/`text` because the order between the text and the
+    // elements is information: inside a `<string>` it decides where each piece ends up.
+    private static void replay(XmlNode node, BeansHandler handler) {
+        handler.open(node.name, node.attributes);
         for (int i = 0; i < node.content.size(); i++) {
             Object child = node.content.get(i);
-            if (child instanceof NodoXml) {
-                replay((NodoXml) child, handler);
+            if (child instanceof XmlNode) {
+                replay((XmlNode) child, handler);
             } else {
                 handler.text((String) child);
             }
@@ -199,10 +198,10 @@ public class XMLDecoder implements AutoCloseable {
         handler.close();
     }
 
-    // Un manejador SAX que arma el mismo grafo que arma este decodificador. Lo que el documento
-    // haga sobre el `owner` desde el nivel de `<java>` es lo observable desde afuera: el tipo de
-    // retorno es DefaultHandler y no tiene por donde entregar los objetos de primer nivel, y el
-    // manejador del JDK esta en la misma posicion —vive en un paquete interno que nadie exporta—.
+    // A SAX handler that builds the same graph this decoder builds. What the document does to the
+    // `owner` from `<java>`'s level is what is observable from outside: the return type is
+    // DefaultHandler and it has no way of handing over the top-level objects, and the JDK's handler
+    // is in the same position --it lives in an internal package nobody exports.
     public static org.xml.sax.helpers.DefaultHandler createHandler(Object owner,
             ExceptionListener el, ClassLoader cl) {
         return new BeansHandler(owner, el, cl);

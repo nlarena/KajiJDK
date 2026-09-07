@@ -31,6 +31,11 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JAVA = os.path.join(RAIZ, "java")
 LIB = os.path.join(RAIZ, "KajiLibrary")
+# El classpath lleva **tambien** `java/`: varias pruebas se apoyan en una clase auxiliar del mismo
+# directorio (`SpiProvTest` en `SpiProvSel`, que instala como proveedor de SPI). Compilando de a un
+# archivo, sin esto el tipo no resuelve y la prueba figuraba como "NO COMPILA" -- un defecto de esta
+# herramienta que se leia como un bug del compilador.
+CP = LIB + os.pathsep + JAVA
 
 RE_RUN = re.compile(r"^\s+(?:public\s+)?static\s+int\s+run\s*\(\s*\)", re.M)
 RE_MAIN = re.compile(r"^\s+public\s+static\s+void\s+main\s*\(", re.M)
@@ -97,7 +102,7 @@ def main():
         fuente = open(f, encoding="utf-8", errors="replace").read()
 
         if not args.sin_compilar:
-            p = subprocess.run([args.javac, "--emit", "-cp", LIB, f],
+            p = subprocess.run([args.javac, "--emit", "-cp", CP, f],
                                capture_output=True, text=True,
                                encoding="utf-8", errors="replace")
             err = [l for l in (p.stdout + p.stderr).splitlines() if "error" in l]

@@ -1,15 +1,15 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.UserSessionListener -- escucha los cambios de sesion de usuario.
+ * KajiLibrary's java.awt.desktop.UserSessionListener -- listens for user session changes.
  *
- * <p>Se registra con {@code Desktop.addAppEventListener}. Ver {@link UserSessionEvent}.
+ * <p>It is registered with {@code Desktop.addAppEventListener}. See {@link UserSessionEvent}.
  */
 public interface UserSessionListener extends SystemEventListener {
 
-    /** La sesion dejo de estar activa. */
+    /** The session stopped being active. */
     void userSessionDeactivated(UserSessionEvent e);
 
-    /** La sesion volvio a estar activa. */
+    /** The session became active again. */
     void userSessionActivated(UserSessionEvent e);
 }

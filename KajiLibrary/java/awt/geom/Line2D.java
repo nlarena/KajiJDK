@@ -3,19 +3,19 @@ package java.awt.geom;
 import java.awt.Rectangle;
 import java.awt.Shape;
 
-// java.awt.geom.Line2D de KajiLibrary -- un segmento de recta. Superficie completa.
+// KajiLibrary's java.awt.geom.Line2D -- a line segment. The surface is complete.
 //
-// `linesIntersect` es de los metodos que mas se usan mal del paquete, asi que vale decir que hace
-// exactamente: devuelve true si los dos **segmentos** (no las rectas infinitas) tienen algun punto
-// en comun, tocarse en un extremo incluido, y tambien cuando son colineales y se superponen. La
-// prueba es la de los cuatro `relativeCCW` cruzados; el caso colineal sale gratis porque
-// `relativeCCW` no devuelve 0 para un punto colineal que cae **fuera** del segmento, sino ±1.
+// `linesIntersect` is one of the package's most misused methods, so it is worth saying exactly what
+// it does: it returns true if the two **segments** (not the infinite lines) have some point in
+// common, touching at an end included, and also when they are collinear and overlap. The test is the
+// one of the four crossed `relativeCCW`s; the collinear case comes free because `relativeCCW` does
+// not return 0 for a collinear point falling **outside** the segment, but ±1.
 //
-// Una Line2D no encierra area, asi que sus cuatro `contains` devuelven siempre false. No es un
-// atajo: un segmento no contiene ningun punto en el sentido de "insideness" de Shape.
+// A Line2D encloses no area, so its four `contains` always return false. It is no shortcut: a
+// segment contains no point in Shape's sense of "insideness".
 public abstract class Line2D implements Shape, Cloneable {
 
-    // Segmento con coordenadas float.
+    // A segment with float coordinates.
     public static class Float extends Line2D implements java.io.Serializable {
 
         public float x1;
@@ -95,7 +95,7 @@ public abstract class Line2D implements Shape, Cloneable {
         }
     }
 
-    // Segmento con coordenadas double.
+    // A segment with double coordinates.
     public static class Double extends Line2D implements java.io.Serializable {
 
         public double x1;
@@ -193,10 +193,10 @@ public abstract class Line2D implements Shape, Cloneable {
         setLine(l.getX1(), l.getY1(), l.getX2(), l.getY2());
     }
 
-    // Devuelve -1, 0 o 1 segun de que lado de la recta dirigida (x1,y1)->(x2,y2) cae el punto.
-    // El 0 se reserva para los puntos colineales que caen **dentro** del segmento: uno colineal pero
-    // pasado el extremo devuelve ±1 segun por que punta se paso. Esa distincion es la que hace que
-    // `linesIntersect` acierte en los casos colineales sin tratarlos aparte.
+    // It returns -1, 0 or 1 according to which side of the directed line (x1,y1)->(x2,y2) the
+    // point falls on. The 0 is reserved for the collinear points falling **inside** the segment: a
+    // collinear one past the end returns ±1 according to which tip it went past. That distinction is
+    // what makes `linesIntersect` get the collinear cases right without treating them apart.
     public static int relativeCCW(double x1, double y1, double x2, double y2,
                                   double px, double py) {
         x2 = x2 - x1;
@@ -205,11 +205,11 @@ public abstract class Line2D implements Shape, Cloneable {
         py = py - y1;
         double ccw = px * y2 - py * x2;
         if (ccw == 0.0) {
-            // Colineal: se clasifica por la proyeccion sobre el segmento.
+            // Collinear: it is classified by the projection onto the segment.
             ccw = px * x2 + py * y2;
             if (ccw > 0.0) {
-                // Se repite la cuenta relativa al otro extremo. x2,y2 ya estan negados respecto de
-                // ese origen, asi que alcanza con correr px,py.
+                // The reckoning is repeated relative to the other end. x2,y2 are already negated
+                // with respect to that origin, so shifting px,py is enough.
                 px = px - x2;
                 py = py - y2;
                 ccw = px * x2 + py * y2;
@@ -251,10 +251,10 @@ public abstract class Line2D implements Shape, Cloneable {
                               getX1(), getY1(), getX2(), getY2());
     }
 
-    // Distancia al **segmento**: si la proyeccion cae fuera, la distancia es a la punta mas cercana.
-    // Con un segmento degenerado (los dos extremos iguales) da la distancia al punto, que es lo
-    // correcto; la version de recta infinita, en cambio, devuelve NaN ahi -- una recta que no existe
-    // no tiene distancia definida, y el JDK tampoco la inventa.
+    // Distance to the **segment**: if the projection falls outside, the distance is to the nearest
+    // tip. With a degenerate segment (both ends equal) it gives the distance to the point, which is
+    // right; the infinite-line version, on the other hand, returns NaN there -- a line that does not
+    // exist has no defined distance, and the JDK does not invent one either.
     public static double ptSegDistSq(double x1, double y1, double x2, double y2,
                                      double px, double py) {
         x2 = x2 - x1;
@@ -264,10 +264,10 @@ public abstract class Line2D implements Shape, Cloneable {
         double dotprod = px * x2 + py * y2;
         double projlenSq;
         if (dotprod <= 0.0) {
-            // El punto cae del lado de (x1,y1): la proyeccion recortada mide 0.
+            // The point falls on (x1,y1)'s side: the clamped projection measures 0.
             projlenSq = 0.0;
         } else {
-            // Se pasa a vectores medidos desde (x2,y2).
+            // It moves to vectors measured from (x2,y2).
             px = x2 - px;
             py = y2 - py;
             dotprod = px * x2 + py * y2;
@@ -341,7 +341,7 @@ public abstract class Line2D implements Shape, Cloneable {
         return ptLineDist(getX1(), getY1(), getX2(), getY2(), pt.getX(), pt.getY());
     }
 
-    // Un segmento no encierra area: nunca contiene nada.
+    // A segment encloses no area: it never contains anything.
     public boolean contains(double x, double y) {
         return false;
     }
@@ -374,7 +374,7 @@ public abstract class Line2D implements Shape, Cloneable {
         return new LineIterator(this, at);
     }
 
-    // Un segmento ya es plano: el parametro de aplanado no cambia nada.
+    // A segment is flat already: the flattening parameter changes nothing.
     public PathIterator getPathIterator(AffineTransform at, double flatness) {
         return new LineIterator(this, at);
     }

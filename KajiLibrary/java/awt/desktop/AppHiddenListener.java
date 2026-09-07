@@ -1,15 +1,15 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.AppHiddenListener -- escucha cuando el programa se oculta.
+ * KajiLibrary's java.awt.desktop.AppHiddenListener -- listens for the program being hidden.
  *
- * <p>Se registra con {@code Desktop.addAppEventListener}. Ver {@link AppHiddenEvent}.
+ * <p>It is registered with {@code Desktop.addAppEventListener}. See {@link AppHiddenEvent}.
  */
 public interface AppHiddenListener extends SystemEventListener {
 
-    /** Se oculto. */
+    /** It was hidden. */
     void appHidden(AppHiddenEvent e);
 
-    /** Se volvio a mostrar. */
+    /** It was shown again. */
     void appUnhidden(AppHiddenEvent e);
 }

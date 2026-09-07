@@ -1,11 +1,11 @@
 package java.awt.color;
 
 /**
- * Un perfil ICC de escala de grises: un punto blanco y una sola curva.
+ * A greyscale ICC profile: a white point and a single curve.
  *
- * <p>Un componente en vez de tres, y por eso {@link #getGamma} y {@link #getTRC} no toman
- * argumento. Vale la misma nota que en {@link ICC_ProfileRGB}: uno de los dos tira segun como este
- * guardada la curva en ese perfil.
+ * <p>One component instead of three, and that is why {@link #getGamma} and {@link #getTRC} take no
+ * argument. The same note as in {@link ICC_ProfileRGB} applies: one of the two throws depending on
+ * how the curve is stored in that profile.
  */
 public final class ICC_ProfileGray extends ICC_Profile {
 
@@ -15,24 +15,24 @@ public final class ICC_ProfileGray extends ICC_Profile {
         super(data);
     }
 
-    /** El punto blanco del medio. */
+    /** The medium's white point. */
     public float[] getMediaWhitePoint() {
         return super.getMediaWhitePoint();
     }
 
     /**
-     * La gamma de la curva.
+     * The curve's gamma.
      *
-     * @throws ProfileDataException si la curva es una tabla
+     * @throws ProfileDataException if the curve is a table
      */
     public float getGamma() {
         return super.getGamma(icSigGrayTRCTag);
     }
 
     /**
-     * La tabla de la curva.
+     * The curve's table.
      *
-     * @throws ProfileDataException si la curva es una gamma
+     * @throws ProfileDataException if the curve is a gamma
      */
     public short[] getTRC() {
         return super.getTRC(icSigGrayTRCTag);

@@ -3,41 +3,41 @@ package java.awt.font;
 import java.awt.Font;
 
 /**
- * Una fuente Multiple Master: la que se puede **interpolar** en vez de elegirse de una lista.
+ * A Multiple Master font: the kind that can be **interpolated** instead of picked from a list.
  *
- * <p>Una familia común trae la fina, la regular y la negrita como archivos separados. Una Multiple
- * Master trae los extremos y una regla para generar todo lo del medio: se pide grosor 1,37 y sale
- * una cara que no existía como archivo.
+ * <p>An ordinary family ships the light, the regular and the bold as separate files. A Multiple
+ * Master ships the extremes and a rule for generating everything in between: weight 1.37 is asked
+ * for and out comes a face that did not exist as a file.
  *
- * <p>Los ejes son las magnitudes que se pueden pedir —grosor, ancho, tamaño óptico— y cada uno tiene
- * su rango. {@link #deriveMMFont(float[])} pide una cara por sus valores de eje.
+ * <p>The axes are the quantities that can be asked for --weight, width, optical size-- and each one
+ * has its range. {@link #deriveMMFont(float[])} asks for a face by its axis values.
  */
 public interface MultipleMaster {
 
-    /** Cuántos ejes tiene la fuente. */
+    /** How many axes the font has. */
     int getNumDesignAxes();
 
-    /** Los pares mínimo y máximo de cada eje, en orden. */
+    /** The minimum and maximum pairs of each axis, in order. */
     float[] getDesignAxisRanges();
 
-    /** El valor de cada eje en la cara por omisión. */
+    /** Each axis's value in the default face. */
     float[] getDesignAxisDefaults();
 
-    /** El nombre de cada eje. */
+    /** Each axis's name. */
     String[] getDesignAxisNames();
 
     /**
-     * Una cara con esos valores de eje.
+     * A face with those axis values.
      *
-     * @throws IllegalArgumentException si algún valor cae fuera de su rango
+     * @throws IllegalArgumentException if some value falls outside its range
      */
     Font deriveMMFont(float[] axes);
 
     /**
-     * Una cara pedida por magnitudes y no por ejes.
+     * A face asked for by quantities rather than by axes.
      *
-     * <p>Es el atajo para cuando no se conocen los ejes de la fuente: se declara qué se quiere y la
-     * fuente traduce a los ejes que tenga.
+     * <p>It is the shortcut for when the font's axes are not known: what is wanted is declared and
+     * the font translates it into whichever axes it has.
      */
     Font deriveMMFont(float[] glyphWidths, float avgStemWidth, float typicalCapHeight,
             float typicalXHeight, float italicAngle);

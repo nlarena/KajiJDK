@@ -4,73 +4,68 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Objects;
 
-// Una direccion IP.
+// An IP address.
 //
 // ===========================================================================================
-// QUE HAY ACA Y QUE NO, Y POR QUE
+// WHAT IS HERE AND WHAT IS NOT, AND WHY
 // ===========================================================================================
 //
-// Una direccion IP son dos cosas que la gente confunde todo el tiempo: **un numero con formato** y
-// **un nombre que hay que resolver**. La primera mitad es aritmetica de bytes y gramaticas de
-// literales -- RFC 791 y RFC 4291 -- y se puede escribir entera aca sin tocar la red. La segunda
-// necesita un resolver, o sea DNS, o sea sockets, y KajiJDK no tiene ninguno.
+// An IP address is two things people confuse all the time: **a number with a format** and **a name
+// that has to be resolved**. The first half is byte arithmetic and literal grammars -- RFC 791 and
+// RFC 4291 -- and it can be written whole here without touching the network. The second needs a
+// resolver, which is to say DNS, which is to say sockets, and KajiJDK has none.
 //
-// Entonces: **el parseo y el formateo estan completos y son fieles**; la resolucion no existe y no
-// se simula. `getByName` de un literal devuelve la direccion; de un nombre que no sea "localhost"
-// tira `UnknownHostException`, que es exactamente lo que el JDK hace cuando el DNS no contesta. Eso
-// no es una mentira: es el resultado honesto de no tener resolver, y el tipo de la excepcion ya
-// estaba en el contrato.
-//
-// Lo que **no** se declara:
+// So: **the parsing and the formatting are complete and faithful**; resolution does not exist and is
+// not simulated. `getByName` of a literal returns the address; of a name other than "localhost" it
+// throws `UnknownHostException`, which is exactly what the JDK does when DNS does not answer. That is
+// not a lie: it is the honest result of having no resolver, and the exception's type was already in
+// the contract.
 //
 // ===========================================================================================
-// `java.net.IDN` NO ESTA, y este es su lugar
+// `java.net.IDN`, WHICH USED TO BE MISSING AND WHOSE PLACE THIS IS
 // ===========================================================================================
 //
-// `IDN` convierte un nombre de host internacionalizado en uno que se pueda resolver --que es lo que
-// hace esta clase con el resultado-- asi que su ausencia se dice aca.
+// `IDN` turns an internationalized host name into one that can be resolved --which is what this class
+// does with the result-- so its absence used to be recorded here.
 //
-// `toASCII` **no es** Punycode. Es *nameprep* (RFC 3491) y **despues** Punycode, y el primer paso es
-// el que no se puede escribir: plegado de mayusculas completo, normalizacion NFKC, y las tablas de
-// caracteres prohibidos. No es un detalle academico, se ve en un ejemplo de dos palabras: el JDK
-// convierte `strasse.de` y `stra{eszett}.de` **a la misma cadena**, porque el plegado completo manda
-// la eszett a `ss`. Un `toLowerCase` no hace eso, y la version que lo usara daria dos nombres
-// distintos para el mismo dominio -- que en un resolutor es exactamente el error que no se perdona.
+// `toASCII` **is not** Punycode. It is *nameprep* (RFC 3491) and **then** Punycode, and the first
+// step is the one that cannot be written: full case folding, NFKC normalization, and the tables of
+// forbidden characters. It is not an academic detail, it shows in a two-word example: the JDK turns
+// `strasse.de` and `stra{eszett}.de` **into the same string**, because full folding sends the eszett
+// to `ss`. A `toLowerCase` does not do that, and the version that used it would give two different
+// names for the same domain -- which in a resolver is exactly the error that is not forgiven.
 //
-// Es el mismo muro que deja a `java.text.Normalizer` sin NFKC y a `java.text` sin sus cuatro
-// ultimos miembros: hacen falta las tablas de Unicode, y este arbol no las tiene. Escribir `IDN`
-// sin ellas seria un metodo que contesta bien los nombres ASCII --donde no hay nada que hacer-- y
-// mal justamente los que motivan que la clase exista.
-//
-// Punycode solo, que si se puede escribir exacto, no alcanza: `toASCII` no lo promete a secas.
+// It is the same wall that leaves `java.text.Normalizer` without NFKC: Unicode's tables are needed,
+// and this tree does not have them. `IDN` is here now, written with the folding and the checks that
+// can be done without tables, and it says in its own header which step it is not doing and what that
+// changes. Punycode alone, which can be written exactly, is the part that is exact.
 
-// `isReachable(int)` **prueba de verdad**: un TCP al puerto 7 donde un rechazo
-// cuenta como respuesta, porque el RST lo manda el host. Es el mismo camino de reserva del JDK
-// cuando no puede mandar un ICMP, que es lo normal --un ping crudo necesita permisos que un proceso
-// comun no tiene--. Antes contestaba `false` siempre, que era legal pero inutil; dejo de serlo
-// cuando la VM aprendio TCP.
+// `isReachable(int)` **really probes**: a TCP to port 7 where a refusal counts as an answer, because
+// the RST is sent by the host. It is the JDK's own fallback path when it cannot send an ICMP, which
+// is the normal case --a raw ping needs permissions an ordinary process does not have. It used to
+// answer `false` always, which was legal but useless; it stopped being so when the VM learnt TCP.
 //
-// **Lo unico observable que lo separa del JDK es el tiempo**, y conviene saberlo antes de elegir un
-// plazo: en Windows el sistema tarda unos dos segundos en reportar un rechazo de TCP, asi que un
-// host vivo con el puerto cerrado necesita un plazo de al menos eso para dar `true`. El JDK, cuando
-// puede, manda un ICMP y contesta en el acto. La respuesta es la misma; lo que cambia es cuanto
-// hay que esperarla.
+// **The only observable thing separating it from the JDK is the time**, and it is worth knowing
+// before choosing a deadline: on Windows the system takes some two seconds to report a TCP refusal,
+// so a live host with the port closed needs a deadline of at least that to give `true`. The JDK, when
+// it can, sends an ICMP and answers on the spot. The answer is the same; what changes is how long it
+// has to be waited for.
 //
-// La clase es concreta y con constructor de paquete, como en el JDK: no se instancia nunca
-// directamente, toda instancia es un `Inet4Address` o un `Inet6Address`. Los metodos de aca son los
-// valores neutros que las subclases pisan -- misma estructura que el JDK, y por la misma razon: el
-// tipo comun tiene que poder nombrarse en las firmas sin comprometerse con una familia.
+// The class is concrete and has a package-private constructor, as in the JDK: it is never
+// instantiated directly, every instance is an `Inet4Address` or an `Inet6Address`. The methods here
+// are the neutral values the subclasses override -- the same structure as the JDK, and for the same
+// reason: the common type has to be nameable in the signatures without committing to a family.
 public class InetAddress implements Serializable {
 
     private static final long serialVersionUID = 3286316764910316507L;
 
-    // Los bytes de la direccion: cuatro para IPv4, dieciseis para IPv6. En la clase base es null,
-    // porque la base no representa ninguna direccion concreta.
+    // The address's bytes: four for IPv4, sixteen for IPv6. In the base class it is null, because the
+    // base represents no concrete address.
     final byte[] addr;
 
-    // El nombre con el que se creo, o null si es anonima. **null no es lo mismo que ""**: una
-    // direccion nacida de un literal no tiene nombre, y `toString` la imprime como "/1.2.3.4".
-    // Confundir los dos era el bug de la version anterior de este archivo.
+    // The name it was created with, or null if it is anonymous. **null is not the same as ""**: an
+    // address born from a literal has no name, and `toString` prints it as "/1.2.3.4". Confusing the
+    // two was the bug in the previous version of this file.
     final String hostName;
 
     InetAddress(String hostName, byte[] addr) {
@@ -78,96 +73,96 @@ public class InetAddress implements Serializable {
         this.addr = addr;
     }
 
-    /** Si es una direccion multicast. */
+    /** Whether it is a multicast address. */
     public boolean isMulticastAddress() {
         return false;
     }
 
-    /** Si es la direccion comodin ("cualquiera de las locales"). */
+    /** Whether it is the wildcard address ("any of the local ones"). */
     public boolean isAnyLocalAddress() {
         return false;
     }
 
-    /** Si es una direccion de loopback. */
+    /** Whether it is a loopback address. */
     public boolean isLoopbackAddress() {
         return false;
     }
 
-    /** Si es link-local (valida solo dentro del enlace fisico). */
+    /** Whether it is link-local (valid only within the physical link). */
     public boolean isLinkLocalAddress() {
         return false;
     }
 
-    /** Si es site-local (el rango "privado"). */
+    /** Whether it is site-local (the "private" range). */
     public boolean isSiteLocalAddress() {
         return false;
     }
 
-    /** Si es multicast de alcance global. */
+    /** Whether it is multicast of global scope. */
     public boolean isMCGlobal() {
         return false;
     }
 
-    /** Si es multicast de alcance nodo. */
+    /** Whether it is multicast of node scope. */
     public boolean isMCNodeLocal() {
         return false;
     }
 
-    /** Si es multicast de alcance enlace. */
+    /** Whether it is multicast of link scope. */
     public boolean isMCLinkLocal() {
         return false;
     }
 
-    /** Si es multicast de alcance sitio. */
+    /** Whether it is multicast of site scope. */
     public boolean isMCSiteLocal() {
         return false;
     }
 
-    /** Si es multicast de alcance organizacion. */
+    /** Whether it is multicast of organization scope. */
     public boolean isMCOrgLocal() {
         return false;
     }
 
     /**
-     * Si el host esta accesible. Siempre {@code false}: no hay red desde donde probar.
+     * Whether the host is reachable within {@code timeout} milliseconds.
      *
-     * <p>Se declara igual porque "no accesible" es una respuesta legal de este metodo -- no promete
-     * llegar, promete informar si llego.
+     * <p>It really probes: see the file's header for what the probe is and how it differs from the
+     * JDK's in timing. A `false` says "it did not answer", not "the host does not exist".
      *
-     * @throws IllegalArgumentException si {@code timeout} es negativo
+     * @throws IllegalArgumentException if {@code timeout} is negative
      */
     public boolean isReachable(int timeout) throws IOException {
         if (timeout < 0) {
             throw new IllegalArgumentException("timeout can't be negative");
         }
         if (this.addr == null) {
-            // La clase base no representa ninguna direccion concreta: no hay a quien preguntarle.
+            // The base class represents no concrete address: there is nobody to ask.
             return false;
         }
-        // Cero significa "sin limite" en el contrato. Ninguna espera de verdad puede ser infinita
-        // aca, asi que se traduce a un plazo largo y explicito en vez de colgar el hilo.
-        return this.probar("", 0, timeout);
+        // Zero means "no limit" in the contract. No real wait can be infinite here, so it is
+        // translated into a long, explicit deadline instead of hanging the thread.
+        return this.probe("", 0, timeout);
     }
 
     /**
-     * Si este host contesta dentro de {@code timeout} milisegundos, probando **por esa placa** y con
-     * ese limite de saltos.
+     * Whether this host answers within {@code timeout} milliseconds, probing **through that
+     * interface** and with that hop limit.
      *
-     * <p>Con {@code netif} null sale por donde el sistema quiera y con {@code ttl} cero usa el
-     * limite por omision, que es lo que documenta el JDK; en ese caso es identico a
-     * {@link #isReachable(int)}.
+     * <p>With a null {@code netif} it goes out wherever the system likes and with a {@code ttl} of
+     * zero it uses the default limit, which is what the JDK documents; in that case it is identical
+     * to {@link #isReachable(int)}.
      *
-     * <p>**Con placa o con TTL la prueba afirma menos**, y hay que decirlo: la version de un
-     * parametro toma el rechazo como respuesta --un RST prueba que el host esta vivo-- y esta, que
-     * tiene que armar el socket a mano para poder elegir la placa, no distingue el rechazo del
-     * silencio. Un `true` sigue significando "contesto"; un `false` con placa puede ser un host vivo
-     * que rechazo la conexion. Es la unica diferencia entre las dos, y no se puede evitar sin
-     * reimplementar el `connect` no bloqueante de cada sistema.
+     * <p>**With an interface or with a TTL the probe asserts less**, and that has to be said: the
+     * one-parameter version takes a refusal as an answer --an RST proves the host is alive-- and this
+     * one, which has to build the socket by hand in order to choose the interface, does not tell a
+     * refusal from silence. A `true` still means "it answered"; a `false` with an interface may be a
+     * live host that refused the connection. It is the only difference between the two, and it cannot
+     * be avoided without reimplementing each system's non-blocking `connect`.
      *
-     * @param netif la placa por la que sale la prueba, o null
-     * @param ttl el limite de saltos, o cero
-     * @param timeout milisegundos; cero es "sin limite"
-     * @throws IllegalArgumentException si el plazo o el ttl son negativos
+     * @param netif the interface the probe goes out through, or null
+     * @param ttl the hop limit, or zero
+     * @param timeout milliseconds; zero is "no limit"
+     * @throws IllegalArgumentException if the deadline or the ttl are negative
      */
     public boolean isReachable(NetworkInterface netif, int ttl, int timeout) throws IOException {
         if (timeout < 0) {
@@ -179,46 +174,48 @@ public class InetAddress implements Serializable {
         if (this.addr == null) {
             return false;
         }
-        return this.probar(InetAddress.salidaDe(netif, this), ttl, timeout);
+        return this.probe(InetAddress.outboundFrom(netif, this), ttl, timeout);
     }
 
-    // Por que direccion local sale una prueba que tiene que ir por esa placa: la primera de la placa
-    // que sea de la misma familia que el destino --atar una punta IPv4 a una conexion IPv6 no es una
-    // peticion que se pueda cumplir--. La cadena vacia significa "que elija el sistema".
-    private static String salidaDe(NetworkInterface netif, InetAddress destino) {
+    // Which local address a probe that has to go through that interface goes out from: the first of
+    // the interface's that is of the same family as the destination --binding an IPv4 end to an IPv6
+    // connection is not a request that can be fulfilled. The empty string means "let the system
+    // choose".
+    private static String outboundFrom(NetworkInterface netif, InetAddress target) {
         if (netif == null) {
             return "";
         }
-        boolean seis = destino instanceof Inet6Address;
-        java.util.Enumeration<InetAddress> dirs = netif.getInetAddresses();
-        while (dirs.hasMoreElements()) {
-            InetAddress d = dirs.nextElement();
-            if (seis == (d instanceof Inet6Address)) {
+        boolean isSix = target instanceof Inet6Address;
+        java.util.Enumeration<InetAddress> addresses = netif.getInetAddresses();
+        while (addresses.hasMoreElements()) {
+            InetAddress d = addresses.nextElement();
+            if (isSix == (d instanceof Inet6Address)) {
                 return d.getHostAddress();
             }
         }
-        // Una placa sin ninguna direccion de la familia del destino no puede llevar la prueba. Que
-        // el sistema elija es mas util que fallar, y es lo que hace el JDK.
+        // An interface with no address of the destination's family cannot carry the probe. Letting
+        // the system choose is more useful than failing, and it is what the JDK does.
         return "";
     }
 
-    // El cuerpo comun de las dos sobrecargas. La espera es de este lado porque el nativo no espera:
-    // ver la cabecera de `jdk.internal.net.Net`.
-    private boolean probar(String local, int ttl, int timeout) throws IOException {
-        // Cero significa "sin limite" en el contrato. Ninguna espera de verdad puede ser infinita
-        // aca, asi que se traduce a un plazo largo y explicito en vez de colgar el hilo.
-        long plazo = timeout == 0 ? 30_000L : timeout;
-        int sonda = jdk.internal.net.Net.reachableStart(this.getHostAddress(), local, ttl);
-        if (sonda < 0) {
+    // The common body of the two overloads. The waiting is on this side because the native does not
+    // wait: see `jdk.internal.net.Net`'s header.
+    private boolean probe(String local, int ttl, int timeout) throws IOException {
+        // Zero means "no limit" in the contract. No real wait can be infinite here, so it is
+        // translated into a long, explicit deadline instead of hanging the thread.
+        long deadline = timeout == 0 ? 30_000L : timeout;
+        int probeId = jdk.internal.net.Net.reachableStart(this.getHostAddress(), local, ttl);
+        if (probeId < 0) {
             return false;
         }
         try {
-            long comienzo = System.currentTimeMillis();
-            int r = jdk.internal.net.Net.answerPoll(sonda);
+            long started = System.currentTimeMillis();
+            int r = jdk.internal.net.Net.answerPoll(probeId);
             while (r == -3) {
-                if (System.currentTimeMillis() - comienzo >= plazo) {
-                    // Sin respuesta dentro del plazo es exactamente lo que este metodo llama "no
-                    // alcanzable": no se afirma que el host no exista, se afirma que no contesto.
+                if (System.currentTimeMillis() - started >= deadline) {
+                    // No answer within the deadline is exactly what this method calls "not
+                    // reachable": it does not assert that the host does not exist, it asserts that it
+                    // did not answer.
                     return false;
                 }
                 try {
@@ -227,15 +224,15 @@ public class InetAddress implements Serializable {
                     Thread.currentThread().interrupt();
                     throw new java.io.InterruptedIOException("isReachable interrupted");
                 }
-                r = jdk.internal.net.Net.answerPoll(sonda);
+                r = jdk.internal.net.Net.answerPoll(probeId);
             }
             return r == 1;
         } finally {
-            jdk.internal.net.Net.answerFree(sonda);
+            jdk.internal.net.Net.answerFree(probeId);
         }
     }
 
-    /** El nombre con el que se creo; si no tenia, su forma textual. */
+    /** The name it was created with; failing that, its textual form. */
     public String getHostName() {
         if (this.hostName != null) {
             return this.hostName;
@@ -248,7 +245,7 @@ public class InetAddress implements Serializable {
         return this.getHostName();
     }
 
-    /** Una copia de los bytes crudos. */
+    /** A copy of the raw bytes. */
     public byte[] getAddress() {
         return null;
     }
@@ -273,14 +270,14 @@ public class InetAddress implements Serializable {
     // ---- factorias ------------------------------------------------------------------------------
 
     /**
-     * La direccion para {@code host} y los bytes {@code addr}, sin consultar a nadie.
+     * The address for {@code host} and the bytes {@code addr}, asking nobody.
      *
-     * <p>Cuatro bytes dan un {@link Inet4Address}; dieciseis dan un {@link Inet6Address}, salvo que
-     * sean la forma "IPv4-mapped" (::ffff:a.b.c.d), que colapsa a `Inet4Address` -- esa direccion
-     * **es** una IPv4, escrita con la sintaxis de IPv6, y tratarla como v6 haria que dos objetos que
-     * nombran el mismo host no fueran iguales.
+     * <p>Four bytes give an {@link Inet4Address}; sixteen give an {@link Inet6Address}, unless they
+     * are the "IPv4-mapped" form (::ffff:a.b.c.d), which collapses to an `Inet4Address` -- that
+     * address **is** an IPv4, written with IPv6's syntax, and treating it as v6 would make two objects
+     * naming the same host unequal.
      *
-     * @throws UnknownHostException si {@code addr} no mide 4 ni 16
+     * @throws UnknownHostException if {@code addr} is neither 4 nor 16 long
      */
     public static InetAddress getByAddress(String host, byte[] addr) throws UnknownHostException {
         if (host != null && host.length() > 0 && host.charAt(0) == '[') {
@@ -304,25 +301,25 @@ public class InetAddress implements Serializable {
         throw new UnknownHostException("addr is of illegal length");
     }
 
-    /** La direccion anonima para esos bytes. */
+    /** The anonymous address for those bytes. */
     public static InetAddress getByAddress(byte[] addr) throws UnknownHostException {
         return getByAddress(null, addr);
     }
 
     /**
-     * La direccion de {@code host}.
+     * The address of {@code host}.
      *
-     * <p>Un literal IPv4 o IPv6 se parsea; "localhost" y la cadena vacia dan el loopback. Cualquier
-     * otro nombre necesitaria un resolver, y no hay: tira {@link UnknownHostException}, que es lo
-     * mismo que devuelve el JDK cuando el DNS no sabe.
+     * <p>An IPv4 or IPv6 literal is parsed; "localhost" and the empty string give the loopback. Any
+     * other name would need a resolver, and there is none: it throws {@link UnknownHostException},
+     * which is the same as the JDK returns when DNS does not know.
      */
     public static InetAddress getByName(String host) throws UnknownHostException {
         return getAllByName(host)[0];
     }
 
     /**
-     * Todas las direcciones de {@code host}. Sin resolver hay a lo sumo una, asi que el arreglo
-     * tiene siempre un elemento (o no se llega a devolver nada).
+     * Every address of {@code host}. With no resolver there is at most one, so the array always has a
+     * single element (or nothing gets returned at all).
      */
     public static InetAddress[] getAllByName(String host) throws UnknownHostException {
         if (host == null || host.length() == 0) {
@@ -337,9 +334,9 @@ public class InetAddress implements Serializable {
                 throw new UnknownHostException(host + ": invalid IPv6 address literal");
             }
         }
-        // Solo se intenta leerlo como literal si empieza como uno podria empezar. Sin este filtro,
-        // "beef.example" entraria al parser de IPv4 y saldria por el mismo lado, pero el filtro
-        // tambien es lo que hace que un nombre que arranca con letra no hexadecimal ni se intente.
+        // It is only tried as a literal if it starts the way one could start. Without this filter,
+        // "beef.example" would go into the IPv4 parser and come out the same side, but the filter is
+        // also what keeps a name starting with a non-hex letter from even being tried.
         if (host.length() > 0 && (digit(host.charAt(0), 16) != -1 || host.charAt(0) == ':')) {
             InetAddress parsed = null;
             if (!bracketed) {
@@ -361,18 +358,18 @@ public class InetAddress implements Serializable {
         throw new UnknownHostException(host);
     }
 
-    /** El loopback: 127.0.0.1, con nombre "localhost". */
+    /** The loopback: 127.0.0.1, named "localhost". */
     public static InetAddress getLoopbackAddress() {
         return new Inet4Address("localhost", new byte[] {127, 0, 0, 1});
     }
 
     /**
-     * La direccion que describe {@code s}, que tiene que ser un literal IPv4 o IPv6.
+     * The address {@code s} describes, which has to be an IPv4 or IPv6 literal.
      *
-     * <p>A diferencia de {@link #getByName}, esto no admite nombres: si no es un literal, no hay
-     * nada que consultar y falla en el acto.
+     * <p>Unlike {@link #getByName}, this admits no names: if it is not a literal, there is nothing to
+     * consult and it fails on the spot.
      *
-     * @throws IllegalArgumentException si no es un literal valido
+     * @throws IllegalArgumentException if it is not a valid literal
      */
     public static InetAddress ofLiteral(String s) {
         Objects.requireNonNull(s);
@@ -387,12 +384,12 @@ public class InetAddress implements Serializable {
         return v6;
     }
 
-    /** El host local. KajiJDK no tiene identidad de red, asi que es el loopback. */
+    /** The local host. KajiJDK has no network identity, so it is the loopback. */
     public static InetAddress getLocalHost() throws UnknownHostException {
         return getLoopbackAddress();
     }
 
-    // ---- utilidades compartidas por las subclases -----------------------------------------------
+    // ---- utilities shared by the subclasses -----------------------------------------------------
 
     static IllegalArgumentException invalidLiteral(String s) {
         return new IllegalArgumentException("Invalid IP address literal: " + s);
@@ -408,8 +405,8 @@ public class InetAddress implements Serializable {
         return out;
     }
 
-    // `Character.digit` acepta digitos de todo Unicode; para un literal IP eso seria un agujero
-    // (los digitos arabigo-indicos no son digitos de una direccion), asi que se restringe a ASCII.
+    // `Character.digit` accepts digits from all of Unicode; for an IP literal that would be a hole
+    // (Arabic-Indic digits are not digits of an address), so it is restricted to ASCII.
     static int digit(char c, int radix) {
         int v = -1;
         if (c >= '0' && c <= '9') {

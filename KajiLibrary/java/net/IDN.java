@@ -3,65 +3,66 @@ package java.net;
 import java.util.Locale;
 
 /**
- * La traduccion entre un nombre de dominio con caracteres no ASCII y su forma transportable.
+ * The translation between a domain name with non-ASCII characters and its transportable form.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it solves</h2>
  *
- * <p>El DNS habla ASCII. Un dominio escrito con acentos, ideogramas o cirilico no puede viajar tal
- * cual, y aun asi tiene que resolver al mismo lugar desde cualquier parte. La solucion es
- * <strong>Punycode</strong> (RFC 3492): una codificacion reversible que convierte cualquier cadena
- * Unicode en ASCII, marcada con el prefijo {@code xn--}.
+ * <p>DNS speaks ASCII. A domain written with accents, ideographs or Cyrillic cannot travel as it
+ * stands, and yet it has to resolve to the same place from anywhere. The solution is
+ * <strong>Punycode</strong> (RFC 3492): a reversible encoding that turns any Unicode string into
+ * ASCII, marked with the {@code xn--} prefix.
  *
- * <p>Reversible es la palabra: {@link #toASCII} y {@link #toUnicode} son inversas, y por eso el
- * mismo dominio se puede mostrar bonito y resolver correctamente sin ninguna tabla de por medio.
+ * <p>Reversible is the word: {@link #toASCII} and {@link #toUnicode} are inverses, and that is why
+ * the same domain can be shown prettily and resolved correctly with no table in between.
  *
- * <h2>Como funciona Punycode, en una linea</h2>
+ * <h2>How Punycode works, in one line</h2>
  *
- * <p>Separa los caracteres ASCII —que se copian literalmente— de los que no, y describe a estos
- * ultimos como una serie de <em>deltas</em> sobre un codigo y una posicion. Los deltas se escriben
- * en un alfabeto de 36 simbolos con longitud variable, y un mecanismo de sesgo hace que los saltos
- * chicos —lo normal, porque un nombre suele estar en un solo alfabeto— ocupen poco.
+ * <p>It separates the ASCII characters —which are copied literally— from the rest, and describes the
+ * latter as a series of <em>deltas</em> over a code point and a position. The deltas are written in a
+ * 36-symbol alphabet with variable length, and a bias mechanism makes the small jumps —the normal
+ * case, because a name is usually in a single alphabet— take little room.
  *
- * <h2>La limitacion de esta implementacion, dicha de frente</h2>
+ * <h2>This implementation's limitation, said plainly</h2>
  *
- * <p>El RFC 3490 manda pasar el nombre por <strong>nameprep</strong> (RFC 3491) antes de codificar:
- * plegado de mayusculas, normalizacion <strong>NFKC</strong>, y rechazo de caracteres prohibidos.
- * Aca se hace el plegado de mayusculas y el rechazo de los prohibidos que se pueden detectar sin
- * tablas, pero <strong>no la normalizacion NFKC</strong>: el {@link java.text.Normalizer} de esta
- * biblioteca no declara esa forma — decision documentada alli, y preferible a declararla y tirar.
+ * <p>RFC 3490 requires the name to be put through <strong>nameprep</strong> (RFC 3491) before
+ * encoding: case folding, <strong>NFKC</strong> normalization, and rejection of forbidden characters.
+ * Here the case folding and the rejection of the forbidden ones that can be detected without tables
+ * are done, but <strong>not the NFKC normalization</strong>: this library's
+ * {@link java.text.Normalizer} does not declare that form — a decision documented there, and
+ * preferable to declaring it and throwing.
  *
- * <p>Que significa en la practica: para una entrada <em>ya normalizada</em> —que es el caso de
- * cualquier nombre que venga de un navegador, de un archivo de configuracion o de un teclado— el
- * resultado es identico al del JDK. Para una entrada que necesitaria NFKC, el Punycode que sale es
- * el de la cadena sin normalizar: sigue siendo Punycode valido y sigue siendo reversible, pero no es
- * el mismo que produciria el JDK.
+ * <p>What that means in practice: for an input that is <em>already normalized</em> —which is the case
+ * for any name coming from a browser, a configuration file or a keyboard— the result is identical to
+ * the JDK's. For an input that would need NFKC, the Punycode that comes out is that of the
+ * unnormalized string: it is still valid Punycode and it is still reversible, but it is not the same
+ * one the JDK would produce.
  *
- * <p>Lo que <strong>si</strong> es exacto es el algoritmo de Punycode, que es la parte especificada
- * hasta el ultimo detalle y la que de verdad tiene forma de estar mal.
+ * <p>What <strong>is</strong> exact is the Punycode algorithm itself, which is the part specified
+ * down to the last detail and the one that really has a way of being wrong.
  *
  * @since 1.6
  */
 public final class IDN {
 
     /**
-     * Permite que el nombre tenga puntos de codigo que Unicode todavia no asigno.
+     * Allows the name to hold code points Unicode has not assigned yet.
      *
-     * <p>Apagado por omision, y es lo prudente: un caracter sin asignar puede recibir significado
-     * —o una regla de plegado— en una version futura, y ahi el mismo nombre pasaria a codificar
-     * distinto.
+     * <p>Off by default, and that is the prudent thing: an unassigned character may be given meaning
+     * —or a folding rule— in a future version, and then the same name would start encoding
+     * differently.
      */
     public static final int ALLOW_UNASSIGNED = 0x01;
 
     /**
-     * Exige que el resultado cumpla las reglas STD3 de nombre de host.
+     * Requires the result to meet STD3's host-name rules.
      *
-     * <p>Letras, digitos y guion; sin empezar ni terminar en guion. Sirve para no fabricar un nombre
-     * que Punycode acepta y que despues ninguna resolucion va a admitir.
+     * <p>Letters, digits and hyphen; not starting or ending in a hyphen. It serves to avoid
+     * manufacturing a name Punycode accepts and no resolver will then admit.
      */
     public static final int USE_STD3_ASCII_RULES = 0x02;
 
-    // El alfabeto de 36 simbolos y los parametros de sesgo son constantes del RFC 3492, no
-    // elecciones: cambiarlas produce una codificacion que nadie mas entiende.
+    // The 36-symbol alphabet and the bias parameters are RFC 3492 constants, not choices: changing
+    // them produces an encoding nobody else understands.
     private static final int BASE = 36;
     private static final int TMIN = 1;
     private static final int TMAX = 26;
@@ -77,72 +78,72 @@ public final class IDN {
     }
 
     /**
-     * A la forma ASCII.
+     * To the ASCII form.
      *
-     * @throws IllegalArgumentException si el nombre no cumple las reglas de IDNA
+     * @throws IllegalArgumentException if the name does not meet IDNA's rules
      */
     public static String toASCII(String input, int flag) {
         StringBuilder out = new StringBuilder();
         int i = 0;
-        boolean vacio = input.isEmpty();
-        while (i < input.length() || vacio) {
-            int fin = finDeEtiqueta(input, i);
-            String etiqueta = input.substring(i, fin);
-            out.append(etiquetaAAscii(etiqueta, flag));
-            if (fin >= input.length()) {
+        boolean empty = input.isEmpty();
+        while (i < input.length() || empty) {
+            int end = labelEnd(input, i);
+            String label = input.substring(i, end);
+            out.append(labelToAscii(label, flag));
+            if (end >= input.length()) {
                 break;
             }
-            // El separador se conserva tal cual: los cuatro que Unicode reconoce como punto se
-            // normalizan al ASCII, que es lo unico que el DNS transporta.
+            // The separator is kept as it stands: the four Unicode recognizes as a dot are
+            // normalized to the ASCII one, which is the only thing DNS carries.
             out.append('.');
-            i = fin + 1;
-            vacio = i == input.length();
+            i = end + 1;
+            empty = i == input.length();
         }
         return out.toString();
     }
 
-    /** A la forma ASCII, sin banderas. */
+    /** To the ASCII form, with no flags. */
     public static String toASCII(String input) {
         return toASCII(input, 0);
     }
 
     /**
-     * De vuelta a Unicode.
+     * Back to Unicode.
      *
-     * <p>Nunca falla: una etiqueta que no se puede decodificar se devuelve tal como vino. Es
-     * deliberado en el RFC — un nombre a medio traducir es mas util que una excepcion, porque esto
-     * se usa sobre todo para <em>mostrar</em>.
+     * <p>It never fails: a label that cannot be decoded is returned as it came. That is deliberate in
+     * the RFC — a half-translated name is more useful than an exception, because this is used above
+     * all to <em>display</em>.
      */
     public static String toUnicode(String input, int flag) {
         StringBuilder out = new StringBuilder();
         int i = 0;
-        boolean vacio = input.isEmpty();
-        while (i < input.length() || vacio) {
-            int fin = finDeEtiqueta(input, i);
-            out.append(etiquetaAUnicode(input.substring(i, fin), flag));
-            if (fin >= input.length()) {
+        boolean empty = input.isEmpty();
+        while (i < input.length() || empty) {
+            int end = labelEnd(input, i);
+            out.append(labelToUnicode(input.substring(i, end), flag));
+            if (end >= input.length()) {
                 break;
             }
             out.append('.');
-            i = fin + 1;
-            vacio = i == input.length();
+            i = end + 1;
+            empty = i == input.length();
         }
         return out.toString();
     }
 
-    /** De vuelta a Unicode, sin banderas. */
+    /** Back to Unicode, with no flags. */
     public static String toUnicode(String input) {
         return toUnicode(input, 0);
     }
 
     /**
-     * Donde termina la etiqueta que empieza en {@code desde}.
+     * Where the label starting at {@code from} ends.
      *
-     * <p>Los cuatro separadores del RFC 3490 y no solo el punto ASCII: hay alfabetos con su propia
-     * forma de punto, y un nombre escrito con ellos tiene que partirse igual.
+     * <p>RFC 3490's four separators and not just the ASCII dot: some alphabets have their own form of
+     * dot, and a name written with them has to be split all the same.
      */
-    private static int finDeEtiqueta(String s, int desde) {
-        for (int i = desde; i < s.length(); i++) {
+    private static int labelEnd(String s, int from) {
+        for (int i = from; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c == '.' || c == '。' || c == '．' || c == '｡') {
                 return i;
@@ -151,74 +152,74 @@ public final class IDN {
         return s.length();
     }
 
-    private static String etiquetaAAscii(String etiqueta, int flag) {
-        boolean soloAscii = true;
-        for (int i = 0; i < etiqueta.length(); i++) {
-            if (etiqueta.charAt(i) > 0x7F) {
-                soloAscii = false;
+    private static String labelToAscii(String label, int flag) {
+        boolean asciiOnly = true;
+        for (int i = 0; i < label.length(); i++) {
+            if (label.charAt(i) > 0x7F) {
+                asciiOnly = false;
                 break;
             }
         }
-        // El plegado de mayusculas es la parte de nameprep que si se puede hacer sin NFKC; ver la
-        // nota de la clase sobre lo que falta.
-        String preparada = soloAscii ? etiqueta : etiqueta.toLowerCase(Locale.ROOT);
+        // Case folding is the part of nameprep that can be done without NFKC; see the class's note
+        // on what is missing.
+        String prepared = asciiOnly ? label : label.toLowerCase(Locale.ROOT);
 
-        String salida;
-        if (soloAscii) {
-            salida = etiqueta;
+        String result;
+        if (asciiOnly) {
+            result = label;
         } else {
-            if (preparada.startsWith(ACE_PREFIX)) {
+            if (prepared.startsWith(ACE_PREFIX)) {
                 throw new IllegalArgumentException(
-                        "una etiqueta no ASCII no puede empezar con " + ACE_PREFIX);
+                        "a non-ASCII label cannot start with " + ACE_PREFIX);
             }
-            salida = ACE_PREFIX + punycode(preparada);
+            result = ACE_PREFIX + punycode(prepared);
         }
         if ((flag & USE_STD3_ASCII_RULES) != 0) {
-            revisarStd3(salida);
+            checkStd3(result);
         }
-        if (salida.isEmpty() || salida.length() > MAX_LABEL) {
-            throw new IllegalArgumentException("etiqueta de largo invalido: " + salida);
+        if (result.isEmpty() || result.length() > MAX_LABEL) {
+            throw new IllegalArgumentException("label of invalid length: " + result);
         }
-        return salida;
+        return result;
     }
 
-    private static String etiquetaAUnicode(String etiqueta, int flag) {
-        if (etiqueta.length() <= ACE_PREFIX.length()
-                || !etiqueta.substring(0, ACE_PREFIX.length())
+    private static String labelToUnicode(String label, int flag) {
+        if (label.length() <= ACE_PREFIX.length()
+                || !label.substring(0, ACE_PREFIX.length())
                         .equalsIgnoreCase(ACE_PREFIX)) {
-            return etiqueta;
+            return label;
         }
         try {
-            String u = despunycode(etiqueta.substring(ACE_PREFIX.length()));
-            // La prueba de ida y vuelta que exige el RFC: si volver a codificar no da lo mismo, la
-            // etiqueta estaba mal formada y se devuelve como vino.
-            if (!toASCII(u, flag).equalsIgnoreCase(etiqueta)) {
-                return etiqueta;
+            String u = depunycode(label.substring(ACE_PREFIX.length()));
+            // The round-trip test the RFC requires: if re-encoding does not give the same thing, the
+            // label was malformed and it is returned as it came.
+            if (!toASCII(u, flag).equalsIgnoreCase(label)) {
+                return label;
             }
             return u;
         } catch (RuntimeException e) {
-            return etiqueta;
+            return label;
         }
     }
 
-    private static void revisarStd3(String s) {
+    private static void checkStd3(String s) {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
                     || (c >= '0' && c <= '9') || c == '-';
             if (!ok) {
-                throw new IllegalArgumentException("caracter no permitido por STD3: " + c);
+                throw new IllegalArgumentException("character not allowed by STD3: " + c);
             }
         }
         if (s.startsWith("-") || s.endsWith("-")) {
-            throw new IllegalArgumentException("una etiqueta no puede empezar ni terminar en '-'");
+            throw new IllegalArgumentException("a label cannot start or end in '-'");
         }
     }
 
-    /** El sesgo adaptativo del RFC 3492: es lo que hace que los saltos chicos ocupen poco. */
-    private static int adaptar(int delta, int cantidad, boolean primera) {
-        int d = primera ? delta / DAMP : delta / 2;
-        d = d + d / cantidad;
+    /** RFC 3492's adaptive bias: it is what makes the small jumps take little room. */
+    private static int adapt(int delta, int count, boolean first) {
+        int d = first ? delta / DAMP : delta / 2;
+        d = d + d / count;
         int k = 0;
         while (d > ((BASE - TMIN) * TMAX) / 2) {
             d = d / (BASE - TMIN);
@@ -227,11 +228,11 @@ public final class IDN {
         return k + (((BASE - TMIN + 1) * d) / (d + SKEW));
     }
 
-    private static char digito(int d) {
+    private static char digit(int d) {
         return (char) (d < 26 ? d + 'a' : d - 26 + '0');
     }
 
-    private static int valor(char c) {
+    private static int value(char c) {
         if (c >= 'a' && c <= 'z') {
             return c - 'a';
         }
@@ -241,31 +242,31 @@ public final class IDN {
         if (c >= '0' && c <= '9') {
             return c - '0' + 26;
         }
-        throw new IllegalArgumentException("digito Punycode invalido: " + c);
+        throw new IllegalArgumentException("invalid Punycode digit: " + c);
     }
 
-    /** RFC 3492 §6.3, tal cual. */
+    /** RFC 3492 §6.3, as it stands. */
     private static String punycode(String input) {
         int n = INITIAL_N;
         int delta = 0;
         int bias = INITIAL_BIAS;
         StringBuilder out = new StringBuilder();
 
-        int basicos = 0;
+        int basic = 0;
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
             if (c < 0x80) {
                 out.append(c);
-                basicos++;
+                basic++;
             }
         }
-        if (basicos > 0) {
+        if (basic > 0) {
             out.append(DELIMITER);
         }
 
-        int manejados = basicos;
+        int handled = basic;
         int total = input.length();
-        while (manejados < total) {
+        while (handled < total) {
             int m = Integer.MAX_VALUE;
             for (int i = 0; i < input.length(); i++) {
                 int c = input.charAt(i);
@@ -273,7 +274,7 @@ public final class IDN {
                     m = c;
                 }
             }
-            delta = delta + (m - n) * (manejados + 1);
+            delta = delta + (m - n) * (handled + 1);
             n = m;
             for (int i = 0; i < input.length(); i++) {
                 int c = input.charAt(i);
@@ -286,13 +287,13 @@ public final class IDN {
                         if (q < t) {
                             break;
                         }
-                        out.append(digito(t + (q - t) % (BASE - t)));
+                        out.append(digit(t + (q - t) % (BASE - t)));
                         q = (q - t) / (BASE - t);
                     }
-                    out.append(digito(q));
-                    bias = adaptar(delta, manejados + 1, manejados == basicos);
+                    out.append(digit(q));
+                    bias = adapt(delta, handled + 1, handled == basic);
                     delta = 0;
-                    manejados++;
+                    handled++;
                 }
             }
             delta++;
@@ -301,33 +302,33 @@ public final class IDN {
         return out.toString();
     }
 
-    /** RFC 3492 §6.2, la inversa exacta de {@link #punycode}. */
-    private static String despunycode(String input) {
+    /** RFC 3492 §6.2, the exact inverse of {@link #punycode}. */
+    private static String depunycode(String input) {
         int n = INITIAL_N;
         int i = 0;
         int bias = INITIAL_BIAS;
         StringBuilder out = new StringBuilder();
 
-        int ultimoGuion = input.lastIndexOf(DELIMITER);
-        if (ultimoGuion > 0) {
-            for (int j = 0; j < ultimoGuion; j++) {
+        int lastDash = input.lastIndexOf(DELIMITER);
+        if (lastDash > 0) {
+            for (int j = 0; j < lastDash; j++) {
                 char c = input.charAt(j);
                 if (c >= 0x80) {
-                    throw new IllegalArgumentException("caracter no basico en la parte literal");
+                    throw new IllegalArgumentException("non-basic character in the literal part");
                 }
                 out.append(c);
             }
         }
 
-        int pos = ultimoGuion < 0 ? 0 : ultimoGuion + 1;
+        int pos = lastDash < 0 ? 0 : lastDash + 1;
         while (pos < input.length()) {
-            int viejo = i;
+            int old = i;
             int w = 1;
             for (int k = BASE; ; k += BASE) {
                 if (pos >= input.length()) {
-                    throw new IllegalArgumentException("Punycode incompleto");
+                    throw new IllegalArgumentException("incomplete Punycode");
                 }
-                int d = valor(input.charAt(pos));
+                int d = value(input.charAt(pos));
                 pos++;
                 i = i + d * w;
                 int t = k <= bias ? TMIN : (k >= bias + TMAX ? TMAX : k - bias);
@@ -336,7 +337,7 @@ public final class IDN {
                 }
                 w = w * (BASE - t);
             }
-            bias = adaptar(i - viejo, out.length() + 1, viejo == 0);
+            bias = adapt(i - old, out.length() + 1, old == 0);
             n = n + i / (out.length() + 1);
             i = i % (out.length() + 1);
             out.insert(i, (char) n);

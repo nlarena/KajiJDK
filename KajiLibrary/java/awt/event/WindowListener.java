@@ -3,31 +3,32 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse del ciclo de vida de una ventana.
-
- <p>{@code windowClosing} es el aviso de que el usuario pidió cerrar, y llega **antes**: es donde se
- pregunta si quiere guardar. {@code windowClosed} llega después de que la ventana ya no existe.
+ * Whoever wants to hear about a window's life cycle.
+ *
+ * <p>{@code windowClosing} is the notice that the user asked to close, and it arrives **before**: it
+ * is where they are asked whether they want to save. {@code windowClosed} arrives after the window no
+ * longer exists.
  */
 public interface WindowListener extends EventListener {
 
-    /** La ventana se abrió por primera vez. */
+    /** The window was opened for the first time. */
     void windowOpened(WindowEvent e);
 
-    /** El usuario pidió cerrarla. */
+    /** The user asked to close it. */
     void windowClosing(WindowEvent e);
 
-    /** La ventana se cerró. */
+    /** The window was closed. */
     void windowClosed(WindowEvent e);
 
-    /** Se minimizó. */
+    /** It was minimized. */
     void windowIconified(WindowEvent e);
 
-    /** Se restauró. */
+    /** It was restored. */
     void windowDeiconified(WindowEvent e);
 
-    /** Pasó a ser la ventana activa. */
+    /** It became the active window. */
     void windowActivated(WindowEvent e);
 
-    /** Dejó de ser la ventana activa. */
+    /** It stopped being the active window. */
     void windowDeactivated(WindowEvent e);
 }

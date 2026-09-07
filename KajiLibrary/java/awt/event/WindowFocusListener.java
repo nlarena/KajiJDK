@@ -3,13 +3,13 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que una ventana ganó o perdió el foco.
+ * Whoever wants to hear that a window gained or lost the focus.
  */
 public interface WindowFocusListener extends EventListener {
 
-    /** La ventana ganó el foco. */
+    /** The window gained the focus. */
     void windowGainedFocus(WindowEvent e);
 
-    /** La ventana perdió el foco. */
+    /** The window lost the focus. */
     void windowLostFocus(WindowEvent e);
 }

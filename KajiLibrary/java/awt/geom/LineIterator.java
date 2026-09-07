@@ -2,8 +2,8 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de Line2D: MOVETO al primer extremo, LINETO al segundo, y se acabo. Sin CLOSE:
-// un segmento es una figura abierta.
+// Line2D's internal iterator: MOVETO to the first end, LINETO to the second, and that is that. No
+// CLOSE: a segment is an open shape.
 class LineIterator implements PathIterator {
 
     Line2D line;

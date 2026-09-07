@@ -1,7 +1,7 @@
 package java.awt.geom;
 
-// java.awt.geom.Dimension2D de KajiLibrary -- ancho y alto en coma flotante, sin ubicacion.
-// Superficie completa (5 miembros).
+// KajiLibrary's java.awt.geom.Dimension2D -- width and height in floating point, with no
+// location. The surface is complete (5 members).
 public abstract class Dimension2D implements Cloneable {
 
     protected Dimension2D() {
@@ -21,7 +21,7 @@ public abstract class Dimension2D implements Cloneable {
         try {
             return super.clone();
         } catch (CloneNotSupportedException e) {
-            // No puede pasar: la clase declara Cloneable.
+            // It cannot happen: the class declares Cloneable.
             throw new InternalError(e.toString());
         }
     }

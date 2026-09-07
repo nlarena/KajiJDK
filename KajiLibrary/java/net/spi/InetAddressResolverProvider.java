@@ -1,44 +1,45 @@
 package java.net.spi;
 
 /**
- * KajiLibrary's java.net.spi.InetAddressResolverProvider -- de donde sale el resolvedor.
+ * KajiLibrary's java.net.spi.InetAddressResolverProvider -- where the resolver comes from.
  *
- * <p>Se carga como servicio y la plataforma toma <b>uno solo</b>: la resolucion de nombres es global
- * al proceso y no tendria sentido que dos partes del programa vieran Internet distinto. Por eso hay
- * {@link #name()}, que sirve para poder decir cual quedo cuando algo no resuelve como se esperaba.
+ * <p>It is loaded as a service and the platform takes <b>one only</b>: name resolution is global to
+ * the process and it would make no sense for two parts of the program to see the Internet
+ * differently. That is why there is {@link #name()}, which serves to be able to say which one ended
+ * up in place when something does not resolve as expected.
  *
- * <p>{@link Configuration#builtinResolver()} es la pieza importante del diseño: le entrega al
- * proveedor el resolvedor del sistema, asi que lo normal no es reemplazar la resolucion sino
- * <b>envolverla</b> -- resolver unos pocos nombres propios y delegar el resto. Sin eso, cualquier
- * proveedor tendria que reimplementar DNS entero para poder interceptar un nombre.
+ * <p>{@link Configuration#builtinResolver()} is the important piece of the design: it hands the
+ * provider the system's resolver, so the normal thing is not to replace resolution but to <b>wrap
+ * it</b> -- resolve a few names of one's own and delegate the rest. Without that, any provider would
+ * have to reimplement the whole of DNS in order to intercept one name.
  */
 public abstract class InetAddressResolverProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected InetAddressResolverProvider() {
     }
 
     /**
-     * El resolvedor de este proveedor.
+     * This provider's resolver.
      *
-     * @param configuration lo que la plataforma le presta; ver la nota de la clase sobre envolver
+     * @param configuration what the platform lends it; see the class's note about wrapping
      */
     public abstract InetAddressResolver get(Configuration configuration);
 
-    /** Un nombre para identificarlo en diagnosticos. */
+    /** A name to identify it in diagnostics. */
     public abstract String name();
 
-    /** Lo que la plataforma le da al proveedor cuando le pide el resolvedor. */
+    /** What the platform gives the provider when it asks it for the resolver. */
     public interface Configuration {
 
-        /** El resolvedor del sistema, para delegarle lo que no se quiera manejar. */
+        /** The system's resolver, to delegate whatever one does not want to handle. */
         InetAddressResolver builtinResolver();
 
         /**
-         * El nombre local de esta maquina.
+         * This machine's local name.
          *
-         * <p>Va aca --y no se busca-- porque averiguarlo suele necesitar resolver, y el proveedor
-         * todavia no existe cuando se lo esta construyendo.
+         * <p>It goes here --and is not looked up-- because finding it out usually needs resolving,
+         * and the provider does not exist yet while it is being built.
          */
         String lookupLocalHostName();
     }

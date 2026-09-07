@@ -3,10 +3,10 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que una ventana se minimizó, se maximizó o se restauró.
+ * Whoever wants to hear that a window was minimized, maximized or restored.
  */
 public interface WindowStateListener extends EventListener {
 
-    /** Cambió el estado de la ventana. */
+    /** The window's state changed. */
     void windowStateChanged(WindowEvent e);
 }

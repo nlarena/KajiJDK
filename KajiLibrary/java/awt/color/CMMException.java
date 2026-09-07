@@ -1,16 +1,17 @@
 package java.awt.color;
 
 /**
- * El motor de gestión de color falló.
+ * The colour management engine failed.
  *
- * <p>Está declarada porque el contrato la nombra, pero **esta biblioteca no la tira nunca**: no hay
- * motor ICC que pueda fallar. Ver la nota de alcance de {@link ColorSpace}.
+ * <p>It is declared because the contract names it. This library throws it nowhere: the ICC parsing
+ * here is done in Java and reports its problems as {@link ProfileDataException}, which is the one
+ * that describes a malformed profile. See {@link ColorSpace}'s scope note.
  */
 public class CMMException extends RuntimeException {
 
     private static final long serialVersionUID = 5775558044142292260L;
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public CMMException(String s) {
         super(s);
     }

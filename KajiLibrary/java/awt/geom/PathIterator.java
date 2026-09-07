@@ -1,17 +1,17 @@
 package java.awt.geom;
 
-// java.awt.geom.PathIterator de KajiLibrary -- el protocolo con el que toda Shape se recorre
-// segmento por segmento. La superficie esta completa: cinco metodos y siete constantes.
+// KajiLibrary's java.awt.geom.PathIterator -- the protocol every Shape is walked segment by
+// segment with. The surface is complete: five methods and seven constants.
 //
-// El contrato que hay que respetar al implementarla: `currentSegment` escribe en `coords` tantos
-// pares (x,y) como pida el tipo devuelto -- 1 para MOVETO/LINETO, 2 para QUADTO, 3 para CUBICTO,
-// 0 para CLOSE -- y no toca el resto del arreglo.
+// The contract to honour when implementing it: `currentSegment` writes into `coords` as many (x,y)
+// pairs as the returned type calls for -- 1 for MOVETO/LINETO, 2 for QUADTO, 3 for CUBICTO, 0 for
+// CLOSE -- and does not touch the rest of the array.
 public interface PathIterator {
 
-    /** Regla par/impar: un punto esta dentro si lo cruza un numero impar de segmentos. */
+    /** Even-odd rule: a point is inside if an odd number of segments cross it. */
     public static final int WIND_EVEN_ODD = 0;
 
-    /** Regla no-cero: un punto esta dentro si la suma de cruces con signo no es cero. */
+    /** Non-zero rule: a point is inside if the sum of signed crossings is not zero. */
     public static final int WIND_NON_ZERO = 1;
 
     public static final int SEG_MOVETO = 0;

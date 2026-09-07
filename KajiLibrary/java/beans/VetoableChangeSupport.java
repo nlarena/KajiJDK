@@ -6,29 +6,29 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// El gemelo vetable de PropertyChangeSupport, y la diferencia no es cosmetica: aca la notificacion
-// puede FALLAR, y entonces hay que deshacerla.
+// PropertyChangeSupport's vetoable twin, and the difference is not cosmetic: here the notification
+// can FAIL, and then it has to be undone.
 //
-// fireVetoableChange corre los oyentes en orden; si uno tira PropertyVetoException, los que ya
-// habian dicho que si quedaron creyendo que el cambio va. Por eso se les vuelve a notificar, con
-// los valores invertidos, para que reviertan lo que hayan hecho — y recien despues se propaga el
-// veto. Sin esa segunda vuelta un veto dejaria al resto del sistema desincronizado.
+// fireVetoableChange runs the listeners in order; if one throws PropertyVetoException, those that
+// had already said yes are left believing the change is going ahead. That is why they are notified
+// again, with the values swapped, so that they revert whatever they did -- and only then is the veto
+// propagated. Without that second round a veto would leave the rest of the system out of step.
 //
-// Igual que en PropertyChangeSupport, se despacha sobre una copia: un oyente puede desuscribirse
-// desde adentro de vetableChange().
+// Just as in PropertyChangeSupport, dispatch happens over a copy: a listener may unsubscribe from
+// inside vetoableChange().
 public class VetoableChangeSupport implements Serializable {
 
     private Object source;
-    private List<VetoableChangeListener> globales;
-    private Map<String, List<VetoableChangeListener>> porNombre;
+    private List<VetoableChangeListener> global;
+    private Map<String, List<VetoableChangeListener>> byName;
 
     public VetoableChangeSupport(Object sourceBean) {
         if (sourceBean == null) {
             throw new NullPointerException();
         }
         this.source = sourceBean;
-        this.globales = new ArrayList<VetoableChangeListener>();
-        this.porNombre = new HashMap<String, List<VetoableChangeListener>>();
+        this.global = new ArrayList<VetoableChangeListener>();
+        this.byName = new HashMap<String, List<VetoableChangeListener>>();
     }
 
     public synchronized void addVetoableChangeListener(VetoableChangeListener listener) {
@@ -37,9 +37,9 @@ public class VetoableChangeSupport implements Serializable {
         }
         if (listener instanceof VetoableChangeListenerProxy) {
             VetoableChangeListenerProxy proxy = (VetoableChangeListenerProxy) listener;
-            this.agregarPorNombre(proxy.getPropertyName(), proxy.getListener());
+            this.addByName(proxy.getPropertyName(), proxy.getListener());
         } else {
-            this.globales.add(listener);
+            this.global.add(listener);
         }
     }
 
@@ -49,9 +49,9 @@ public class VetoableChangeSupport implements Serializable {
         }
         if (listener instanceof VetoableChangeListenerProxy) {
             VetoableChangeListenerProxy proxy = (VetoableChangeListenerProxy) listener;
-            this.quitarPorNombre(proxy.getPropertyName(), proxy.getListener());
+            this.removeByName(proxy.getPropertyName(), proxy.getListener());
         } else {
-            this.globales.remove(listener);
+            this.global.remove(listener);
         }
     }
 
@@ -59,65 +59,65 @@ public class VetoableChangeSupport implements Serializable {
         if (listener == null || propertyName == null) {
             return;
         }
-        this.agregarPorNombre(propertyName, listener);
+        this.addByName(propertyName, listener);
     }
 
     public synchronized void removeVetoableChangeListener(String propertyName, VetoableChangeListener listener) {
         if (listener == null || propertyName == null) {
             return;
         }
-        this.quitarPorNombre(propertyName, listener);
+        this.removeByName(propertyName, listener);
     }
 
-    private void agregarPorNombre(String propertyName, VetoableChangeListener listener) {
-        List<VetoableChangeListener> l = this.porNombre.get(propertyName);
+    private void addByName(String propertyName, VetoableChangeListener listener) {
+        List<VetoableChangeListener> l = this.byName.get(propertyName);
         if (l == null) {
             l = new ArrayList<VetoableChangeListener>();
-            this.porNombre.put(propertyName, l);
+            this.byName.put(propertyName, l);
         }
         l.add(listener);
     }
 
-    private void quitarPorNombre(String propertyName, VetoableChangeListener listener) {
-        List<VetoableChangeListener> l = this.porNombre.get(propertyName);
+    private void removeByName(String propertyName, VetoableChangeListener listener) {
+        List<VetoableChangeListener> l = this.byName.get(propertyName);
         if (l != null) {
             l.remove(listener);
             if (l.isEmpty()) {
-                this.porNombre.remove(propertyName);
+                this.byName.remove(propertyName);
             }
         }
     }
 
     public synchronized VetoableChangeListener[] getVetoableChangeListeners() {
         List<VetoableChangeListener> salida = new ArrayList<VetoableChangeListener>();
-        for (int i = 0; i < this.globales.size(); i++) {
-            salida.add(this.globales.get(i));
+        for (int i = 0; i < this.global.size(); i++) {
+            salida.add(this.global.get(i));
         }
-        Object[] nombres = this.porNombre.keySet().toArray();
-        for (int i = 0; i < nombres.length; i++) {
-            String nombre = (String) nombres[i];
-            List<VetoableChangeListener> l = this.porNombre.get(nombre);
+        Object[] names = this.byName.keySet().toArray();
+        for (int i = 0; i < names.length; i++) {
+            String name = (String) names[i];
+            List<VetoableChangeListener> l = this.byName.get(name);
             for (int j = 0; j < l.size(); j++) {
-                salida.add(new VetoableChangeListenerProxy(nombre, l.get(j)));
+                salida.add(new VetoableChangeListenerProxy(name, l.get(j)));
             }
         }
-        return this.aArreglo(salida);
+        return this.asArray(salida);
     }
 
     public synchronized VetoableChangeListener[] getVetoableChangeListeners(String propertyName) {
         List<VetoableChangeListener> salida = new ArrayList<VetoableChangeListener>();
         if (propertyName != null) {
-            List<VetoableChangeListener> l = this.porNombre.get(propertyName);
+            List<VetoableChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
                     salida.add(l.get(i));
                 }
             }
         }
-        return this.aArreglo(salida);
+        return this.asArray(salida);
     }
 
-    private VetoableChangeListener[] aArreglo(List<VetoableChangeListener> l) {
+    private VetoableChangeListener[] asArray(List<VetoableChangeListener> l) {
         VetoableChangeListener[] a = new VetoableChangeListener[l.size()];
         for (int i = 0; i < l.size(); i++) {
             a[i] = l.get(i);
@@ -127,46 +127,47 @@ public class VetoableChangeSupport implements Serializable {
 
     private synchronized VetoableChangeListener[] instantanea(String propertyName) {
         List<VetoableChangeListener> salida = new ArrayList<VetoableChangeListener>();
-        for (int i = 0; i < this.globales.size(); i++) {
-            salida.add(this.globales.get(i));
+        for (int i = 0; i < this.global.size(); i++) {
+            salida.add(this.global.get(i));
         }
         if (propertyName != null) {
-            List<VetoableChangeListener> l = this.porNombre.get(propertyName);
+            List<VetoableChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
                     salida.add(l.get(i));
                 }
             }
         }
-        return this.aArreglo(salida);
+        return this.asArray(salida);
     }
 
-    // Consulta a los oyentes y, si alguno veta, revierte a los que ya habian aceptado antes de
-    // dejar salir la excepcion.
+    // It asks the listeners and, if one vetoes, reverts those that had already accepted before
+    // letting the exception out.
     public void fireVetoableChange(PropertyChangeEvent evt) throws PropertyVetoException {
         Object viejo = evt.getOldValue();
-        Object nuevo = evt.getNewValue();
-        if (viejo == null || nuevo == null || !viejo.equals(nuevo)) {
-            VetoableChangeListener[] copia = this.instantanea(evt.getPropertyName());
+        Object fresh = evt.getNewValue();
+        if (viejo == null || fresh == null || !viejo.equals(fresh)) {
+            VetoableChangeListener[] copy = this.instantanea(evt.getPropertyName());
             int i = 0;
             PropertyVetoException veto = null;
-            while (i < copia.length && veto == null) {
+            while (i < copy.length && veto == null) {
                 try {
-                    copia[i].vetoableChange(evt);
+                    copy[i].vetoableChange(evt);
                     i = i + 1;
                 } catch (PropertyVetoException e) {
                     veto = e;
                 }
             }
             if (veto != null) {
-                // `i` quedo en el que veto: hay que deshacer los [0, i).
+                // `i` is left at the one that vetoed: [0, i) have to be undone.
                 PropertyChangeEvent vuelta = new PropertyChangeEvent(
-                    evt.getSource(), evt.getPropertyName(), nuevo, viejo);
+                    evt.getSource(), evt.getPropertyName(), fresh, viejo);
                 for (int j = 0; j < i; j++) {
                     try {
-                        copia[j].vetoableChange(vuelta);
+                        copy[j].vetoableChange(vuelta);
                     } catch (PropertyVetoException ignorada) {
-                        // Vetar la reversion no tiene a donde ir: el cambio no se hizo igual.
+                        // Vetoing the reversion has nowhere to go: the change was not made
+                        // anyway.
                     }
                 }
                 throw veto;
@@ -196,11 +197,11 @@ public class VetoableChangeSupport implements Serializable {
     }
 
     public synchronized boolean hasListeners(String propertyName) {
-        boolean hay = !this.globales.isEmpty();
-        if (!hay && propertyName != null) {
-            List<VetoableChangeListener> l = this.porNombre.get(propertyName);
-            hay = l != null && !l.isEmpty();
+        boolean any = !this.global.isEmpty();
+        if (!any && propertyName != null) {
+            List<VetoableChangeListener> l = this.byName.get(propertyName);
+            any = l != null && !l.isEmpty();
         }
-        return hay;
+        return any;
     }
 }

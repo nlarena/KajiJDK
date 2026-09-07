@@ -2,7 +2,7 @@ package java.beans;
 
 import java.util.EventListenerProxy;
 
-// El equivalente vetable de PropertyChangeListenerProxy: un oyente atado a una sola propiedad.
+// PropertyChangeListenerProxy's vetoable equivalent: a listener tied to a single property.
 public class VetoableChangeListenerProxy
         extends EventListenerProxy<VetoableChangeListener>
         implements VetoableChangeListener {

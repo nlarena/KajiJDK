@@ -6,61 +6,62 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// El ayudante que un bean con propiedades ligadas delega para llevar la lista de oyentes y
-// despacharles los eventos. Se usa por composicion, no por herencia: el bean tiene uno y le
-// reenvia add/remove/fire.
+// The helper a bean with bound properties delegates to for keeping the list of listeners and
+// dispatching the events to them. It is used by composition, not by inheritance: the bean has one
+// and forwards add/remove/fire to it.
 //
-// Dos decisiones que no son de comodidad sino de correccion:
+// Two decisions that are not about convenience but about correctness:
 //
-// 1. **Se notifica sobre una copia.** Un oyente tiene todo el derecho de desuscribirse a si mismo
-//    —o de agregar otro— desde adentro de propertyChange(). Si se iterara la lista viva, esa
-//    modificacion la corrompe en pleno recorrido. Copiar antes de despachar es lo que hace que el
-//    caso mas natural del mundo no rompa nada. Los oyentes agregados durante una notificacion no
-//    reciben ESE evento, y los que se van si lo reciben: es el precio de la copia y es el que
-//    cobra el JDK.
+// 1. **Notification happens over a copy.** A listener has every right to unsubscribe itself --or to
+//    add another-- from inside propertyChange(). If the live list were iterated, that modification
+//    would corrupt it mid-walk. Copying before dispatching is what stops the most natural case in
+//    the world from breaking anything. Listeners added during a notification do not receive THAT
+//    event, and those that leave do receive it: it is the price of the copy and it is the one the
+//    JDK charges.
 //
-// 2. **Los oyentes por nombre se guardan envueltos en un proxy.** getPropertyChangeListeners()
-//    tiene que devolver ambas clases de oyente en un solo arreglo; envolver los que estan atados a
-//    una propiedad en PropertyChangeListenerProxy es lo que deja distinguirlos al leerlos.
+// 2. **The listeners registered by name are stored wrapped in a proxy.**
+//    getPropertyChangeListeners() has to return both kinds of listener in a single array; wrapping
+//    those tied to a property in a PropertyChangeListenerProxy is what allows telling them apart
+//    when reading them back.
 //
-// La sincronizacion va a nivel de metodo y no en bloques: en este arbol un `synchronized` en bloque
-// con un `return` temprano no emite el monitorexit (hallazgo #105), asi que los metodos que tocan
-// las estructuras son `synchronized` enteros.
+// The synchronization goes at method level and not in blocks: in this tree a block `synchronized`
+// with an early `return` does not emit the monitorexit (finding #105), so the methods touching the
+// structures are `synchronized` whole.
 public class PropertyChangeSupport implements Serializable {
 
-    // El bean que figura como `source` de los eventos. El JDK tambien rechaza null aca: un evento
-    // sin origen no le sirve a ningun oyente.
+    // The bean that appears as the events' `source`. The JDK also rejects null here: an event with
+    // no source is no use to any listener.
     private Object source;
 
-    // Oyentes registrados sin nombre: reciben todo.
-    private List<PropertyChangeListener> globales;
+    // Listeners registered with no name: they receive everything.
+    private List<PropertyChangeListener> global;
 
-    // Oyentes atados a una propiedad, por nombre.
-    private Map<String, List<PropertyChangeListener>> porNombre;
+    // Listeners tied to a property, by name.
+    private Map<String, List<PropertyChangeListener>> byName;
 
     public PropertyChangeSupport(Object sourceBean) {
         if (sourceBean == null) {
             throw new NullPointerException();
         }
         this.source = sourceBean;
-        this.globales = new ArrayList<PropertyChangeListener>();
-        this.porNombre = new HashMap<String, List<PropertyChangeListener>>();
+        this.global = new ArrayList<PropertyChangeListener>();
+        this.byName = new HashMap<String, List<PropertyChangeListener>>();
     }
 
-    // Registra un oyente para todas las propiedades.
+    // It registers a listener for every property.
     //
-    // Si viene un PropertyChangeListenerProxy se lo desarma y se registra por su nombre: asi
-    // getPropertyChangeListeners() puede devolver su resultado a addPropertyChangeListener() y
-    // reconstruir el mismo registro, que es lo que espera cualquiera que clone un bean.
+    // If a PropertyChangeListenerProxy comes in, it is unwrapped and registered under its name: that
+    // way getPropertyChangeListeners()'s result can be handed back to addPropertyChangeListener()
+    // and rebuild the same register, which is what anyone cloning a bean expects.
     public synchronized void addPropertyChangeListener(PropertyChangeListener listener) {
         if (listener == null) {
             return;
         }
         if (listener instanceof PropertyChangeListenerProxy) {
             PropertyChangeListenerProxy proxy = (PropertyChangeListenerProxy) listener;
-            this.agregarPorNombre(proxy.getPropertyName(), proxy.getListener());
+            this.addByName(proxy.getPropertyName(), proxy.getListener());
         } else {
-            this.globales.add(listener);
+            this.global.add(listener);
         }
     }
 
@@ -70,9 +71,9 @@ public class PropertyChangeSupport implements Serializable {
         }
         if (listener instanceof PropertyChangeListenerProxy) {
             PropertyChangeListenerProxy proxy = (PropertyChangeListenerProxy) listener;
-            this.quitarPorNombre(proxy.getPropertyName(), proxy.getListener());
+            this.removeByName(proxy.getPropertyName(), proxy.getListener());
         } else {
-            this.globales.remove(listener);
+            this.global.remove(listener);
         }
     }
 
@@ -80,68 +81,69 @@ public class PropertyChangeSupport implements Serializable {
         if (listener == null || propertyName == null) {
             return;
         }
-        this.agregarPorNombre(propertyName, listener);
+        this.addByName(propertyName, listener);
     }
 
     public synchronized void removePropertyChangeListener(String propertyName, PropertyChangeListener listener) {
         if (listener == null || propertyName == null) {
             return;
         }
-        this.quitarPorNombre(propertyName, listener);
+        this.removeByName(propertyName, listener);
     }
 
-    private void agregarPorNombre(String propertyName, PropertyChangeListener listener) {
-        List<PropertyChangeListener> l = this.porNombre.get(propertyName);
+    private void addByName(String propertyName, PropertyChangeListener listener) {
+        List<PropertyChangeListener> l = this.byName.get(propertyName);
         if (l == null) {
             l = new ArrayList<PropertyChangeListener>();
-            this.porNombre.put(propertyName, l);
+            this.byName.put(propertyName, l);
         }
         l.add(listener);
     }
 
-    private void quitarPorNombre(String propertyName, PropertyChangeListener listener) {
-        List<PropertyChangeListener> l = this.porNombre.get(propertyName);
+    private void removeByName(String propertyName, PropertyChangeListener listener) {
+        List<PropertyChangeListener> l = this.byName.get(propertyName);
         if (l != null) {
             l.remove(listener);
             if (l.isEmpty()) {
-                this.porNombre.remove(propertyName);
+                this.byName.remove(propertyName);
             }
         }
     }
 
-    // Todos los oyentes: los globales tal cual, y los atados a una propiedad envueltos en un proxy
-    // que dice a cual.
+    // Every listener: the global ones as they stand, and those tied to a property wrapped in a
+    // proxy saying which one.
     public synchronized PropertyChangeListener[] getPropertyChangeListeners() {
         List<PropertyChangeListener> salida = new ArrayList<PropertyChangeListener>();
-        for (int i = 0; i < this.globales.size(); i++) {
-            salida.add(this.globales.get(i));
+        for (int i = 0; i < this.global.size(); i++) {
+            salida.add(this.global.get(i));
         }
-        Object[] nombres = this.porNombre.keySet().toArray();
-        for (int i = 0; i < nombres.length; i++) {
-            String nombre = (String) nombres[i];
-            List<PropertyChangeListener> l = this.porNombre.get(nombre);
+        Object[] names = this.byName.keySet().toArray();
+        for (int i = 0; i < names.length; i++) {
+            String name = (String) names[i];
+            List<PropertyChangeListener> l = this.byName.get(name);
             for (int j = 0; j < l.size(); j++) {
-                salida.add(new PropertyChangeListenerProxy(nombre, l.get(j)));
+                salida.add(new PropertyChangeListenerProxy(name, l.get(j)));
             }
         }
-        return this.aArreglo(salida);
+        return this.asArray(salida);
     }
 
-    // Solo los oyentes atados a `propertyName`, sin envolver: quien pregunto ya sabe el nombre.
+    // Only the listeners tied to `propertyName`, unwrapped: whoever asked already knows the
+    // name.
     public synchronized PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
         List<PropertyChangeListener> salida = new ArrayList<PropertyChangeListener>();
         if (propertyName != null) {
-            List<PropertyChangeListener> l = this.porNombre.get(propertyName);
+            List<PropertyChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
                     salida.add(l.get(i));
                 }
             }
         }
-        return this.aArreglo(salida);
+        return this.asArray(salida);
     }
 
-    private PropertyChangeListener[] aArreglo(List<PropertyChangeListener> l) {
+    private PropertyChangeListener[] asArray(List<PropertyChangeListener> l) {
         PropertyChangeListener[] a = new PropertyChangeListener[l.size()];
         for (int i = 0; i < l.size(); i++) {
             a[i] = l.get(i);
@@ -149,34 +151,34 @@ public class PropertyChangeSupport implements Serializable {
         return a;
     }
 
-    // La copia que se despacha: globales + los atados al nombre del evento. Se arma bajo el
-    // candado y se recorre afuera, que es justamente lo que hace seguro desuscribirse desde
-    // adentro de un oyente.
+    // The copy that gets dispatched: the global ones plus those tied to the event's name. It is
+    // built under the lock and walked outside it, which is exactly what makes unsubscribing from
+    // inside a listener safe.
     private synchronized PropertyChangeListener[] instantanea(String propertyName) {
         List<PropertyChangeListener> salida = new ArrayList<PropertyChangeListener>();
-        for (int i = 0; i < this.globales.size(); i++) {
-            salida.add(this.globales.get(i));
+        for (int i = 0; i < this.global.size(); i++) {
+            salida.add(this.global.get(i));
         }
         if (propertyName != null) {
-            List<PropertyChangeListener> l = this.porNombre.get(propertyName);
+            List<PropertyChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
                     salida.add(l.get(i));
                 }
             }
         }
-        return this.aArreglo(salida);
+        return this.asArray(salida);
     }
 
     public void firePropertyChange(PropertyChangeEvent evt) {
         Object viejo = evt.getOldValue();
-        Object nuevo = evt.getNewValue();
-        // Dos valores conocidos e iguales no son un cambio. Si alguno es null no se sabe, y ante
-        // la duda se notifica.
-        if (viejo == null || nuevo == null || !viejo.equals(nuevo)) {
-            PropertyChangeListener[] copia = this.instantanea(evt.getPropertyName());
-            for (int i = 0; i < copia.length; i++) {
-                copia[i].propertyChange(evt);
+        Object fresh = evt.getNewValue();
+        // Two known, equal values are not a change. If either is null it is not known, and when in
+        // doubt it notifies.
+        if (viejo == null || fresh == null || !viejo.equals(fresh)) {
+            PropertyChangeListener[] copy = this.instantanea(evt.getPropertyName());
+            for (int i = 0; i < copy.length; i++) {
+                copy[i].propertyChange(evt);
             }
         }
     }
@@ -218,14 +220,14 @@ public class PropertyChangeSupport implements Serializable {
         }
     }
 
-    // Si hay alguien escuchando esta propiedad. Sirve para saltearse el trabajo de calcular el
-    // valor viejo cuando no hay a quien contarselo.
+    // Whether anyone is listening to this property. It serves to skip the work of computing the
+    // old value when there is nobody to tell it to.
     public synchronized boolean hasListeners(String propertyName) {
-        boolean hay = !this.globales.isEmpty();
-        if (!hay && propertyName != null) {
-            List<PropertyChangeListener> l = this.porNombre.get(propertyName);
-            hay = l != null && !l.isEmpty();
+        boolean any = !this.global.isEmpty();
+        if (!any && propertyName != null) {
+            List<PropertyChangeListener> l = this.byName.get(propertyName);
+            any = l != null && !l.isEmpty();
         }
-        return hay;
+        return any;
     }
 }

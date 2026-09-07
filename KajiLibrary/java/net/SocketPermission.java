@@ -7,37 +7,38 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 
-// "A que hosts y puertos, y para hacer que."
+// "To which hosts and ports, and to do what."
 //
-// El nombre del permiso es `host:puertos` y las acciones son un subconjunto de
-// connect/listen/accept/resolve. Todo lo interesante de la clase esta en `implies`, que es lo que
-// hace que un permiso escrito una vez cubra un conjunto: `*.ejemplo.org:1-1023` con "connect"
-// implica `www.ejemplo.org:80` con "connect".
+// The permission's name is `host:ports` and the actions are a subset of
+// connect/listen/accept/resolve. Everything interesting about the class is in `implies`, which is
+// what makes a permission written once cover a set: `*.example.org:1-1023` with "connect" implies
+// `www.example.org:80` with "connect".
 //
 // ===========================================================================================
-// LO QUE ESTA CLASE ES SIN RED
+// WHAT THIS CLASS IS WITH NO NETWORK
 // ===========================================================================================
 //
-// Un permiso no conecta: describe. Toda la clase es parsing y comparacion de conjuntos --nombres
-// con comodin, rangos de puertos, mascaras de bits-- y eso se computa entero aca.
+// A permission does not connect: it describes. The whole class is parsing and set comparison
+// --wildcard names, port ranges, bit masks-- and that is computed in full here.
 //
-// **La unica diferencia con el JDK, y hay que decirla:** el `implies` del JDK, cuando la
-// comparacion por nombre no alcanza, **resuelve los dos hosts por DNS** y compara direcciones IP,
-// para que `ejemplo.org` implique `93.184.216.34`. Eso necesita un resolutor, que en esta VM no
-// existe (el porque esta en la cabecera de `InetAddress`).
+// **The one difference from the JDK, and it has to be said:** the JDK's `implies`, when the
+// comparison by name is not enough, **resolves both hosts through DNS** and compares IP addresses,
+// so that `example.org` implies `93.184.216.34`. That needs a resolver, which does not exist in this
+// VM (the why is in `InetAddress`'s header).
 //
-// Aca la comparacion es **solo textual**: nombre canonico contra nombre canonico, sin distinguir
-// mayusculas, mas el comodin de prefijo. Eso hace que este `implies` sea **mas restrictivo** que el
-// del JDK, nunca mas permisivo -- puede decir "no" donde el JDK diria "si", y no al reves.
+// Here the comparison is **textual only**: canonical name against canonical name, case-insensitively,
+// plus the prefix wildcard. That makes this `implies` **stricter** than the JDK's, never more
+// permissive -- it may say "no" where the JDK would say "yes", and not the other way round.
 //
-// Esa direccion del error es la que importa: un permiso que niega de mas se nota al primer uso; uno
-// que otorga de mas no se nota nunca. Y como la comparacion por IP solo suma casos, ninguna
-// respuesta afirmativa de aca es una respuesta que el JDK no daria.
+// That direction of the error is the one that matters: a permission that denies too much is noticed
+// at first use; one that grants too much is never noticed. And since comparison by IP only adds
+// cases, no affirmative answer from here is an answer the JDK would not give.
 //
-// El resto --acciones, orden canonico, rangos, `equals`, `hashCode`-- es identico al JDK, y esta
-// verificado contra el JDK real caso por caso.
+// The rest --actions, canonical order, ranges, `equals`, `hashCode`-- is identical to the JDK's, and
+// it is verified against the real JDK case by case.
 //
-// @deprecated El Security Manager quedo deprecado para remocion; estos permisos ya no se chequean.
+// @deprecated The Security Manager is deprecated for removal; these permissions are no longer
+// checked.
 @Deprecated
 public final class SocketPermission extends Permission implements java.io.Serializable {
 
@@ -48,101 +49,101 @@ public final class SocketPermission extends Permission implements java.io.Serial
     private static final int ACCEPT = 0x4;
     private static final int RESOLVE = 0x8;
 
-    // El host en minusculas. Si `comodin` es true, es el SUFIJO que hay que matchear (".ejemplo.org"),
-    // o la cadena vacia para el `*` pelado, que matchea todo.
+    // The host in lower case. If `wildcard` is true, it is the SUFFIX to match (".example.org"), or
+    // the empty string for the bare `*`, which matches everything.
     private final String host;
-    private final boolean comodin;
-    private final int puertoMin;
-    private final int puertoMax;
+    private final boolean wildcard;
+    private final int portMin;
+    private final int portMax;
     private final int mask;
     private final String actions;
 
     /**
-     * El permiso sobre {@code host} para {@code action}.
+     * The permission over {@code host} for {@code action}.
      *
-     * @param host {@code hostname[:puerto|:min-max|:min-|:-max]}; vacio significa "localhost", y
-     *     un nombre puede empezar con {@code *.} para cubrir un dominio entero
-     * @param action lista separada por comas de connect/listen/accept/resolve, sin distinguir caja
-     * @throws NullPointerException si {@code action} es null
-     * @throws IllegalArgumentException si {@code action} es vacio o tiene un nombre desconocido
+     * @param host {@code hostname[:port|:min-max|:min-|:-max]}; empty means "localhost", and a name
+     *     may start with {@code *.} to cover a whole domain
+     * @param action a comma-separated list of connect/listen/accept/resolve, case-insensitive
+     * @throws NullPointerException if {@code action} is null
+     * @throws IllegalArgumentException if {@code action} is empty or holds an unknown name
      */
     public SocketPermission(String host, String action) {
-        // El nombre que se guarda es el YA normalizado: un host vacio significa "localhost", y
-        // `getName()` tiene que devolver eso y no la cadena vacia con la que se escribio. La cuenta
-        // va inline porque `super(...)` tiene que ser la primera sentencia.
+        // The name that is stored is the ALREADY normalized one: an empty host means "localhost", and
+        // `getName()` has to return that and not the empty string it was written with. The computation
+        // goes inline because `super(...)` has to be the first statement.
         super(host == null || host.length() == 0 ? "localhost" : host);
         String h = host == null || host.length() == 0 ? "localhost" : host;
-        int corte = puntoDeCorte(h);
-        String nombre;
-        String puertos;
-        if (corte == -1) {
-            nombre = h;
-            puertos = null;
+        int cut = cutPoint(h);
+        String name;
+        String ports;
+        if (cut == -1) {
+            name = h;
+            ports = null;
         } else {
-            nombre = h.substring(0, corte);
-            puertos = h.substring(corte + 1);
+            name = h.substring(0, cut);
+            ports = h.substring(cut + 1);
         }
-        nombre = nombre.toLowerCase();
-        if (nombre.equals("*")) {
-            this.comodin = true;
+        name = name.toLowerCase();
+        if (name.equals("*")) {
+            this.wildcard = true;
             this.host = "";
-        } else if (nombre.startsWith("*.")) {
-            this.comodin = true;
-            this.host = nombre.substring(1);
+        } else if (name.startsWith("*.")) {
+            this.wildcard = true;
+            this.host = name.substring(1);
         } else {
-            this.comodin = false;
-            this.host = nombre;
+            this.wildcard = false;
+            this.host = name;
         }
-        int[] rango = parsearPuertos(puertos);
-        this.puertoMin = rango[0];
-        this.puertoMax = rango[1];
-        this.mask = parsearAcciones(action);
-        this.actions = armarAcciones(this.mask);
+        int[] range = parsePorts(ports);
+        this.portMin = range[0];
+        this.portMax = range[1];
+        this.mask = parseActions(action);
+        this.actions = buildActions(this.mask);
     }
 
-    // El ':' que separa el host de los puertos. Es el ULTIMO, y no el primero, porque una direccion
-    // IPv6 literal viene llena de ':' -- pero entre corchetes, asi que si hay un ']' el corte tiene
-    // que buscarse despues de el.
-    private static int puntoDeCorte(String h) {
-        int corchete = h.lastIndexOf(']');
-        return h.indexOf(':', corchete + 1) == -1 ? -1 : h.lastIndexOf(':');
+    // The ':' separating the host from the ports. It is the LAST one, and not the first, because a
+    // literal IPv6 address comes full of ':' -- but between brackets, so if there is a ']' the split
+    // has to be looked for after it.
+    private static int cutPoint(String h) {
+        int bracket = h.lastIndexOf(']');
+        return h.indexOf(':', bracket + 1) == -1 ? -1 : h.lastIndexOf(':');
     }
 
     // "80" -> [80,80]; "80-90" -> [80,90]; "1024-" -> [1024,65535]; "-100" -> [0,100];
-    // ausente -> todo el rango, que es lo que hace que `*` con "connect" implique cualquier puerto.
-    private static int[] parsearPuertos(String p) {
+    // absent -> the whole range, which is what makes `*` with "connect" imply any port.
+    private static int[] parsePorts(String p) {
         if (p == null || p.length() == 0) {
             return new int[] {0, 65535};
         }
-        int guion = p.indexOf('-');
-        if (guion == -1) {
-            int v = entero(p, -1);
+        int dash = p.indexOf('-');
+        if (dash == -1) {
+            int v = parseInt(p, -1);
             if (v < 0) {
                 throw new IllegalArgumentException("invalid port range: " + p);
             }
             return new int[] {v, v};
         }
-        String izq = p.substring(0, guion);
-        String der = p.substring(guion + 1);
-        int lo = izq.length() == 0 ? 0 : entero(izq, -1);
-        int hi = der.length() == 0 ? 65535 : entero(der, -1);
+        String left = p.substring(0, dash);
+        String right = p.substring(dash + 1);
+        int lo = left.length() == 0 ? 0 : parseInt(left, -1);
+        int hi = right.length() == 0 ? 65535 : parseInt(right, -1);
         if (lo < 0 || hi < 0) {
             throw new IllegalArgumentException("invalid port range: " + p);
         }
         return new int[] {lo, hi};
     }
 
-    private static int entero(String s, int siFalla) {
+    private static int parseInt(String s, int onFailure) {
         try {
             return Integer.parseInt(s);
         } catch (NumberFormatException e) {
-            return siFalla;
+            return onFailure;
         }
     }
 
-    // "resolve" se agrega solo cuando hay cualquier otra accion: conectarse a un nombre implica
-    // haberlo podido resolver, asi que separarlos seria dar un permiso inutil.
-    private static int parsearAcciones(String action) {
+    // "resolve" is added on its own whenever there is any other action: connecting to a name implies
+    // having been able to resolve it, so separating them would be granting a useless permission.
+    private static int parseActions(String action) {
         if (action == null) {
             throw new NullPointerException("action can't be null");
         }
@@ -152,14 +153,14 @@ public final class SocketPermission extends Permission implements java.io.Serial
         int m = 0;
         int start = 0;
         while (start <= action.length()) {
-            int coma = action.indexOf(',', start);
+            int comma = action.indexOf(',', start);
             String tok;
-            if (coma == -1) {
+            if (comma == -1) {
                 tok = action.substring(start);
                 start = action.length() + 1;
             } else {
-                tok = action.substring(start, coma);
-                start = coma + 1;
+                tok = action.substring(start, comma);
+                start = comma + 1;
             }
             tok = tok.trim().toLowerCase();
             if (tok.length() == 0) {
@@ -183,9 +184,9 @@ public final class SocketPermission extends Permission implements java.io.Serial
         return m;
     }
 
-    // El orden es fijo --connect, listen, accept, resolve-- y no el de escritura: asi dos permisos
-    // equivalentes escritos distinto dan la misma cadena.
-    private static String armarAcciones(int m) {
+    // The order is fixed --connect, listen, accept, resolve-- and not the written one: that way two
+    // equivalent permissions written differently give the same string.
+    private static String buildActions(int m) {
         StringBuilder b = new StringBuilder();
         String sep = "";
         if ((m & CONNECT) != 0) {
@@ -207,13 +208,12 @@ public final class SocketPermission extends Permission implements java.io.Serial
     }
 
     /**
-     * Si este permiso cubre a {@code p}.
+     * Whether this permission covers {@code p}.
      *
-     * <p>Tres condiciones, todas necesarias: las acciones de {@code p} tienen que estar entre las
-     * de este, su rango de puertos tiene que caer entero adentro de este, y su host tiene que
-     * matchear.
+     * <p>Three conditions, all necessary: {@code p}'s actions have to be among this one's, its port
+     * range has to fall entirely inside this one's, and its host has to match.
      *
-     * <p>Sobre la comparacion de hosts, ver la cabecera del archivo: es textual, sin DNS.
+     * <p>On the comparison of hosts, see the file's header: it is textual, with no DNS.
      */
     @Override
     public boolean implies(Permission p) {
@@ -224,35 +224,35 @@ public final class SocketPermission extends Permission implements java.io.Serial
         if ((this.mask & that.mask) != that.mask) {
             return false;
         }
-        if (that.puertoMin < this.puertoMin || that.puertoMax > this.puertoMax) {
+        if (that.portMin < this.portMin || that.portMax > this.portMax) {
             return false;
         }
-        return this.matcheaHost(that);
+        return this.matchesHost(that);
     }
 
-    private boolean matcheaHost(SocketPermission that) {
-        if (this.comodin) {
-            // `*` pelado cubre todo; `*.dominio` cubre los subdominios, NO el dominio pelado
-            // (`*.ejemplo.org` no implica `ejemplo.org`, que es lo que hace el JDK).
+    private boolean matchesHost(SocketPermission that) {
+        if (this.wildcard) {
+            // A bare `*` covers everything; `*.domain` covers the subdomains, NOT the bare domain
+            // (`*.example.org` does not imply `example.org`, which is what the JDK does).
             return this.host.length() == 0 || that.host.endsWith(this.host);
         }
-        if (that.comodin) {
+        if (that.wildcard) {
             return false;
         }
         return this.host.equals(that.host);
     }
 
-    /** Las acciones en orden canonico. */
+    /** The actions in canonical order. */
     @Override
     public String getActions() {
         return this.actions;
     }
 
     /**
-     * Igual host, igual rango y iguales acciones.
+     * Same host, same range and same actions.
      *
-     * <p>Comparar el host **canonizado** y no el nombre crudo es lo que hace que
-     * {@code HOST.com:80} y {@code host.com:80} sean el mismo permiso.
+     * <p>Comparing the **canonicalized** host and not the raw name is what makes
+     * {@code HOST.com:80} and {@code host.com:80} the same permission.
      */
     @Override
     public boolean equals(Object obj) {
@@ -264,17 +264,17 @@ public final class SocketPermission extends Permission implements java.io.Serial
         }
         SocketPermission that = (SocketPermission) obj;
         return this.mask == that.mask
-                && this.comodin == that.comodin
-                && this.puertoMin == that.puertoMin
-                && this.puertoMax == that.puertoMax
+                && this.wildcard == that.wildcard
+                && this.portMin == that.portMin
+                && this.portMax == that.portMax
                 && this.host.equals(that.host);
     }
 
     /**
-     * El hash del NOMBRE, no de las acciones.
+     * The hash of the NAME, not of the actions.
      *
-     * <p>Es lo que hace el JDK, y no es un descuido: dos permisos sobre el mismo host con acciones
-     * distintas caen en el mismo balde a proposito, porque las consultas van siempre por host.
+     * <p>It is what the JDK does, and it is not an oversight: two permissions over the same host with
+     * different actions land in the same bucket on purpose, because the lookups always go by host.
      */
     @Override
     public int hashCode() {
@@ -282,18 +282,18 @@ public final class SocketPermission extends Permission implements java.io.Serial
     }
 
     /**
-     * Una coleccion que sabe responder {@code implies} sobre el conjunto entero.
+     * A collection that knows how to answer {@code implies} over the whole set.
      *
-     * <p>Hace falta una propia porque un conjunto de `SocketPermission` puede implicar algo que
-     * ningun miembro implica solo: "connect" a un host mas "resolve" al mismo host se suman. La
-     * coleccion junta las mascaras de los que matchean el host antes de decidir.
+     * <p>One of its own is needed because a set of `SocketPermission`s can imply something no member
+     * implies on its own: "connect" to a host plus "resolve" to the same host add up. The collection
+     * gathers the masks of the ones matching the host before deciding.
      */
     @Override
     public PermissionCollection newPermissionCollection() {
         return new SocketPermissionCollection();
     }
 
-    // Package-private, como en el JDK: nadie la nombra, se la obtiene por `newPermissionCollection`.
+    // Package-private, as in the JDK: nobody names it, it is obtained through `newPermissionCollection`.
     static final class SocketPermissionCollection extends PermissionCollection {
 
         private static final long serialVersionUID = 2787186408602930181L;
@@ -320,20 +320,20 @@ public final class SocketPermission extends Permission implements java.io.Serial
                 return false;
             }
             SocketPermission np = (SocketPermission) permission;
-            int necesita = np.mask;
-            int juntado = 0;
+            int needed = np.mask;
+            int gathered = 0;
             synchronized (this.perms) {
                 int i = 0;
                 while (i < this.perms.size()) {
                     SocketPermission x = (SocketPermission) this.perms.get(i);
-                    // Solo suman los que ya cubren el host y el rango; si no, sus acciones son
-                    // sobre otra cosa y no tienen por que valer aca.
-                    if ((x.mask & necesita) != 0
-                            && np.puertoMin >= x.puertoMin
-                            && np.puertoMax <= x.puertoMax
-                            && x.matcheaHost(np)) {
-                        juntado = juntado | x.mask;
-                        if ((juntado & necesita) == necesita) {
+                    // Only the ones that already cover the host and the range add up; otherwise
+                    // their actions are about something else and have no reason to count here.
+                    if ((x.mask & needed) != 0
+                            && np.portMin >= x.portMin
+                            && np.portMax <= x.portMax
+                            && x.matchesHost(np)) {
+                        gathered = gathered | x.mask;
+                        if ((gathered & needed) == needed) {
                             return true;
                         }
                     }

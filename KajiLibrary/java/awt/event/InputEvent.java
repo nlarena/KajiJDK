@@ -3,81 +3,81 @@ package java.awt.event;
 import java.awt.Component;
 
 /**
- * La raíz de los eventos de entrada: teclado y ratón.
+ * The root of the input events: keyboard and mouse.
  *
- * <p>Lo que agrega es **cuándo** pasó y **qué modificadores** estaban apretados, que es lo que los
- * dos tienen en común y nadie más necesita.
+ * <p>What it adds is **when** it happened and **which modifiers** were down, which is what the two
+ * have in common and nobody else needs.
  *
- * <p>Los modificadores están dos veces y conviene entender por qué. Las máscaras viejas
- * ({@code SHIFT_MASK} y compañía) mezclaban en un solo número el estado de las teclas y el del ratón
- * de una forma que hacía imposible distinguir "el botón 1 está apretado" de "Alt está apretado" en
- * algunas combinaciones. Las nuevas ({@code SHIFT_DOWN_MASK}) usan bits que no chocan y dicen
- * exactamente qué estaba apretado en el momento del evento. Las viejas se conservan porque están en
- * la API desde 1.0.
+ * <p>The modifiers are there twice and it is worth understanding why. The old masks
+ * ({@code SHIFT_MASK} and company) mixed the state of the keys and that of the mouse into a single
+ * number in a way that made it impossible to tell "button 1 is down" from "Alt is down" in some
+ * combinations. The new ones ({@code SHIFT_DOWN_MASK}) use bits that do not collide and say exactly
+ * what was down at the moment of the event. The old ones are kept because they have been in the API
+ * since 1.0.
  *
- * <p>{@link #consume} se redefine acá para hacerse pública: en un evento de entrada, consumir es
- * algo que la aplicación hace a propósito para que el sistema no le dé el tratamiento por omisión a
- * una tecla o a un clic.
+ * <p>{@link #consume} is overridden here to become public: in an input event, consuming is something
+ * the application does on purpose so that the system does not give a key or a click its default
+ * treatment.
  */
 public abstract class InputEvent extends ComponentEvent {
 
     private static final long serialVersionUID = -2482525981698309786L;
 
-    /** Alt estaba apretada. */
+    /** Alt was down. */
     public static final int ALT_DOWN_MASK = 512;
 
-    /** AltGr estaba apretada. */
+    /** AltGr was down. */
     public static final int ALT_GRAPH_DOWN_MASK = 8192;
 
-    /** AltGr, en la codificación vieja. */
+    /** AltGr, in the old encoding. */
     public static final int ALT_GRAPH_MASK = 32;
 
-    /** Alt, en la codificación vieja. */
+    /** Alt, in the old encoding. */
     public static final int ALT_MASK = 8;
 
-    /** El botón 1 estaba apretado. */
+    /** Button 1 was down. */
     public static final int BUTTON1_DOWN_MASK = 1024;
 
-    /** Botón 1, en la codificación vieja. */
+    /** Button 1, in the old encoding. */
     public static final int BUTTON1_MASK = 16;
 
-    /** El botón 2 estaba apretado. */
+    /** Button 2 was down. */
     public static final int BUTTON2_DOWN_MASK = 2048;
 
-    /** Botón 2, en la codificación vieja. */
+    /** Button 2, in the old encoding. */
     public static final int BUTTON2_MASK = 8;
 
-    /** El botón 3 estaba apretado. */
+    /** Button 3 was down. */
     public static final int BUTTON3_DOWN_MASK = 4096;
 
-    /** Botón 3, en la codificación vieja. */
+    /** Button 3, in the old encoding. */
     public static final int BUTTON3_MASK = 4;
 
-    /** Control estaba apretada. */
+    /** Control was down. */
     public static final int CTRL_DOWN_MASK = 128;
 
-    /** Control, en la codificación vieja. */
+    /** Control, in the old encoding. */
     public static final int CTRL_MASK = 2;
 
-    /** Meta estaba apretada. */
+    /** Meta was down. */
     public static final int META_DOWN_MASK = 256;
 
-    /** Meta, en la codificación vieja. */
+    /** Meta, in the old encoding. */
     public static final int META_MASK = 4;
 
-    /** Mayúsculas estaba apretada. */
+    /** Shift was down. */
     public static final int SHIFT_DOWN_MASK = 64;
 
-    /** Mayúsculas, en la codificación vieja. */
+    /** Shift, in the old encoding. */
     public static final int SHIFT_MASK = 1;
 
-    /** Cuándo pasó, en milisegundos desde la época. */
+    /** When it happened, in milliseconds since the epoch. */
     long when;
 
-    /** Qué estaba apretado. */
+    /** What was down. */
     int modifiers;
 
-    /** Con el componente, el identificador, el momento y los modificadores. */
+    /** With the component, the identifier, the moment and the modifiers. */
     InputEvent(Component source, int id, long when, int modifiers) {
         super(source, id);
         this.when = when;
@@ -85,9 +85,9 @@ public abstract class InputEvent extends ComponentEvent {
     }
 
     /**
-     * La máscara del botón número `button`.
+     * The mask of button number `button`.
      *
-     * @throws IllegalArgumentException si el número no es positivo
+     * @throws IllegalArgumentException if the number is not positive
      */
     public static int getMaskForButton(int button) {
         if (button <= 0) {
@@ -102,78 +102,78 @@ public abstract class InputEvent extends ComponentEvent {
         if (button == 3) {
             return BUTTON3_DOWN_MASK;
         }
-        // Los botones a partir del cuarto siguen en los bits altos, uno por boton.
+        // The buttons from the fourth on carry on in the high bits, one per button.
         return 1 << (button + 9);
     }
 
     /**
-     * Si Mayúsculas estaba apretada.
+     * Whether Shift was down.
      *
-     * <p>Mira la máscara **nueva** y no la vieja: es la única que dice sin ambigüedad qué estaba
-     * apretado, y es lo que hace el JDK moderno. Un evento armado con las máscaras viejas contesta
-     * `false` acá, y eso es correcto — esas máscaras no distinguían teclas de botones.
+     * <p>It looks at the **new** mask and not the old one: it is the only one that says
+     * unambiguously what was down, and it is what the modern JDK does. An event built with the old
+     * masks answers `false` here, and that is right — those masks did not tell keys from buttons.
      */
     public boolean isShiftDown() {
         return (this.modifiers & SHIFT_DOWN_MASK) != 0;
     }
 
-    /** Si Control estaba apretada. */
+    /** Whether Control was down. */
     public boolean isControlDown() {
         return (this.modifiers & CTRL_DOWN_MASK) != 0;
     }
 
-    /** Si Meta estaba apretada. */
+    /** Whether Meta was down. */
     public boolean isMetaDown() {
         return (this.modifiers & META_DOWN_MASK) != 0;
     }
 
-    /** Si Alt estaba apretada. */
+    /** Whether Alt was down. */
     public boolean isAltDown() {
         return (this.modifiers & ALT_DOWN_MASK) != 0;
     }
 
-    /** Si AltGr estaba apretada. */
+    /** Whether AltGr was down. */
     public boolean isAltGraphDown() {
         return (this.modifiers & ALT_GRAPH_DOWN_MASK) != 0;
     }
 
-    /** Cuándo pasó. */
+    /** When it happened. */
     public long getWhen() {
         return this.when;
     }
 
     /**
-     * Los modificadores en la codificación vieja.
+     * The modifiers in the old encoding.
      *
-     * @deprecated mezcla teclas con botones de forma ambigua. Usar {@link #getModifiersEx}.
+     * @deprecated it mixes keys with buttons ambiguously. Use {@link #getModifiersEx}.
      */
     @Deprecated
     public int getModifiers() {
         return this.modifiers & (JDK_1_3_MODIFIERS | HIGH_MODIFIERS);
     }
 
-    /** Los modificadores en la codificación nueva. */
+    /** The modifiers in the new encoding. */
     public int getModifiersEx() {
         return this.modifiers & ~JDK_1_3_MODIFIERS;
     }
 
-    /** Los bits que usaba la codificación vieja. */
+    /** The bits the old encoding used. */
     static final int JDK_1_3_MODIFIERS = SHIFT_DOWN_MASK - 1;
 
-    /** Los bits reservados para los botones a partir del cuarto. */
+    /** The bits reserved for the buttons from the fourth on. */
     static final int HIGH_MODIFIERS = ~((1 << 14) - 1);
 
-    /** Marca que alguien se hizo cargo. */
+    /** Marks that someone took charge. */
     public void consume() {
         this.consumed = true;
     }
 
-    /** Si alguien ya se hizo cargo. */
+    /** Whether someone already took charge. */
     public boolean isConsumed() {
         return this.consumed;
     }
 
-    /** Los modificadores escritos para una persona, como "Ctrl+Shift". */
+    /** The modifiers written out for a person, such as "Ctrl+Shift". */
     public static String getModifiersExText(int modifiers) {
         StringBuilder sb = new StringBuilder();
         if ((modifiers & META_DOWN_MASK) != 0) {

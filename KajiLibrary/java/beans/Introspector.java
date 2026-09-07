@@ -7,35 +7,36 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// Descubre la forma de un bean mirando sus metodos publicos: que propiedades tiene, que eventos
-// dispara, y que metodos vale la pena exponer.
+// It discovers a bean's shape by looking at its public methods: which properties it has, which
+// events it fires, and which methods are worth exposing.
 //
-// Todas las reglas de abajo estan VERIFICADAS contra el JDK real (H:/jdk-25.0.2) con un bean que
-// toca cada caso dudoso a la vez; no son deducciones del contrato escrito. Las que mas se suelen
-// implementar mal:
+// Every rule below is CHECKED against the real JDK (H:/jdk-25.0.2) with a bean touching each
+// doubtful case at once; they are not deductions from the written contract. The ones most often
+// implemented wrongly:
 //
-//  - **decapitalize NO baja la primera letra siempre.** Si las dos primeras son mayusculas se deja
-//    el nombre tal cual: `getURL` da la propiedad "URL", no "uRL". `getXCoord` da "XCoord", porque
-//    X y C son las dos mayusculas. `getX` si da "x".
-//  - **`is` vale solo para el boolean primitivo.** `isEnvuelto()` devolviendo `Boolean` NO es un
-//    getter; la propiedad queda de solo escritura si tiene setter.
-//  - **El setter tiene que devolver void.** `String setRaro(String)` no engancha, y la propiedad
-//    "raro" directamente no existe.
-//  - **Un setter con tipo que no coincide se descarta, y gana el getter.** `getDesparejo():String`
-//    con `setDesparejo(int)` da una propiedad String de solo lectura, no dos propiedades ni un error.
-//  - **Los estaticos no cuentan.** Un `public static String getEstatico()` no produce propiedad.
-//  - **Una propiedad solo indexada tiene tipo null.** Ver IndexedPropertyDescriptor.
-//  - **Las propiedades salen ordenadas por nombre.**
-//  - **La propiedad "class" aparece** (de Object.getClass) salvo que se corte con un stopClass.
-//  - `bound` se prende cuando el bean tiene addPropertyChangeListener; `constrained` NO se deduce
-//    de addVetoableChangeListener.
+//  - **decapitalize does NOT always lower the first letter.** If the first two are capitals the name
+//    is left as it stands: `getURL` gives the property "URL", not "uRL". `getXCoord` gives "XCoord",
+//    because X and C are both capitals. `getX` does give "x".
+//  - **`is` counts only for the primitive boolean.** `isWrapped()` returning `Boolean` is NOT a
+//    getter; the property ends up write-only if it has a setter.
+//  - **The setter has to return void.** `String setOdd(String)` does not hook on, and the property
+//    "odd" does not exist at all.
+//  - **A setter whose type does not match is discarded, and the getter wins.**
+//    `getMismatched():String` with `setMismatched(int)` gives a read-only String property, not two
+//    properties and not an error.
+//  - **The static ones do not count.** A `public static String getStatic()` produces no property.
+//  - **A purely indexed property has a null type.** See IndexedPropertyDescriptor.
+//  - **The properties come out sorted by name.**
+//  - **The "class" property appears** (from Object.getClass) unless it is cut off with a stopClass.
+//  - `bound` is turned on when the bean has addPropertyChangeListener; `constrained` is NOT worked
+//    out from addVetoableChangeListener.
 //
-// **Las anotaciones NO se leen.** `@BeanProperty`, `@JavaBean` y `@Transient` estan declaradas en
-// el paquete, pero este Introspector no las consulta, y es deliberado: en este arbol el javac
-// pierde `@Retention(RUNTIME)` cuando el tipo anotacion viene del classpath, asi que en tiempo de
-// ejecucion no se ven; y ademas `Method.invoke` sobre la instancia de una anotacion voltea la VM.
-// Un Introspector que dijera leerlas y no pudiera daria descriptores incompletos sin avisar, que
-// es peor que no leerlas y decirlo.
+// **The annotations are NOT read.** `@BeanProperty`, `@JavaBean` and `@Transient` are declared in
+// the package, but this Introspector does not consult them, and it is deliberate: in this tree the
+// javac loses `@Retention(RUNTIME)` when the annotation type comes from the classpath, so at run
+// time they are not seen; and besides, `Method.invoke` on an annotation's instance topples the VM.
+// An Introspector that claimed to read them and could not would give incomplete descriptors without
+// saying so, which is worse than not reading them and saying so.
 public class Introspector {
 
     public static final int USE_ALL_BEANINFO = 1;
@@ -44,8 +45,8 @@ public class Introspector {
 
     private static String[] searchPath = new String[] { "sun.beans.infos" };
 
-    // Cache de lo ya introspeccionado, con la clave incluyendo stopClass y flags: el mismo bean
-    // cortado en distinto lugar da distinto resultado.
+    // A cache of what has already been introspected, with the key including stopClass and flags:
+    // the same bean cut off at a different place gives a different result.
     private static Map<String, BeanInfo> cache = new HashMap<String, BeanInfo>();
 
     private Introspector() {
@@ -69,37 +70,37 @@ public class Introspector {
         if (beanClass == null) {
             throw new IntrospectionException("null bean class");
         }
-        String clave = beanClass.getName() + "|" + (stopClass == null ? "-" : stopClass.getName()) + "|" + flags;
-        BeanInfo bi = leerCache(clave);
+        String key = beanClass.getName() + "|" + (stopClass == null ? "-" : stopClass.getName()) + "|" + flags;
+        BeanInfo bi = readCache(key);
         if (bi == null) {
-            bi = analizar(beanClass, stopClass, flags);
-            guardarCache(clave, bi);
+            bi = analyse(beanClass, stopClass, flags);
+            storeCache(key, bi);
         }
         return bi;
     }
 
-    private static synchronized BeanInfo leerCache(String clave) {
-        return cache.get(clave);
+    private static synchronized BeanInfo readCache(String key) {
+        return cache.get(key);
     }
 
-    private static synchronized void guardarCache(String clave, BeanInfo bi) {
-        cache.put(clave, bi);
+    private static synchronized void storeCache(String key, BeanInfo bi) {
+        cache.put(key, bi);
     }
 
     public static synchronized void flushCaches() {
         cache.clear();
     }
 
-    // Tira la entrada de una clase. La clave lleva el nombre adelante, asi que se barren todas las
-    // combinaciones de stopClass/flags de esa clase.
+    // It throws away a class's entry. The key carries the name in front, so every combination of
+    // stopClass/flags for that class is swept away.
     public static synchronized void flushFromCaches(Class<?> clz) {
         if (clz == null) {
             throw new NullPointerException();
         }
         String prefijo = clz.getName() + "|";
-        Object[] claves = cache.keySet().toArray();
-        for (int i = 0; i < claves.length; i++) {
-            String c = (String) claves[i];
+        Object[] keys = cache.keySet().toArray();
+        for (int i = 0; i < keys.length; i++) {
+            String c = (String) keys[i];
             if (c.startsWith(prefijo)) {
                 cache.remove(c);
             }
@@ -126,18 +127,18 @@ public class Introspector {
         }
     }
 
-    // La regla de nombre que casi todo el mundo implementa mal. Verificada contra el JDK real:
+    // The naming rule nearly everyone implements wrongly. Checked against the real JDK:
     //   "URL" -> "URL"      "Name"   -> "name"    "XCoord" -> "XCoord"
     //   "X"   -> "x"        "aB"     -> "aB"      "ABc"    -> "ABc"
-    // El caso raro —dos mayusculas al principio se dejan— existe para que las siglas sobrevivan:
-    // bajar solo la primera letra de "URL" daria "uRL", que no es el nombre de nada.
+    // The odd case --two capitals at the start are left alone-- exists so that acronyms survive:
+    // lowering only "URL"'s first letter would give "uRL", which is nobody's name.
     public static String decapitalize(String name) {
         String r = name;
         if (name != null && name.length() != 0) {
-            boolean dosMayusculas = name.length() > 1
+            boolean twoCapitals = name.length() > 1
                 && Character.isUpperCase(name.charAt(1))
                 && Character.isUpperCase(name.charAt(0));
-            if (!dosMayusculas) {
+            if (!twoCapitals) {
                 char[] c = name.toCharArray();
                 c[0] = Character.toLowerCase(c[0]);
                 r = new String(c);
@@ -146,41 +147,41 @@ public class Introspector {
         return r;
     }
 
-    // --- el analisis ----------------------------------------------------------------
+    // --- the analysis ---------------------------------------------------------------
 
-    private static BeanInfo analizar(Class<?> beanClass, Class<?> stopClass, int flags)
+    private static BeanInfo analyse(Class<?> beanClass, Class<?> stopClass, int flags)
             throws IntrospectionException {
 
-        // Los metodos a considerar: los publicos de instancia declarados entre beanClass y
-        // stopClass (sin incluir stopClass). Sin stopClass entran tambien los de Object, que es
-        // de donde sale la propiedad "class".
-        List<Method> metodos = metodosVisibles(beanClass, stopClass);
+        // The methods to consider: the public instance ones declared between beanClass and
+        // stopClass (stopClass excluded). With no stopClass, Object's come in too, which is where
+        // the "class" property comes from.
+        List<Method> methods = visibleMethods(beanClass, stopClass);
 
-        List<PropertyDescriptor> props = descubrirPropiedades(metodos, beanClass);
-        List<EventSetDescriptor> eventos = descubrirEventos(metodos);
+        List<PropertyDescriptor> props = discoverProperties(methods, beanClass);
+        List<EventSetDescriptor> eventSets = discoverEvents(methods);
 
-        MethodDescriptor[] mds = new MethodDescriptor[metodos.size()];
-        for (int i = 0; i < metodos.size(); i++) {
-            mds[i] = new MethodDescriptor(metodos.get(i));
+        MethodDescriptor[] mds = new MethodDescriptor[methods.size()];
+        for (int i = 0; i < methods.size(); i++) {
+            mds[i] = new MethodDescriptor(methods.get(i));
         }
 
         PropertyDescriptor[] pds = new PropertyDescriptor[props.size()];
         for (int i = 0; i < props.size(); i++) {
             pds[i] = props.get(i);
         }
-        EventSetDescriptor[] esds = new EventSetDescriptor[eventos.size()];
-        for (int i = 0; i < eventos.size(); i++) {
-            esds[i] = eventos.get(i);
+        EventSetDescriptor[] esds = new EventSetDescriptor[eventSets.size()];
+        for (int i = 0; i < eventSets.size(); i++) {
+            esds[i] = eventSets.get(i);
         }
 
-        BeanInfo explicito = buscarBeanInfoExplicito(beanClass, flags);
-        return new BeanInfoGenerico(new BeanDescriptor(beanClass), pds, esds, mds, explicito);
+        BeanInfo explicit = findExplicitBeanInfo(beanClass, flags);
+        return new GenericBeanInfo(new BeanDescriptor(beanClass), pds, esds, mds, explicit);
     }
 
-    // Recorre la jerarquia desde beanClass hacia arriba, parando en stopClass. Se toman los
-    // declarados de cada nivel y se filtran a publicos de instancia; asi un metodo redefinido
-    // aparece una sola vez, con la version mas derivada.
-    private static List<Method> metodosVisibles(Class<?> beanClass, Class<?> stopClass) {
+    // It walks the hierarchy from beanClass upwards, stopping at stopClass. The declared ones of
+    // each level are taken and filtered down to the public instance ones; that way an overridden
+    // method appears once only, with the most derived version.
+    private static List<Method> visibleMethods(Class<?> beanClass, Class<?> stopClass) {
         List<Method> salida = new ArrayList<Method>();
         List<String> vistos = new ArrayList<String>();
         Class<?> c = beanClass;
@@ -190,7 +191,7 @@ public class Introspector {
                 Method m = ms[i];
                 int mods = m.getModifiers();
                 if (Modifier.isPublic(mods) && !Modifier.isStatic(mods) && !m.isSynthetic()) {
-                    String firma = firmaDe(m);
+                    String firma = signatureOf(m);
                     if (!vistos.contains(firma)) {
                         vistos.add(firma);
                         salida.add(m);
@@ -202,7 +203,7 @@ public class Introspector {
         return salida;
     }
 
-    private static String firmaDe(Method m) {
+    private static String signatureOf(Method m) {
         StringBuilder sb = new StringBuilder();
         sb.append(m.getName()).append('(');
         Class<?>[] args = m.getParameterTypes();
@@ -213,192 +214,194 @@ public class Introspector {
         return sb.toString();
     }
 
-    // El descubrimiento de propiedades: se clasifica cada metodo en uno de los cuatro roles y
-    // recien al final se arman los descriptores, porque el tipo de una propiedad depende de
-    // haberlos visto a todos.
-    private static List<PropertyDescriptor> descubrirPropiedades(List<Method> metodos, Class<?> beanClass)
+    // The discovery of properties: each method is classified into one of the four roles and the
+    // descriptors are only built at the end, because a property's type depends on having seen them
+    // all.
+    private static List<PropertyDescriptor> discoverProperties(List<Method> methods, Class<?> beanClass)
             throws IntrospectionException {
 
-        List<String> nombres = new ArrayList<String>();
-        List<Method> lectores = new ArrayList<Method>();
-        List<Method> escritores = new ArrayList<Method>();
-        List<Method> lectoresIdx = new ArrayList<Method>();
-        List<Method> escritoresIdx = new ArrayList<Method>();
+        List<String> names = new ArrayList<String>();
+        List<Method> readers = new ArrayList<Method>();
+        List<Method> writers = new ArrayList<Method>();
+        List<Method> indexedReaders = new ArrayList<Method>();
+        List<Method> indexedWriters = new ArrayList<Method>();
 
-        for (int i = 0; i < metodos.size(); i++) {
-            Method m = metodos.get(i);
-            String nombreMetodo = m.getName();
+        for (int i = 0; i < methods.size(); i++) {
+            Method m = methods.get(i);
+            String methodName = m.getName();
             Class<?>[] args = m.getParameterTypes();
             Class<?> ret = m.getReturnType();
 
             String prop = null;
             int rol = -1;   // 0 lector, 1 escritor, 2 lector indexado, 3 escritor indexado
 
-            if (nombreMetodo.startsWith("get") && nombreMetodo.length() > 3) {
+            if (methodName.startsWith("get") && methodName.length() > 3) {
                 if (args.length == 0 && ret != void.class) {
-                    prop = decapitalize(nombreMetodo.substring(3));
+                    prop = decapitalize(methodName.substring(3));
                     rol = 0;
                 } else if (args.length == 1 && args[0] == int.class && ret != void.class) {
-                    prop = decapitalize(nombreMetodo.substring(3));
+                    prop = decapitalize(methodName.substring(3));
                     rol = 2;
                 }
-            } else if (nombreMetodo.startsWith("is") && nombreMetodo.length() > 2) {
-                // Solo el boolean primitivo. `Boolean` NO califica: verificado contra el JDK real.
+            } else if (methodName.startsWith("is") && methodName.length() > 2) {
+                // Only the primitive boolean. `Boolean` does NOT qualify: checked against the
+                // real JDK.
                 if (args.length == 0 && ret == boolean.class) {
-                    prop = decapitalize(nombreMetodo.substring(2));
+                    prop = decapitalize(methodName.substring(2));
                     rol = 0;
                 }
-            } else if (nombreMetodo.startsWith("set") && nombreMetodo.length() > 3) {
-                // El escritor tiene que devolver void: verificado contra el JDK real.
+            } else if (methodName.startsWith("set") && methodName.length() > 3) {
+                // The writer has to return void: checked against the real JDK.
                 if (ret == void.class) {
                     if (args.length == 1) {
-                        prop = decapitalize(nombreMetodo.substring(3));
+                        prop = decapitalize(methodName.substring(3));
                         rol = 1;
                     } else if (args.length == 2 && args[0] == int.class) {
-                        prop = decapitalize(nombreMetodo.substring(3));
+                        prop = decapitalize(methodName.substring(3));
                         rol = 3;
                     }
                 }
             }
 
             if (prop != null && prop.length() > 0) {
-                int idx = nombres.indexOf(prop);
+                int idx = names.indexOf(prop);
                 if (idx < 0) {
-                    nombres.add(prop);
-                    lectores.add(null);
-                    escritores.add(null);
-                    lectoresIdx.add(null);
-                    escritoresIdx.add(null);
-                    idx = nombres.size() - 1;
+                    names.add(prop);
+                    readers.add(null);
+                    writers.add(null);
+                    indexedReaders.add(null);
+                    indexedWriters.add(null);
+                    idx = names.size() - 1;
                 }
-                if (rol == 0 && lectores.get(idx) == null) {
-                    lectores.set(idx, m);
-                } else if (rol == 1 && escritores.get(idx) == null) {
-                    escritores.set(idx, m);
-                } else if (rol == 2 && lectoresIdx.get(idx) == null) {
-                    lectoresIdx.set(idx, m);
-                } else if (rol == 3 && escritoresIdx.get(idx) == null) {
-                    escritoresIdx.set(idx, m);
+                if (rol == 0 && readers.get(idx) == null) {
+                    readers.set(idx, m);
+                } else if (rol == 1 && writers.get(idx) == null) {
+                    writers.set(idx, m);
+                } else if (rol == 2 && indexedReaders.get(idx) == null) {
+                    indexedReaders.set(idx, m);
+                } else if (rol == 3 && indexedWriters.get(idx) == null) {
+                    indexedWriters.set(idx, m);
                 }
             }
         }
 
-        boolean ligadas = PropertyDescriptor.buscarMetodo(beanClass, "addPropertyChangeListener", 1) != null;
+        boolean ligadas = PropertyDescriptor.findMethod(beanClass, "addPropertyChangeListener", 1) != null;
 
         List<PropertyDescriptor> salida = new ArrayList<PropertyDescriptor>();
-        for (int i = 0; i < nombres.size(); i++) {
-            PropertyDescriptor pd = armar(nombres.get(i), lectores.get(i), escritores.get(i),
-                                          lectoresIdx.get(i), escritoresIdx.get(i));
+        for (int i = 0; i < names.size(); i++) {
+            PropertyDescriptor pd = buildDescriptor(names.get(i), readers.get(i), writers.get(i),
+                                          indexedReaders.get(i), indexedWriters.get(i));
             if (pd != null) {
                 pd.setBound(ligadas);
                 salida.add(pd);
             }
         }
-        ordenarPorNombre(salida);
+        sortByName(salida);
         return salida;
     }
 
-    // Arma el descriptor de una propiedad conciliando los cuatro accesores posibles. Aca viven las
-    // reglas de emparejado, que son las que deciden si algo es propiedad y de que tipo.
-    private static PropertyDescriptor armar(String nombre, Method lector, Method escritor,
-                                            Method lectorIdx, Method escritorIdx) {
+    // It builds a property's descriptor by reconciling the four possible accessors. The pairing
+    // rules live here, which are the ones that decide whether something is a property and of what
+    // type.
+    private static PropertyDescriptor buildDescriptor(String propName, Method lector, Method escritor,
+                                            Method indexedReader, Method indexedWriter) {
         PropertyDescriptor pd = null;
 
-        // El tipo no indexado lo fija el lector si esta; si no, el escritor.
+        // The non-indexed type is set by the reader if it is there; if not, by the writer.
         Method l = lector;
         Method e = escritor;
         if (l != null && e != null) {
-            // Tipos que no cierran: se descarta el escritor y gana el lector. Verificado contra el
-            // JDK real con getDesparejo():String / setDesparejo(int).
+            // Types that do not add up: the writer is discarded and the reader wins. Checked
+            // against the real JDK with getMismatched():String / setMismatched(int).
             if (l.getReturnType() != e.getParameterTypes()[0]) {
                 e = null;
             }
         }
 
-        boolean hayIdx = lectorIdx != null || escritorIdx != null;
+        boolean hayIdx = indexedReader != null || indexedWriter != null;
         if (hayIdx) {
-            Class<?> tipoIdx = null;
-            Method li = lectorIdx;
-            Method ei = escritorIdx;
+            Class<?> indexedType = null;
+            Method li = indexedReader;
+            Method ei = indexedWriter;
             if (li != null) {
-                tipoIdx = li.getReturnType();
+                indexedType = li.getReturnType();
             }
             if (ei != null) {
                 Class<?> t = ei.getParameterTypes()[1];
-                if (tipoIdx == null) {
-                    tipoIdx = t;
-                } else if (tipoIdx != t) {
+                if (indexedType == null) {
+                    indexedType = t;
+                } else if (indexedType != t) {
                     ei = null;
                 }
             }
-            // Si tambien hay accesores de arreglo, el componente tiene que coincidir; si no, la
-            // mitad no indexada no pertenece a esta propiedad.
-            Class<?> tipoArreglo = null;
+            // If there are array accessors too, the component has to match; if not, the
+            // non-indexed half does not belong to this property.
+            Class<?> arrayType = null;
             if (l != null) {
-                tipoArreglo = l.getReturnType();
+                arrayType = l.getReturnType();
             } else if (e != null) {
-                tipoArreglo = e.getParameterTypes()[0];
+                arrayType = e.getParameterTypes()[0];
             }
-            if (tipoArreglo != null) {
-                if (!tipoArreglo.isArray() || tipoArreglo.getComponentType() != tipoIdx) {
+            if (arrayType != null) {
+                if (!arrayType.isArray() || arrayType.getComponentType() != indexedType) {
                     l = null;
                     e = null;
                 }
             }
-            pd = new IndexedPropertyDescriptor(nombre, l, e, li, ei, true);
+            pd = new IndexedPropertyDescriptor(propName, l, e, li, ei, true);
         } else if (l != null || e != null) {
-            pd = new PropertyDescriptor(nombre, l, e, true);
+            pd = new PropertyDescriptor(propName, l, e, true);
         }
         return pd;
     }
 
-    // Inserción directa: son pocas propiedades y evita depender de un sort de Object[], que en
-    // este arbol java.util.Arrays no ofrece (solo tiene los primitivos).
-    private static void ordenarPorNombre(List<PropertyDescriptor> l) {
+    // Insertion sort: there are few properties and it avoids depending on a sort of Object[],
+    // which java.util.Arrays does not offer in this tree (it only has the primitives).
+    private static void sortByName(List<PropertyDescriptor> l) {
         for (int i = 1; i < l.size(); i++) {
-            PropertyDescriptor actual = l.get(i);
+            PropertyDescriptor current = l.get(i);
             int j = i - 1;
-            while (j >= 0 && l.get(j).getName().compareTo(actual.getName()) > 0) {
+            while (j >= 0 && l.get(j).getName().compareTo(current.getName()) > 0) {
                 l.set(j + 1, l.get(j));
                 j = j - 1;
             }
-            l.set(j + 1, actual);
+            l.set(j + 1, current);
         }
     }
 
-    // Los conjuntos de eventos: pares add/remove que toman un oyente. El sufijo "Listener" en el
-    // nombre del tipo es obligatorio — verificado contra el JDK real, un `addBarOyente(BarOyente)`
-    // con BarOyente extendiendo EventListener no produce nada.
-    private static List<EventSetDescriptor> descubrirEventos(List<Method> metodos)
+    // The event sets: add/remove pairs taking a listener. The "Listener" suffix in the type's name
+    // is compulsory -- checked against the real JDK, an `addBarOyente(BarOyente)` with BarOyente
+    // extending EventListener produces nothing.
+    private static List<EventSetDescriptor> discoverEvents(List<Method> methods)
             throws IntrospectionException {
 
-        List<String> nombres = new ArrayList<String>();
-        List<Class<?>> tipos = new ArrayList<Class<?>>();
+        List<String> names = new ArrayList<String>();
+        List<Class<?>> kinds = new ArrayList<Class<?>>();
         List<Method> adds = new ArrayList<Method>();
         List<Method> removes = new ArrayList<Method>();
 
-        for (int i = 0; i < metodos.size(); i++) {
-            Method m = metodos.get(i);
+        for (int i = 0; i < methods.size(); i++) {
+            Method m = methods.get(i);
             String n = m.getName();
             Class<?>[] args = m.getParameterTypes();
-            boolean esAdd = n.startsWith("add") && n.length() > 3;
-            boolean esRemove = n.startsWith("remove") && n.length() > 6;
-            if ((esAdd || esRemove) && args.length == 1 && m.getReturnType() == void.class) {
-                Class<?> tipo = args[0];
-                if (java.util.EventListener.class.isAssignableFrom(tipo)) {
-                    String simple = EventSetDescriptor.nombreSimple(tipo);
-                    String sufijoDelMetodo = esAdd ? n.substring(3) : n.substring(6);
-                    if (simple.endsWith("Listener") && simple.equals(sufijoDelMetodo)) {
-                        String evento = decapitalize(simple.substring(0, simple.length() - 8));
-                        int idx = nombres.indexOf(evento);
+            boolean isAdd = n.startsWith("add") && n.length() > 3;
+            boolean isRemove = n.startsWith("remove") && n.length() > 6;
+            if ((isAdd || isRemove) && args.length == 1 && m.getReturnType() == void.class) {
+                Class<?> kind = args[0];
+                if (java.util.EventListener.class.isAssignableFrom(kind)) {
+                    String simple = EventSetDescriptor.simpleName(kind);
+                    String methodSuffix = isAdd ? n.substring(3) : n.substring(6);
+                    if (simple.endsWith("Listener") && simple.equals(methodSuffix)) {
+                        String eventName = decapitalize(simple.substring(0, simple.length() - 8));
+                        int idx = names.indexOf(eventName);
                         if (idx < 0) {
-                            nombres.add(evento);
-                            tipos.add(tipo);
+                            names.add(eventName);
+                            kinds.add(kind);
                             adds.add(null);
                             removes.add(null);
-                            idx = nombres.size() - 1;
+                            idx = names.size() - 1;
                         }
-                        if (esAdd) {
+                        if (isAdd) {
                             adds.set(idx, m);
                         } else {
                             removes.set(idx, m);
@@ -409,41 +412,41 @@ public class Introspector {
         }
 
         List<EventSetDescriptor> salida = new ArrayList<EventSetDescriptor>();
-        for (int i = 0; i < nombres.size(); i++) {
-            // Hacen falta los dos: poder suscribirse y no poder desuscribirse no es un conjunto
-            // de eventos utilizable.
+        for (int i = 0; i < names.size(); i++) {
+            // Both are needed: being able to subscribe and not being able to unsubscribe is not a
+            // usable event set.
             if (adds.get(i) != null && removes.get(i) != null) {
-                Class<?> tipo = tipos.get(i);
-                Method[] delOyente = metodosDelOyente(tipo);
-                salida.add(new EventSetDescriptor(nombres.get(i), tipo, delOyente,
+                Class<?> kind = kinds.get(i);
+                Method[] delOyente = methodsOfListener(kind);
+                salida.add(new EventSetDescriptor(names.get(i), kind, delOyente,
                                                   adds.get(i), removes.get(i)));
             }
         }
         return salida;
     }
 
-    private static Method[] metodosDelOyente(Class<?> tipo) {
-        Method[] todos = tipo.getMethods();
+    private static Method[] methodsOfListener(Class<?> kind) {
+        Method[] all = kind.getMethods();
         int n = 0;
-        for (int i = 0; i < todos.length; i++) {
-            if (!Modifier.isStatic(todos[i].getModifiers())) {
+        for (int i = 0; i < all.length; i++) {
+            if (!Modifier.isStatic(all[i].getModifiers())) {
                 n = n + 1;
             }
         }
         Method[] r = new Method[n];
         int k = 0;
-        for (int i = 0; i < todos.length; i++) {
-            if (!Modifier.isStatic(todos[i].getModifiers())) {
-                r[k] = todos[i];
+        for (int i = 0; i < all.length; i++) {
+            if (!Modifier.isStatic(all[i].getModifiers())) {
+                r[k] = all[i];
                 k = k + 1;
             }
         }
         return r;
     }
 
-    // Busca la clase `<Bean>BeanInfo` al lado del bean. Si no esta —el caso normal— se devuelve
-    // null y todo sale de la reflexion.
-    private static BeanInfo buscarBeanInfoExplicito(Class<?> beanClass, int flags) {
+    // It looks for the `<Bean>BeanInfo` class next to the bean. If it is not there --the normal
+    // case-- null is returned and everything comes out of reflection.
+    private static BeanInfo findExplicitBeanInfo(Class<?> beanClass, int flags) {
         BeanInfo bi = null;
         if (flags != IGNORE_ALL_BEANINFO && flags != IGNORE_IMMEDIATE_BEANINFO) {
             try {

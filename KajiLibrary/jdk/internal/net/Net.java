@@ -1,35 +1,36 @@
 package jdk.internal.net;
 
 /**
- * La costura de TCP entre la biblioteca y la VM.
+ * TCP's seam between the library and the VM.
  *
- * <p>El mismo diseno que {@link jdk.internal.proc.Proc}: el nativo hace lo minimo y **no sabe nada
- * de las clases de Java**. Toma y devuelve cadenas, arreglos y enteros; quien sea `Socket` es
- * problema del lado Java, que puede cambiar sin tocar la VM.
+ * <p>The same design as {@link jdk.internal.proc.Proc}: the native does the minimum and **knows
+ * nothing about Java's classes**. It takes and returns strings, arrays and integers; who a `Socket`
+ * is is the Java side's problem, and it can change without touching the VM.
  *
- * <p>Un socket es un `handle`, un indice en una tabla de la VM. Hace falta un handle y no una
- * operacion de una sola vez porque un socket **es** estado entre llamadas: su par, sus plazos, si ya
- * se cerro una de sus mitades. Los handles **no se reciclan**, asi que uno viejo nunca apunta a un
- * socket nuevo -- que es el error que seria mas dificil de encontrar.
+ * <p>A socket is a `handle`, an index into a table of the VM's. A handle is needed rather than a
+ * one-shot operation because a socket **is** state between calls: its peer, its deadlines, whether
+ * one of its halves has been closed. Handles are **not recycled**, so an old one never points at a
+ * new socket -- which is the error that would be hardest to find.
  *
- * <h2>Los codigos de error, que no son todos -1</h2>
+ * <h2>The error codes, which are not all -1</h2>
  *
- * <p>{@link #read} devuelve **-1** en fin de flujo y **-2** si vencio el plazo, y esa distincion es
- * el motivo de que no haya un solo centinela: una conexion cerrada y una que sigue viva pero callada
- * son dos cosas distintas, y el contrato de `Socket` las distingue --`SocketTimeoutException` no es
- * un EOF--. Con un solo -1 no habria forma de saber cual paso.
+ * <p>{@link #read} returns **-1** at end of stream and **-2** if the deadline expired, and that
+ * distinction is the reason there is not a single sentinel: a closed connection and one that is still
+ * alive but quiet are two different things, and `Socket`'s contract tells them apart --a
+ * `SocketTimeoutException` is not an EOF. With a single -1 there would be no way of knowing which
+ * happened.
  *
- * <h2>Nada de aca espera: el -3</h2>
+ * <h2>Nothing here waits: the -3</h2>
  *
- * <p>{@link #read} y {@link #accept} devuelven **-3** para "todavia no hay nada", y **ninguna de las
- * dos bloquea**. Tiene que ser asi: los hilos de Java de esta VM comparten un interprete, asi que un
- * nativo que se quede esperando adentro no deja correr a ningun otro hilo --incluido el que iba a
- * conectar o a contestar--. Un `accept` bloqueante no seria lento, seria un abrazo mortal.
+ * <p>{@link #read} and {@link #accept} return **-3** for "there is nothing yet", and **neither of
+ * them blocks**. It has to be that way: this VM's Java threads share one interpreter, so a native
+ * standing still waiting inside does not let any other thread run --including the one that was going
+ * to connect or to answer. A blocking `accept` would not be slow, it would be a deadlock.
  *
- * <p>La espera va del lado Java: reintentar con un {@link Thread#sleep} corto entre intentos.
- * Dormir si es algo que esta VM sabe manejar --suelta el interprete-- asi que el hilo que espera no
- * le impide a nadie avanzar. Y como el tiempo lo cuenta Java, `ServerSocket.accept` puede respetar
- * `setSoTimeout`, cosa que un accept del sistema no permitia.
+ * <p>The waiting goes on the Java side: retrying with a short {@link Thread#sleep} between attempts.
+ * Sleeping is something this VM does know how to handle --it releases the interpreter-- so the thread
+ * that waits keeps nobody from advancing. And since Java counts the time, `ServerSocket.accept` can
+ * honour `setSoTimeout`, which a system accept did not allow.
  */
 public final class Net {
 
@@ -37,150 +38,149 @@ public final class Net {
     }
 
     /**
-     * Conecta a ese host y puerto. Devuelve el handle, o -1 si no se pudo.
+     * Connects to that host and port. It returns the handle, or -1 if it could not.
      *
-     * @param timeoutMs cero significa sin limite
+     * @param timeoutMs zero means no limit
      */
     public static native int connect(String host, int port, int timeoutMs);
 
     /**
-     * Ata y escucha. Devuelve el handle, o -1.
+     * Binds and listens. It returns the handle, or -1.
      *
-     * <p>Un puerto cero deja que el sistema elija; el que toco se lee con {@link #localPort}.
+     * <p>A port of zero lets the system choose; the one it picked is read with {@link #localPort}.
      */
     public static native int listen(String host, int port, int backlog);
 
     /**
-     * Acepta una conexion **sin esperar**. Devuelve el handle del socket nuevo, **-3** si todavia no
-     * hay nadie, o -1 si fallo. Ver la cabecera: quien quiera esperar, reintenta.
+     * Accepts a connection **without waiting**. It returns the new socket's handle, **-3** if there
+     * is nobody yet, or -1 if it failed. See the header: whoever wants to wait, retries.
      */
     public static native int accept(int handle);
 
     /**
-     * Lee en `buf` **sin esperar**. Devuelve cuantos bytes puso, **-1** en fin de flujo, **-3** si
-     * todavia no llego nada. El **-2** queda reservado para el plazo vencido, que lo decide quien
-     * llama: este nativo no cuenta tiempo.
+     * Reads into `buf` **without waiting**. It returns how many bytes it put there, **-1** at end of
+     * stream, **-3** if nothing has arrived yet. The **-2** is reserved for the expired deadline,
+     * which is decided by the caller: this native counts no time.
      */
     public static native int read(int handle, byte[] buf, int off, int len);
 
-    /** Escribe. `true` solo si se escribio todo. */
+    /** Writes. `true` only if everything was written. */
     public static native boolean write(int handle, byte[] buf, int off, int len);
 
-    /** Cierra el socket. Un handle que no existe se ignora. */
+    /** Closes the socket. A handle that does not exist is ignored. */
     public static native void close(int handle);
 
-    /** Cierra la mitad de lectura. */
+    /** Closes the reading half. */
     public static native boolean shutdownIn(int handle);
 
-    /** Cierra la mitad de escritura. */
+    /** Closes the writing half. */
     public static native boolean shutdownOut(int handle);
 
-    /** El puerto local, o -1. Sirve para un flujo y para un escucha. */
+    /** The local port, or -1. It serves both a stream and a listener. */
     public static native int localPort(int handle);
 
-    /** La direccion local, o `null`. */
+    /** The local address, or `null`. */
     public static native String localAddress(int handle);
 
-    /** El puerto del par, o -1. */
+    /** The peer's port, or -1. */
     public static native int remotePort(int handle);
 
-    /** La direccion del par, o `null`. */
+    /** The peer's address, or `null`. */
     public static native String remoteAddress(int handle);
 
-    /** El plazo de lectura en milisegundos; cero es sin limite. */
+    /** The read deadline in milliseconds; zero is no limit. */
     public static native boolean setSoTimeout(int handle, int ms);
 
-    /** Prende o apaga el algoritmo de Nagle. */
+    /** Turns Nagle's algorithm on or off. */
     public static native boolean setTcpNoDelay(int handle, boolean on);
 
     // ---- UDP -------------------------------------------------------------------------------
     //
-    // Mismas reglas que TCP: nada de aca espera, y "todavia no llego nada" es **-3**. Un datagrama
-    // no tiene fin de flujo --no hay conexion que cerrar-- asi que el -1 es siempre un error.
+    // The same rules as TCP: nothing here waits, and "nothing has arrived yet" is **-3**. A datagram
+    // has no end of stream --there is no connection to close-- so a -1 is always an error.
 
     /**
-     * Ata un socket de datagramas. Devuelve el handle, o -1.
+     * Binds a datagram socket. It returns the handle, or -1.
      *
-     * <p>Puerto cero: lo elige el sistema, y se lee con {@link #localPort}.
+     * <p>Port zero: the system chooses it, and it is read with {@link #localPort}.
      */
     public static native int udpBind(String host, int port);
 
-    /** Manda un datagrama. `true` solo si salio entero: un datagrama partido no es un datagrama. */
+    /** Sends a datagram. `true` only if it went out whole: a split datagram is not a datagram. */
     public static native boolean udpSend(int handle, String host, int port,
             byte[] buf, int off, int len);
 
     /**
-     * Recibe un datagrama **sin esperar**. Devuelve cuantos bytes puso, **-3** si todavia no llego
-     * nada, -1 si fallo.
+     * Receives a datagram **without waiting**. It returns how many bytes it put there, **-3** if
+     * nothing has arrived yet, -1 if it failed.
      *
-     * <p>Deja anotado el remitente, que se lee con {@link #udpSenderAddress} y
-     * {@link #udpSenderPort}. Los tres son **una sola operacion**: quien reciba tiene que leer el
-     * remitente antes de que otro hilo reciba sobre el mismo socket.
+     * <p>It records the sender, which is read with {@link #udpSenderAddress} and
+     * {@link #udpSenderPort}. The three are **a single operation**: whoever receives has to read the
+     * sender before another thread receives over the same socket.
      */
     public static native int udpReceive(int handle, byte[] buf, int off, int len);
 
-    /** De quien vino el ultimo datagrama recibido, o `null` si no hubo ninguno. */
+    /** Who the last datagram received came from, or `null` if there was none. */
     public static native String udpSenderAddress(int handle);
 
-    /** De que puerto vino el ultimo datagrama recibido, o -1. */
+    /** Which port the last datagram received came from, or -1. */
     public static native int udpSenderPort(int handle);
 
     /**
-     * Entra a un grupo multicast.
+     * Joins a multicast group.
      *
-     * @param iface la placa: una direccion IPv4, un indice de placa en IPv6, o la cadena vacia para
-     *     dejar que el sistema elija
+     * @param iface the interface: an IPv4 address, an interface index in IPv6, or the empty string to
+     *     let the system choose
      */
     public static native boolean udpJoin(int handle, String group, String iface);
 
-    /** Sale de un grupo multicast. Ver {@link #udpJoin}. */
+    /** Leaves a multicast group. See {@link #udpJoin}. */
     public static native boolean udpLeave(int handle, String group, String iface);
 
-    /** El limite de saltos de los paquetes multicast que salgan de ese socket. */
+    /** The hop limit of the multicast packets going out of that socket. */
     public static native boolean udpSetTtl(int handle, int ttl);
 
-    // ---- las dos que si tienen que bloquear --------------------------------------------------
+    // ---- the two that do have to block --------------------------------------------------------
     //
-    // Atar la punta local antes de conectar, y probar si un host contesta, necesitan las dos un
-    // `connect` **de verdad** del sistema, que bloquea. Se arrancan aca, corren en un hilo del
-    // sistema aparte, y la respuesta se recoge con {@link #answerPoll} sin colgar la VM.
+    // Binding the local end before connecting, and probing whether a host answers, both need a
+    // **real** system `connect`, which blocks. They are started here, run on a separate system
+    // thread, and the answer is collected with {@link #answerPoll} without hanging the VM.
 
     /**
-     * Empieza a probar si ese host contesta. Devuelve el id del casillero.
+     * Starts probing whether that host answers. It returns the pigeonhole's id.
      *
-     * <p>Un rechazo cuenta como respuesta: el RST lo manda el host, asi que prueba que esta vivo
-     * igual que una conexion aceptada. Solo el silencio cuenta como no alcanzable.
+     * <p>A refusal counts as an answer: the RST is sent by the host, so it proves it is alive just as
+     * an accepted connection does. Only silence counts as unreachable.
      *
-     * @param local la direccion por la que sale la prueba, o la cadena vacia para dejar que el
-     *     sistema elija
-     * @param ttl el limite de saltos, o cero para el que venga por omision
+     * @param local the address the probe goes out from, or the empty string to let the system choose
+     * @param ttl the hop limit, or zero for whichever comes by default
      */
     public static native int reachableStart(String host, String local, int ttl);
 
     /**
-     * Empieza a conectar a {@code host}:{@code port} **saliendo por** {@code local}:{@code
-     * localPort}. Devuelve el id del casillero; la respuesta es el handle del socket, o -1.
+     * Starts connecting to {@code host}:{@code port} **going out through** {@code local}:{@code
+     * localPort}. It returns the pigeonhole's id; the answer is the socket's handle, or -1.
      *
-     * @param local la cadena vacia para el comodin, que es lo que pide una direccion local null
+     * @param local the empty string for the wildcard, which is what a null local address asks for
      */
     public static native int connectFromStart(String host, int port, String local, int localPort);
 
     /**
-     * La respuesta, o **-3** si todavia no llego.
+     * The answer, or **-3** if it has not arrived yet.
      *
-     * <p>Que significa depende de quien pregunte: la sonda de alcance contesta 1 o 0, el connect
-     * contesta el handle o -1.
+     * <p>What it means depends on who is asking: the reachability probe answers 1 or 0, the connect
+     * answers the handle or -1.
      */
     public static native int answerPoll(int answer);
 
-    /** Suelta el casillero. Hay que llamarlo siempre, se haya esperado la respuesta o no. */
+    /** Releases the pigeonhole. It always has to be called, whether the answer was waited for or not. */
     public static native void answerFree(int answer);
 
     /**
-     * Manda un byte **fuera de banda**.
+     * Sends a byte **out of band**.
      *
-     * <p>No es escribir en el flujo: va con una bandera del protocolo, y el que lo recibe lo ve por
-     * un camino aparte.
+     * <p>It is not writing to the stream: it goes with a protocol flag, and whoever receives it sees
+     * it by a separate path.
      */
     public static native boolean sendUrgent(int handle, int b);
 

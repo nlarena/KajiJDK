@@ -2,12 +2,12 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de Arc2D. El arco se parte en tramos de a lo sumo 90 grados y cada tramo se
-// aproxima con una cubica; `btan` da la longitud del brazo de control que hace que la cubica toque
-// el arco en los extremos con la tangente correcta.
+// Arc2D's internal iterator. The arc is split into stretches of at most 90 degrees and each
+// stretch is approximated with a cubic; `btan` gives the length of the control arm that makes the
+// cubic touch the arc at the ends with the right tangent.
 //
-// El tipo del arco decide que va despues de las cubicas: OPEN no agrega nada, CHORD cierra (la
-// cuerda sale sola del CLOSE) y PIE agrega un LINETO al centro y despues cierra.
+// The arc's type decides what goes after the cubics: OPEN adds nothing, CHORD closes (the chord
+// comes out of the CLOSE by itself) and PIE adds a LINETO to the centre and then closes.
 class ArcIterator implements PathIterator {
 
     double x;
@@ -33,7 +33,7 @@ class ArcIterator implements PathIterator {
         if (ext >= 360.0 || ext <= -360.0) {
             this.arcSegs = 4;
             this.increment = Math.PI / 2;
-            // btan(PI/2) exacto, la misma constante que usa la elipse
+            // btan(PI/2) exactly, the same constant the ellipse uses
             this.cv = 0.5522847498307933;
             if (ext < 0) {
                 this.increment = -this.increment;
@@ -73,15 +73,16 @@ class ArcIterator implements PathIterator {
         this.index = this.index + 1;
     }
 
-    // Largo del brazo de control (en unidades de radio) para una cubica que cubre `increment`
-    // radianes de arco.
+    // Length of the control arm (in units of the radius) for a cubic covering `increment` radians
+    // of arc.
     private static double btan(double increment) {
         increment = increment / 2.0;
         return 4.0 / 3.0 * Math.sin(increment) / (1.0 + Math.cos(increment));
     }
 
-    // Se calcula en double y se baja a float **antes** de transformar, no despues: la transformacion
-    // de un float[] convierte a double, opera y vuelve a bajar, y el redondeo doble da otro numero.
+    // It is worked out in double and narrowed to float **before** transforming, not after: the
+    // transform of a float[] converts to double, operates and narrows again, and the double
+    // rounding gives another number.
     public int currentSegment(float[] coords) {
         if (isDone()) {
             throw new NoSuchElementException("arc iterator out of bounds");

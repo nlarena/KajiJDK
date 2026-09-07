@@ -895,6 +895,18 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             let b = if env.has_this { Some(Binding::Local { slot: 0 }) } else { None };
             (t, b)
         }
+        ExprKind::QualifiedSuper(ty) => {
+            // `Interfaz.super` (§15.11.2): el receptor sigue siendo `this` --de ahí el binding al
+            // slot 0-- y lo que cambia es el **dueño** del despacho, que el codegen saca del tipo.
+            // Se tipa como la interfaz nombrada para que la búsqueda del método mire ahí y no en la
+            // superclase.
+            if !env.has_this {
+                env.error(pos, "`Interfaz.super` no se puede usar en un contexto estático".into());
+            }
+            let t = resolve_rtype(env.table, env.class_scope, ty);
+            let b = if env.has_this { Some(Binding::Local { slot: 0 }) } else { None };
+            (t, b)
+        }
         ExprKind::QualifiedThis(ty) => {
             // `Outer.this` (§15.8.4): la instancia envolvente de tipo `Outer`. Se tipa como esa
             // clase para que el acceso a miembros a través de ella (`Outer.this.f`) resuelva; el
@@ -1132,9 +1144,33 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // (`Object` si no declaró ninguna), que es exactamente lo que da `types::erasure`. Con eso
             // `value.equals(o)` resuelve contra `Object.equals` igual que si se hubiera escrito el
             // rodeo (ligar el receptor a un local `Object` primero), que era el workaround conocido.
-            let recv = match recv {
-                RType::TypeVar(_) => types::erasure(env.table, &recv),
-                other => other,
+            //
+            // **Finding #517**: lo mismo pasa con una variable de **captura**. `l.get(0).valor()`
+            // sobre un `List<? extends X>` deja un receptor `cap#N`, y `member_class` no le
+            // encuentra miembros: la llamada se descartaba y el error salía recién en el generador
+            // ("no resolvió a ningún método"). La regla es la misma de §4.9: los miembros de una
+            // variable de captura son los de su **cota superior**.
+            //
+            // Se usa la cota **tal cual** y no su erasure, que es lo que la distingue del caso de
+            // arriba: para un `List<? extends List<String>>`, la cota es `List<String>` y borrarla
+            // perdería el `String` que hace falta para tipar la llamada siguiente.
+            //
+            // El bucle es por si la cota es a su vez una captura o una variable.
+            let recv = {
+                let mut r = recv;
+                loop {
+                    r = match r {
+                        RType::TypeVar(_) => {
+                            let e = types::erasure(env.table, &r);
+                            if e == r {
+                                break r;
+                            }
+                            e
+                        }
+                        RType::Capture { upper, .. } => *upper,
+                        other => break other,
+                    };
+                }
             };
             // El receptor puede ser crudo (`C`) o parametrizado (`List<String>`): se busca sobre
             // su erasure, y después se **sustituyen** los argumentos en la firma.
@@ -1428,7 +1464,19 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             if let Some(o) = outer {
                 attrib_expr(env, o);
             }
-            let arg_types: Vec<RType> = args.iter_mut().map(|a| attrib_expr(env, a)).collect();
+            // **Finding #519**: a los argumentos hay que aplicarles **capture conversion**
+            // (§5.1.10) antes de la resolución, igual que en una llamada a método. Sin eso, un
+            // `new Caja<Object>(v)` con `v` de tipo `Vector<?>` no encontraba el
+            // `Caja(Collection<? extends E>)`: el `?` sin capturar no se convierte, y la captura
+            // --que es *algún* `CAP <: Object`-- sí. Los métodos lo hacían desde siempre; los
+            // constructores no, y era la única diferencia entre las dos resoluciones.
+            let arg_types: Vec<RType> = args
+                .iter_mut()
+                .map(|a| {
+                    let t = attrib_expr(env, a);
+                    types::capture(env.table, &t)
+                })
+                .collect();
             let rt = resolve_rtype(env.table, env.class_scope, ty);
             // Se decora con el **constructor** resuelto: el codegen necesita su descriptor para
             // emitir el `invokespecial <init>`. Sin candidatos (tipo externo) queda en `None` y el
@@ -2315,6 +2363,24 @@ pub(crate) fn candidates(table: &SymbolTable, class: SymbolId, name: &str) -> Ve
             if !matches!(table.symbol(id).kind, SymbolKind::Method { is_constructor: false, .. }) {
                 continue;
             }
+            // Un método `static` de una **interfaz** no se hereda (§9.4.1): sólo es visible por su
+            // propia interfaz. Se salta cuando `c` no es el tipo de partida, o sea cuando llegamos
+            // acá **subiendo** por los supertipos. Sin esto, `EnumSet.of(x)` resolvía contra el
+            // `Set.of` heredado --`EnumSet` implementa `Set`-- y devolvía `Set<E>` en vez de
+            // `EnumSet<E>`: "tipo incompatible" en el destino, sin nombrar en ningún lado a `Set`.
+            if c != class
+                && table.symbol(id).modifiers.contains(&Modifier::Static)
+                && matches!(
+                    &table.symbol(c).kind,
+                    SymbolKind::Class {
+                        kind: crate::javac::ast::TypeKind::Interface
+                            | crate::javac::ast::TypeKind::Annotation,
+                        ..
+                    }
+                )
+            {
+                continue;
+            }
             let sig: Option<Vec<RType>> = signature_of(table, id)
                 .map(|(p, _)| p.iter().map(|t| types::erasure(table, t)).collect());
             if seen.contains(&sig) {
@@ -2536,8 +2602,23 @@ fn hierarchy_complete(table: &SymbolTable, class: SymbolId) -> bool {
 /// está definitivamente asignada dentro del brazo (como la del `catch`).
 fn bind_patterns(env: &mut Env, labels: &mut [CaseLabel]) {
     for l in labels {
-        if let CaseLabel::Pattern(p) = l {
-            bind_pattern(env, p);
+        match l {
+            CaseLabel::Pattern(p) => bind_pattern(env, p),
+            // **Finding #503**: una etiqueta constante también se atribuye. Es una expresión
+            // (§14.11) y le corresponde tipo y binding como a cualquier otra; no atribuirla dejaba
+            // `case Types.BIT:` **sin binding**, y entonces el desugar tenía que re-resolver el
+            // nombre por su cuenta, con un scope que no ve los `import` de la unidad. De ahí el
+            // síntoma raro: `Types.BIT` en una expresión normal compilaba y como etiqueta no.
+            //
+            // Las de `enum` se dejan afuera: ahí el nombre simple es la constante del enum del
+            // selector y no un nombre del scope, y atribuirla daría "no se encuentra el símbolo".
+            // El desugar las baja con `$SwitchMap$`, que es donde se resuelven.
+            CaseLabel::Constant(e) => {
+                if !matches!(e.kind, ExprKind::Name(_)) {
+                    attrib_expr(env, e);
+                }
+            }
+            _ => {}
         }
     }
 }

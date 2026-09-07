@@ -2079,6 +2079,26 @@ impl Parser {
         ))
     }
 
+    /// `java.util.Objects.requireNonNull(e)`, para el calificador de un `outer.super(...)`.
+    ///
+    /// Se arma el receptor como el parser armaría `java.util.Objects` escrito a mano —una cadena
+    /// de `Field`—, así el resto de las fases no distingue este caso de uno del fuente.
+    fn non_null(pos: Pos, e: Expr) -> Expr {
+        let java = Expr::new(pos, ExprKind::Name("java".to_string()));
+        let util = Expr::new(pos, ExprKind::Field { expr: Box::new(java), name: "util".to_string() });
+        let objects =
+            Expr::new(pos, ExprKind::Field { expr: Box::new(util), name: "Objects".to_string() });
+        Expr::new(
+            pos,
+            ExprKind::Call {
+                target: Some(Box::new(objects)),
+                name: "requireNonNull".to_string(),
+                args: vec![e],
+                type_args: Vec::new(),
+            },
+        )
+    }
+
     fn postfix(&mut self) -> Result<Expr> {
         let mut e = self.primary()?;
         loop {
@@ -2137,6 +2157,48 @@ impl Parser {
                     e = Expr::new(
                         pos,
                         ExprKind::NewObject { ty, args, body, outer: Some(Box::new(e)) },
+                    );
+                }
+                // `outer.super(args)` (§8.8.7.1): invocación **cualificada** del constructor de la
+                // superclase. Hace falta cuando una clase extiende a una clase interna de otra y no
+                // está adentro de ella: sin decir cuál es la instancia envolvente, la subclase no se
+                // puede construir. `super` es keyword: se reconoce acá, como `.this` y `.new`.
+                //
+                // El calificador se inserta como **primer argumento**, que es exactamente el lugar
+                // que ocupa en la firma: el constructor de una clase interna lleva la envolvente
+                // como primer parámetro sintético (`Ext$Interna(Ext, int)`), y así lo emite también
+                // el javac del JDK. Con eso, la resolución y el generador siguen viendo un
+                // `super(...)` común y no hace falta tocarlos.
+                // `Interfaz.super.m(args)` (§15.11.2): la llamada a la implementación `default` de
+                // *una* superinterfaz concreta. Hace falta cuando una clase implementa dos
+                // interfaces que declaran el mismo `default` y hay que decir a cuál se llama.
+                // `super` es keyword: se reconoce acá, como `.this` y `.new`.
+                TokenKind::Dot if self.kind_at(1) == TokenKind::Super && self.kind_at(2) == TokenKind::Dot => {
+                    self.bump(); // '.'
+                    self.bump(); // 'super'
+                    let Some(name) = Self::type_name_of(&e) else {
+                        return Err(self.error("`.super` necesita un nombre de tipo".to_string()));
+                    };
+                    e = Expr::new(pos, ExprKind::QualifiedSuper(Type::Class(name)));
+                }
+                TokenKind::Dot if self.kind_at(1) == TokenKind::Super && self.kind_at(2) == TokenKind::LParen => {
+                    self.bump(); // '.'
+                    self.bump(); // 'super'
+                    let mut args = self.args()?;
+                    // El calificador no puede ser `null` (§8.8.7.1): se envuelve en
+                    // `Objects.requireNonNull`, que es la misma clase que usa el javac del JDK.
+                    // (Él lo emite con `dup`/`pop` y se ahorra el `checkcast`; acá sale por el
+                    // camino normal de una llamada genérica, así que queda el `checkcast`. El
+                    // comportamiento es el mismo: NPE antes de construir nada.)
+                    args.insert(0, Self::non_null(pos, e));
+                    e = Expr::new(
+                        pos,
+                        ExprKind::Call {
+                            target: None,
+                            name: "super".to_string(),
+                            args,
+                            type_args: Vec::new(),
+                        },
                     );
                 }
                 TokenKind::Dot => {

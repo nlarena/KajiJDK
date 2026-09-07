@@ -1,19 +1,19 @@
 package java.awt.event;
 
 /**
- * Un {@link HierarchyBoundsListener} que no hace nada, para redefinir sólo lo que interese.
+ * A {@link HierarchyBoundsListener} that does nothing, to override only what matters.
  */
 public abstract class HierarchyBoundsAdapter implements HierarchyBoundsListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected HierarchyBoundsAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void ancestorMoved(HierarchyEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void ancestorResized(HierarchyEvent e) {
     }
 }

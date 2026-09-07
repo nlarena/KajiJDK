@@ -3,10 +3,10 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que se eligió o se dejó de elegir un elemento.
+ * Whoever wants to hear that an item was chosen or stopped being chosen.
  */
 public interface ItemListener extends EventListener {
 
-    /** Cambió qué está elegido. */
+    /** What is chosen changed. */
     void itemStateChanged(ItemEvent e);
 }

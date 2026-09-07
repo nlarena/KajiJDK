@@ -57,6 +57,9 @@ pub struct ExternalClass {
 
 pub struct ExtField {
     pub name: String,
+    /// El valor del atributo `ConstantValue`, si el campo lo tiene (§4.7.2). Es lo que permite
+    /// plegar un `case OtraClase.CONSTANTE:` cuando `OtraClase` viene de un `.class`: finding #503.
+    pub const_value: Option<super::codegen::ConstVal>,
     /// El tipo del descriptor (borrado).
     pub ty: Type,
     /// El tipo **genérico** del atributo `Signature`, si lo tiene.
@@ -144,12 +147,13 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let fname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _, _, _) = read_attributes(&mut r, &pool)?;
+        let (sig, _, _, _, const_value) = read_attributes(&mut r, &pool)?;
         fields.push(ExtField {
             name: fname,
             ty: parse_field_desc(&desc)?,
             generic_ty: sig.as_deref().and_then(parse_field_signature),
             is_static: access & ACC_STATIC != 0,
+            const_value,
         });
     }
 
@@ -158,7 +162,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let mname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _, throws, _) = read_attributes(&mut r, &pool)?;
+        let (sig, _, throws, _, _) = read_attributes(&mut r, &pool)?;
         let (params, ret) = parse_method_desc(&desc)?;
         methods.push(ExtMethod {
             name: mname,
@@ -175,7 +179,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         });
     }
 
-    let (class_sig, nested, _, runtime_retention) = read_attributes(&mut r, &pool)?;
+    let (class_sig, nested, _, runtime_retention, _) = read_attributes(&mut r, &pool)?;
     Some(ExternalClass {
         name,
         is_interface: access_flags & ACC_INTERFACE != 0,
@@ -221,6 +225,14 @@ impl<'a> Reader<'a> {
 enum Const {
     Utf8(String),
     Class(u16),
+    /// Los valores de un `ConstantValue` (§4.7.2). Se guardaban como `Other` --el pool solo se
+    /// usaba para nombres-- y por eso una constante leida de un `.class` no se podia plegar:
+    /// finding #503. `Str` lleva el indice a la `Utf8`, como en el classfile.
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    Str(u16),
     Other,
 }
 
@@ -232,6 +244,18 @@ impl Pool {
             Const::Utf8(s) => Some(s.clone()),
             _ => None,
         }
+    }
+    /// El valor de una entrada de constante, para el atributo `ConstantValue` (§4.7.2).
+    fn const_value(&self, idx: u16) -> Option<super::codegen::ConstVal> {
+        use super::codegen::ConstVal;
+        Some(match self.0.get(idx as usize)? {
+            Const::Int(v) => ConstVal::Int(*v),
+            Const::Long(v) => ConstVal::Long(*v),
+            Const::Float(v) => ConstVal::Float(*v),
+            Const::Double(v) => ConstVal::Double(*v),
+            Const::Str(i) => ConstVal::Str(self.utf8(*i)?),
+            _ => return None,
+        })
     }
     /// El nombre *dotted* (`java.lang.Object`) de una entrada `Class`.
     fn class_name(&self, idx: u16) -> Option<String> {
@@ -256,7 +280,9 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
                 pool.push(Const::Utf8(s));
             }
             7 => pool.push(Const::Class(r.u2()?)),
-            8 | 16 | 19 | 20 => {
+            // `String` (8) guarda el indice a su `Utf8`; los otros tres no interesan.
+            8 => pool.push(Const::Str(r.u2()?)),
+            16 | 19 | 20 => {
                 r.u2()?;
                 pool.push(Const::Other);
             }
@@ -265,15 +291,23 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
                 r.u2()?;
                 pool.push(Const::Other);
             }
-            3 | 4 | 9 | 10 | 11 | 12 | 17 | 18 => {
+            // `Integer` (3) y `Float` (4) llevan su valor en los cuatro bytes.
+            3 => pool.push(Const::Int(r.u4()? as i32)),
+            4 => pool.push(Const::Float(f32::from_bits(r.u4()?))),
+            9 | 10 | 11 | 12 | 17 | 18 => {
                 r.u4()?;
                 pool.push(Const::Other);
             }
             5 | 6 => {
                 // Long/Double ocupan **dos** slots.
-                r.u4()?;
-                r.u4()?;
-                pool.push(Const::Other);
+                let hi = r.u4()? as u64;
+                let lo = r.u4()? as u64;
+                let bits = (hi << 32) | lo;
+                pool.push(if tag == 5 {
+                    Const::Long(bits as i64)
+                } else {
+                    Const::Double(f64::from_bits(bits))
+                });
                 pool.push(Const::Other);
                 i += 1;
             }
@@ -290,11 +324,12 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
 fn read_attributes(
     r: &mut Reader,
     pool: &Pool,
-) -> Option<(Option<String>, Vec<String>, Vec<String>, bool)> {
+) -> Option<(Option<String>, Vec<String>, Vec<String>, bool, Option<super::codegen::ConstVal>)> {
     let mut signature = None;
     let mut nested = Vec::new();
     let mut throws = Vec::new();
     let mut runtime_retention = false;
+    let mut const_value = None;
     for _ in 0..r.u2()? {
         let name = pool.utf8(r.u2()?);
         let len = r.u4()? as usize;
@@ -341,10 +376,17 @@ fn read_attributes(
             Some("RuntimeVisibleAnnotations") => {
                 runtime_retention = declares_runtime_retention(&data, pool);
             }
+            // `ConstantValue` (§4.7.2): el valor de un `static final` con inicializador constante.
+            // Sin leerlo, un `case java.sql.Types.BIT:` no podia plegarse --la constante no estaba
+            // en ningun mapa-- y el generador rechazaba la etiqueta. Finding #503.
+            Some("ConstantValue") if data.len() >= 2 => {
+                let idx = ((data[0] as u16) << 8) | data[1] as u16;
+                const_value = pool.const_value(idx);
+            }
             _ => {}
         }
     }
-    Some((signature, nested, throws, runtime_retention))
+    Some((signature, nested, throws, runtime_retention, const_value))
 }
 
 // ---- descriptores → Type ----

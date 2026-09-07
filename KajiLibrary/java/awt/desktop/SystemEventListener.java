@@ -3,15 +3,15 @@ package java.awt.desktop;
 import java.util.EventListener;
 
 /**
- * KajiLibrary's java.awt.desktop.SystemEventListener -- la marca de los escuchas del escritorio.
+ * KajiLibrary's java.awt.desktop.SystemEventListener -- the mark of the desktop's listeners.
  *
- * <p>No declara nada. Existe para que {@code Desktop.addAppEventListener} tenga un solo parametro en
- * lugar de una sobrecarga por cada tipo de escucha, y para que el escritorio pueda repartir cada
- * evento preguntando con {@code instanceof}.
+ * <p>It declares nothing. It exists so that {@code Desktop.addAppEventListener} has a single
+ * parameter instead of one overload per kind of listener, and so that the desktop can hand out each
+ * event by asking with {@code instanceof}.
  *
- * <p>La diferencia con los manejadores de este paquete --{@link AboutHandler} y compania-- es de
- * naturaleza, no de forma: un escucha recibe un <b>aviso</b> y puede haber muchos; un manejador toma
- * una <b>responsabilidad</b> y hay uno solo.
+ * <p>The difference from this package's handlers --{@link AboutHandler} and company-- is one of
+ * nature, not of form: a listener receives a <b>notice</b> and there may be many; a handler takes a
+ * <b>responsibility</b> and there is only one.
  */
 public interface SystemEventListener extends EventListener {
 }

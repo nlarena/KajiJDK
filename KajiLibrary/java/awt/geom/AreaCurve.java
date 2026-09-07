@@ -2,44 +2,43 @@ package java.awt.geom;
 
 import java.util.ArrayList;
 
-// Trozo de borde monotono en Y (no es API). Es la pieza sobre la que trabaja AreaOp.
+// A piece of edge monotonic in Y (not API). It is the piece AreaOp works on.
 //
-// Toda la maquinaria de Area se apoya en una sola invariante: **cada trozo es monotono en Y y se
-// guarda de arriba hacia abajo**, con `dir` acordandose de si el trazo original iba hacia abajo
-// (+1) o hacia arriba (-1). Esa invariante compra tres cosas que de otro modo serian casos
-// especiales sueltos:
+// All of Area's machinery rests on a single invariant: **each piece is monotonic in Y and is kept
+// top to bottom**, with `dir` remembering whether the original stroke went downwards (+1) or upwards
+// (-1). That invariant buys three things that would otherwise be loose special cases:
 //
-//   * `xForY(y)` esta bien definida --hay un solo x por cada y-- y se resuelve por biseccion en el
-//     parametro. Sobre una funcion monotona la biseccion converge al ulp en 60 pasos y no necesita
-//     resolver la cubica: no hay formula cerrada que sea mas exacta que eso, solo mas rapida.
+//   * `xForY(y)` is well defined --there is a single x for each y-- and is solved by bisection on
+//     the parameter. Over a monotonic function bisection converges to the ulp in 60 steps and does
+//     not need to solve the cubic: there is no closed formula more exact than that, only faster.
 //
-//   * El conteo de cruces para el numero de vuelta es el de siempre --intervalo semiabierto
-//     [ytop, ybot) y suma de `dir`-- y da el resultado exacto incluso cuando el rayo pasa justo por
-//     un vertice: en un maximo o minimo local nacen dos trozos con el mismo `ytop` y `dir` opuesto,
-//     que se cancelan; en un vertice de paso uno termina (no cuenta) y otro empieza (cuenta), o sea
-//     una vez.
+//   * The crossing count for the winding number is the usual one --a half-open interval
+//     [ytop, ybot) and a sum of `dir`-- and gives the exact result even when the ray passes right
+//     through a vertex: at a local maximum or minimum two pieces are born with the same `ytop` and
+//     opposite `dir`, which cancel; at a pass-through vertex one ends (does not count) and another
+//     begins (counts), that is, once.
 //
-//   * Los tramos horizontales se descartan al construir. No aportan nada al numero de vuelta y son
-//     la fuente clasica de divisiones por cero. AreaOp los vuelve a fabricar al final, ya
-//     clasificados, para cerrar los lazos.
+//   * The horizontal stretches are discarded on construction. They contribute nothing to the winding
+//     number and they are the classic source of divisions by zero. AreaOp manufactures them again at
+//     the end, already classified, to close the loops.
 //
-// El precio de la invariante es partir cada cuadratica y cada cubica en sus extremos de Y antes de
-// guardarlas. Es una cuadratica que resolver (dy/dt = 0) y como mucho dos cortes.
+// The price of the invariant is splitting each quadratic and each cubic at its Y extrema before
+// storing them. That is one quadratic to solve (dy/dt = 0) and at most two cuts.
 final class AreaCurve {
 
-    /** Trozo del operando izquierdo. */
+    /** A piece of the left operand. */
     static final int LEFT = 0;
 
-    /** Trozo del operando derecho. */
+    /** A piece of the right operand. */
     static final int RIGHT = 1;
 
-    /** Orden: 1 recta, 2 cuadratica, 3 cubica. */
+    /** The order: 1 line, 2 quadratic, 3 cubic. */
     final int order;
 
-    /** 2*(order+1) coordenadas, del extremo superior al inferior. */
+    /** 2*(order+1) coordinates, from the top end to the bottom one. */
     final double[] c;
 
-    /** +1 si el trazo original bajaba, -1 si subia. */
+    /** +1 if the original stroke went down, -1 if it went up. */
     final int dir;
 
     /** LEFT o RIGHT. */
@@ -68,9 +67,9 @@ final class AreaCurve {
         return this.c[2 * this.order + 1];
     }
 
-    // --- evaluacion ------------------------------------------------------------------------------
+    // --- evaluation ------------------------------------------------------------------------------
 
-    /** El punto de la curva en el parametro t, por de Casteljau. */
+    /** The curve's point at the parameter t, by de Casteljau. */
     double[] point(double t) {
         double[] p = copyOf(this.c);
         int level = this.order;
@@ -89,8 +88,8 @@ final class AreaCurve {
         return r;
     }
 
-    // La X que le corresponde a esa Y. Fuera del rango devuelve el extremo, que es lo que quieren
-    // los llamadores: la curva "vale" su punta cuando el rayo pasa justo por ella.
+    // The X corresponding to that Y. Outside the range it returns the end, which is what the
+    // callers want: the curve "is worth" its tip when the ray passes right through it.
     double xForY(double y) {
         if (y <= ytop()) {
             return xtop();
@@ -103,8 +102,8 @@ final class AreaCurve {
             double t = (y - this.c[1]) / dy;
             return this.c[0] + (this.c[2] - this.c[0]) * t;
         }
-        // Biseccion: y(t) es monotona creciente por construccion, asi que el invariante
-        // y(lo) <= y <= y(hi) se mantiene sin mirar derivadas.
+        // Bisection: y(t) is monotonically increasing by construction, so the invariant
+        // y(lo) <= y <= y(hi) holds without looking at derivatives.
         double lo = 0.0;
         double hi = 1.0;
         int i = 0;
@@ -134,7 +133,7 @@ final class AreaCurve {
         return r;
     }
 
-    /** Puntos de control del trozo [0, t]. */
+    /** The [0, t] piece's control points. */
     static double[] leftPart(double[] c, int n, double t) {
         double[] p = copyOf(c);
         double[] out = new double[2 * (n + 1)];
@@ -157,7 +156,7 @@ final class AreaCurve {
         return out;
     }
 
-    /** Puntos de control del trozo [t, 1]. */
+    /** The [t, 1] piece's control points. */
     static double[] rightPart(double[] c, int n, double t) {
         double[] p = copyOf(c);
         double[] out = new double[2 * (n + 1)];
@@ -180,7 +179,7 @@ final class AreaCurve {
         return out;
     }
 
-    /** Puntos de control del trozo [t0, t1]. */
+    /** The [t0, t1] piece's control points. */
     static double[] subCurve(double[] c, int n, double t0, double t1) {
         double[] r = c;
         if (t1 < 1.0) {
@@ -201,7 +200,7 @@ final class AreaCurve {
         return r;
     }
 
-    // --- construccion desde un camino ------------------------------------------------------------
+    // --- construction from a path ----------------------------------------------------------------
 
     static void appendPath(ArrayList<AreaCurve> out, PathIterator pi, int tag) {
         double[] coords = new double[6];
@@ -243,8 +242,8 @@ final class AreaCurve {
             pi.next();
         }
         if (open) {
-            // Un subcamino sin closePath se cierra igual: el area encerrada es la del camino
-            // cerrado. Es lo que dice la spec de Shape y lo que hace el JDK.
+            // A subpath with no closePath is closed all the same: the enclosed area is the closed
+            // path's. It is what Shape's spec says and what the JDK does.
             appendLine(out, curx, cury, movx, movy, tag);
         }
     }
@@ -298,7 +297,7 @@ final class AreaCurve {
         c[5] = cy2;
         c[6] = x1;
         c[7] = y1;
-        // dy/dt / 3 = p*t^2 + q*t + r con las diferencias hacia adelante de la Y.
+        // dy/dt / 3 = p*t^2 + q*t + r with the forward differences of the Y.
         double d0 = cy1 - y0;
         double d1 = cy2 - cy1;
         double d2 = y1 - cy2;
@@ -356,9 +355,10 @@ final class AreaCurve {
         }
     }
 
-    // Guarda el trozo ya monotono, girado de arriba hacia abajo. Los puntos de control interiores se
-    // recortan al rango de Y: matematicamente ya estan adentro despues de cortar en los extremos, y
-    // el recorte solo saca el ruido de coma flotante que le arruinaria la biseccion a `xForY`.
+    // It stores the piece already monotonic, turned top to bottom. The interior control points are
+    // clamped to the Y range: mathematically they are inside already after cutting at the extrema,
+    // and the clamping only takes out the floating-point noise that would ruin `xForY`'s
+    // bisection.
     static void appendMonotone(ArrayList<AreaCurve> out, double[] c, int n, int tag) {
         double y0 = c[1];
         double y1 = c[2 * n + 1];
@@ -396,23 +396,23 @@ final class AreaCurve {
         return r;
     }
 
-    // --- intersecciones --------------------------------------------------------------------------
+    // --- intersections ---------------------------------------------------------------------------
 
     /**
-     * Los pares (ta, tb) donde las dos curvas se tocan, agregados a `out`.
+     * The (ta, tb) pairs where the two curves touch, added to `out`.
      *
-     * Recta contra recta se resuelve en forma cerrada, incluido el caso colineal --dos bordes
-     * pegados es lo normal, no lo raro: pasa en cuanto se unen dos rectangulos que comparten un
-     * lado, y el metodo general de subdivision se le va al infinito ahi--. Los demas pares se
-     * resuelven subdividiendo el par y descartando por cajas envolventes, que es exacto hasta donde
-     * llega el double y no depende de resolver polinomios de grado 6.
+     * Line against line is solved in closed form, the collinear case included --two abutting edges
+     * is the normal thing, not the odd one: it happens as soon as two rectangles sharing a side are
+     * united, and the general subdivision method runs away to infinity there. The other pairs are
+     * solved by subdividing the pair and discarding by bounding boxes, which is exact as far as the
+     * double reaches and does not depend on solving degree-6 polynomials.
      */
     static void intersections(AreaCurve a, AreaCurve b, ArrayList<double[]> out) {
         if (a.ytop() > b.ybot() || b.ytop() > a.ybot()) {
             return;
         }
         if (sameGeometry(a, b)) {
-            // Coincidentes de punta a punta: no hay nada que cortar, AreaOp las agrupa.
+            // Coincident tip to tip: there is nothing to cut, AreaOp groups them.
             return;
         }
         if (a.order == 1 && b.order == 1) {
@@ -473,7 +473,7 @@ final class AreaCurve {
         double ry = by - ay;
         double len = Math.sqrt(adx * adx + ady * ady);
         if (Math.abs(den) <= tol * len) {
-            // Paralelas. Solo importan si ademas son colineales y se pisan.
+            // Parallel. They only matter if they are collinear as well and overlap.
             double perp = Math.abs(rx * ady - ry * adx);
             if (len == 0.0 || perp > tol * len) {
                 return;
@@ -546,7 +546,7 @@ final class AreaCurve {
         }
     }
 
-    /** {minx, miny, maxx, maxy} de la envolvente de los puntos de control. */
+    /** {minx, miny, maxx, maxy} of the control points' hull. */
     static double[] bbox(double[] c, int n) {
         double x0 = c[0];
         double y0 = c[1];

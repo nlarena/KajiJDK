@@ -1,16 +1,17 @@
 package java.awt.datatransfer;
 
 /**
- * A quien avisarle cuando le sacan el portapapeles.
+ * Who to tell when the clipboard is taken away from them.
  *
- * <p>El portapapeles tiene **un** dueño por vez: el último que copió. Cuando otro copia, el anterior
- * recibe este aviso, y ahí es cuando puede soltar lo que estaba guardando para poder entregarlo.
+ * <p>The clipboard has **one** owner at a time: the last one who copied. When someone else copies,
+ * the previous owner gets this notice, and that is when it can release whatever it was holding in
+ * order to be able to hand it over.
  *
- * <p>No hay garantía de cuándo llega ni de que llegue: si el programa se cierra antes, no llega
- * nunca. Por eso no sirve para liberar nada crítico.
+ * <p>There is no guarantee of when it arrives or that it arrives at all: if the program closes
+ * first, it never does. That is why it is no use for releasing anything critical.
  */
 public interface ClipboardOwner {
 
-    /** Avisa que otro se quedó con el portapapeles. */
+    /** Reports that someone else has taken the clipboard. */
     void lostOwnership(Clipboard clipboard, Transferable contents);
 }

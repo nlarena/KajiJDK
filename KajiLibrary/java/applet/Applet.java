@@ -11,43 +11,43 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un programa chico que corre **adentro de una página web**, dibujado por el navegador.
+ * A small program that runs **inside a web page**, drawn by the browser.
  *
- * <p>Es un {@link Panel} con un ciclo de vida que maneja el navegador: {@link #init} al cargarlo,
- * {@link #start} cada vez que la página se muestra, {@link #stop} cada vez que se deja de ver,
- * {@link #destroy} al descartarlo. Un applet no tiene `main`: lo que hace lo hace en esos cuatro
- * métodos, y el resto —parámetros, imágenes, sonidos, la barra de estado— se lo pide al navegador a
- * través de su {@link AppletStub}.
+ * <p>It is a {@link Panel} with a life cycle the browser drives: {@link #init} on loading it,
+ * {@link #start} every time the page is shown, {@link #stop} every time it stops being seen,
+ * {@link #destroy} on discarding it. An applet has no `main`: what it does it does in those four
+ * methods, and the rest —parameters, images, sounds, the status bar— it asks the browser for through
+ * its {@link AppletStub}.
  *
- * <p><strong>Sin pantalla no se puede construir.</strong> El constructor tira
- * {@link HeadlessException}, igual que en el JDK: un applet existe para ser mostrado por un
- * navegador, y sin sistema de ventanas no hay navegador ni superficie. Es la misma decisión que en
- * {@code TrayIcon}: de un applet no cuelga ninguna otra clase, así que no hay motivo para divergir
- * del JDK como sí lo hay en {@code Window}. Los métodos de instancia están declarados porque son
- * parte de la clase, pero no existe ninguna instancia desde la que llamarlos.
+ * <p><strong>With no screen it cannot be constructed.</strong> The constructor throws
+ * {@link HeadlessException}, just as in the JDK: an applet exists to be shown by a browser, and with
+ * no windowing system there is neither browser nor surface. It is the same decision as in
+ * {@code TrayIcon}: no other class hangs off an applet, so there is no reason to diverge from the JDK
+ * as there is in {@code Window}. The instance methods are declared because they are part of the
+ * class, but there is no instance to call them on.
  *
- * <p>Todo el paquete está en este árbol por una sola razón: {@code java.beans.AppletInitializer} y
- * una de las formas de {@code java.beans.Beans.instantiate} nombran a esta clase, y sin ella
- * `java.beans` no se podía cerrar. Son cuatro tipos chicos y se pudieron escribir enteros.
+ * <p>The whole package is in this tree for a single reason: {@code java.beans.AppletInitializer} and
+ * one of the forms of {@code java.beans.Beans.instantiate} name this class, and without it
+ * `java.beans` could not be closed. They are four small types and they could be written whole.
  *
- * @deprecated el modelo de applets está en desuso desde Java 9 y marcado para borrarse desde 17: los
- *     navegadores dejaron de ejecutarlos.
+ * @deprecated the applet model has been deprecated since Java 9 and marked for removal since 17: the
+ *     browsers stopped running them.
  */
 @Deprecated(since = "9", forRemoval = true)
 public class Applet extends Panel {
 
     private static final long serialVersionUID = -5836846270535785031L;
 
-    /** El representante del navegador, o `null` hasta que el navegador lo ponga. */
+    /** The browser's representative, or `null` until the browser sets it. */
     private transient AppletStub stub;
 
     /** La accesibilidad, armada al primer pedido. */
     AccessibleContext accessibleContext;
 
     /**
-     * Un applet.
+     * An applet.
      *
-     * @throws HeadlessException si no hay pantalla, o sea siempre acá
+     * @throws HeadlessException if there is no screen, which is to say always here
      */
     public Applet() throws HeadlessException {
         if (GraphicsEnvironment.isHeadless()) {
@@ -56,66 +56,66 @@ public class Applet extends Panel {
     }
 
     /**
-     * Le pone el representante del navegador.
+     * Sets the browser's representative.
      *
-     * <p>Es `final` y lo llama el navegador, no el applet: es el único enlace entre los dos y un
-     * applet que se lo cambiara a sí mismo se quedaría hablando solo.
+     * <p>It is `final` and the browser calls it, not the applet: it is the only link between the two
+     * and an applet that changed it on itself would be left talking to itself.
      */
     public final void setStub(AppletStub stub) {
         this.stub = stub;
     }
 
     /**
-     * Si está corriendo, o sea entre {@link #start} y {@link #stop}.
+     * Whether it is running, that is, between {@link #start} and {@link #stop}.
      *
-     * @return `false` también mientras no tenga navegador: sin él no arrancó
+     * @return `false` too while it has no browser: without one it never started
      */
     public boolean isActive() {
         return this.stub != null && this.stub.isActive();
     }
 
     /**
-     * La dirección de la página que lo contiene.
+     * The address of the page containing it.
      *
-     * @throws NullPointerException si todavía no tiene navegador
+     * @throws NullPointerException if it has no browser yet
      */
     public URL getDocumentBase() {
         return this.stub.getDocumentBase();
     }
 
     /**
-     * La dirección de la que se bajó su código.
+     * The address its code was downloaded from.
      *
-     * @throws NullPointerException si todavía no tiene navegador
+     * @throws NullPointerException if it has no browser yet
      */
     public URL getCodeBase() {
         return this.stub.getCodeBase();
     }
 
     /**
-     * El valor de un parámetro puesto en el HTML.
+     * The value of a parameter set in the HTML.
      *
-     * @return el valor, o `null` si no hay un parámetro con ese nombre
-     * @throws NullPointerException si todavía no tiene navegador
+     * @return the value, or `null` if there is no parameter with that name
+     * @throws NullPointerException if it has no browser yet
      */
     public String getParameter(String name) {
         return this.stub.getParameter(name);
     }
 
     /**
-     * El navegador, visto como contexto.
+     * The browser, seen as the context.
      *
-     * @throws NullPointerException si todavía no tiene navegador
+     * @throws NullPointerException if it has no browser yet
      */
     public AppletContext getAppletContext() {
         return this.stub.getAppletContext();
     }
 
     /**
-     * Le pide al navegador ese tamaño.
+     * Asks the browser for that size.
      *
-     * <p>Redefine el de {@code Component} porque un applet no decide su tamaño: lo decide el
-     * navegador, y el pedido tiene que pasar por él.
+     * <p>It overrides {@code Component}'s because an applet does not decide its own size: the browser
+     * does, and the request has to go through it.
      */
     public void resize(int width, int height) {
         Dimension d = this.size();
@@ -127,35 +127,35 @@ public class Applet extends Panel {
         }
     }
 
-    /** Lo mismo, con una dimensión. */
+    /** The same, with a dimension. */
     public void resize(Dimension d) {
         this.resize(d.width, d.height);
     }
 
     /**
-     * Si es raíz de validación.
+     * Whether it is a validation root.
      *
-     * @return `true`: un applet es la raíz de su propio árbol, así que la validación no tiene por
-     *     qué subir más allá de él
+     * @return `true`: an applet is the root of its own tree, so validation has no reason to climb
+     *     beyond it
      */
     public boolean isValidateRoot() {
         return true;
     }
 
-    /** Escribe en la barra de estado del navegador. */
+    /** Writes in the browser's status bar. */
     public void showStatus(String msg) {
         this.getAppletContext().showStatus(msg);
     }
 
-    /** Una imagen en esa dirección; la carga empieza recién cuando alguien la dibuja. */
+    /** An image at that address; the loading starts only when somebody draws it. */
     public Image getImage(URL url) {
         return this.getAppletContext().getImage(url);
     }
 
     /**
-     * Una imagen en esa dirección relativa a otra.
+     * An image at that address relative to another.
      *
-     * @return la imagen, o `null` si la dirección está mal formada
+     * @return the image, or `null` if the address is malformed
      */
     public Image getImage(URL url, String name) {
         try {
@@ -166,29 +166,29 @@ public class Applet extends Panel {
     }
 
     /**
-     * Un sonido en esa dirección, sin necesidad de un applet ni de un navegador.
+     * A sound at that address, with no need for an applet or a browser.
      *
-     * <p>Es `static` porque es la única entrada al sonido de este paquete que sirve fuera de un
-     * navegador, y por eso se usaba desde programas comunes. Acá el clip se arma pero no puede
-     * sonar: sus tres verbos tiran, con el motivo dicho, porque esta biblioteca no tiene motor de
-     * audio. Devolver un clip que "reproduce" en silencio sería prometer un sonido que no hay.
+     * <p>It is `static` because it is the only entry to this package's sound that is of use outside a
+     * browser, and that is why it was called from ordinary programs. Here the clip is assembled but
+     * cannot sound: its three verbs throw, with the reason given, because this library has no audio
+     * engine. Returning a clip that "plays" in silence would be promising a sound that is not there.
      *
-     * <p>Una dirección `null` **se acepta**, igual que en el JDK: el clip es vago y no toca la
-     * dirección hasta que alguien lo reproduce, así que acá no hay nada que falle todavía.
+     * <p>A `null` address **is accepted**, just as in the JDK: the clip is lazy and does not touch the
+     * address until somebody plays it, so there is nothing here to fail yet.
      */
     public static final AudioClip newAudioClip(URL url) {
-        return new ClipMudo(url);
+        return new SilentClip(url);
     }
 
-    /** Un sonido en esa dirección, a través del navegador. */
+    /** A sound at that address, through the browser. */
     public AudioClip getAudioClip(URL url) {
         return this.getAppletContext().getAudioClip(url);
     }
 
     /**
-     * Un sonido en esa dirección relativa a otra.
+     * A sound at that address relative to another.
      *
-     * @return el clip, o `null` si la dirección está mal formada
+     * @return the clip, or `null` if the address is malformed
      */
     public AudioClip getAudioClip(URL url, String name) {
         try {
@@ -199,19 +199,19 @@ public class Applet extends Panel {
     }
 
     /**
-     * Quién lo hizo y para qué.
+     * Who made it and what for.
      *
-     * @return `null` de base; cada applet redefine esto con su autor, versión y descripción
+     * @return `null` in the base; each applet overrides this with its author, version and description
      */
     public String getAppletInfo() {
         return null;
     }
 
     /**
-     * El idioma del applet.
+     * The applet's language.
      *
-     * <p>Un applet sin idioma propio usa el del sistema, no el de su padre como haría un componente
-     * común: su "padre" es el navegador, que no es un componente.
+     * <p>An applet with no language of its own uses the system's, not its parent's as an ordinary
+     * component would: its "parent" is the browser, which is not a component.
      */
     public Locale getLocale() {
         Locale l = super.getLocale();
@@ -222,15 +222,15 @@ public class Applet extends Panel {
     }
 
     /**
-     * Qué parámetros entiende.
+     * Which parameters it understands.
      *
-     * @return `null` de base; cada applet redefine esto con filas de {nombre, tipo, descripción}
+     * @return `null` in the base; each applet overrides this with rows of {name, type, description}
      */
     public String[][] getParameterInfo() {
         return null;
     }
 
-    /** Reproduce el sonido de esa dirección, una vez. */
+    /** Plays the sound at that address, once. */
     public void play(URL url) {
         AudioClip clip = this.getAudioClip(url);
         if (clip != null) {
@@ -238,7 +238,7 @@ public class Applet extends Panel {
         }
     }
 
-    /** Reproduce el sonido de esa dirección relativa a otra, una vez. */
+    /** Plays the sound at that address relative to another, once. */
     public void play(URL url, String name) {
         AudioClip clip = this.getAudioClip(url, name);
         if (clip != null) {
@@ -246,23 +246,23 @@ public class Applet extends Panel {
         }
     }
 
-    /** Lo llama el navegador al cargarlo; el de base no hace nada. */
+    /** The browser calls it on loading; the base one does nothing. */
     public void init() {
     }
 
-    /** Lo llama el navegador cada vez que la página se muestra; el de base no hace nada. */
+    /** The browser calls it every time the page is shown; the base one does nothing. */
     public void start() {
     }
 
-    /** Lo llama el navegador cada vez que la página deja de verse; el de base no hace nada. */
+    /** The browser calls it every time the page stops being seen; the base one does nothing. */
     public void stop() {
     }
 
-    /** Lo llama el navegador al descartarlo; el de base no hace nada. */
+    /** The browser calls it on discarding it; the base one does nothing. */
     public void destroy() {
     }
 
-    /** La accesibilidad del applet. */
+    /** The applet's accessibility. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleApplet();
@@ -271,12 +271,12 @@ public class Applet extends Panel {
     }
 
     /**
-     * Un applet, para la accesibilidad, es un marco: la raíz de un árbol de componentes que el
-     * usuario ve como una unidad.
+     * An applet, for accessibility, is a frame: the root of a tree of components the user sees as one
+     * unit.
      */
     protected class AccessibleApplet extends AccessibleAWTPanel {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleApplet() {
         }
 
@@ -286,30 +286,30 @@ public class Applet extends Panel {
     }
 
     /**
-     * Un clip que no puede sonar.
+     * A clip that cannot sound.
      *
-     * <p>Guarda la dirección, que es lo único que se sabe de él, y tira en los tres verbos con el
-     * motivo: no hay motor de audio. Es lo que corresponde a un sonido que existe pero no se puede
-     * reproducir, que es distinto de un sonido que no existe.
+     * <p>It keeps the address, which is the only thing known about it, and throws in all three verbs
+     * with the reason: there is no audio engine. It is what suits a sound that exists but cannot be
+     * played, which is different from a sound that does not exist.
      */
-    private static final class ClipMudo implements AudioClip {
+    private static final class SilentClip implements AudioClip {
 
         private final URL url;
 
-        private ClipMudo(URL url) {
+        private SilentClip(URL url) {
             this.url = url;
         }
 
         public void play() {
             throw new UnsupportedOperationException(
-                    "esta biblioteca no tiene motor de audio; no se puede reproducir " + this.url);
+                    "this library has no audio engine; it cannot play " + this.url);
         }
 
         public void loop() {
             this.play();
         }
 
-        /** Parar algo que nunca sonó no es un error: no hace nada. */
+        /** Stopping something that never sounded is not an error: it does nothing. */
         public void stop() {
         }
 

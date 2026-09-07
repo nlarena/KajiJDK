@@ -4,30 +4,30 @@ import java.io.File;
 import java.util.List;
 
 /**
- * KajiLibrary's java.awt.desktop.OpenFilesEvent -- el sistema pide abrir archivos.
+ * KajiLibrary's java.awt.desktop.OpenFilesEvent -- the system asks for files to be opened.
  *
- * <p>Lo entrega {@link OpenFilesHandler}. Llega cuando alguien arrastra archivos al icono del
- * programa, o hace doble clic en uno cuyo tipo el programa declaro manejar.
+ * <p>It is handed over by {@link OpenFilesHandler}. It arrives when someone drags files onto the
+ * program's icon, or double-clicks one whose type the program declared it handles.
  *
- * <h2>El termino de busqueda</h2>
+ * <h2>The search term</h2>
  *
- * <p>{@link #getSearchTerm} es la parte que sorprende. Cuando el archivo se abre desde el buscador del
- * escritorio, trae <b>lo que el usuario habia escrito</b> para encontrarlo. Un editor puede usarlo
- * para saltar directo a esa palabra dentro del documento, que es exactamente lo que el usuario espera
- * y casi nadie implementa.
+ * <p>{@link #getSearchTerm} is the part that surprises. When the file is opened from the desktop's
+ * search, it brings <b>what the user had typed</b> to find it. An editor can use it to jump straight
+ * to that word inside the document, which is exactly what the user expects and almost nobody
+ * implements.
  *
- * <p>Es la cadena vacia --no null-- cuando no vino de una busqueda.
+ * <p>It is the empty string --not null-- when it did not come from a search.
  */
 public final class OpenFilesEvent extends FilesEvent {
 
     private static final long serialVersionUID = -3982871005867718956L;
 
-    /** Lo que el usuario habia buscado, o vacio. */
+    /** What the user had searched for, or empty. */
     final String searchTerm;
 
     /**
-     * @param files los archivos a abrir
-     * @param searchTerm lo que el usuario habia buscado; null se guarda como cadena vacia
+     * @param files the files to open
+     * @param searchTerm what the user had searched for; null is stored as the empty string
      */
     public OpenFilesEvent(final List<File> files, final String searchTerm) {
         super(files);
@@ -38,7 +38,7 @@ public final class OpenFilesEvent extends FilesEvent {
         }
     }
 
-    /** Lo que el usuario habia buscado; vacio si no vino de una busqueda. Ver la nota de la clase. */
+    /** What the user had searched for; empty if it did not come from a search. See the class note. */
     public String getSearchTerm() {
         return this.searchTerm;
     }

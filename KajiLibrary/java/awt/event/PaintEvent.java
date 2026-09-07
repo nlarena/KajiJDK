@@ -4,67 +4,67 @@ import java.awt.Component;
 import java.awt.Rectangle;
 
 /**
- * Hay que repintar una parte de un componente.
+ * A part of a component has to be repainted.
  *
- * <p>Es el único evento de AWT que **no se le entrega a un oyente**: no hay `PaintListener`. Va
- * directo a `Component.paint` o a `Component.update`, y por eso está en el paquete de eventos pero
- * no participa del modelo de oyentes.
+ * <p>It is AWT's only event that **is not handed to a listener**: there is no `PaintListener`. It
+ * goes straight to `Component.paint` or `Component.update`, and that is why it lives in the event
+ * package but takes no part in the listener model.
  *
- * <p>El rectángulo a actualizar es lo que hace que repintar sea barato: en vez de redibujar el
- * componente entero cuando una ventana lo destapa, se redibuja el pedazo que se destapó.
+ * <p>The rectangle to update is what makes repainting cheap: instead of redrawing the whole component
+ * when a window uncovers it, the uncovered piece is redrawn.
  */
 public class PaintEvent extends ComponentEvent {
 
     private static final long serialVersionUID = 1267492026433337593L;
 
-    /** Hay que pintar, empezando por borrar el fondo. */
+    /** It has to be painted, starting by clearing the background. */
     public static final int PAINT = 800;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int PAINT_FIRST = 800;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int PAINT_LAST = 801;
 
-    /** Hay que actualizar, sin borrar el fondo. */
+    /** It has to be updated, without clearing the background. */
     public static final int UPDATE = 801;
 
     private Rectangle updateRect;
 
     /**
-     * Con el componente, el identificador y el rectángulo.
+     * With the component, the identifier and the rectangle.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public PaintEvent(Component source, int id, Rectangle updateRect) {
         super(source, id);
         this.updateRect = updateRect;
     }
 
-    /** Qué parte hay que repintar. */
+    /** Which part has to be repainted. */
     public Rectangle getUpdateRect() {
         return this.updateRect;
     }
 
     /**
-     * Cambia qué parte hay que repintar.
+     * Changes which part has to be repainted.
      *
-     * <p>Sirve para juntar varios pedidos en uno: el sistema agranda el rectángulo en vez de
-     * encolar dos eventos.
+     * <p>It serves to merge several requests into one: the system grows the rectangle instead of
+     * queueing two events.
      */
     public void setUpdateRect(Rectangle updateRect) {
         this.updateRect = updateRect;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == PAINT) {
-            tipo = "PAINT";
+            type = "PAINT";
         } else if (this.id == UPDATE) {
-            tipo = "UPDATE";
+            type = "UPDATE";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + ",updateRect=" + this.updateRect;
+        return type + ",updateRect=" + this.updateRect;
     }
 }

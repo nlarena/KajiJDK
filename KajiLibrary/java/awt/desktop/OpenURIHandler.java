@@ -1,14 +1,14 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.OpenURIHandler -- abre una direccion que le pasa el sistema.
+ * KajiLibrary's java.awt.desktop.OpenURIHandler -- opens an address the system hands it.
  *
- * <p>Se registra con {@code Desktop.setOpenURIHandler}. Solo puede haber uno: a diferencia de los
- * {@link SystemEventListener}, esto no es un aviso sino una responsabilidad, y no tendria sentido que
- * dos partes del programa la tomaran.
+ * <p>It is registered with {@code Desktop.setOpenURIHandler}. There can be only one: unlike the
+ * {@link SystemEventListener}s, this is not a notice but a responsibility, and it would make no sense
+ * for two parts of the program to take it.
  */
 public interface OpenURIHandler {
 
-    /** Abre esa direccion. */
+    /** Opens that address. */
     void openURI(OpenURIEvent e);
 }

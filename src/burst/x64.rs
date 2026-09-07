@@ -386,6 +386,57 @@ impl Asm {
         self.modrm_mem(src.low3(), dst);
     }
 
+    /// `movsx dst, byte [base+disp]` — `REX.W + 0F BE /r`. La carga de `baload`: un `byte[]`
+    /// guarda 8 bits y la JVM los pone en la pila **con signo**, así que `arr[i]` de `0xFF` es -1.
+    pub fn movsx_rm8(&mut self, dst: Reg, src: Mem) {
+        self.rex(true, dst.is_extended(), src.base.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xBE);
+        self.modrm_mem(dst.low3(), src);
+    }
+
+    /// `movzx dst, word [base+disp]` — `REX.W + 0F B7 /r`. La carga de `caload`: un `char` no
+    /// tiene signo, así que `0xFFFF` vale 65535 y no -1.
+    pub fn movzx_rm16(&mut self, dst: Reg, src: Mem) {
+        self.rex(true, dst.is_extended(), src.base.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xB7);
+        self.modrm_mem(dst.low3(), src);
+    }
+
+    /// `movsx dst, word [base+disp]` — `REX.W + 0F BF /r`. La carga de `saload`. Difiere de
+    /// [`movzx_rm16`][Asm::movzx_rm16] **sólo** para valores con el bit 15 prendido, que es lo que
+    /// hace que un `char[]` y un `short[]` se comporten igual hasta que dejan de hacerlo.
+    pub fn movsx_rm16(&mut self, dst: Reg, src: Mem) {
+        self.rex(true, dst.is_extended(), src.base.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xBF);
+        self.modrm_mem(dst.low3(), src);
+    }
+
+    /// `mov byte [base+disp], src8` — `REX + 88 /r`. El store de `bastore`, que escribe **sólo** el
+    /// byte bajo: los otros tres del `int` en la pila se descartan, que es el truncado que manda
+    /// JVMS §6.5.
+    ///
+    /// El `REX` va siempre, aunque no haga falta el `.W`: sin él, los códigos 4-7 del campo de
+    /// registro nombran `AH`/`CH`/`DH`/`BH` en vez de `SPL`/`BPL`/`SIL`/`DIL`, y guardar el byte
+    /// bajo de `RSI` escribiría la parte alta de `RDX`.
+    pub fn mov_mr8(&mut self, dst: Mem, src: Reg) {
+        self.rex(false, src.is_extended(), dst.base.is_extended(), true);
+        self.byte(0x88);
+        self.modrm_mem(src.low3(), dst);
+    }
+
+    /// `mov word [base+disp], src16` — `66 + 89 /r`, con el prefijo de tamaño de operando. El store
+    /// de `castore` y `sastore`, que comparten instrucción: los dos escriben 16 bits crudos y la
+    /// diferencia entre `char` y `short` está sólo en cómo se los **lee** después.
+    pub fn mov_mr16(&mut self, dst: Mem, src: Reg) {
+        self.byte(0x66);
+        self.rex(false, src.is_extended(), dst.base.is_extended(), false);
+        self.byte(0x89);
+        self.modrm_mem(src.low3(), dst);
+    }
+
     /// `lock xadd [base+disp], src` — `F0 REX.W 0F C1 /r` (`LOCK XADD r/m64, r64`).
     ///
     /// Atomically adds `src` to the memory word and leaves the word's **previous** value in `src`.
@@ -429,6 +480,40 @@ impl Asm {
         self.rex(true, dst.is_extended(), src.is_extended(), false);
         self.byte(0x0F);
         self.byte(0xB6);
+        self.modrm_reg(dst.low3(), src);
+    }
+
+    /// `movsx dst, src8` — `REX.W + 0F BE /r`, **sign**-extending the low byte. El gemelo con
+    /// signo de [`movzx_rr8`][Asm::movzx_rr8], y lo que `i2b` (0x91) es exactamente: JLS §5.1.3
+    /// dice que un `int` a `byte` se trunca a 8 bits y **se reinterpreta con signo**.
+    ///
+    /// El `REX.W` no es solo por el ancho del destino: sin prefijo REX, los códigos 4-7 del campo
+    /// de registro nombran `AH`/`CH`/`DH`/`BH` en vez de `SPL`/`BPL`/`SIL`/`DIL`, así que leer el
+    /// byte bajo de `RSI` sin REX leería la parte alta de `RDX`. Acá siempre se emite.
+    pub fn movsx_rr8(&mut self, dst: Reg, src: Reg) {
+        self.rex(true, dst.is_extended(), src.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xBE);
+        self.modrm_reg(dst.low3(), src);
+    }
+
+    /// `movzx dst, src16` — `REX.W + 0F B7 /r`, **zero**-extending the low word. Es `i2c` (0x92):
+    /// un `char` no tiene signo, así que el truncado a 16 bits da siempre `0..=65535`.
+    pub fn movzx_rr16(&mut self, dst: Reg, src: Reg) {
+        self.rex(true, dst.is_extended(), src.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xB7);
+        self.modrm_reg(dst.low3(), src);
+    }
+
+    /// `movsx dst, src16` — `REX.W + 0F BF /r`, **sign**-extending the low word. Es `i2s` (0x93).
+    /// La diferencia con [`movzx_rr16`][Asm::movzx_rr16] es la única que separa a `char` de
+    /// `short`, y equivocarla da resultados correctos para todo valor menor a 32768 — que es
+    /// justamente por qué los tests de abajo usan valores por encima de ese umbral.
+    pub fn movsx_rr16(&mut self, dst: Reg, src: Reg) {
+        self.rex(true, dst.is_extended(), src.is_extended(), false);
+        self.byte(0x0F);
+        self.byte(0xBF);
         self.modrm_reg(dst.low3(), src);
     }
 
@@ -1167,6 +1252,26 @@ impl Asm {
     /// `cvtsi2sd dst, src` — `F2 REX.W 0F 2A /r`. The `double` twin, for `i2d` and `l2d`.
     pub fn cvtsi2sd(&mut self, dst: Xmm, src: Reg) {
         self.sse_rr(Sse::F2, true, 0x2A, dst.into(), src.into());
+    }
+
+    /// `cvttss2si dst, src` — `F3 [REX.W] 0F 2C /r`: un `float` **truncado hacia cero** a entero.
+    /// `wide` elige el destino de 64 bits (`f2l`) o el de 32 (`f2i`).
+    ///
+    /// La `tt` del nombre es *truncate*, y es la que corresponde: la JVM redondea hacia cero, no al
+    /// par más cercano como haría `cvtss2si`.
+    ///
+    /// **Lo que esta instrucción NO hace es la saturación de la JLS.** Ante un NaN, un infinito o
+    /// un valor fuera de rango, x86 devuelve el *integer indefinite value* — `0x8000_0000` o
+    /// `0x8000…0000`, o sea `MIN` — mientras que la JVM manda 0 para NaN y `MIN`/`MAX` según el
+    /// signo. Por eso el emisor **guarda** ese valor y deopta: ver el brazo de `f2i` en `compile`.
+    pub fn cvttss2si(&mut self, dst: Reg, src: Xmm, wide: bool) {
+        self.sse_rr(Sse::F3, wide, 0x2C, dst.into(), src.into());
+    }
+
+    /// `cvttsd2si dst, src` — `F2 [REX.W] 0F 2C /r`. El gemelo `double`, para `d2i` y `d2l`, con
+    /// exactamente la misma salvedad sobre la saturación.
+    pub fn cvttsd2si(&mut self, dst: Reg, src: Xmm, wide: bool) {
+        self.sse_rr(Sse::F2, wide, 0x2C, dst.into(), src.into());
     }
 
     /// `cvtss2sd dst, src` — `F3 0F 5A /r`: a scalar single widened to a double (`f2d`). Exact for

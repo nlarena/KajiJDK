@@ -4,21 +4,21 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
-// Convierte un evento en una llamada a otro objeto, sin escribir la clase del oyente: "cuando
-// llegue este evento, sacale esta propiedad y pasasela a este metodo de aquel objeto".
+// It turns an event into a call on another object, without writing the listener's class: "when this
+// event arrives, take this property off it and pass it to this method of that object".
 //
-// Los tres nombres que lleva son las tres partes de esa frase:
-//   - `listenerMethodName`: a que metodo del oyente reacciona (null = a todos).
-//   - `eventPropertyName`: que sacarle al evento. Puede ser una ruta con puntos —"source.text"
-//     saca `getSource()` y despues `getText()`—. null significa "no le pases nada".
-//   - `action`: que llamarle al objetivo. Tambien puede ser una ruta con puntos, y el ultimo
-//     tramo es el metodo o la propiedad a escribir.
+// The three names it carries are the three parts of that sentence:
+//   - `listenerMethodName`: which listener method it reacts to (null = all of them).
+//   - `eventPropertyName`: what to take off the event. It may be a dotted path --"source.text" takes
+//     `getSource()` and then `getText()`. null means "pass it nothing".
+//   - `action`: what to call on the target. It may be a dotted path too, and the last segment is the
+//     method or the property to write.
 //
-// Los tres `create(...)` estaticos son la cara que se usa: envuelven este InvocationHandler en un
-// proxy que implementa la interfaz de oyente pedida, asi el llamador puede pasarlo a un
-// `addFooListener` sin escribir la clase. Dependen de `java.lang.reflect.Proxy`, que **ahora si**
-// esta en este arbol; una version anterior de esta clase los declaraba omitidos por esa falta y esa
-// nota quedo vieja.
+// The three static `create(...)` are the face that gets used: they wrap this InvocationHandler in a
+// proxy implementing the listener interface asked for, so the caller can hand it to an
+// `addFooListener` without writing the class. They depend on `java.lang.reflect.Proxy`, which
+// **now is** in this tree; an earlier version of this class declared them omitted for want of it and
+// that note went stale.
 public class EventHandler implements InvocationHandler {
 
     private Object target;
@@ -51,133 +51,135 @@ public class EventHandler implements InvocationHandler {
         return this.eventPropertyName;
     }
 
-    // A que metodo del oyente reacciona. null significa a todos.
+    // Which listener method it reacts to. null means all of them.
     public String getListenerMethodName() {
         return this.listenerMethodName;
     }
 
-    // La llamada que llega desde el oyente. Si no es el metodo al que este handler reacciona, se
-    // contesta lo minimo que la interfaz espera y no se hace nada.
+    // The call arriving from the listener. If it is not the method this handler reacts to, the
+    // least the interface expects is answered and nothing is done.
     //
-    // Los tres metodos de Object van aparte y no como "el metodo del oyente": con
-    // `listenerMethodName == null` este handler reacciona a TODO, y un `hashCode()` sobre el proxy
-    // —que es lo que hace cualquier coleccion donde se guarde el oyente— terminaria ejecutando la
-    // accion. Se contestan por identidad del proxy, que es lo que un oyente sin estado propio es.
+    // Object's three methods go apart and not as "the listener's method": with
+    // `listenerMethodName == null` this handler reacts to EVERYTHING, and a `hashCode()` on the
+    // proxy --which is what any collection the listener is stored in does-- would end up running the
+    // action. They are answered by the proxy's identity, which is what a listener with no state of
+    // its own is.
     public Object invoke(Object proxy, Method method, Object[] arguments) {
-        Object resultado = null;
+        Object result = null;
         if (method != null) {
             String name = method.getName();
             if (method.getDeclaringClass() == Object.class) {
                 if (name.equals("hashCode")) {
-                    resultado = Integer.valueOf(System.identityHashCode(proxy));
+                    result = Integer.valueOf(System.identityHashCode(proxy));
                 } else if (name.equals("equals")) {
-                    resultado = Boolean.valueOf(proxy == arguments[0]);
+                    result = Boolean.valueOf(proxy == arguments[0]);
                 } else if (name.equals("toString")) {
-                    resultado = proxy.getClass().getName() + '@'
+                    result = proxy.getClass().getName() + '@'
                         + Integer.toHexString(System.identityHashCode(proxy));
                 }
             } else if (this.listenerMethodName == null || this.listenerMethodName.equals(name)) {
-                resultado = this.aplicar(arguments);
+                result = this.aplicar(arguments);
             }
         }
-        return resultado;
+        return result;
     }
 
     private Object aplicar(Object[] arguments) {
-        Object resultado = null;
+        Object result = null;
         try {
-            // Que pasarle al objetivo: lo que diga eventPropertyName sobre el evento, o nada.
+            // What to pass the target: whatever eventPropertyName says about the event, or
+            // nothing.
             Object[] args;
             if (this.eventPropertyName == null) {
                 args = new Object[0];
             } else {
-                Object evento = arguments != null && arguments.length > 0 ? arguments[0] : null;
-                args = new Object[] { this.seguirRuta(evento, this.eventPropertyName) };
+                Object event = arguments != null && arguments.length > 0 ? arguments[0] : null;
+                args = new Object[] { this.followPath(event, this.eventPropertyName) };
             }
 
-            // El action tambien puede ser una ruta: se camina hasta el anteultimo tramo y el
-            // ultimo es lo que se llama.
-            Object destino = this.target;
-            String ultimo = this.action;
-            int punto = this.action.lastIndexOf('.');
-            if (punto >= 0) {
-                destino = this.seguirRuta(this.target, this.action.substring(0, punto));
-                ultimo = this.action.substring(punto + 1);
+            // The action may be a path too: it is walked to the second-to-last segment and the
+            // last one is what gets called.
+            Object target = this.target;
+            String last = this.action;
+            int dot = this.action.lastIndexOf('.');
+            if (dot >= 0) {
+                target = this.followPath(this.target, this.action.substring(0, dot));
+                last = this.action.substring(dot + 1);
             }
-            resultado = this.llamar(destino, ultimo, args);
+            result = this.callOn(target, last, args);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return resultado;
+        return result;
     }
 
-    // Camina "a.b.c" aplicando cada tramo como propiedad de lectura.
-    private Object seguirRuta(Object base, String ruta) throws Exception {
-        Object actual = base;
-        int desde = 0;
-        while (desde <= ruta.length() && actual != null) {
-            int punto = ruta.indexOf('.', desde);
-            String tramo = punto < 0 ? ruta.substring(desde) : ruta.substring(desde, punto);
-            if (tramo.length() > 0) {
-                actual = this.leerPropiedad(actual, tramo);
+    // It walks "a.b.c" applying each segment as a read property.
+    private Object followPath(Object base, String path) throws Exception {
+        Object current = base;
+        int from = 0;
+        while (from <= path.length() && current != null) {
+            int dot = path.indexOf('.', from);
+            String segment = dot < 0 ? path.substring(from) : path.substring(from, dot);
+            if (segment.length() > 0) {
+                current = this.readProperty(current, segment);
             }
-            desde = punto < 0 ? ruta.length() + 1 : punto + 1;
+            from = dot < 0 ? path.length() + 1 : dot + 1;
         }
-        return actual;
+        return current;
     }
 
-    // Lee una propiedad probando `getX`, `isX` y, por ultimo, un metodo que se llame igual.
-    private Object leerPropiedad(Object o, String nombre) throws Exception {
-        String cap = PropertyDescriptor.capitalizar(nombre);
-        Method m = PropertyDescriptor.buscarMetodo(o.getClass(), "get" + cap, 0);
+    // It reads a property by trying `getX`, `isX` and, lastly, a method called the same.
+    private Object readProperty(Object o, String name) throws Exception {
+        String cap = PropertyDescriptor.capitalize(name);
+        Method m = PropertyDescriptor.findMethod(o.getClass(), "get" + cap, 0);
         if (m == null) {
-            m = PropertyDescriptor.buscarMetodo(o.getClass(), "is" + cap, 0);
+            m = PropertyDescriptor.findMethod(o.getClass(), "is" + cap, 0);
         }
         if (m == null) {
-            m = PropertyDescriptor.buscarMetodo(o.getClass(), nombre, 0);
+            m = PropertyDescriptor.findMethod(o.getClass(), name, 0);
         }
         if (m == null) {
-            throw new NoSuchMethodException("No property " + nombre + " on " + o.getClass().getName());
+            throw new NoSuchMethodException("No property " + name + " on " + o.getClass().getName());
         }
         return m.invoke(o);
     }
 
-    // Llama al metodo del objetivo, aceptando tanto el nombre directo como la forma `setX`.
-    private Object llamar(Object destino, String nombre, Object[] args) throws Exception {
-        Method elegido = this.buscarCompatible(destino.getClass(), nombre, args);
-        if (elegido == null) {
-            String cap = "set" + PropertyDescriptor.capitalizar(nombre);
-            elegido = this.buscarCompatible(destino.getClass(), cap, args);
+    // It calls the target's method, accepting both the plain name and the `setX` form.
+    private Object callOn(Object target, String name, Object[] args) throws Exception {
+        Method chosen = this.findCompatible(target.getClass(), name, args);
+        if (chosen == null) {
+            String cap = "set" + PropertyDescriptor.capitalize(name);
+            chosen = this.findCompatible(target.getClass(), cap, args);
         }
-        if (elegido == null) {
-            throw new NoSuchMethodException("No method " + nombre + " on " + destino.getClass().getName());
+        if (chosen == null) {
+            throw new NoSuchMethodException("No method " + name + " on " + target.getClass().getName());
         }
-        return elegido.invoke(destino, args);
+        return chosen.invoke(target, args);
     }
 
-    // Un oyente de `listenerInterface` que, ante cualquiera de sus metodos, le llama `action` al
-    // objetivo sin pasarle nada del evento.
+    // A listener of `listenerInterface` that, on any of its methods, calls `action` on the target
+    // without passing it anything from the event.
     public static <T> T create(Class<T> listenerInterface, Object target, String action) {
         return makeProxy(listenerInterface, target, action, null, null);
     }
 
-    // Igual, pero pasandole al objetivo lo que `eventPropertyName` saque del evento.
+    // The same, but passing the target whatever `eventPropertyName` takes off the event.
     public static <T> T create(Class<T> listenerInterface, Object target, String action,
             String eventPropertyName) {
         return makeProxy(listenerInterface, target, action, eventPropertyName, null);
     }
 
-    // Igual, y ademas solo reacciona al metodo de oyente que se nombre.
+    // The same, and it also reacts only to the listener method that is named.
     public static <T> T create(Class<T> listenerInterface, Object target, String action,
             String eventPropertyName, String listenerMethodName) {
         return makeProxy(listenerInterface, target, action, eventPropertyName, listenerMethodName);
     }
 
-    // El cargador que se le pide al proxy es el de la interfaz y no el del contexto: la clase que
-    // se fabrica tiene que VER a `listenerInterface` para poder implementarla, y el unico cargador
-    // del que eso se sabe seguro es el que la cargo a ella.
+    // The loader asked of the proxy is the interface's and not the context's: the class that is
+    // manufactured has to SEE `listenerInterface` in order to implement it, and the only loader that
+    // is certain of is the one that loaded it.
     private static <T> T makeProxy(Class<T> listenerInterface, Object target, String action,
             String eventPropertyName, String listenerMethodName) {
         if (listenerInterface == null) {
@@ -189,16 +191,16 @@ public class EventHandler implements InvocationHandler {
         return listenerInterface.cast(proxy);
     }
 
-    private Method buscarCompatible(Class<?> c, String nombre, Object[] args) {
-        Method elegido = null;
+    private Method findCompatible(Class<?> c, String name, Object[] args) {
+        Method chosen = null;
         Method[] ms = c.getMethods();
         for (int i = 0; i < ms.length; i++) {
-            if (elegido == null
-                    && ms[i].getName().equals(nombre)
+            if (chosen == null
+                    && ms[i].getName().equals(name)
                     && Statement.aceptan(ms[i].getParameterTypes(), args)) {
-                elegido = ms[i];
+                chosen = ms[i];
             }
         }
-        return elegido;
+        return chosen;
     }
 }

@@ -3,21 +3,21 @@ package java.net.spi;
 import java.net.URLStreamHandlerFactory;
 
 /**
- * KajiLibrary's java.net.spi.URLStreamHandlerProvider -- protocolos de URL nuevos.
+ * KajiLibrary's java.net.spi.URLStreamHandlerProvider -- new URL protocols.
  *
- * <p>No declara nada propio: hereda el unico metodo de {@link URLStreamHandlerFactory} y solo agrega
- * el hecho de ser cargable como servicio. Esa es toda la diferencia con la fabrica vieja, y es una
- * diferencia real: la fabrica se instala llamando a {@code URL.setURLStreamHandlerFactory}, que se
- * puede llamar <b>una sola vez por proceso</b>, asi que la primera biblioteca que la usaba dejaba
- * afuera a todas las demas. Como servicio, cada una registra el suyo y la plataforma les pregunta a
- * todas por orden.
+ * <p>It declares nothing of its own: it inherits {@link URLStreamHandlerFactory}'s only method and
+ * adds no more than being loadable as a service. That is the whole difference from the old factory,
+ * and it is a real difference: the factory is installed by calling
+ * {@code URL.setURLStreamHandlerFactory}, which can be called <b>once only per process</b>, so the
+ * first library that used it left every other one out. As a service, each registers its own and the
+ * platform asks them all in order.
  *
- * <p>Un proveedor devuelve null para los protocolos que no le interesan, y ahi se le pregunta al que
- * sigue.
+ * <p>A provider returns null for the protocols it is not interested in, and there the next one is
+ * asked.
  */
 public abstract class URLStreamHandlerProvider implements URLStreamHandlerFactory {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected URLStreamHandlerProvider() {
     }
 }

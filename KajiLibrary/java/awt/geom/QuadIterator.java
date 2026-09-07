@@ -2,7 +2,7 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de QuadCurve2D: MOVETO al primer punto y una sola QUADTO. Sin CLOSE.
+// QuadCurve2D's internal iterator: MOVETO to the first point and a single QUADTO. No CLOSE.
 class QuadIterator implements PathIterator {
 
     QuadCurve2D quad;

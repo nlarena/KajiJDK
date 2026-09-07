@@ -4,39 +4,39 @@ import java.awt.AWTEvent;
 import java.awt.ActiveEvent;
 
 /**
- * Trabajo para correr en el hilo de eventos.
+ * Work to be run on the event thread.
  *
- * <p>Es la pieza que resuelve la regla más estricta de AWT: **la interfaz sólo se toca desde el hilo
- * de eventos**. Un hilo que quiera cambiar algo de la pantalla no lo hace directamente; encola uno
- * de éstos con lo que hay que hacer, y el hilo de eventos lo saca a su turno y lo ejecuta.
+ * <p>It is the piece that settles AWT's strictest rule: **the interface is only touched from the
+ * event thread**. A thread wanting to change something on screen does not do it directly; it queues
+ * one of these with what has to be done, and the event thread takes it out in its turn and runs it.
  *
- * <p>Se atiende solo, sin oyentes: implementa {@link ActiveEvent}, así que la cola le llama
- * {@link #dispatch} y él corre lo suyo.
+ * <p>It attends to itself, with no listeners: it implements {@link ActiveEvent}, so the queue calls
+ * {@link #dispatch} on it and it runs what is its own.
  *
- * <p>Las excepciones se pueden atrapar o dejar pasar. Atraparlas y guardarlas sirve para las
- * llamadas **sincrónicas**: el hilo que espera necesita enterarse de que la tarea falló, y una
- * excepción que se propague en el hilo de eventos no le llegaría nunca.
+ * <p>Exceptions may be caught or let through. Catching and storing them serves the **synchronous**
+ * calls: the waiting thread needs to hear that the task failed, and an exception propagating on the
+ * event thread would never reach it.
  */
 public class InvocationEvent extends AWTEvent implements ActiveEvent {
 
     private static final long serialVersionUID = 436056344909459450L;
 
-    /** El identificador de siempre. */
+    /** The usual identifier. */
     public static final int INVOCATION_DEFAULT = 1200;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int INVOCATION_FIRST = 1200;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int INVOCATION_LAST = 1200;
 
-    /** Qué hay que hacer. */
+    /** What has to be done. */
     protected Runnable runnable;
 
-    /** Sobre qué avisar cuando terminó, o `null`. */
+    /** What to notify on once it has finished, or `null`. */
     protected volatile Object notifier;
 
-    /** Si hay que atrapar las excepciones en vez de dejarlas pasar. */
+    /** Whether the exceptions have to be caught instead of let through. */
     protected boolean catchExceptions;
 
     private Runnable listener;
@@ -45,18 +45,18 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
     private final long when;
 
     /**
-     * Con la tarea, dejando pasar las excepciones.
+     * With the task, letting the exceptions through.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public InvocationEvent(Object source, Runnable runnable) {
         this(source, INVOCATION_DEFAULT, runnable, null, false);
     }
 
     /**
-     * Con un objeto sobre el que avisar al terminar.
+     * With an object to notify on when it finishes.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public InvocationEvent(Object source, Runnable runnable, Object notifier,
             boolean catchThrowables) {
@@ -64,9 +64,9 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
     }
 
     /**
-     * Con una tarea que se corre al terminar.
+     * With a task that is run when it finishes.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public InvocationEvent(Object source, Runnable runnable, Runnable listener,
             boolean catchThrowables) {
@@ -75,9 +75,9 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
     }
 
     /**
-     * El constructor general, para las subclases.
+     * The general constructor, for the subclasses.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     protected InvocationEvent(Object source, int id, Runnable runnable, Object notifier,
             boolean catchThrowables) {
@@ -89,10 +89,10 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
     }
 
     /**
-     * Corre la tarea y avisa que terminó.
+     * Runs the task and reports that it finished.
      *
-     * <p>El aviso va en un `finally`: si la tarea tira y las excepciones no se atrapan, el hilo que
-     * esperaba tiene que despertarse igual, o queda colgado para siempre.
+     * <p>The notice goes in a `finally`: if the task throws and the exceptions are not caught, the
+     * waiting thread has to wake up all the same, or it hangs for ever.
      */
     public void dispatch() {
         try {
@@ -110,7 +110,7 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
         }
     }
 
-    /** Marca que terminó y despierta a quien estuviera esperando. */
+    /** Marks that it finished and wakes whoever was waiting. */
     private void finishedDispatching() {
         this.dispatched = true;
         Object n = this.notifier;
@@ -125,9 +125,9 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
     }
 
     /**
-     * La excepción que tiró la tarea, si fue una `Exception`.
+     * The exception the task threw, if it was an `Exception`.
      *
-     * @return la excepción, o `null` si no hubo o si fue un `Error`
+     * @return the exception, or `null` if there was none or if it was an `Error`
      */
     public Exception getException() {
         if (this.catchExceptions && this.throwable instanceof Exception) {
@@ -137,9 +137,9 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
     }
 
     /**
-     * Lo que haya tirado la tarea.
+     * Whatever the task threw.
      *
-     * <p>A diferencia de {@link #getException}, incluye los `Error`.
+     * <p>Unlike {@link #getException}, it includes the `Error`s.
      */
     public Throwable getThrowable() {
         if (this.catchExceptions) {
@@ -148,19 +148,19 @@ public class InvocationEvent extends AWTEvent implements ActiveEvent {
         return null;
     }
 
-    /** Cuándo se encoló. */
+    /** When it was queued. */
     public long getWhen() {
         return this.when;
     }
 
-    /** Si ya se ejecutó. */
+    /** Whether it has already run. */
     public boolean isDispatched() {
         return this.dispatched;
     }
 
     public String paramString() {
-        String tipo = this.id == INVOCATION_DEFAULT ? "INVOCATION_DEFAULT" : "unknown type";
-        return tipo + ",runnable=" + this.runnable + ",notifier=" + this.notifier
+        String type = this.id == INVOCATION_DEFAULT ? "INVOCATION_DEFAULT" : "unknown type";
+        return type + ",runnable=" + this.runnable + ",notifier=" + this.notifier
                 + ",catchExceptions=" + this.catchExceptions + ",when=" + this.when;
     }
 }

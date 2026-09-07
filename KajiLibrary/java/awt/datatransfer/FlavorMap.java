@@ -3,20 +3,20 @@ package java.awt.datatransfer;
 import java.util.Map;
 
 /**
- * La traducción entre los formatos de Java y los nombres que usa el sistema operativo.
+ * The translation between Java's formats and the names the operating system uses.
  *
- * <p>Cada plataforma nombra los formatos del portapapeles a su manera: Windows dice `CF_TEXT`, X11
- * dice `STRING`, macOS dice otra cosa. Un {@link DataFlavor} es el nombre de Java. Esta interfaz es
- * el diccionario entre los dos.
+ * <p>Each platform names the clipboard's formats its own way: Windows says `CF_TEXT`, X11 says
+ * `STRING`, macOS says something else. A {@link DataFlavor} is Java's name. This interface is the
+ * dictionary between the two.
  *
- * <p>Sin ella, todo programa Java que quisiera intercambiar datos con un programa nativo tendría que
- * conocer los nombres de cada sistema.
+ * <p>Without it, every Java program wanting to exchange data with a native program would have to
+ * know each system's names.
  */
 public interface FlavorMap {
 
-    /** Qué nombre nativo le corresponde a cada uno de esos formatos. */
+    /** Which native name corresponds to each of those formats. */
     Map<DataFlavor, String> getNativesForFlavors(DataFlavor[] flavors);
 
-    /** Qué formato le corresponde a cada uno de esos nombres nativos. */
+    /** Which format corresponds to each of those native names. */
     Map<String, DataFlavor> getFlavorsForNatives(String[] natives);
 }

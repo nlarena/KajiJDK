@@ -4,29 +4,29 @@ import java.applet.Applet;
 import java.beans.beancontext.BeanContext;
 
 /**
- * Quien prepara un bean que resulta ser un applet, cuando lo trae {@link Beans#instantiate}.
+ * Whoever prepares a bean that turns out to be an applet, when {@link Beans#instantiate} brings it.
  *
- * <p>Un applet suelto no sirve: necesita un {@link java.applet.AppletStub} que le diga dónde está y
- * un contexto que lo aloje, y eso normalmente lo pone el navegador. Cuando el applet lo crea
- * `Beans.instantiate` no hay navegador, así que alguien tiene que hacer ese trabajo: es este tipo.
- * Los dos pasos están separados porque van en momentos distintos —preparar antes de entrar al
- * contexto, arrancar después—.
+ * <p>A loose applet is no use: it needs a {@link java.applet.AppletStub} to tell it where it is and
+ * a context to host it, and that is normally put there by the browser. When the applet is created by
+ * `Beans.instantiate` there is no browser, so someone has to do that work: it is this type. The two
+ * steps are kept apart because they go at different moments —preparing before entering the context,
+ * starting afterwards.
  *
- * <p>Acá ninguno de los dos métodos llega a llamarse: un {@link Applet} no se puede construir sin
- * pantalla. El tipo está entero igual, porque `Beans.instantiate` lo nombra.
+ * <p>Here neither of the two methods ever gets called: an {@link Applet} cannot be constructed with
+ * no screen. The type is here in full all the same, because `Beans.instantiate` names it.
  *
- * @deprecated el modelo de applets está en desuso desde Java 9 y marcado para borrarse desde 17.
+ * @deprecated the applet model has been deprecated since Java 9 and marked for removal since 17.
  */
 @Deprecated(since = "9", forRemoval = true)
 public interface AppletInitializer {
 
     /**
-     * Prepara el applet: le pone el representante y lo que haga falta para que pueda correr.
+     * Prepares the applet: it gives it the stub and whatever else it needs to be able to run.
      *
-     * @param bCtxt el contexto que lo va a alojar, o `null`
+     * @param bCtxt the context that is going to host it, or `null`
      */
     void initialize(Applet newAppletBean, BeanContext bCtxt);
 
-    /** Lo arranca: es el momento de llamar a {@code start()}. */
+    /** It starts it: this is the moment to call {@code start()}. */
     void activate(Applet newApplet);
 }

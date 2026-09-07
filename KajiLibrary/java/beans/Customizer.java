@@ -1,14 +1,15 @@
 package java.beans;
 
-// El panel a medida con el que una herramienta edita un bean entero, cuando editar propiedad por
-// propiedad no alcanza. Quien lo implementa recibe el bean por setObject y avisa de los cambios
-// como cualquier fuente de propiedades ligadas.
+// The bespoke panel a tool edits a whole bean with, when editing property by property is not
+// enough. Whoever implements it receives the bean through setObject and reports the changes like any
+// source of bound properties.
 //
-// En el JDK un Customizer ademas hereda de java.awt.Component; aca no puede, porque java.awt no
-// existe en este arbol. La interfaz en si —sus tres metodos— no toca awt y queda completa.
+// In the JDK a Customizer also inherits from java.awt.Component; here it cannot, because java.awt
+// does not exist in this tree. The interface itself —its three methods— does not touch awt and is
+// complete.
 public interface Customizer {
 
-    // El bean a editar. Se llama una sola vez, antes de mostrar el panel.
+    // The bean to edit. It is called once only, before showing the panel.
     void setObject(Object bean);
 
     void addPropertyChangeListener(PropertyChangeListener listener);

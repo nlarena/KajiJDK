@@ -2,11 +2,12 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de Rectangle2D. Seis segmentos: MOVETO, tres LINETO por las esquinas, un cuarto
-// LINETO **de vuelta al origen** y recien ahi el CLOSE. El LINETO redundante no es un descuido: es
-// lo que emite el JDK y lo que ve cualquiera que recorra el camino.
+// Rectangle2D's internal iterator. Six segments: MOVETO, three LINETO through the corners, a
+// fourth LINETO **back to the origin** and only then the CLOSE. The redundant LINETO is no
+// oversight: it is what the JDK emits and what anyone walking the path sees.
 //
-// Un rectangulo de ancho o alto negativo no representa nada: el iterador arranca ya terminado.
+// A rectangle of negative width or height represents nothing: the iterator starts out already
+// done.
 class RectIterator implements PathIterator {
 
     double x;

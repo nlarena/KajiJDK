@@ -407,6 +407,16 @@ fn fold_const_int(
     consts: &HashMap<SymbolId, i32>,
     e: &Expr,
 ) -> Option<i32> {
+    // **Finding #503**: primero, el binding que ya calculó la atribución. Es lo único que funciona
+    // para una constante de **otra unidad de compilación**: re-resolver el nombre acá falla, porque
+    // el scope del desugar no ve los `import` de la unidad --`Types.BIT` resuelve perfecto en una
+    // expresión normal y no en un `case`, que era todo el síntoma--. Con el binding no hay que
+    // resolver nada: la atribución ya dijo qué campo es.
+    if let Some(Binding::Field(fid)) = e.binding {
+        if let Some(v) = consts.get(&fid).copied().or_else(|| from_table(table, fid)) {
+            return Some(v);
+        }
+    }
     match &e.kind {
         ExprKind::IntLit(n) => i32::try_from(*n).ok(),
         ExprKind::CharLit(c) => Some(*c as i32),
@@ -431,6 +441,9 @@ fn fold_const_int(
             consts.get(&fid).copied().or_else(|| from_table(table, fid))
         }
         // `C.MAX`: se resuelve `C` a su clase y se busca `MAX` en su scope de miembros.
+        // `C.MAX`: se resuelve `C` a su clase y se busca `MAX` en su scope de miembros. Es el
+        // camino para una constante de **esta** compilación; la de otra unidad entra por el binding
+        // de arriba, porque acá el scope no ve los `import` (#503).
         ExprKind::Field { expr, name } => {
             let ExprKind::Name(cn) = &expr.kind else { return None };
             let cid = table.resolve_type(scope, cn)?;
@@ -3416,15 +3429,25 @@ impl Desugarer<'_> {
             Field(String, usize),
             Receiver(usize),
         }
+        // §6.5.6.1: un nombre simple resuelve primero en **esta** clase y sus supertipos; recién si
+        // no está ahí se sube a la envolvente. El corte es necesario desde que `member_owner_is`
+        // mira la herencia (#522): sin él, un miembro que la anidada y la envolvente comparten
+        // --las dos extienden la misma base-- se reescribía a `this$0.m()` aunque fuera propio, y
+        // si la anidada es estática ni siquiera hay `this$0` al que reescribir. Lo destapó
+        // recompilar la biblioteca entera: `BasicMenuUI` dejaba de compilar con
+        // *"no se encuentra el campo: this$0"*.
+        let propio = |sym: SymbolId| self.cur_class.is_some_and(|c| self.member_owner_is(sym, c));
         let act = match (&e.kind, &e.binding) {
-            (ExprKind::Name(n), Some(Binding::Field(fid))) if !self.is_static_sym(*fid) => {
+            (ExprKind::Name(n), Some(Binding::Field(fid)))
+                if !self.is_static_sym(*fid) && !propio(*fid) =>
+            {
                 match self.enclosing_level(&chain, *fid) {
                     Some(k) => Act::Field(n.clone(), k),
                     None => return,
                 }
             }
             (ExprKind::Call { target: None, .. }, Some(Binding::Method(mid)))
-                if !self.is_static_sym(*mid) =>
+                if !self.is_static_sym(*mid) && !propio(*mid) =>
             {
                 match self.enclosing_level(&chain, *mid) {
                     Some(k) => Act::Receiver(k),
@@ -3710,13 +3733,45 @@ impl Desugarer<'_> {
         if matches!(e.kind, ExprKind::IntLit(_)) {
             return;
         }
-        let scope = self.cur_class.map_or(self.top_scope, |c| self.member_scope_of(c));
-        if let Some(v) = fold_const_int(self.table, scope, &self.consts, e) {
-            *e = ex(ExprKind::IntLit(v as i64));
+        // **Finding #513**: se prueba con el scope de la clase en curso y, si no resuelve, con el
+        // de cada clase **envolvente**. Un `case CH:` adentro de una anidada puede nombrar una
+        // constante de la de afuera: por §6.5.6.1 el nombre simple es visible ahí, pero no está en
+        // el scope de miembros de la anidada, y mirando solo ese scope el plegado fallaba. El
+        // síntoma era desconcertante porque `case C.CH:` --el mismo campo, calificado-- sí andaba,
+        // y `c == CH` fuera de un `case` también.
+        let mut cur = self.cur_class;
+        for _ in 0..64 {
+            let scope = match cur {
+                Some(c) => self.member_scope_of(c),
+                None => self.top_scope,
+            };
+            if let Some(v) = fold_const_int(self.table, scope, &self.consts, e) {
+                *e = ex(ExprKind::IntLit(v as i64));
+                return;
+            }
+            match cur {
+                Some(c) => cur = self.table.symbol(c).owner,
+                None => return,
+            }
         }
     }
+    /// ¿`sym` es miembro de `class` — propio o **heredado**?
+    ///
+    /// **Finding #522**: antes solo comparaba el owner **directo**, y por eso una clase interna que
+    /// llamaba a un método que su externa **hereda** no se reescribía a `this$0.m()`. La llamada
+    /// quedaba sin calificar, el generador la emitía como `invokevirtual` sobre la interna, y en
+    /// ejecución salía `NoSuchMethodError` — sin un solo aviso al compilar. Es el patrón de casi
+    /// todas las clases anidadas de Swing (`Handler` adentro de un `XxxUI` llamando a
+    /// `getComponent()`), así que el sintoma aparecia lejos de la causa.
+    ///
+    /// Se mira el grafo de supertipos entero, superinterfaces incluidas, que es lo que hace
+    /// `candidates`.
     fn member_owner_is(&self, sym: SymbolId, class: SymbolId) -> bool {
-        self.table.symbol(sym).owner == Some(class)
+        if self.table.symbol(sym).owner == Some(class) {
+            return true;
+        }
+        let name = self.table.symbol(sym).name.clone();
+        super::attribute::candidates(self.table, class, &name).contains(&sym)
     }
     /// La cadena de tipos envolventes alcanzables por `this$0` desde la clase en curso: `[enclosing
     /// directo, su enclosing, …]`. Se sube mientras cada eslabón sea una **interna de instancia** (la
@@ -4138,9 +4193,22 @@ impl EnclosingUseScan<'_> {
     fn is_static(&self, id: SymbolId) -> bool {
         self.table.symbol(id).modifiers.contains(&Modifier::Static)
     }
-    /// ¿El miembro `id` (campo o método) pertenece a un tipo del conjunto de enclosings?
+    /// ¿El miembro `id` (campo o método) pertenece a un tipo del conjunto de enclosings — propio o
+    /// **heredado**?
+    ///
+    /// Tiene que usar el **mismo** criterio que `Desugar::member_owner_is`, que decide reescribir a
+    /// `this$0.m()`. Si uno mira la herencia y el otro no, el rewrite rutea por un campo que este
+    /// otro decidió no materializar, y sale *"no se encuentra el campo: this$0"*. Pasó al arreglar
+    /// el #522: la anónima de `BasicMenuUI.setupPostTimer` llama a `getPath()`, que `BasicMenuUI`
+    /// hereda de `BasicMenuItemUI`.
     fn owner_in_set(&self, id: SymbolId) -> bool {
-        self.table.symbol(id).owner.is_some_and(|o| self.set.contains(&o))
+        if self.table.symbol(id).owner.is_some_and(|o| self.set.contains(&o)) {
+            return true;
+        }
+        let name = self.table.symbol(id).name.clone();
+        self.set
+            .iter()
+            .any(|&c| super::attribute::candidates(self.table, c, &name).contains(&id))
     }
 
     fn members(&mut self, members: &[Member]) {

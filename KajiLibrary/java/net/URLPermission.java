@@ -5,42 +5,38 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-// El permiso de hablar con una URL: que esquema, que host, que ruta, con que metodos y mandando que
-// headers.
+// Permission to talk to a URL: which scheme, which host, which path, with which methods and sending
+// which headers.
 //
-// Es el unico permiso de este paquete que se puede escribir entero sin red, y la razon esta en su
-// propio contrato: **URLPermission no resuelve nombres**. Compara los textos tal como se los dieron
-// -- no canonicaliza el host, no consulta DNS, no hace busqueda inversa. Eso lo convierte en
-// computacion pura sobre cadenas, que es exactamente lo que se puede hacer aca.
+// It is the permission in this package that can be written whole with no network, and the reason is
+// in its own contract: **URLPermission does not resolve names**. It compares the texts as they were
+// given -- it does not canonicalize the host, does not consult DNS, does not do a reverse lookup.
+// That makes it pure computation over strings, which is exactly what can be done here.
 //
-// (`SocketPermission` es lo contrario y por eso no esta en este arbol: su `implies` esta definido en
-// terminos de resolver los dos nombres y comparar direcciones. Ver mas abajo.)
+// The path grammar has three forms and the difference matters:
 //
-// La gramatica de la ruta tiene tres formas y la diferencia importa:
+//   /a/b     exactly that one
+//   /a/*     that one and **one** level more: it covers /a/b but not /a/b/c
+//   /a/-     that one and everything hanging off it, recursively
 //
-//   /a/b     exactamente esa
-//   /a/*     esa y **un** nivel mas: cubre /a/b pero no /a/b/c
-//   /a/-     esa y todo lo que cuelgue, recursivo
-//
-// Las acciones son "metodos:headers", las dos listas separadas por comas, y `*` en cualquiera de las
-// dos significa todos. Se normalizan --ordenadas, y siempre con los dos puntos-- para que dos
-// permisos que dicen lo mismo se comparen iguales: "POST,GET" y "GET,POST" son el mismo permiso.
+// The actions are "methods:headers", both comma-separated lists, and `*` in either of the two means
+// all. They are normalized --sorted, and always with the colon-- so that two permissions saying the
+// same thing compare equal: "POST,GET" and "GET,POST" are the same permission.
 //
 // ===========================================================================================
-// POR QUE `SocketPermission` NO ESTA
+// HOW THIS DIFFERS FROM `SocketPermission`
 // ===========================================================================================
 //
-// `SocketPermission.implies` esta especificado en terminos de resolucion de nombres: para decidir si
-// el permiso sobre "ejemplo.org" cubre al permiso sobre "1.2.3.4" hay que resolver el primero y
-// comparar direcciones. Sin resolver, la respuesta seria distinta de la del JDK **en silencio**, y
-// siempre en la direccion de negar de mas. En una clase de seguridad eso es justamente lo peor: un
-// permiso que contesta que no cuando el JDK contesta que si es un metodo que miente sobre el
-// resultado de una decision de autorizacion. No declararlo hace que el codigo que lo necesita falle
-// al compilar, que es donde se puede ver.
+// `SocketPermission.implies` is specified in terms of name resolution: to decide whether the
+// permission over "example.org" covers the permission over "1.2.3.4", the first has to be resolved
+// and the addresses compared. There is no resolver in this VM, so that class compares textually and
+// documents that its answer is stricter than the JDK's, never laxer. This one has no such gap,
+// because its contract never asked for a resolver in the first place.
 //
-// Nada mas omitido de esta clase.
+// Nothing is omitted from this class.
 //
-// @deprecated El Security Manager quedo deprecado para remocion; estos permisos ya no se chequean.
+// @deprecated The Security Manager is deprecated for removal; these permissions are no longer
+// checked.
 @Deprecated
 public final class URLPermission extends Permission {
 
@@ -55,18 +51,18 @@ public final class URLPermission extends Permission {
     private String actions;
 
     /**
-     * El permiso sobre esa URL, con esas acciones.
+     * The permission over that URL, with those actions.
      *
-     * @param url esquema://autoridad/ruta, o "esquema:*"
-     * @param actions "metodos:headers"; los dos puntos son opcionales si no hay headers
-     * @throws IllegalArgumentException si la URL o las acciones no se entienden
+     * @param url scheme://authority/path, or "scheme:*"
+     * @param actions "methods:headers"; the colon is optional if there are no headers
+     * @throws IllegalArgumentException if the URL or the actions are not understood
      */
     public URLPermission(String url, String actions) {
         super(url);
         this.init(actions);
     }
 
-    /** El permiso sobre esa URL para todos los metodos y todos los headers ("*:*"). */
+    /** The permission over that URL for every method and every header ("*:*"). */
     public URLPermission(String url) {
         this(url, "*:*");
     }
@@ -74,8 +70,8 @@ public final class URLPermission extends Permission {
     private void init(String actions) {
         this.parseURI(this.getName());
         int colon = actions.indexOf(':');
-        // Un segundo ':' significaria un tercer campo que no existe; es un error de escritura, no
-        // una lista de headers con dos puntos adentro.
+        // A second ':' would mean a third field that does not exist; it is a writing error, not a
+        // header list with a colon inside it.
         if (actions.lastIndexOf(':') != colon) {
             throw new IllegalArgumentException("Invalid actions string: \"" + actions + "\"");
         }
@@ -102,7 +98,7 @@ public final class URLPermission extends Permission {
         this.scheme = url.substring(0, delim).toLowerCase();
         this.ssp = url.substring(delim + 1);
         if (!this.ssp.startsWith("//")) {
-            // La unica forma sin autoridad que se admite es "esquema:*": todo ese esquema.
+            // The only authority-less form admitted is "scheme:*": that whole scheme.
             if (!this.ssp.equals("*")) {
                 throw new IllegalArgumentException("Invalid URL string: \"" + url + "\"");
             }
@@ -122,18 +118,19 @@ public final class URLPermission extends Permission {
         this.authority = new Authority(this.scheme, auth.toLowerCase());
     }
 
-    // Ordenadas y con la caja canonica, para que dos permisos equivalentes tengan la misma cadena
-    // de acciones. `campo` es "methods" o "headers" y decide dos cosas: como se normaliza la caja y
-    // que dice el mensaje de error.
+    // Sorted and in canonical case, so that two equivalent permissions have the same actions string.
+    // `field` is "methods" or "headers" and it decides two things: how the case is normalized and what
+    // the error message says.
     //
-    // Los repetidos NO se sacan --"GET,GET" queda "GET,GET"-- porque es lo que hace el JDK, y la
-    // cadena de acciones es observable por `getActions`. Se habia hecho al reves y la prueba de
-    // comportamiento lo agarro.
+    // Duplicates are NOT removed --"GET,GET" stays "GET,GET"-- because it is what the JDK does, and
+    // the actions string is observable through `getActions`. It had been done the other way round and
+    // the behaviour test caught it.
     //
-    // El espacio en blanco es un error, no algo para recortar: un permiso escrito " GET " casi
-    // siempre viene de una cadena armada a mano mal, y aceptarlo callado da un permiso que no es el
-    // que se quiso escribir. El JDK tira, y el mensaje cita el campo ENTERO sin tocar, no el token.
-    private static List<String> normalize(String s, String campo) {
+    // White space is an error, not something to trim: a permission written " GET " almost always
+    // comes from a hand-assembled string gone wrong, and accepting it silently gives a permission
+    // that is not the one that was meant. The JDK throws, and the message quotes the WHOLE field
+    // untouched, not the token.
+    private static List<String> normalize(String s, String field) {
         List<String> out = new ArrayList<String>();
         if (s == null || s.length() == 0) {
             return Collections.unmodifiableList(out);
@@ -142,7 +139,7 @@ public final class URLPermission extends Permission {
         while (i < s.length()) {
             if (Character.isWhitespace(s.charAt(i))) {
                 throw new IllegalArgumentException(
-                        "White space not allowed in " + campo + ": \"" + s + "\"");
+                        "White space not allowed in " + field + ": \"" + s + "\"");
             }
             i = i + 1;
         }
@@ -158,29 +155,29 @@ public final class URLPermission extends Permission {
                 start = comma + 1;
             }
             if (tok.length() > 0) {
-                out.add("methods".equals(campo) ? tok.toUpperCase() : canonHeader(tok));
+                out.add("methods".equals(field) ? tok.toUpperCase() : canonHeader(tok));
             }
         }
         Collections.sort(out);
         return Collections.unmodifiableList(out);
     }
 
-    // "accept" -> "Accept", "x-Y-z" -> "X-Y-Z": mayuscula inicial en cada tramo separado por
-    // guion, minuscula el resto. Es la escritura canonica de un header HTTP, y normalizar a ella
-    // --en vez de a minuscula-- es lo que hace que `getActions` devuelva algo que se pueda pegar
-    // tal cual en una cabecera.
+    // "accept" -> "Accept", "x-Y-z" -> "X-Y-Z": an initial capital on each hyphen-separated stretch,
+    // lower case for the rest. It is an HTTP header's canonical spelling, and normalizing to it
+    // --instead of to lower case-- is what makes `getActions` return something that can be pasted
+    // straight into a header.
     private static String canonHeader(String tok) {
         StringBuilder b = new StringBuilder();
-        boolean inicio = true;
+        boolean atStart = true;
         int i = 0;
         while (i < tok.length()) {
             char c = tok.charAt(i);
             if (c == '-') {
                 b.append(c);
-                inicio = true;
+                atStart = true;
             } else {
-                b.append(inicio ? Character.toUpperCase(c) : Character.toLowerCase(c));
-                inicio = false;
+                b.append(atStart ? Character.toUpperCase(c) : Character.toLowerCase(c));
+                atStart = false;
             }
             i = i + 1;
         }
@@ -207,12 +204,12 @@ public final class URLPermission extends Permission {
         return b.toString();
     }
 
-    /** Las acciones normalizadas, en la forma "metodos:headers". */
+    /** The normalized actions, in the form "methods:headers". */
     public String getActions() {
         return this.actions;
     }
 
-    /** Si este permiso cubre a {@code p}. Ver la cabecera para las tres formas de ruta. */
+    /** Whether this permission covers {@code p}. See the header for the three path forms. */
     public boolean implies(Permission p) {
         if (!(p instanceof URLPermission)) {
             return false;
@@ -257,8 +254,8 @@ public final class URLPermission extends Permission {
                 return false;
             }
             String suffix = that.path.substring(prefix.length());
-            // Un solo nivel: si queda una barra, la otra ruta baja mas hondo de lo permitido. Y "-"
-            // como sufijo seria un comodin recursivo colandose por la puerta de atras.
+            // A single level: if a slash is left, the other path goes deeper than allowed. And a "-"
+            // as a suffix would be a recursive wildcard slipping in through the back door.
             return suffix.indexOf('/') == -1 && !suffix.equals("-");
         }
         return this.path.equals(that.path);
@@ -291,10 +288,10 @@ public final class URLPermission extends Permission {
                 + (this.path == null ? 0 : this.path.hashCode());
     }
 
-    // La autoridad de la URL: host --con sus comodines-- y rango de puertos.
+    // The URL's authority: host --with its wildcards-- and port range.
     //
-    // Un host puede ser "*" (cualquiera), "*.dominio" (cualquiera dentro de ese dominio) o un
-    // nombre/literal exacto. **Nunca se resuelve**: ver la cabecera de la clase.
+    // A host may be "*" (any), "*.domain" (any inside that domain) or an exact name/literal. **It is
+    // never resolved**: see the class's header.
     private static class Authority {
 
         private final String host;
@@ -306,7 +303,7 @@ public final class URLPermission extends Permission {
             int low;
             int high;
             int colon = h.lastIndexOf(':');
-            // Un ':' dentro de corchetes es de un literal IPv6, no el separador del puerto.
+            // A ':' inside brackets belongs to an IPv6 literal, not to the port separator.
             int bracket = h.lastIndexOf(']');
             if (colon != -1 && colon > bracket) {
                 String p = h.substring(colon + 1);
@@ -331,8 +328,8 @@ public final class URLPermission extends Permission {
                     }
                 }
             } else {
-                // Sin puerto vale el del esquema: comparar "http://x.com" con "http://x.com:80"
-                // tiene que dar lo mismo, porque nombran lo mismo.
+                // With no port the scheme's applies: comparing "http://x.com" with "http://x.com:80"
+                // has to give the same, because they name the same thing.
                 low = defaultPort(scheme);
                 high = low;
             }

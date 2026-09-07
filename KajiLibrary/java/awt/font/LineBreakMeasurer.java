@@ -4,117 +4,117 @@ import java.text.AttributedCharacterIterator;
 import java.text.BreakIterator;
 
 /**
- * Parte un párrafo en renglones que entren en un ancho dado.
+ * Breaks a paragraph into lines that fit a given width.
  *
- * <p>Se usa como un iterador con estado: cada {@link #nextLayout(float)} devuelve el renglón
- * siguiente y avanza la posición. Que el ancho se pase **en cada llamada** y no en el constructor no
- * es un descuido: es lo que permite maquetar alrededor de una figura, donde cada renglón tiene un
- * ancho distinto porque el hueco cambia de forma.
+ * <p>It is used as an iterator with state: each {@link #nextLayout(float)} returns the next line and
+ * advances the position. That the width is passed **on each call** and not in the constructor is no
+ * oversight: it is what allows laying out around a figure, where each line has a different width
+ * because the gap changes shape.
  *
- * <p>Dónde se puede cortar lo decide un {@link BreakIterator}, y por eso se puede dar el propio: en
- * la mayoría de los idiomas se corta en los espacios, pero en tailandés o en japonés no hay espacios
- * entre palabras y el corte necesita saber del idioma.
+ * <p>Where it may break is decided by a {@link BreakIterator}, and that is why one's own can be
+ * given: in most languages the break goes at the spaces, but in Thai or Japanese there are no spaces
+ * between words and the break needs to know about the language.
  *
- * <p><strong>No se puede construir.</strong> Para saber qué entra en un ancho hay que medir, y medir
- * necesita un motor tipográfico que esta biblioteca no trae. Es la misma frontera de
- * {@link TextLayout}, {@link TextMeasurer} y {@link java.awt.Font}.
+ * <p><strong>It cannot be constructed.</strong> To know what fits in a width one has to measure, and
+ * measuring needs a text engine this library does not carry. It is the same boundary as
+ * {@link TextLayout}'s, {@link TextMeasurer}'s and {@link java.awt.Font}'s.
  */
 public final class LineBreakMeasurer {
 
-    /** El mensaje único de todo lo que necesita medir glifos. */
-    private static UnsupportedOperationException sinMotor(String metodo) {
-        return new UnsupportedOperationException(metodo + " requiere medir los glifos de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+    /** The single message of everything that needs to measure glyphs. */
+    private static UnsupportedOperationException noEngine(String method) {
+        return new UnsupportedOperationException(method + " requires measuring the font's "
+                + "glyphs; this library carries no text engine");
     }
 
     /**
-     * Con el párrafo y las condiciones de dibujo, cortando por palabras.
+     * With the paragraph and the drawing conditions, breaking at words.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public LineBreakMeasurer(AttributedCharacterIterator text, FontRenderContext frc) {
-        throw sinMotor("LineBreakMeasurer");
+        throw noEngine("LineBreakMeasurer");
     }
 
     /**
-     * Con el criterio de corte dado.
+     * With the given breaking criterion.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public LineBreakMeasurer(AttributedCharacterIterator text, BreakIterator breakIter,
             FontRenderContext frc) {
-        throw sinMotor("LineBreakMeasurer");
+        throw noEngine("LineBreakMeasurer");
     }
 
     /**
-     * Hasta dónde llegaría el renglón siguiente, sin consumirlo.
+     * How far the next line would reach, without consuming it.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public int nextOffset(float wrappingWidth) {
-        throw sinMotor("nextOffset");
+        throw noEngine("nextOffset");
     }
 
     /**
-     * Lo mismo, con un límite y con la opción de cortar en cualquier lado.
+     * The same, with a limit and with the option of breaking anywhere.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public int nextOffset(float wrappingWidth, int offsetLimit, boolean requireNextWord) {
-        throw sinMotor("nextOffset");
+        throw noEngine("nextOffset");
     }
 
     /**
-     * El renglón siguiente, y avanza la posición.
+     * The next line, advancing the position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextLayout nextLayout(float wrappingWidth) {
-        throw sinMotor("nextLayout");
+        throw noEngine("nextLayout");
     }
 
     /**
-     * Lo mismo, con un límite y con la opción de cortar en cualquier lado.
+     * The same, with a limit and with the option of breaking anywhere.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextLayout nextLayout(float wrappingWidth, int offsetLimit, boolean requireNextWord) {
-        throw sinMotor("nextLayout");
+        throw noEngine("nextLayout");
     }
 
     /**
-     * Por dónde va.
+     * Where it has got to.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public int getPosition() {
-        throw sinMotor("getPosition");
+        throw noEngine("getPosition");
     }
 
     /**
-     * Mueve la posición.
+     * Moves the position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void setPosition(int newPosition) {
-        throw sinMotor("setPosition");
+        throw noEngine("setPosition");
     }
 
     /**
-     * Avisa que se insertó un carácter en esa posición.
+     * Reports that a character was inserted at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void insertChar(AttributedCharacterIterator newParagraph, int insertPos) {
-        throw sinMotor("insertChar");
+        throw noEngine("insertChar");
     }
 
     /**
-     * Avisa que se borró un carácter en esa posición.
+     * Reports that a character was deleted at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void deleteChar(AttributedCharacterIterator newParagraph, int deletePos) {
-        throw sinMotor("deleteChar");
+        throw noEngine("deleteChar");
     }
 }

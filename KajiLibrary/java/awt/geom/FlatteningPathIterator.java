@@ -2,28 +2,29 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// java.awt.geom.FlatteningPathIterator de KajiLibrary -- envuelve otro PathIterator y reemplaza cada
-// curva por una cadena de segmentos rectos. Superficie completa.
+// KajiLibrary's java.awt.geom.FlatteningPathIterator -- it wraps another PathIterator and replaces
+// each curve with a chain of straight segments. The surface is complete.
 //
-// Como funciona la pila: `hold` es un buffer que se llena **desde el final hacia el principio**.
-// Cuando un trozo de curva todavia no es lo bastante plano se lo subdivide en dos y la mitad
-// izquierda se escribe encima del original mientras la derecha se empuja hacia atras en el buffer;
-// `holdIndex` apunta al trozo que se esta mirando y `holdEnd` al final de lo que queda pendiente.
-// Es una pila explicita en vez de recursion, y por eso el buffer crece (`ensureHoldCapacity`) en vez
-// de desbordar la de llamadas.
+// How the stack works: `hold` is a buffer filled **from the end towards the start**. When a piece of
+// curve is not flat enough yet it is subdivided in two and the left half is written over the
+// original while the right one is pushed back into the buffer; `holdIndex` points at the piece being
+// looked at and `holdEnd` at the end of what is still pending. It is an explicit stack instead of
+// recursion, and that is why the buffer grows (`ensureHoldCapacity`) instead of overflowing the call
+// stack.
 //
-// Dos cosas del contrato que conviene tener presentes:
+// Two things about the contract worth keeping in mind:
 //
-//   * El iterador aplanado **nunca** devuelve QUADTO ni CUBICTO. Devuelve MOVETO, LINETO y CLOSE, y
-//     nada mas. Eso es lo que lo hace util: quien lo consume no necesita saber de curvas.
+//   * The flattened iterator **never** returns QUADTO or CUBICTO. It returns MOVETO, LINETO and
+//     CLOSE, and nothing else. That is what makes it useful: whoever consumes it needs to know
+//     nothing about curves.
 //
-//   * `limit` es el numero maximo de subdivisiones **por curva**, no en total. Al agotarse se emite
-//     el segmento aunque no haya llegado a la planitud pedida. Sin ese tope una curva con una cuspide
-//     subdividiria para siempre, porque la planitud no baja de cierto punto.
+//   * `limit` is the maximum number of subdivisions **per curve**, not in total. Once exhausted the
+//     segment is emitted even if it has not reached the flatness asked for. Without that cap a curve
+//     with a cusp would subdivide for ever, because the flatness stops going down past a point.
 //
-// El constructor rechaza una planitud negativa y un limite negativo con IllegalArgumentException:
-// no hay lectura sensata de "aplanar con tolerancia -1", y aceptarlo daria un bucle infinito mas
-// tarde, lejos del error.
+// The constructor rejects a negative flatness and a negative limit with IllegalArgumentException:
+// there is no sensible reading of "flatten with tolerance -1", and accepting it would give an
+// infinite loop later, far from the mistake.
 public class FlatteningPathIterator implements PathIterator {
 
     static final int GROW_SIZE = 24;
@@ -129,9 +130,9 @@ public class FlatteningPathIterator implements PathIterator {
         int level;
         if (this.holdType == PathIterator.SEG_QUADTO) {
             if (this.holdIndex >= this.holdEnd) {
-                // Primera vez que se ve esta curva: se copia al final del buffer, precedida por el
-                // punto actual --que el iterador de origen no repite-- para tener los tres puntos de
-                // control contiguos. Seis huecos: (x0,y0) (xc,yc) (x1,y1).
+                // First time this curve is seen: it is copied to the end of the buffer, preceded
+                // by the current point --which the source iterator does not repeat-- so as to have
+                // the three control points contiguous. Six slots: (x0,y0) (xc,yc) (x1,y1).
                 this.holdIndex = this.hold.length - 6;
                 this.holdEnd = this.hold.length - 2;
                 this.hold[this.holdIndex + 0] = this.curx;
@@ -153,20 +154,20 @@ public class FlatteningPathIterator implements PathIterator {
                                       this.hold, this.holdIndex - 4,
                                       this.hold, this.holdIndex);
                 this.holdIndex = this.holdIndex - 4;
-                // Quedaron dos curvas de un nivel mas: la izquierda en los huecos nuevos y la
-                // derecha donde estaba la original. Las dos se marcan con el nivel siguiente.
+                // Two curves one level deeper are left: the left one in the new slots and the
+                // right one where the original was. Both are marked with the next level.
                 level = level + 1;
                 this.levels[this.levelIndex] = level;
                 this.levelIndex = this.levelIndex + 1;
                 this.levels[this.levelIndex] = level;
             }
-            // El trozo ya es plano (o se agoto el limite): su extremo, en holdIndex+4, es el final
-            // del segmento que se va a emitir.
+            // The piece is flat already (or the limit ran out): its end, at holdIndex+4, is the
+            // end of the segment about to be emitted.
             this.holdIndex = this.holdIndex + 4;
             this.levelIndex = this.levelIndex - 1;
         } else {
             if (this.holdIndex >= this.holdEnd) {
-                // Ocho huecos: (x0,y0) (xc0,yc0) (xc1,yc1) (x1,y1).
+                // Eight slots: (x0,y0) (xc0,yc0) (xc1,yc1) (x1,y1).
                 this.holdIndex = this.hold.length - 8;
                 this.holdEnd = this.hold.length - 2;
                 this.hold[this.holdIndex + 0] = this.curx;

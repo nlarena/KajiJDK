@@ -3,629 +3,629 @@ package java.awt.event;
 import java.awt.Component;
 
 /**
- * Alguien tocó el teclado.
+ * Someone touched the keyboard.
  *
- * <p>Hay dos maneras de mirar una pulsación y esta clase lleva las dos, que es de donde viene toda
- * la confusión con el teclado en Java.
+ * <p>There are two ways of looking at a keystroke and this class carries both, which is where all
+ * the confusion with the keyboard in Java comes from.
  *
- * <p>El <strong>código de tecla</strong> ({@code VK_A}, {@code VK_F1}, {@code VK_SHIFT}) identifica
- * una **tecla física** del teclado, y viene en {@code KEY_PRESSED} y {@code KEY_RELEASED}. Sirve
- * para atajos y para teclas que no escriben nada: no hay un carácter "F1".
+ * <p>The <strong>key code</strong> ({@code VK_A}, {@code VK_F1}, {@code VK_SHIFT}) identifies a
+ * **physical key** of the keyboard, and comes in {@code KEY_PRESSED} and {@code KEY_RELEASED}. It
+ * serves for shortcuts and for keys that write nothing: there is no "F1" character.
  *
- * <p>El <strong>carácter</strong> es lo que se escribió, y viene en {@code KEY_TYPED}. No hay una
- * correspondencia uno a uno con las teclas: Mayús+a produce una sola pulsación con carácter, dos
- * teclas apretadas y ningún código de tecla propio; una tecla muerta seguida de una vocal son tres
- * pulsaciones y un solo carácter.
+ * <p>The <strong>character</strong> is what was written, and comes in {@code KEY_TYPED}. There is no
+ * one-to-one correspondence with the keys: Shift+a produces a single keystroke with a character, two
+ * keys down and no key code of its own; a dead key followed by a vowel is three keystrokes and a
+ * single character.
  *
- * <p>De ahí la regla práctica: <b>los atajos van en {@code keyPressed}, el texto en
- * {@code keyTyped}</b>. Usar el otro es la causa de casi todos los teclados que se portan raro con
- * un idioma que no es inglés.
+ * <p>Hence the practical rule: <b>shortcuts go in {@code keyPressed}, text in {@code keyTyped}</b>.
+ * Using the other one is the cause of nearly every keyboard that behaves oddly with a language that
+ * is not English.
  *
- * <p>La <strong>ubicación</strong> distingue teclas que comparten código: el Mayús de la izquierda
- * del de la derecha, el 1 del teclado numérico del de la fila de arriba.
+ * <p>The <strong>location</strong> tells apart keys that share a code: the left Shift from the right
+ * one, the numeric keypad's 1 from the one on the top row.
  */
 public class KeyEvent extends InputEvent {
 
     private static final long serialVersionUID = -2352130953028126954L;
 
-    /** Ningún carácter: es lo que trae una tecla que no produce texto. */
+    /** No character: it is what a key that produces no text carries. */
     public static final char CHAR_UNDEFINED = '\uFFFF';
 
-    /** Constante de {@code KeyEvent}. */
+    /** The family's first identifier. */
     public static final int KEY_FIRST = 400;
 
-    /** Constante de {@code KeyEvent}. */
+    /** The family's last identifier. */
     public static final int KEY_LAST = 402;
 
-    /** Constante de {@code KeyEvent}. */
+    /** The key on the left of a pair that shares a code. */
     public static final int KEY_LOCATION_LEFT = 2;
 
-    /** Constante de {@code KeyEvent}. */
+    /** The key on the numeric keypad. */
     public static final int KEY_LOCATION_NUMPAD = 4;
 
-    /** Constante de {@code KeyEvent}. */
+    /** The key on the right of a pair that shares a code. */
     public static final int KEY_LOCATION_RIGHT = 3;
 
-    /** Constante de {@code KeyEvent}. */
+    /** The key in its usual place, with no twin. */
     public static final int KEY_LOCATION_STANDARD = 1;
 
-    /** Constante de {@code KeyEvent}. */
+    /** The place is not known. */
     public static final int KEY_LOCATION_UNKNOWN = 0;
 
-    /** Constante de {@code KeyEvent}. */
+    /** A key was pressed. */
     public static final int KEY_PRESSED = 401;
 
-    /** Constante de {@code KeyEvent}. */
+    /** A key was released. */
     public static final int KEY_RELEASED = 402;
 
-    /** Constante de {@code KeyEvent}. */
+    /** A character was produced. */
     public static final int KEY_TYPED = 400;
 
-    /** La tecla <b>0</b>. */
+    /** The <b>0</b> key. */
     public static final int VK_0 = 48;
 
-    /** La tecla <b>1</b>. */
+    /** The <b>1</b> key. */
     public static final int VK_1 = 49;
 
-    /** La tecla <b>2</b>. */
+    /** The <b>2</b> key. */
     public static final int VK_2 = 50;
 
-    /** La tecla <b>3</b>. */
+    /** The <b>3</b> key. */
     public static final int VK_3 = 51;
 
-    /** La tecla <b>4</b>. */
+    /** The <b>4</b> key. */
     public static final int VK_4 = 52;
 
-    /** La tecla <b>5</b>. */
+    /** The <b>5</b> key. */
     public static final int VK_5 = 53;
 
-    /** La tecla <b>6</b>. */
+    /** The <b>6</b> key. */
     public static final int VK_6 = 54;
 
-    /** La tecla <b>7</b>. */
+    /** The <b>7</b> key. */
     public static final int VK_7 = 55;
 
-    /** La tecla <b>8</b>. */
+    /** The <b>8</b> key. */
     public static final int VK_8 = 56;
 
-    /** La tecla <b>9</b>. */
+    /** The <b>9</b> key. */
     public static final int VK_9 = 57;
 
-    /** La tecla <b>a</b>. */
+    /** The <b>a</b> key. */
     public static final int VK_A = 65;
 
-    /** La tecla <b>accept</b>. */
+    /** The <b>accept</b> key. */
     public static final int VK_ACCEPT = 30;
 
-    /** La tecla <b>add</b>. */
+    /** The <b>add</b> key. */
     public static final int VK_ADD = 107;
 
-    /** La tecla <b>again</b>. */
+    /** The <b>again</b> key. */
     public static final int VK_AGAIN = 65481;
 
-    /** La tecla <b>all candidates</b>. */
+    /** The <b>all candidates</b> key. */
     public static final int VK_ALL_CANDIDATES = 256;
 
-    /** La tecla <b>alphanumeric</b>. */
+    /** The <b>alphanumeric</b> key. */
     public static final int VK_ALPHANUMERIC = 240;
 
-    /** La tecla <b>alt</b>. */
+    /** The <b>alt</b> key. */
     public static final int VK_ALT = 18;
 
-    /** La tecla <b>alt graph</b>. */
+    /** The <b>alt graph</b> key. */
     public static final int VK_ALT_GRAPH = 65406;
 
-    /** La tecla <b>ampersand</b>. */
+    /** The <b>ampersand</b> key. */
     public static final int VK_AMPERSAND = 150;
 
-    /** La tecla <b>asterisk</b>. */
+    /** The <b>asterisk</b> key. */
     public static final int VK_ASTERISK = 151;
 
-    /** La tecla <b>at</b>. */
+    /** The <b>at</b> key. */
     public static final int VK_AT = 512;
 
-    /** La tecla <b>b</b>. */
+    /** The <b>b</b> key. */
     public static final int VK_B = 66;
 
-    /** La tecla <b>back quote</b>. */
+    /** The <b>back quote</b> key. */
     public static final int VK_BACK_QUOTE = 192;
 
-    /** La tecla <b>back slash</b>. */
+    /** The <b>back slash</b> key. */
     public static final int VK_BACK_SLASH = 92;
 
-    /** La tecla <b>back space</b>. */
+    /** The <b>back space</b> key. */
     public static final int VK_BACK_SPACE = 8;
 
-    /** La tecla <b>begin</b>. */
+    /** The <b>begin</b> key. */
     public static final int VK_BEGIN = 65368;
 
-    /** La tecla <b>braceleft</b>. */
+    /** The <b>braceleft</b> key. */
     public static final int VK_BRACELEFT = 161;
 
-    /** La tecla <b>braceright</b>. */
+    /** The <b>braceright</b> key. */
     public static final int VK_BRACERIGHT = 162;
 
-    /** La tecla <b>c</b>. */
+    /** The <b>c</b> key. */
     public static final int VK_C = 67;
 
-    /** La tecla <b>cancel</b>. */
+    /** The <b>cancel</b> key. */
     public static final int VK_CANCEL = 3;
 
-    /** La tecla <b>caps lock</b>. */
+    /** The <b>caps lock</b> key. */
     public static final int VK_CAPS_LOCK = 20;
 
-    /** La tecla <b>circumflex</b>. */
+    /** The <b>circumflex</b> key. */
     public static final int VK_CIRCUMFLEX = 514;
 
-    /** La tecla <b>clear</b>. */
+    /** The <b>clear</b> key. */
     public static final int VK_CLEAR = 12;
 
-    /** La tecla <b>close bracket</b>. */
+    /** The <b>close bracket</b> key. */
     public static final int VK_CLOSE_BRACKET = 93;
 
-    /** La tecla <b>code input</b>. */
+    /** The <b>code input</b> key. */
     public static final int VK_CODE_INPUT = 258;
 
-    /** La tecla <b>colon</b>. */
+    /** The <b>colon</b> key. */
     public static final int VK_COLON = 513;
 
-    /** La tecla <b>comma</b>. */
+    /** The <b>comma</b> key. */
     public static final int VK_COMMA = 44;
 
-    /** La tecla <b>compose</b>. */
+    /** The <b>compose</b> key. */
     public static final int VK_COMPOSE = 65312;
 
-    /** La tecla <b>context menu</b>. */
+    /** The <b>context menu</b> key. */
     public static final int VK_CONTEXT_MENU = 525;
 
-    /** La tecla <b>control</b>. */
+    /** The <b>control</b> key. */
     public static final int VK_CONTROL = 17;
 
-    /** La tecla <b>convert</b>. */
+    /** The <b>convert</b> key. */
     public static final int VK_CONVERT = 28;
 
-    /** La tecla <b>copy</b>. */
+    /** The <b>copy</b> key. */
     public static final int VK_COPY = 65485;
 
-    /** La tecla <b>cut</b>. */
+    /** The <b>cut</b> key. */
     public static final int VK_CUT = 65489;
 
-    /** La tecla <b>d</b>. */
+    /** The <b>d</b> key. */
     public static final int VK_D = 68;
 
-    /** La tecla <b>dead abovedot</b>. */
+    /** The <b>dead abovedot</b> key. */
     public static final int VK_DEAD_ABOVEDOT = 134;
 
-    /** La tecla <b>dead abovering</b>. */
+    /** The <b>dead abovering</b> key. */
     public static final int VK_DEAD_ABOVERING = 136;
 
-    /** La tecla <b>dead acute</b>. */
+    /** The <b>dead acute</b> key. */
     public static final int VK_DEAD_ACUTE = 129;
 
-    /** La tecla <b>dead breve</b>. */
+    /** The <b>dead breve</b> key. */
     public static final int VK_DEAD_BREVE = 133;
 
-    /** La tecla <b>dead caron</b>. */
+    /** The <b>dead caron</b> key. */
     public static final int VK_DEAD_CARON = 138;
 
-    /** La tecla <b>dead cedilla</b>. */
+    /** The <b>dead cedilla</b> key. */
     public static final int VK_DEAD_CEDILLA = 139;
 
-    /** La tecla <b>dead circumflex</b>. */
+    /** The <b>dead circumflex</b> key. */
     public static final int VK_DEAD_CIRCUMFLEX = 130;
 
-    /** La tecla <b>dead diaeresis</b>. */
+    /** The <b>dead diaeresis</b> key. */
     public static final int VK_DEAD_DIAERESIS = 135;
 
-    /** La tecla <b>dead doubleacute</b>. */
+    /** The <b>dead doubleacute</b> key. */
     public static final int VK_DEAD_DOUBLEACUTE = 137;
 
-    /** La tecla <b>dead grave</b>. */
+    /** The <b>dead grave</b> key. */
     public static final int VK_DEAD_GRAVE = 128;
 
-    /** La tecla <b>dead iota</b>. */
+    /** The <b>dead iota</b> key. */
     public static final int VK_DEAD_IOTA = 141;
 
-    /** La tecla <b>dead macron</b>. */
+    /** The <b>dead macron</b> key. */
     public static final int VK_DEAD_MACRON = 132;
 
-    /** La tecla <b>dead ogonek</b>. */
+    /** The <b>dead ogonek</b> key. */
     public static final int VK_DEAD_OGONEK = 140;
 
-    /** La tecla <b>dead semivoiced sound</b>. */
+    /** The <b>dead semivoiced sound</b> key. */
     public static final int VK_DEAD_SEMIVOICED_SOUND = 143;
 
-    /** La tecla <b>dead tilde</b>. */
+    /** The <b>dead tilde</b> key. */
     public static final int VK_DEAD_TILDE = 131;
 
-    /** La tecla <b>dead voiced sound</b>. */
+    /** The <b>dead voiced sound</b> key. */
     public static final int VK_DEAD_VOICED_SOUND = 142;
 
-    /** La tecla <b>decimal</b>. */
+    /** The <b>decimal</b> key. */
     public static final int VK_DECIMAL = 110;
 
-    /** La tecla <b>delete</b>. */
+    /** The <b>delete</b> key. */
     public static final int VK_DELETE = 127;
 
-    /** La tecla <b>divide</b>. */
+    /** The <b>divide</b> key. */
     public static final int VK_DIVIDE = 111;
 
-    /** La tecla <b>dollar</b>. */
+    /** The <b>dollar</b> key. */
     public static final int VK_DOLLAR = 515;
 
-    /** La tecla <b>down</b>. */
+    /** The <b>down</b> key. */
     public static final int VK_DOWN = 40;
 
-    /** La tecla <b>e</b>. */
+    /** The <b>e</b> key. */
     public static final int VK_E = 69;
 
-    /** La tecla <b>end</b>. */
+    /** The <b>end</b> key. */
     public static final int VK_END = 35;
 
-    /** La tecla <b>enter</b>. */
+    /** The <b>enter</b> key. */
     public static final int VK_ENTER = 10;
 
-    /** La tecla <b>equals</b>. */
+    /** The <b>equals</b> key. */
     public static final int VK_EQUALS = 61;
 
-    /** La tecla <b>escape</b>. */
+    /** The <b>escape</b> key. */
     public static final int VK_ESCAPE = 27;
 
-    /** La tecla <b>euro sign</b>. */
+    /** The <b>euro sign</b> key. */
     public static final int VK_EURO_SIGN = 516;
 
-    /** La tecla <b>exclamation mark</b>. */
+    /** The <b>exclamation mark</b> key. */
     public static final int VK_EXCLAMATION_MARK = 517;
 
-    /** La tecla <b>f</b>. */
+    /** The <b>f</b> key. */
     public static final int VK_F = 70;
 
-    /** La tecla <b>f1</b>. */
+    /** The <b>f1</b> key. */
     public static final int VK_F1 = 112;
 
-    /** La tecla <b>f10</b>. */
+    /** The <b>f10</b> key. */
     public static final int VK_F10 = 121;
 
-    /** La tecla <b>f11</b>. */
+    /** The <b>f11</b> key. */
     public static final int VK_F11 = 122;
 
-    /** La tecla <b>f12</b>. */
+    /** The <b>f12</b> key. */
     public static final int VK_F12 = 123;
 
-    /** La tecla <b>f13</b>. */
+    /** The <b>f13</b> key. */
     public static final int VK_F13 = 61440;
 
-    /** La tecla <b>f14</b>. */
+    /** The <b>f14</b> key. */
     public static final int VK_F14 = 61441;
 
-    /** La tecla <b>f15</b>. */
+    /** The <b>f15</b> key. */
     public static final int VK_F15 = 61442;
 
-    /** La tecla <b>f16</b>. */
+    /** The <b>f16</b> key. */
     public static final int VK_F16 = 61443;
 
-    /** La tecla <b>f17</b>. */
+    /** The <b>f17</b> key. */
     public static final int VK_F17 = 61444;
 
-    /** La tecla <b>f18</b>. */
+    /** The <b>f18</b> key. */
     public static final int VK_F18 = 61445;
 
-    /** La tecla <b>f19</b>. */
+    /** The <b>f19</b> key. */
     public static final int VK_F19 = 61446;
 
-    /** La tecla <b>f2</b>. */
+    /** The <b>f2</b> key. */
     public static final int VK_F2 = 113;
 
-    /** La tecla <b>f20</b>. */
+    /** The <b>f20</b> key. */
     public static final int VK_F20 = 61447;
 
-    /** La tecla <b>f21</b>. */
+    /** The <b>f21</b> key. */
     public static final int VK_F21 = 61448;
 
-    /** La tecla <b>f22</b>. */
+    /** The <b>f22</b> key. */
     public static final int VK_F22 = 61449;
 
-    /** La tecla <b>f23</b>. */
+    /** The <b>f23</b> key. */
     public static final int VK_F23 = 61450;
 
-    /** La tecla <b>f24</b>. */
+    /** The <b>f24</b> key. */
     public static final int VK_F24 = 61451;
 
-    /** La tecla <b>f3</b>. */
+    /** The <b>f3</b> key. */
     public static final int VK_F3 = 114;
 
-    /** La tecla <b>f4</b>. */
+    /** The <b>f4</b> key. */
     public static final int VK_F4 = 115;
 
-    /** La tecla <b>f5</b>. */
+    /** The <b>f5</b> key. */
     public static final int VK_F5 = 116;
 
-    /** La tecla <b>f6</b>. */
+    /** The <b>f6</b> key. */
     public static final int VK_F6 = 117;
 
-    /** La tecla <b>f7</b>. */
+    /** The <b>f7</b> key. */
     public static final int VK_F7 = 118;
 
-    /** La tecla <b>f8</b>. */
+    /** The <b>f8</b> key. */
     public static final int VK_F8 = 119;
 
-    /** La tecla <b>f9</b>. */
+    /** The <b>f9</b> key. */
     public static final int VK_F9 = 120;
 
-    /** La tecla <b>final</b>. */
+    /** The <b>final</b> key. */
     public static final int VK_FINAL = 24;
 
-    /** La tecla <b>find</b>. */
+    /** The <b>find</b> key. */
     public static final int VK_FIND = 65488;
 
-    /** La tecla <b>full width</b>. */
+    /** The <b>full width</b> key. */
     public static final int VK_FULL_WIDTH = 243;
 
-    /** La tecla <b>g</b>. */
+    /** The <b>g</b> key. */
     public static final int VK_G = 71;
 
-    /** La tecla <b>greater</b>. */
+    /** The <b>greater</b> key. */
     public static final int VK_GREATER = 160;
 
-    /** La tecla <b>h</b>. */
+    /** The <b>h</b> key. */
     public static final int VK_H = 72;
 
-    /** La tecla <b>half width</b>. */
+    /** The <b>half width</b> key. */
     public static final int VK_HALF_WIDTH = 244;
 
-    /** La tecla <b>help</b>. */
+    /** The <b>help</b> key. */
     public static final int VK_HELP = 156;
 
-    /** La tecla <b>hiragana</b>. */
+    /** The <b>hiragana</b> key. */
     public static final int VK_HIRAGANA = 242;
 
-    /** La tecla <b>home</b>. */
+    /** The <b>home</b> key. */
     public static final int VK_HOME = 36;
 
-    /** La tecla <b>i</b>. */
+    /** The <b>i</b> key. */
     public static final int VK_I = 73;
 
-    /** La tecla <b>input method on off</b>. */
+    /** The <b>input method on off</b> key. */
     public static final int VK_INPUT_METHOD_ON_OFF = 263;
 
-    /** La tecla <b>insert</b>. */
+    /** The <b>insert</b> key. */
     public static final int VK_INSERT = 155;
 
-    /** La tecla <b>inverted exclamation mark</b>. */
+    /** The <b>inverted exclamation mark</b> key. */
     public static final int VK_INVERTED_EXCLAMATION_MARK = 518;
 
-    /** La tecla <b>j</b>. */
+    /** The <b>j</b> key. */
     public static final int VK_J = 74;
 
-    /** La tecla <b>japanese hiragana</b>. */
+    /** The <b>japanese hiragana</b> key. */
     public static final int VK_JAPANESE_HIRAGANA = 260;
 
-    /** La tecla <b>japanese katakana</b>. */
+    /** The <b>japanese katakana</b> key. */
     public static final int VK_JAPANESE_KATAKANA = 259;
 
-    /** La tecla <b>japanese roman</b>. */
+    /** The <b>japanese roman</b> key. */
     public static final int VK_JAPANESE_ROMAN = 261;
 
-    /** La tecla <b>k</b>. */
+    /** The <b>k</b> key. */
     public static final int VK_K = 75;
 
-    /** La tecla <b>kana</b>. */
+    /** The <b>kana</b> key. */
     public static final int VK_KANA = 21;
 
-    /** La tecla <b>kana lock</b>. */
+    /** The <b>kana lock</b> key. */
     public static final int VK_KANA_LOCK = 262;
 
-    /** La tecla <b>kanji</b>. */
+    /** The <b>kanji</b> key. */
     public static final int VK_KANJI = 25;
 
-    /** La tecla <b>katakana</b>. */
+    /** The <b>katakana</b> key. */
     public static final int VK_KATAKANA = 241;
 
-    /** La tecla <b>kp down</b>. */
+    /** The <b>kp down</b> key. */
     public static final int VK_KP_DOWN = 225;
 
-    /** La tecla <b>kp left</b>. */
+    /** The <b>kp left</b> key. */
     public static final int VK_KP_LEFT = 226;
 
-    /** La tecla <b>kp right</b>. */
+    /** The <b>kp right</b> key. */
     public static final int VK_KP_RIGHT = 227;
 
-    /** La tecla <b>kp up</b>. */
+    /** The <b>kp up</b> key. */
     public static final int VK_KP_UP = 224;
 
-    /** La tecla <b>l</b>. */
+    /** The <b>l</b> key. */
     public static final int VK_L = 76;
 
-    /** La tecla <b>left</b>. */
+    /** The <b>left</b> key. */
     public static final int VK_LEFT = 37;
 
-    /** La tecla <b>left parenthesis</b>. */
+    /** The <b>left parenthesis</b> key. */
     public static final int VK_LEFT_PARENTHESIS = 519;
 
-    /** La tecla <b>less</b>. */
+    /** The <b>less</b> key. */
     public static final int VK_LESS = 153;
 
-    /** La tecla <b>m</b>. */
+    /** The <b>m</b> key. */
     public static final int VK_M = 77;
 
-    /** La tecla <b>meta</b>. */
+    /** The <b>meta</b> key. */
     public static final int VK_META = 157;
 
-    /** La tecla <b>minus</b>. */
+    /** The <b>minus</b> key. */
     public static final int VK_MINUS = 45;
 
-    /** La tecla <b>modechange</b>. */
+    /** The <b>modechange</b> key. */
     public static final int VK_MODECHANGE = 31;
 
-    /** La tecla <b>multiply</b>. */
+    /** The <b>multiply</b> key. */
     public static final int VK_MULTIPLY = 106;
 
-    /** La tecla <b>n</b>. */
+    /** The <b>n</b> key. */
     public static final int VK_N = 78;
 
-    /** La tecla <b>nonconvert</b>. */
+    /** The <b>nonconvert</b> key. */
     public static final int VK_NONCONVERT = 29;
 
-    /** La tecla <b>number sign</b>. */
+    /** The <b>number sign</b> key. */
     public static final int VK_NUMBER_SIGN = 520;
 
-    /** La tecla <b>numpad0</b>. */
+    /** The <b>numpad0</b> key. */
     public static final int VK_NUMPAD0 = 96;
 
-    /** La tecla <b>numpad1</b>. */
+    /** The <b>numpad1</b> key. */
     public static final int VK_NUMPAD1 = 97;
 
-    /** La tecla <b>numpad2</b>. */
+    /** The <b>numpad2</b> key. */
     public static final int VK_NUMPAD2 = 98;
 
-    /** La tecla <b>numpad3</b>. */
+    /** The <b>numpad3</b> key. */
     public static final int VK_NUMPAD3 = 99;
 
-    /** La tecla <b>numpad4</b>. */
+    /** The <b>numpad4</b> key. */
     public static final int VK_NUMPAD4 = 100;
 
-    /** La tecla <b>numpad5</b>. */
+    /** The <b>numpad5</b> key. */
     public static final int VK_NUMPAD5 = 101;
 
-    /** La tecla <b>numpad6</b>. */
+    /** The <b>numpad6</b> key. */
     public static final int VK_NUMPAD6 = 102;
 
-    /** La tecla <b>numpad7</b>. */
+    /** The <b>numpad7</b> key. */
     public static final int VK_NUMPAD7 = 103;
 
-    /** La tecla <b>numpad8</b>. */
+    /** The <b>numpad8</b> key. */
     public static final int VK_NUMPAD8 = 104;
 
-    /** La tecla <b>numpad9</b>. */
+    /** The <b>numpad9</b> key. */
     public static final int VK_NUMPAD9 = 105;
 
-    /** La tecla <b>num lock</b>. */
+    /** The <b>num lock</b> key. */
     public static final int VK_NUM_LOCK = 144;
 
-    /** La tecla <b>o</b>. */
+    /** The <b>o</b> key. */
     public static final int VK_O = 79;
 
-    /** La tecla <b>open bracket</b>. */
+    /** The <b>open bracket</b> key. */
     public static final int VK_OPEN_BRACKET = 91;
 
-    /** La tecla <b>p</b>. */
+    /** The <b>p</b> key. */
     public static final int VK_P = 80;
 
-    /** La tecla <b>page down</b>. */
+    /** The <b>page down</b> key. */
     public static final int VK_PAGE_DOWN = 34;
 
-    /** La tecla <b>page up</b>. */
+    /** The <b>page up</b> key. */
     public static final int VK_PAGE_UP = 33;
 
-    /** La tecla <b>paste</b>. */
+    /** The <b>paste</b> key. */
     public static final int VK_PASTE = 65487;
 
-    /** La tecla <b>pause</b>. */
+    /** The <b>pause</b> key. */
     public static final int VK_PAUSE = 19;
 
-    /** La tecla <b>period</b>. */
+    /** The <b>period</b> key. */
     public static final int VK_PERIOD = 46;
 
-    /** La tecla <b>plus</b>. */
+    /** The <b>plus</b> key. */
     public static final int VK_PLUS = 521;
 
-    /** La tecla <b>previous candidate</b>. */
+    /** The <b>previous candidate</b> key. */
     public static final int VK_PREVIOUS_CANDIDATE = 257;
 
-    /** La tecla <b>printscreen</b>. */
+    /** The <b>printscreen</b> key. */
     public static final int VK_PRINTSCREEN = 154;
 
-    /** La tecla <b>props</b>. */
+    /** The <b>props</b> key. */
     public static final int VK_PROPS = 65482;
 
-    /** La tecla <b>q</b>. */
+    /** The <b>q</b> key. */
     public static final int VK_Q = 81;
 
-    /** La tecla <b>quote</b>. */
+    /** The <b>quote</b> key. */
     public static final int VK_QUOTE = 222;
 
-    /** La tecla <b>quotedbl</b>. */
+    /** The <b>quotedbl</b> key. */
     public static final int VK_QUOTEDBL = 152;
 
-    /** La tecla <b>r</b>. */
+    /** The <b>r</b> key. */
     public static final int VK_R = 82;
 
-    /** La tecla <b>right</b>. */
+    /** The <b>right</b> key. */
     public static final int VK_RIGHT = 39;
 
-    /** La tecla <b>right parenthesis</b>. */
+    /** The <b>right parenthesis</b> key. */
     public static final int VK_RIGHT_PARENTHESIS = 522;
 
-    /** La tecla <b>roman characters</b>. */
+    /** The <b>roman characters</b> key. */
     public static final int VK_ROMAN_CHARACTERS = 245;
 
-    /** La tecla <b>s</b>. */
+    /** The <b>s</b> key. */
     public static final int VK_S = 83;
 
-    /** La tecla <b>scroll lock</b>. */
+    /** The <b>scroll lock</b> key. */
     public static final int VK_SCROLL_LOCK = 145;
 
-    /** La tecla <b>semicolon</b>. */
+    /** The <b>semicolon</b> key. */
     public static final int VK_SEMICOLON = 59;
 
-    /** La tecla <b>separater</b>. */
+    /** The <b>separater</b> key. */
     public static final int VK_SEPARATER = 108;
 
-    /** La tecla <b>separator</b>. */
+    /** The <b>separator</b> key. */
     public static final int VK_SEPARATOR = 108;
 
-    /** La tecla <b>shift</b>. */
+    /** The <b>shift</b> key. */
     public static final int VK_SHIFT = 16;
 
-    /** La tecla <b>slash</b>. */
+    /** The <b>slash</b> key. */
     public static final int VK_SLASH = 47;
 
-    /** La tecla <b>space</b>. */
+    /** The <b>space</b> key. */
     public static final int VK_SPACE = 32;
 
-    /** La tecla <b>stop</b>. */
+    /** The <b>stop</b> key. */
     public static final int VK_STOP = 65480;
 
-    /** La tecla <b>subtract</b>. */
+    /** The <b>subtract</b> key. */
     public static final int VK_SUBTRACT = 109;
 
-    /** La tecla <b>t</b>. */
+    /** The <b>t</b> key. */
     public static final int VK_T = 84;
 
-    /** La tecla <b>tab</b>. */
+    /** The <b>tab</b> key. */
     public static final int VK_TAB = 9;
 
-    /** La tecla <b>u</b>. */
+    /** The <b>u</b> key. */
     public static final int VK_U = 85;
 
-    /** Ninguna tecla conocida. */
+    /** No known key. */
     public static final int VK_UNDEFINED = 0;
 
-    /** La tecla <b>underscore</b>. */
+    /** The <b>underscore</b> key. */
     public static final int VK_UNDERSCORE = 523;
 
-    /** La tecla <b>undo</b>. */
+    /** The <b>undo</b> key. */
     public static final int VK_UNDO = 65483;
 
-    /** La tecla <b>up</b>. */
+    /** The <b>up</b> key. */
     public static final int VK_UP = 38;
 
-    /** La tecla <b>v</b>. */
+    /** The <b>v</b> key. */
     public static final int VK_V = 86;
 
-    /** La tecla <b>w</b>. */
+    /** The <b>w</b> key. */
     public static final int VK_W = 87;
 
-    /** La tecla <b>windows</b>. */
+    /** The <b>windows</b> key. */
     public static final int VK_WINDOWS = 524;
 
-    /** La tecla <b>x</b>. */
+    /** The <b>x</b> key. */
     public static final int VK_X = 88;
 
-    /** La tecla <b>y</b>. */
+    /** The <b>y</b> key. */
     public static final int VK_Y = 89;
 
-    /** La tecla <b>z</b>. */
+    /** The <b>z</b> key. */
     public static final int VK_Z = 90;
 
     private int keyCode;
@@ -633,10 +633,10 @@ public class KeyEvent extends InputEvent {
     private int keyLocation;
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si la fuente es `null`, si un {@code KEY_TYPED} trae un
-     *     código de tecla o una ubicación conocida, o si la ubicación no es una de las cuatro
+     * @throws IllegalArgumentException if the source is `null`, if a {@code KEY_TYPED} carries a key
+     *     code or a known location, or if the location is none of the four
      */
     public KeyEvent(Component source, int id, long when, int modifiers, int keyCode, char keyChar,
             int keyLocation) {
@@ -658,9 +658,9 @@ public class KeyEvent extends InputEvent {
     }
 
     /**
-     * Sin decir la ubicación.
+     * Without saying the location.
      *
-     * @throws IllegalArgumentException si la fuente es `null` o los datos no cuadran con el tipo
+     * @throws IllegalArgumentException if the source is `null` or the data does not match the type
      */
     public KeyEvent(Component source, int id, long when, int modifiers, int keyCode,
             char keyChar) {
@@ -668,59 +668,58 @@ public class KeyEvent extends InputEvent {
     }
 
     /**
-     * Sin carácter.
+     * Without a character.
      *
-     * @deprecated no permite decir qué carácter se escribió, y sin eso un {@code KEY_TYPED} no
-     *     significa nada. Usar alguno de los otros dos.
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @deprecated it does not allow saying which character was written, and without that a
+     *     {@code KEY_TYPED} means nothing. Use either of the other two.
+     * @throws IllegalArgumentException if the source is `null`
      */
     @Deprecated
     public KeyEvent(Component source, int id, long when, int modifiers, int keyCode) {
         this(source, id, when, modifiers, keyCode, (char) keyCode, KEY_LOCATION_UNKNOWN);
     }
 
-    /** Qué tecla física fue. */
+    /** Which physical key it was. */
     public int getKeyCode() {
         return this.keyCode;
     }
 
-    /** Cambia qué tecla física fue. */
+    /** Changes which physical key it was. */
     public void setKeyCode(int keyCode) {
         this.keyCode = keyCode;
     }
 
-    /** Qué carácter se escribió, o {@link #CHAR_UNDEFINED} si ninguno. */
+    /** Which character was written, or {@link #CHAR_UNDEFINED} if none. */
     public char getKeyChar() {
         return this.keyChar;
     }
 
-    /** Cambia qué carácter se escribió. */
+    /** Changes which character was written. */
     public void setKeyChar(char keyChar) {
         this.keyChar = keyChar;
     }
 
     /**
-     * Cambia los modificadores.
+     * Changes the modifiers.
      *
-     * @deprecated cambiar los modificadores no cambia el carácter que ya se calculó, así que el
-     *     evento queda diciendo dos cosas que no se corresponden.
+     * @deprecated changing the modifiers does not change the character already worked out, so the
+     *     event is left saying two things that do not match.
      */
     @Deprecated
     public void setModifiers(int modifiers) {
         this.modifiers = modifiers;
     }
 
-    /** Cuál de las teclas que comparten ese código fue. */
+    /** Which of the keys sharing that code it was. */
     public int getKeyLocation() {
         return this.keyLocation;
     }
 
     /**
-     * El nombre de una tecla, para mostrárselo a una persona.
+     * A key's name, to be shown to a person.
      *
-     * <p>Devuelve los nombres en inglés, que son los que el JDK usa cuando no encuentra la
-     * traducción: acá no hay traducciones que buscar, así que es la respuesta correcta y no un
-     * relleno.
+     * <p>It returns the English names, which are the ones the JDK uses when it finds no translation:
+     * there are no translations to look up here, so it is the right answer and not a filler.
      */
     public static String getKeyText(int keyCode) {
         if (keyCode >= VK_0 && keyCode <= VK_9 || keyCode >= VK_A && keyCode <= VK_Z) {
@@ -775,9 +774,9 @@ public class KeyEvent extends InputEvent {
     }
 
     /**
-     * Los modificadores escritos para una persona.
+     * The modifiers written out for a person.
      *
-     * @deprecated trabaja con la codificación vieja. Usar
+     * @deprecated it works with the old encoding. Use
      *     {@link InputEvent#getModifiersExText(int)}.
      */
     @Deprecated
@@ -805,10 +804,10 @@ public class KeyEvent extends InputEvent {
     }
 
     /**
-     * Si la tecla no produce texto: una de función, una flecha, un modificador.
+     * Whether the key produces no text: a function key, an arrow, a modifier.
      *
-     * <p>Es la pregunta que separa las dos mitades del teclado, y la que decide si esperar un
-     * {@code KEY_TYPED} después de esta pulsación tiene sentido.
+     * <p>It is the question that splits the keyboard in two halves, and the one that decides whether
+     * expecting a {@code KEY_TYPED} after this keystroke makes sense.
      */
     public boolean isActionKey() {
         if (this.keyCode >= VK_F1 && this.keyCode <= VK_F24) {
@@ -825,37 +824,37 @@ public class KeyEvent extends InputEvent {
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == KEY_PRESSED) {
-            tipo = "KEY_PRESSED";
+            type = "KEY_PRESSED";
         } else if (this.id == KEY_RELEASED) {
-            tipo = "KEY_RELEASED";
+            type = "KEY_RELEASED";
         } else if (this.id == KEY_TYPED) {
-            tipo = "KEY_TYPED";
+            type = "KEY_TYPED";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + ",keyCode=" + this.keyCode + ",keyText=" + getKeyText(this.keyCode)
+        return type + ",keyCode=" + this.keyCode + ",keyText=" + getKeyText(this.keyCode)
                 + ",keyChar=" + (this.keyChar == CHAR_UNDEFINED ? "Undefined keyChar"
                         : String.valueOf(this.keyChar))
                 + ",keyLocation=" + this.keyLocation;
     }
 
     /**
-     * El código extendido, que distingue teclas que el código común confunde.
+     * The extended code, which tells apart keys the common code confuses.
      *
-     * <p>Acá coincide siempre con {@link #getKeyCode}: el código extendido sólo se separa del común
-     * cuando el sistema informa la disposición física del teclado, y esta biblioteca no tiene de
-     * dónde sacarla.
+     * <p>Here it always agrees with {@link #getKeyCode}: the extended code only parts from the
+     * common one when the system reports the keyboard's physical layout, and this library has
+     * nowhere to get that from.
      */
     public int getExtendedKeyCode() {
         return this.keyCode;
     }
 
     /**
-     * El código extendido que corresponde a ese carácter.
+     * The extended code corresponding to that character.
      *
-     * @return el código, o {@link #VK_UNDEFINED} si el carácter no tiene tecla propia
+     * @return the code, or {@link #VK_UNDEFINED} if the character has no key of its own
      */
     public static int getExtendedKeyCodeForChar(int c) {
         if (c >= 'a' && c <= 'z') {

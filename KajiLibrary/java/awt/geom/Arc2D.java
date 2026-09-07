@@ -1,28 +1,28 @@
 package java.awt.geom;
 
-// java.awt.geom.Arc2D de KajiLibrary -- un sector de la elipse inscripta en el marco. Superficie
-// completa.
+// KajiLibrary's java.awt.geom.Arc2D -- a sector of the ellipse inscribed in the frame. The surface
+// is complete.
 //
-// Convencion de angulos, que es la trampa de esta clase: se miden en **grados**, crecen en sentido
-// antihorario y el 0 esta a la derecha; pero el eje y de la pantalla apunta hacia abajo, asi que
-// para pasar a radianes hay que **negar** (`Math.toRadians(-angulo)`). Ademas, en una elipse no
-// circular el angulo **no** es el angulo geometrico del punto: la spec lo define sobre el circulo
-// unitario antes de estirar por el ancho y el alto. Por eso `setAngles` sesga los atan2 por w y h.
+// The angle convention, which is this class's trap: they are measured in **degrees**, they grow
+// anticlockwise and 0 is to the right; but the screen's y axis points down, so converting to radians
+// requires **negating** (`Math.toRadians(-angle)`). What is more, in a non-circular ellipse the
+// angle is **not** the point's geometric angle: the spec defines it over the unit circle before
+// stretching by the width and the height. That is why `setAngles` skews the atan2s by w and h.
 //
-// El tipo (OPEN, CHORD, PIE) cambia que figura cierra el arco, y con eso cambian `contains`,
-// `intersects` y el camino que emite el iterador.
+// The type (OPEN, CHORD, PIE) changes which shape closes the arc, and with it `contains`,
+// `intersects` and the path the iterator emits change too.
 public abstract class Arc2D extends RectangularShape {
 
-    /** El arco queda abierto: no se agrega ningun segmento de cierre. */
+    /** The arc is left open: no closing segment is added. */
     public static final int OPEN = 0;
 
-    /** El arco se cierra con la cuerda que une sus dos extremos. */
+    /** The arc is closed with the chord joining its two ends. */
     public static final int CHORD = 1;
 
-    /** El arco se cierra pasando por el centro: una porcion de torta. */
+    /** The arc is closed by way of the centre: a slice of pie. */
     public static final int PIE = 2;
 
-    // Arco con coordenadas float.
+    // An arc with float coordinates.
     public static class Float extends Arc2D implements java.io.Serializable {
 
         public float x;
@@ -112,7 +112,7 @@ public abstract class Arc2D extends RectangularShape {
         }
     }
 
-    // Arco con coordenadas double.
+    // An arc with double coordinates.
     public static class Double extends Arc2D implements java.io.Serializable {
 
         public double x;
@@ -270,8 +270,8 @@ public abstract class Arc2D extends RectangularShape {
         setArc(x - radius, y - radius, radius * 2.0, radius * 2.0, angSt, angExt, closure);
     }
 
-    // Arco de radio dado tangente a los dos segmentos p1-p2 y p2-p3. El centro cae sobre la
-    // bisectriz del angulo en p2, a distancia radius/sin(mitad del angulo).
+    // An arc of the given radius tangent to the two segments p1-p2 and p2-p3. The centre falls on
+    // the bisector of the angle at p2, at a distance radius/sin(half the angle).
     public void setArcByTangent(Point2D p1, Point2D p2, Point2D p3, double radius) {
         double ang1 = Math.atan2(p1.getY() - p2.getY(), p1.getX() - p2.getX());
         double ang2 = Math.atan2(p3.getY() - p2.getY(), p3.getX() - p2.getX());
@@ -286,7 +286,7 @@ public abstract class Arc2D extends RectangularShape {
         double dist = radius / Math.sin(theta);
         double x = p2.getX() + dist * Math.cos(bisect);
         double y = p2.getY() + dist * Math.sin(bisect);
-        // Los puntos de tangencia estan a 90 grados de las direcciones de los lados.
+        // The tangency points are 90 degrees from the sides' directions.
         if (ang1 < ang2) {
             ang1 = ang1 - Math.PI / 2.0;
             ang2 = ang2 + Math.PI / 2.0;
@@ -299,8 +299,8 @@ public abstract class Arc2D extends RectangularShape {
         setArcByCenter(x, y, radius, ang1, ang2 - ang1, this.type);
     }
 
-    // El angulo se sesga por el alto y el ancho porque en la elipse el parametro no es el angulo
-    // geometrico.
+    // The angle is skewed by the height and the width because in the ellipse the parameter is not
+    // the geometric angle.
     public void setAngleStart(Point2D p) {
         double dx = getHeight() * (p.getX() - getCenterX());
         double dy = getWidth() * (p.getY() - getCenterY());
@@ -312,7 +312,7 @@ public abstract class Arc2D extends RectangularShape {
         double y = getCenterY();
         double w = getWidth();
         double h = getHeight();
-        // Se invierte la y para compensar el eje hacia abajo, y se sesga por w/h.
+        // The y is flipped to make up for the downward axis, and it is skewed by w/h.
         double ang1 = Math.atan2(w * (y - y1), h * (x1 - x));
         double ang2 = Math.atan2(w * (y - y2), h * (x2 - x));
         ang2 = ang2 - ang1;
@@ -331,8 +331,8 @@ public abstract class Arc2D extends RectangularShape {
         setArc(x, y, w, h, getAngleStart(), getAngleExtent(), this.type);
     }
 
-    // La caja del arco no es la del marco: hay que mirar solo los cuadrantes que el arco recorre,
-    // mas sus dos extremos, mas el centro si es PIE.
+    // The arc's box is not the frame's: only the quadrants the arc travels through have to be
+    // looked at, plus its two ends, plus the centre if it is a PIE.
     public Rectangle2D getBounds2D() {
         if (isEmpty()) {
             return makeBounds(getX(), getY(), getWidth(), getHeight());
@@ -356,7 +356,7 @@ public abstract class Arc2D extends RectangularShape {
         int i = 0;
         while (i < 6) {
             if (i < 4) {
-                // 0..3: los cuatro cuadrantes
+                // 0..3: the four quadrants
                 angle = angle + 90.0;
                 if (!containsAngle(angle)) {
                     i = i + 1;
@@ -385,8 +385,8 @@ public abstract class Arc2D extends RectangularShape {
         return makeBounds(x1, y1, x2, y2);
     }
 
-    // Lleva un angulo al rango (-180, 180]. IEEEremainder puede devolver exactamente -180 para
-    // ciertas entradas y ahi hay que corregirlo a mano.
+    // It brings an angle into the range (-180, 180]. IEEEremainder may return exactly -180 for
+    // certain inputs and there it has to be corrected by hand.
     static double normalizeDegrees(double angle) {
         if (angle > 180.0) {
             if (angle <= (180.0 + 360.0)) {
@@ -430,7 +430,7 @@ public abstract class Arc2D extends RectangularShape {
     }
 
     public boolean contains(double x, double y) {
-        // Primero: ¿esta dentro de la elipse? (normalizado a circulo de radio 0.5)
+        // First: is it inside the ellipse? (normalized to a circle of radius 0.5)
         double ellw = getWidth();
         if (ellw <= 0.0) {
             return false;
@@ -453,17 +453,17 @@ public abstract class Arc2D extends RectangularShape {
         if (this.type == PIE) {
             return inarc;
         }
-        // CHORD y OPEN encierran la misma region: la limitada por la cuerda.
+        // CHORD and OPEN enclose the same region: the one bounded by the chord.
         if (inarc) {
             if (angExt >= 180.0) {
                 return true;
             }
-            // el punto tiene que quedar **afuera** del triangulo centro-extremos
+            // the point has to end up **outside** the centre-ends triangle
         } else {
             if (angExt <= 180.0) {
                 return false;
             }
-            // el punto tiene que quedar **adentro** de ese triangulo
+            // the point has to end up **inside** that triangle
         }
         double angle = Math.toRadians(-getAngleStart());
         double x1 = Math.cos(angle);
@@ -507,8 +507,8 @@ public abstract class Arc2D extends RectangularShape {
         double ex = ep.getX();
         double ey = ep.getY();
 
-        // Casos que se escapan del rectangulo formado por el centro y los dos extremos: el arco
-        // sobresale por uno de los cuatro puntos cardinales.
+        // Cases that escape the rectangle formed by the centre and the two ends: the arc sticks
+        // out through one of the four cardinal points.
         if (ayc >= y && ayc <= yh) {
             if ((sx < xw && ex < xw && axc < xw && axw > x && containsAngle(0))
                 || (sx > x && ex > x && axc > x && ax < xw && containsAngle(180))) {
@@ -524,8 +524,8 @@ public abstract class Arc2D extends RectangularShape {
 
         Rectangle2D rect = Rectangle2D.newDouble(x, y, w, h);
         if (this.type == PIE || Math.abs(ext) > 180) {
-            // Con mas de media vuelta, o con PIE, la figura es concava: hay que probar los dos
-            // radios y no la cuerda.
+            // With more than half a turn, or with PIE, the shape is concave: the two radii have to
+            // be tested and not the chord.
             if (rect.intersectsLine(axc, ayc, sx, sy) || rect.intersectsLine(axc, ayc, ex, ey)) {
                 return true;
             }
@@ -547,9 +547,9 @@ public abstract class Arc2D extends RectangularShape {
         return containsRect(r.getX(), r.getY(), r.getWidth(), r.getHeight(), r);
     }
 
-    // Las cuatro esquinas adentro alcanzan mientras la figura sea convexa. Un PIE de mas de 180
-    // grados es concavo: puede tener las cuatro esquinas adentro y aun asi un lado del rectangulo
-    // cruzando la "cuña que falta", asi que hay que probar los dos radios aparte.
+    // The four corners being inside is enough as long as the shape is convex. A PIE of more than
+    // 180 degrees is concave: it may have the four corners inside and still have a side of the
+    // rectangle crossing the "missing wedge", so the two radii have to be tested apart.
     private boolean containsRect(double x, double y, double w, double h, Rectangle2D origrect) {
         if (!(contains(x, y) && contains(x + w, y)
               && contains(x, y + h) && contains(x + w, y + h))) {

@@ -1,19 +1,19 @@
 package java.awt.event;
 
 /**
- * Un {@link ContainerListener} que no hace nada, para redefinir sólo lo que interese.
+ * A {@link ContainerListener} that does nothing, to override only what matters.
  */
 public abstract class ContainerAdapter implements ContainerListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected ContainerAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void componentAdded(ContainerEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void componentRemoved(ContainerEvent e) {
     }
 }

@@ -1,20 +1,20 @@
 package java.awt.datatransfer;
 
 /**
- * Se pidieron los datos en un formato que no se puede entregar.
+ * The data was asked for in a format that cannot be handed over.
  *
- * <p>Es una excepción **comprobada** a propósito: pedir un formato que el origen no ofrece no es un
- * error de programación sino una posibilidad normal, y quien pide tiene que estar preparado.
+ * <p>It is a **checked** exception on purpose: asking for a format the source does not offer is not
+ * a programming error but a normal possibility, and whoever asks has to be prepared.
  */
 public class UnsupportedFlavorException extends Exception {
 
     private static final long serialVersionUID = 5383814944251665601L;
 
     /**
-     * Con el formato que no se pudo entregar.
+     * With the format that could not be handed over.
      *
-     * <p>El mensaje es el nombre legible del formato y no su tipo MIME: el que va a leerlo es una
-     * persona.
+     * <p>The message is the format's human-readable name and not its MIME type: the one who is going
+     * to read it is a person.
      */
     public UnsupportedFlavorException(DataFlavor flavor) {
         super(flavor != null ? flavor.getHumanPresentableName() : null);

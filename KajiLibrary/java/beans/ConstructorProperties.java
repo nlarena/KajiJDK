@@ -5,11 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// Dice a que propiedades corresponden los parametros de un constructor, en orden. Es lo que deja
-// reconstruir un objeto INMUTABLE: sin setters, la unica forma de volver a armarlo es pasarle los
-// valores al constructor, y hace falta saber cual parametro es cual propiedad.
+// It says which properties a constructor's parameters correspond to, in order. It is what allows
+// rebuilding an IMMUTABLE object: with no setters, the only way of putting it back together is
+// passing the values to the constructor, and one has to know which parameter is which property.
 //
-// Nota: declarada pero no leida en este arbol; ver el encabezado de Introspector.
+// Note: declared but not read in this tree; see Introspector's header.
 @Target({ ElementType.CONSTRUCTOR })
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ConstructorProperties {

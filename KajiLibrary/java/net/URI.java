@@ -3,25 +3,25 @@ package java.net;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 
-// Un URI segun RFC 3986, descompuesto en sus cinco piezas: esquema, autoridad, camino,
-// consulta y fragmento. Es un tipo de VALOR: inmutable, con igualdad por contenido.
+// A URI per RFC 3986, broken into its five pieces: scheme, authority, path, query and fragment. It
+// is a VALUE type: immutable, with equality by content.
 //
-// Entro a la biblioteca porque `javax.tools.FileObject.toUri()` y el constructor de
-// `SimpleJavaFileObject` lo piden — sin el, ese paquete no se puede cerrar.
+// It came into the library because `javax.tools.FileObject.toUri()` and `SimpleJavaFileObject`'s
+// constructor ask for it -- without it, that package cannot be closed.
 //
-// COMPLETO: los 32 miembros. Esta nota decia que faltaba la decodificacion de %XX --que las
-// `getX()` devolvian lo mismo que las `getRawX()` porque `java.nio.charset` no existia-- y las dos
-// mitades de esa frase quedaron viejas: el paquete esta (se importa aca arriba) y la decodificacion
-// tambien. `getPath()` sobre `/a%20b/c%2Fd` devuelve `/a b/c/d` y `getRawPath()` la forma escapada,
-// que es lo que hace el JDK; se comprobo contra el.
+// COMPLETE: all 32 members. This note used to say that the %XX decoding was missing --that the
+// `getX()` returned the same as the `getRawX()` because `java.nio.charset` did not exist-- and both
+// halves of that sentence went stale: the package is here (it is imported above) and so is the
+// decoding. `getPath()` over `/a%20b/c%2Fd` returns `/a b/c/d` and `getRawPath()` the escaped form,
+// which is what the JDK does; it was checked against it.
 //
-// El parser usa `charAt` y `substring(int,int)` porque nuestro `String` no tiene `indexOf`
-// ni `substring(int)` — de ahi los `scan*` de abajo.
+// The parser uses `charAt` and `substring(int,int)` because our `String` has neither `indexOf` nor
+// `substring(int)` -- hence the `scan*` methods below.
 public final class URI implements Comparable<URI>, Serializable {
 
     private final String string;
     private final String scheme;
-    private final String ssp;          // scheme-specific part: todo lo que sigue al "esquema:"
+    private final String ssp;          // scheme-specific part: everything after the "scheme:"
     private final String authority;
     private final String path;
     private final String query;
@@ -35,8 +35,8 @@ public final class URI implements Comparable<URI>, Serializable {
         this.string = str;
         int len = str.length();
 
-        // 1. esquema: letras/digitos/+-. hasta el primer ':', y solo si aparece antes que
-        //    cualquier '/', '?' o '#'. "foo/bar:baz" NO tiene esquema.
+        // 1. scheme: letters/digits/+-. up to the first ':', and only if it appears before any '/',
+        //    '?' or '#'. "foo/bar:baz" has NO scheme.
         int colon = -1;
         int i = 0;
         while (i < len) {
@@ -65,15 +65,15 @@ public final class URI implements Comparable<URI>, Serializable {
         }
         this.scheme = sch;
 
-        // 2. fragmento: desde el ultimo '#' hasta el final (no puede haber otro despues).
+        // 2. fragment: from the last '#' to the end (there cannot be another after it).
         int hash = scanFor(str, rest, len, '#');
         int endOfRest = (hash < 0) ? len : hash;
         this.fragment = (hash < 0) ? null : str.substring(hash + 1, len);
 
         this.ssp = str.substring(rest, endOfRest);
 
-        // 3. Opaco = tiene esquema y su parte especifica NO arranca con '/'  ("mailto:x@y").
-        //    En ese caso no hay autoridad, camino ni consulta que separar.
+        // 3. Opaque = it has a scheme and its scheme-specific part does NOT start with '/'
+        //    ("mailto:x@y"). In that case there is no authority, path or query to separate.
         this.opaque = (sch != null) && !(this.ssp.length() > 0 && this.ssp.charAt(0) == '/');
         if (this.opaque) {
             if (this.ssp.isEmpty()) {
@@ -85,7 +85,7 @@ public final class URI implements Comparable<URI>, Serializable {
             return;
         }
 
-        // 4. jerarquico: [ "//" autoridad ] camino [ "?" consulta ]
+        // 4. jerarquico: [ "//" autoridad ] path [ "?" consulta ]
         int p = rest;
         String auth = null;
         if (p + 1 < endOfRest && str.charAt(p) == '/' && str.charAt(p + 1) == '/') {
@@ -107,8 +107,8 @@ public final class URI implements Comparable<URI>, Serializable {
         this.query = (qmark < 0) ? null : str.substring(qmark + 1, endOfRest);
     }
 
-    // Igual que el constructor pero para strings que se sabe que estan bien (constantes del
-    // programa): convierte el fallo en no chequeado, como en el JDK.
+    // The same as the constructor but for strings known to be well formed (the program's constants):
+    // it turns the failure into an unchecked one, as in the JDK.
     public static URI create(String str) {
         try {
             return new URI(str);
@@ -119,22 +119,22 @@ public final class URI implements Comparable<URI>, Serializable {
 
     public String getScheme() { return this.scheme; }
 
-    // Absoluto = tiene esquema. Es lo que distingue "http://a/b" de "/b".
+    // Absolute = it has a scheme. It is what tells "http://a/b" from "/b".
     public boolean isAbsolute() { return this.scheme != null; }
 
-    // Opaco = "mailto:x@y": hay esquema pero lo que sigue no es un camino jerarquico.
+    // Opaque = "mailto:x@y": there is a scheme but what follows is not a hierarchical path.
     public boolean isOpaque() { return this.opaque; }
 
-    public String getSchemeSpecificPart() { return desescapar(this.ssp); }
+    public String getSchemeSpecificPart() { return unescape(this.ssp); }
 
     public String getRawSchemeSpecificPart() { return this.ssp; }
 
-    public String getAuthority() { return desescapar(this.authority); }
+    public String getAuthority() { return unescape(this.authority); }
 
     public String getRawAuthority() { return this.authority; }
 
     // De "user@host:port", la parte anterior al '@', ya decodificada.
-    public String getUserInfo() { return desescapar(getRawUserInfo()); }
+    public String getUserInfo() { return unescape(getRawUserInfo()); }
 
     public String getRawUserInfo() {
         if (this.authority == null) { return null; }
@@ -145,13 +145,13 @@ public final class URI implements Comparable<URI>, Serializable {
     public String getHost() {
         if (this.authority == null) { return null; }
         int len = this.authority.length();
-        int start = scanFor(this.authority, 0, len, '@') + 1;   // -1 + 1 = 0 si no hay '@'
+        int start = scanFor(this.authority, 0, len, '@') + 1;   // -1 + 1 = 0 if there is no '@'
         int colon = scanFor(this.authority, start, len, ':');
         int end = (colon < 0) ? len : colon;
         return this.authority.substring(start, end);
     }
 
-    // -1 cuando no hay puerto, igual que el JDK.
+    // -1 when there is no port, just as in the JDK.
     public int getPort() {
         if (this.authority == null) { return -1; }
         int len = this.authority.length();
@@ -169,51 +169,52 @@ public final class URI implements Comparable<URI>, Serializable {
         return value;
     }
 
-    // ---- los cuatro constructores por partes ------------------------------------------------------
+    // ---- the four by-parts constructors -----------------------------------------------------------
     //
-    // Reciben los componentes EN CRUDO y los escapan; el constructor de un solo `String` los recibe
-    // ya escapados. Esa es toda la diferencia entre los dos, y es lo que le da sentido al par
-    // `getPath()`/`getRawPath()`: sin escapar aca, "raw" no tenia nada distinto que mostrar.
+    // They take the components RAW and escape them; the single-`String` constructor takes them already
+    // escaped. That is the whole difference between the two, and it is what gives the
+    // `getPath()`/`getRawPath()` pair its point: without escaping here, "raw" had nothing different
+    // to show.
     //
-    // El escape va en los constructores y **no** dentro de `armar`, aunque ahi quedaria en un solo
-    // lugar: `armar` tambien lo usan `resolve`, `normalize` y `relativize`, que le pasan componentes
-    // que YA estan escapados --salen de `this.path`, `this.query`--. Escapar ahi los escaparia dos
-    // veces, y un `%20` se volveria `%2520` en cada `resolve`.
+    // The escaping goes in the constructors and **not** inside `build`, even though it would be in a
+    // single place there: `build` is also used by `resolve`, `normalize` and `relativize`, which pass
+    // it components that are ALREADY escaped --they come out of `this.path`, `this.query`. Escaping
+    // there would escape them twice, and a `%20` would become `%2520` on every `resolve`.
     //
-    // Arman la cadena y despues la **reparsean**. Podria parecer un rodeo --se tienen las piezas--
-    // pero es lo que garantiza que un URI armado por partes y uno parseado con el mismo texto sean
-    // indistinguibles: mismo `toString`, mismo `equals`, mismo `hashCode`. Construir los campos a
-    // mano abriria la puerta a un URI cuyo texto no coincide con sus partes.
+    // They assemble the string and then **reparse** it. It may look like a detour --the pieces are in
+    // hand-- but it is what guarantees that a URI built from parts and one parsed from the same text
+    // are indistinguishable: same `toString`, same `equals`, same `hashCode`. Building the fields by
+    // hand would open the door to a URI whose text does not match its parts.
 
-    /** Un URI opaco: esquema, parte especifica y fragmento. */
+    /** Un URI opaque: esquema, parte especifica y fragmento. */
     public URI(String scheme, String ssp, String fragment) throws URISyntaxException {
-        this(armar(scheme, null, null, -1, escapar(ssp, LEGALES_URIC), null,
-                escapar(fragment, LEGALES_URIC), true));
+        this(build(scheme, null, null, -1, escape(ssp, LEGAL_URIC), null,
+                escape(fragment, LEGAL_URIC), true));
     }
 
-    /** Un URI jerarquico con autoridad en bruto. */
+    /** A hierarchical URI with a raw authority. */
     public URI(String scheme, String authority, String path, String query, String fragment)
             throws URISyntaxException {
-        this(armar(scheme, escapar(authority, LEGALES_AUTORIDAD), null, -1,
-                escapar(path, LEGALES_PATH), escapar(query, LEGALES_URIC),
-                escapar(fragment, LEGALES_URIC), false));
+        this(build(scheme, escape(authority, LEGAL_AUTHORITY), null, -1,
+                escape(path, LEGAL_PATH), escape(query, LEGAL_URIC),
+                escape(fragment, LEGAL_URIC), false));
     }
 
-    /** Un URI jerarquico con la autoridad partida en usuario, host y puerto. */
+    /** A hierarchical URI with the authority split into user, host and port. */
     public URI(String scheme, String userInfo, String host, int port, String path, String query,
             String fragment) throws URISyntaxException {
-        this(armar(scheme, null,
-                armarAutoridad(escapar(userInfo, LEGALES_USERINFO), host, port), port,
-                escapar(path, LEGALES_PATH), escapar(query, LEGALES_URIC),
-                escapar(fragment, LEGALES_URIC), false));
+        this(build(scheme, null,
+                buildAuthority(escape(userInfo, LEGAL_USERINFO), host, port), port,
+                escape(path, LEGAL_PATH), escape(query, LEGAL_URIC),
+                escape(fragment, LEGAL_URIC), false));
     }
 
-    /** El de arriba sin usuario ni puerto, que es el caso comun de un `http://host/camino`. */
+    /** The one above without user or port, which is the common case of an `http://host/path`. */
     public URI(String scheme, String host, String path, String fragment) throws URISyntaxException {
         this(scheme, null, host, -1, path, null, fragment);
     }
 
-    private static String armarAutoridad(String userInfo, String host, int port) {
+    private static String buildAuthority(String userInfo, String host, int port) {
         if (host == null) {
             return null;
         }
@@ -230,22 +231,22 @@ public final class URI implements Comparable<URI>, Serializable {
         return sb.toString();
     }
 
-    private static String armar(String scheme, String authority, String userInfo, int port,
-            String resto, String query, String fragment, boolean opaco) {
+    private static String build(String scheme, String authority, String userInfo, int port,
+            String rest, String query, String fragment, boolean opaque) {
         StringBuilder sb = new StringBuilder();
         if (scheme != null) {
             sb.append(scheme);
             sb.append(':');
         }
-        if (!opaco) {
+        if (!opaque) {
             String auth = authority != null ? authority : userInfo;
             if (auth != null) {
                 sb.append("//");
                 sb.append(auth);
             }
         }
-        if (resto != null) {
-            sb.append(resto);
+        if (rest != null) {
+            sb.append(rest);
         }
         if (query != null) {
             sb.append('?');
@@ -261,78 +262,78 @@ public final class URI implements Comparable<URI>, Serializable {
     // ---- el algebra de caminos ---------------------------------------------------------------------
 
     /**
-     * Este URI con los `.` y `..` de su camino resueltos.
+     * This URI with the `.` and `..` of its path resolved.
      *
-     * <p>La trampa esta en el `..`, y es la razon de que esto no sea un `replace`: sacar un `..`
-     * **no** es borrar el segmento anterior si ese segmento era a su vez un `..`. `a/../../b` es
-     * `../b`, no `b` -- un URI relativo puede legitimamente subir mas alto que su propio texto.
+     * <p>The trap is in the `..`, and it is the reason this is not a `replace`: removing a `..` is
+     * **not** deleting the previous segment if that segment was itself a `..`. `a/../../b` is `../b`,
+     * not `b` -- a relative URI may legitimately climb higher than its own text.
      *
-     * <p>Un URI opaco no tiene camino que normalizar y se devuelve tal cual.
+     * <p>An opaque URI has no path to normalize and is returned as it stands.
      */
     public URI normalize() {
         if (this.opaque || this.path == null || this.path.length() == 0) {
             return this;
         }
-        String limpio = normalizarCamino(this.path);
-        if (limpio.equals(this.path)) {
+        String cleaned = normalizePath(this.path);
+        if (cleaned.equals(this.path)) {
             return this;
         }
-        return crearOMismo(armar(this.scheme, this.authority, null, -1, limpio, this.query,
+        return createOrSame(build(this.scheme, this.authority, null, -1, cleaned, this.query,
                 this.fragment, false));
     }
 
-    private static String normalizarCamino(String camino) {
-        boolean absoluto = camino.length() > 0 && camino.charAt(0) == '/';
-        java.util.ArrayList<String> salida = new java.util.ArrayList<String>();
-        int desde = 0;
-        int n = camino.length();
-        while (desde <= n) {
-            int corte = scanFor(camino, desde, n, '/');
-            int fin = corte < 0 ? n : corte;
-            String pieza = camino.substring(desde, fin);
-            if (pieza.equals(".") || pieza.length() == 0) {
-                // Se descarta -- salvo que sea el ultimo, donde marca "termina en barra".
-                if (fin == n && salida.size() > 0) {
-                    salida.add("");
+    private static String normalizePath(String path) {
+        boolean absolute = path.length() > 0 && path.charAt(0) == '/';
+        java.util.ArrayList<String> out = new java.util.ArrayList<String>();
+        int from = 0;
+        int n = path.length();
+        while (from <= n) {
+            int cut = scanFor(path, from, n, '/');
+            int end = cut < 0 ? n : cut;
+            String piece = path.substring(from, end);
+            if (piece.equals(".") || piece.length() == 0) {
+                // It is discarded -- unless it is the last, where it marks "ends in a slash".
+                if (end == n && out.size() > 0) {
+                    out.add("");
                 }
-            } else if (pieza.equals("..")) {
-                int ultimo = salida.size() - 1;
-                if (ultimo >= 0 && !salida.get(ultimo).equals("..")) {
-                    salida.remove(ultimo);
-                } else if (!absoluto) {
-                    // En un camino relativo el `..` que no tiene a quien comerse **se queda**.
-                    salida.add("..");
+            } else if (piece.equals("..")) {
+                int last = out.size() - 1;
+                if (last >= 0 && !out.get(last).equals("..")) {
+                    out.remove(last);
+                } else if (!absolute) {
+                    // In a relative path a `..` with nothing to eat **stays**.
+                    out.add("..");
                 }
             } else {
-                salida.add(pieza);
+                out.add(piece);
             }
-            if (corte < 0) {
-                desde = n + 1;
+            if (cut < 0) {
+                from = n + 1;
             } else {
-                desde = corte + 1;
+                from = cut + 1;
             }
         }
         StringBuilder sb = new StringBuilder();
-        if (absoluto) {
+        if (absolute) {
             sb.append('/');
         }
         int i = 0;
-        while (i < salida.size()) {
+        while (i < out.size()) {
             if (i > 0) {
                 sb.append('/');
             }
-            sb.append(salida.get(i));
+            sb.append(out.get(i));
             i = i + 1;
         }
         return sb.toString();
     }
 
     /**
-     * Resuelve `that` contra este URI, que hace de base (RFC 3986 §5.2.2).
+     * Resolves `that` against this URI, which acts as the base (RFC 3986 §5.2.2).
      *
-     * <p>Las reglas en orden, que es como el RFC las escribe: si `that` es absoluto o opaco, gana
-     * entero; si solo tiene fragmento, se le pega a la base; si su camino es absoluto, reemplaza; y
-     * si es relativo, se lo cuelga del directorio de la base.
+     * <p>The rules in order, which is how the RFC writes them: if `that` is absolute or opaque, it
+     * wins whole; if it has only a fragment, it is pasted onto the base; if its path is absolute, it
+     * replaces; and if it is relative, it is hung off the base's directory.
      */
     public URI resolve(URI that) {
         if (that == null) {
@@ -344,24 +345,24 @@ public final class URI implements Comparable<URI>, Serializable {
         if (this.isOpaque()) {
             return that;
         }
-        // Solo fragmento: la base entera con otro fragmento.
+        // Fragment only: the whole base with the other's fragment.
         if (that.authority == null && (that.path == null || that.path.length() == 0)
                 && that.query == null && that.fragment != null) {
-            return crearOMismo(armar(this.scheme, this.authority, null, -1, this.path, this.query,
+            return createOrSame(build(this.scheme, this.authority, null, -1, this.path, this.query,
                     that.fragment, false));
         }
         if (that.authority != null) {
-            return crearOMismo(armar(this.scheme, that.authority, null, -1,
-                    normalizarCamino(nuloAVacio(that.path)), that.query, that.fragment, false));
+            return createOrSame(build(this.scheme, that.authority, null, -1,
+                    normalizePath(nullToEmpty(that.path)), that.query, that.fragment, false));
         }
-        String caminoNuevo;
+        String newPath;
         if (that.path != null && that.path.length() > 0 && that.path.charAt(0) == '/') {
-            caminoNuevo = that.path;
+            newPath = that.path;
         } else {
-            caminoNuevo = unirCaminos(nuloAVacio(this.path), nuloAVacio(that.path));
+            newPath = joinPaths(nullToEmpty(this.path), nullToEmpty(that.path));
         }
-        return crearOMismo(armar(this.scheme, this.authority, null, -1,
-                normalizarCamino(caminoNuevo), that.query, that.fragment, false));
+        return createOrSame(build(this.scheme, this.authority, null, -1,
+                normalizePath(newPath), that.query, that.fragment, false));
     }
 
     /** El de arriba, parseando `str` primero. */
@@ -369,29 +370,29 @@ public final class URI implements Comparable<URI>, Serializable {
         return this.resolve(URI.create(str));
     }
 
-    // El camino de la base **hasta la ultima barra**: un URI nombra un recurso, no un directorio, asi
-    // que lo que queda a la derecha de la ultima barra se reemplaza.
-    private static String unirCaminos(String base, String relativo) {
-        int ultimaBarra = -1;
+    // The base's path **up to the last slash**: a URI names a resource, not a directory, so what is
+    // to the right of the last slash gets replaced.
+    private static String joinPaths(String base, String relative) {
+        int lastSlash = -1;
         int i = 0;
         while (i < base.length()) {
             if (base.charAt(i) == '/') {
-                ultimaBarra = i;
+                lastSlash = i;
             }
             i = i + 1;
         }
-        if (ultimaBarra < 0) {
-            return relativo;
+        if (lastSlash < 0) {
+            return relative;
         }
-        return base.substring(0, ultimaBarra + 1) + relativo;
+        return base.substring(0, lastSlash + 1) + relative;
     }
 
     /**
-     * Expresa `that` como relativo a este URI, si se puede.
+     * Expresses `that` as relative to this URI, if it can.
      *
-     * <p>Es la inversa parcial de {@link #resolve}: si no comparten esquema y autoridad, o si `that`
-     * no cuelga del camino de la base, **no hay** forma relativa y se devuelve `that` sin tocar. Eso
-     * no es un fallo: es que la respuesta correcta es el URI absoluto.
+     * <p>It is {@link #resolve}'s partial inverse: if they do not share scheme and authority, or if
+     * `that` does not hang off the base's path, there **is no** relative form and `that` is returned
+     * untouched. That is not a failure: it is that the correct answer is the absolute URI.
      */
     public URI relativize(URI that) {
         if (that == null) {
@@ -403,44 +404,43 @@ public final class URI implements Comparable<URI>, Serializable {
         if (!iguales(this.scheme, that.scheme) || !iguales(this.authority, that.authority)) {
             return that;
         }
-        String base = normalizarCamino(nuloAVacio(this.path));
-        String otro = normalizarCamino(nuloAVacio(that.path));
-        // El prefijo se corta en la ultima barra de la base: comparar por caracteres dejaria
-        // `/a/bc` como "hijo" de `/a/b`, que es falso.
-        int hastaBarra = 0;
+        String base = normalizePath(nullToEmpty(this.path));
+        String other = normalizePath(nullToEmpty(that.path));
+        // The prefix is cut at the base's last slash: comparing character by character would leave
+        // `/a/bc` as a "child" of `/a/b`, which is false.
+        int upToSlash = 0;
         int i = 0;
         while (i < base.length()) {
             if (base.charAt(i) == '/') {
-                hastaBarra = i + 1;
+                upToSlash = i + 1;
             }
             i = i + 1;
         }
-        String prefijo = base.substring(0, hastaBarra);
-        if (otro.length() < prefijo.length()) {
+        String prefix = base.substring(0, upToSlash);
+        if (other.length() < prefix.length()) {
             return that;
         }
-        if (!otro.substring(0, prefijo.length()).equals(prefijo)) {
+        if (!other.substring(0, prefix.length()).equals(prefix)) {
             return that;
         }
-        String resto = otro.substring(prefijo.length(), otro.length());
-        return crearOMismo(armar(null, null, null, -1, resto, that.query, that.fragment, false));
+        String rest = other.substring(prefix.length(), other.length());
+        return createOrSame(build(null, null, null, -1, rest, that.query, that.fragment, false));
     }
 
     /**
-     * Este mismo URI, comprobando que su autoridad tenga forma de servidor (usuario, host, puerto).
+     * This same URI, checking that its authority has server form (user, host, port).
      *
-     * <p>Existe porque la autoridad de un URI puede ser cualquier cosa --el RFC deja una forma
-     * "basada en registro" para esquemas raros-- y quien necesite un host y un puerto quiere fallar
-     * temprano si no los hay.
+     * <p>It exists because a URI's authority may be anything --the RFC leaves a "registry-based" form
+     * for odd schemes-- and whoever needs a host and a port wants to fail early if there are none.
      *
-     * @throws URISyntaxException si la autoridad no tiene forma de servidor
+     * @throws URISyntaxException if the authority does not have server form
      */
     public URI parseServerAuthority() throws URISyntaxException {
         if (this.authority == null) {
             return this;
         }
         if (this.getHost() == null) {
-            throw new URISyntaxException(this.string, "la autoridad no tiene forma de servidor");
+            throw new URISyntaxException(this.string, "the authority does not have server form");
         }
         return this;
     }
@@ -448,8 +448,8 @@ public final class URI implements Comparable<URI>, Serializable {
     /**
      * Este URI como {@link java.net.URL}.
      *
-     * @throws IllegalArgumentException si el URI no es absoluto
-     * @throws java.net.MalformedURLException si el esquema no se puede convertir en URL
+     * @throws IllegalArgumentException si el URI no es absolute
+     * @throws java.net.MalformedURLException if the scheme cannot be turned into a URL
      */
     public java.net.URL toURL() throws java.net.MalformedURLException {
         if (!this.isAbsolute()) {
@@ -465,37 +465,38 @@ public final class URI implements Comparable<URI>, Serializable {
         return a.equals(b);
     }
 
-    private static String nuloAVacio(String s) {
+    private static String nullToEmpty(String s) {
         return s == null ? "" : s;
     }
 
-    // Todos los `resolve`/`relativize`/`normalize` producen texto que **ya** es un URI valido --sale
-    // de piezas que lo eran-- asi que un fallo de parseo aca seria un defecto de esta clase y no del
-    // que llama. Por eso se reetiqueta como `IllegalArgumentException`, igual que `URI.create`.
-    private static URI crearOMismo(String texto) {
-        return URI.create(texto);
+    // Every `resolve`/`relativize`/`normalize` produces text that **already** is a valid URI --it
+    // comes out of pieces that were-- so a parse failure here would be a defect of this class and not
+    // of the caller. That is why it is relabelled as `IllegalArgumentException`, just like
+    // `URI.create`.
+    private static URI createOrSame(String text) {
+        return URI.create(text);
     }
 
-    public String getPath() { return desescapar(this.path); }
+    public String getPath() { return unescape(this.path); }
 
     public String getRawPath() { return this.path; }
 
-    public String getQuery() { return desescapar(this.query); }
+    public String getQuery() { return unescape(this.query); }
 
     public String getRawQuery() { return this.query; }
 
-    public String getFragment() { return desescapar(this.fragment); }
+    public String getFragment() { return unescape(this.fragment); }
 
     public String getRawFragment() { return this.fragment; }
 
     public String toString() { return this.string; }
 
     /**
-     * El URI escrito con **solo ASCII**.
+     * The URI written with **ASCII only**.
      *
-     * <p>Los caracteres no-ASCII se guardan literales --`toString()` de un URI con una "e" acentuada
-     * la muestra acentuada, y el JDK hace lo mismo--; esta es la forma que se manda por un canal que
-     * solo acepta ASCII, y es la unica diferencia entre los dos metodos.
+     * <p>Non-ASCII characters are kept literal --`toString()` of a URI with an accented "e" shows it
+     * accented, and the JDK does the same--; this is the form to be sent over a channel that only
+     * accepts ASCII, and it is the only difference between the two methods.
      */
     public String toASCIIString() {
         StringBuilder out = new StringBuilder();
@@ -508,13 +509,14 @@ public final class URI implements Comparable<URI>, Serializable {
                 i = i + 1;
                 continue;
             }
-            // Un caracter suplementario son DOS `char`, y hay que tomar el par entero antes de
-            // pasarlo a UTF-8: codificar cada sustituto por separado da una secuencia que no vuelve.
+            // A supplementary character is TWO `char`s, and the whole pair has to be taken before
+            // passing it to UTF-8: encoding each surrogate separately gives a sequence that does not
+            // come back.
             int cp = this.string.codePointAt(i);
             byte[] bytes = new String(Character.toChars(cp)).getBytes(StandardCharsets.UTF_8);
             int k = 0;
             while (k < bytes.length) {
-                escaparByte(out, bytes[k] & 0xFF);
+                escapeByte(out, bytes[k] & 0xFF);
                 k = k + 1;
             }
             i = i + Character.charCount(cp);
@@ -534,7 +536,7 @@ public final class URI implements Comparable<URI>, Serializable {
 
     public int compareTo(URI that) { return this.string.compareTo(that.string); }
 
-    // ---- helpers de parseo (nuestro String no tiene indexOf) ----
+    // ---- parsing helpers (our String has no indexOf) ----
 
     // Primer `ch` en [from, to), o -1.
     private static int scanFor(String s, int from, int to, char ch) {
@@ -556,36 +558,36 @@ public final class URI implements Comparable<URI>, Serializable {
 
     // ---- percent-encoding (RFC 3986) --------------------------------------------------------------
     //
-    // Que se escapa depende del COMPONENTE, y por eso hay cuatro juegos y no uno: un '?' dentro de un
-    // camino tiene que escaparse --si no, corta el camino y arranca la consulta-- pero dentro de la
-    // consulta es un caracter mas y dejarlo es lo correcto. Escapar de mas tambien es un error: le
-    // cambia el valor al componente.
+    // What gets escaped depends on the COMPONENT, and that is why there are four sets and not one: a
+    // '?' inside a path has to be escaped --otherwise it cuts the path short and starts the query--
+    // but inside the query it is just another character and leaving it is correct. Escaping too much
+    // is an error too: it changes the component's value.
     //
-    // Los conjuntos son los del JDK, que usa la definicion de "unreserved" del RFC 2396 --incluye los
-    // "mark" !~*'()-- y no la mas corta del RFC 3986. Verificado contra el JDK real.
+    // The sets are the JDK's, which uses RFC 2396's definition of "unreserved" --it includes the
+    // "mark" characters !~*'()-- and not RFC 3986's shorter one. Verified against the real JDK.
     //
-    // Lo que NO se escapa nunca aca: los caracteres no-ASCII. El JDK los deja literales en
-    // `toString()` y en `getRawPath()`, y los codifica recien en `toASCIIString()`.
+    // What is NEVER escaped here: the non-ASCII characters. The JDK leaves them literal in
+    // `toString()` and in `getRawPath()`, and encodes them only in `toASCIIString()`.
 
     private static final String NO_RESERVADOS =
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!~*'()";
 
-    /** Legales en un camino: los no reservados, mas los separadores que un camino puede contener. */
-    private static final String LEGALES_PATH = NO_RESERVADOS + ":@&=+$,/";
+    /** Legal in a path: the unreserved ones, plus the separators a path may contain. */
+    private static final String LEGAL_PATH = NO_RESERVADOS + ":@&=+$,/";
 
-    /** Legales en una consulta o un fragmento: ahi '/' y '?' ya no separan nada. */
-    private static final String LEGALES_URIC = NO_RESERVADOS + ";/?:@&=+$,[]";
+    /** Legal in a query or a fragment: there '/' and '?' no longer separate anything. */
+    private static final String LEGAL_URIC = NO_RESERVADOS + ";/?:@&=+$,[]";
 
-    /** Legales en una autoridad; los corchetes son de las direcciones IPv6 literales. */
-    private static final String LEGALES_AUTORIDAD = NO_RESERVADOS + "$,;:@&=+[]";
+    /** Legal in an authority; the brackets belong to literal IPv6 addresses. */
+    private static final String LEGAL_AUTHORITY = NO_RESERVADOS + "$,;:@&=+[]";
 
-    /** Legales en la parte de usuario: no lleva '@', que es justamente lo que la termina. */
-    private static final String LEGALES_USERINFO = NO_RESERVADOS + ";:&=+$,";
+    /** Legal in the user part: it carries no '@', which is precisely what terminates it. */
+    private static final String LEGAL_USERINFO = NO_RESERVADOS + ";:&=+$,";
 
     private static final String HEX = "0123456789ABCDEF";
 
-    // Escapa lo que no sea legal en ese componente.
-    private static String escapar(String s, String legales) {
+    // Escapes whatever is not legal in that component.
+    private static String escape(String s, String legal) {
         if (s == null) {
             return null;
         }
@@ -593,27 +595,27 @@ public final class URI implements Comparable<URI>, Serializable {
         int i = 0;
         while (i < s.length()) {
             char c = s.charAt(i);
-            if (c >= 0x80 || scanFor(legales, 0, legales.length(), c) >= 0) {
+            if (c >= 0x80 || scanFor(legal, 0, legal.length(), c) >= 0) {
                 out.append(c);
             } else {
-                escaparByte(out, c);
+                escapeByte(out, c);
             }
             i = i + 1;
         }
         return out.toString();
     }
 
-    // En mayusculas, que es la forma canonica del RFC y la que emite el JDK.
-    private static void escaparByte(StringBuilder out, int b) {
+    // In upper case, which is the RFC's canonical form and the one the JDK emits.
+    private static void escapeByte(StringBuilder out, int b) {
         out.append('%');
         out.append(HEX.charAt((b >> 4) & 0xF));
         out.append(HEX.charAt(b & 0xF));
     }
 
-    // Deshace los %XX. Un escape mal formado ("%zz") se deja tal cual en vez de tirar: a este metodo
-    // lo llaman los `getX()`, que no declaran excepcion, y perder el resto del componente por un '%'
-    // suelto seria peor que devolverlo como vino.
-    private static String desescapar(String s) {
+    // It undoes the %XX. A malformed escape ("%zz") is left as it stands instead of throwing: this
+    // method is called by the `getX()`, which declare no exception, and losing the rest of the
+    // component over a stray '%' would be worse than returning it as it came.
+    private static String unescape(String s) {
         if (s == null || scanFor(s, 0, s.length(), '%') < 0) {
             return s;
         }
@@ -624,12 +626,13 @@ public final class URI implements Comparable<URI>, Serializable {
         while (i < len) {
             char c = s.charAt(i);
             if (c == '%' && i + 2 < len) {
-                int alto = Character.digit(s.charAt(i + 1), 16);
-                int bajo = Character.digit(s.charAt(i + 2), 16);
-                if (alto >= 0 && bajo >= 0) {
-                    // Los %XX seguidos se juntan antes de decodificar: un caracter no-ASCII son
-                    // varios bytes en UTF-8, y pasarlos de a uno daria un caracter roto por byte.
-                    bytes.write((alto << 4) + bajo);
+                int hi = Character.digit(s.charAt(i + 1), 16);
+                int lo = Character.digit(s.charAt(i + 2), 16);
+                if (hi >= 0 && lo >= 0) {
+                    // Consecutive %XX are gathered before decoding: a non-ASCII character is
+                    // several bytes in UTF-8, and passing them one at a time would give one broken
+                    // character per byte.
+                    bytes.write((hi << 4) + lo);
                     i = i + 3;
                     continue;
                 }

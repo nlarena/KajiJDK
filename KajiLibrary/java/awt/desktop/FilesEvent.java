@@ -5,37 +5,36 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's java.awt.desktop.FilesEvent -- un evento que trae archivos.
+ * KajiLibrary's java.awt.desktop.FilesEvent -- an event that carries files.
  *
- * <p>La base de {@link OpenFilesEvent} y {@link PrintFilesEvent}. Su constructor es de acceso de
- * paquete: la clase no se instancia sola.
+ * <p>The base of {@link OpenFilesEvent} and {@link PrintFilesEvent}. Its constructor is
+ * package-private: the class is not instantiated on its own.
  *
- * <h2>{@link #getFiles} devuelve una copia</h2>
+ * <h2>{@link #getFiles} returns a copy</h2>
  *
- * <p>Una copia <b>nueva y modificable</b> en cada llamada. Eso tiene dos consecuencias que conviene
- * tener presentes:
+ * <p>A <b>new and modifiable</b> copy on each call. That has two consequences worth keeping in mind:
  *
  * <ul>
- *   <li>comparar con {@code ==} el resultado de dos llamadas da false;
- *   <li>modificar lo que devuelve no cambia el evento, pero modificar la lista que se le paso al
- *       constructor <b>si</b> -- el evento guarda esa lista, no una copia.
+ *   <li>comparing the result of two calls with {@code ==} gives false;
+ *   <li>modifying what it returns does not change the event, but modifying the list handed to the
+ *       constructor <b>does</b> -- the event keeps that list, not a copy.
  * </ul>
  *
- * <p>Es lo que hace el JDK y se comprobo contra el JDK 25.
+ * <p>It is what the JDK does and it was checked against JDK 25.
  */
 public class FilesEvent extends AppEvent {
 
     private static final long serialVersionUID = 5271763715462312871L;
 
-    /** La lista que se paso, sin copiar. Ver la nota de la clase. */
+    /** The list that was handed in, uncopied. See the class note. */
     final List<File> files;
 
-    /** De acceso de paquete; solo las dos subclases lo usan. */
+    /** Package-private; only the two subclasses use it. */
     FilesEvent(final List<File> files) {
         this.files = files;
     }
 
-    /** Una copia modificable de los archivos, o null si no habia lista. Ver la nota de la clase. */
+    /** A modifiable copy of the files, or null if there was no list. See the class note. */
     public List<File> getFiles() {
         if (this.files == null) {
             return null;

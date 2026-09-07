@@ -3,73 +3,73 @@ package java.awt.event;
 import java.awt.Component;
 
 /**
- * Un componente ganó o perdió el foco del teclado.
+ * A component gained or lost the keyboard focus.
  *
- * <p>Lo **temporal** es la distinción importante y la que se pasa por alto. Un foco que se pierde
- * temporalmente —porque se abrió un menú, porque la ventana pasó a segundo plano— va a volver, y no
- * es el momento de validar el campo ni de guardar. Uno permanente sí.
+ * <p>**Temporary** is the important distinction and the one that gets overlooked. A focus lost
+ * temporarily —because a menu opened, because the window went to the background— is going to come
+ * back, and it is not the moment to validate the field or to save. A permanent one is.
  *
- * <p>La causa, que se agregó mucho después, dice **por qué**: si fue un clic, un tabulador, un
- * pedido explícito o el arranque de la ventana. Sirve para tratar distinto un foco que el usuario
- * pidió de uno que le tocó.
+ * <p>The cause, added much later, says **why**: whether it was a click, a tab, an explicit request
+ * or the window starting up. It serves to treat a focus the user asked for differently from one that
+ * merely fell to them.
  */
 public class FocusEvent extends ComponentEvent {
 
     private static final long serialVersionUID = 523753786457416396L;
 
-    /** Por qué cambió el foco. */
+    /** Why the focus changed. */
     public static enum Cause {
 
-        /** No se sabe. */
+        /** It is not known. */
         UNKNOWN,
 
-        /** Un clic del ratón. */
+        /** A mouse click. */
         MOUSE_EVENT,
 
-        /** Un recorrido con el tabulador. */
+        /** A traversal with the tab key. */
         TRAVERSAL,
 
-        /** Un recorrido hacia arriba en el árbol. */
+        /** A traversal up the tree. */
         TRAVERSAL_UP,
 
-        /** Un recorrido hacia abajo en el árbol. */
+        /** A traversal down the tree. */
         TRAVERSAL_DOWN,
 
-        /** Un recorrido hacia adelante. */
+        /** A traversal forwards. */
         TRAVERSAL_FORWARD,
 
-        /** Un recorrido hacia atrás. */
+        /** A traversal backwards. */
         TRAVERSAL_BACKWARD,
 
-        /** Alguien lo pidió explícitamente. */
+        /** Someone asked for it explicitly. */
         MANUAL_REQUEST,
 
-        /** El sistema lo movió solo. */
+        /** The system moved it on its own. */
         AUTOMATIC_TRAVERSAL,
 
-        /** Se volvió al foco anterior porque el nuevo no lo aceptó. */
+        /** The previous focus was returned to because the new one did not accept it. */
         ROLLBACK,
 
-        /** La ventana pasó a ser la activa. */
+        /** The window became the active one. */
         ACTIVATION,
 
-        /** Se soltó el foco global. */
+        /** The global focus was released. */
         CLEAR_GLOBAL_FOCUS_OWNER,
 
-        /** Pasó algo que no encaja en ninguna de las otras. */
+        /** Something happened that fits none of the others. */
         UNEXPECTED
     }
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int FOCUS_FIRST = 1004;
 
-    /** El componente ganó el foco. */
+    /** The component gained the focus. */
     public static final int FOCUS_GAINED = 1004;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int FOCUS_LAST = 1005;
 
-    /** El componente perdió el foco. */
+    /** The component lost the focus. */
     public static final int FOCUS_LOST = 1005;
 
     private final boolean temporary;
@@ -77,10 +77,10 @@ public class FocusEvent extends ComponentEvent {
     private final Cause cause;
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
-     * @throws NullPointerException si la causa es `null`
+     * @throws IllegalArgumentException if the source is `null`
+     * @throws NullPointerException if the cause is `null`
      */
     public FocusEvent(Component source, int id, boolean temporary, Component opposite,
             Cause cause) {
@@ -94,57 +94,57 @@ public class FocusEvent extends ComponentEvent {
     }
 
     /**
-     * Sin decir la causa.
+     * Without saying the cause.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public FocusEvent(Component source, int id, boolean temporary, Component opposite) {
         this(source, id, temporary, opposite, Cause.UNKNOWN);
     }
 
     /**
-     * Sin el componente opuesto.
+     * Without the opposite component.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public FocusEvent(Component source, int id, boolean temporary) {
         this(source, id, temporary, null, Cause.UNKNOWN);
     }
 
     /**
-     * Permanente y sin opuesto.
+     * Permanent and with no opposite.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public FocusEvent(Component source, int id) {
         this(source, id, false, null, Cause.UNKNOWN);
     }
 
-    /** Si el foco va a volver. */
+    /** Whether the focus is going to come back. */
     public boolean isTemporary() {
         return this.temporary;
     }
 
-    /** La otra parte del cambio, o `null` si es de otra aplicación. */
+    /** The other side of the change, or `null` if it belongs to another application. */
     public Component getOppositeComponent() {
         return this.opposite;
     }
 
-    /** Por qué cambió el foco. */
+    /** Why the focus changed. */
     public final Cause getCause() {
         return this.cause;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == FOCUS_GAINED) {
-            tipo = "FOCUS_GAINED";
+            type = "FOCUS_GAINED";
         } else if (this.id == FOCUS_LOST) {
-            tipo = "FOCUS_LOST";
+            type = "FOCUS_LOST";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + (this.temporary ? ",temporary" : ",permanent") + ",opposite="
+        return type + (this.temporary ? ",temporary" : ",permanent") + ",opposite="
                 + this.opposite + ",cause=" + this.cause;
     }
 }

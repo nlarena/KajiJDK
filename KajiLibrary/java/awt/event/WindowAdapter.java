@@ -1,54 +1,54 @@
 package java.awt.event;
 
 /**
- * Un oyente de ventana que no hace nada, para redefinir sólo lo que interese.
-
- <p>Implementa las tres interfaces de ventana. El uso clásico es redefinir un solo método,
- {@code windowClosing}, para preguntar si hay que guardar antes de cerrar.
+ * A window listener that does nothing, to override only what matters.
+ *
+ * <p>It implements the three window interfaces. The classic use is overriding a single method,
+ * {@code windowClosing}, to ask whether anything has to be saved before closing.
  */
 public abstract class WindowAdapter implements WindowListener, WindowStateListener, WindowFocusListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected WindowAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowOpened(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowClosing(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowClosed(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowIconified(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowDeiconified(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowActivated(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowDeactivated(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowStateChanged(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowGainedFocus(WindowEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void windowLostFocus(WindowEvent e) {
     }
 }

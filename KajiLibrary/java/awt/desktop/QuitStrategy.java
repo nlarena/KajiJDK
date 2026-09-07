@@ -1,20 +1,20 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.QuitStrategy -- que hacer cuando el sistema pide cerrar.
+ * KajiLibrary's java.awt.desktop.QuitStrategy -- what to do when the system asks to close.
  *
- * <p>Se fija con {@code Desktop.setQuitStrategy} y decide que pasa <b>despues</b> de que un
- * {@link QuitHandler} acepta el cierre.
+ * <p>It is set with {@code Desktop.setQuitStrategy} and decides what happens <b>after</b> a
+ * {@link QuitHandler} accepts the closing.
  *
- * <p>La diferencia entre las dos importa: {@link #CLOSE_ALL_WINDOWS} manda un evento de cierre a cada
- * ventana, asi que cada una puede guardar lo suyo; {@link #NORMAL_EXIT} llama a {@code System.exit(0)}
- * directo y las ventanas no se enteran.
+ * <p>The difference between the two matters: {@link #CLOSE_ALL_WINDOWS} sends a closing event to each
+ * window, so each one can save what is its own; {@link #NORMAL_EXIT} calls {@code System.exit(0)}
+ * straight away and the windows never find out.
  */
 public enum QuitStrategy {
 
-    /** Llama a {@code System.exit(0)}. Las ventanas no se enteran. */
+    /** Calls {@code System.exit(0)}. The windows never find out. */
     NORMAL_EXIT,
 
-    /** Manda un evento de cierre a cada ventana. */
+    /** Sends a closing event to each window. */
     CLOSE_ALL_WINDOWS
 }

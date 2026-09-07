@@ -3,10 +3,11 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que se ejecutó una acción: un botón apretado, una opción elegida, un Enter en un campo de texto.
+ * Whoever wants to hear that an action was carried out: a button pressed, an option chosen, an Enter
+ * in a text field.
  */
 public interface ActionListener extends EventListener {
 
-    /** Se ejecutó la acción. */
+    /** The action was carried out. */
     void actionPerformed(ActionEvent e);
 }

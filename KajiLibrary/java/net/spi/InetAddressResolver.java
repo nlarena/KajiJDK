@@ -5,70 +5,70 @@ import java.net.UnknownHostException;
 import java.util.stream.Stream;
 
 /**
- * KajiLibrary's java.net.spi.InetAddressResolver -- quien traduce nombres a direcciones.
+ * KajiLibrary's java.net.spi.InetAddressResolver -- the one that translates names into addresses.
  *
- * <p>Es el enchufe que deja reemplazar la resolucion de nombres del sistema. Sirve para bastante mas
- * que para "usar otro DNS": permite resolver nombres de un descubrimiento de servicios, o fijar
- * respuestas en una prueba para que no dependa de la red.
+ * <p>It is the socket that lets the system's name resolution be replaced. It serves for rather more
+ * than "using another DNS": it allows names to be resolved from a service discovery, or answers to be
+ * fixed in a test so that it does not depend on the network.
  *
- * <p>Los dos metodos <b>no son inversos</b>, y conviene tenerlo presente. Un nombre puede tener
- * varias direcciones --por eso la ida devuelve un flujo-- y una direccion puede tener varios nombres
- * o ninguno, pero la vuelta devuelve uno solo. Ademas la vuelta la controla quien es dueño de la
- * direccion, no quien es dueño del nombre, asi que un nombre obtenido asi <b>no prueba</b> nada:
- * usarlo para autorizar es el error clasico de este API.
+ * <p>The two methods are <b>not inverses</b>, and that is worth keeping in mind. A name may have
+ * several addresses --which is why the outward direction returns a stream-- and an address may have
+ * several names or none, but the return direction gives only one. Besides, the return direction is
+ * controlled by whoever owns the address, not by whoever owns the name, so a name obtained this way
+ * <b>proves</b> nothing: using it to authorize is this API's classic mistake.
  */
 public interface InetAddressResolver {
 
     /**
-     * Las direcciones de ese nombre.
+     * The addresses of that name.
      *
-     * @param host el nombre a resolver
-     * @param lookupPolicy que familias se piden y en que orden
-     * @return un flujo, posiblemente con varias direcciones
-     * @throws UnknownHostException si el nombre no resuelve
+     * @param host the name to resolve
+     * @param lookupPolicy which families are asked for and in what order
+     * @return a stream, possibly holding several addresses
+     * @throws UnknownHostException if the name does not resolve
      */
     Stream<InetAddress> lookupByName(String host, LookupPolicy lookupPolicy)
         throws UnknownHostException;
 
     /**
-     * El nombre de esa direccion.
+     * The name of that address.
      *
-     * @param addr los bytes crudos, 4 o 16
-     * @throws UnknownHostException si no hay nombre
+     * @param addr the raw bytes, 4 or 16
+     * @throws UnknownHostException if there is no name
      */
     String lookupByAddress(byte[] addr) throws UnknownHostException;
 
     /**
-     * Que se pide en una resolucion: que familias de direcciones y en que orden.
+     * What is asked for in a lookup: which address families and in what order.
      *
-     * <p>Es un juego de bits y no un enum porque las dos preguntas son independientes: <b>cuales</b>
-     * traer (IPv4, IPv6 o las dos) y <b>cual primero</b>. Un enum con todas las combinaciones
-     * validas tendria seis valores y no diria por que.
+     * <p>It is a set of bits and not an enum because the two questions are independent: <b>which</b>
+     * to bring (IPv4, IPv6 or both) and <b>which first</b>. An enum with every valid combination
+     * would have six values and would not say why.
      *
-     * <p>{@link #of} rechaza las combinaciones que no significan nada. Las reglas son tres:
+     * <p>{@link #of} rejects the combinations that mean nothing. There are three rules:
      *
      * <ul>
-     *   <li>tiene que pedirse al menos una familia -- pedir "ninguna, IPv4 primero" no es nada;
-     *   <li>no se pueden pedir los dos ordenes a la vez;
-     *   <li>un orden solo se puede pedir sobre una familia que se esta pidiendo: {@code IPV4_FIRST}
-     *       con solo IPv6 es una contradiccion.
+     *   <li>at least one family has to be asked for -- asking for "none, IPv4 first" is nothing;
+     *   <li>both orders cannot be asked for at once;
+     *   <li>an order can only be asked for over a family that is being asked for:
+     *       {@code IPV4_FIRST} with IPv6 alone is a contradiction.
      * </ul>
      *
-     * <p>Los bits que no son ninguno de los cuatro se dejan pasar tal cual: son la via por la que
-     * este juego puede crecer sin invalidar codigo viejo.
+     * <p>The bits that are none of the four are let through as they stand: they are the road by which
+     * this set can grow without invalidating old code.
      */
     final class LookupPolicy {
 
-        /** Se piden direcciones IPv4. */
+        /** IPv4 addresses are asked for. */
         public static final int IPV4 = 1 << 0;
 
-        /** Se piden direcciones IPv6. */
+        /** IPv6 addresses are asked for. */
         public static final int IPV6 = 1 << 1;
 
-        /** Las IPv4 van primero en el resultado. */
+        /** The IPv4 ones come first in the result. */
         public static final int IPV4_FIRST = 1 << 2;
 
-        /** Las IPv6 van primero en el resultado. */
+        /** The IPv6 ones come first in the result. */
         public static final int IPV6_FIRST = 1 << 3;
 
         private final int characteristics;
@@ -78,10 +78,10 @@ public interface InetAddressResolver {
         }
 
         /**
-         * Una politica con esos bits.
+         * A policy with those bits.
          *
-         * @throws IllegalArgumentException si la combinacion no significa nada; ver las tres reglas
-         *     en la nota de la clase
+         * @throws IllegalArgumentException if the combination means nothing; see the three rules in
+         *     the class's note
          */
         public static LookupPolicy of(int characteristics) {
             if ((characteristics & (IPV4 | IPV6)) == 0) {
@@ -99,7 +99,7 @@ public interface InetAddressResolver {
             return new LookupPolicy(characteristics);
         }
 
-        /** Los bits, tal como se pasaron. */
+        /** The bits, exactly as they were passed. */
         public int characteristics() {
             return this.characteristics;
         }

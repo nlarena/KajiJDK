@@ -8,23 +8,23 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Una figura metida en un renglón de texto como si fuera un carácter.
+ * A figure put into a line of text as if it were a character.
  *
- * <p>Las medidas salen de la figura misma: lo que la figura tenga por encima del origen es el
- * ascenso, lo que tenga por debajo el descenso, y hasta dónde llegue a la derecha el avance. Lo que
- * quede a la **izquierda** del origen no cuenta como avance —los tres se recortan a cero— así que
- * una figura que empiece antes del origen se mete debajo de lo anterior, igual que una letra
- * cursiva.
+ * <p>The measurements come from the figure itself: whatever the figure has above the origin is the
+ * ascent, whatever it has below it the descent, and how far it reaches to the right the advance.
+ * Whatever is left to the **left** of the origin does not count as advance --the three are clamped to
+ * zero-- so a figure starting before the origin tucks under what came before, just like an italic
+ * letter.
  *
- * <p>Se puede pedir rellena o trazada. Trazada ocupa un píxel más de ancho y de alto, porque el
- * trazo se dibuja **sobre** el borde y sobresale medio píxel de cada lado.
+ * <p>It can be asked for filled or stroked. Stroked takes one pixel more in width and in height,
+ * because the stroke is drawn **on** the edge and sticks out half a pixel on each side.
  */
 public final class ShapeGraphicAttribute extends GraphicAttribute {
 
-    /** Que la figura se dibuje trazada. */
+    /** That the figure be drawn stroked. */
     public static final boolean STROKE = true;
 
-    /** Que la figura se dibuje rellena. */
+    /** That the figure be drawn filled. */
     public static final boolean FILL = false;
 
     private final Shape shape;
@@ -32,10 +32,10 @@ public final class ShapeGraphicAttribute extends GraphicAttribute {
     private final Rectangle2D shapeBounds;
 
     /**
-     * Con la figura, la alineación y si va trazada o rellena.
+     * With the figure, the alignment and whether it goes stroked or filled.
      *
-     * @throws IllegalArgumentException si la alineación no es una de las cinco
-     * @throws NullPointerException si la figura es `null`
+     * @throws IllegalArgumentException if the alignment is none of the five
+     * @throws NullPointerException if the figure is `null`
      */
     public ShapeGraphicAttribute(Shape shape, int alignment, boolean stroke) {
         super(alignment);
@@ -44,27 +44,27 @@ public final class ShapeGraphicAttribute extends GraphicAttribute {
         this.shapeBounds = this.shape.getBounds2D();
     }
 
-    /** Lo que la figura sube por encima del origen. */
+    /** How far the figure rises above the origin. */
     public float getAscent() {
         return (float) Math.max(0, -this.shapeBounds.getMinY());
     }
 
-    /** Lo que la figura baja por debajo del origen. */
+    /** How far the figure drops below the origin. */
     public float getDescent() {
         return (float) Math.max(0, this.shapeBounds.getMaxY());
     }
 
-    /** Hasta dónde llega la figura a la derecha del origen. */
+    /** How far the figure reaches to the right of the origin. */
     public float getAdvance() {
         return (float) Math.max(0, this.shapeBounds.getMaxX());
     }
 
     /**
-     * Dibuja la figura con su origen en `(x, y)`.
+     * Draws the figure with its origin at `(x, y)`.
      *
-     * <p>El desplazamiento se hace y se deshace sobre el contexto que se recibe, y se deshace en un
-     * `finally`: si el dibujo tira, el contexto queda como estaba y no arrastra el corrimiento al
-     * resto del renglón.
+     * <p>The shift is done and undone on the context that is received, and undone in a `finally`: if
+     * the drawing throws, the context is left as it was and does not drag the offset into the rest of
+     * the line.
      */
     public void draw(Graphics2D graphics, float x, float y) {
         graphics.translate((int) x, (int) y);
@@ -83,9 +83,10 @@ public final class ShapeGraphicAttribute extends GraphicAttribute {
     }
 
     /**
-     * Dónde cae la tinta.
+     * Where the ink falls.
      *
-     * <p>Trazada ocupa un píxel más de cada lado, porque el trazo se dibuja sobre el borde.
+     * <p>Stroked takes one pixel more in width and in height, because the stroke is drawn on the
+     * edge.
      */
     public Rectangle2D getBounds() {
         Rectangle2D.Float bounds = new Rectangle2D.Float();
@@ -98,9 +99,10 @@ public final class ShapeGraphicAttribute extends GraphicAttribute {
     }
 
     /**
-     * El contorno de la figura, transformado.
+     * The figure's outline, transformed.
      *
-     * <p>Se redefine porque acá sí hay un contorno de verdad: la figura misma, y no su caja.
+     * <p>It is overridden because here there really is an outline: the figure itself, and not its
+     * box.
      */
     public Shape getOutline(AffineTransform tx) {
         if (tx == null) {
@@ -113,7 +115,7 @@ public final class ShapeGraphicAttribute extends GraphicAttribute {
         return this.shape.hashCode();
     }
 
-    /** Igualdad por figura, alineación y modo de dibujo. */
+    /** Equality by figure, alignment and drawing mode. */
     public boolean equals(Object rhs) {
         if (rhs instanceof ShapeGraphicAttribute) {
             return this.equals((ShapeGraphicAttribute) rhs);
@@ -121,7 +123,7 @@ public final class ShapeGraphicAttribute extends GraphicAttribute {
         return false;
     }
 
-    /** Lo mismo, con el tipo ya conocido. */
+    /** The same, with the type already known. */
     public boolean equals(ShapeGraphicAttribute rhs) {
         if (rhs == null) {
             return false;

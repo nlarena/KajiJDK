@@ -4,37 +4,38 @@ import java.awt.AWTEvent;
 import java.awt.ItemSelectable;
 
 /**
- * Se eligió o se dejó de elegir un elemento.
+ * An item was chosen or stopped being chosen.
  *
- * <p>Trae **el elemento** y si quedó elegido o no, en vez de traer la lista entera. Es lo que hace
- * que atender el evento sea barato en una lista de miles: se avisa lo que cambió, no lo que hay.
+ * <p>It brings **the item** and whether it ended up chosen or not, instead of bringing the whole
+ * list. That is what makes attending to the event cheap in a list of thousands: what changed is
+ * reported, not what there is.
  */
 public class ItemEvent extends AWTEvent {
 
     private static final long serialVersionUID = -608708132447206933L;
 
-    /** El elemento dejó de estar elegido. */
+    /** The item stopped being chosen. */
     public static final int DESELECTED = 2;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int ITEM_FIRST = 701;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int ITEM_LAST = 701;
 
-    /** Cambió qué está elegido. */
+    /** What is chosen changed. */
     public static final int ITEM_STATE_CHANGED = 701;
 
-    /** El elemento quedó elegido. */
+    /** The item ended up chosen. */
     public static final int SELECTED = 1;
 
     private final Object item;
     private final int stateChange;
 
     /**
-     * Con la fuente, el elemento y en qué quedó.
+     * With the source, the item and what it ended up as.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public ItemEvent(ItemSelectable source, int id, Object item, int stateChange) {
         super(source, id);
@@ -42,31 +43,31 @@ public class ItemEvent extends AWTEvent {
         this.stateChange = stateChange;
     }
 
-    /** De dónde salió. */
+    /** Where it came from. */
     public ItemSelectable getItemSelectable() {
         return (ItemSelectable) this.source;
     }
 
-    /** Qué elemento cambió. */
+    /** Which item changed. */
     public Object getItem() {
         return this.item;
     }
 
-    /** {@link #SELECTED} o {@link #DESELECTED}. */
+    /** {@link #SELECTED} or {@link #DESELECTED}. */
     public int getStateChange() {
         return this.stateChange;
     }
 
     public String paramString() {
-        String tipo = this.id == ITEM_STATE_CHANGED ? "ITEM_STATE_CHANGED" : "unknown type";
-        String estado;
+        String type = this.id == ITEM_STATE_CHANGED ? "ITEM_STATE_CHANGED" : "unknown type";
+        String state;
         if (this.stateChange == SELECTED) {
-            estado = "SELECTED";
+            state = "SELECTED";
         } else if (this.stateChange == DESELECTED) {
-            estado = "DESELECTED";
+            state = "DESELECTED";
         } else {
-            estado = "unknown type";
+            state = "unknown type";
         }
-        return tipo + ",item=" + this.item + ",stateChange=" + estado;
+        return type + ",item=" + this.item + ",stateChange=" + state;
     }
 }

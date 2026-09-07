@@ -3,35 +3,35 @@ package java.beans;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-// El motor de la persistencia de beans. No escribe nada: lo que hace es **rearmar el objeto en
-// paralelo**. Por cada llamada que se le describe, ejecuta la llamada equivalente sobre una copia
-// que va construyendo, y guarda la correspondencia "objeto viejo -> expresion que lo produce".
+// The engine of bean persistence. It writes nothing: what it does is **rebuild the object in
+// parallel**. For each call described to it, it runs the equivalent call on a copy it is building,
+// and stores the correspondence "old object -> expression that produces it".
 //
-// Esa copia es la clave de todo. Es lo que permite que `initialize` pregunte "¿el nuevo ya tiene
-// este valor?" y no emita nada cuando la respuesta es si. Sin la copia, un bean con veinte
-// propiedades en su valor por defecto saldria con veinte llamadas inutiles.
+// That copy is the key to everything. It is what lets `initialize` ask "does the new one have this
+// value already?" and emit nothing when the answer is yes. Without the copy, a bean with twenty
+// properties at their default value would come out with twenty useless calls.
 //
-// Escribir es problema de las subclases: XMLEncoder redefine `writeStatement`/`writeExpression`
-// para ademas anotar lo que pasa y despues imprimirlo.
+// Writing is the subclasses' problem: XMLEncoder overrides `writeStatement`/`writeExpression` to
+// also note down what happens and print it afterwards.
 //
-// El mapa de enlaces es de **identidad**, no de igualdad: dos listas iguales pero distintas son dos
-// objetos del grafo y tienen que salir dos veces. Con un HashMap comun se fusionarian y el grafo
-// reconstruido tendria aliasing que el original no tenia.
+// The map of links is by **identity**, not by equality: two equal but distinct lists are two objects
+// of the graph and have to come out twice. With an ordinary HashMap they would be merged and the
+// rebuilt graph would have aliasing the original did not have.
 public class Encoder {
 
-    // El registro de delegados es estatico, como en el JDK: `setPersistenceDelegate` cambia como
-    // se guarda ese tipo para todos los codificadores, no para este.
+    // The register of delegates is static, as in the JDK: `setPersistenceDelegate` changes how
+    // that type is stored for every encoder, not for this one.
     private static final Map<Class<?>, PersistenceDelegate> registro =
         new java.util.HashMap<Class<?>, PersistenceDelegate>();
 
-    private final Map<Object, Expression> enlaces = new IdentityHashMap<Object, Expression>();
+    private final Map<Object, Expression> links = new IdentityHashMap<Object, Expression>();
 
     private ExceptionListener exceptionListener;
 
     public Encoder() {
     }
 
-    // Escribe un objeto: busca quien sabe rehacerlo y le pasa la posta.
+    // It writes an object: it looks for whoever knows how to remake it and hands over.
     protected void writeObject(Object o) {
         if (o != this) {
             PersistenceDelegate info = this.getPersistenceDelegate(o == null ? null : o.getClass());
@@ -43,35 +43,35 @@ public class Encoder {
         this.exceptionListener = exceptionListener;
     }
 
-    // Nunca devuelve null: si nadie puso uno, el de por defecto imprime el problema y sigue. Que
-    // siga es a proposito — un grafo con una propiedad que no se puede leer se guarda igual, sin
-    // esa propiedad, en vez de no guardarse.
+    // It never returns null: if nobody set one, the default prints the problem and carries on.
+    // Carrying on is on purpose -- a graph with a property that cannot be read is stored all the
+    // same, without that property, rather than not being stored at all.
     public ExceptionListener getExceptionListener() {
-        return this.exceptionListener != null ? this.exceptionListener : Delegados.LISTENER_POR_DEFECTO;
+        return this.exceptionListener != null ? this.exceptionListener : Delegates.DEFAULT_LISTENER;
     }
 
-    // Quien sabe rehacer ese tipo. El orden es: lo que se registro a mano, lo que diga el BeanInfo
-    // del tipo, y por ultimo la regla incorporada que corresponda a su forma.
+    // Whoever knows how to remake that type. The order is: what was registered by hand, what the
+    // type's BeanInfo says, and lastly the built-in rule matching its shape.
     public PersistenceDelegate getPersistenceDelegate(Class<?> type) {
-        PersistenceDelegate d = leerRegistro(type);
+        PersistenceDelegate d = readRegistry(type);
         if (d == null) {
-            d = delegadoDelBeanInfo(type);
+            d = beanInfoDelegate(type);
         }
         if (d == null) {
-            d = Delegados.para(type);
+            d = Delegates.forType(type);
         }
         return d;
     }
 
     public void setPersistenceDelegate(Class<?> type, PersistenceDelegate delegate) {
-        escribirRegistro(type, delegate);
+        writeRegistry(type, delegate);
     }
 
-    private static synchronized PersistenceDelegate leerRegistro(Class<?> type) {
+    private static synchronized PersistenceDelegate readRegistry(Class<?> type) {
         return type == null ? null : registro.get(type);
     }
 
-    private static synchronized void escribirRegistro(Class<?> type, PersistenceDelegate d) {
+    private static synchronized void writeRegistry(Class<?> type, PersistenceDelegate d) {
         if (type != null) {
             if (d == null) {
                 registro.remove(type);
@@ -81,9 +81,10 @@ public class Encoder {
         }
     }
 
-    // Un BeanInfo puede traer su propio delegado en el atributo "persistenceDelegate" de su
-    // BeanDescriptor. Es como el JDK deja que una clase diga como se guarda sin tocar el Encoder.
-    private static PersistenceDelegate delegadoDelBeanInfo(Class<?> type) {
+    // A BeanInfo may bring its own delegate in its BeanDescriptor's "persistenceDelegate"
+    // attribute. It is how the JDK lets a class say how it is stored without touching the
+    // Encoder.
+    private static PersistenceDelegate beanInfoDelegate(Class<?> type) {
         PersistenceDelegate d = null;
         if (type != null && !type.isPrimitive() && !type.isArray()) {
             try {
@@ -101,43 +102,44 @@ public class Encoder {
         return d;
     }
 
-    // Saca el objeto del mapa y devuelve lo que valia. Lo usa writeObject del delegado cuando
-    // decide que la copia que hay no sirve y hay que crear una nueva.
+    // It takes the object out of the map and returns what it was worth. The delegate's writeObject
+    // uses it when it decides the copy already there is no good and a new one has to be created.
     public Object remove(Object oldInstance) {
-        Expression exp = this.enlaces.remove(oldInstance);
-        return this.valorDe(exp);
+        Expression exp = this.links.remove(oldInstance);
+        return this.valueOf(exp);
     }
 
-    // La contraparte nueva del objeto viejo, o null si todavia no se escribio.
+    // The old object's new counterpart, or null if it has not been written yet.
     //
-    // Las cadenas se devuelven a si mismas: son inmutables, asi que la "copia" de una cadena es la
-    // cadena. Sin este caso, cada literal del grafo pediria una construccion aparte.
+    // Strings return themselves: they are immutable, so a string's "copy" is the string. Without
+    // this case, every literal of the graph would ask for a construction of its own.
     public Object get(Object oldInstance) {
         Object r;
         if (oldInstance == null || oldInstance == this || oldInstance.getClass() == String.class) {
             r = oldInstance;
         } else {
-            r = this.valorDe(this.enlaces.get(oldInstance));
+            r = this.valueOf(this.links.get(oldInstance));
         }
         return r;
     }
 
-    // La contraparte del objeto, escribiendolo solo si todavia no la tiene.
+    // The object's counterpart, writing it only if it does not have one yet.
     //
-    // El "solo si" no es una optimizacion: es lo que corta la recursion. Al copiar una propiedad,
-    // el delegado por defecto pide escribir la expresion `viejo.getX()`, cuyo OBJETIVO es el mismo
-    // objeto que se esta escribiendo. Sin la guarda, traducir esa expresion vuelve a escribir el
-    // objetivo, que vuelve a copiar sus propiedades, que vuelven a pedir `getX()`: cualquier bean
-    // con una propiedad desborda la pila.
+    // The "only if" is not an optimization: it is what cuts the recursion. When copying a property,
+    // the default delegate asks to write the expression `old.getX()`, whose TARGET is the very
+    // object being written. Without the guard, translating that expression writes the target again,
+    // which copies its properties again, which ask for `getX()` again: any bean with one property
+    // overflows the stack.
     private Object writeObject1(Object oldInstance) {
         Object o = this.get(oldInstance);
         if (o == null) {
             if (oldInstance instanceof Class) {
-                // Una Class es su propia contraparte: las clases no se reconstruyen, el `forName`
-                // del otro lado devuelve este mismo objeto. Decirlo aca es lo que impide que
-                // describir `Class.forName("X")` —cuyo objetivo es `Class.class`— obligue a
-                // describir `Class.class`, que se describiria con otro `Class.forName` sobre el
-                // mismo objetivo. Sin esto, guardar cualquier objeto desborda la pila.
+                // A Class is its own counterpart: classes are not rebuilt, the `forName` on the
+                // other side returns this very object. Saying so here is what stops describing
+                // `Class.forName("X")` --whose target is `Class.class`-- from forcing
+                // `Class.class` to be described, which would be described with another
+                // `Class.forName` over the same target. Without this, storing any object overflows
+                // the stack.
                 o = oldInstance;
             } else {
                 this.writeObject(oldInstance);
@@ -147,8 +149,8 @@ public class Encoder {
         return o;
     }
 
-    // Traduce una llamada del mundo viejo al mundo nuevo: cada objeto que aparece como objetivo o
-    // como argumento se escribe primero y se reemplaza por su contraparte.
+    // It translates a call from the old world into the new one: every object appearing as target
+    // or as argument is written first and replaced by its counterpart.
     private Statement clonar(Statement oldExp) {
         Object newTarget = this.writeObject1(oldExp.getTarget());
         Object[] oldArgs = oldExp.getArguments();
@@ -161,7 +163,7 @@ public class Encoder {
             : new Expression(newTarget, oldExp.getMethodName(), newArgs);
     }
 
-    // Una llamada sin valor: se ejecuta sobre la copia y se descarta.
+    // A call with no value: it is run on the copy and discarded.
     public void writeStatement(Statement oldStm) {
         Statement newStm = this.clonar(oldStm);
         if (oldStm.getTarget() != this) {
@@ -174,29 +176,30 @@ public class Encoder {
         }
     }
 
-    // Una llamada con valor: se anota que ese valor viejo se produce con esta expresion, y despues
-    // se escribe el valor —que es lo que dispara la escritura de su estado interno—.
+    // A call with a value: it is noted that the old value is produced by this expression, and then
+    // the value is written -- which is what triggers the writing of its internal state.
     //
-    // El `get(oldValue) != null` de arriba corta la recursion en los ciclos del grafo: un objeto
-    // que ya tiene enlace no se vuelve a describir.
+    // The `get(oldValue) != null` above cuts the recursion on the graph's cycles: an object that
+    // already has a link is not described again.
     public void writeExpression(Expression oldExp) {
-        Object oldValue = this.valorDe(oldExp);
+        Object oldValue = this.valueOf(oldExp);
         if (this.get(oldValue) == null) {
-            this.enlaces.put(oldValue, (Expression) this.clonar(oldExp));
+            this.links.put(oldValue, (Expression) this.clonar(oldExp));
             this.writeObject(oldValue);
         }
     }
 
-    // Evaluar una expresion no puede devolver "no se pudo": el llamador ya la esta usando como
-    // valor. Se avisa al oyente y se corta.
-    // Olvida las contrapartes acumuladas. Lo usa XMLEncoder al terminar un flush: cada documento
-    // escrito arranca de cero, asi que un objeto que aparezca en dos flushes sucesivos se describe
-    // entero las dos veces en vez de salir como una referencia a un id del documento anterior.
-    void limpiarEnlaces() {
-        this.enlaces.clear();
+    // Evaluating an expression cannot return "it could not be done": the caller is already using it
+    // as a value. The listener is told and it stops there.
+    // It forgets the accumulated counterparts. XMLEncoder uses it when finishing a flush: each
+    // written document starts from scratch, so an object appearing in two successive flushes is
+    // described in full both times instead of coming out as a reference to an id from the previous
+    // document.
+    void clearLinks() {
+        this.links.clear();
     }
 
-    final Object valorDe(Expression exp) {
+    final Object valueOf(Expression exp) {
         Object r = null;
         if (exp != null) {
             try {

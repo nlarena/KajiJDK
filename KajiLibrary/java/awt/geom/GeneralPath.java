@@ -2,21 +2,22 @@ package java.awt.geom;
 
 import java.awt.Shape;
 
-// java.awt.geom.GeneralPath de KajiLibrary -- un camino de precision float. Superficie publica
-// completa: cuatro constructores y nada mas.
+// KajiLibrary's java.awt.geom.GeneralPath -- a float-precision path. The public surface is
+// complete: four constructors and nothing else.
 //
-// No agrega comportamiento: es exactamente `Path2D.Float` con otro nombre. Existe porque es anterior
-// a Path2D (viene de Java 1.2, Path2D es de la 6) y hay codigo que la nombra. Se la deja `final`
-// como en el JDK.
+// It adds no behaviour: it is exactly `Path2D.Float` under another name. It exists because it
+// predates Path2D (it comes from Java 1.2, Path2D from 6) and there is code that names it. It is
+// left `final` as in the JDK.
 //
-// Del constructor de paquete `GeneralPath(int, byte[], int, float[], int)` que lista el JDK no hay
-// nada que cumplir: no es publico ni protegido, asi que no es contrato -- es la puerta que usa el
-// pipeline de dibujo interno para armar un camino sin copiar, y ese pipeline no existe aca.
-// El `extends` va con el nombre completo por el finding #465: escrito `Path2D.Float`, el generador
-// de bytecode resuelve `Float` contra `java.lang` en vez de contra los miembros de `Path2D`, se
-// cree que la superclase es `java.lang.Float` y no le encuentra el constructor `(int, int)`. El
-// verificador de tipos si lo resuelve bien --`--check` pasa y `--emit` no--, asi que el archivo
-// parece sano hasta que se lo intenta emitir. Con el nombre calificado entero anda.
+// The package-private constructor `GeneralPath(int, byte[], int, float[], int)` the JDK lists has
+// nothing to honour: it is neither public nor protected, so it is not contract -- it is the door
+// the internal drawing pipeline uses to build a path without copying, and that pipeline is not
+// here.
+// The `extends` carries the full name because of finding #465: written `Path2D.Float`, the bytecode
+// generator resolves `Float` against `java.lang` instead of against `Path2D`'s members, believes the
+// superclass is `java.lang.Float` and cannot find its `(int, int)` constructor. The type checker
+// does resolve it right --`--check` passes and `--emit` does not-- so the file looks healthy until
+// one tries to emit it. With the whole qualified name it works.
 public final class GeneralPath extends java.awt.geom.Path2D.Float {
 
     public GeneralPath() {

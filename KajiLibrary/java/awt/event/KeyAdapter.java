@@ -1,23 +1,23 @@
 package java.awt.event;
 
 /**
- * Un {@link KeyListener} que no hace nada, para redefinir sólo lo que interese.
+ * A {@link KeyListener} that does nothing, to override only what matters.
  */
 public abstract class KeyAdapter implements KeyListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected KeyAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void keyTyped(KeyEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void keyPressed(KeyEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void keyReleased(KeyEvent e) {
     }
 }

@@ -1,8 +1,8 @@
 package java.beans;
 
-// Lo que una clase puede declarar explicitamente sobre si misma como bean, en vez de dejar que
-// Introspector lo deduzca. Introspector busca una clase `<Bean>BeanInfo`, y lo que esta encuentre
-// pisa lo deducido.
+// What a class can declare explicitly about itself as a bean, instead of letting Introspector work
+// it out. Introspector looks for a `<Bean>BeanInfo` class, and whatever that one has overrides what
+// was worked out.
 public interface BeanInfo {
 
     int ICON_COLOR_16x16 = 1;
@@ -11,10 +11,10 @@ public interface BeanInfo {
     int ICON_MONO_32x32 = 4;
 
     /**
-     * El ícono con que una herramienta muestra al bean en su paleta.
+     * The icon a tool shows the bean with in its palette.
      *
-     * @param iconKind una de las cuatro constantes `ICON_*`: color o monocromo, 16 o 32 píxeles
-     * @return la imagen, o `null` si el bean no ofrece ícono de ese tipo
+     * @param iconKind one of the four `ICON_*` constants: colour or monochrome, 16 or 32 pixels
+     * @return the image, or `null` if the bean offers no icon of that kind
      */
     java.awt.Image getIcon(int iconKind);
 
@@ -22,8 +22,8 @@ public interface BeanInfo {
 
     PropertyDescriptor[] getPropertyDescriptors();
 
-    // El indice, dentro de getPropertyDescriptors(), de la propiedad que una herramienta deberia
-    // resaltar. -1 significa "ninguna en particular".
+    // The index, within getPropertyDescriptors(), of the property a tool ought to highlight. -1
+    // means "none in particular".
     int getDefaultPropertyIndex();
 
     EventSetDescriptor[] getEventSetDescriptors();
@@ -32,7 +32,7 @@ public interface BeanInfo {
 
     MethodDescriptor[] getMethodDescriptors();
 
-    // Otros BeanInfo cuyos descriptores se suman a los de este. Devolver null —no un arreglo
-    // vacio— es como se dice "no hay".
+    // Other BeanInfos whose descriptors add to this one's. Returning null —not an empty array— is
+    // how "there are none" is said.
     BeanInfo[] getAdditionalBeanInfo();
 }

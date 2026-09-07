@@ -2,15 +2,15 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de Ellipse2D: cuatro cubicas de Bezier, una por cuadrante.
+// Ellipse2D's internal iterator: four Bezier cubics, one per quadrant.
 //
-// El circulo no es representable exactamente con Beziers; la constante CTRL_VAL = 4/3*(sqrt(2)-1)
-// es la que hace que el cuarto de circulo aproximado toque los dos extremos con la tangente
-// correcta y quede a menos de 0.03 % del radio en el medio. Es el valor que usa todo el mundo,
-// incluido el JDK, y hay que usar **el mismo** para que las coordenadas coincidan bit a bit.
+// The circle is not exactly representable with Beziers; the constant CTRL_VAL = 4/3*(sqrt(2)-1) is
+// the one that makes the approximated quarter circle touch both ends with the right tangent and
+// stay within 0.03 % of the radius in the middle. It is the value everyone uses, the JDK included,
+// and **the same** one has to be used for the coordinates to agree bit for bit.
 //
-// El recorrido arranca en el punto medio del lado derecho (x+w, y+h/2) y va derecha -> abajo ->
-// izquierda -> arriba, que con el eje y hacia abajo de la pantalla es el sentido horario.
+// The walk starts at the midpoint of the right side (x+w, y+h/2) and goes right -> down -> left ->
+// up, which with the screen's y axis pointing down is clockwise.
 class EllipseIterator implements PathIterator {
 
     double x;
@@ -48,7 +48,7 @@ class EllipseIterator implements PathIterator {
     private static final double PCV = 0.5 + CTRL_VAL * 0.5;
     private static final double NCV = 0.5 - CTRL_VAL * 0.5;
 
-    // Cada fila es una cubica en coordenadas normalizadas [0,1]x[0,1]: {c1x, c1y, c2x, c2y, px, py}.
+    // Each row is a cubic in normalized [0,1]x[0,1] coordinates: {c1x, c1y, c2x, c2y, px, py}.
     private static final double[][] CTRLPTS = {
         { 1.0, PCV, PCV, 1.0, 0.5, 1.0 },
         { NCV, 1.0, 0.0, PCV, 0.0, 0.5 },

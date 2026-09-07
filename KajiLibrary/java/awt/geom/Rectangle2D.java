@@ -1,39 +1,38 @@
 package java.awt.geom;
 
-// java.awt.geom.Rectangle2D de KajiLibrary -- un rectangulo alineado a los ejes. Superficie completa.
+// KajiLibrary's java.awt.geom.Rectangle2D -- an axis-aligned rectangle. The surface is complete.
 //
-// Dos detalles que se suelen implementar mal y que aca estan a proposito:
+// Two details that tend to be implemented wrongly and that are here on purpose:
 //
-//   * `intersect(a, b, dest)` **no normaliza**: si los rectangulos no se tocan, el destino queda con
-//     ancho y/o alto negativos (por ejemplo x=5, w=-4). Eso es lo que hace el JDK y es util --
-//     `isEmpty()` lo reconoce como vacio-- pero tienta a "arreglarlo" con setFrameFromDiagonal, que
-//     lo normalizaria y daria otro rectangulo.
+//   * `intersect(a, b, dest)` **does not normalize**: if the rectangles do not touch, the
+//     destination is left with a negative width and/or height (x=5, w=-4, say). That is what the JDK
+//     does and it is useful -- `isEmpty()` recognizes it as empty -- but it tempts one into "fixing"
+//     it with setFrameFromDiagonal, which would normalize it and give another rectangle.
 //
-//   * `intersectsLine` recorta el segmento contra el marco con el algoritmo de outcodes de
-//     Cohen-Sutherland en vez de probar las cuatro aristas. Es el metodo que mas se usa mal del
-//     paquete: probar "¿alguna arista corta al segmento?" da falso cuando el segmento esta
-//     enteramente adentro.
+//   * `intersectsLine` clips the segment against the frame with Cohen-Sutherland's outcode
+//     algorithm instead of testing the four edges. It is the package's most misused method: testing
+//     "does some edge cut the segment?" gives false when the segment is entirely inside.
 //
-// Al final del archivo hay fabricas internas `newDouble`/`newFloat`. Existen por el mismo motivo que
-// las de Point2D: el javac de esta casa no resuelve bien dos tipos con el mismo nombre simple en una
-// unidad de compilacion, y `Arc2D`, `Ellipse2D`, `Line2D`, `Path2D` y `RoundRectangle2D` tienen sus
-// **propias** clases anidadas `Double` y `Float`, asi que no pueden nombrar tambien a las de aca.
-// Ver la nota larga en el encabezado de Point2D.java.
+// At the end of the file there are internal `newDouble`/`newFloat` factories. They exist for the
+// same reason as Point2D's: this house's javac does not properly resolve two types with the same
+// simple name in one compilation unit, and `Arc2D`, `Ellipse2D`, `Line2D`, `Path2D` and
+// `RoundRectangle2D` have their **own** nested `Double` and `Float` classes, so they cannot also
+// name the ones from here. See the long note in Point2D.java's header.
 public abstract class Rectangle2D extends RectangularShape {
 
-    /** El punto esta a la izquierda del rectangulo. */
+    /** The point is left of the rectangle. */
     public static final int OUT_LEFT = 1;
 
-    /** El punto esta por encima del rectangulo. */
+    /** The point is above the rectangle. */
     public static final int OUT_TOP = 2;
 
-    /** El punto esta a la derecha del rectangulo. */
+    /** The point is right of the rectangle. */
     public static final int OUT_RIGHT = 4;
 
-    /** El punto esta por debajo del rectangulo. */
+    /** The point is below the rectangle. */
     public static final int OUT_BOTTOM = 8;
 
-    // Rectangulo con coordenadas float.
+    // A rectangle with float coordinates.
     public static class Float extends Rectangle2D implements java.io.Serializable {
 
         public float x;
@@ -140,7 +139,7 @@ public abstract class Rectangle2D extends RectangularShape {
         }
     }
 
-    // Rectangulo con coordenadas double.
+    // A rectangle with double coordinates.
     public static class Double extends Rectangle2D implements java.io.Serializable {
 
         public double x;
@@ -257,8 +256,8 @@ public abstract class Rectangle2D extends RectangularShape {
         return (Rectangle2D) clone();
     }
 
-    // Asimetria deliberada (§ "insideness"): el borde izquierdo y el superior pertenecen al
-    // rectangulo, el derecho y el inferior no. Asi dos rectangulos pegados no comparten puntos.
+    // A deliberate asymmetry (§ "insideness"): the left and top edges belong to the rectangle, the
+    // right and bottom ones do not. That way two abutting rectangles share no points.
     public boolean contains(double x, double y) {
         double x0 = getX();
         double y0 = getY();
@@ -283,10 +282,10 @@ public abstract class Rectangle2D extends RectangularShape {
         return (x >= x0 && y >= y0 && (x + w) <= x0 + getWidth() && (y + h) <= y0 + getHeight());
     }
 
-    // Cohen-Sutherland: se recorta el extremo (x1,y1) contra la arista que su outcode señale hasta
-    // que caiga adentro (devolver true) o hasta que los dos extremos queden del mismo lado de una
-    // misma arista (devolver false). Recortar --y no intersecar aristas-- es lo que hace que un
-    // segmento enteramente contenido devuelva true.
+    // Cohen-Sutherland: the end (x1,y1) is clipped against the edge its outcode points at until it
+    // falls inside (return true) or until both ends end up on the same side of one and the same edge
+    // (return false). Clipping --and not intersecting edges-- is what makes an entirely contained
+    // segment return true.
     public boolean intersectsLine(double x1, double y1, double x2, double y2) {
         int out1;
         int out2 = outcode(x2, y2);
@@ -322,7 +321,8 @@ public abstract class Rectangle2D extends RectangularShape {
         return intersectsLine(l.getX1(), l.getY1(), l.getX2(), l.getY2());
     }
 
-    // Ojo: no normaliza. Si no hay interseccion, `dest` queda con dimensiones negativas.
+    // Mind this: it does not normalize. If they do not intersect, `dest` is left with negative
+    // dimensions.
     public static void intersect(Rectangle2D src1, Rectangle2D src2, Rectangle2D dest) {
         double x1 = Math.max(src1.getMinX(), src2.getMinX());
         double y1 = Math.max(src1.getMinY(), src2.getMinY());
@@ -331,8 +331,8 @@ public abstract class Rectangle2D extends RectangularShape {
         dest.setFrame(x1, y1, x2 - x1, y2 - y1);
     }
 
-    // Tampoco filtra los vacios: la union de un rectangulo de area cero con otro incluye al punto
-    // degenerado. Es lo que hace el JDK.
+    // Nor does it filter out the empty ones: the union of a zero-area rectangle with another
+    // includes the degenerate point. It is what the JDK does.
     public static void union(Rectangle2D src1, Rectangle2D src2, Rectangle2D dest) {
         double x1 = Math.min(src1.getMinX(), src2.getMinX());
         double y1 = Math.min(src1.getMinY(), src2.getMinY());
@@ -365,7 +365,8 @@ public abstract class Rectangle2D extends RectangularShape {
         return new RectIterator(this, at);
     }
 
-    // Un rectangulo ya es plano: aplanarlo no cambia nada y no hace falta el FlatteningPathIterator.
+    // A rectangle is flat already: flattening it changes nothing and the FlatteningPathIterator is
+    // not needed.
     public PathIterator getPathIterator(AffineTransform at, double flatness) {
         return new RectIterator(this, at);
     }
@@ -392,7 +393,7 @@ public abstract class Rectangle2D extends RectangularShape {
         return false;
     }
 
-    // --- fabricas internas (no son API; ver la nota del encabezado) -------------------------------
+    // --- internal factories (not API; see the header note) ---------------------------------------
 
     static Rectangle2D newDouble(double x, double y, double w, double h) {
         return new Double(x, y, w, h);

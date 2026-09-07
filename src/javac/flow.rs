@@ -681,6 +681,7 @@ impl Analyzer {
             | ExprKind::This
             | ExprKind::QualifiedThis(_)
             | ExprKind::Super
+            | ExprKind::QualifiedSuper(_)
             // Un nodo de error no aporta al flujo: ya se reportó su error de sintaxis.
             | ExprKind::Error => both(flow.clone()),
             // El cuerpo de una **lambda** se ejecuta **diferido**, no acá: no aporta al flujo del

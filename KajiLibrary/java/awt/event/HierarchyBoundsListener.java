@@ -3,13 +3,13 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que un ancestro del componente cambió de tamaño o de lugar.
+ * Whoever wants to hear that an ancestor of the component changed size or place.
  */
 public interface HierarchyBoundsListener extends EventListener {
 
-    /** Un ancestro cambió de lugar. */
+    /** An ancestor changed place. */
     void ancestorMoved(HierarchyEvent e);
 
-    /** Un ancestro cambió de tamaño. */
+    /** An ancestor changed size. */
     void ancestorResized(HierarchyEvent e);
 }

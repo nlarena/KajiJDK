@@ -3,12 +3,12 @@ package java.awt.geom;
 import java.awt.Rectangle;
 import java.awt.Shape;
 
-// java.awt.geom.RectangularShape de KajiLibrary -- la base de toda figura que queda definida por su
-// "marco" rectangular: Rectangle2D, Ellipse2D, RoundRectangle2D y Arc2D. Superficie completa.
+// KajiLibrary's java.awt.geom.RectangularShape -- the base of every shape defined by its
+// rectangular "frame": Rectangle2D, Ellipse2D, RoundRectangle2D and Arc2D. The surface is complete.
 //
-// La clase no sabe nada de la figura en si; solo administra el marco (x, y, ancho, alto) y deriva de
-// ahi los accesos de conveniencia. Las preguntas geometricas de verdad (`contains`, `intersects`,
-// `getPathIterator`) las contesta cada subclase.
+// The class knows nothing about the shape itself; it only manages the frame (x, y, width, height)
+// and derives the convenience accessors from it. The real geometric questions (`contains`,
+// `intersects`, `getPathIterator`) are answered by each subclass.
 public abstract class RectangularShape implements Shape, Cloneable {
 
     protected RectangularShape() {
@@ -62,8 +62,8 @@ public abstract class RectangularShape implements Shape, Cloneable {
         setFrame(r.getX(), r.getY(), r.getWidth(), r.getHeight());
     }
 
-    // Los dos puntos son esquinas opuestas, en cualquier orden: se normaliza para que el marco
-    // resultante nunca tenga ancho o alto negativos.
+    // The two points are opposite corners, in either order: it is normalized so that the
+    // resulting frame never has a negative width or height.
     public void setFrameFromDiagonal(double x1, double y1, double x2, double y2) {
         if (x2 < x1) {
             double t = x1;
@@ -105,8 +105,8 @@ public abstract class RectangularShape implements Shape, Cloneable {
         return contains(r.getX(), r.getY(), r.getWidth(), r.getHeight());
     }
 
-    // El rectangulo entero mas chico que contiene a la figura: piso abajo/izquierda y techo
-    // arriba/derecha. Un marco de ancho o alto negativo no representa nada y devuelve el vacio.
+    // The smallest whole rectangle containing the shape: floor below/left and ceiling above/right.
+    // A frame of negative width or height represents nothing and returns the empty one.
     public Rectangle getBounds() {
         double width = getWidth();
         double height = getHeight();

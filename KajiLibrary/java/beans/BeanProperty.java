@@ -5,15 +5,15 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// Todo lo que un PropertyDescriptor lleva, dicho en la declaracion en vez de en una clase BeanInfo
-// aparte: si la propiedad es ligada, si es de expertos, como describirla, y —cuando el valor sale
-// de una lista cerrada— cuales son los valores validos.
+// Everything a PropertyDescriptor carries, said in the declaration instead of in a separate
+// BeanInfo class: whether the property is bound, whether it is for experts, how to describe it, and
+// —when the value comes out of a closed list— which the valid values are.
 //
-// `bound` viene en true por defecto, al reves que el campo del descriptor: quien se toma el trabajo
-// de anotar una propiedad casi siempre la esta exponiendo a una herramienta que quiere enterarse
-// de los cambios.
+// `bound` defaults to true, the other way round from the descriptor's field: whoever takes the
+// trouble of annotating a property is nearly always exposing it to a tool that wants to hear about
+// the changes.
 //
-// Nota: declarada pero no leida en este arbol; ver el encabezado de Introspector.
+// Note: declared but not read in this tree; see Introspector's header.
 @Target({ ElementType.METHOD })
 @Retention(RetentionPolicy.RUNTIME)
 public @interface BeanProperty {
@@ -28,11 +28,11 @@ public @interface BeanProperty {
 
     boolean required() default false;
 
-    // Si al cambiar esta propiedad cambia tambien como se ve el bean.
+    // Whether changing this property also changes how the bean looks.
     boolean visualUpdate() default false;
 
     String description() default "";
 
-    // Los valores validos, de a ternas nombre/valor/codigo, cuando la propiedad es de lista cerrada.
+    // The valid values, in name/value/code triples, when the property is of a closed list.
     String[] enumerationValues() default {};
 }

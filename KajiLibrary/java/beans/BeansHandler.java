@@ -7,15 +7,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// Un elemento del documento mientras se lo lee: sus atributos, los argumentos que le fueron
-// llegando de sus hijos, y el valor que produce.
+// An element of the document while it is being read: its attributes, the arguments that have been
+// arriving from its children, and the value it produces.
 //
-// El valor se calcula UNA vez y tarde: no al abrir el elemento sino cuando alguien lo pide. Quien
-// lo pide suele ser un hijo que necesita a su contenedor como objetivo —un `<void property="x">`
-// necesita el bean sobre el que llamar `setX`—, y ese pedido es justamente la senal de que ya no
-// van a llegar mas argumentos al constructor. De ahi que agregar un argumento a un elemento ya
-// evaluado sea un error y no un descuido: significa que el documento describe un objeto construido
-// con argumentos que el objeto ya no puede recibir.
+// The value is worked out ONCE and late: not when the element opens but when somebody asks for it.
+// Whoever asks is usually a child needing its container as a target --a `<void property="x">` needs
+// the bean to call `setX` on-- and that request is precisely the signal that no more arguments are
+// going to reach the constructor. Hence adding an argument to an already evaluated element is an
+// error and not an oversight: it means the document describes an object constructed with arguments
+// the object can no longer receive.
 final class Element {
 
     final Element parent;
@@ -28,8 +28,9 @@ final class Element {
     boolean inProgress;
     Object value;
 
-    // Un elemento que fallo al evaluarse no aporta valor: no se lo cuenta como argumento de su
-    // contenedor ni como objeto del documento. Es la diferencia entre "vale null" y "no vale".
+    // An element that failed to evaluate contributes no value: it is counted neither as an argument
+    // of its container nor as an object of the document. It is the difference between "it is worth
+    // null" and "it is worth nothing".
     boolean empty;
 
     Element(Element parent, String name) {
@@ -37,55 +38,55 @@ final class Element {
         this.name = name;
     }
 
-    // `<void>` describe un efecto sobre el contenedor, no un valor para el; `<java>` es la raiz y
-    // no tiene contenedor. Todo lo demas es un valor que va a parar a los argumentos de quien lo
-    // contiene.
+    // `<void>` describes an effect on the container, not a value for it; `<java>` is the root and
+    // has no container. Everything else is a value that ends up among the arguments of whoever
+    // contains it.
     boolean isArgument() {
         return !this.name.equals("void") && !this.name.equals("java");
     }
 }
 
-// El armador del grafo a partir de los eventos de un documento de `java.beans`.
+// The builder of the graph out of the events of a `java.beans` document.
 //
-// Es un DefaultHandler de SAX de verdad —es lo que `XMLDecoder.createHandler` entrega, y el tipo
-// que ese metodo declara devolver— y ademas es el motor que usa XMLDecoder por dentro, alimentado
-// por el analizador propio de este paquete. Que sean el mismo objeto no es economia: es lo que
-// garantiza que el documento se lea igual venga de donde venga.
+// It is a real SAX DefaultHandler --it is what `XMLDecoder.createHandler` hands over, and the type
+// that method declares it returns-- and it is also the engine XMLDecoder uses inside, fed by this
+// package's own parser. That they are the same object is no thrift: it is what guarantees the
+// document is read the same way wherever it comes from.
 //
-// El dialecto que entiende es el de la persistencia larga de beans, el que escribe XMLEncoder:
+// The dialect it understands is that of long-term bean persistence, the one XMLEncoder writes:
 //
-//   `<java>`               la raiz. Su VALOR es el objeto que se le pasa al constructor —para
-//                          XMLDecoder, el propio decodificador, que es lo que hace que
-//                          `<object property="owner"/>` sea `decodificador.getOwner()`—. Los
-//                          valores que cuelgan de ella son los objetos del documento.
+//   `<java>`               the root. Its VALUE is the object handed to the constructor --for
+//                          XMLDecoder, the decoder itself, which is what makes
+//                          `<object property="owner"/>` be `decoder.getOwner()`. The values hanging
+//                          off it are the document's objects.
 //   `<null/>`              null.
-//   `<string>`             el texto, con el valor de los hijos intercalado donde aparecen.
-//   `<class>`              un java.lang.Class, incluidos los primitivos y los descriptores de
-//                          arreglo.
+//   `<string>`             the text, with the children's value interleaved where they appear.
+//   `<class>`              a java.lang.Class, the primitives and the array descriptors included.
 //   `<boolean> <byte> <char> <short> <int> <long> <float> <double>`
-//                          el envoltorio correspondiente. Los enteros se leen con `decode`, asi
-//                          que `010` es 8 y `0x1f` es 31; es lo que hace el JDK.
-//   `<array class= length=>`  un arreglo, con los elementos que pongan sus `<void index=>`.
-//   `<object>` / `<void>`  una llamada. Igual salvo en una cosa: `<object>` aporta su resultado
-//                          como argumento de quien lo contiene y `<void>` no.
+//                          the matching wrapper. The integers are read with `decode`, so `010` is 8
+//                          and `0x1f` is 31; it is what the JDK does.
+//   `<array class= length=>`  an array, with the elements its `<void index=>` put in.
+//   `<object>` / `<void>`  a call. The same except in one thing: `<object>` contributes its result
+//                          as an argument of whoever contains it and `<void>` does not.
 //
-// Los atributos de `<object>`/`<void>` se combinan asi: `idref` corta y devuelve la variable;
-// `class` fija el objetivo (y sin `method` la llamada es el constructor); sin `class` el objetivo
-// es el valor del elemento contenedor; `field` lee o escribe un campo; `property` se traduce a
-// `getX`/`setX` segun haya o no argumento; e `index` gana sobre `property` y se traduce a
-// `get`/`set` con el indice adelante, que es lo que el JDK hace y lo que la escritura de arreglos
-// y listas necesita.
+// `<object>`/`<void>`'s attributes combine like this: `idref` cuts short and returns the variable;
+// `class` sets the target (and with no `method` the call is the constructor); with no `class` the
+// target is the containing element's value; `field` reads or writes a field; `property` translates
+// to `getX`/`setX` according to whether there is an argument; and `index` beats `property` and
+// translates to `get`/`set` with the index in front, which is what the JDK does and what writing
+// arrays and lists needs.
 //
-// Las variables (`id`) se anotan al ABRIR el elemento, y apuntan al elemento y no a su valor. Sin
-// eso un grafo ciclico no se puede leer: `<object id="l0"><void method="add"><object idref="l0"/>`
-// pide la variable antes de que su propio elemento haya terminado, y solo apuntando al elemento se
-// la puede resolver forzando su evaluacion en ese momento.
+// The variables (`id`) are noted down when the element OPENS, and they point at the element and not
+// at its value. Without that a cyclic graph cannot be read:
+// `<object id="l0"><void method="add"><object idref="l0"/>` asks for the variable before its own
+// element has finished, and only by pointing at the element can it be resolved by forcing its
+// evaluation at that moment.
 //
-// **Lo que NO hace**: los objetos que arma no se pueden sacar de aca por la interfaz publica.
-// `createHandler` declara devolver un `DefaultHandler`, que no tiene por donde entregar un
-// resultado, y el JDK esta igual: su manejador vive en un paquete interno que ningun modulo
-// exporta. Lo que si es observable, y es para lo que ese metodo esta, son las llamadas que el
-// documento hace sobre el `owner` desde el nivel de `<java>`.
+// **What it does NOT do**: the objects it builds cannot be taken out of here through the public
+// interface. `createHandler` declares it returns a `DefaultHandler`, which has no way of handing
+// over a result, and the JDK is in the same position: its handler lives in an internal package no
+// module exports. What IS observable, and what that method is there for, are the calls the document
+// makes on the `owner` from `<java>`'s level.
 final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
 
     private final Object rootValue;
@@ -107,18 +108,19 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
     }
 
     ExceptionListener effectiveListener() {
-        return this.listener != null ? this.listener : Delegados.LISTENER_POR_DEFECTO;
+        return this.listener != null ? this.listener : Delegates.DEFAULT_LISTENER;
     }
 
     List<Object> objects() {
         return this.objects;
     }
 
-    // ------------------------------------------------------------------ entrada, sin SAX
+    // ------------------------------------------------------------------ input, without SAX
 
-    // Las tres entradas que de verdad usa el armador. `startElement`/`characters`/`endElement` de
-    // SAX no son mas que adaptadores a estas: asi el camino interno de XMLDecoder no depende de
-    // que exista una implementacion de `org.xml.sax.Attributes`, que en este arbol es una interfaz.
+    // The three entry points the builder really uses. SAX's
+    // `startElement`/`characters`/`endElement` are no more than adapters to these: that way
+    // XMLDecoder's internal path does not depend on an implementation of `org.xml.sax.Attributes`
+    // existing, which in this tree is an interface.
     void open(String name, Map<String, String> attributes) {
         Element e = new Element(this.current, name);
         if (attributes != null) {
@@ -185,17 +187,18 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
         return qName != null && qName.length() > 0 ? qName : localName;
     }
 
-    // ------------------------------------------------------------------ evaluacion
+    // ------------------------------------------------------------------ evaluation
 
     private void addArgument(Element parent, Object v) {
         if (parent.name.equals("string")) {
-            // Un valor dentro de un `<string>` se concatena donde aparece: `<string>a<int>9</int>b`
-            // es "a9b". Por eso el texto se acumula en el mismo buffer y en orden.
+            // A value inside a `<string>` is concatenated where it appears:
+            // `<string>a<int>9</int>b` is "a9b". That is why the text is gathered in the same buffer
+            // and in order.
             parent.text.append(v);
         } else if (parent.name.equals("java")) {
-            // La raiz siempre acepta: cada valor que cuelga de ella es un objeto del documento, y
-            // que ya se le haya pedido su valor —lo hace cualquier `<void>` de primer nivel— no
-            // tiene por que cortar la lista.
+            // The root always accepts: each value hanging off it is an object of the document, and
+            // its value having been asked for already --any top-level `<void>` does that-- is no
+            // reason to cut the list short.
             this.objects.add(v);
         } else if (parent.evaluated || parent.inProgress) {
             this.report(new IllegalStateException("Could not add argument to evaluated element"));
@@ -204,12 +207,12 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
         }
     }
 
-    // El valor del elemento, calculado una sola vez.
+    // The element's value, worked out once only.
     private Object valueOf(Element e) {
         if (!e.evaluated) {
             if (e.inProgress) {
                 this.report(new IllegalStateException(
-                    "<" + e.name + "> depende de su propio valor para poder calcularlo"));
+                    "<" + e.name + "> depends on its own value in order to work it out"));
                 return null;
             }
             e.inProgress = true;
@@ -218,9 +221,9 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
             } catch (Exception ex) {
                 this.report(ex);
                 e.value = null;
-                // Una llamada que fallo no vale null: no vale. Un valor suelto que no se pudo leer
-                // si vale null, que es como se comporta el JDK y lo que deja ver en la lista de
-                // objetos que ese lugar del documento no se entendio.
+                // A call that failed is not worth null: it is worth nothing. A loose value that
+                // could not be read IS worth null, which is how the JDK behaves and what lets the
+                // list of objects show that that place in the document was not understood.
                 e.empty = isCall(e);
             } finally {
                 e.inProgress = false;
@@ -255,8 +258,9 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
         return r;
     }
 
-    // Los ocho primitivos. Los enteros por `decode` y no por `parseX`: es lo que hace el JDK, y es
-    // lo que le da sentido al atributo `code` de `<char>`, que se escribe en octal o en hexa.
+    // The eight primitives. The integers through `decode` and not through `parseX`: it is what the
+    // JDK does, and it is what gives `<char>`'s `code` attribute its meaning, which is written in
+    // octal or in hex.
     private static Object primitive(String n, Element e) {
         String s = e.text.toString();
         Object r;
@@ -295,21 +299,21 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
         return r;
     }
 
-    // `class` es el tipo de COMPONENTE, no el del arreglo. Sin `length` el largo lo dan los valores
-    // sueltos que cuelgan; con `length` el arreglo nace de ese tamano y lo llenan los
-    // `<void index=>`. Si vinieran las dos cosas se usan las dos, que es leer el documento de la
-    // forma mas obvia; el JDK en ese caso rechaza los valores sueltos.
+    // `class` is the COMPONENT type, not the array's. With no `length` the length is given by the
+    // loose values hanging off it; with `length` the array is born that size and the `<void index=>`
+    // fill it. If both came, both are used, which is reading the document the most obvious way; the
+    // JDK in that case rejects the loose values.
     private Object computeArray(Element e) throws Exception {
         String className = e.attributes.get("class");
         if (className == null) {
-            throw new IllegalArgumentException("<array> sin atributo class");
+            throw new IllegalArgumentException("<array> sin attribute class");
         }
         Class<?> component = classForName(className, this.loader);
         String length = e.attributes.get("length");
         int n = length != null ? Integer.parseInt(length) : e.args.size();
         Object array = Array.newInstance(component, n);
         for (int i = 0; i < e.args.size() && i < n; i++) {
-            Statement.ponerEnArreglo(array, i, e.args.get(i));
+            Statement.putInArray(array, i, e.args.get(i));
         }
         return array;
     }
@@ -345,12 +349,12 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
         String method = e.attributes.get("method");
         String property = e.attributes.get("property");
         if (property != null) {
-            method = (args.length == 0 ? "get" : "set") + PropertyDescriptor.capitalizar(property);
+            method = (args.length == 0 ? "get" : "set") + PropertyDescriptor.capitalize(property);
         }
         String index = e.attributes.get("index");
         if (index != null) {
-            // El indice gana sobre la propiedad, igual que en el JDK: `index` describe acceso
-            // posicional —el de un arreglo o una lista— y ese acceso se llama `get`/`set` a secas.
+            // The index beats the property, just as in the JDK: `index` describes positional
+            // access --an array's or a list's-- and that access is called plain `get`/`set`.
             method = args.length == 0 ? "get" : "set";
             Object[] withIndex = new Object[args.length + 1];
             withIndex[0] = Integer.valueOf(index);
@@ -365,7 +369,7 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
 
     private Object context(Element e) {
         if (e.parent == null) {
-            throw new IllegalStateException("<" + e.name + "> fuera de todo elemento contenedor");
+            throw new IllegalStateException("<" + e.name + "> fuera de whole elemento container");
         }
         Object v = this.valueOf(e.parent);
         if (v == null) {
@@ -382,7 +386,7 @@ final class BeansHandler extends org.xml.sax.helpers.DefaultHandler {
         return this.valueOf(e);
     }
 
-    // Los nueve nombres que no son de ninguna clase cargable, y despues el cargador.
+    // The nine names that belong to no loadable class, and then the loader.
     static Class<?> classForName(String name, ClassLoader loader) throws ClassNotFoundException {
         Class<?> r;
         if (name.equals("boolean")) { r = boolean.class; }

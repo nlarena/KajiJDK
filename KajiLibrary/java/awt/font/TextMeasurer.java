@@ -3,89 +3,89 @@ package java.awt.font;
 import java.text.AttributedCharacterIterator;
 
 /**
- * Mide un párrafo por tramos, guardando el trabajo entre consultas.
+ * Measures a paragraph stretch by stretch, keeping the work between queries.
  *
- * <p>Es la máquina de abajo de {@link LineBreakMeasurer}, y existe por una razón de costo: partir un
- * párrafo en renglones exige medirlo muchas veces —una por cada corte que se prueba— y volver a
- * medir desde cero cada vez sería cuadrático.
+ * <p>It is the machinery underneath {@link LineBreakMeasurer}, and it exists for a reason of cost:
+ * breaking a paragraph into lines demands measuring it many times --once for each break that is
+ * tried-- and measuring from scratch every time would be quadratic.
  *
- * <p>De ahí {@link #insertChar} y {@link #deleteChar}, que son la parte interesante. Cuando se
- * edita un párrafo, casi todo lo medido sigue valiendo: sólo cambia el tramo alrededor del cambio.
- * Estos dos métodos le avisan qué se tocó para que tire lo que dejó de valer y conserve el resto,
- * que es lo que hace que escribir en un texto largo no se ponga lento.
+ * <p>Hence {@link #insertChar} and {@link #deleteChar}, which are the interesting part. When a
+ * paragraph is edited, nearly everything measured still holds: only the stretch around the change
+ * differs. These two methods tell it what was touched so that it can throw away what stopped holding
+ * and keep the rest, which is what stops typing into a long text from getting slow.
  *
- * <p><strong>No se puede construir.</strong> Medir un tramo es medir sus glifos, y eso necesita un
- * motor tipográfico que esta biblioteca no trae. Es la misma frontera de {@link TextLayout} y de
- * {@link java.awt.Font}.
+ * <p><strong>It cannot be constructed.</strong> Measuring a stretch is measuring its glyphs, and that
+ * needs a text engine this library does not carry. It is the same boundary as {@link TextLayout}'s
+ * and {@link java.awt.Font}'s.
  */
 public final class TextMeasurer implements Cloneable {
 
-    /** El mensaje único de todo lo que necesita medir glifos. */
-    private static UnsupportedOperationException sinMotor(String metodo) {
-        return new UnsupportedOperationException(metodo + " requiere medir los glifos de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+    /** The single message of everything that needs to measure glyphs. */
+    private static UnsupportedOperationException noEngine(String method) {
+        return new UnsupportedOperationException(method + " requires measuring the font's "
+                + "glyphs; this library carries no text engine");
     }
 
     /**
-     * Con el párrafo y las condiciones de dibujo.
+     * With the paragraph and the drawing conditions.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public TextMeasurer(AttributedCharacterIterator text, FontRenderContext frc) {
-        throw sinMotor("TextMeasurer");
+        throw noEngine("TextMeasurer");
     }
 
     /**
-     * Una copia con el trabajo ya hecho.
+     * A copy with the work already done.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     protected Object clone() {
-        throw sinMotor("clone");
+        throw noEngine("clone");
     }
 
     /**
-     * Hasta dónde llega un renglón que empiece ahí y no pase de ese ancho.
+     * How far a line starting there and not going past that width reaches.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public int getLineBreakIndex(int start, float maxAdvance) {
-        throw sinMotor("getLineBreakIndex");
+        throw noEngine("getLineBreakIndex");
     }
 
     /**
-     * Cuánto mide ese tramo.
+     * How much that stretch measures.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float getAdvanceBetween(int start, int limit) {
-        throw sinMotor("getAdvanceBetween");
+        throw noEngine("getAdvanceBetween");
     }
 
     /**
-     * El renglón armado de ese tramo.
+     * The line built out of that stretch.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextLayout getLayout(int start, int limit) {
-        throw sinMotor("getLayout");
+        throw noEngine("getLayout");
     }
 
     /**
-     * Avisa que se insertó un carácter en esa posición.
+     * Reports that a character was inserted at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void insertChar(AttributedCharacterIterator newParagraph, int insertPos) {
-        throw sinMotor("insertChar");
+        throw noEngine("insertChar");
     }
 
     /**
-     * Avisa que se borró un carácter en esa posición.
+     * Reports that a character was deleted at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void deleteChar(AttributedCharacterIterator newParagraph, int deletePos) {
-        throw sinMotor("deleteChar");
+        throw noEngine("deleteChar");
     }
 }

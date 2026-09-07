@@ -1,26 +1,27 @@
 package java.awt.geom;
 
-// java.awt.geom.Point2D de KajiLibrary -- un punto (x,y) en coma flotante. Superficie completa.
+// KajiLibrary's java.awt.geom.Point2D -- an (x,y) point in floating point. The surface is
+// complete.
 //
-// Ojo al leer este archivo: dentro del cuerpo de Point2D, `Double` y `Float` son las clases
-// anidadas de aca, no las de java.lang. Por eso todo uso del envoltorio va escrito completo
-// (`java.lang.Double.doubleToLongBits`). No es manía: es la regla de sombreado de §6.5.5 y el
-// compilador la aplica.
+// Mind this while reading the file: inside Point2D's body, `Double` and `Float` are the nested
+// classes from here, not java.lang's. That is why every use of the wrapper is written out in full
+// (`java.lang.Double.doubleToLongBits`). It is not fussiness: it is §6.5.5's shadowing rule and the
+// compiler applies it.
 //
-// Y por eso existen las fabricas `newDouble`/`newFloat`/`newLike` del final, que son internas y no
-// API. El resto del paquete las usa en vez de escribir `new Point2D.Double(...)` porque el javac de
-// esta casa **no puede tener los dos nombres `Double` vivos en la misma unidad de compilacion**:
-// mantiene un solo mapa nombre-simple -> tipo por archivo, asi que un archivo que nombre a la vez
-// `Point2D.Double` y `java.lang.Double` resuelve mal uno de los dos (da "tipo incompatible" o
-// "no se encuentra el campo MIN_VALUE"). Ese choque afectaba a AffineTransform, Arc2D, Line2D y
-// Path2D, que necesitan las dos cosas. Aca adentro no hay choque --`Double` a secas ya es la
-// anidada-- asi que la construccion vive aca y los demas archivos nunca nombran a `Point2D.Double`.
-// Es un rodeo por un bug del compilador, no por la especificacion del lenguaje: contra el javac del
-// JDK las dos formas son igual de validas.
+// And that is why the `newDouble`/`newFloat`/`newLike` factories at the end exist, which are
+// internal and not API. The rest of the package uses them instead of writing
+// `new Point2D.Double(...)` because this house's javac **cannot hold both `Double` names alive in
+// the same compilation unit**: it keeps a single simple-name -> type map per file, so a file naming
+// both `Point2D.Double` and `java.lang.Double` resolves one of the two wrongly (it gives
+// "tipo incompatible" or "no se encuentra el campo MIN_VALUE"). That clash affected
+// AffineTransform, Arc2D, Line2D and Path2D, which need both things. In here there is no clash
+// --bare `Double` is already the nested one-- so construction lives here and the other files never
+// name `Point2D.Double`. It is a detour around a compiler bug, not around the language
+// specification: against the JDK's javac both forms are equally valid.
 public abstract class Point2D implements Cloneable {
 
-    // Punto con coordenadas float. Las guarda en float pero las expone en double, que es lo que
-    // pide el contrato de la clase base.
+    // A point with float coordinates. It keeps them in float but exposes them in double, which is
+    // what the base class's contract calls for.
     public static class Float extends Point2D implements java.io.Serializable {
 
         public float x;
@@ -57,7 +58,7 @@ public abstract class Point2D implements Cloneable {
         }
     }
 
-    // Punto con coordenadas double.
+    // A point with double coordinates.
     public static class Double extends Point2D implements java.io.Serializable {
 
         public double x;
@@ -102,8 +103,9 @@ public abstract class Point2D implements Cloneable {
         setLocation(p.getX(), p.getY());
     }
 
-    // La distancia al cuadrado existe aparte de la distancia a proposito: evita la raiz cuando solo
-    // se van a comparar distancias entre si, y ahi el resultado es exacto si los operandos lo son.
+    // The squared distance exists apart from the distance on purpose: it avoids the root when
+    // distances are only going to be compared with each other, and there the result is exact if the
+    // operands are.
     public static double distanceSq(double x1, double y1, double x2, double y2) {
         x1 = x1 - x2;
         y1 = y1 - y2;
@@ -148,8 +150,9 @@ public abstract class Point2D implements Cloneable {
         }
     }
 
-    // Mezcla de los bits de las dos coordenadas. Se replica la formula del JDK y no otra: hashCode
-    // es observable y dos implementaciones que "hashean bien" pero distinto son distinguibles.
+    // A mix of the two coordinates' bits. The JDK's formula is replicated and not another one:
+    // hashCode is observable and two implementations that "hash well" but differently are
+    // distinguishable.
     public int hashCode() {
         long bits = java.lang.Double.doubleToLongBits(getX());
         bits = bits ^ (java.lang.Double.doubleToLongBits(getY()) * 31L);
@@ -164,7 +167,7 @@ public abstract class Point2D implements Cloneable {
         return super.equals(obj);
     }
 
-    // --- fabricas internas (no son API; ver la nota del encabezado) -------------------------------
+    // --- internal factories (not API; see the header note) ---------------------------------------
 
     static Point2D newDouble(double x, double y) {
         return new Double(x, y);
@@ -174,9 +177,9 @@ public abstract class Point2D implements Cloneable {
         return new Float(x, y);
     }
 
-    // Un punto vacio de la misma precision que `src`. Es la regla del JDK para el destino implicito
-    // de AffineTransform.transform(src, null): Double solo si el origen ya era Double, Float en
-    // cualquier otro caso --incluida una subclase de Point2D escrita afuera.
+    // An empty point of the same precision as `src`. It is the JDK's rule for the implicit
+    // destination of AffineTransform.transform(src, null): Double only if the source already was a
+    // Double, Float in every other case --a subclass of Point2D written outside included.
     static Point2D newLike(Point2D src) {
         if (src instanceof Double) {
             return new Double();

@@ -11,487 +11,488 @@ import java.text.AttributedCharacterIterator;
 import java.util.Map;
 
 /**
- * Un renglón de texto ya armado: los glifos elegidos, ordenados y colocados.
+ * A line of text already laid out: the glyphs chosen, ordered and placed.
  *
- * <p>Es la clase que resuelve todo lo que un renglón de texto tiene de difícil, y que no se nota
- * hasta que el texto no es inglés. Qué glifo le corresponde a cada carácter y cuáles se funden en
- * una ligadura; en qué orden van si el renglón mezcla direcciones; dónde cae el cursor cuando la
- * frontera entre dos caracteres cae en dos lugares distintos de la pantalla; qué se resalta cuando
- * se selecciona un tramo que en pantalla no es contiguo.
+ * <p>It is the class that settles everything a line of text has that is hard, and that goes
+ * unnoticed until the text is not English. Which glyph corresponds to each character and which ones
+ * melt into a ligature; in what order they go if the line mixes directions; where the caret falls
+ * when the boundary between two characters falls in two different places on the screen; what is
+ * highlighted when a stretch is selected that is not contiguous on screen.
  *
- * <p>Esa última familia de métodos —{@code getCaretShapes}, {@code getVisualHighlightShape},
- * {@code getLogicalRangesForVisualSelection}— existe entera por el texto bidireccional. En un
- * renglón de una sola dirección serían triviales; en uno que mezcla árabe con latín, seleccionar
- * tres caracteres consecutivos puede pintar **dos** rectángulos separados, y arrastrar el cursor una
- * posición puede moverlo para el otro lado.
+ * <p>That last family of methods —{@code getCaretShapes}, {@code getVisualHighlightShape},
+ * {@code getLogicalRangesForVisualSelection}— exists entirely because of bidirectional text. In a
+ * single-direction line they would be trivial; in one mixing Arabic with Latin, selecting three
+ * consecutive characters may paint **two** separate rectangles, and dragging the caret one position
+ * may move it the other way.
  *
- * <p><strong>No se puede construir.</strong> Armar un renglón exige medir cada glifo, y medir un
- * glifo exige leer el archivo de la fuente. Esta biblioteca no trae un motor tipográfico —la misma
- * frontera que parte a {@link Font} en dos mitades— así que los tres constructores tiran
- * `UnsupportedOperationException` con ese motivo. La clase está declarada entera para que compile lo
- * que la nombra, y no contesta nada que no pueda saber: un miembro que falta es un subconjunto
- * legal; uno que miente, no.
+ * <p><strong>It cannot be constructed.</strong> Laying out a line demands measuring every glyph, and
+ * measuring a glyph demands reading the font's file. This library carries no text engine —the same
+ * boundary that splits {@link Font} in two halves— so the three constructors throw
+ * `UnsupportedOperationException` for that reason. The class is declared in full so that whatever
+ * names it compiles, and it answers nothing it cannot know: a member that is missing is a legal
+ * subset; one that lies is not.
  */
 public final class TextLayout implements Cloneable {
 
     /**
-     * Cuál de los dos cursores posibles es el fuerte cuando una posición cae entre dos direcciones.
+     * Which of the two possible carets is the strong one when a position falls between two
+     * directions.
      *
-     * <p>En un renglón bidireccional, una misma posición del texto tiene **dos** lugares en pantalla
-     * donde podría ir el cursor. La política decide cuál se dibuja lleno y cuál se dibuja como
-     * cursor débil, o no se dibuja.
+     * <p>In a bidirectional line, one and the same text position has **two** places on screen where
+     * the caret could go. The policy decides which one is drawn solid and which is drawn as the weak
+     * caret, or not drawn at all.
      */
     public static class CaretPolicy {
 
-        /** Uno que elige el cursor del tramo de mayor nivel de anidamiento bidireccional. */
+        /** One that picks the caret of the stretch with the higher bidirectional embedding level. */
         public CaretPolicy() {
         }
 
         /**
-         * Cuál de los dos cursores es el fuerte.
+         * Which of the two carets is the strong one.
          *
-         * @throws UnsupportedOperationException siempre: la respuesta depende de los niveles
-         *     bidireccionales del renglón, que sólo existen si el renglón se pudo armar
+         * @throws UnsupportedOperationException always: the answer depends on the line's
+         *     bidirectional levels, which only exist if the line could be laid out
          */
         public TextHitInfo getStrongCaret(TextHitInfo hit1, TextHitInfo hit2,
                 TextLayout layout) {
-            throw sinMotor("getStrongCaret");
+            throw noEngine("getStrongCaret");
         }
     }
 
-    /** La política que se usa si no se dice otra cosa. */
+    /** The policy used unless something else is said. */
     public static final CaretPolicy DEFAULT_CARET_POLICY = new CaretPolicy();
 
-    /** El mensaje único de todo lo que necesita medir glifos. */
-    private static UnsupportedOperationException sinMotor(String metodo) {
-        return new UnsupportedOperationException(metodo + " requiere armar el renglón, y armarlo "
-                + "requiere medir los glifos de la fuente; esta biblioteca no trae motor "
-                + "tipográfico");
+    /** The single message of everything that needs to measure glyphs. */
+    private static UnsupportedOperationException noEngine(String method) {
+        return new UnsupportedOperationException(method + " requires laying out the line, and "
+                + "laying it out requires measuring the font's glyphs; this library carries no "
+                + "text engine");
     }
 
     /**
-     * Un renglón con una sola fuente.
+     * A line with a single font.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public TextLayout(String string, Font font, FontRenderContext frc) {
-        throw sinMotor("TextLayout");
+        throw noEngine("TextLayout");
     }
 
     /**
-     * Un renglón con los atributos dados.
+     * A line with the given attributes.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public TextLayout(String string,
             Map<? extends AttributedCharacterIterator.Attribute, ?> attributes,
             FontRenderContext frc) {
-        throw sinMotor("TextLayout");
+        throw noEngine("TextLayout");
     }
 
     /**
-     * Un renglón a partir de un texto con atributos por tramo.
+     * A line out of a text with attributes per stretch.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public TextLayout(AttributedCharacterIterator text, FontRenderContext frc) {
-        throw sinMotor("TextLayout");
+        throw noEngine("TextLayout");
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     protected Object clone() {
-        throw sinMotor("clone");
+        throw noEngine("clone");
     }
 
     /**
-     * El mismo renglón estirado a ese ancho.
+     * The same line stretched to that width.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextLayout getJustifiedLayout(float justificationWidth) {
-        throw sinMotor("getJustifiedLayout");
+        throw noEngine("getJustifiedLayout");
     }
 
     /**
-     * Reparte el sobrante entre los glifos del renglón.
+     * Shares the slack out among the line's glyphs.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     protected void handleJustify(float justificationWidth) {
-        throw sinMotor("handleJustify");
+        throw noEngine("handleJustify");
     }
 
     /**
-     * Sobre qué línea de base se apoya el renglón.
+     * Which baseline the line rests on.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public byte getBaseline() {
-        throw sinMotor("getBaseline");
+        throw noEngine("getBaseline");
     }
 
     /**
-     * La distancia de cada línea de base a la del renglón.
+     * The distance from each baseline to the line's.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float[] getBaselineOffsets() {
-        throw sinMotor("getBaselineOffsets");
+        throw noEngine("getBaselineOffsets");
     }
 
     /**
-     * Cuánto avanza el renglón entero.
+     * How far the whole line advances.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float getAdvance() {
-        throw sinMotor("getAdvance");
+        throw noEngine("getAdvance");
     }
 
     /**
-     * Cuánto avanza sin contar los espacios finales.
+     * How far it advances not counting the trailing spaces.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float getVisibleAdvance() {
-        throw sinMotor("getVisibleAdvance");
+        throw noEngine("getVisibleAdvance");
     }
 
     /**
-     * Cuánto sube el renglón.
+     * How far the line rises.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float getAscent() {
-        throw sinMotor("getAscent");
+        throw noEngine("getAscent");
     }
 
     /**
-     * Cuánto baja el renglón.
+     * How far the line drops.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float getDescent() {
-        throw sinMotor("getDescent");
+        throw noEngine("getDescent");
     }
 
     /**
-     * El aire hasta el renglón siguiente.
+     * The air up to the next line.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float getLeading() {
-        throw sinMotor("getLeading");
+        throw noEngine("getLeading");
     }
 
     /**
-     * Dónde cae la tinta del renglón.
+     * Where the line's ink falls.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Rectangle2D getBounds() {
-        throw sinMotor("getBounds");
+        throw noEngine("getBounds");
     }
 
     /**
-     * Los píxeles que toca el renglón dibujado en `(x, y)`.
+     * The pixels the line drawn at `(x, y)` touches.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Rectangle getPixelBounds(FontRenderContext frc, float x, float y) {
-        throw sinMotor("getPixelBounds");
+        throw noEngine("getPixelBounds");
     }
 
     /**
-     * Si la dirección base del renglón es de izquierda a derecha.
+     * Whether the line's base direction is left to right.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public boolean isLeftToRight() {
-        throw sinMotor("isLeftToRight");
+        throw noEngine("isLeftToRight");
     }
 
     /**
-     * Si el renglón corre en vertical.
+     * Whether the line runs vertically.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public boolean isVertical() {
-        throw sinMotor("isVertical");
+        throw noEngine("isVertical");
     }
 
     /**
-     * Cuántos caracteres tiene el renglón.
+     * How many characters the line has.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public int getCharacterCount() {
-        throw sinMotor("getCharacterCount");
+        throw noEngine("getCharacterCount");
     }
 
     /**
-     * Dónde y cómo dibujar el cursor en esa posición.
+     * Where and how to draw the caret at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float[] getCaretInfo(TextHitInfo hit, Rectangle2D bounds) {
-        throw sinMotor("getCaretInfo");
+        throw noEngine("getCaretInfo");
     }
 
     /**
-     * Lo mismo, con los límites del renglón.
+     * The same, with the line's bounds.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public float[] getCaretInfo(TextHitInfo hit) {
-        throw sinMotor("getCaretInfo");
+        throw noEngine("getCaretInfo");
     }
 
     /**
-     * La posición que queda a la derecha en pantalla.
+     * The position right of it on screen.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getNextRightHit(TextHitInfo hit) {
-        throw sinMotor("getNextRightHit");
+        throw noEngine("getNextRightHit");
     }
 
     /**
-     * Lo mismo, con la política de cursor dada.
+     * The same, with the given caret policy.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getNextRightHit(int offset, CaretPolicy policy) {
-        throw sinMotor("getNextRightHit");
+        throw noEngine("getNextRightHit");
     }
 
     /**
-     * Lo mismo, desde una posición de inserción.
+     * The same, from an insertion position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getNextRightHit(int offset) {
-        throw sinMotor("getNextRightHit");
+        throw noEngine("getNextRightHit");
     }
 
     /**
-     * La posición que queda a la izquierda en pantalla.
+     * The position left of it on screen.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getNextLeftHit(TextHitInfo hit) {
-        throw sinMotor("getNextLeftHit");
+        throw noEngine("getNextLeftHit");
     }
 
     /**
-     * Lo mismo, con la política de cursor dada.
+     * The same, with the given caret policy.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getNextLeftHit(int offset, CaretPolicy policy) {
-        throw sinMotor("getNextLeftHit");
+        throw noEngine("getNextLeftHit");
     }
 
     /**
-     * Lo mismo, desde una posición de inserción.
+     * The same, from an insertion position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getNextLeftHit(int offset) {
-        throw sinMotor("getNextLeftHit");
+        throw noEngine("getNextLeftHit");
     }
 
     /**
-     * La otra manera de nombrar la misma frontera, en coordenadas de pantalla.
+     * The other way of naming the same boundary, in screen coordinates.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo getVisualOtherHit(TextHitInfo hit) {
-        throw sinMotor("getVisualOtherHit");
+        throw noEngine("getVisualOtherHit");
     }
 
     /**
-     * La figura del cursor en esa posición.
+     * The caret's shape at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getCaretShape(TextHitInfo hit, Rectangle2D bounds) {
-        throw sinMotor("getCaretShape");
+        throw noEngine("getCaretShape");
     }
 
     /**
-     * Lo mismo, con los límites del renglón.
+     * The same, with the line's bounds.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getCaretShape(TextHitInfo hit) {
-        throw sinMotor("getCaretShape");
+        throw noEngine("getCaretShape");
     }
 
     /**
-     * El nivel de anidamiento bidireccional de ese carácter.
+     * That character's bidirectional embedding level.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public byte getCharacterLevel(int index) {
-        throw sinMotor("getCharacterLevel");
+        throw noEngine("getCharacterLevel");
     }
 
     /**
-     * Las figuras de los dos cursores posibles en esa posición.
+     * The shapes of the two possible carets at that position.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape[] getCaretShapes(int offset, Rectangle2D bounds, CaretPolicy policy) {
-        throw sinMotor("getCaretShapes");
+        throw noEngine("getCaretShapes");
     }
 
     /**
-     * Lo mismo, con la política por omisión.
+     * The same, with the default policy.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape[] getCaretShapes(int offset, Rectangle2D bounds) {
-        throw sinMotor("getCaretShapes");
+        throw noEngine("getCaretShapes");
     }
 
     /**
-     * Lo mismo, con los límites del renglón.
+     * The same, with the line's bounds.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape[] getCaretShapes(int offset) {
-        throw sinMotor("getCaretShapes");
+        throw noEngine("getCaretShapes");
     }
 
     /**
-     * Qué tramos del texto quedan seleccionados por una selección hecha en pantalla.
+     * Which stretches of the text end up selected by a selection made on screen.
      *
-     * <p>Devuelve varios pares porque en un renglón bidireccional una selección contigua en pantalla
-     * puede corresponder a tramos separados del texto.
+     * <p>It returns several pairs because in a bidirectional line a selection contiguous on screen
+     * may correspond to separate stretches of the text.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public int[] getLogicalRangesForVisualSelection(TextHitInfo firstEndpoint,
             TextHitInfo secondEndpoint) {
-        throw sinMotor("getLogicalRangesForVisualSelection");
+        throw noEngine("getLogicalRangesForVisualSelection");
     }
 
     /**
-     * La figura a resaltar para una selección hecha en pantalla.
+     * The shape to highlight for a selection made on screen.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getVisualHighlightShape(TextHitInfo firstEndpoint, TextHitInfo secondEndpoint,
             Rectangle2D bounds) {
-        throw sinMotor("getVisualHighlightShape");
+        throw noEngine("getVisualHighlightShape");
     }
 
     /**
-     * Lo mismo, con los límites del renglón.
+     * The same, with the line's bounds.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getVisualHighlightShape(TextHitInfo firstEndpoint, TextHitInfo secondEndpoint) {
-        throw sinMotor("getVisualHighlightShape");
+        throw noEngine("getVisualHighlightShape");
     }
 
     /**
-     * La figura a resaltar para un tramo del texto.
+     * The shape to highlight for a stretch of the text.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getLogicalHighlightShape(int firstEndpoint, int secondEndpoint,
             Rectangle2D bounds) {
-        throw sinMotor("getLogicalHighlightShape");
+        throw noEngine("getLogicalHighlightShape");
     }
 
     /**
-     * Lo mismo, con los límites del renglón.
+     * The same, with the line's bounds.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getLogicalHighlightShape(int firstEndpoint, int secondEndpoint) {
-        throw sinMotor("getLogicalHighlightShape");
+        throw noEngine("getLogicalHighlightShape");
     }
 
     /**
-     * La tinta de un tramo del texto.
+     * The ink of a stretch of the text.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getBlackBoxBounds(int firstEndpoint, int secondEndpoint) {
-        throw sinMotor("getBlackBoxBounds");
+        throw noEngine("getBlackBoxBounds");
     }
 
     /**
-     * Qué carácter cae en ese punto de la pantalla.
+     * Which character falls at that point on the screen.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo hitTestChar(float x, float y, Rectangle2D bounds) {
-        throw sinMotor("hitTestChar");
+        throw noEngine("hitTestChar");
     }
 
     /**
-     * Lo mismo, con los límites del renglón.
+     * The same, with the line's bounds.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public TextHitInfo hitTestChar(float x, float y) {
-        throw sinMotor("hitTestChar");
+        throw noEngine("hitTestChar");
     }
 
     /**
-     * Igualdad con otro renglón.
+     * Equality with another line.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public boolean equals(TextLayout rhs) {
-        throw sinMotor("equals");
+        throw noEngine("equals");
     }
 
     public String toString() {
-        return "java.awt.font.TextLayout[sin motor tipográfico]";
+        return "java.awt.font.TextLayout[no text engine]";
     }
 
     /**
-     * Dibuja el renglón con el comienzo de la línea de base en `(x, y)`.
+     * Draws the line with the start of the baseline at `(x, y)`.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void draw(Graphics2D g2, float x, float y) {
-        throw sinMotor("draw");
+        throw noEngine("draw");
     }
 
     /**
-     * El contorno del renglón entero.
+     * The whole line's outline.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public Shape getOutline(AffineTransform tx) {
-        throw sinMotor("getOutline");
+        throw noEngine("getOutline");
     }
 
     /**
-     * El camino sobre el que se apoya el renglón.
+     * The path the line rests on.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public LayoutPath getLayoutPath() {
-        throw sinMotor("getLayoutPath");
+        throw noEngine("getLayoutPath");
     }
 
     /**
-     * Dónde cae en pantalla esa posición del texto.
+     * Where that text position falls on screen.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void hitToPoint(TextHitInfo hit, Point2D point) {
-        throw sinMotor("hitToPoint");
+        throw noEngine("hitToPoint");
     }
 }

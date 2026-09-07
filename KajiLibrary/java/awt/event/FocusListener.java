@@ -3,13 +3,13 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que un componente ganó o perdió el foco del teclado.
+ * Whoever wants to hear that a component gained or lost the keyboard focus.
  */
 public interface FocusListener extends EventListener {
 
-    /** Ganó el foco. */
+    /** It gained the focus. */
     void focusGained(FocusEvent e);
 
-    /** Perdió el foco. */
+    /** It lost the focus. */
     void focusLost(FocusEvent e);
 }

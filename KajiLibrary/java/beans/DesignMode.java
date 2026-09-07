@@ -1,10 +1,10 @@
 package java.beans;
 
-// Distingue "me estan editando en una herramienta" de "estoy corriendo de verdad". Un bean en
-// modo diseno no deberia abrir conexiones ni arrancar hilos: se lo esta dibujando, no usando.
+// It tells "I am being edited in a tool" from "I am really running". A bean in design mode should
+// not open connections nor start threads: it is being drawn, not used.
 public interface DesignMode {
 
-    // El nombre de la propiedad que se dispara al cambiar el modo.
+    // The name of the property fired when the mode changes.
     String PROPERTYNAME = "designTime";
 
     void setDesignTime(boolean designTime);

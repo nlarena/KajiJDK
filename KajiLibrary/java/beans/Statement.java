@@ -4,16 +4,16 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
-// Una llamada guardada para ejecutar despues: un objetivo, un nombre de metodo y sus argumentos.
-// Es la unidad con la que la persistencia describe "como se rehace este objeto" — un grafo de
-// objetos se guarda como la secuencia de llamadas que lo reconstruye, no como sus bytes.
+// A call stored to be executed later: a target, a method name and its arguments. It is the unit
+// persistence describes "how this object is remade" with -- a graph of objects is stored as the
+// sequence of calls that rebuilds it, not as its bytes.
 //
-// El nombre "new" es especial y significa constructor: `new Statement(Foo.class, "new", args)`
-// ejecuta `new Foo(args)`.
+// The name "new" is special and means constructor: `new Statement(Foo.class, "new", args)` runs
+// `new Foo(args)`.
 //
-// La resolucion del metodo no puede ser por descriptor exacto: los argumentos llegan como Object,
-// asi que un `int` viene envuelto en Integer y hay que aceptarlo donde se declaro `int`. Por eso
-// se recorren los candidatos y se elige el primero cuyos parametros ACEPTAN los argumentos dados.
+// The method resolution cannot go by exact descriptor: the arguments arrive as Object, so an `int`
+// comes wrapped in an Integer and has to be accepted where `int` was declared. That is why the
+// candidates are walked and the first one whose parameters ACCEPT the given arguments is chosen.
 public class Statement {
 
     private Object target;
@@ -38,13 +38,13 @@ public class Statement {
         return this.arguments;
     }
 
-    // Ejecuta la llamada y descarta el resultado. Expression la redefine para quedarselo.
+    // It runs the call and discards the result. Expression overrides it to keep it.
     public void execute() throws Exception {
-        this.invocar();
+        this.emitCall();
     }
 
-    // El motor compartido con Expression.
-    Object invocar() throws Exception {
+    // The engine shared with Expression.
+    Object emitCall() throws Exception {
         if (this.target == null) {
             throw new NullPointerException("target should not be null");
         }
@@ -52,54 +52,54 @@ public class Statement {
             throw new NullPointerException("method name should not be null");
         }
 
-        Object resultado;
+        Object result;
         if (this.target.getClass().isArray()
                 && ("get".equals(this.methodName) || "set".equals(this.methodName))) {
-            // Los arreglos no tienen metodos: `get`/`set` sobre un arreglo son acceso indexado.
-            // Es el mismo caso especial que hace el JDK, y es el que le permite a la persistencia
-            // describir "el elemento 3 de este arreglo" como una llamada mas.
-            int indice = ((Integer) this.arguments[0]).intValue();
+            // Arrays have no methods: `get`/`set` on an array are indexed access. It is the same
+            // special case the JDK makes, and it is the one that lets persistence describe "element
+            // 3 of this array" as one more call.
+            int index = ((Integer) this.arguments[0]).intValue();
             if ("get".equals(this.methodName)) {
-                resultado = elementoDeArreglo(this.target, indice);
+                result = arrayElement(this.target, index);
             } else {
-                ponerEnArreglo(this.target, indice, this.arguments[1]);
-                resultado = null;
+                putInArray(this.target, index, this.arguments[1]);
+                result = null;
             }
         } else if ("new".equals(this.methodName)) {
             if (!(this.target instanceof Class)) {
                 throw new NoSuchMethodException("\"new\" needs a Class target");
             }
-            resultado = this.construir((Class<?>) this.target);
+            result = this.construir((Class<?>) this.target);
         } else if (this.target instanceof Class) {
-            // Un objetivo Class puede ser tanto "llamar un estatico de esa clase" como "llamar un
-            // metodo de la instancia Class". Se prueba primero el estatico, que es lo que quiso
-            // decir quien escribio el Statement.
-            Method m = this.buscar((Class<?>) this.target, true);
+            // A Class target may mean either "call a static of that class" or "call a method of
+            // the Class instance". The static is tried first, which is what whoever wrote the
+            // Statement meant.
+            Method m = this.findFor((Class<?>) this.target, true);
             if (m != null) {
-                resultado = m.invoke(null, this.arguments);
+                result = m.invoke(null, this.arguments);
             } else {
-                Method mc = this.buscar(this.target.getClass(), false);
+                Method mc = this.findFor(this.target.getClass(), false);
                 if (mc == null) {
                     throw new NoSuchMethodException(this.descripcion());
                 }
-                resultado = mc.invoke(this.target, this.arguments);
+                result = mc.invoke(this.target, this.arguments);
             }
         } else {
-            Method m = this.buscar(this.target.getClass(), false);
+            Method m = this.findFor(this.target.getClass(), false);
             if (m == null) {
                 throw new NoSuchMethodException(this.descripcion());
             }
-            resultado = m.invoke(this.target, this.arguments);
+            result = m.invoke(this.target, this.arguments);
         }
-        return resultado;
+        return result;
     }
 
     private Object construir(Class<?> c) throws Exception {
-        // Character es el unico envoltorio sin constructor desde String. La persistencia describe
-        // a todos los envoltorios igual —`new Integer("7")`, `new Boolean("true")`—, asi que en vez
-        // de darle a Character un delegado aparte se finge aca ese constructor que no existe. Es el
-        // mismo remiendo que hace el JDK y en el mismo lugar: si no estuviera, todo bean con una
-        // propiedad `char` fallaria al releer su propio valor.
+        // Character is the only wrapper with no constructor from a String. Persistence describes
+        // every wrapper the same way --`new Integer("7")`, `new Boolean("true")`-- so instead of
+        // giving Character a delegate of its own, that non-existent constructor is faked here. It is
+        // the same patch the JDK makes and in the same place: without it, every bean with a `char`
+        // property would fail on rereading its own value.
         if (c == Character.class && this.arguments.length == 1
                 && this.arguments[0] instanceof String) {
             String s = (String) this.arguments[0];
@@ -109,32 +109,32 @@ public class Statement {
             return Character.valueOf(s.charAt(0));
         }
         Constructor<?>[] cs = c.getConstructors();
-        Constructor<?> elegido = null;
+        Constructor<?> chosen = null;
         for (int i = 0; i < cs.length; i++) {
-            if (elegido == null && aceptan(cs[i].getParameterTypes(), this.arguments)) {
-                elegido = cs[i];
+            if (chosen == null && aceptan(cs[i].getParameterTypes(), this.arguments)) {
+                chosen = cs[i];
             }
         }
-        if (elegido == null) {
+        if (chosen == null) {
             throw new NoSuchMethodException(this.descripcion());
         }
-        return elegido.newInstance(this.arguments);
+        return chosen.newInstance(this.arguments);
     }
 
-    // El primer metodo publico con ese nombre cuyos parametros aceptan los argumentos.
-    private Method buscar(Class<?> c, boolean soloEstaticos) {
-        Method elegido = null;
+    // The first public method with that name whose parameters accept the arguments.
+    private Method findFor(Class<?> c, boolean staticsOnly) {
+        Method chosen = null;
         Method[] ms = c.getMethods();
         for (int i = 0; i < ms.length; i++) {
             Method m = ms[i];
-            if (elegido == null
+            if (chosen == null
                     && m.getName().equals(this.methodName)
-                    && Modifier.isStatic(m.getModifiers()) == soloEstaticos
+                    && Modifier.isStatic(m.getModifiers()) == staticsOnly
                     && aceptan(m.getParameterTypes(), this.arguments)) {
-                elegido = m;
+                chosen = m;
             }
         }
-        return elegido;
+        return chosen;
     }
 
     private String descripcion() {
@@ -150,7 +150,7 @@ public class Statement {
         return sb.toString();
     }
 
-    // Si esos parametros declarados admiten esos argumentos.
+    // Whether those declared parameters admit those arguments.
     static boolean aceptan(Class<?>[] params, Object[] args) {
         boolean ok = params.length == args.length;
         for (int i = 0; ok && i < params.length; i++) {
@@ -159,12 +159,12 @@ public class Statement {
         return ok;
     }
 
-    // Un parametro primitivo acepta su envoltorio y nada mas —ni siquiera null—; un parametro de
-    // referencia acepta null y cualquier instancia suya.
+    // A primitive parameter accepts its wrapper and nothing else --not even null; a reference
+    // parameter accepts null and any instance of itself.
     static boolean acepta(Class<?> param, Object arg) {
         boolean ok;
         if (param.isPrimitive()) {
-            ok = arg != null && envoltorioDe(param) == arg.getClass();
+            ok = arg != null && wrapperOf(param) == arg.getClass();
         } else if (arg == null) {
             ok = true;
         } else {
@@ -173,11 +173,11 @@ public class Statement {
         return ok;
     }
 
-    // Los tres accesos a arreglo van por despacho de tipo y no por `java.lang.reflect.Array`: en
-    // esta VM `Array.get`, `Array.set` y `Array.getLength` son `native` sin implementacion
-    // registrada y tiran UnsatisfiedLinkError. Con el despacho explicito la persistencia de
-    // arreglos funciona igual y no depende de nativos que no estan.
-    static int largoDeArreglo(Object a) {
+    // The three array accesses go by type dispatch and not through `java.lang.reflect.Array`: in
+    // this VM `Array.get`, `Array.set` and `Array.getLength` are `native` with no registered
+    // implementation and throw UnsatisfiedLinkError. With the explicit dispatch, array persistence
+    // works all the same and does not depend on natives that are not there.
+    static int arrayLength(Object a) {
         int n;
         if (a instanceof Object[]) { n = ((Object[]) a).length; }
         else if (a instanceof int[]) { n = ((int[]) a).length; }
@@ -192,7 +192,7 @@ public class Statement {
         return n;
     }
 
-    static Object elementoDeArreglo(Object a, int i) {
+    static Object arrayElement(Object a, int i) {
         Object v;
         if (a instanceof Object[]) { v = ((Object[]) a)[i]; }
         else if (a instanceof int[]) { v = Integer.valueOf(((int[]) a)[i]); }
@@ -207,7 +207,7 @@ public class Statement {
         return v;
     }
 
-    static void ponerEnArreglo(Object a, int i, Object v) {
+    static void putInArray(Object a, int i, Object v) {
         if (a instanceof Object[]) { ((Object[]) a)[i] = v; }
         else if (a instanceof int[]) { ((int[]) a)[i] = ((Number) v).intValue(); }
         else if (a instanceof boolean[]) { ((boolean[]) a)[i] = ((Boolean) v).booleanValue(); }
@@ -220,21 +220,21 @@ public class Statement {
         else { throw new IllegalArgumentException("Argument is not an array"); }
     }
 
-    // El camino inverso de envoltorioDe: null si la clase no es un envoltorio.
-    static Class<?> primitivoDelEnvoltorio(Class<?> envoltorio) {
+    // wrapperOf's inverse path: null if the class is not a wrapper.
+    static Class<?> primitiveOfWrapper(Class<?> wrapper) {
         Class<?> r = null;
-        if (envoltorio == Integer.class) { r = int.class; }
-        else if (envoltorio == Boolean.class) { r = boolean.class; }
-        else if (envoltorio == Long.class) { r = long.class; }
-        else if (envoltorio == Double.class) { r = double.class; }
-        else if (envoltorio == Float.class) { r = float.class; }
-        else if (envoltorio == Short.class) { r = short.class; }
-        else if (envoltorio == Byte.class) { r = byte.class; }
-        else if (envoltorio == Character.class) { r = char.class; }
+        if (wrapper == Integer.class) { r = int.class; }
+        else if (wrapper == Boolean.class) { r = boolean.class; }
+        else if (wrapper == Long.class) { r = long.class; }
+        else if (wrapper == Double.class) { r = double.class; }
+        else if (wrapper == Float.class) { r = float.class; }
+        else if (wrapper == Short.class) { r = short.class; }
+        else if (wrapper == Byte.class) { r = byte.class; }
+        else if (wrapper == Character.class) { r = char.class; }
         return r;
     }
 
-    static Class<?> envoltorioDe(Class<?> primitivo) {
+    static Class<?> wrapperOf(Class<?> primitivo) {
         Class<?> r = null;
         if (primitivo == int.class) { r = Integer.class; }
         else if (primitivo == boolean.class) { r = Boolean.class; }
@@ -249,7 +249,7 @@ public class Statement {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(this.target == null ? "null" : EventSetDescriptor.nombreSimple(this.target.getClass()));
+        sb.append(this.target == null ? "null" : EventSetDescriptor.simpleName(this.target.getClass()));
         sb.append('.').append(this.methodName).append('(');
         for (int i = 0; i < this.arguments.length; i++) {
             if (i > 0) {

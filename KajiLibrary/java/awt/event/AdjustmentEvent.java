@@ -4,41 +4,41 @@ import java.awt.AWTEvent;
 import java.awt.Adjustable;
 
 /**
- * Se movió una barra de desplazamiento.
+ * A scrollbar was moved.
  *
- * <p>Trae **cómo** se movió —un paso chico, un paso grande, un arrastre— además de a dónde llegó,
- * porque no todas las formas de mover merecen la misma reacción.
+ * <p>It brings **how** it moved --a small step, a big step, a drag-- on top of where it ended up,
+ * because not every way of moving deserves the same reaction.
  *
- * <p>{@link #getValueIsAdjusting} es la parte que ahorra trabajo: mientras el usuario arrastra el
- * pulgar llegan decenas de eventos con esa bandera prendida, y quien reciba puede postergar lo caro
- * —volver a maquetar, releer de disco— hasta que se apague.
+ * <p>{@link #getValueIsAdjusting} is the part that saves work: while the user drags the thumb dozens
+ * of events arrive with that flag on, and whoever receives them can put off the expensive part
+ * --laying out again, reading from disk again-- until it goes off.
  */
 public class AdjustmentEvent extends AWTEvent {
 
     private static final long serialVersionUID = 5700290645205279921L;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int ADJUSTMENT_FIRST = 601;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int ADJUSTMENT_LAST = 601;
 
-    /** Cambió el valor. */
+    /** The value changed. */
     public static final int ADJUSTMENT_VALUE_CHANGED = 601;
 
-    /** Un paso grande hacia atrás. */
+    /** A big step backwards. */
     public static final int BLOCK_DECREMENT = 3;
 
-    /** Un paso grande hacia adelante. */
+    /** A big step forwards. */
     public static final int BLOCK_INCREMENT = 4;
 
-    /** Un arrastre del pulgar. */
+    /** A drag of the thumb. */
     public static final int TRACK = 5;
 
-    /** Un paso chico hacia atrás. */
+    /** A small step backwards. */
     public static final int UNIT_DECREMENT = 2;
 
-    /** Un paso chico hacia adelante. */
+    /** A small step forwards. */
     public static final int UNIT_INCREMENT = 1;
 
     private final int adjustmentType;
@@ -46,18 +46,18 @@ public class AdjustmentEvent extends AWTEvent {
     private final boolean isAdjusting;
 
     /**
-     * Con la fuente, el tipo de movimiento y el valor.
+     * With the source, the kind of movement and the value.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public AdjustmentEvent(Adjustable source, int id, int type, int value) {
         this(source, id, type, value, false);
     }
 
     /**
-     * Como el anterior, diciendo si el movimiento todavía está en curso.
+     * Like the previous one, saying whether the movement is still under way.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public AdjustmentEvent(Adjustable source, int id, int type, int value, boolean isAdjusting) {
         super(source, id);
@@ -66,44 +66,44 @@ public class AdjustmentEvent extends AWTEvent {
         this.isAdjusting = isAdjusting;
     }
 
-    /** De dónde salió. */
+    /** Where it came from. */
     public Adjustable getAdjustable() {
         return (Adjustable) this.source;
     }
 
-    /** A dónde llegó. */
+    /** Where it ended up. */
     public int getValue() {
         return this.value;
     }
 
-    /** Cómo se movió. */
+    /** How it moved. */
     public int getAdjustmentType() {
         return this.adjustmentType;
     }
 
-    /** Si el movimiento todavía está en curso. */
+    /** Whether the movement is still under way. */
     public boolean getValueIsAdjusting() {
         return this.isAdjusting;
     }
 
     public String paramString() {
-        String tipo = this.id == ADJUSTMENT_VALUE_CHANGED ? "ADJUSTMENT_VALUE_CHANGED"
+        String type = this.id == ADJUSTMENT_VALUE_CHANGED ? "ADJUSTMENT_VALUE_CHANGED"
                 : "unknown type";
-        String como;
+        String how;
         if (this.adjustmentType == UNIT_INCREMENT) {
-            como = "UNIT_INCREMENT";
+            how = "UNIT_INCREMENT";
         } else if (this.adjustmentType == UNIT_DECREMENT) {
-            como = "UNIT_DECREMENT";
+            how = "UNIT_DECREMENT";
         } else if (this.adjustmentType == BLOCK_INCREMENT) {
-            como = "BLOCK_INCREMENT";
+            how = "BLOCK_INCREMENT";
         } else if (this.adjustmentType == BLOCK_DECREMENT) {
-            como = "BLOCK_DECREMENT";
+            how = "BLOCK_DECREMENT";
         } else if (this.adjustmentType == TRACK) {
-            como = "TRACK";
+            how = "TRACK";
         } else {
-            como = "unknown type";
+            how = "unknown type";
         }
-        return tipo + ",adjType=" + como + ",value=" + this.value + ",isAdjusting="
+        return type + ",adjType=" + how + ",value=" + this.value + ",isAdjusting="
                 + this.isAdjusting;
     }
 }

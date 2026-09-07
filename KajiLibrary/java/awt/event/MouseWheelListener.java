@@ -3,10 +3,10 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que se movió la rueda del ratón.
+ * Whoever wants to hear that the mouse wheel was moved.
  */
 public interface MouseWheelListener extends EventListener {
 
-    /** Se movió la rueda. */
+    /** The wheel was moved. */
     void mouseWheelMoved(MouseWheelEvent e);
 }

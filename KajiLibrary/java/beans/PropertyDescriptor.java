@@ -4,18 +4,20 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
-// Una propiedad simple de un bean: un nombre, un tipo, y hasta dos metodos —el que lee y el que
-// escribe—. Cualquiera de los dos puede faltar: sin escritor es de solo lectura, sin lector es de
-// solo escritura, y ambas cosas son propiedades legitimas.
+// A bean's simple property: a name, a type, and up to two methods --the one that reads and the one
+// that writes. Either of the two may be missing: with no writer it is read-only, with no reader it
+// is write-only, and both are legitimate properties.
 //
-// El tipo NO se declara, se deduce: sale del retorno del lector o del unico parametro del
-// escritor. Cuando estan los dos tienen que coincidir, y si no coinciden la propiedad no es
-// valida — es el chequeo que hace que `setDesparejo(int)` no se enganche a `getDesparejo():String`.
+// The type is NOT declared, it is worked out: it comes from the reader's return or from the writer's
+// single parameter. When both are there they have to agree, and if they do not agree the property is
+// not valid -- it is the check that stops `setMismatched(int)` from being hooked to
+// `getMismatched():String`.
 //
-// Sobre `bound`: el constructor que recibe la clase del bean lo prende solo si esa clase tiene
-// addPropertyChangeListener. Esta comprobado contra el JDK real (un bean sin ese metodo da
-// bound=false, uno con el da bound=true) y no es cosa de Introspector: pasa en el constructor.
-// `constrained`, en cambio, NO se deduce de addVetoableChangeListener — tambien comprobado.
+// On `bound`: the constructor that receives the bean's class turns it on only if that class has
+// addPropertyChangeListener. It is checked against the real JDK (a bean without that method gives
+// bound=false, one with it gives bound=true) and it is not Introspector's doing: it happens in the
+// constructor. `constrained`, on the other hand, is NOT worked out from addVetoableChangeListener
+// -- also checked.
 public class PropertyDescriptor extends FeatureDescriptor {
 
     private Class<?> propertyType;
@@ -25,18 +27,18 @@ public class PropertyDescriptor extends FeatureDescriptor {
     private boolean constrained;
     private Class<?> propertyEditorClass;
 
-    // La clase del bean, para poder resolver el otro accesor cuando recien viene uno.
+    // The bean's class, so that the other accessor can be resolved when only one has come in.
     private Class<?> class0;
 
-    // Busca `isNombre`/`getNombre` y `setNombre` en la clase.
+    // It looks for `isName`/`getName` and `setName` in the class.
     public PropertyDescriptor(String propertyName, Class<?> beanClass) throws IntrospectionException {
         this(propertyName, beanClass,
-             "is" + capitalizar(propertyName),
-             "set" + capitalizar(propertyName));
+             "is" + capitalize(propertyName),
+             "set" + capitalize(propertyName));
     }
 
-    // Igual, pero con los nombres de los metodos dados. Un nombre null significa "esta propiedad
-    // no tiene ese accesor".
+    // The same, but with the method names given. A null name means "this property has no such
+    // accessor".
     public PropertyDescriptor(String propertyName, Class<?> beanClass,
                               String readMethodName, String writeMethodName)
             throws IntrospectionException {
@@ -49,46 +51,46 @@ public class PropertyDescriptor extends FeatureDescriptor {
         this.setName(propertyName);
         this.class0 = beanClass;
 
-        String lectura = readMethodName;
-        if (lectura != null && lectura.length() == 0) {
-            lectura = null;
+        String readName = readMethodName;
+        if (readName != null && readName.length() == 0) {
+            readName = null;
         }
-        String escritura = writeMethodName;
-        if (escritura != null && escritura.length() == 0) {
-            escritura = null;
+        String writeName = writeMethodName;
+        if (writeName != null && writeName.length() == 0) {
+            writeName = null;
         }
 
         Method r = null;
-        if (lectura != null) {
-            r = buscarMetodo(beanClass, lectura, 0);
+        if (readName != null) {
+            r = findMethod(beanClass, readName, 0);
             if (r == null) {
-                // El primer intento asume boolean (`isX`); si no esta, se prueba `getX`. Que el
-                // mensaje de error conserve el nombre ORIGINAL es lo que hace el JDK.
-                String alternativo = "get" + capitalizar(propertyName);
-                r = buscarMetodo(beanClass, alternativo, 0);
+                // The first attempt assumes boolean (`isX`); if it is not there, `getX` is tried.
+                // That the error message keeps the ORIGINAL name is what the JDK does.
+                String alternativo = "get" + capitalize(propertyName);
+                r = findMethod(beanClass, alternativo, 0);
             }
             if (r == null) {
-                throw new IntrospectionException("Method not found: " + lectura);
+                throw new IntrospectionException("Method not found: " + readName);
             }
         }
         if (r != null) {
             this.setReadMethod(r);
         }
 
-        if (escritura != null) {
-            Method w = buscarMetodo(beanClass, escritura, 1);
-            if (w == null && lectura == null) {
-                throw new IntrospectionException("Method not found: " + escritura);
+        if (writeName != null) {
+            Method w = findMethod(beanClass, writeName, 1);
+            if (w == null && readName == null) {
+                throw new IntrospectionException("Method not found: " + writeName);
             }
             if (w != null) {
                 this.setWriteMethod(w);
             }
         }
 
-        this.bound = buscarMetodo(beanClass, "addPropertyChangeListener", 1) != null;
+        this.bound = findMethod(beanClass, "addPropertyChangeListener", 1) != null;
     }
 
-    // Con los metodos ya en la mano. Cualquiera de los dos puede ser null.
+    // With the methods already in hand. Either of the two may be null.
     public PropertyDescriptor(String propertyName, Method readMethod, Method writeMethod)
             throws IntrospectionException {
         if (propertyName == null || propertyName.length() == 0) {
@@ -99,9 +101,9 @@ public class PropertyDescriptor extends FeatureDescriptor {
         this.setWriteMethod(writeMethod);
     }
 
-    // Constructor interno de Introspector, que ya valido todo al descubrir los metodos y no
-    // necesita que se lo revalide.
-    PropertyDescriptor(String propertyName, Method readMethod, Method writeMethod, boolean sinChequear) {
+    // Introspector's internal constructor, which validated everything already while discovering
+    // the methods and does not need it validated again.
+    PropertyDescriptor(String propertyName, Method readMethod, Method writeMethod, boolean unchecked) {
         this.setName(propertyName);
         this.readMethod = readMethod;
         this.writeMethod = writeMethod;
@@ -112,14 +114,14 @@ public class PropertyDescriptor extends FeatureDescriptor {
         }
     }
 
-    // El tipo de la propiedad, o null cuando no hay ni lector ni escritor no indexados — que es
-    // exactamente el caso de una propiedad puramente indexada.
+    // The property's type, or null when there is neither a non-indexed reader nor a non-indexed
+    // writer -- which is exactly the case of a purely indexed property.
     public synchronized Class<?> getPropertyType() {
         return this.propertyType;
     }
 
-    // Para que IndexedPropertyDescriptor pueda dejarlo en null sin repetir la deduccion.
-    void fijarTipo(Class<?> t) {
+    // So that IndexedPropertyDescriptor can leave it null without repeating the deduction.
+    void setType(Class<?> t) {
         this.propertyType = t;
     }
 
@@ -127,8 +129,8 @@ public class PropertyDescriptor extends FeatureDescriptor {
         return this.readMethod;
     }
 
-    // Acepta el metodo lector si es un getter de verdad: sin parametros y devolviendo algo. Si ya
-    // habia un escritor, los tipos tienen que cerrar.
+    // It accepts the reader method if it is a real getter: no parameters and returning something.
+    // If there was a writer already, the types have to add up.
     public synchronized void setReadMethod(Method readMethod) throws IntrospectionException {
         if (readMethod == null) {
             this.readMethod = null;
@@ -158,8 +160,8 @@ public class PropertyDescriptor extends FeatureDescriptor {
         return this.writeMethod;
     }
 
-    // Acepta el metodo escritor si toma exactamente un argumento, y si ese argumento es del tipo
-    // que ya tiene la propiedad.
+    // It accepts the writer method if it takes exactly one argument, and if that argument is of the
+    // type the property already has.
     public synchronized void setWriteMethod(Method writeMethod) throws IntrospectionException {
         if (writeMethod == null) {
             this.writeMethod = null;
@@ -182,7 +184,7 @@ public class PropertyDescriptor extends FeatureDescriptor {
         }
     }
 
-    // Si al cambiar dispara un PropertyChangeEvent.
+    // Whether changing it fires a PropertyChangeEvent.
     public boolean isBound() {
         return this.bound;
     }
@@ -191,7 +193,7 @@ public class PropertyDescriptor extends FeatureDescriptor {
         this.bound = bound;
     }
 
-    // Si un oyente puede vetar el cambio.
+    // Whether a listener may veto the change.
     public boolean isConstrained() {
         return this.constrained;
     }
@@ -208,8 +210,8 @@ public class PropertyDescriptor extends FeatureDescriptor {
         return this.propertyEditorClass;
     }
 
-    // Instancia el editor declarado. Se prueba primero el constructor que recibe el bean —el que
-    // usan los editores que necesitan contexto— y se cae al de cero argumentos.
+    // It instantiates the declared editor. The constructor that receives the bean --the one the
+    // editors needing context use-- is tried first, and it falls back to the zero-argument one.
     public PropertyEditor createPropertyEditor(Object bean) {
         PropertyEditor ed = null;
         if (this.propertyEditorClass != null) {
@@ -217,7 +219,7 @@ public class PropertyDescriptor extends FeatureDescriptor {
                 Constructor<?> c = null;
                 try {
                     c = this.propertyEditorClass.getConstructor(Object.class);
-                } catch (Exception sinEseCtor) {
+                } catch (Exception withoutThatCtor) {
                     c = null;
                 }
                 Object o;
@@ -259,10 +261,11 @@ public class PropertyDescriptor extends FeatureDescriptor {
         return a == null ? b == null : a.equals(b);
     }
 
-    // --- ayudantes compartidos con el resto del paquete -------------------------------
+    // --- helpers shared with the rest of the package ----------------------------------
 
-    // "nombre" -> "Nombre". No es decapitalize al reves: aca alcanza con subir la primera letra.
-    static String capitalizar(String s) {
+    // "name" -> "Name". It is not decapitalize backwards: here raising the first letter is
+    // enough.
+    static String capitalize(String s) {
         String r = s;
         if (s != null && s.length() > 0) {
             r = s.substring(0, 1).toUpperCase() + s.substring(1);
@@ -270,23 +273,23 @@ public class PropertyDescriptor extends FeatureDescriptor {
         return r;
     }
 
-    // El primer metodo publico y NO estatico con ese nombre y esa cantidad de argumentos.
-    // Introspector ignora los estaticos, y esta comprobado contra el JDK real: un `getEstatico()`
-    // publico no produce ninguna propiedad.
-    static Method buscarMetodo(Class<?> c, String nombre, int cantidadArgs) {
-        Method encontrado = null;
-        if (c != null && nombre != null) {
+    // The first public and NON-static method with that name and that number of arguments.
+    // Introspector ignores the static ones, and it is checked against the real JDK: a public
+    // `getStatic()` produces no property at all.
+    static Method findMethod(Class<?> c, String name, int argCount) {
+        Method hit = null;
+        if (c != null && name != null) {
             Method[] ms = c.getMethods();
             for (int i = 0; i < ms.length; i++) {
                 Method m = ms[i];
-                if (encontrado == null
-                        && m.getName().equals(nombre)
-                        && m.getParameterTypes().length == cantidadArgs
+                if (hit == null
+                        && m.getName().equals(name)
+                        && m.getParameterTypes().length == argCount
                         && !Modifier.isStatic(m.getModifiers())) {
-                    encontrado = m;
+                    hit = m;
                 }
             }
         }
-        return encontrado;
+        return hit;
     }
 }

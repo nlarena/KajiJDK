@@ -1,16 +1,16 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.PreferencesEvent -- el usuario pidio abrir las preferencias.
+ * KajiLibrary's java.awt.desktop.PreferencesEvent -- the user asked to open the preferences.
  *
- * <p>Lo entrega {@link PreferencesHandler}. En los escritorios donde el menu de preferencias esta
- * deshabilitado por omision, registrar un manejador es lo que lo habilita.
+ * <p>It is handed over by {@link PreferencesHandler}. On the desktops where the preferences menu is
+ * disabled by default, registering a handler is what enables it.
  */
 public final class PreferencesEvent extends AppEvent {
 
     private static final long serialVersionUID = -6398607097086476160L;
 
-    /** Sin datos: el evento es el aviso. */
+    /** No data: the event is the notice. */
     public PreferencesEvent() {
     }
 }

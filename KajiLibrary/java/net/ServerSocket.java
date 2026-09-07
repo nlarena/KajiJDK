@@ -6,33 +6,29 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-// El socket que escucha: se ata a un puerto y espera conexiones.
+// The listening socket: it binds to a port and waits for connections.
 //
 // ===========================================================================================
-// DONDE ESTA LA LINEA
+// WHERE THE LINE IS
 // ===========================================================================================
 //
-// `new ServerSocket()` --el constructor sin argumentos-- crea un socket **sin atar**. Eso es del
-// JDK, no una version recortada, y se cumple aca entero: sobre ese objeto andan todas las
-// opciones, el estado y `close`.
+// `new ServerSocket()` --the no-argument constructor-- creates an **unbound** socket. That comes from
+// the JDK, not from a cut-down version, and it is fulfilled here in full: over that object all the
+// options, the state and `close` work.
 //
-// **NO ENTRAN los dos que esperan a alguien:**
+// **The two that wait for somebody used to be missing:** `accept()`, whose contract is to return a
+// `Socket` **connected to a client**, and `implAccept(Socket)`, which is `accept`'s lower half for
+// the subclasses. With no client and no TCP stack there was no way to fulfil them, and an `accept`
+// returning an invented socket would have been the worst lie in this whole API -- the server would
+// believe it had served somebody. The VM has TCP natives now and both are here, really accepting.
 //
-//  - `accept()`. Su contrato es devolver un `Socket` **conectado a un cliente**. No hay cliente, no
-//    hay pila de TCP, y no hay forma de cumplirlo. Un `accept` que devolviera un socket inventado
-//    seria la peor mentira de esta API entera --el servidor creeria que atendio a alguien-- y uno
-//    que fallara siempre dejaria compilar un servidor completo que no sirve.
-//  - `implAccept(Socket)`. Es la mitad de abajo de `accept`, para las subclases. Sin `accept` no
-//    tiene sentido, y promete lo mismo.
+// **The constructors that bind, and `bind`, are here** too, throwing `IOException`. Binding is local
+// --reserving a port on this machine-- and its failure is literally the case the contract describes.
+// The exception is checked: the compiler forces it to be looked at, so nobody finds out late.
 //
-// **SI ENTRAN los constructores que atan y `bind`**, tirando `IOException`. Atar es local
-// --reservar un puerto en esta maquina-- y su fracaso es literalmente el caso que el contrato
-// describe. La excepcion es chequeada: el compilador obliga a mirarla, asi que nadie se entera
-// tarde.
-//
-// Todo lo demas --`setSoTimeout`, `setReuseAddress`, `setReceiveBufferSize`,
-// `setPerformancePreferences`, `setOption`/`getOption`/`supportedOptions`, el estado, `toString` y
-// la factoria-- es configuracion, y esta completo.
+// Everything else --`setSoTimeout`, `setReuseAddress`, `setReceiveBufferSize`,
+// `setPerformancePreferences`, `setOption`/`getOption`/`supportedOptions`, the state, `toString` and
+// the factory-- is configuration, and it is complete.
 public class ServerSocket implements Closeable {
 
     private static volatile SocketImplFactory factory;
@@ -40,7 +36,7 @@ public class ServerSocket implements Closeable {
     private boolean bound;
     private boolean closed;
 
-    /** El socket a la escucha de la VM, o -1 si todavia no se ato. */
+    /** The VM's listening socket, or -1 if it has not been bound yet. */
     private int handle = -1;
 
     // What a `ServerSocketChannel` needs in order to hand over the socket that wraps it: the channel
@@ -56,44 +52,44 @@ public class ServerSocket implements Closeable {
     private boolean reuseAddress = false;
     private int receiveBufferSize = 65536;
 
-    /** Un socket servidor **sin atar**, listo para configurar. */
+    /** An **unbound** server socket, ready to configure. */
     public ServerSocket() throws IOException {
     }
 
     /**
-     * Un socket servidor sobre la implementacion dada, sin atar.
+     * A server socket over the given implementation, unbound.
      *
-     * <p>Es el constructor de una subclase que trae su propia pila.
+     * <p>It is the constructor for a subclass bringing its own stack.
      */
     protected ServerSocket(SocketImpl impl) {
     }
 
     /**
-     * Un socket servidor atado a {@code port}.
+     * A server socket bound to {@code port}.
      *
-     * <p>Un puerto cero deja que el sistema elija uno; el que toco se lee con
+     * <p>A port of zero lets the system choose one; the one it picked is read with
      * {@link #getLocalPort}.
      *
-     * @throws IOException si no se pudo atar (el puerto ocupado, sin permiso)
+     * @throws IOException if it could not be bound (the port taken, no permission)
      */
     public ServerSocket(int port) throws IOException {
         this(port, 50, null);
     }
 
     /**
-     * Un socket servidor atado a {@code port}, con una cola de {@code backlog} conexiones.
+     * A server socket bound to {@code port}, with a queue of {@code backlog} connections.
      *
-     * @throws IOException si no se pudo atar
+     * @throws IOException if it could not be bound
      */
     public ServerSocket(int port, int backlog) throws IOException {
         this(port, backlog, null);
     }
 
     /**
-     * Un socket servidor atado a {@code bindAddr}:{@code port}.
+     * A server socket bound to {@code bindAddr}:{@code port}.
      *
-     * @throws IllegalArgumentException si el puerto esta fuera de rango
-     * @throws IOException si no se pudo atar
+     * @throws IllegalArgumentException if the port is out of range
+     * @throws IOException if it could not be bound
      */
     public ServerSocket(int port, int backlog, InetAddress bindAddr) throws IOException {
         if (port < 0 || port > 0xFFFF) {
@@ -109,18 +105,18 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Ata el socket a {@code endpoint}, con la cola de conexiones por defecto.
+     * Binds the socket to {@code endpoint}, with the default connection queue.
      *
-     * @throws IOException siempre en KajiJDK
+     * @throws IOException if it could not be bound
      */
     public void bind(SocketAddress endpoint) throws IOException {
         this.bind(endpoint, 50);
     }
 
     /**
-     * Ata el socket a {@code endpoint}, con una cola de {@code backlog} conexiones.
+     * Binds the socket to {@code endpoint}, with a queue of {@code backlog} connections.
      *
-     * @throws IOException si no se pudo atar
+     * @throws IOException if it could not be bound
      */
     public void bind(SocketAddress endpoint, int backlog) throws IOException {
         this.chequearAbierto();
@@ -130,8 +126,8 @@ public class ServerSocket implements Closeable {
         if (endpoint != null && !(endpoint instanceof InetSocketAddress)) {
             throw new IllegalArgumentException("Unsupported address type");
         }
-        // Sin direccion, el comodin: escuchar en todas las interfaces, que es lo que
-        // `new ServerSocket(puerto)` promete.
+        // With no address, the wildcard: listen on every interface, which is what
+        // `new ServerSocket(port)` promises.
         String host = "0.0.0.0";
         int puerto = 0;
         if (endpoint != null) {
@@ -143,15 +139,15 @@ public class ServerSocket implements Closeable {
         }
         int h = jdk.internal.net.Net.listen(host, puerto, backlog <= 0 ? 50 : backlog);
         if (h < 0) {
-            // El nativo no distingue "puerto ocupado" de "sin permiso"; el mensaje nombra lo unico
-            // que se sabe con certeza.
+            // The native does not tell "port taken" from "no permission"; the message names the
+            // only thing known for certain.
             throw new BindException("Cannot assign requested address: " + host + ":" + puerto);
         }
         this.handle = h;
         this.bound = true;
     }
 
-    /** La direccion local a la que esta atado, o null si no lo esta. */
+    /** The local address it is bound to, or null if it is not. */
     public InetAddress getInetAddress() {
         if (!this.isBound()) {
             return null;
@@ -163,7 +159,7 @@ public class ServerSocket implements Closeable {
         }
     }
 
-    /** El puerto en el que escucha, o -1 si no esta atado. */
+    /** The port it listens on, or -1 if it is not bound. */
     public int getLocalPort() {
         if (this.handle >= 0) {
             int p = jdk.internal.net.Net.localPort(this.handle);
@@ -174,7 +170,7 @@ public class ServerSocket implements Closeable {
         return this.isBound() ? 0 : -1;
     }
 
-    /** La direccion local como {@link SocketAddress}, o null si no esta atado. */
+    /** The local address as a {@link SocketAddress}, or null if it is not bound. */
     public SocketAddress getLocalSocketAddress() {
         if (!this.isBound()) {
             return null;
@@ -191,9 +187,9 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * El canal NIO asociado, o null.
+     * The associated NIO channel, or null.
      *
-     * <p>Null salvo que el socket haya salido de un `ServerSocketChannel`, igual que en el JDK.
+     * <p>Null unless the socket came out of a `ServerSocketChannel`, just as in the JDK.
      */
     public java.nio.channels.ServerSocketChannel getChannel() {
         return null;
@@ -202,9 +198,9 @@ public class ServerSocket implements Closeable {
     // ---- opciones ----
 
     /**
-     * Milisegundos que espera una conexion entrante; 0 es "para siempre".
+     * Milliseconds it waits for an incoming connection; 0 is "forever".
      *
-     * @throws IllegalArgumentException si el timeout es negativo
+     * @throws IllegalArgumentException if the timeout is negative
      */
     public void setSoTimeout(int timeout) throws SocketException {
         this.chequearAbierto();
@@ -214,17 +210,17 @@ public class ServerSocket implements Closeable {
         this.soTimeout = timeout;
     }
 
-    /** El timeout de espera. Declara `IOException` y no `SocketException`: es asi en el JDK. */
+    /** The waiting timeout. It declares `IOException` and not `SocketException`: that is how the JDK has it. */
     public int getSoTimeout() throws IOException {
         this.chequearAbierto();
         return this.soTimeout;
     }
 
     /**
-     * Si se puede reusar un puerto que quedo en TIME_WAIT.
+     * Whether a port left in TIME_WAIT may be reused.
      *
-     * <p>Es la opcion que hace que un servidor pueda reiniciarse sin esperar dos minutos, y por eso
-     * hay que fijarla **antes** de atar: despues no tiene efecto.
+     * <p>It is the option that lets a server restart without waiting two minutes, and that is why it
+     * has to be set **before** binding: afterwards it has no effect.
      */
     public void setReuseAddress(boolean on) throws SocketException {
         this.chequearAbierto();
@@ -237,12 +233,12 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Tamano sugerido del buffer de entrada que **heredan** los sockets aceptados.
+     * Suggested size of the input buffer the accepted sockets **inherit**.
      *
-     * <p>Va aca y no en `Socket` porque para pedir una ventana de mas de 64 KiB hay que fijarla
-     * antes del handshake, y el socket aceptado no existe todavia en ese momento.
+     * <p>It goes here and not in `Socket` because asking for a window larger than 64 KiB means
+     * setting it before the handshake, and the accepted socket does not exist yet at that moment.
      *
-     * @throws IllegalArgumentException si el tamano no es positivo
+     * @throws IllegalArgumentException if the size is not positive
      */
     public void setReceiveBufferSize(int size) throws SocketException {
         this.chequearAbierto();
@@ -258,18 +254,18 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Que importa mas de estas conexiones: tiempo de establecimiento, latencia o ancho de banda.
+     * What matters most about these connections: connection time, latency or bandwidth.
      *
-     * <p>Es una sugerencia que el JDK permite ignorar por completo, y esta implementacion la
-     * ignora -- una de las respuestas que el contrato admite, no una promesa incumplida.
+     * <p>It is a suggestion the JDK allows to be ignored entirely, and this implementation ignores it
+     * -- one of the answers the contract admits, not an unfulfilled promise.
      */
     public void setPerformancePreferences(int connectionTime, int latency, int bandwidth) {
     }
 
     /**
-     * Fija una opcion por su constante tipada.
+     * Sets an option by its typed constant.
      *
-     * @throws UnsupportedOperationException si esta clase no soporta esa opcion
+     * @throws UnsupportedOperationException if this class does not support that option
      */
     public <T> ServerSocket setOption(SocketOption<T> name, T value) throws IOException {
         this.chequearAbierto();
@@ -287,9 +283,9 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * El valor de una opcion.
+     * An option's value.
      *
-     * @throws UnsupportedOperationException si esta clase no soporta esa opcion
+     * @throws UnsupportedOperationException if this class does not support that option
      */
     public <T> T getOption(SocketOption<T> name) throws IOException {
         this.chequearAbierto();
@@ -306,10 +302,10 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Las opciones que este socket entiende.
+     * The options this socket understands.
      *
-     * <p>Son menos que las de {@link Socket}, y no es un recorte: un socket que escucha no tiene
-     * buffer de salida ni algoritmo de Nagle que configurar.
+     * <p>There are fewer than {@link Socket}'s, and that is not a cut: a listening socket has no
+     * output buffer and no Nagle algorithm to configure.
      */
     public Set<SocketOption<?>> supportedOptions() {
         Set<SocketOption<?>> s = new HashSet<SocketOption<?>>();
@@ -320,12 +316,12 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Cierra el socket servidor. Cerrar dos veces no hace nada.
+     * Closes the server socket. Closing twice does nothing.
      *
-     * <p>En el JDK declara {@code throws IOException}. Aca no puede: la
-     * {@code java.io.Closeable} de esta biblioteca declara {@code close()} sin excepcion, y un
-     * override no puede ensanchar la clausula {@code throws} (JLS 8.4.8.3). Misma decision que
-     * {@code java.nio.channels.Channel} en este arbol.
+     * <p>In the JDK it declares {@code throws IOException}. Here it cannot: this library's
+     * {@code java.io.Closeable} declares {@code close()} without the exception, and an override
+     * cannot widen the {@code throws} clause (JLS 8.4.8.3). The same decision as
+     * {@code java.nio.channels.Channel} in this tree.
      */
     public void close() throws java.io.IOException {
         if (this.handle >= 0) {
@@ -335,7 +331,7 @@ public class ServerSocket implements Closeable {
         this.closed = true;
     }
 
-    /** {@code ServerSocket[unbound]} mientras no este atado, que es el formato del JDK. */
+    /** {@code ServerSocket[unbound]} while it is not bound, which is the JDK's format. */
     @Override
     public String toString() {
         if (!this.isBound()) {
@@ -346,10 +342,10 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Instala la factoria de implementaciones para toda la VM. Una sola vez.
+     * Installs the implementation factory for the whole VM. Once only.
      *
-     * @throws Error si ya se habia instalado una
-     * @deprecated el JDK deprecio el mecanismo de {@link SocketImpl}
+     * @throws Error if one had already been installed
+     * @deprecated the JDK deprecated the {@link SocketImpl} mechanism
      */
     @Deprecated
     public static synchronized void setSocketFactory(SocketImplFactory fac) throws IOException {
@@ -360,15 +356,15 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Espera una conexion y devuelve el socket que la atiende.
+     * Waits for a connection and returns the socket serving it.
      *
-     * <p>Espera hasta que alguien conecte, o hasta que venza el plazo puesto con
-     * {@link #setSoTimeout}. Ese plazo se respeta de verdad: el nativo no espera --contesta
-     * "todavia no" en el acto-- y quien cuenta el tiempo es este metodo, que es el que sabe cuando
-     * empezo a esperar.
+     * <p>It waits until somebody connects, or until the deadline set with {@link #setSoTimeout}
+     * expires. That deadline is really honoured: the native does not wait --it answers "not yet" on
+     * the spot-- and the one counting the time is this method, which is the one that knows when it
+     * started waiting.
      *
-     * @throws SocketTimeoutException si vencio el plazo sin que nadie conectara
-     * @throws IOException si el socket esta cerrado o sin atar, o si fallo el accept
+     * @throws SocketTimeoutException if the deadline expired with nobody connecting
+     * @throws IOException if the socket is closed or unbound, or if the accept failed
      */
     public Socket accept() throws IOException {
         this.chequearAbierto();
@@ -381,21 +377,22 @@ public class ServerSocket implements Closeable {
     }
 
     /**
-     * Acepta una conexion **sobre el socket que se le da**.
+     * Accepts a connection **over the socket it is given**.
      *
-     * <p>Existe para que una subclase pueda entregar su propia clase de socket: redefine
-     * {@link #accept} para construir la suya y llama a este con ella. Por eso es `final` -- lo que
-     * la subclase cambia es que socket se pasa, no como se acepta.
+     * <p>It exists so that a subclass can hand over its own kind of socket: it redefines
+     * {@link #accept} to build its own and calls this one with it. That is why it is `final` -- what
+     * the subclass changes is which socket is passed, not how it is accepted.
      *
-     * @throws IOException si fallo el accept
+     * @throws IOException if the accept failed
      */
     protected final void implAccept(Socket s) throws IOException {
         if (s == null) {
             throw new NullPointerException("s");
         }
-        // El -3 es "todavia no hay nadie". Se reintenta durmiendo un poco entre intentos: dormir
-        // suelta el interprete de la VM, y eso es justamente lo que le deja lugar al hilo que va a
-        // conectar. Un milisegundo es corto para quien espera y largo para no quemar el procesador.
+        // The -3 is "there is nobody yet". It retries, sleeping a little between attempts: sleeping
+        // releases the VM's interpreter, and that is exactly what makes room for the thread that is
+        // going to connect. A millisecond is short for the waiter and long enough not to burn the
+        // processor.
         long comienzo = System.currentTimeMillis();
         int h = jdk.internal.net.Net.accept(this.handle);
         while (h == -3) {

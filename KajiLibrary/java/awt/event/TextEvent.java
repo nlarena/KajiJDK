@@ -3,29 +3,29 @@ package java.awt.event;
 import java.awt.AWTEvent;
 
 /**
- * Cambió el texto de un componente.
+ * A component's text changed.
  *
- * <p>Es el evento más escueto de AWT: no dice qué cambió ni cómo, sólo que cambió. Quien lo reciba
- * tiene que ir a leer el texto. Es una decisión de 1.0 que hoy se ve pobre, pero tiene una virtud:
- * no se puede quedar desactualizado respecto del componente.
+ * <p>It is AWT's tersest event: it does not say what changed nor how, only that it changed. Whoever
+ * receives it has to go and read the text. It is a decision from 1.0 that looks poor today, but it
+ * has one virtue: it cannot fall out of date with respect to the component.
  */
 public class TextEvent extends AWTEvent {
 
     private static final long serialVersionUID = 6269902291250941179L;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int TEXT_FIRST = 900;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int TEXT_LAST = 900;
 
-    /** Cambió el texto. */
+    /** The text changed. */
     public static final int TEXT_VALUE_CHANGED = 900;
 
     /**
-     * Con la fuente y el identificador.
+     * With the source and the identifier.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public TextEvent(Object source, int id) {
         super(source, id);

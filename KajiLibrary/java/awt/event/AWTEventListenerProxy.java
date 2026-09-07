@@ -4,11 +4,11 @@ import java.awt.AWTEvent;
 import java.util.EventListenerProxy;
 
 /**
- * Un {@link AWTEventListener} con la máscara de qué familias le interesan pegada.
+ * An {@link AWTEventListener} with the mask of which families interest it stuck on.
  *
- * <p>El `Toolkit` guarda todos los oyentes globales en una sola lista, y sin esto no habría forma de
- * preguntarle **con qué máscara** se registró cada uno: el oyente solo no lo dice. Envolverlo
- * conserva ese dato para que {@code getAWTEventListeners} pueda devolverlo.
+ * <p>The `Toolkit` keeps every global listener in a single list, and without this there would be no
+ * way of asking it **with which mask** each one registered: the listener alone does not say. Wrapping
+ * it preserves that datum so that {@code getAWTEventListeners} can return it.
  */
 public class AWTEventListenerProxy extends EventListenerProxy<AWTEventListener>
         implements AWTEventListener {
@@ -16,21 +16,21 @@ public class AWTEventListenerProxy extends EventListenerProxy<AWTEventListener>
     private final long eventMask;
 
     /**
-     * Con la máscara y el oyente.
+     * With the mask and the listener.
      *
-     * @throws NullPointerException si el oyente es `null`
+     * @throws NullPointerException if the listener is `null`
      */
     public AWTEventListenerProxy(long eventMask, AWTEventListener listener) {
         super(listener);
         this.eventMask = eventMask;
     }
 
-    /** Le pasa el evento al oyente envuelto. */
+    /** Hands the event to the wrapped listener. */
     public void eventDispatched(AWTEvent event) {
         this.getListener().eventDispatched(event);
     }
 
-    /** Con qué máscara se registró. */
+    /** With which mask it registered. */
     public long getEventMask() {
         return this.eventMask;
     }

@@ -7,27 +7,26 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * El diccionario entre los formatos de Java y los nombres del portapapeles del sistema.
+ * The dictionary between Java's formats and the system clipboard's names.
  *
- * <p>Es un {@link FlavorTable} porque la correspondencia no es uno a uno: un texto de Java puede
- * entregarse como varios nombres nativos y un nombre nativo puede corresponder a varias clases de
- * Java. Las listas vienen ordenadas de mejor a peor.
+ * <p>It is a {@link FlavorTable} because the correspondence is not one to one: a Java text may be
+ * handed over as several native names and a native name may correspond to several Java classes. The
+ * lists come ordered from best to worst.
  *
- * <p>La codificación de {@link #encodeDataFlavor} resuelve un problema concreto: el portapapeles del
- * sistema sólo entiende cadenas, y un formato de Java es un tipo MIME con parámetros que puede
- * traer cualquier carácter. Codificarlo con un prefijo conocido —`JAVA_DATAFLAVOR:`— permite que un
- * programa Java reconozca sus propios formatos en un portapapeles compartido y los ignore si son de
- * otro.
+ * <p>{@link #encodeDataFlavor}'s encoding settles a concrete problem: the system clipboard
+ * understands only strings, and a Java format is a MIME type with parameters that may carry any
+ * character. Encoding it with a known prefix —`JAVA_DATAFLAVOR:`— lets a Java program recognize its
+ * own formats on a shared clipboard and ignore them if they belong to another.
  *
- * <p><strong>Esta implementación no tiene un portapapeles nativo detrás.</strong> Arranca con las
- * correspondencias que el JDK trae de fábrica —las de texto, imagen y lista de archivos, que son las
- * mismas en todas las plataformas— y las que se le agreguen a mano. No hay un archivo de
- * correspondencias del sistema que leer, así que lo que hay es lo que se ve: un mapa vivo y
- * modificable, no una lista inventada de nombres de una plataforma que no está.
+ * <p><strong>This implementation has no native clipboard behind it.</strong> It starts with the
+ * correspondences the JDK ships out of the box —those of text, image and file list, which are the
+ * same on every platform— and whatever is added by hand. There is no system correspondence file to
+ * read, so what is there is what can be seen: a live, modifiable map, not an invented list of names
+ * from a platform that is not there.
  */
 public final class SystemFlavorMap implements FlavorMap, FlavorTable {
 
-    /** El prefijo con el que se codifica un tipo MIME de Java como nombre nativo. */
+    /** The prefix a Java MIME type is encoded as a native name with. */
     private static final String JAVA_PREFIX = "JAVA_DATAFLAVOR:";
 
     private static SystemFlavorMap defaultMap;
@@ -37,7 +36,7 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     private final Map<String, List<DataFlavor>> nativeToFlavor =
             new LinkedHashMap<String, List<DataFlavor>>();
 
-    /** Con las correspondencias de fábrica. */
+    /** With the out-of-the-box correspondences. */
     private SystemFlavorMap() {
         this.registrar(DataFlavor.stringFlavor, "UNICODE TEXT");
         this.registrar(DataFlavor.stringFlavor, "TEXT");
@@ -46,14 +45,14 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         this.registrar(DataFlavor.allHtmlFlavor, "HTML");
     }
 
-    /** Ata un formato con un nombre nativo, en los dos sentidos. */
+    /** Binds a format to a native name, in both directions. */
     private void registrar(DataFlavor flavor, String nat) {
-        this.agregarNativo(flavor, nat);
-        this.agregarFormato(nat, flavor);
+        this.addNative(flavor, nat);
+        this.addFlavor(nat, flavor);
     }
 
-    /** Suma un nombre nativo al final de la lista de ese formato. */
-    private void agregarNativo(DataFlavor flavor, String nat) {
+    /** Adds a native name at the end of that format's list. */
+    private void addNative(DataFlavor flavor, String nat) {
         List<String> lista = this.flavorToNative.get(flavor);
         if (lista == null) {
             lista = new ArrayList<String>();
@@ -64,8 +63,8 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         }
     }
 
-    /** Suma un formato al final de la lista de ese nombre nativo. */
-    private void agregarFormato(String nat, DataFlavor flavor) {
+    /** Adds a format at the end of that native name's list. */
+    private void addFlavor(String nat, DataFlavor flavor) {
         List<DataFlavor> lista = this.nativeToFlavor.get(nat);
         if (lista == null) {
             lista = new ArrayList<DataFlavor>();
@@ -76,7 +75,7 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         }
     }
 
-    /** El mapa que usa el sistema; hay uno solo. */
+    /** The map the system uses; there is only one. */
     public static FlavorMap getDefaultFlavorMap() {
         synchronized (SystemFlavorMap.class) {
             if (defaultMap == null) {
@@ -87,13 +86,13 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Los nombres nativos que sirven para ese formato, del mejor al peor.
+     * The native names that serve that format, from best to worst.
      *
-     * <p>Un formato desconocido no da la lista vacía: da su propio tipo MIME codificado. Es lo que
-     * permite que dos programas Java intercambien un formato propio a través de un portapapeles que
-     * no sabe nada de él.
+     * <p>An unknown format does not give the empty list: it gives its own MIME type encoded. That is
+     * what lets two Java programs exchange a format of their own through a clipboard that knows
+     * nothing about it.
      *
-     * @throws NullPointerException si el formato es `null`
+     * @throws NullPointerException if the format is `null`
      */
     public synchronized List<String> getNativesForFlavor(DataFlavor flav) {
         if (flav == null) {
@@ -109,12 +108,12 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Los formatos que sirven para ese nombre nativo, del mejor al peor.
+     * The formats that serve that native name, from best to worst.
      *
-     * <p>Un nombre codificado se decodifica de vuelta al formato que representa, aunque nadie lo
-     * haya registrado.
+     * <p>An encoded name is decoded back into the format it represents, even if nobody registered
+     * it.
      *
-     * @throws NullPointerException si el nombre es `null`
+     * @throws NullPointerException if the name is `null`
      */
     public synchronized List<DataFlavor> getFlavorsForNative(String nat) {
         if (nat == null) {
@@ -129,16 +128,16 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
             try {
                 out.add(decodeDataFlavor(nat));
             } catch (ClassNotFoundException e) {
-                // Es un formato de Java pero de una clase que no está acá: no hay nada que ofrecer.
+                // It is a Java format but of a class that is not here: there is nothing to offer.
             }
         }
         return out;
     }
 
     /**
-     * El mejor nombre nativo de cada formato.
+     * The best native name of each format.
      *
-     * @throws NullPointerException si el arreglo trae un `null`
+     * @throws NullPointerException if the array carries a `null`
      */
     public synchronized Map<DataFlavor, String> getNativesForFlavors(DataFlavor[] flavors) {
         Map<DataFlavor, String> out = new HashMap<DataFlavor, String>();
@@ -156,9 +155,9 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * El mejor formato de cada nombre nativo.
+     * The best format of each native name.
      *
-     * @throws NullPointerException si el arreglo trae un `null`
+     * @throws NullPointerException if the array carries a `null`
      */
     public synchronized Map<String, DataFlavor> getFlavorsForNatives(String[] natives) {
         Map<String, DataFlavor> out = new HashMap<String, DataFlavor>();
@@ -176,24 +175,24 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Agrega un nombre nativo **al final** de la lista de un formato.
+     * Adds a native name **at the end** of a format's list.
      *
-     * <p>Al final y no al principio: lo que ya estaba registrado se prefiere, y lo agregado es el
-     * recurso de última.
+     * <p>At the end and not at the start: what was already registered is preferred, and what is added
+     * is the last resort.
      *
-     * @throws NullPointerException si falta alguno de los dos
+     * @throws NullPointerException if either of the two is missing
      */
     public synchronized void addUnencodedNativeForFlavor(DataFlavor flav, String nat) {
         if (flav == null || nat == null) {
             throw new NullPointerException("null arguments not permitted");
         }
-        this.agregarNativo(flav, nat);
+        this.addNative(flav, nat);
     }
 
     /**
-     * Reemplaza la lista de nombres nativos de un formato.
+     * Replaces a format's list of native names.
      *
-     * @throws NullPointerException si falta el formato o el arreglo trae un `null`
+     * @throws NullPointerException if the format is missing or the array carries a `null`
      */
     public synchronized void setNativesForFlavor(DataFlavor flav, String[] natives) {
         if (flav == null || natives == null) {
@@ -212,21 +211,21 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Agrega un formato al final de la lista de un nombre nativo.
+     * Adds a format at the end of a native name's list.
      *
-     * @throws NullPointerException si falta alguno de los dos
+     * @throws NullPointerException if either of the two is missing
      */
     public synchronized void addFlavorForUnencodedNative(String nat, DataFlavor flav) {
         if (flav == null || nat == null) {
             throw new NullPointerException("null arguments not permitted");
         }
-        this.agregarFormato(nat, flav);
+        this.addFlavor(nat, flav);
     }
 
     /**
-     * Reemplaza la lista de formatos de un nombre nativo.
+     * Replaces a native name's list of formats.
      *
-     * @throws NullPointerException si falta el nombre o el arreglo trae un `null`
+     * @throws NullPointerException if the name is missing or the array carries a `null`
      */
     public synchronized void setFlavorsForNative(String nat, DataFlavor[] flavors) {
         if (nat == null || flavors == null) {
@@ -245,9 +244,9 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Codifica un tipo MIME de Java como nombre nativo.
+     * Encodes a Java MIME type as a native name.
      *
-     * @return el nombre codificado, o `null` si el tipo MIME es `null`
+     * @return the encoded name, or `null` if the MIME type is `null`
      */
     public static String encodeJavaMIMEType(String mimeType) {
         if (mimeType == null) {
@@ -257,9 +256,9 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Codifica un formato como nombre nativo.
+     * Encodes a format as a native name.
      *
-     * @return el nombre codificado, o `null` si el formato o su tipo MIME es `null`
+     * @return the encoded name, or `null` if the format or its MIME type is `null`
      */
     public static String encodeDataFlavor(DataFlavor flav) {
         if (flav == null) {
@@ -268,15 +267,15 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         return encodeJavaMIMEType(flav.getMimeType());
     }
 
-    /** Si ese nombre nativo es un tipo MIME de Java codificado. */
+    /** Whether that native name is an encoded Java MIME type. */
     public static boolean isJavaMIMEType(String str) {
         return str != null && str.startsWith(JAVA_PREFIX, 0);
     }
 
     /**
-     * Decodifica un nombre nativo a un tipo MIME de Java.
+     * Decodes a native name into a Java MIME type.
      *
-     * @return el tipo MIME, o `null` si el nombre no está codificado
+     * @return the MIME type, or `null` if the name is not encoded
      */
     public static String decodeJavaMIMEType(String nat) {
         if (!isJavaMIMEType(nat)) {
@@ -286,10 +285,10 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
     }
 
     /**
-     * Decodifica un nombre nativo a un formato.
+     * Decodes a native name into a format.
      *
-     * @return el formato, o `null` si el nombre no está codificado
-     * @throws ClassNotFoundException si la clase de representación no se puede cargar
+     * @return the format, or `null` if the name is not encoded
+     * @throws ClassNotFoundException if the representation class cannot be loaded
      */
     public static DataFlavor decodeDataFlavor(String nat) throws ClassNotFoundException {
         String mimeType = decodeJavaMIMEType(nat);

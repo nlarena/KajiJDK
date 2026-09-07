@@ -2,8 +2,8 @@ package java.beans;
 
 import java.util.EventListener;
 
-// Se entera de que una propiedad ligada (`bound`) cambio. El cambio YA ocurrio: esto notifica,
-// no autoriza. Para poder rechazarlo esta VetoableChangeListener.
+// It hears that a bound property has changed. The change has ALREADY happened: this notifies, it
+// does not authorize. For being able to refuse it there is VetoableChangeListener.
 public interface PropertyChangeListener extends EventListener {
 
     void propertyChange(PropertyChangeEvent evt);

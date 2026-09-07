@@ -3,28 +3,28 @@ package java.awt.desktop;
 import java.net.URI;
 
 /**
- * KajiLibrary's java.awt.desktop.OpenURIEvent -- el sistema pide abrir una direccion.
+ * KajiLibrary's java.awt.desktop.OpenURIEvent -- the system asks for an address to be opened.
  *
- * <p>Lo entrega {@link OpenURIHandler}. Llega cuando alguien abre un enlace de un esquema que el
- * programa declaro manejar -- {@code mailto:}, o uno propio como {@code miapp:}.
+ * <p>It is handed over by {@link OpenURIHandler}. It arrives when someone opens a link of a scheme
+ * the program declared it handles -- {@code mailto:}, or one of its own like {@code myapp:}.
  *
- * <p>Es la puerta de entrada de datos que vienen de <b>afuera del programa</b>, tipicamente de una
- * pagina web. Lo que llegue por aca hay que validarlo como cualquier entrada no confiable: el esquema
- * no garantiza nada sobre el resto de la direccion.
+ * <p>It is the entry point of data coming from <b>outside the program</b>, typically from a web page.
+ * Whatever arrives here has to be validated like any untrusted input: the scheme guarantees nothing
+ * about the rest of the address.
  */
 public final class OpenURIEvent extends AppEvent {
 
     private static final long serialVersionUID = 221209100935933476L;
 
-    /** La direccion. */
+    /** The address. */
     final URI uri;
 
-    /** @param uri la direccion a abrir */
+    /** @param uri the address to open */
     public OpenURIEvent(final URI uri) {
         this.uri = uri;
     }
 
-    /** La direccion. Ver la nota de la clase: no es confiable. */
+    /** The address. See the class note: it is not to be trusted. */
     public URI getURI() {
         return this.uri;
     }

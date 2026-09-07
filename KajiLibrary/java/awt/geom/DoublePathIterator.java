@@ -2,8 +2,8 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de Path2D.Double (no es API). Misma mecanica que FloatPathIterator; alli esta la
-// explicacion de la tabla de tamanos y del porque del campo tipado como Path2D.
+// Path2D.Double's internal iterator (not API). Same mechanics as FloatPathIterator; the
+// explanation of the size table and of why the field is typed as Path2D lives there.
 class DoublePathIterator implements PathIterator {
 
     Path2D path;
@@ -46,8 +46,8 @@ class DoublePathIterator implements PathIterator {
                     i = i + 1;
                 }
             } else {
-                // Se transforma en double y la transformacion estrecha a float al escribir: al reves
-                // se redondearia dos veces.
+                // It is transformed in double and the transform narrows to float on writing: the
+                // other way round would round twice.
                 this.affine.transform(this.coordsRef, this.pointIdx, coords, 0, numCoords / 2);
             }
         }

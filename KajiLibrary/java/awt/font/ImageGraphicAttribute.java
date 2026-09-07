@@ -5,16 +5,16 @@ import java.awt.Image;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Una imagen metida en un renglón de texto como si fuera un carácter.
+ * An image put into a line of text as if it were a character.
  *
- * <p>El origen dice **qué punto de la imagen** se apoya en el renglón, y por eso se da en
- * coordenadas de la imagen y no del texto. Con el origen en (0,0) la imagen cuelga entera por debajo
- * de la línea de base; con el origen en el medio, queda centrada; con el origen abajo, se apoya como
- * una letra.
+ * <p>The origin says **which point of the image** rests on the line, and that is why it is given in
+ * the image's coordinates and not the text's. With the origin at (0,0) the whole image hangs below
+ * the baseline; with the origin in the middle, it ends up centred; with the origin at the bottom, it
+ * rests like a letter.
  *
- * <p>El tamaño se pregunta una sola vez, al construir. Una imagen que todavía se esté cargando
- * contestaría -1, y las medidas del renglón quedarían mal para siempre: conviene construir esto con
- * una imagen ya completa.
+ * <p>The size is asked for once only, on construction. An image still loading would answer -1, and
+ * the line's measurements would be wrong for ever: this is better built with an image that is already
+ * complete.
  */
 public final class ImageGraphicAttribute extends GraphicAttribute {
 
@@ -25,20 +25,20 @@ public final class ImageGraphicAttribute extends GraphicAttribute {
     private final float originY;
 
     /**
-     * Con el origen en el ángulo superior izquierdo de la imagen.
+     * With the origin at the image's top left corner.
      *
-     * @throws IllegalArgumentException si la alineación no es una de las cinco
-     * @throws NullPointerException si la imagen es `null`
+     * @throws IllegalArgumentException if the alignment is none of the five
+     * @throws NullPointerException if the image is `null`
      */
     public ImageGraphicAttribute(Image image, int alignment) {
         this(image, alignment, 0, 0);
     }
 
     /**
-     * Con el origen en el punto dado de la imagen.
+     * With the origin at the given point of the image.
      *
-     * @throws IllegalArgumentException si la alineación no es una de las cinco
-     * @throws NullPointerException si la imagen es `null`
+     * @throws IllegalArgumentException if the alignment is none of the five
+     * @throws NullPointerException if the image is `null`
      */
     public ImageGraphicAttribute(Image image, int alignment, float originX, float originY) {
         super(alignment);
@@ -49,28 +49,28 @@ public final class ImageGraphicAttribute extends GraphicAttribute {
         this.originY = originY;
     }
 
-    /** Lo que la imagen queda por encima de la línea de base. */
+    /** How much of the image is left above the baseline. */
     public float getAscent() {
         return Math.max(0, this.originY);
     }
 
-    /** Lo que la imagen queda por debajo de la línea de base. */
+    /** How much of the image is left below the baseline. */
     public float getDescent() {
         return Math.max(0, this.imageHeight - this.originY);
     }
 
-    /** Lo que avanza el renglón: lo que quede a la derecha del origen. */
+    /** How far the line advances: whatever is left to the right of the origin. */
     public float getAdvance() {
         return Math.max(0, this.imageWidth - this.originX);
     }
 
-    /** El rectángulo de la imagen, relativo al origen. */
+    /** The image's rectangle, relative to the origin. */
     public Rectangle2D getBounds() {
         return new Rectangle2D.Float(-this.originX, -this.originY, this.imageWidth,
                 this.imageHeight);
     }
 
-    /** Dibuja la imagen con su origen en `(x, y)`. */
+    /** Draws the image with its origin at `(x, y)`. */
     public void draw(Graphics2D graphics, float x, float y) {
         graphics.drawImage(this.image, (int) (x - this.originX), (int) (y - this.originY), null);
     }
@@ -79,7 +79,7 @@ public final class ImageGraphicAttribute extends GraphicAttribute {
         return this.image.hashCode();
     }
 
-    /** Igualdad por imagen, alineación y origen. */
+    /** Equality by image, alignment and origin. */
     public boolean equals(Object rhs) {
         if (rhs instanceof ImageGraphicAttribute) {
             return this.equals((ImageGraphicAttribute) rhs);
@@ -88,11 +88,11 @@ public final class ImageGraphicAttribute extends GraphicAttribute {
     }
 
     /**
-     * Lo mismo, con el tipo ya conocido.
+     * The same, with the type already known.
      *
-     * <p>La imagen se compara por **identidad**: dos imágenes distintas con los mismos píxeles son
-     * dos objetos, y compararlas píxel a píxel en un `equals` que se llama por tramo de texto no
-     * sería razonable.
+     * <p>The image is compared by **identity**: two different images with the same pixels are two
+     * objects, and comparing them pixel by pixel in an `equals` called once per stretch of text would
+     * not be reasonable.
      */
     public boolean equals(ImageGraphicAttribute rhs) {
         if (rhs == null) {

@@ -426,8 +426,16 @@ fn collect_from_stmt(s: &Stmt, out: &mut HashSet<String>) {
             collect_from_expr(selector, out);
             for c in cases {
                 for l in &c.labels {
-                    if let super::ast::CaseLabel::Pattern(p) = l {
-                        collect_from_pattern(p, out);
+                    match l {
+                        super::ast::CaseLabel::Pattern(p) => collect_from_pattern(p, out),
+                        // **Finding #503**: una etiqueta constante puede nombrar un tipo del
+                        // classpath (`case Types.BIT:`), y ese tipo hay que **cargarlo**. Sin esto
+                        // no se cargaba, y el síntoma era desconcertante: el mismo `Types.BIT` en
+                        // una expresión normal compilaba --porque ahí sí se recolectaba el nombre y
+                        // el tipo entraba-- y como etiqueta no. Con las dos formas en el mismo
+                        // archivo andaba, que es lo que lo hacía parecer intermitente.
+                        super::ast::CaseLabel::Constant(e) => collect_from_expr(e, out),
+                        _ => {}
                     }
                 }
                 if let Some(g) = &c.guard {
@@ -477,6 +485,8 @@ fn collect_from_expr(e: &Expr, out: &mut HashSet<String>) {
         ExprKind::ClassLit(ty) => collect_from_type(ty, out),
         // `Outer.this` menciona el tipo de la clase envolvente.
         ExprKind::QualifiedThis(ty) => collect_from_type(ty, out),
+        // `Interfaz.super.m()` nombra la interfaz: cuenta como uso del tipo.
+        ExprKind::QualifiedSuper(ty) => collect_from_type(ty, out),
         ExprKind::NewObject { ty, args, body, outer } => {
             collect_from_type(ty, out);
             if let Some(o) = outer {
@@ -818,6 +828,11 @@ fn build_external(
             owner: Some(cid),
             modifiers: mods,
         });
+        // El valor del `ConstantValue`, si el campo lo trae: es lo que permite plegar un
+        // `case java.sql.Types.BIT:` sobre un tipo del classpath (finding #503).
+        if let Some(v) = f.const_value.clone() {
+            table.add_const_field(s, v);
+        }
         table.define(members, &f.name, s);
     }
     for m in &ext.methods {
@@ -1256,8 +1271,21 @@ fn resolve_symbols(table: &mut SymbolTable) {
                     }
                     None => None,
                 };
-                let interface_types =
+                let mut interface_types: Vec<RType> =
                     implements.iter().map(|t| resolve_rtype(table, members, t)).collect();
+                // **Finding #504**: un `@interface` extiende implícitamente
+                // `java.lang.annotation.Annotation` (§9.6). El generador ya lo escribía en el
+                // `.class`, pero acá no entraba a la tabla, así que la comprobación de subtipos no
+                // lo veía: `Mi.class` no encajaba en un `Class<? extends Annotation>` y la llamada
+                // a `isAnnotationPresent` no resolvía. Va **después** de las escritas, como en el
+                // generador, y no se le agrega a la propia `Annotation`.
+                if kind == TypeKind::Annotation {
+                    if let RType::Class(a) = resolve_rtype(table, members, &Type::Class("Annotation".into())) {
+                        if a != id && !interface_types.iter().any(|t| matches!(t, RType::Class(c) if *c == a)) {
+                            interface_types.push(RType::Class(a));
+                        }
+                    }
+                }
                 // Los subtipos de `permits` se resuelven en el scope de la clase (donde viven sus
                 // parámetros de tipo). El chequeo de buena formación (§8.1.6) lo hace la pasada 3.
                 let permitted =

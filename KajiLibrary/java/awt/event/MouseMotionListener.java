@@ -3,16 +3,16 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que el ratón se movió sobre el componente.
-
- <p>Está separado de {@link MouseListener} porque son órdenes de magnitud más eventos: mover el
- ratón un segundo genera decenas, y apretar un botón genera uno.
+ * Whoever wants to hear that the mouse moved over the component.
+ *
+ * <p>It is kept apart from {@link MouseListener} because they are orders of magnitude more events:
+ * moving the mouse for a second produces dozens, and pressing a button produces one.
  */
 public interface MouseMotionListener extends EventListener {
 
-    /** Se movió con un botón apretado. */
+    /** It moved with a button pressed. */
     void mouseDragged(MouseEvent e);
 
-    /** Se movió sin botones apretados. */
+    /** It moved with no button pressed. */
     void mouseMoved(MouseEvent e);
 }

@@ -6,14 +6,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// La base comun de todo lo que Introspector describe: propiedades, metodos, eventos y el bean
-// mismo. Guarda lo que los cuatro comparten —un nombre, como mostrarlo, y banderas de visibilidad—
-// mas una tabla de atributos libre para que una herramienta cuelgue lo suyo sin que la clase
-// tenga que preverlo.
+// The common base of everything Introspector describes: properties, methods, events and the bean
+// itself. It keeps what the four share —a name, how to show it, and visibility flags— plus a free
+// attribute table so that a tool can hang its own things there without the class having to foresee
+// them.
 //
-// Los defaults encadenan y esta verificado contra el JDK real: getDisplayName() devuelve el nombre
-// cuando nadie fijo uno, y getShortDescription() devuelve el displayName cuando nadie fijo una.
-// Asi un descriptor recien construido con solo setName("ene") ya responde "ene" a los tres.
+// The defaults chain and it is checked against the real JDK: getDisplayName() returns the name when
+// nobody set one, and getShortDescription() returns the displayName when nobody set one. That way a
+// freshly built descriptor with only setName("en") already answers "en" to all three.
 public class FeatureDescriptor {
 
     private String name;
@@ -23,13 +23,13 @@ public class FeatureDescriptor {
     private boolean hidden;
     private boolean preferred;
 
-    // Atributos libres. Se crea perezosamente: la mayoria de los descriptores nunca recibe uno.
+    // Free attributes. It is created lazily: most descriptors never receive one.
     private Map<String, Object> tabla;
 
     public FeatureDescriptor() {
     }
 
-    // El nombre programatico: el de la propiedad, el metodo o el evento.
+    // The programmatic name: the property's, the method's or the event's.
     public String getName() {
         return this.name;
     }
@@ -38,7 +38,7 @@ public class FeatureDescriptor {
         this.name = name;
     }
 
-    // El nombre para mostrar. Si nadie lo fijo, cae al nombre programatico.
+    // The name to show. If nobody set one, it falls back to the programmatic name.
     public String getDisplayName() {
         String d = this.displayName;
         if (d == null) {
@@ -51,7 +51,8 @@ public class FeatureDescriptor {
         this.displayName = displayName;
     }
 
-    // La descripcion corta. Si nadie la fijo, cae al displayName (que a su vez puede caer al nombre).
+    // The short description. If nobody set one, it falls back to the displayName (which may in
+    // turn fall back to the name).
     public String getShortDescription() {
         String s = this.shortDescription;
         if (s == null) {
@@ -64,7 +65,7 @@ public class FeatureDescriptor {
         this.shortDescription = text;
     }
 
-    // "Para usuarios expertos": una herramienta puede esconderlo del panel basico.
+    // "For expert users": a tool may hide it from the basic panel.
     public boolean isExpert() {
         return this.expert;
     }
@@ -73,7 +74,7 @@ public class FeatureDescriptor {
         this.expert = expert;
     }
 
-    // "De uso interno": no se muestra al humano.
+    // "For internal use": it is not shown to the human.
     public boolean isHidden() {
         return this.hidden;
     }
@@ -82,7 +83,7 @@ public class FeatureDescriptor {
         this.hidden = hidden;
     }
 
-    // "Vale la pena destacarlo": lo contrario de hidden.
+    // "Worth highlighting": the opposite of hidden.
     public boolean isPreferred() {
         return this.preferred;
     }
@@ -91,7 +92,7 @@ public class FeatureDescriptor {
         this.preferred = preferred;
     }
 
-    // Cuelga un atributo arbitrario. Fijar null borra la entrada, como en el JDK.
+    // It hangs an arbitrary attribute. Setting null deletes the entry, as in the JDK.
     public void setValue(String attributeName, Object value) {
         if (attributeName != null) {
             if (value == null) {
@@ -115,8 +116,8 @@ public class FeatureDescriptor {
         return v;
     }
 
-    // Los nombres de los atributos colgados. Enumeration y no Iterator: es la firma del JDK, que
-    // es anterior a Iterator y no se puede cambiar sin romper el contrato.
+    // The names of the hung attributes. Enumeration and not Iterator: it is the JDK's signature,
+    // which predates Iterator and cannot be changed without breaking the contract.
     public Enumeration<String> attributeNames() {
         List<String> nombres = new ArrayList<String>();
         if (this.tabla != null) {
@@ -125,12 +126,12 @@ public class FeatureDescriptor {
                 nombres.add((String) claves[i]);
             }
         }
-        return new EnumeracionDeLista(nombres);
+        return new ListEnumeration(nombres);
     }
 
-    // Copia los campos de `otro` sobre este. Lo usa Introspector al fusionar el descriptor
-    // deducido por reflexion con el que aporta un BeanInfo explicito.
-    void copiarDe(FeatureDescriptor otro) {
+    // It copies `other`'s fields over this one's. Introspector uses it when merging the descriptor
+    // worked out by reflection with the one an explicit BeanInfo contributes.
+    void copyFrom(FeatureDescriptor otro) {
         if (otro.name != null) {
             this.name = otro.name;
         }
@@ -152,14 +153,14 @@ public class FeatureDescriptor {
         }
     }
 
-    // Enumeration sobre una lista ya materializada. Se recorre por indice a proposito: en este
-    // arbol el for-each sobre una coleccion no compila bien (hallazgo #113).
-    private static class EnumeracionDeLista implements Enumeration<String> {
+    // An Enumeration over an already materialized list. It is walked by index on purpose: in this
+    // tree the for-each over a collection does not compile properly (finding #113).
+    private static class ListEnumeration implements Enumeration<String> {
 
         private List<String> datos;
         private int pos;
 
-        EnumeracionDeLista(List<String> datos) {
+        ListEnumeration(List<String> datos) {
             this.datos = datos;
             this.pos = 0;
         }

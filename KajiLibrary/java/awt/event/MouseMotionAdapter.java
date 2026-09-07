@@ -1,19 +1,19 @@
 package java.awt.event;
 
 /**
- * Un {@link MouseMotionListener} que no hace nada, para redefinir sólo lo que interese.
+ * A {@link MouseMotionListener} that does nothing, to override only what matters.
  */
 public abstract class MouseMotionAdapter implements MouseMotionListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MouseMotionAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseDragged(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseMoved(MouseEvent e) {
     }
 }

@@ -1,8 +1,8 @@
 package java.beans;
 
-// El bean visto como un todo: su clase y, opcionalmente, la clase del customizador que una
-// herramienta usaria para editarlo. El nombre del descriptor es el nombre simple de la clase
-// —verificado contra el JDK real: para `BeanRaro` da "BeanRaro", no el nombre calificado—.
+// The bean seen as a whole: its class and, optionally, the class of the customizer a tool would
+// use to edit it. The descriptor's name is the class's simple name —checked against the real JDK:
+// for `BeanRaro` it gives "BeanRaro", not the qualified name.
 public class BeanDescriptor extends FeatureDescriptor {
 
     private Class<?> beanClass;

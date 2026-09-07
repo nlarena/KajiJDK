@@ -3,31 +3,31 @@ package java.awt.geom;
 import java.awt.Rectangle;
 import java.awt.Shape;
 
-// java.awt.geom.CubicCurve2D de KajiLibrary -- un segmento de curva de Bezier cubica. Superficie
-// completa.
+// KajiLibrary's java.awt.geom.CubicCurve2D -- a segment of a cubic Bezier curve. The surface is
+// complete.
 //
-// La curva va de (x1,y1) a (x2,y2) con dos puntos de control que **no se tocan**: la curva pasa por
-// los extremos y no por los controles. De ahi salen dos cosas que sorprenden si uno espera que el
-// cuadrilatero de control sea la figura:
+// The curve goes from (x1,y1) to (x2,y2) with two control points it **does not touch**: the curve
+// passes through the ends and not through the controls. Two things that surprise anyone expecting
+// the control quadrilateral to be the shape come out of that:
 //
-//   * `getBounds2D` devuelve la caja **ajustada** de la curva, no la del poligono de control. Las
-//     dos son cotas validas segun `Shape.getBounds2D`, asi que esto no lo decide el contrato sino
-//     el JDK, que devuelve la ajustada -- comprobado con `java` de verdad. Aca hubo la del poligono
-//     de control hasta que la prueba de comportamiento no coincidio. Ver `CurveBounds`.
+//   * `getBounds2D` returns the curve's **tight** box, not the control polygon's. Both are valid
+//     bounds according to `Shape.getBounds2D`, so this is not decided by the contract but by the
+//     JDK, which returns the tight one -- checked against the real `java`. The control polygon's was
+//     here until the behaviour test did not match. See `CurveBounds`.
 //
-//   * `contains` mide la region encerrada por la curva **mas la cuerda** que une sus extremos, con
-//     la regla par/impar. Una curva abierta no encierra nada por si sola; cerrarla con la cuerda es
-//     la unica lectura que le da sentido a "adentro", y es la del JDK.
+//   * `contains` measures the region enclosed by the curve **plus the chord** joining its ends, with
+//     the even-odd rule. An open curve encloses nothing on its own; closing it with the chord is the
+//     only reading that gives "inside" a meaning, and it is the JDK's.
 //
-// Sobre `solveCubic`: se resuelve por el metodo trigonometrico/de Cardano de Numerical Recipes (5.6)
-// --el mismo que usa el JDK-- y despues se pulen las raices con dos pasos de Newton. El pulido no es
-// decorativo: la formula cerrada pierde precision cuando dos raices estan cerca, y sin el las
-// raices dobles salen con un error de 1e-8 en vez de 1e-15. El **orden** en que quedan las raices no
-// esta especificado por el contrato ni aca ni en el JDK, asi que compararlas contra el JDK exige
-// ordenarlas primero; la prueba CgeomCubicTest lo hace.
+// On `solveCubic`: it is solved by Numerical Recipes' (5.6) trigonometric/Cardano method --the same
+// one the JDK uses-- and then the roots are polished with two Newton steps. The polishing is not
+// decorative: the closed formula loses precision when two roots are close, and without it the double
+// roots come out with an error of 1e-8 instead of 1e-15. The **order** the roots are left in is
+// specified by the contract neither here nor in the JDK, so comparing them against the JDK demands
+// sorting them first; the CgeomAwtTest test does that.
 public abstract class CubicCurve2D implements Shape, Cloneable {
 
-    // Curva con coordenadas float.
+    // A curve with float coordinates.
     public static class Float extends CubicCurve2D implements java.io.Serializable {
 
         public float x1;
@@ -126,7 +126,7 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         }
     }
 
-    // Curva con coordenadas double.
+    // A curve with double coordinates.
     public static class Double extends CubicCurve2D implements java.io.Serializable {
 
         public double x1;
@@ -267,8 +267,9 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
                  c.getCtrlX2(), c.getCtrlY2(), c.getX2(), c.getY2());
     }
 
-    // "Planitud": la mayor de las dos distancias de los puntos de control a la cuerda, al cuadrado.
-    // Es la medida con la que el aplanador decide si un trozo ya se puede dibujar como un segmento.
+    // "Flatness": the greater of the two distances from the control points to the chord, squared.
+    // It is the measure the flattener decides with whether a piece can be drawn as a segment
+    // already.
     public static double getFlatnessSq(double x1, double y1,
                                        double ctrlx1, double ctrly1,
                                        double ctrlx2, double ctrly2,
@@ -308,8 +309,8 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         subdivide(this, left, right);
     }
 
-    // Corte de De Casteljau en t=0.5. Se hace solo con sumas y una division por 2, que es exacta en
-    // binario: subdividir no introduce error de redondeo propio.
+    // A De Casteljau cut at t=0.5. It is done with additions alone and one division by 2, which is
+    // exact in binary: subdividing introduces no rounding error of its own.
     public static void subdivide(CubicCurve2D src, CubicCurve2D left, CubicCurve2D right) {
         double x1 = src.getX1();
         double y1 = src.getY1();
@@ -392,8 +393,8 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         return solveCubic(eqn, eqn);
     }
 
-    // eqn = {c, b, a, d} con d*t^3 + a*t^2 + b*t + c = 0. Devuelve cuantas raices reales hay y las
-    // deja en `res`. Devolver -1 significa "infinitas" (la ecuacion es 0 = 0).
+    // eqn = {c, b, a, d} with d*t^3 + a*t^2 + b*t + c = 0. It returns how many real roots there are
+    // and leaves them in `res`. Returning -1 means "infinitely many" (the equation is 0 = 0).
     public static int solveCubic(double[] eqn, double[] res) {
         double d = eqn[3];
         if (d == 0.0) {
@@ -402,8 +403,8 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         double a = eqn[2] / d;
         double b = eqn[1] / d;
         double c = eqn[0] / d;
-        // Se copian los coeficientes originales antes de escribir en `res`, que puede ser el mismo
-        // arreglo: el pulido de Newton los necesita intactos.
+        // The original coefficients are copied before writing into `res`, which may be the same
+        // array: Newton's polishing needs them intact.
         double[] orig = new double[4];
         orig[0] = eqn[0];
         orig[1] = eqn[1];
@@ -417,7 +418,7 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         double q3 = q * q * q;
         double a3 = a / 3.0;
         if (r2 < q3) {
-            // Tres raices reales distintas: forma trigonometrica.
+            // Three distinct real roots: the trigonometric form.
             double theta = Math.acos(r / Math.sqrt(q3));
             double m = -2.0 * Math.sqrt(q);
             res[0] = m * Math.cos(theta / 3.0) - a3;
@@ -425,7 +426,7 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
             res[2] = m * Math.cos((theta - Math.PI * 2.0) / 3.0) - a3;
             roots = 3;
         } else {
-            // Una raiz real: forma de Cardano.
+            // One real root: Cardano's form.
             boolean neg = (r < 0.0);
             double s = Math.sqrt(r2 - q3);
             double rr = r;
@@ -451,8 +452,9 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         return roots;
     }
 
-    // Dos pasos de Newton sobre el polinomio original. Se aborta si la derivada es cero o si el paso
-    // no mejora: pulir de mas puede alejar la raiz cuando ya se llego al limite del double.
+    // Two Newton steps over the original polynomial. It aborts if the derivative is zero or if the
+    // step does not improve: over-polishing can push the root away once the double's limit has been
+    // reached.
     private static double refine(double[] eqn, double t) {
         for (int k = 0; k < 2; k = k + 1) {
             double f = ((eqn[3] * t + eqn[2]) * t + eqn[1]) * t + eqn[0];
@@ -473,8 +475,8 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
         return t;
     }
 
-    // "Adentro" es la region que encierran la curva y la cuerda entre sus extremos, con la regla
-    // par/impar. Un x o y infinito o NaN da false: no hay punto que examinar.
+    // "Inside" is the region enclosed by the curve and the chord between its ends, with the
+    // even-odd rule. An infinite or NaN x or y gives false: there is no point to examine.
     public boolean contains(double x, double y) {
         if (!(x * 0.0 + y * 0.0 == 0.0)) {
             return false;
@@ -500,8 +502,8 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
             return false;
         }
         int numCrossings = rectCrossings(x, y, w, h);
-        // Basta con que la cuenta no sea cero: RECT_INTERSECTS tampoco lo es, y las dos cosas
-        // --borde tocado o interior no vacio-- significan que hay interseccion.
+        // It is enough for the count not to be zero: RECT_INTERSECTS is not zero either, and both
+        // things --an edge touched or a non-empty interior-- mean they intersect.
         return numCrossings != 0;
     }
 
@@ -514,8 +516,8 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
             return false;
         }
         int numCrossings = rectCrossings(x, y, w, h);
-        // Aca si hace falta separar: RECT_INTERSECTS quiere decir que el borde de la curva entra al
-        // rectangulo, y entonces el rectangulo no esta contenido aunque los cruces no sean cero.
+        // Here they do have to be told apart: RECT_INTERSECTS means the curve's edge enters the
+        // rectangle, and then the rectangle is not contained even if the crossings are not zero.
         return !(numCrossings == 0 || numCrossings == Curve.RECT_INTERSECTS);
     }
 
@@ -532,9 +534,9 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
                 return crossings;
             }
         }
-        // La curva se recorre al reves para que su sentido cierre con el de la cuerda, que ya se
-        // conto en la direccion contraria. Con los dos en el mismo sentido los cruces se cancelan y
-        // `contains` daria false para todo.
+        // The curve is walked backwards so that its direction closes with the chord's, which was
+        // already counted in the opposite direction. With both going the same way the crossings
+        // cancel and `contains` would give false for everything.
         return Curve.rectCrossingsForCubic(crossings, x, y, x + w, y + h,
                                            getX2(), getY2(),
                                            getCtrlX2(), getCtrlY2(),
@@ -543,14 +545,14 @@ public abstract class CubicCurve2D implements Shape, Cloneable {
     }
 
     /**
-     * La caja **ajustada** de la curva: la mas chica que la contiene.
+     * The curve's **tight** box: the smallest one containing it.
      *
-     * <p>No es la del poligono de control, que seria una cota valida y mas facil de calcular. Es lo
-     * que devuelve el JDK, comprobado corriendo el mismo caso con `java` de verdad. Ver
-     * {@link CurveBounds}, que resuelve las derivadas.
+     * <p>It is not the control polygon's, which would be a valid bound and easier to work out. It is
+     * what the JDK returns, checked by running the same case with the real `java`. See
+     * {@link CurveBounds}, which solves the derivatives.
      *
-     * <p>El JDK declara este metodo concreto aca y no en las subclases anidadas, asi que `Float`
-     * tambien devuelve un `Rectangle2D.Double`; se respeta.
+     * <p>The JDK declares this concrete method here and not in the nested subclasses, so `Float`
+     * also returns a `Rectangle2D.Double`; that is honoured.
      */
     public Rectangle2D getBounds2D() {
         double[] xs = CurveBounds.cubic(getX1(), getCtrlX1(), getCtrlX2(), getX2());

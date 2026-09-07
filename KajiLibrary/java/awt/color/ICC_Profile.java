@@ -10,49 +10,49 @@ import java.io.OutputStream;
 import java.io.Serializable;
 
 /**
- * Un perfil ICC: la descripcion de un espacio de color en el formato de la especificacion ICC.1.
+ * An ICC profile: the description of a colour space in the ICC.1 specification's format.
  *
- * <p>Un perfil son bytes con una estructura fija: una **cabecera de 128 bytes** con lo esencial
- * --que espacio describe, contra que espacio de conexion, que version-- y despues una **tabla de
- * etiquetas**, cada una con su firma de cuatro caracteres, su offset y su tamano. Todo lo demas
- * --la matriz de un perfil RGB, sus curvas de respuesta, el punto blanco-- vive en esas etiquetas.
+ * <p>A profile is bytes with a fixed structure: a **128-byte header** with the essentials --which
+ * space it describes, against which connection space, which version-- and then a **tag table**, each
+ * entry with its four-character signature, its offset and its size. Everything else --an RGB
+ * profile's matrix, its response curves, the white point-- lives in those tags.
  *
- * <p>Esta clase lee y escribe ese formato de verdad: {@link #getInstance(byte[])} valida la firma
- * `acsp` y recorre la tabla, {@link #getData(int)} devuelve los bytes de una etiqueta,
- * {@link #setData} la reemplaza reconstruyendo la tabla, y {@link #write(OutputStream)} vuelca el
- * perfil entero. Un perfil leido y vuelto a escribir sale byte a byte igual.
+ * <p>This class really reads and writes that format: {@link #getInstance(byte[])} validates the
+ * `acsp` signature and walks the table, {@link #getData(int)} returns a tag's bytes,
+ * {@link #setData} replaces it by rebuilding the table, and {@link #write(OutputStream)} dumps the
+ * whole profile. A profile read and written back out comes out byte for byte the same.
  *
- * <h2>Los perfiles integrados</h2>
+ * <h2>The built-in profiles</h2>
  *
- * <p>{@link #getInstance(int)} devuelve uno de los espacios estandar. El JDK los trae como archivos
- * de recurso; aca se **construyen** a partir de las constantes del estandar --la matriz sRGB
- * adaptada a D50, la curva de IEC 61966-2-1, el punto blanco--. Son perfiles ICC validos, no
- * imitaciones: se pueden escribir a un archivo y otro programa los lee.
+ * <p>{@link #getInstance(int)} returns one of the standard spaces. The JDK ships them as resource
+ * files; here they are **built** out of the standard's constants --the sRGB matrix adapted to D50,
+ * IEC 61966-2-1's curve, the white point. They are valid ICC profiles, not imitations: they can be
+ * written to a file and another program reads them.
  *
- * <p>La forma de cada uno sigue la del JDK, comprobada contra el:
+ * <p>The shape of each follows the JDK's, checked against it:
  *
  * <ul>
- * <li><b>sRGB</b> es un {@link ICC_ProfileRGB} de clase display con las curvas como **tabla** de
- *     1024 puntos, asi que {@code getGamma} tira y {@code getTRC} contesta.</li>
- * <li><b>RGB lineal</b> es igual pero con las curvas como **gamma 1.0**, asi que es al reves:
- *     {@code getGamma} contesta y {@code getTRC} tira.</li>
- * <li><b>Gris</b> es un {@link ICC_ProfileGray} con gamma 1.0.</li>
- * <li><b>CIEXYZ</b> es un perfil abstracto sin matriz ni curvas.</li>
+ * <li><b>sRGB</b> is a display-class {@link ICC_ProfileRGB} with the curves as a 1024-point
+ *     **table**, so {@code getGamma} throws and {@code getTRC} answers.</li>
+ * <li><b>Linear RGB</b> is the same but with the curves as **gamma 1.0**, so it is the other way
+ *     round: {@code getGamma} answers and {@code getTRC} throws.</li>
+ * <li><b>Grey</b> is an {@link ICC_ProfileGray} with gamma 1.0.</li>
+ * <li><b>CIEXYZ</b> is an abstract profile with neither matrix nor curves.</li>
  * </ul>
  *
- * <p><strong>{@link ColorSpace#CS_PYCC} no esta</strong>, y es la unica ausencia. PhotoYCC no se
- * define por formulas sino por **tablas de interpolacion** de 230 KB que vienen dentro del perfil:
- * sin ese archivo no hay nada que construir, y armar un perfil vacio con su firma seria un objeto
- * que dice ser PhotoYCC y no convierte como PhotoYCC. {@code getInstance(CS_PYCC)} tira diciendo
- * eso.
+ * <p><strong>{@link ColorSpace#CS_PYCC} is not here</strong>, and it is the only absence. PhotoYCC is
+ * defined not by formulas but by 230 KB of **interpolation tables** that come inside the profile:
+ * without that file there is nothing to build, and assembling an empty profile with its signature
+ * would be an object claiming to be PhotoYCC that does not convert like PhotoYCC.
+ * {@code getInstance(CS_PYCC)} throws saying so.
  */
 public class ICC_Profile implements Serializable {
 
     private static final long serialVersionUID = -3938515861990936766L;
 
 
-    // ---- Las siete clases de perfil, en la numeracion de esta API (0..6). No son las
-    // firmas ICC: para eso estan las `icSig...Class`.
+    // ---- The seven profile classes, in this API's numbering (0..6). They are not the ICC
+    // signatures: the `icSig...Class` constants are for that.
 
     /** `CLASS_INPUT`. */
     public static final int CLASS_INPUT = 0;
@@ -69,7 +69,7 @@ public class ICC_Profile implements Serializable {
     /** `CLASS_NAMEDCOLOR`. */
     public static final int CLASS_NAMEDCOLOR = 6;
 
-    // ---- Los espacios de color, por su firma ICC de cuatro caracteres empaquetada en
+    // ---- The colour spaces, by their four-character ICC signature packed into
     // un `int`. `icSigRgbData` es 'RGB ' leido como big-endian.
 
     /** `icSigXYZData`. */
@@ -123,7 +123,7 @@ public class ICC_Profile implements Serializable {
     /** `icSigSpaceFCLR`. */
     public static final int icSigSpaceFCLR = 1178815570;
 
-    // ---- Las clases de perfil, por su firma.
+    // ---- The profile classes, by their signature.
 
     /** `icSigInputClass`. */
     public static final int icSigInputClass = 1935896178;
@@ -140,7 +140,7 @@ public class ICC_Profile implements Serializable {
     /** `icSigNamedColorClass`. */
     public static final int icSigNamedColorClass = 1852662636;
 
-    // ---- Los propositos de renderizado (§6.1.11 de ICC.1).
+    // ---- The rendering intents (ICC.1 §6.1.11).
 
     /** `icPerceptual`. */
     public static final int icPerceptual = 0;
@@ -155,10 +155,10 @@ public class ICC_Profile implements Serializable {
     /** `icICCAbsoluteColorimetric`. */
     public static final int icICCAbsoluteColorimetric = 3;
 
-    // ---- Las etiquetas. `icSigHead` no es una etiqueta de verdad: es el valor que se le
-    // pasa a `getData`/`setData` para llegar a la cabecera de 128 bytes.
+    // ---- The tags. `icSigHead` is not a real tag: it is the value passed to `getData`/`setData`
+    // to reach the 128-byte header.
 
-    /** El pseudo-tag de la cabecera; ver el comentario del grupo. */
+    /** The header's pseudo-tag; see the group's comment. */
     public static final int icSigHead = 1751474532;
     /** `icSigAToB0Tag`. */
     public static final int icSigAToB0Tag = 1093812784;
@@ -263,23 +263,23 @@ public class ICC_Profile implements Serializable {
     /** `icSigColorantTableTag`. */
     public static final int icSigColorantTableTag = 1668051572;
 
-    // ---- Los offsets dentro de la cabecera de 128 bytes.
+    // ---- The offsets inside the 128-byte header.
 
-    /** Offset del tamano total del perfil. */
+    /** Offset of the profile's total size. */
     public static final int icHdrSize = 0;
     /** `icHdrCmmId`. */
     public static final int icHdrCmmId = 4;
-    /** Offset de la version. */
+    /** Offset of the version. */
     public static final int icHdrVersion = 8;
-    /** Offset de la clase de perfil. */
+    /** Offset of the profile class. */
     public static final int icHdrDeviceClass = 12;
-    /** Offset del espacio de color del dispositivo. */
+    /** Offset of the device's colour space. */
     public static final int icHdrColorSpace = 16;
-    /** Offset del espacio de conexion (siempre XYZ o Lab). */
+    /** Offset of the connection space (always XYZ or Lab). */
     public static final int icHdrPcs = 20;
     /** `icHdrDate`. */
     public static final int icHdrDate = 24;
-    /** Offset de la firma `acsp`, que es lo que hace valido a un perfil. */
+    /** Offset of the `acsp` signature, which is what makes a profile valid. */
     public static final int icHdrMagic = 36;
     /** `icHdrPlatform`. */
     public static final int icHdrPlatform = 40;
@@ -293,93 +293,93 @@ public class ICC_Profile implements Serializable {
     public static final int icHdrAttributes = 56;
     /** `icHdrRenderingIntent`. */
     public static final int icHdrRenderingIntent = 64;
-    /** Offset del iluminante, que ICC fija en D50. */
+    /** Offset of the illuminant, which ICC fixes at D50. */
     public static final int icHdrIlluminant = 68;
     /** `icHdrCreator`. */
     public static final int icHdrCreator = 80;
     /** `icHdrProfileID`. */
     public static final int icHdrProfileID = 84;
 
-    // ---- Los offsets dentro de una etiqueta.
+    // ---- The offsets inside a tag.
 
     /** `icTagType`. */
     public static final int icTagType = 0;
     /** `icTagReserved`. */
     public static final int icTagReserved = 4;
-    /** Offset de la cantidad de puntos de un `curveType`. */
+    /** Offset of a `curveType`'s point count. */
     public static final int icCurveCount = 8;
-    /** Offset del primer punto de un `curveType`. */
+    /** Offset of a `curveType`'s first point. */
     public static final int icCurveData = 12;
-    /** Offset de la X dentro de un `XYZType`. */
+    /** Offset of the X inside an `XYZType`. */
     public static final int icXYZNumberX = 8;
 
-    // El perfil entero. Es la unica fuente de verdad: los accesores leen de aca en vez de guardar
-    // campos aparte, para que `setData` no pueda dejar el objeto contradiciendose consigo mismo.
+    // The whole profile. It is the single source of truth: the accessors read from here instead of
+    // keeping separate fields, so that `setData` cannot leave the object contradicting itself.
     private byte[] data;
 
     ICC_Profile(byte[] data) {
         this.data = data;
     }
 
-    // ---- lectura de enteros big-endian, que es como ICC guarda todo -----------------------------
+    // ---- reading big-endian integers, which is how ICC stores everything ------------------------
 
-    private static int leerInt(byte[] b, int off) {
+    private static int readInt(byte[] b, int off) {
         return ((b[off] & 0xFF) << 24) | ((b[off + 1] & 0xFF) << 16)
                 | ((b[off + 2] & 0xFF) << 8) | (b[off + 3] & 0xFF);
     }
 
-    private static int leerShort(byte[] b, int off) {
+    private static int readShort(byte[] b, int off) {
         return ((b[off] & 0xFF) << 8) | (b[off + 1] & 0xFF);
     }
 
-    private static void escribirInt(byte[] b, int off, int v) {
+    private static void writeInt(byte[] b, int off, int v) {
         b[off] = (byte) (v >> 24);
         b[off + 1] = (byte) (v >> 16);
         b[off + 2] = (byte) (v >> 8);
         b[off + 3] = (byte) v;
     }
 
-    private static void escribirShort(byte[] b, int off, int v) {
+    private static void writeShort(byte[] b, int off, int v) {
         b[off] = (byte) (v >> 8);
         b[off + 1] = (byte) v;
     }
 
-    /** El tamano de la cabecera, que el formato fija. */
-    private static final int LARGO_CABECERA = 128;
+    /** The header's size, which the format fixes. */
+    private static final int HEADER_LEN = 128;
 
-    /** La firma `acsp`, sin la cual los bytes no son un perfil. */
+    /** The `acsp` signature, without which the bytes are not a profile. */
     private static final int MAGIC = 0x61637370;
 
     // ---- fabricas ------------------------------------------------------------------------------
 
     /**
-     * El perfil que describen esos bytes.
+     * The profile those bytes describe.
      *
-     * <p>Se comprueban el tamano declarado y la firma `acsp`. Lo que **no** se comprueba es que
-     * cada etiqueta tenga sentido: eso lo descubre quien la pida, y adelantarlo obligaria a
-     * entender etiquetas que esta biblioteca no interpreta.
+     * <p>The declared size and the `acsp` signature are checked. What is **not** checked is that each
+     * tag makes sense: that is discovered by whoever asks for it, and doing it up front would mean
+     * understanding tags this library does not interpret.
      *
-     * @throws IllegalArgumentException si los bytes no son un perfil valido
+     * @throws IllegalArgumentException if the bytes are not a valid profile
      */
     public static ICC_Profile getInstance(byte[] data) {
-        if (data == null || data.length < LARGO_CABECERA) {
+        if (data == null || data.length < HEADER_LEN) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
-        int declarado = leerInt(data, icHdrSize);
-        if (declarado < LARGO_CABECERA || declarado > data.length) {
+        int declarado = readInt(data, icHdrSize);
+        if (declarado < HEADER_LEN || declarado > data.length) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
-        if (leerInt(data, icHdrMagic) != MAGIC) {
+        if (readInt(data, icHdrMagic) != MAGIC) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
-        byte[] copia = new byte[declarado];
-        System.arraycopy(data, 0, copia, 0, declarado);
-        return conClaseSegunEspacio(copia);
+        byte[] copy = new byte[declarado];
+        System.arraycopy(data, 0, copy, 0, declarado);
+        return conClaseSegunEspacio(copy);
     }
 
-    // La subclase que corresponde segun el espacio y las etiquetas presentes. El JDK hace lo mismo:
-    // un perfil RGB con matriz y curvas es un `ICC_ProfileRGB`, uno gris con curva es un
-    // `ICC_ProfileGray`, y cualquier otro es un `ICC_Profile` a secas.
+    // The subclass that suits the space and the tags present. The JDK does the same: an RGB profile
+    // with matrix and curves is an `ICC_ProfileRGB`, a grey one with a curve is an `ICC_ProfileGray`,
+    // and anything else is a plain `ICC_Profile`.
     private static ICC_Profile conClaseSegunEspacio(byte[] d) {
         ICC_Profile crudo = new ICC_Profile(d);
         int espacio = crudo.getColorSpaceType();
@@ -397,10 +397,10 @@ public class ICC_Profile implements Serializable {
     }
 
     /**
-     * Uno de los perfiles integrados.
+     * One of the built-in profiles.
      *
-     * @throws IllegalArgumentException si el identificador no es uno de los `ColorSpace.CS_`, o si
-     *     es {@link ColorSpace#CS_PYCC} -- ver la nota de la clase
+     * @throws IllegalArgumentException if the identifier is not one of the `ColorSpace.CS_`, or if it
+     *     is {@link ColorSpace#CS_PYCC} -- see the class's note
      */
     public static ICC_Profile getInstance(int cspace) {
         if (cspace == ColorSpace.CS_sRGB) {
@@ -417,17 +417,17 @@ public class ICC_Profile implements Serializable {
         }
         if (cspace == ColorSpace.CS_PYCC) {
             throw new IllegalArgumentException(
-                    "CS_PYCC no esta disponible: su perfil son tablas de interpolacion que esta "
+                    "CS_PYCC is not available: its profile is interpolation tables that this "
                             + "biblioteca no trae, y no se pueden derivar de ninguna formula");
         }
         throw new IllegalArgumentException("Unknown color space");
     }
 
     /**
-     * El perfil que hay en ese archivo.
+     * The profile in that file.
      *
-     * @throws IOException si no se puede leer
-     * @throws IllegalArgumentException si el contenido no es un perfil valido
+     * @throws IOException if it cannot be read
+     * @throws IllegalArgumentException if the contents are not a valid profile
      */
     public static ICC_Profile getInstance(String fileName) throws IOException {
         FileInputStream in = new FileInputStream(new File(fileName));
@@ -439,64 +439,64 @@ public class ICC_Profile implements Serializable {
     }
 
     /**
-     * El perfil que viene por ese flujo.
+     * The profile coming over that stream.
      *
-     * <p>Lee **exactamente** los bytes que la cabecera declara y no uno mas: un perfil puede venir
-     * incrustado en un archivo mas grande --dentro de un JPEG, por ejemplo-- y consumir hasta el
-     * final se llevaria puesto lo que sigue.
+     * <p>It reads **exactly** the bytes the header declares and not one more: a profile may come
+     * embedded in a larger file --inside a JPEG, say-- and consuming to the end would take what
+     * follows with it.
      *
-     * @throws IOException si el flujo se corta antes de tiempo
-     * @throws IllegalArgumentException si lo que llega no es un perfil valido
+     * @throws IOException if the stream is cut short
+     * @throws IllegalArgumentException if what arrives is not a valid profile
      */
     public static ICC_Profile getInstance(InputStream s) throws IOException {
-        byte[] cabecera = new byte[LARGO_CABECERA];
-        leerCompleto(s, cabecera, 0, LARGO_CABECERA);
-        int total = leerInt(cabecera, icHdrSize);
-        if (total < LARGO_CABECERA) {
+        byte[] header = new byte[HEADER_LEN];
+        readFully(s, header, 0, HEADER_LEN);
+        int total = readInt(header, icHdrSize);
+        if (total < HEADER_LEN) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
-        byte[] todo = new byte[total];
-        System.arraycopy(cabecera, 0, todo, 0, LARGO_CABECERA);
-        leerCompleto(s, todo, LARGO_CABECERA, total - LARGO_CABECERA);
-        return getInstance(todo);
+        byte[] all = new byte[total];
+        System.arraycopy(header, 0, all, 0, HEADER_LEN);
+        readFully(s, all, HEADER_LEN, total - HEADER_LEN);
+        return getInstance(all);
     }
 
-    private static void leerCompleto(InputStream s, byte[] buf, int off, int len)
+    private static void readFully(InputStream s, byte[] buf, int off, int len)
             throws IOException {
         int puestos = 0;
         while (puestos < len) {
             int n = s.read(buf, off + puestos, len - puestos);
             if (n < 0) {
-                throw new IOException("el perfil se corta antes de lo que declara su cabecera");
+                throw new IOException("the profile is cut short of what its header declares");
             }
             puestos = puestos + n;
         }
     }
 
-    // ---- la cabecera ---------------------------------------------------------------------------
+    // ---- the header ----------------------------------------------------------------------------
 
-    /** La parte mayor de la version. Un perfil 2.4 devuelve 2. */
+    /** The version's major part. A 2.4 profile returns 2. */
     public int getMajorVersion() {
         return this.data[icHdrVersion] & 0xFF;
     }
 
     /**
-     * La parte menor de la version, con los dos digitos juntos.
+     * The version's minor part, with both digits together.
      *
-     * <p>El byte trae dos numeros de cuatro bits --menor y correccion-- y este metodo los devuelve
-     * como esta escrito: un 0x48 es 48, o sea version 2.4.8. Es lo que contesta el JDK.
+     * <p>The byte carries two four-bit numbers --minor and fix-- and this method returns them as
+     * written: a 0x48 is 48, that is, version 2.4.8. It is what the JDK answers.
      */
     public int getMinorVersion() {
         return this.data[icHdrVersion + 1] & 0xFF;
     }
 
     /**
-     * La clase de perfil, como una de las constantes `CLASS_`.
+     * The profile's class, as one of the `CLASS_` constants.
      *
-     * @throws IllegalArgumentException si la firma de la cabecera no es ninguna conocida
+     * @throws IllegalArgumentException if the header's signature is none of the known ones
      */
     public int getProfileClass() {
-        int sig = leerInt(this.data, icHdrDeviceClass);
+        int sig = readInt(this.data, icHdrDeviceClass);
         if (sig == icSigInputClass) {
             return CLASS_INPUT;
         }
@@ -521,14 +521,14 @@ public class ICC_Profile implements Serializable {
         throw new IllegalArgumentException("Unknown profile class");
     }
 
-    /** El espacio del dispositivo, como una constante `ColorSpace.TYPE_`. */
+    /** The device's space, as a `ColorSpace.TYPE_` constant. */
     public int getColorSpaceType() {
-        return tipoDeFirma(leerInt(this.data, icHdrColorSpace));
+        return tipoDeFirma(readInt(this.data, icHdrColorSpace));
     }
 
-    /** El espacio de conexion, como una constante `ColorSpace.TYPE_`. */
+    /** The connection space, as a `ColorSpace.TYPE_` constant. */
     public int getPCSType() {
-        return tipoDeFirma(leerInt(this.data, icHdrPcs));
+        return tipoDeFirma(readInt(this.data, icHdrPcs));
     }
 
     private static int tipoDeFirma(int sig) {
@@ -565,7 +565,7 @@ public class ICC_Profile implements Serializable {
         if (sig == icSigCmyData) {
             return ColorSpace.TYPE_CMY;
         }
-        // Los genericos `nCLR` van seguidos, y su firma tambien: 2CLR..FCLR se mapean a
+        // The generic `nCLR` ones run consecutively, and so do their signatures: 2CLR..FCLR map to
         // TYPE_2CLR..TYPE_FCLR sin tabla.
         if (sig >= icSigSpace2CLR && sig <= icSigSpaceFCLR) {
             int i = 0;
@@ -583,7 +583,7 @@ public class ICC_Profile implements Serializable {
         throw new IllegalArgumentException("Unknown color space");
     }
 
-    /** Cuantos componentes tiene el espacio del dispositivo. */
+    /** How many components the device's space has. */
     public int getNumComponents() {
         int t = this.getColorSpaceType();
         if (t == ColorSpace.TYPE_GRAY) {
@@ -598,9 +598,9 @@ public class ICC_Profile implements Serializable {
         return 3;
     }
 
-    // ---- las etiquetas -------------------------------------------------------------------------
+    // ---- the tags ------------------------------------------------------------------------------
 
-    /** Una copia del perfil entero. */
+    /** A copy of the whole profile. */
     public byte[] getData() {
         byte[] out = new byte[this.data.length];
         System.arraycopy(this.data, 0, out, 0, this.data.length);
@@ -608,26 +608,26 @@ public class ICC_Profile implements Serializable {
     }
 
     /**
-     * Los bytes de esa etiqueta, o **nulo si el perfil no la tiene**.
+     * That tag's bytes, or **null if the profile does not have it**.
      *
-     * <p>Devolver nulo y no tirar es lo que permite preguntar por una etiqueta opcional sin
-     * envolver la llamada en un `try`. Con {@link #icSigHead} devuelve la cabecera.
+     * <p>Returning null rather than throwing is what allows an optional tag to be asked for without
+     * wrapping the call in a `try`. With {@link #icSigHead} it returns the header.
      */
     public byte[] getData(int tagSignature) {
         if (tagSignature == icSigHead) {
-            byte[] out = new byte[LARGO_CABECERA];
-            System.arraycopy(this.data, 0, out, 0, LARGO_CABECERA);
+            byte[] out = new byte[HEADER_LEN];
+            System.arraycopy(this.data, 0, out, 0, HEADER_LEN);
             return out;
         }
-        int n = leerInt(this.data, LARGO_CABECERA);
+        int n = readInt(this.data, HEADER_LEN);
         for (int i = 0; i < n; i++) {
-            int e = LARGO_CABECERA + 4 + i * 12;
-            if (leerInt(this.data, e) == tagSignature) {
-                int off = leerInt(this.data, e + 4);
-                int len = leerInt(this.data, e + 8);
+            int e = HEADER_LEN + 4 + i * 12;
+            if (readInt(this.data, e) == tagSignature) {
+                int off = readInt(this.data, e + 4);
+                int len = readInt(this.data, e + 8);
                 if (off < 0 || len < 0 || off + len > this.data.length) {
                     throw new IllegalArgumentException(
-                            "una etiqueta del perfil apunta fuera de sus datos");
+                            "a tag of the profile points outside its data");
                 }
                 byte[] out = new byte[len];
                 System.arraycopy(this.data, off, out, 0, len);
@@ -638,34 +638,34 @@ public class ICC_Profile implements Serializable {
     }
 
     /**
-     * Reemplaza esa etiqueta, o la agrega si no estaba.
+     * Replaces that tag, or adds it if it was not there.
      *
-     * <p>Reconstruye el perfil entero: la tabla de etiquetas guarda offsets, asi que cambiar el
-     * tamano de una mueve a todas las que van despues. Hacerlo en el lugar solo funcionaria cuando
-     * el tamano coincidiera, y esa asimetria es justo la clase de cosa que rompe una vez cada mil.
+     * <p>It rebuilds the whole profile: the tag table stores offsets, so changing one's size moves
+     * every one that comes after it. Doing it in place would only work when the size happened to
+     * match, and that asymmetry is exactly the kind of thing that breaks once in a thousand times.
      *
-     * @throws IllegalArgumentException si se pasa {@link #icSigHead} con algo que no mida 128
-     *     bytes
+     * @throws IllegalArgumentException if {@link #icSigHead} is passed with something that is not 128
+     *     bytes long
      */
     public void setData(int tagSignature, byte[] tagData) {
         if (tagSignature == icSigHead) {
-            if (tagData == null || tagData.length != LARGO_CABECERA) {
-                throw new IllegalArgumentException("la cabecera mide 128 bytes");
+            if (tagData == null || tagData.length != HEADER_LEN) {
+                throw new IllegalArgumentException("la header mide 128 bytes");
             }
-            System.arraycopy(tagData, 0, this.data, 0, LARGO_CABECERA);
+            System.arraycopy(tagData, 0, this.data, 0, HEADER_LEN);
             return;
         }
-        int n = leerInt(this.data, LARGO_CABECERA);
+        int n = readInt(this.data, HEADER_LEN);
         int[] firmas = new int[n + 1];
         byte[][] cuerpos = new byte[n + 1][];
         int cuantas = 0;
         boolean reemplazada = false;
         for (int i = 0; i < n; i++) {
-            int e = LARGO_CABECERA + 4 + i * 12;
-            int sig = leerInt(this.data, e);
+            int e = HEADER_LEN + 4 + i * 12;
+            int sig = readInt(this.data, e);
             if (sig == tagSignature) {
                 if (tagData == null) {
-                    // Un `null` borra la etiqueta, que es lo que hace el JDK.
+                    // A `null` deletes the tag, which is what the JDK does.
                     reemplazada = true;
                     continue;
                 }
@@ -684,42 +684,42 @@ public class ICC_Profile implements Serializable {
             cuerpos[cuantas] = tagData;
             cuantas = cuantas + 1;
         }
-        byte[] cabecera = new byte[LARGO_CABECERA];
-        System.arraycopy(this.data, 0, cabecera, 0, LARGO_CABECERA);
-        this.data = armar(cabecera, firmas, cuerpos, cuantas);
+        byte[] header = new byte[HEADER_LEN];
+        System.arraycopy(this.data, 0, header, 0, HEADER_LEN);
+        this.data = assemble(header, firmas, cuerpos, cuantas);
     }
 
     /**
-     * Arma un perfil desde su cabecera y sus etiquetas.
+     * Assembles a profile from its header and its tags.
      *
-     * <p>Cada etiqueta se alinea a cuatro bytes, como pide el formato, y el relleno queda en cero.
-     * El tamano total se escribe en la cabecera al final, cuando ya se sabe.
+     * <p>Each tag is aligned to four bytes, as the format requires, and the padding is left at zero.
+     * The total size is written into the header at the end, once it is known.
      */
-    static byte[] armar(byte[] cabecera, int[] firmas, byte[][] cuerpos, int cuantas) {
-        int off = LARGO_CABECERA + 4 + cuantas * 12;
+    static byte[] assemble(byte[] header, int[] firmas, byte[][] cuerpos, int cuantas) {
+        int off = HEADER_LEN + 4 + cuantas * 12;
         int[] offsets = new int[cuantas];
         for (int i = 0; i < cuantas; i++) {
             offsets[i] = off;
             off = off + ((cuerpos[i].length + 3) & ~3);
         }
         byte[] out = new byte[off];
-        System.arraycopy(cabecera, 0, out, 0, LARGO_CABECERA);
-        escribirInt(out, LARGO_CABECERA, cuantas);
+        System.arraycopy(header, 0, out, 0, HEADER_LEN);
+        writeInt(out, HEADER_LEN, cuantas);
         for (int i = 0; i < cuantas; i++) {
-            int e = LARGO_CABECERA + 4 + i * 12;
-            escribirInt(out, e, firmas[i]);
-            escribirInt(out, e + 4, offsets[i]);
-            escribirInt(out, e + 8, cuerpos[i].length);
+            int e = HEADER_LEN + 4 + i * 12;
+            writeInt(out, e, firmas[i]);
+            writeInt(out, e + 4, offsets[i]);
+            writeInt(out, e + 8, cuerpos[i].length);
             System.arraycopy(cuerpos[i], 0, out, offsets[i], cuerpos[i].length);
         }
-        escribirInt(out, icHdrSize, off);
+        writeInt(out, icHdrSize, off);
         return out;
     }
 
     /**
-     * Escribe el perfil a ese archivo.
+     * Writes the profile to that file.
      *
-     * @throws IOException si no se puede escribir
+     * @throws IOException if it cannot be written
      */
     public void write(String fileName) throws IOException {
         FileOutputStream out = new FileOutputStream(new File(fileName));
@@ -731,29 +731,29 @@ public class ICC_Profile implements Serializable {
     }
 
     /**
-     * Escribe el perfil a ese flujo. No lo cierra.
+     * Writes the profile to that stream. It does not close it.
      *
-     * @throws IOException si falla la escritura
+     * @throws IOException if the write fails
      */
     public void write(OutputStream s) throws IOException {
         s.write(this.data);
     }
 
-    // ---- lo que las subclases exponen ----------------------------------------------------------
+    // ---- what the subclasses expose ------------------------------------------------------------
     //
-    // De paquete, como en el JDK: `ICC_Profile` las tiene para que `ICC_ProfileRGB` y
-    // `ICC_ProfileGray` las publiquen con el tipo que corresponde a su espacio. Un perfil CMYK no
-    // tiene matriz, y publicarlas aca obligaria a que contestara algo.
+    // Package-private, as in the JDK: `ICC_Profile` has them so that `ICC_ProfileRGB` and
+    // `ICC_ProfileGray` can publish them with the type suiting their space. A CMYK profile has no
+    // matrix, and publishing them here would oblige it to answer something.
 
     float[] getMediaWhitePoint() {
         return this.getXYZTag(icSigMediaWhitePointTag);
     }
 
     /**
-     * Los tres numeros de una etiqueta `XYZType`.
+     * The three numbers of an `XYZType` tag.
      *
-     * <p>Vienen como s15Fixed16: enteros con signo donde el 1.0 es 0x10000. Dividir por 65536 es
-     * toda la conversion.
+     * <p>They come as s15Fixed16: signed integers where 1.0 is 0x10000. Dividing by 65536 is the
+     * whole conversion.
      */
     final float[] getXYZTag(int tagSignature) {
         byte[] t = this.getData(tagSignature);
@@ -762,79 +762,79 @@ public class ICC_Profile implements Serializable {
         }
         float[] out = new float[3];
         for (int i = 0; i < 3; i++) {
-            out[i] = leerInt(t, icXYZNumberX + i * 4) / 65536.0f;
+            out[i] = readInt(t, icXYZNumberX + i * 4) / 65536.0f;
         }
         return out;
     }
 
     /**
-     * La gamma de una curva de un solo valor.
+     * The gamma of a single-valued curve.
      *
-     * @throws ProfileDataException si la curva es una **tabla** y no una gamma -- son dos formas
-     *     distintas del mismo `curveType` y solo una tiene gamma
+     * @throws ProfileDataException if the curve is a **table** and not a gamma -- they are two
+     *     different forms of the same `curveType` and only one has a gamma
      */
     float getGamma(int tagSignature) {
         return this.gammaOfTag(tagSignature);
     }
 
     /**
-     * Lo mismo que {@link #getGamma}, con un nombre que **no se puede confundir**.
+     * The same as {@link #getGamma}, with a name that **cannot be confused**.
      *
-     * <p>Existe por una trampa del contrato heredado: `ICC_ProfileRGB.getGamma(int)` toma un
-     * numero de COMPONENTE y `ICC_Profile.getGamma(int)` toma una FIRMA de etiqueta -- misma
-     * firma de metodo, significados distintos--, asi que el segundo queda redefinido por el
-     * primero. Llamar a `perfil.getGamma(icSigRedTRCTag)` sobre un perfil RGB no lee la curva
-     * roja: interpreta la firma como componente y tira "Must be Red, Green, or Blue".
+     * <p>It exists because of a trap in the inherited contract: `ICC_ProfileRGB.getGamma(int)` takes
+     * a COMPONENT number and `ICC_Profile.getGamma(int)` takes a tag SIGNATURE -- the same method
+     * signature, different meanings -- so the second is overridden by the first. Calling
+     * `profile.getGamma(icSigRedTRCTag)` on an RGB profile does not read the red curve: it reads the
+     * signature as a component and throws "Must be Red, Green, or Blue".
      *
-     * <p>Quien quiera la curva por su etiqueta usa esta. La colision viene del JDK y no se puede
-     * arreglar sin cambiar la superficie publica.
+     * <p>Whoever wants the curve by its tag uses this one. The collision comes from the JDK and
+     * cannot be fixed without changing the public surface.
      */
     final float gammaOfTag(int tagSignature) {
         byte[] t = this.getData(tagSignature);
         if (t == null || t.length < icCurveData) {
             throw new ProfileDataException("falta la curva pedida");
         }
-        int n = leerInt(t, icCurveCount);
+        int n = readInt(t, icCurveCount);
         if (n != 1) {
             throw new ProfileDataException(
-                    "la curva es una tabla de " + n + " puntos y no una gamma");
+                    "the curve is a table of " + n + " points and not a gamma");
         }
-        // u8Fixed8: el 1.0 es 0x100.
-        return leerShort(t, icCurveData) / 256.0f;
+        // u8Fixed8: the 1.0 is 0x100.
+        return readShort(t, icCurveData) / 256.0f;
     }
 
     /**
-     * La tabla de una curva.
+     * A curve's table.
      *
-     * @throws ProfileDataException si la curva es una gamma y no una tabla
+     * @throws ProfileDataException if the curve is a gamma and not a table
      */
     short[] getTRC(int tagSignature) {
         return this.trcOfTag(tagSignature);
     }
 
-    /** Como {@link #gammaOfTag}, para la tabla. Misma trampa, misma salida. */
+    /** Like {@link #gammaOfTag}, for the table. The same trap, the same way out. */
     final short[] trcOfTag(int tagSignature) {
         byte[] t = this.getData(tagSignature);
         if (t == null || t.length < icCurveData) {
             throw new ProfileDataException("falta la curva pedida");
         }
-        int n = leerInt(t, icCurveCount);
+        int n = readInt(t, icCurveCount);
         if (n <= 1) {
-            throw new ProfileDataException("la curva es una gamma y no una tabla");
+            throw new ProfileDataException("the curve is a gamma and not a table");
         }
         short[] out = new short[n];
         for (int i = 0; i < n; i++) {
-            out[i] = (short) leerShort(t, icCurveData + i * 2);
+            out[i] = (short) readShort(t, icCurveData + i * 2);
         }
         return out;
     }
 
     /**
-     * Al deserializar, un perfil integrado vuelve a ser **la misma instancia**.
+     * On deserializing, a built-in profile becomes **the same instance** again.
      *
-     * <p>Sin esto, un `ColorSpace.getInstance(CS_sRGB).getProfile()` que viaje por serializacion
-     * dejaria de ser identico al de acá, y las comparaciones por identidad empezarian a fallar en
-     * silencio. Un perfil que no es ninguno de los integrados vuelve tal cual.
+     * <p>Without this, a `ColorSpace.getInstance(CS_sRGB).getProfile()` travelling through
+     * serialization would stop being identical to the one here, and comparisons by identity would
+     * start failing silently. A profile that is none of the built-in ones comes back as it stands.
      */
     protected Object readResolve() throws ObjectStreamException {
         int[] ids = { ColorSpace.CS_sRGB, ColorSpace.CS_LINEAR_RGB, ColorSpace.CS_GRAY,

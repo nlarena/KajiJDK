@@ -1,15 +1,15 @@
 package java.awt.geom;
 
-// java.awt.geom.Ellipse2D de KajiLibrary -- una elipse inscripta en su marco. Superficie completa.
+// KajiLibrary's java.awt.geom.Ellipse2D -- an ellipse inscribed in its frame. The surface is
+// complete.
 //
-// Todas las pruebas geometricas se hacen normalizando a un circulo de radio 0.5 centrado en el
-// origen: se divide por el ancho y el alto del marco y se resta 0.5. Asi `contains` es un solo
-// `x²+y² < 0.25` en vez de la ecuacion general de la elipse, y no hay que tratar aparte el caso
-// circular. El `<` estricto es el que corresponde: un punto exactamente sobre el borde **no** esta
-// contenido.
+// Every geometric test is done by normalizing to a circle of radius 0.5 centred on the origin: one
+// divides by the frame's width and height and subtracts 0.5. That way `contains` is a single
+// `x²+y² < 0.25` instead of the ellipse's general equation, and the circular case needs no separate
+// treatment. The strict `<` is the right one: a point exactly on the edge is **not** contained.
 public abstract class Ellipse2D extends RectangularShape {
 
-    // Elipse con coordenadas float.
+    // An ellipse with float coordinates.
     public static class Float extends Ellipse2D implements java.io.Serializable {
 
         public float x;
@@ -63,7 +63,7 @@ public abstract class Ellipse2D extends RectangularShape {
         }
     }
 
-    // Elipse con coordenadas double.
+    // An ellipse with double coordinates.
     public static class Double extends Ellipse2D implements java.io.Serializable {
 
         public double x;
@@ -114,7 +114,7 @@ public abstract class Ellipse2D extends RectangularShape {
     }
 
     public boolean contains(double x, double y) {
-        // Se lleva todo a un circulo de radio 0.5 centrado en el origen.
+        // Everything is carried over to a circle of radius 0.5 centred on the origin.
         double ellw = getWidth();
         if (ellw <= 0.0) {
             return false;
@@ -128,9 +128,9 @@ public abstract class Ellipse2D extends RectangularShape {
         return (normx * normx + normy * normy) < 0.25;
     }
 
-    // Se busca el punto del rectangulo mas cercano al centro de la elipse; si ese punto cae dentro
-    // del circulo unitario normalizado, hay interseccion. Probar solo las esquinas seria incorrecto:
-    // un rectangulo puede cruzar la elipse sin que ninguna esquina este adentro.
+    // The rectangle's point closest to the ellipse's centre is sought; if that point falls inside
+    // the normalized unit circle, they intersect. Testing only the corners would be wrong: a
+    // rectangle may cross the ellipse without any corner being inside.
     public boolean intersects(double x, double y, double w, double h) {
         if (w <= 0.0 || h <= 0.0) {
             return false;
@@ -150,10 +150,10 @@ public abstract class Ellipse2D extends RectangularShape {
         double nearx;
         double neary;
         if (normx0 > 0.0) {
-            // el centro queda a la izquierda del rectangulo
+            // the centre is left of the rectangle
             nearx = normx0;
         } else if (normx1 < 0.0) {
-            // el centro queda a la derecha
+            // the centre is right of it
             nearx = normx1;
         } else {
             nearx = 0.0;
@@ -168,7 +168,7 @@ public abstract class Ellipse2D extends RectangularShape {
         return (nearx * nearx + neary * neary) < 0.25;
     }
 
-    // La elipse es convexa, asi que alcanza con las cuatro esquinas.
+    // The ellipse is convex, so the four corners are enough.
     public boolean contains(double x, double y, double w, double h) {
         return (contains(x, y)
                 && contains(x + w, y)

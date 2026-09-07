@@ -2,32 +2,33 @@ package java.beans;
 
 import java.lang.reflect.Method;
 
-// Una propiedad a la que ademas se le puede acceder elemento por elemento: `getDatos()` devuelve
-// el arreglo entero y `getDatos(int)` un solo elemento.
+// A property that can also be reached element by element: `getData()` returns the whole array and
+// `getData(int)` a single element.
 //
-// El detalle que casi todo el mundo implementa mal, y que aca esta verificado contra el JDK real:
-// **una propiedad puramente indexada tiene propertyType null**. Si el bean declara `getSoloIdx(int)`
-// y `setSoloIdx(int, String)` pero ningun accesor de arreglo, el descriptor sale con
-// getPropertyType() == null, getReadMethod() == null y getWriteMethod() == null, y solo la mitad
-// indexada poblada. Devolver String, o String[], seria mentir sobre un accesor que no existe.
+// The detail nearly everyone implements wrongly, and that is checked here against the real JDK: **a
+// purely indexed property has a null propertyType**. If the bean declares `getIdxOnly(int)` and
+// `setIdxOnly(int, String)` but no array accessor, the descriptor comes out with
+// getPropertyType() == null, getReadMethod() == null and getWriteMethod() == null, and only the
+// indexed half filled in. Returning String, or String[], would be lying about an accessor that does
+// not exist.
 //
-// Cuando SI estan los dos pares, el tipo indexado tiene que ser el componente del tipo arreglo:
-// `int[]` contra `int`. Si no cierran, la propiedad no es valida.
+// When both pairs ARE there, the indexed type has to be the array type's component: `int[]` against
+// `int`. If they do not add up, the property is not valid.
 public class IndexedPropertyDescriptor extends PropertyDescriptor {
 
     private Class<?> indexedPropertyType;
     private Method indexedReadMethod;
     private Method indexedWriteMethod;
 
-    // Busca los cuatro accesores por convencion: get/is + Nombre, set + Nombre, y las variantes
-    // con indice que llevan el mismo nombre pero un argumento int adelante.
+    // It looks for the four accessors by convention: get/is + Name, set + Name, and the indexed
+    // variants carrying the same name but an int argument in front.
     public IndexedPropertyDescriptor(String propertyName, Class<?> beanClass)
             throws IntrospectionException {
         this(propertyName, beanClass,
-             "get" + capitalizar(propertyName),
-             "set" + capitalizar(propertyName),
-             "get" + capitalizar(propertyName),
-             "set" + capitalizar(propertyName));
+             "get" + capitalize(propertyName),
+             "set" + capitalize(propertyName),
+             "get" + capitalize(propertyName),
+             "set" + capitalize(propertyName));
     }
 
     public IndexedPropertyDescriptor(String propertyName, Class<?> beanClass,
@@ -35,11 +36,11 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
                                      String indexedReadMethodName, String indexedWriteMethodName)
             throws IntrospectionException {
         super(propertyName, beanClass, readMethodName, writeMethodName);
-        Method ir = buscarIndexado(beanClass, indexedReadMethodName, 1);
+        Method ir = findIndexed(beanClass, indexedReadMethodName, 1);
         if (ir != null) {
             this.setIndexedReadMethod(ir);
         }
-        Method iw = buscarIndexado(beanClass, indexedWriteMethodName, 2);
+        Method iw = findIndexed(beanClass, indexedWriteMethodName, 2);
         if (iw != null) {
             this.setIndexedWriteMethod(iw);
         }
@@ -56,10 +57,11 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
         this.setIndexedWriteMethod(indexedWriteMethod);
     }
 
-    // Constructor interno de Introspector: los metodos ya vienen validados del descubrimiento.
+    // Introspector's internal constructor: the methods come already validated from the
+    // discovery.
     IndexedPropertyDescriptor(String propertyName, Method readMethod, Method writeMethod,
-                              Method indexedReadMethod, Method indexedWriteMethod, boolean sinChequear) {
-        super(propertyName, readMethod, writeMethod, sinChequear);
+                              Method indexedReadMethod, Method indexedWriteMethod, boolean unchecked) {
+        super(propertyName, readMethod, writeMethod, unchecked);
         this.indexedReadMethod = indexedReadMethod;
         this.indexedWriteMethod = indexedWriteMethod;
         if (indexedReadMethod != null) {
@@ -69,7 +71,7 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
         }
     }
 
-    // El tipo de UN elemento, no el del arreglo.
+    // The type of ONE element, not the array's.
     public synchronized Class<?> getIndexedPropertyType() {
         return this.indexedPropertyType;
     }
@@ -78,8 +80,8 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
         return this.indexedReadMethod;
     }
 
-    // Exige la forma exacta del lector indexado: un unico argumento int y un retorno que no sea
-    // void. `getPorClave(String)` no califica, y por eso no es una propiedad indexada.
+    // It demands the indexed reader's exact shape: a single int argument and a return that is not
+    // void. `getByKey(String)` does not qualify, and that is why it is not an indexed property.
     public synchronized void setIndexedReadMethod(Method readMethod) throws IntrospectionException {
         if (readMethod == null) {
             this.indexedReadMethod = null;
@@ -100,7 +102,7 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
             }
             this.indexedReadMethod = readMethod;
             this.indexedPropertyType = t;
-            this.chequearContraElArreglo();
+            this.checkAgainstTheArray();
         }
     }
 
@@ -108,7 +110,7 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
         return this.indexedWriteMethod;
     }
 
-    // El escritor indexado lleva (int, valor): dos argumentos, el primero int.
+    // The indexed writer takes (int, value): two arguments, the first an int.
     public synchronized void setIndexedWriteMethod(Method writeMethod) throws IntrospectionException {
         if (writeMethod == null) {
             this.indexedWriteMethod = null;
@@ -125,13 +127,13 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
             }
             this.indexedWriteMethod = writeMethod;
             this.indexedPropertyType = args[1];
-            this.chequearContraElArreglo();
+            this.checkAgainstTheArray();
         }
     }
 
-    // Si ademas hay accesores de arreglo, el tipo indexado tiene que ser el componente del tipo
-    // del arreglo.
-    private void chequearContraElArreglo() throws IntrospectionException {
+    // If there are array accessors as well, the indexed type has to be the array type's
+    // component.
+    private void checkAgainstTheArray() throws IntrospectionException {
         Class<?> arreglo = this.getPropertyType();
         if (arreglo != null && this.indexedPropertyType != null) {
             if (!arreglo.isArray() || arreglo.getComponentType() != this.indexedPropertyType) {
@@ -141,14 +143,14 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
         }
     }
 
-    // Los indexados se buscan sin exigir que exista el par de arreglo: la propiedad puede ser solo
-    // indexada, y en ese caso el super ya dejo propertyType en null.
-    private static Method buscarIndexado(Class<?> c, String nombre, int cantidadArgs) {
-        Method m = buscarMetodo(c, nombre, cantidadArgs);
+    // The indexed ones are looked for without demanding that the array pair exist: the property may
+    // be indexed only, and in that case the super already left propertyType null.
+    private static Method findIndexed(Class<?> c, String name, int argCount) {
+        Method m = findMethod(c, name, argCount);
         Method bueno = null;
         if (m != null) {
             Class<?>[] args = m.getParameterTypes();
-            if (args.length == cantidadArgs && args[0] == int.class) {
+            if (args.length == argCount && args[0] == int.class) {
                 bueno = m;
             }
         }
@@ -161,8 +163,8 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
             IndexedPropertyDescriptor otro = (IndexedPropertyDescriptor) obj;
             igual = super.equals(obj)
                  && this.indexedPropertyType == otro.indexedPropertyType
-                 && mismoMetodo(this.indexedReadMethod, otro.indexedReadMethod)
-                 && mismoMetodo(this.indexedWriteMethod, otro.indexedWriteMethod);
+                 && sameMethod(this.indexedReadMethod, otro.indexedReadMethod)
+                 && sameMethod(this.indexedWriteMethod, otro.indexedWriteMethod);
         }
         return igual;
     }
@@ -173,7 +175,7 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
         return h;
     }
 
-    private static boolean mismoMetodo(Method a, Method b) {
+    private static boolean sameMethod(Method a, Method b) {
         return a == null ? b == null : a.equals(b);
     }
 }

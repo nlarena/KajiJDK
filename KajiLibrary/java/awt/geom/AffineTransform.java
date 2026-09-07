@@ -2,61 +2,61 @@ package java.awt.geom;
 
 import java.awt.Shape;
 
-// java.awt.geom.AffineTransform de KajiLibrary -- una transformacion afin 2D. Superficie completa.
+// KajiLibrary's java.awt.geom.AffineTransform -- a 2D affine transform. The surface is complete.
 //
 //     [ x' ]   [ m00 m01 m02 ] [ x ]
 //     [ y' ] = [ m10 m11 m12 ] [ y ]
 //     [ 1  ]   [  0   0   1  ] [ 1 ]
 //
-// Dos cosas que se confunden facil y que aca estan escritas a proposito:
+// Two things that are easily confused and that are written out here on purpose:
 //
-//   * `concatenate(Tx)` deja `this = this ∘ Tx`: Tx se aplica **primero** a cada punto. Es lo que
-//     uno quiere cuando va acumulando transformaciones "hacia adentro" de un dibujo.
-//     `preConcatenate(Tx)` deja `this = Tx ∘ this`: Tx se aplica **al final**, sobre el resultado.
-//     La composicion no conmuta, asi que elegir mal no da un error, da otra figura.
+//   * `concatenate(Tx)` leaves `this = this ∘ Tx`: Tx is applied **first** to each point. It is what
+//     one wants when accumulating transforms "inwards" into a drawing. `preConcatenate(Tx)` leaves
+//     `this = Tx ∘ this`: Tx is applied **last**, over the result. Composition does not commute, so
+//     choosing wrongly does not give an error, it gives another shape.
 //
-//   * `invert()`/`createInverse()` **tienen que fallar** con NoninvertibleTransformException cuando
-//     el determinante es cero. Devolver "algo" (una matriz con infinitos, por ejemplo) seria mentir:
-//     la transformacion no tiene inversa y el llamador tiene que enterarse.
+//   * `invert()`/`createInverse()` **have to fail** with NoninvertibleTransformException when the
+//     determinant is zero. Returning "something" (a matrix of infinities, say) would be lying: the
+//     transform has no inverse and the caller has to hear about it.
 //
-// Sobre la aritmetica: el estado interno (`state`) recuerda que celdas son **estructuralmente** 0 o
-// 1, y las operaciones saltean los terminos que las involucran en vez de multiplicar por cero. No es
-// una optimizacion: es lo que hace que `0.0` no se convierta en `-0.0` al componer con una escala
-// negativa, y que un `y` infinito no ensucie una traslacion pura con un NaN. El JDK hace exactamente
-// lo mismo y por el mismo motivo; sin eso, los resultados divergen en los bordes.
+// On the arithmetic: the internal state (`state`) remembers which cells are **structurally** 0 or 1,
+// and the operations skip the terms involving them instead of multiplying by zero. It is not an
+// optimization: it is what stops `0.0` from turning into `-0.0` when composing with a negative
+// scale, and stops an infinite `y` from dirtying a pure translation with a NaN. The JDK does exactly
+// the same thing and for the same reason; without it, the results diverge at the edges.
 public class AffineTransform implements Cloneable, java.io.Serializable {
 
-    /** La transformacion no cambia nada. */
+    /** The transform changes nothing. */
     public static final int TYPE_IDENTITY = 0;
 
-    /** Hay una traslacion. */
+    /** There is a translation. */
     public static final int TYPE_TRANSLATION = 1;
 
-    /** Escala igual en las dos direcciones. */
+    /** An equal scale in both directions. */
     public static final int TYPE_UNIFORM_SCALE = 2;
 
-    /** Escala distinta en cada direccion. */
+    /** A different scale in each direction. */
     public static final int TYPE_GENERAL_SCALE = 4;
 
-    /** Mascara de los dos bits de escala. */
+    /** A mask of the two scale bits. */
     public static final int TYPE_MASK_SCALE = TYPE_UNIFORM_SCALE | TYPE_GENERAL_SCALE;
 
-    /** Invierte la orientacion (reflexion). */
+    /** It flips the orientation (a reflection). */
     public static final int TYPE_FLIP = 64;
 
-    /** Rotacion de un multiplo de 90 grados. */
+    /** A rotation by a multiple of 90 degrees. */
     public static final int TYPE_QUADRANT_ROTATION = 8;
 
-    /** Rotacion de un angulo arbitrario. */
+    /** A rotation by an arbitrary angle. */
     public static final int TYPE_GENERAL_ROTATION = 16;
 
-    /** Mascara de los dos bits de rotacion. */
+    /** A mask of the two rotation bits. */
     public static final int TYPE_MASK_ROTATION = TYPE_QUADRANT_ROTATION | TYPE_GENERAL_ROTATION;
 
-    /** Transformacion que no cae en ninguna de las categorias de arriba. */
+    /** A transform falling into none of the categories above. */
     public static final int TYPE_GENERAL_TRANSFORM = 32;
 
-    // --- estado interno (libre por la regla del contrato) -------------------------------------
+    // --- internal state (free by the contract's rule) -----------------------------------------
 
     static final int APPLY_IDENTITY = 0;
     static final int APPLY_TRANSLATE = 1;
@@ -78,7 +78,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
     public AffineTransform() {
         this.m00 = 1.0;
         this.m11 = 1.0;
-        // el resto queda en 0.0
+        // the rest stays at 0.0
         this.state = APPLY_IDENTITY;
         this.type = TYPE_IDENTITY;
     }
@@ -94,8 +94,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         this.type = Tx.type;
     }
 
-    // Ojo al orden de los parametros: es **por columnas** (m00, m10, m01, m11, m02, m12), no por
-    // filas. Es la trampa numero uno de esta clase.
+    // Mind the parameter order: it goes **by columns** (m00, m10, m01, m11, m02, m12), not by
+    // rows. It is this class's number one trap.
     public AffineTransform(float m00, float m10, float m01, float m11, float m02, float m12) {
         this.m00 = (double) m00;
         this.m10 = (double) m10;
@@ -140,7 +140,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         updateState();
     }
 
-    // --- fabricas ------------------------------------------------------------------------------
+    // --- factories -----------------------------------------------------------------------------
 
     public static AffineTransform getTranslateInstance(double tx, double ty) {
         AffineTransform Tx = new AffineTransform();
@@ -198,11 +198,11 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         return Tx;
     }
 
-    // --- estado y tipo -------------------------------------------------------------------------
+    // --- state and type ------------------------------------------------------------------------
 
-    // Recalcula `state` desde las celdas. Se llama despues de cada mutacion que no sepa dejar el
-    // estado a mano; los predicados son los mismos que usa el JDK, asi que los dos coinciden en que
-    // consideran "estructuralmente cero".
+    // It recomputes `state` from the cells. It is called after every mutation that cannot leave the
+    // state set by hand; the predicates are the same ones the JDK uses, so the two agree on what
+    // they consider "structurally zero".
     void updateState() {
         if (m01 == 0.0 && m10 == 0.0) {
             if (m00 == 1.0 && m11 == 1.0) {
@@ -246,8 +246,9 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         return this.type;
     }
 
-    // La clasificacion en categorias. Se sigue al pie la del JDK porque `getType()` es observable y
-    // dos clasificaciones "razonables" pero distintas se distinguen desde afuera.
+    // The classification into categories. The JDK's is followed to the letter because `getType()`
+    // is observable and two "reasonable" but different classifications are distinguishable from
+    // outside.
     private void calculateType() {
         int ret = TYPE_IDENTITY;
         boolean sgn0;
@@ -269,15 +270,15 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
             M3 = m10;
             M1 = m11;
             if (M0 * M2 + M3 * M1 != 0.0) {
-                // Los vectores unitarios transformados no quedan perpendiculares: no hay forma de
-                // describirlo como rotacion + escala.
+                // The transformed unit vectors do not end up perpendicular: there is no way of
+                // describing it as rotation + scale.
                 this.type = TYPE_GENERAL_TRANSFORM;
                 return;
             }
             sgn0 = (M0 >= 0.0);
             sgn1 = (M1 >= 0.0);
             if (sgn0 == sgn1) {
-                // sgn(M0) == sgn(M1), luego sgn(M2) == -sgn(M3): rotacion sin reflexion.
+                // sgn(M0) == sgn(M1), hence sgn(M2) == -sgn(M3): rotation with no reflection.
                 if (M0 != M1 || M2 != -M3) {
                     ret = ret | (TYPE_GENERAL_ROTATION | TYPE_GENERAL_SCALE);
                 } else if (M0 * M1 - M2 * M3 != 1.0) {
@@ -286,7 +287,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
                     ret = ret | TYPE_GENERAL_ROTATION;
                 }
             } else {
-                // signos cruzados: hay reflexion.
+                // crossed signs: there is a reflection.
                 if (M0 == -M1 && M2 == M3) {
                     if (M0 * M1 - M2 * M3 != -1.0) {
                         ret = ret | (TYPE_GENERAL_ROTATION | TYPE_UNIFORM_SCALE | TYPE_FLIP);
@@ -303,7 +304,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
             sgn0 = (M0 >= 0.0);
             sgn1 = (M1 >= 0.0);
             if (sgn0 != sgn1) {
-                // signos distintos: giro de 90 grados limpio
+                // different signs: a clean 90 degree turn
                 if (M0 != -M1) {
                     ret = ret | (TYPE_QUADRANT_ROTATION | TYPE_GENERAL_SCALE);
                 } else if (M0 != 1.0 && M0 != -1.0) {
@@ -312,7 +313,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
                     ret = ret | TYPE_QUADRANT_ROTATION;
                 }
             } else {
-                // mismos signos: giro de 90 grados mas una reflexion
+                // same signs: a 90 degree turn plus a reflection
                 if (M0 == M1) {
                     ret = ret | (TYPE_QUADRANT_ROTATION | TYPE_FLIP | TYPE_UNIFORM_SCALE);
                 } else {
@@ -326,14 +327,14 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
             sgn1 = (M1 >= 0.0);
             if (sgn0 == sgn1) {
                 if (sgn0) {
-                    // las dos escalas no negativas: escala pura
+                    // both scales non-negative: a pure scale
                     if (M0 == M1) {
                         ret = ret | TYPE_UNIFORM_SCALE;
                     } else {
                         ret = ret | TYPE_GENERAL_SCALE;
                     }
                 } else {
-                    // las dos negativas: giro de 180 grados
+                    // both negative: a 180 degree turn
                     if (M0 != M1) {
                         ret = ret | (TYPE_QUADRANT_ROTATION | TYPE_GENERAL_SCALE);
                     } else if (M0 != -1.0) {
@@ -343,7 +344,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
                     }
                 }
             } else {
-                // signos distintos: reflexion sobre alguno de los ejes
+                // different signs: a reflection about one of the axes
                 if (M0 == -M1) {
                     if (M0 == 1.0 || M0 == -1.0) {
                         ret = ret | TYPE_FLIP;
@@ -358,8 +359,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         this.type = ret;
     }
 
-    // El determinante se calcula salteando los terminos estructuralmente nulos, igual que el JDK:
-    // en una matriz de puro shear `m00 * m11` es 0*0 y sumarlo cambiaria el signo del cero.
+    // The determinant is worked out skipping the structurally null terms, just as the JDK does: in
+    // a pure shear matrix `m00 * m11` is 0*0 and adding it would change the zero's sign.
     public double getDeterminant() {
         int linear = this.state & (APPLY_SHEAR | APPLY_SCALE);
         if (linear == (APPLY_SHEAR | APPLY_SCALE)) {
@@ -474,8 +475,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         }
     }
 
-    // El redondeo de sin/cos a 0 y ±1 exactos en los cuadrantes no es cosmetico: sin el, una
-    // rotacion de 90 grados deja un 6.1e-17 en la diagonal y la matriz deja de ser reconocible como
+    // Rounding sin/cos to exact 0 and ±1 at the quadrants is not cosmetic: without it, a 90 degree
+    // rotation leaves a 6.1e-17 on the diagonal and the matrix stops being recognizable as
     // TYPE_QUADRANT_ROTATION.
     public void setToRotation(double theta) {
         double sin = Math.sin(theta);
@@ -679,7 +680,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         updateState();
     }
 
-    // --- mutadores por composicion -------------------------------------------------------------
+    // --- mutators by composition ---------------------------------------------------------------
 
     public void translate(double tx, double ty) {
         int st = this.state;
@@ -690,7 +691,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
                 nx = tx * m00 + ty * m01;
                 ny = tx * m10 + ty * m11;
             } else {
-                // shear puro: m00 y m11 son cero estructural, no se multiplican
+                // pure shear: m00 and m11 are structural zeros, they are not multiplied
                 nx = ty * m01;
                 ny = tx * m10;
             }
@@ -713,8 +714,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         updateState();
     }
 
-    // Giro de 90 grados por permutacion de celdas: sin multiplicaciones no hay error de redondeo ni
-    // ceros con signo inventados.
+    // A 90 degree turn by permuting cells: with no multiplications there is no rounding error and
+    // no invented signed zeros.
     private void rotate90() {
         double M0 = m00;
         m00 = m01;
@@ -732,7 +733,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
             m01 = -m01;
             m10 = -m10;
         }
-        // Sin shear, m01/m10 valen 0.0: negarlos daria -0.0 sin motivo.
+        // With no shear, m01/m10 are 0.0: negating them would give -0.0 for no reason.
         updateState();
     }
 
@@ -769,7 +770,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
                 m11 = -sin * M0 + cos * M1;
                 updateState();
             }
-            // cos == 1.0 (y sin != ±1): la rotacion es la identidad, no se toca nada.
+            // cos == 1.0 (and sin != ±1): the rotation is the identity, nothing is touched.
         }
     }
 
@@ -784,7 +785,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
             if (vecx < 0.0) {
                 rotate180();
             }
-            // vecx > 0: no hay rotacion. vecx == 0: vector nulo, angulo indefinido, no se rota.
+            // vecx > 0: there is no rotation. vecx == 0: a null vector, an undefined angle, it is
+            // not rotated.
         } else if (vecx == 0.0) {
             if (vecy > 0.0) {
                 rotate90();
@@ -848,11 +850,11 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
             m00 = m00 * sx;
             m11 = m11 * sy;
         } else if ((st & APPLY_SHEAR) == 0) {
-            // diagonal estructuralmente 1: se asigna en vez de multiplicar
+            // a structurally 1 diagonal: it is assigned instead of multiplied
             m00 = sx;
             m11 = sy;
         }
-        // (SHEAR sin SCALE: la diagonal es cero estructural y no se toca)
+        // (SHEAR with no SCALE: the diagonal is a structural zero and is not touched)
         if ((st & APPLY_SHEAR) != 0) {
             m01 = m01 * sy;
             m10 = m10 * sx;
@@ -887,7 +889,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         updateState();
     }
 
-    // `this = this ∘ Tx`. Tx se aplica primero.
+    // `this = this ∘ Tx`. Tx is applied first.
     public void concatenate(AffineTransform Tx) {
         int mystate = this.state;
         int txstate = Tx.state;
@@ -898,7 +900,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         double T02 = Tx.m02;
         double T12 = Tx.m12;
 
-        // Parte lineal: C = A * B, salteando todo termino con un factor estructuralmente nulo.
+        // The linear part: C = A * B, skipping every term with a structurally null factor.
         double C00 = product2(m00, T00, diagZero(mystate), diagZero(txstate),
                               m01, T10, offZero(mystate), offZero(txstate));
         double C01 = product2(m00, T01, diagZero(mystate), offZero(txstate),
@@ -908,7 +910,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         double C11 = product2(m10, T01, offZero(mystate), offZero(txstate),
                               m11, T11, diagZero(mystate), diagZero(txstate));
 
-        // Parte de traslacion: el desplazamiento de Tx pasa por la parte lineal **vieja** de this.
+        // The translation part: Tx's displacement goes through this's **old** linear part.
         double C02 = m02;
         double C12 = m12;
         if ((txstate & APPLY_TRANSLATE) != 0) {
@@ -934,7 +936,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         updateState();
     }
 
-    // `this = Tx ∘ this`. Tx se aplica al final, sobre el resultado de this.
+    // `this = Tx ∘ this`. Tx is applied last, over this's result.
     public void preConcatenate(AffineTransform Tx) {
         int mystate = this.state;
         int txstate = Tx.state;
@@ -955,7 +957,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         double C11 = product2(T10, m01, offZero(txstate), offZero(mystate),
                               T11, m11, diagZero(txstate), diagZero(mystate));
 
-        // La traslacion de this pasa por la parte lineal de Tx, y despues se suma la de Tx.
+        // This's translation goes through Tx's linear part, and then Tx's own is added.
         double C02;
         double C12;
         if ((mystate & APPLY_TRANSLATE) != 0) {
@@ -981,19 +983,20 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         updateState();
     }
 
-    // ¿La diagonal (m00/m11) de una matriz en este estado es cero estructural? Lo es exactamente
-    // cuando hay shear y no hay escala.
+    // Is the diagonal (m00/m11) of a matrix in this state a structural zero? It is exactly when
+    // there is shear and there is no scale.
     private static boolean diagZero(int st) {
         return (st & APPLY_SHEAR) != 0 && (st & APPLY_SCALE) == 0;
     }
 
-    // ¿La antidiagonal (m01/m10) es cero estructural? Lo es cuando no hay shear.
+    // Is the antidiagonal (m01/m10) a structural zero? It is when there is no shear.
     private static boolean offZero(int st) {
         return (st & APPLY_SHEAR) == 0;
     }
 
-    // a*b + c*d, salteando el termino cuyo factor sea cero estructural. Si los dos se saltean el
-    // resultado es 0.0 literal -- nunca -0.0 ni NaN heredado de un factor infinito del otro lado.
+    // a*b + c*d, skipping the term whose factor is a structural zero. If both are skipped the
+    // result is a literal 0.0 -- never -0.0 nor a NaN inherited from an infinite factor on the other
+    // side.
     private static double product2(double a, double b, boolean aZero, boolean bZero,
                                    double c, double d, boolean cZero, boolean dZero) {
         boolean t1 = !(aZero || bZero);
@@ -1016,8 +1019,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         return inv;
     }
 
-    // Falla en vez de devolver basura: si el determinante es cero la transformacion colapsa el plano
-    // sobre una recta o un punto y no hay inversa que valga.
+    // It fails instead of returning rubbish: if the determinant is zero the transform collapses the
+    // plane onto a line or a point and there is no inverse worth having.
     public void invert() throws NoninvertibleTransformException {
         int linear = this.state & (APPLY_SHEAR | APPLY_SCALE);
         boolean hasTranslate = (this.state & APPLY_TRANSLATE) != 0;
@@ -1081,14 +1084,14 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
                 m02 = -m02;
                 m12 = -m12;
             }
-            // identidad: nada que invertir
+            // the identity: nothing to invert
         }
         updateState();
     }
 
-    // --- aplicacion ----------------------------------------------------------------------------
+    // --- application ---------------------------------------------------------------------------
 
-    // Componente x de la parte lineal aplicada a (x,y), sin la traslacion.
+    // The x component of the linear part applied to (x,y), without the translation.
     private double deltaX(double x, double y) {
         int st = this.state;
         if ((st & APPLY_SHEAR) != 0) {
@@ -1162,8 +1165,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
 
     public void transform(double[] srcPts, int srcOff, double[] dstPts, int dstOff, int numPts) {
         if (dstPts == srcPts && dstOff > srcOff && dstOff < srcOff + numPts * 2) {
-            // Los rangos se pisan con el destino mas adelante: si transformamos en orden nos
-            // comeriamos coordenadas de origen todavia sin leer. Copiar primero lo resuelve.
+            // The ranges overlap with the destination further on: transforming in order would eat
+            // source coordinates not yet read. Copying first settles it.
             System.arraycopy(srcPts, srcOff, dstPts, dstOff, numPts * 2);
             srcOff = dstOff;
         }
@@ -1218,7 +1221,7 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
         }
     }
 
-    // La transformacion "delta" ignora la traslacion: transforma vectores, no puntos.
+    // The "delta" transform ignores the translation: it transforms vectors, not points.
     public Point2D deltaTransform(Point2D ptSrc, Point2D ptDst) {
         if (ptDst == null) {
             ptDst = Point2D.newLike(ptSrc);
@@ -1338,8 +1341,8 @@ public class AffineTransform implements Cloneable, java.io.Serializable {
 
     // --- Object --------------------------------------------------------------------------------
 
-    // Se redondea a 15 digitos significativos igual que el JDK: sin eso una rotacion imprime
-    // 0.7071067811865476 y 0.7071067811865475 en celdas que deberian verse iguales.
+    // It is rounded to 15 significant digits just as the JDK does: without that a rotation prints
+    // 0.7071067811865476 and 0.7071067811865475 in cells that ought to look alike.
     private static double matround(double matval) {
         return Math.rint(matval * 1E15) / 1E15;
     }

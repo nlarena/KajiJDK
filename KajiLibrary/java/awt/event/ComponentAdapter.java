@@ -1,27 +1,27 @@
 package java.awt.event;
 
 /**
- * Un {@link ComponentListener} que no hace nada, para redefinir sólo lo que interese.
+ * A {@link ComponentListener} that does nothing, to override only what matters.
  */
 public abstract class ComponentAdapter implements ComponentListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected ComponentAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void componentResized(ComponentEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void componentMoved(ComponentEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void componentShown(ComponentEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void componentHidden(ComponentEvent e) {
     }
 }

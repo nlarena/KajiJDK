@@ -3,10 +3,10 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que cambió el texto de un componente.
+ * Whoever wants to hear that a component's text changed.
  */
 public interface TextListener extends EventListener {
 
-    /** Cambió el texto. */
+    /** The text changed. */
     void textValueChanged(TextEvent e);
 }

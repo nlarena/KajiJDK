@@ -2,11 +2,11 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de RoundRectangle2D: cuatro lados rectos y cuatro esquinas en cubica.
+// RoundRectangle2D's internal iterator: four straight sides and four cubic corners.
 //
-// Cada punto se arma como (x + v0*w + v1*arcWidth, y + v2*h + v3*arcHeight); esa parametrizacion en
-// cuatro coeficientes es la que permite escribir las esquinas sin repetir la aritmetica de los
-// lados. `acv` es el analogo de la constante de la elipse para un cuarto de arco.
+// Each point is built as (x + v0*w + v1*arcWidth, y + v2*h + v3*arcHeight); that four-coefficient
+// parametrization is what allows writing the corners without repeating the sides' arithmetic. `acv`
+// is the analogue of the ellipse's constant for a quarter arc.
 class RoundRectIterator implements PathIterator {
 
     double x;
@@ -27,7 +27,7 @@ class RoundRectIterator implements PathIterator {
         this.ah = Math.min(this.h, Math.abs(rr.getArcHeight()));
         this.affine = at;
         if (this.aw < 0 || this.ah < 0) {
-            // No hay redondeo que dibujar: el camino queda vacio.
+            // There is no rounding to draw: the path is left empty.
             this.index = CTRLPTS.length;
         }
     }
@@ -51,7 +51,7 @@ class RoundRectIterator implements PathIterator {
     private static final double CV = 4.0 / 3.0 * A * B / C;
     private static final double ACV = (1.0 - CV) / 2.0;
 
-    // Cada punto son cuatro coeficientes {v0, v1, v2, v3}.
+    // Each point is four coefficients {v0, v1, v2, v3}.
     private static final double[][] CTRLPTS = {
         { 0.0, 0.0, 0.0, 0.5 },
         { 0.0, 0.0, 1.0, -0.5 },

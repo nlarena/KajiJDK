@@ -3,20 +3,21 @@ package java.awt.datatransfer;
 import java.util.EventObject;
 
 /**
- * Cambió lo que hay en un portapapeles.
+ * What is on a clipboard has changed.
  *
- * <p>No dice **qué** cambió: sólo que el contenido es otro. Quien lo reciba tiene que preguntarle al
- * portapapeles, y eso es a propósito — entre el aviso y la consulta el contenido puede haber
- * cambiado otra vez, y un evento que trajera los datos estaría mintiendo la mitad de las veces.
+ * <p>It does not say **what** changed: only that the contents are now something else. Whoever
+ * receives it has to ask the clipboard, and that is on purpose — between the notice and the query
+ * the contents may have changed again, and an event that carried the data would be lying half the
+ * time.
  */
 public class FlavorEvent extends EventObject {
 
     private static final long serialVersionUID = -5842664112252414548L;
 
     /**
-     * Con el portapapeles que cambió.
+     * With the clipboard that changed.
      *
-     * @throws IllegalArgumentException si es `null`
+     * @throws IllegalArgumentException if it is `null`
      */
     public FlavorEvent(Clipboard source) {
         super(source);

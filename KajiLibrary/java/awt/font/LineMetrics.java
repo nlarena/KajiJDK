@@ -1,53 +1,53 @@
 package java.awt.font;
 
 /**
- * Las medidas verticales de una línea de texto.
+ * A line of text's vertical measurements.
  *
- * <p>Todo lo que hace falta para apilar renglones sin que se pisen: cuánto sube el texto sobre la
- * línea de base, cuánto baja, y cuánto aire va entre un renglón y el siguiente. La suma de las tres
- * es {@link #getHeight}.
+ * <p>Everything needed to stack lines without their treading on each other: how far the text rises
+ * above the baseline, how far it drops, and how much air goes between one line and the next. The sum
+ * of the three is {@link #getHeight}.
  *
- * <p>Las líneas de base en plural no son un capricho: un texto que mezcla alfabetos las necesita.
- * Un carácter latino se apoya sobre la base romana, uno devanagari cuelga de una barra superior, y
- * uno ideográfico se centra; {@link #getBaselineOffsets} da la distancia entre ellas para que los
- * tres queden alineados en el mismo renglón.
+ * <p>The baselines in the plural are no whim: a text mixing alphabets needs them. A Latin character
+ * rests on the roman baseline, a Devanagari one hangs from a bar above, and an ideographic one is
+ * centred; {@link #getBaselineOffsets} gives the distance between them so that the three line up on
+ * the same line.
  */
 public abstract class LineMetrics {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected LineMetrics() {
     }
 
-    /** Cuántos caracteres se midieron. */
+    /** How many characters were measured. */
     public abstract int getNumChars();
 
-    /** Cuánto sube el texto por encima de la línea de base. */
+    /** How far the text rises above the baseline. */
     public abstract float getAscent();
 
-    /** Cuánto baja el texto por debajo de la línea de base. */
+    /** How far the text drops below the baseline. */
     public abstract float getDescent();
 
-    /** El aire entre el fondo de un renglón y el techo del siguiente. */
+    /** The air between the bottom of one line and the top of the next. */
     public abstract float getLeading();
 
-    /** La suma de las tres anteriores. */
+    /** The sum of the three above. */
     public abstract float getHeight();
 
-    /** Cuál de las líneas de base usa este texto. */
+    /** Which of the baselines this text uses. */
     public abstract int getBaselineIndex();
 
-    /** La distancia de cada línea de base a la que usa este texto. */
+    /** The distance from each baseline to the one this text uses. */
     public abstract float[] getBaselineOffsets();
 
-    /** A qué altura va la línea de tachado. */
+    /** At what height the strikethrough line goes. */
     public abstract float getStrikethroughOffset();
 
-    /** Qué grosor tiene la línea de tachado. */
+    /** How thick the strikethrough line is. */
     public abstract float getStrikethroughThickness();
 
-    /** A qué altura va el subrayado. */
+    /** At what height the underline goes. */
     public abstract float getUnderlineOffset();
 
-    /** Qué grosor tiene el subrayado. */
+    /** How thick the underline is. */
     public abstract float getUnderlineThickness();
 }

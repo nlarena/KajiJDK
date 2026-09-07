@@ -5,42 +5,42 @@ import java.awt.Component;
 import java.awt.Container;
 
 /**
- * Cambió el árbol de componentes por encima de un componente.
+ * The tree of components above a component changed.
  *
- * <p>Sirve para enterarse de cosas que no pasan en el componente sino **arriba** suyo: que lo
- * agregaron a una ventana, que un ancestro se ocultó, que la ventana que lo contiene se movió. Un
- * componente no puede ver eso mirándose a sí mismo.
+ * <p>It serves to hear about things that do not happen in the component but **above** it: that it
+ * was added to a window, that an ancestor was hidden, that the window containing it moved. A
+ * component cannot see that by looking at itself.
  *
- * <p>Las banderas dicen qué cambió, y `SHOWING_CHANGED` es la más útil: significa que el componente
- * pasó a verse o dejó de verse **de verdad**, contando que todos sus ancestros estén visibles. Es la
- * señal correcta para arrancar y parar una animación.
+ * <p>The flags say what changed, and `SHOWING_CHANGED` is the most useful: it means the component
+ * came to be seen or stopped being seen **for real**, counting that all its ancestors are visible. It
+ * is the right signal for starting and stopping an animation.
  */
 public class HierarchyEvent extends AWTEvent {
 
     private static final long serialVersionUID = -5337576970038043990L;
 
-    /** Un ancestro cambió de lugar. */
+    /** An ancestor changed place. */
     public static final int ANCESTOR_MOVED = 1401;
 
-    /** Un ancestro cambió de tamaño. */
+    /** An ancestor changed size. */
     public static final int ANCESTOR_RESIZED = 1402;
 
-    /** Cambió si el componente puede mostrarse. */
+    /** Whether the component can be displayed changed. */
     public static final int DISPLAYABILITY_CHANGED = 2;
 
-    /** Cambió el árbol. */
+    /** The tree changed. */
     public static final int HIERARCHY_CHANGED = 1400;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int HIERARCHY_FIRST = 1400;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int HIERARCHY_LAST = 1402;
 
-    /** El componente cambió de padre. */
+    /** The component changed parent. */
     public static final int PARENT_CHANGED = 1;
 
-    /** Cambió si el componente se ve de verdad. */
+    /** Whether the component is seen for real changed. */
     public static final int SHOWING_CHANGED = 4;
 
     private final Component changed;
@@ -48,18 +48,18 @@ public class HierarchyEvent extends AWTEvent {
     private final long changeFlags;
 
     /**
-     * Sin banderas, para los eventos de ancestro.
+     * With no flags, for the ancestor events.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public HierarchyEvent(Component source, int id, Component changed, Container changedParent) {
         this(source, id, changed, changedParent, 0);
     }
 
     /**
-     * Con las banderas de qué cambió.
+     * With the flags of what changed.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public HierarchyEvent(Component source, int id, Component changed, Container changedParent,
             long changeFlags) {
@@ -69,7 +69,7 @@ public class HierarchyEvent extends AWTEvent {
         this.changeFlags = changeFlags;
     }
 
-    /** El componente que recibe el aviso. */
+    /** The component that receives the notice. */
     public Component getComponent() {
         if (this.source instanceof Component) {
             return (Component) this.source;
@@ -77,33 +77,33 @@ public class HierarchyEvent extends AWTEvent {
         return null;
     }
 
-    /** El componente de arriba que efectivamente cambió. */
+    /** The component above that actually changed. */
     public Component getChanged() {
         return this.changed;
     }
 
-    /** El padre de ese componente, antes o después del cambio según qué pasó. */
+    /** That component's parent, before or after the change depending on what happened. */
     public Container getChangedParent() {
         return this.changedParent;
     }
 
-    /** Qué cambió, como combinación de banderas. */
+    /** What changed, as a combination of flags. */
     public long getChangeFlags() {
         return this.changeFlags;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == HIERARCHY_CHANGED) {
-            tipo = "HIERARCHY_CHANGED";
+            type = "HIERARCHY_CHANGED";
         } else if (this.id == ANCESTOR_MOVED) {
-            tipo = "ANCESTOR_MOVED";
+            type = "ANCESTOR_MOVED";
         } else if (this.id == ANCESTOR_RESIZED) {
-            tipo = "ANCESTOR_RESIZED";
+            type = "ANCESTOR_RESIZED";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + " (" + this.changed + "," + this.changedParent + "),changeFlags="
+        return type + " (" + this.changed + "," + this.changedParent + "),changeFlags="
                 + this.changeFlags;
     }
 }

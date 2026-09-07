@@ -1,8 +1,8 @@
 package java.awt.geom;
 
-// java.awt.geom.NoninvertibleTransformException de KajiLibrary. Es *checked* a proposito: una
-// matriz con determinante cero no tiene inversa y el llamador tiene que decidir que hacer, no
-// recibir una matriz de infinitos y seguir como si nada.
+// KajiLibrary's java.awt.geom.NoninvertibleTransformException. It is *checked* on purpose: a
+// matrix with a zero determinant has no inverse and the caller has to decide what to do, not
+// receive a matrix of infinities and carry on as if nothing had happened.
 public class NoninvertibleTransformException extends Exception {
 
     public NoninvertibleTransformException(String s) {

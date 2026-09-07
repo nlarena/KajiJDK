@@ -1,18 +1,19 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.AppForegroundEvent -- el programa paso a primer plano o se fue al fondo.
+ * KajiLibrary's java.awt.desktop.AppForegroundEvent -- the program came to the foreground or went to
+ * the background.
  *
- * <p>Lo entrega {@link AppForegroundListener}, que tiene un metodo para cada direccion; el evento en
- * si no dice cual de las dos fue.
+ * <p>It is handed over by {@link AppForegroundListener}, which has one method for each direction; the
+ * event itself does not say which of the two it was.
  *
- * <p>Sirve para bajar el ritmo de animaciones o de sondeos cuando nadie esta mirando.
+ * <p>It serves to slow down animations or polling when nobody is looking.
  */
 public final class AppForegroundEvent extends AppEvent {
 
     private static final long serialVersionUID = -5513582555740533911L;
 
-    /** Sin datos: el evento es el aviso. */
+    /** No data: the event is the notice. */
     public AppForegroundEvent() {
     }
 }

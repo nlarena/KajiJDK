@@ -8,77 +8,77 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Una tira de glifos ya colocados, lista para dibujar.
+ * A run of glyphs already placed, ready to be drawn.
  *
- * <p>Es el resultado de haber resuelto todo lo que un texto tiene de difícil: qué glifo le
- * corresponde a cada carácter, cuáles se juntan en una ligadura, en qué orden van si el renglón
- * mezcla direcciones, y dónde cae cada uno. Después de eso ya no hay caracteres, hay dibujos con
- * coordenadas.
+ * <p>It is the result of having settled everything a text has that is hard: which glyph corresponds
+ * to each character, which ones join into a ligature, in what order they go if the line mixes
+ * directions, and where each one falls. After that there are no characters left, there are drawings
+ * with coordinates.
  *
- * <p>Un glifo no es un carácter, y por eso hay {@link #getGlyphCharIndex}: una ligadura es un glifo
- * para dos caracteres, un acento suelto puede ser un glifo para ninguno, y en un renglón
- * bidireccional el orden de los glifos no es el de los caracteres. La correspondencia se guarda
- * porque hace falta para poner el cursor donde el usuario cree que hizo clic.
+ * <p>A glyph is not a character, and that is why {@link #getGlyphCharIndex} exists: a ligature is one
+ * glyph for two characters, a loose accent may be a glyph for none, and in a bidirectional line the
+ * glyphs' order is not the characters'. The correspondence is kept because it is needed to put the
+ * caret where the user believes they clicked.
  *
- * <p>Hay dos rectángulos por glifo y conviene no confundirlos. El **lógico** es el lugar que ocupa a
- * los efectos de la selección y del renglón; el **visual**, dónde cae la tinta. El primero incluye
- * el aire de los costados y el segundo no.
+ * <p>There are two rectangles per glyph and they are best not confused. The **logical** one is the
+ * place it takes up for the purposes of selection and of the line; the **visual** one, where the ink
+ * falls. The first includes the air at the sides and the second does not.
  */
 public abstract class GlyphVector implements Cloneable {
 
-    /** Algún glifo tiene una transformación propia. */
+    /** Some glyph has a transform of its own. */
     public static final int FLAG_HAS_TRANSFORMS = 1;
 
-    /** Alguna posición se corrigió respecto de la que daría el avance. */
+    /** Some position was corrected with respect to the one the advance would give. */
     public static final int FLAG_HAS_POSITION_ADJUSTMENTS = 2;
 
-    /** La tira va de derecha a izquierda. */
+    /** The run goes right to left. */
     public static final int FLAG_RUN_RTL = 4;
 
-    /** La correspondencia entre glifos y caracteres no es uno a uno en orden. */
+    /** The correspondence between glyphs and characters is not one to one in order. */
     public static final int FLAG_COMPLEX_GLYPHS = 8;
 
-    /** Los bits que usan las banderas anteriores. */
+    /** The bits the flags above use. */
     public static final int FLAG_MASK = FLAG_HAS_TRANSFORMS | FLAG_HAS_POSITION_ADJUSTMENTS
             | FLAG_RUN_RTL | FLAG_COMPLEX_GLYPHS;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected GlyphVector() {
     }
 
-    /** La fuente de la que salieron los glifos. */
+    /** The font the glyphs came out of. */
     public abstract Font getFont();
 
-    /** Las condiciones en las que se armó. */
+    /** The conditions it was built under. */
     public abstract FontRenderContext getFontRenderContext();
 
-    /** Vuelve a colocar los glifos en sus posiciones por omisión. */
+    /** Puts the glyphs back in their default positions. */
     public abstract void performDefaultLayout();
 
-    /** Cuántos glifos hay. */
+    /** How many glyphs there are. */
     public abstract int getNumGlyphs();
 
-    /** El código de ese glifo dentro de su fuente. */
+    /** That glyph's code inside its font. */
     public abstract int getGlyphCode(int glyphIndex);
 
-    /** Los códigos de un tramo de glifos. */
+    /** The codes of a run of glyphs. */
     public abstract int[] getGlyphCodes(int beginGlyphIndex, int numEntries, int[] codeReturn);
 
     /**
-     * Qué carácter le dio origen a ese glifo.
+     * Which character gave rise to that glyph.
      *
-     * <p>La implementación de acá supone la correspondencia trivial —el glifo `i` viene del carácter
-     * `i`—, que es la correcta mientras no haya ligaduras ni reordenamiento. Una subclase que arme
-     * texto complejo tiene que redefinirla.
+     * <p>The implementation here assumes the trivial correspondence —glyph `i` comes from character
+     * `i`—, which is the right one as long as there are no ligatures and no reordering. A subclass
+     * that lays out complex text has to override it.
      */
     public int getGlyphCharIndex(int glyphIndex) {
         return glyphIndex;
     }
 
     /**
-     * Lo mismo para un tramo.
+     * The same for a run.
      *
-     * @throws IllegalArgumentException si `numEntries` es negativo
+     * @throws IllegalArgumentException if `numEntries` is negative
      */
     public int[] getGlyphCharIndices(int beginGlyphIndex, int numEntries, int[] codeReturn) {
         if (numEntries < 0) {
@@ -94,24 +94,23 @@ public abstract class GlyphVector implements Cloneable {
         return out;
     }
 
-    /** El rectángulo que ocupa la tira a efectos de renglón y selección. */
+    /** The rectangle the run takes up for the purposes of the line and of selection. */
     public abstract Rectangle2D getLogicalBounds();
 
-    /** El rectángulo donde cae la tinta. */
+    /** The rectangle where the ink falls. */
     public abstract Rectangle2D getVisualBounds();
 
     /**
-     * Los píxeles que va a tocar la tira dibujada en `(x, y)`.
+     * The pixels the run drawn at `(x, y)` is going to touch.
      *
-     * <p>Es el rectángulo visual redondeado hacia afuera: un píxel tocado a medias es un píxel
-     * tocado.
+     * <p>It is the visual rectangle rounded outwards: a pixel half touched is a pixel touched.
      */
     public Rectangle getPixelBounds(FontRenderContext renderFRC, float x, float y) {
-        return redondearAfuera(this.getVisualBounds(), x, y);
+        return roundOutwards(this.getVisualBounds(), x, y);
     }
 
-    /** El rectángulo entero de píxeles que cubre un rectángulo continuo corrido `(x, y)`. */
-    private static Rectangle redondearAfuera(Rectangle2D rect, float x, float y) {
+    /** The whole pixel rectangle covering a continuous rectangle shifted by `(x, y)`. */
+    private static Rectangle roundOutwards(Rectangle2D rect, float x, float y) {
         int l = (int) Math.floor(rect.getX() + x);
         int t = (int) Math.floor(rect.getY() + y);
         int r = (int) Math.ceil(rect.getMaxX() + x);
@@ -119,16 +118,16 @@ public abstract class GlyphVector implements Cloneable {
         return new Rectangle(l, t, r - l, b - t);
     }
 
-    /** El contorno de toda la tira. */
+    /** The whole run's outline. */
     public abstract Shape getOutline();
 
-    /** El contorno de toda la tira, corrido a `(x, y)`. */
+    /** The whole run's outline, shifted to `(x, y)`. */
     public abstract Shape getOutline(float x, float y);
 
-    /** El contorno de un glifo. */
+    /** One glyph's outline. */
     public abstract Shape getGlyphOutline(int glyphIndex);
 
-    /** El contorno de un glifo, corrido a `(x, y)`. */
+    /** One glyph's outline, shifted to `(x, y)`. */
     public Shape getGlyphOutline(int glyphIndex, float x, float y) {
         Shape s = this.getGlyphOutline(glyphIndex);
         AffineTransform at = AffineTransform.getTranslateInstance(x, y);
@@ -136,54 +135,54 @@ public abstract class GlyphVector implements Cloneable {
     }
 
     /**
-     * Dónde está ese glifo.
+     * Where that glyph is.
      *
-     * <p>Se admite el índice igual a la cantidad de glifos: ésa es la posición donde iría el
-     * siguiente, o sea el final de la tira.
+     * <p>An index equal to the number of glyphs is admitted: that is the position the next one would
+     * go at, that is, the end of the run.
      */
     public abstract Point2D getGlyphPosition(int glyphIndex);
 
-    /** Mueve un glifo. */
+    /** Moves a glyph. */
     public abstract void setGlyphPosition(int glyphIndex, Point2D newPos);
 
-    /** La transformación propia de ese glifo, o `null` si es la identidad. */
+    /** That glyph's own transform, or `null` if it is the identity. */
     public abstract AffineTransform getGlyphTransform(int glyphIndex);
 
-    /** Le pone una transformación propia a un glifo. */
+    /** Gives a glyph a transform of its own. */
     public abstract void setGlyphTransform(int glyphIndex, AffineTransform newTX);
 
     /**
-     * Las banderas que describen a la tira.
+     * The flags describing the run.
      *
-     * <p>La implementación de acá devuelve 0, que es lo cierto para una tira simple. Una subclase
-     * que admita transformaciones por glifo o texto complejo tiene que redefinirla.
+     * <p>The implementation here returns 0, which is true for a simple run. A subclass admitting
+     * per-glyph transforms or complex text has to override it.
      */
     public int getLayoutFlags() {
         return 0;
     }
 
-    /** Las posiciones de un tramo de glifos, como pares. */
+    /** The positions of a run of glyphs, as pairs. */
     public abstract float[] getGlyphPositions(int beginGlyphIndex, int numEntries,
             float[] positionReturn);
 
-    /** El lugar que ocupa un glifo a efectos de selección. */
+    /** The place a glyph takes up for the purposes of selection. */
     public abstract Shape getGlyphLogicalBounds(int glyphIndex);
 
-    /** Dónde cae la tinta de un glifo. */
+    /** Where a glyph's ink falls. */
     public abstract Shape getGlyphVisualBounds(int glyphIndex);
 
-    /** Los píxeles que va a tocar un glifo dibujado en `(x, y)`. */
+    /** The pixels a glyph drawn at `(x, y)` is going to touch. */
     public Rectangle getGlyphPixelBounds(int index, FontRenderContext renderFRC, float x,
             float y) {
-        return redondearAfuera(this.getGlyphVisualBounds(index).getBounds2D(), x, y);
+        return roundOutwards(this.getGlyphVisualBounds(index).getBounds2D(), x, y);
     }
 
-    /** Las medidas de un glifo. */
+    /** A glyph's measurements. */
     public abstract GlyphMetrics getGlyphMetrics(int glyphIndex);
 
-    /** Cómo se estira o se encoge un glifo al justificar. */
+    /** How a glyph stretches or shrinks when justifying. */
     public abstract GlyphJustificationInfo getGlyphJustificationInfo(int glyphIndex);
 
-    /** Igualdad por fuente, condiciones, códigos y posiciones. */
+    /** Equality by font, conditions, codes and positions. */
     public abstract boolean equals(GlyphVector set);
 }

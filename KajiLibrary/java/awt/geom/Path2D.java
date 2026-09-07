@@ -3,35 +3,35 @@ package java.awt.geom;
 import java.awt.Rectangle;
 import java.awt.Shape;
 
-// java.awt.geom.Path2D de KajiLibrary -- un camino arbitrario hecho de moveTo/lineTo/quadTo/
-// curveTo/closePath. Superficie completa.
+// KajiLibrary's java.awt.geom.Path2D -- an arbitrary path made of
+// moveTo/lineTo/quadTo/curveTo/closePath. The surface is complete.
 //
-// El camino se guarda en dos arreglos paralelos: `pointTypes` (un byte por segmento) y las
-// coordenadas (float o double segun la subclase), aplanadas. `numTypes` y `numCoords` son los
-// largos utiles; la capacidad crece de a saltos.
+// The path is kept in two parallel arrays: `pointTypes` (one byte per segment) and the coordinates
+// (float or double according to the subclass), flattened. `numTypes` and `numCoords` are the useful
+// lengths; the capacity grows in jumps.
 //
-// Tres cosas que valen la pena saber antes de tocar esto:
+// Three things worth knowing before touching this:
 //
-//   * **`getBounds2D` usa los puntos de control, no la curva.** Una cubica queda dentro de la
-//     envolvente convexa de sus cuatro puntos, asi que el rectangulo devuelto contiene al camino
-//     pero puede ser mas grande que el ajustado. Es lo que especifica el JDK y lo que esperan los
-//     llamadores; calcular el ajustado seria mas "lindo" y **distinto**, o sea observable.
+//   * **`getBounds2D` uses the control points, not the curve.** A cubic stays inside the convex hull
+//     of its four points, so the returned rectangle contains the path but may be larger than the
+//     tight one. It is what the JDK specifies and what the callers expect; working out the tight one
+//     would be "prettier" and **different**, that is, observable.
 //
-//   * **`contains`/`intersects` no son lo mismo dado vuelta.** Se cuentan cruces del borde contra
-//     el rectangulo con un centinela (Curve.RECT_INTERSECTS) que dice "el borde entra". `intersects`
-//     acepta ese caso, `contains` lo rechaza. Ver el encabezado de Curve.
+//   * **`contains`/`intersects` are not each other turned around.** The edge's crossings against the
+//     rectangle are counted with a sentinel (Curve.RECT_INTERSECTS) saying "the edge enters".
+//     `intersects` accepts that case, `contains` rejects it. See Curve's header.
 //
-//   * **`moveTo` es obligatorio antes de todo lo demas.** Un `lineTo` sin `moveTo` previo tira
-//     IllegalPathStateException; no se inventa un origen en (0,0).
+//   * **`moveTo` is compulsory before everything else.** A `lineTo` with no previous `moveTo` throws
+//     IllegalPathStateException; no origin at (0,0) is invented.
 public abstract class Path2D implements Shape, Cloneable {
 
-    /** Regla par/impar para decidir el interior. */
+    /** The even-odd rule for deciding the interior. */
     public static final int WIND_EVEN_ODD = PathIterator.WIND_EVEN_ODD;
 
-    /** Regla no-cero para decidir el interior. */
+    /** The non-zero rule for deciding the interior. */
     public static final int WIND_NON_ZERO = PathIterator.WIND_NON_ZERO;
 
-    // --- estado interno (libre por la regla del contrato) -----------------------------------------
+    // --- internal state (free by the contract's rule) --------------------------------------------
 
     static final byte SEG_MOVETO = (byte) PathIterator.SEG_MOVETO;
     static final byte SEG_LINETO = (byte) PathIterator.SEG_LINETO;
@@ -72,16 +72,16 @@ public abstract class Path2D implements Shape, Cloneable {
 
     abstract int rectCrossings(double rxmin, double rymin, double rxmax, double rymax);
 
-    // Acceso al arreglo de coordenadas para los iteradores internos. Devuelve el arreglo **vivo**,
-    // no una copia: los iteradores solo leen, y copiar el camino entero para recorrerlo seria
-    // exactamente lo que getPathIterator promete no hacer. Uno de los dos siempre devuelve null,
-    // segun la precision de la subclase.
+    // Access to the coordinate array for the internal iterators. It returns the **live** array, not
+    // a copy: the iterators only read, and copying the whole path to walk it would be exactly what
+    // getPathIterator promises not to do. One of the two always returns null, according to the
+    // subclass's precision.
     abstract float[] floatCoordsRef();
 
     abstract double[] doubleCoordsRef();
 
-    // Crece al doble hasta EXPAND_MAX y de ahi en adelante de a saltos fijos: duplicar un arreglo
-    // de millones de puntos para agregar dos coordenadas no tiene sentido.
+    // It grows by doubling up to EXPAND_MAX and from there on in fixed jumps: doubling an array of
+    // millions of points to add two coordinates makes no sense.
     static byte[] expandPointTypes(byte[] oldPointTypes, int needed) {
         int oldSize = oldPointTypes.length;
         int newSizeMin = oldSize + needed;
@@ -145,7 +145,7 @@ public abstract class Path2D implements Shape, Cloneable {
         return out;
     }
 
-    // --- camino con coordenadas float ------------------------------------------------------------
+    // --- a path with float coordinates -----------------------------------------------------------
 
     public static class Float extends Path2D implements java.io.Serializable {
 
@@ -244,7 +244,8 @@ public abstract class Path2D implements Shape, Cloneable {
 
         public final synchronized void moveTo(double x, double y) {
             if (this.numTypes > 0 && this.pointTypes[this.numTypes - 1] == SEG_MOVETO) {
-                // Dos moveTo seguidos: el segundo pisa al primero, no deja un subcamino vacio.
+                // Two moveTo in a row: the second overwrites the first, it does not leave an empty
+                // subpath.
                 this.floatCoords[this.numCoords - 2] = (float) x;
                 this.floatCoords[this.numCoords - 1] = (float) y;
             } else {
@@ -471,7 +472,7 @@ public abstract class Path2D implements Shape, Cloneable {
                     } else if (this.pointTypes[this.numTypes - 1] != SEG_CLOSE
                             && this.floatCoords[this.numCoords - 2] == ((float) coords[0])
                             && this.floatCoords[this.numCoords - 1] == ((float) coords[1])) {
-                        // Pegar en el mismo punto donde termina el camino: se saltea el moveTo.
+                        // Joining at the very point where the path ends: the moveTo is skipped.
                         connect = false;
                     } else {
                         if (this.pointTypes[this.numTypes - 1] == SEG_CLOSE) {
@@ -588,7 +589,7 @@ public abstract class Path2D implements Shape, Cloneable {
         }
     }
 
-    // --- camino con coordenadas double -----------------------------------------------------------
+    // --- a path with double coordinates ----------------------------------------------------------
 
     public static class Double extends Path2D implements java.io.Serializable {
 
@@ -988,7 +989,7 @@ public abstract class Path2D implements Shape, Cloneable {
         }
     }
 
-    // --- superficie comun -------------------------------------------------------------------------
+    // --- the common surface -----------------------------------------------------------------------
 
     public abstract void moveTo(double x, double y);
 
@@ -1026,8 +1027,8 @@ public abstract class Path2D implements Shape, Cloneable {
         this.windingRule = rule;
     }
 
-    // El ultimo punto **dibujado**. Despues de un CLOSE es el punto del moveTo que abrio el
-    // subcamino, no el ultimo lineTo: el camino volvio ahi.
+    // The last point **drawn**. After a CLOSE it is the point of the moveTo that opened the
+    // subpath, not the last lineTo: the path went back there.
     public final synchronized Point2D getCurrentPoint() {
         int index = this.numCoords;
         if (this.numTypes < 1 || index < 1) {
@@ -1035,11 +1036,11 @@ public abstract class Path2D implements Shape, Cloneable {
         }
         if (this.pointTypes[this.numTypes - 1] == SEG_CLOSE) {
             int i = this.numTypes - 2;
-            boolean buscando = true;
-            while (i > 0 && buscando) {
+            boolean searching = true;
+            while (i > 0 && searching) {
                 byte t = this.pointTypes[i];
                 if (t == SEG_MOVETO) {
-                    buscando = false;
+                    searching = false;
                 } else if (t == SEG_LINETO) {
                     index = index - 2;
                 } else if (t == SEG_QUADTO) {
@@ -1047,7 +1048,7 @@ public abstract class Path2D implements Shape, Cloneable {
                 } else if (t == SEG_CUBICTO) {
                     index = index - 6;
                 }
-                if (buscando) {
+                if (searching) {
                     i = i - 1;
                 }
             }
@@ -1074,10 +1075,10 @@ public abstract class Path2D implements Shape, Cloneable {
 
     public abstract void trimToSize();
 
-    // --- preguntas geometricas --------------------------------------------------------------------
+    // --- geometric questions ----------------------------------------------------------------------
 
     public static boolean contains(PathIterator pi, double x, double y) {
-        // x*0.0 da NaN si x es infinito o NaN: filtra los dos casos de una.
+        // x*0.0 gives NaN if x is infinite or NaN: it filters both cases at once.
         if (x * 0.0 + y * 0.0 == 0.0) {
             int mask;
             if (pi.getWindingRule() == WIND_NON_ZERO) {
@@ -1117,7 +1118,7 @@ public abstract class Path2D implements Shape, Cloneable {
 
     public static boolean contains(PathIterator pi, double x, double y, double w, double h) {
         if (java.lang.Double.isNaN(x + w) || java.lang.Double.isNaN(y + h)) {
-            // Un rectangulo con NaN no tiene interior; ni contains ni intersects son ciertos.
+            // A rectangle with a NaN has no interior; neither contains nor intersects holds.
             return false;
         }
         if (w <= 0 || h <= 0) {
@@ -1208,9 +1209,8 @@ public abstract class Path2D implements Shape, Cloneable {
         return getBounds2D().getBounds();
     }
 
-    // Fabrica interna (no es API). Ver la nota del encabezado de Point2D.java: AffineTransform no
-    // puede nombrar a `Path2D.Double` porque en esa unidad de compilacion `Double` ya es
-    // java.lang.Double.
+    // An internal factory (not API). See the note in Point2D.java's header: AffineTransform cannot
+    // name `Path2D.Double` because in that compilation unit `Double` is already java.lang.Double.
     static Path2D newDouble(Shape s, AffineTransform at) {
         return new Double(s, at);
     }

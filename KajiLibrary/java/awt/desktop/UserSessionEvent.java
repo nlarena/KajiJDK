@@ -1,50 +1,50 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.UserSessionEvent -- la sesion del usuario se activo o se desactivo.
+ * KajiLibrary's java.awt.desktop.UserSessionEvent -- the user's session became active or inactive.
  *
- * <p>Lo entrega {@link UserSessionListener}. Una sesion se desactiva cuando el usuario cambia de
- * cuenta, bloquea la pantalla, o se conecta desde otro lado; el programa <b>sigue corriendo</b>, solo
- * que nadie lo esta viendo.
+ * <p>It is handed over by {@link UserSessionListener}. A session becomes inactive when the user
+ * switches account, locks the screen, or connects from somewhere else; the program <b>keeps
+ * running</b>, it is just that nobody is watching it.
  *
- * <p>{@link #getReason} dice cual de esas cosas paso, y es lo que permite reaccionar distinto: un
- * bloqueo de pantalla es buen momento para pedir la clave de vuelta, un cambio de consola no
- * necesariamente.
+ * <p>{@link #getReason} says which of those things happened, and it is what allows reacting
+ * differently: a screen lock is a good moment to ask for the password again, a console switch not
+ * necessarily.
  */
 public final class UserSessionEvent extends AppEvent {
 
     private static final long serialVersionUID = 6747138462796569055L;
 
-    /** Por que cambio. */
+    /** Why it changed. */
     private final Reason reason;
 
     /**
-     * Los cuatro motivos por los que una sesion cambia de estado.
+     * The four reasons a session changes state.
      *
-     * <p>{@link #UNSPECIFIED} no es un error: hay sistemas que avisan del cambio sin decir por que, y
-     * un manejador tiene que estar preparado para eso.
+     * <p>{@link #UNSPECIFIED} is not an error: there are systems that report the change without
+     * saying why, and a handler has to be ready for that.
      */
     public enum Reason {
 
-        /** El sistema no dijo por que. */
+        /** The system did not say why. */
         UNSPECIFIED,
 
-        /** El usuario cambio de consola local. */
+        /** The user switched local console. */
         CONSOLE,
 
-        /** Alguien se conecto o desconecto de forma remota. */
+        /** Someone connected or disconnected remotely. */
         REMOTE,
 
-        /** Se bloqueo o se desbloqueo la pantalla. */
+        /** The screen was locked or unlocked. */
         LOCK
     }
 
-    /** @param reason por que cambio */
+    /** @param reason why it changed */
     public UserSessionEvent(final Reason reason) {
         this.reason = reason;
     }
 
-    /** Por que cambio. Ver la nota de la clase. */
+    /** Why it changed. See the class note. */
     public Reason getReason() {
         return this.reason;
     }

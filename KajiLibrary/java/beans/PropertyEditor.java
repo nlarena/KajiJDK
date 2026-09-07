@@ -1,43 +1,43 @@
 package java.beans;
 
-// Como una herramienta muestra y edita el valor de una propiedad: convertirlo a texto y de vuelta,
-// ofrecer una lista cerrada de opciones, dar el codigo Java que lo reconstruye, y --si sabe--
-// dibujarse o traer un panel propio.
+// How a tool shows and edits a property's value: converting it to text and back, offering a closed
+// list of options, giving the Java code that rebuilds it, and --if it knows how-- drawing itself or
+// bringing a panel of its own.
 public interface PropertyEditor {
 
     void setValue(Object value);
 
     Object getValue();
 
-    // Si el editor sabe dibujarse con paintValue. Un editor que contesta true tiene que estar
-    // dispuesto a que la herramienta lo llame en vez de mostrarle getAsText().
+    // Whether the editor knows how to draw itself with paintValue. An editor answering true has to
+    // be prepared for the tool to call it instead of showing it getAsText().
     boolean isPaintable();
 
     /**
-     * Dibuja una representación del valor en ese rectángulo.
+     * Draws a representation of the value in that rectangle.
      *
-     * <p>Es lo que una herramienta usa en vez de {@link #getAsText} cuando {@link #isPaintable} dio
-     * `true`: un editor de color pinta una muestra, uno de tipografía escribe con ella. Si el editor
-     * no sabe dibujarse, no hace nada.
+     * <p>It is what a tool uses instead of {@link #getAsText} when {@link #isPaintable} gave `true`:
+     * a colour editor paints a swatch, a typeface one writes with it. If the editor does not know
+     * how to draw itself, it does nothing.
      */
     void paintValue(java.awt.Graphics gfx, java.awt.Rectangle box);
 
-    // El fragmento de codigo Java que reconstruye este valor, para generadores de codigo.
+    // The fragment of Java code that rebuilds this value, for code generators.
     String getJavaInitializationString();
 
     String getAsText();
 
     void setAsText(String text) throws IllegalArgumentException;
 
-    // Los valores validos, cuando la propiedad es de lista cerrada (un enum, por ejemplo).
-    // null significa "no es de lista cerrada".
+    // The valid values, when the property is of a closed list (an enum, say). null means "it is not
+    // of a closed list".
     String[] getTags();
 
     /**
-     * Un panel propio para editar el valor, cuando texto y lista no alcanzan.
+     * A panel of its own for editing the value, when text and list are not enough.
      *
-     * @return el componente, o `null` si el editor no tiene uno; {@link #supportsCustomEditor} lo
-     *     anticipa
+     * @return the component, or `null` if the editor has none; {@link #supportsCustomEditor}
+     *     announces it in advance
      */
     java.awt.Component getCustomEditor();
 

@@ -2,9 +2,9 @@ package java.beans;
 
 import java.util.EventListenerProxy;
 
-// Un oyente atado a UNA propiedad. Es como PropertyChangeSupport recuerda los oyentes que se
-// registraron por nombre: en vez de llevar dos estructuras, envuelve al oyente junto con el
-// nombre y lo guarda en la misma lista que los demas.
+// A listener tied to ONE property. It is how PropertyChangeSupport remembers the listeners that
+// registered by name: instead of keeping two structures, it wraps the listener together with the
+// name and stores it in the same list as the rest.
 public class PropertyChangeListenerProxy
         extends EventListenerProxy<PropertyChangeListener>
         implements PropertyChangeListener {
@@ -20,7 +20,7 @@ public class PropertyChangeListenerProxy
         return this.propertyName;
     }
 
-    // Delega tal cual: el filtrado por nombre ya lo hizo quien despacha.
+    // It delegates as it stands: the filtering by name was already done by whoever dispatches.
     public void propertyChange(PropertyChangeEvent evt) {
         this.getListener().propertyChange(evt);
     }

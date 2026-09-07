@@ -1,20 +1,20 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.QuitHandler -- decide si el programa se cierra.
+ * KajiLibrary's java.awt.desktop.QuitHandler -- decides whether the program closes.
  *
- * <p>Se registra con {@code Desktop.setQuitHandler}. Es el unico manejador del paquete que puede
- * <b>negarse</b>, y por eso su metodo recibe un {@link QuitResponse} aparte.
+ * <p>It is registered with {@code Desktop.setQuitHandler}. It is the package's only handler that can
+ * <b>refuse</b>, and that is why its method receives a {@link QuitResponse} apart.
  *
- * <p>Ver ahi por que la respuesta no es el valor de retorno.
+ * <p>See there why the answer is not the return value.
  */
 public interface QuitHandler {
 
     /**
-     * El sistema quiere cerrar el programa.
+     * The system wants to close the program.
      *
-     * <p>Hay que llamar a {@code performQuit} o a {@code cancelQuit} sobre la respuesta, tarde o
-     * temprano. No llamar a ninguno deja al sistema esperando.
+     * <p>Either {@code performQuit} or {@code cancelQuit} has to be called on the response, sooner or
+     * later. Calling neither leaves the system waiting.
      */
     void handleQuitRequestWith(QuitEvent e, QuitResponse response);
 }

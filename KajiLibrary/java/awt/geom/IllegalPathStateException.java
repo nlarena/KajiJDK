@@ -1,8 +1,8 @@
 package java.awt.geom;
 
-// java.awt.geom.IllegalPathStateException de KajiLibrary -- se tira cuando a un Path2D se le pide
-// una operacion que necesita un punto actual (lineTo, quadTo, curveTo, closePath) y todavia no hubo
-// ningun moveTo.
+// KajiLibrary's java.awt.geom.IllegalPathStateException -- thrown when a Path2D is asked for an
+// operation that needs a current point (lineTo, quadTo, curveTo, closePath) and there has not been
+// any moveTo yet.
 public class IllegalPathStateException extends RuntimeException {
 
     public IllegalPathStateException() {

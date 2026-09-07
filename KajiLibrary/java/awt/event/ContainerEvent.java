@@ -4,40 +4,40 @@ import java.awt.Component;
 import java.awt.Container;
 
 /**
- * A un contenedor le agregaron o le sacaron un hijo.
+ * A child was added to or taken from a container.
  *
- * <p>Llega **después** del cambio y es sólo un aviso: no se puede vetar. La fuente es el contenedor
- * y el hijo viene aparte, porque el interesante es el hijo.
+ * <p>It arrives **after** the change and is only a notice: it cannot be vetoed. The source is the
+ * container and the child travels apart, because the interesting one is the child.
  */
 public class ContainerEvent extends ComponentEvent {
 
     private static final long serialVersionUID = -4114942250539772041L;
 
-    /** Se agregó un hijo. */
+    /** A child was added. */
     public static final int COMPONENT_ADDED = 300;
 
-    /** Se sacó un hijo. */
+    /** A child was taken away. */
     public static final int COMPONENT_REMOVED = 301;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int CONTAINER_FIRST = 300;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int CONTAINER_LAST = 301;
 
     private final Component child;
 
     /**
-     * Con el contenedor, el identificador y el hijo.
+     * With the container, the identifier and the child.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public ContainerEvent(Component source, int id, Component child) {
         super(source, id);
         this.child = child;
     }
 
-    /** El contenedor al que le pasó. */
+    /** The container it happened to. */
     public Container getContainer() {
         if (this.source instanceof Container) {
             return (Container) this.source;
@@ -45,20 +45,20 @@ public class ContainerEvent extends ComponentEvent {
         return null;
     }
 
-    /** El hijo que se agregó o se sacó. */
+    /** The child that was added or taken away. */
     public Component getChild() {
         return this.child;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == COMPONENT_ADDED) {
-            tipo = "COMPONENT_ADDED";
+            type = "COMPONENT_ADDED";
         } else if (this.id == COMPONENT_REMOVED) {
-            tipo = "COMPONENT_REMOVED";
+            type = "COMPONENT_REMOVED";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + ",child=" + (this.child == null ? "null" : this.child.getName());
+        return type + ",child=" + (this.child == null ? "null" : this.child.getName());
     }
 }

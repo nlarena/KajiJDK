@@ -1,8 +1,8 @@
 package java.beans;
 
-// La implementacion vacia de BeanInfo, para heredar y sobrescribir solo lo que interesa. Devolver
-// null en todo no es pereza: es la senal convenida de "no aporto nada aca, deducilo por reflexion",
-// y por eso los metodos no devuelven arreglos vacios.
+// BeanInfo's empty implementation, for inheriting from and overriding only what matters. Returning
+// null everywhere is not laziness: it is the agreed signal for "I contribute nothing here, work it
+// out by reflection", and that is why the methods do not return empty arrays.
 public class SimpleBeanInfo implements BeanInfo {
 
     public SimpleBeanInfo() {
@@ -37,27 +37,27 @@ public class SimpleBeanInfo implements BeanInfo {
     }
 
     /**
-     * El ícono del bean.
+     * The bean's icon.
      *
-     * @return `null`: el de base no ofrece ninguno. Un `BeanInfo` concreto lo redefine llamando a
-     *     {@link #loadImage} con el nombre de su archivo.
+     * @return `null`: the base one offers none. A concrete `BeanInfo` overrides it by calling
+     *     {@link #loadImage} with the name of its file.
      */
     public java.awt.Image getIcon(int iconKind) {
         return null;
     }
 
     /**
-     * Carga una imagen que está como recurso al lado de la clase del `BeanInfo`.
+     * Loads an image sitting as a resource next to the `BeanInfo`'s class.
      *
-     * <p>Es la ayuda pensada para escribir {@link #getIcon}: el nombre es relativo a la clase, como en
-     * {@link Class#getResource}, así que `"MiBeanIcon16.gif"` busca al lado del `.class`.
+     * <p>It is the help meant for writing {@link #getIcon}: the name is relative to the class, as in
+     * {@link Class#getResource}, so `"MyBeanIcon16.gif"` looks next to the `.class`.
      *
-     * <p>Acá devuelve `null` aunque el recurso exista: los bytes se leen bien, pero esta biblioteca
-     * no tiene decodificador de imágenes y {@link java.awt.Toolkit#createImage(byte[])} lo dice
-     * devolviendo `null`. Es la misma respuesta que da el JDK cuando el recurso no está, y es honesta
-     * en los dos casos: no hay imagen que dar.
+     * <p>Here it returns `null` even if the resource exists: the bytes are read fine, but this
+     * library has no image decoder and {@link java.awt.Toolkit#createImage(byte[])} says so by
+     * returning `null`. It is the same answer the JDK gives when the resource is not there, and it
+     * is honest in both cases: there is no image to give.
      *
-     * @return la imagen, o `null` si el recurso no está o no se puede decodificar
+     * @return the image, or `null` if the resource is not there or cannot be decoded
      */
     public java.awt.Image loadImage(String resourceName) {
         java.io.InputStream in = this.getClass().getResourceAsStream(resourceName);
@@ -73,7 +73,8 @@ public class SimpleBeanInfo implements BeanInfo {
             try {
                 in.close();
             } catch (java.io.IOException e) {
-                // Cerrar un recurso que ya se leyo no puede fallar de forma que importe.
+                // Closing a resource that has already been read cannot fail in a way that
+                // matters.
             }
         }
     }

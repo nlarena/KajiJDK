@@ -1102,6 +1102,36 @@
 //! then — for the one factory with a plausible shape, `metafactory` — expressing "allocate the spun
 //! class and run its `<init>`" as the `new` + `invokespecial` pair it already is. Both are real
 //! steps; neither is a guard.
+//!
+//! **Y cuánto rendiría, medido** (`jit_tests::de_que_estan_hechos_los_invokedynamic_del_corpus`):
+//!
+//! ```text
+//! 5897  StringConcatFactory::makeConcatWithConstants
+//! 1092  <sin resolver>
+//!  426  LambdaMetafactory::metafactory
+//!   32  ObjectMethods::bootstrap
+//!    1  SwitchBootstraps::typeSwitch
+//! ```
+//!
+//! **El 86% es concatenación de strings**, y lo que la traba **no es este tier**: es que esta VM la
+//! implementa **en Rust** (`concat_with_recipe` renderiza cada argumento y devuelve un `String`
+//! nativo). Un intrínseco de Rust no tiene bytecode, y sin bytecode no hay nada que compilar — pero
+//! eso es una decisión de implementación de la VM, no un límite del compilador.
+//!
+//! **El camino que sí existe**, y es el mismo que la VM ya recorre para los lambdas: que el
+//! bootstrap **spinee un método Java** en vez de calcular en Rust, con el cuerpo que javac emitía
+//! antes de Java 9 — `new StringBuilder().append(…)…toString()`. `LambdaMetafactory` ya fabrica una
+//! clase estable por call site, y `StringBuilder` ya está en la biblioteca. Hecho eso, el indy pasa
+//! a ser **una llamada estática a un método spun**, y este tier la compila sin una línea nueva:
+//! alocación y llamadas es exactamente lo que sabe hacer.
+//!
+//! El precio hay que decirlo: el intrínseco de Rust es **más rápido interpretado** que la secuencia
+//! de `StringBuilder`, así que la jugada cambia velocidad del intérprete por *compilabilidad*. Es
+//! la misma que hace el JDK real, donde `StringConcatFactory` produce una cadena de `MethodHandle`
+//! que HotSpot inlinea; el intrínseco es el atajo que este proyecto tomó primero.
+//!
+//! Con eso, el techo de este frente no es el 6% de `metafactory` sino **el bloque entero**. Lo que
+//! sigue faltando es el trabajo, que está en la VM y no acá.
 
 //! # Group 4: a **real call**, and the deopt that walks back out through it
 //!
@@ -2337,6 +2367,26 @@ pub enum Ineligible {
     /// supplied, the object is bigger than Eden, or Eden's capacity does not fit the immediate the
     /// bounds check needs. A property of the VM's configuration and of the class, not of the method.
     AllocOutOfReach { pc: usize },
+    /// **`multianewarray` de más de una dimensión** — un rechazo *razonado*, no una carencia del
+    /// emisor, y por eso tiene nombre propio en vez de contarse como opcode desconocido.
+    ///
+    /// Un `new int[n][m]` aloca `1 + n` arreglos: la cantidad **depende de un operando** y no tiene
+    /// cota estática. Eso choca de frente con dos cosas de este tier a la vez. La primera es el log
+    /// de alocación, que es un array fijo de [`ALLOC_LOG_RECORDS`] entradas en el buffer del
+    /// llamador — un `n` mayor que eso lo desborda siempre.
+    ///
+    /// La segunda es la que lo cierra, y no se arregla agrandando el log: **las salidas de este
+    /// tier reanudan en un límite de instrucción**. Un `multianewarray` que se quedó sin log a
+    /// mitad de camino ya alocó parte de la cadena, y al reanudar el intérprete **re-ejecuta el
+    /// opcode entero** y la aloca de nuevo. Lo alocado antes queda inalcanzable —o sea que no es
+    /// incorrecto, es basura para la próxima colección— pero el método no progresa: con un `n`
+    /// mayor que la capacidad del log, cada intento llena el log y vuelve a empezar. Un opcode que
+    /// no puede terminar no es un opcode que falte implementar.
+    ///
+    /// El caso de **una** dimensión (`new int[3][]`, `dimensions == 1`) sí sería expresable: es una
+    /// sola alocación, exactamente lo que hace `anewarray`. No está implementado porque medirlo dio
+    /// **cero** métodos en el corpus — los tres `multianewarray` que hay usan `dimensions == 2`.
+    MultiDimensional { pc: usize, dimensions: u8 },
     /// A branch target outside the code array, or an instruction whose operand bytes run off
     /// the end.
     OutOfRange { pc: usize },
@@ -2419,6 +2469,10 @@ impl std::fmt::Display for Ineligible {
             Ineligible::AllocOutOfReach { pc } => {
                 write!(f, "the allocation at {pc} is outside what this tier can do inline")
             }
+            Ineligible::MultiDimensional { pc, dimensions } => write!(
+                f,
+                "multianewarray at {pc} builds {dimensions} dimensions, an allocation count no operand bounds"
+            ),
             Ineligible::OutOfRange { pc } => write!(f, "instruction or branch at {pc} leaves the code array"),
             Ineligible::StackMismatch { pc, seen, found } => {
                 write!(f, "pc {pc} is reached with stack depth {seen} and {found}")
@@ -3269,6 +3323,37 @@ fn transfer(
             state.pop(pc, Reference)?; // ...over the array
             state.stack.push(Int);
         }
+        // **Los tres accesos angostos de lectura** — `baload` (0x33), `caload` (0x34) y `saload`
+        // (0x35). En el mapa de tipos son `iaload` exacto: índice sobre arreglo, sale un `int`. El
+        // ancho y el signo no viven acá sino en el emisor, porque **el opcode ya los fija**: la
+        // bytecode verificada nunca pone un `caload` sobre un `byte[]`, así que no hace falta
+        // perfilar la clase del arreglo como sí hace `aastore`.
+        0x33 | 0x34 | 0x35 => {
+            state.pop(pc, Int)?; // índice...
+            state.pop(pc, Reference)?; // ...sobre el arreglo
+            state.stack.push(Int);
+        }
+        // **Los accesos de 8 bytes y de `float`** — `laload` (0x2f), `faload` (0x30) y `daload`
+        // (0x31). Como los angostos, el opcode fija el ancho; lo que cambia es el `Kind` que sale.
+        //
+        // Un `long` ocupa **una** posición de pila acá, no dos: el marco nativo tiene slots de 64
+        // bits, así que `Cat2High` sólo existe para los *locales* (ver su doc). Por eso un `push`
+        // alcanza y no hay que modelar la mitad alta.
+        0x2f => {
+            state.pop(pc, Int)?;
+            state.pop(pc, Reference)?;
+            state.stack.push(Kind::Long);
+        }
+        0x30 => {
+            state.pop(pc, Int)?;
+            state.pop(pc, Reference)?;
+            state.stack.push(Kind::Float);
+        }
+        0x31 => {
+            state.pop(pc, Int)?;
+            state.pop(pc, Reference)?;
+            state.stack.push(Kind::Double);
+        }
         // `aaload` is `iaload`'s shape with the *element's* kind: a reference in, a reference out.
         // The array is a `Reference` here exactly as an `int[]` is -- the type map does not
         // distinguish array classes, and it does not need to: verified bytecode never puts an
@@ -3293,6 +3378,25 @@ fn transfer(
             let (_, kind) = (env.field)(method.unit, pc, index).ok_or(wrong)?;
             state.pop(pc, kind)?; // putfield: the value...
             state.pop(pc, Reference)?; // ...over the receiver
+        }
+        // **Los tres accesos angostos de escritura** — `bastore` (0x54), `castore` (0x55) y
+        // `sastore` (0x56). Mismo pop que `iastore`; el truncado a 8 o 16 bits lo hace el store,
+        // que es lo que manda JVMS §6.5.
+        0x54 | 0x55 | 0x56 => {
+            state.pop(pc, Int)?; // el valor...
+            state.pop(pc, Int)?; // ...sobre el índice...
+            state.pop(pc, Reference)?; // ...sobre el arreglo
+        }
+        // `lastore` (0x50), `fastore` (0x51) y `dastore` (0x52): el espejo de las tres de arriba.
+        0x50 | 0x51 | 0x52 => {
+            let valor = match op {
+                0x50 => Kind::Long,
+                0x51 => Kind::Float,
+                _ => Kind::Double,
+            };
+            state.pop(pc, valor)?; // el valor...
+            state.pop(pc, Int)?; // ...sobre el índice...
+            state.pop(pc, Reference)?; // ...sobre el arreglo
         }
         0x4f => {
             state.pop(pc, Int)?; // iastore: the value...
@@ -3355,6 +3459,14 @@ fn transfer(
         }
         0x88 => {
             state.pop(pc, Kind::Long)?; // l2i
+            state.stack.push(Int);
+        }
+        // **Las tres conversiones angostas** (JLS §5.1.3): `i2b`, `i2c`, `i2s` truncan un `int` a
+        // 8 o 16 bits y lo reinterpretan — con signo las dos de `byte`/`short`, sin signo la de
+        // `char`. Entran y salen `Int`: el resultado sigue siendo un `int` de la JVM, solo que con
+        // un rango más chico. Es el emisor el que hace el truncado, en una instrucción.
+        0x91 | 0x92 | 0x93 => {
+            state.pop(pc, Int)?;
             state.stack.push(Int);
         }
 
@@ -3420,6 +3532,27 @@ fn transfer(
         0x90 => {
             state.pop(pc, Kind::Double)?; // d2f
             state.stack.push(Kind::Float);
+        }
+        // **Las cuatro de punto flotante a entero** — `f2i` (0x8b), `f2l` (0x8c), `d2i` (0x8e) y
+        // `d2l` (0x8f). Son las únicas conversiones que **pierden** información de una forma que la
+        // JLS especifica caso por caso (§5.1.3): NaN da 0, y lo que se sale del rango satura a
+        // `MIN` o `MAX` según el signo en vez de envolver. El mapa sólo dice qué entra y qué sale;
+        // la saturación la resuelve el emisor, y lo hace **guardando en vez de emitiéndola**.
+        0x8b => {
+            state.pop(pc, Kind::Float)?;
+            state.stack.push(Int);
+        }
+        0x8c => {
+            state.pop(pc, Kind::Float)?;
+            state.stack.push(Kind::Long);
+        }
+        0x8e => {
+            state.pop(pc, Kind::Double)?;
+            state.stack.push(Int);
+        }
+        0x8f => {
+            state.pop(pc, Kind::Double)?;
+            state.stack.push(Kind::Long);
         }
 
         // --- the stack shuffles: permutations, and blind to the kinds they move --------------
@@ -3563,7 +3696,7 @@ fn transfer(
         //
         // Popping top-first with `state.pop` therefore walks the arguments **downwards**, and a
         // mismatch is an [`Ineligible::WrongType`] like any other.
-        0xb6..=0xb9 => {
+        0xb6..=0xba => {
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             // **The shape of the call is the shape of *any* of its targets.** Every alternative
             // of a dispatched site was selected for the same descriptor — that is what a vtable
@@ -3905,6 +4038,11 @@ fn decode(
         // --- constants ---------------------------------------------------------------------
         // `aconst_null` is a constant like any other here: `null` is the reference `0`, so it
         // materialises the immediate 0 and the type map is what remembers it is not an `int`.
+        // `multianewarray` (0xc5): reconocido y rechazado con motivo — ver [`Ineligible::MultiDimensional`].
+        0xc5 => {
+            need(4)?;
+            return Err(Ineligible::MultiDimensional { pc, dimensions: code[pc + 3] });
+        }
         0x01 => return Ok((simple(1, 0, 1), Some(0))),
         // iconst_m1 (0x02) .. iconst_5 (0x08): the value is the opcode minus iconst_0.
         0x02..=0x08 => return Ok((simple(1, 0, 1), Some(op as i64 - 0x03))),
@@ -4195,7 +4333,7 @@ fn decode(
             reachable_heap()?;
             simple(1, 1, 1)
         }
-        0x2e | 0x32 => {
+        0x2e | 0x32 | 0x33 | 0x34 | 0x35 | 0x2f | 0x30 | 0x31 => {
             reachable_heap()?;
             simple(1, 2, 1)
         }
@@ -4214,7 +4352,7 @@ fn decode(
             i32::try_from(offset).map_err(|_| Ineligible::HeapOutOfReach { pc })?;
             simple(3, 2, 0)
         }
-        0x4f => {
+        0x4f | 0x54 | 0x55 | 0x56 | 0x50 | 0x51 | 0x52 => {
             reachable_heap()?;
             simple(1, 3, 0)
         }
@@ -4271,7 +4409,8 @@ fn decode(
         // becomes `MIN`/`MAX` — while x86's `cvtt*2si` answers the "integer indefinite" value
         // (`MIN`) for all three of those cases. Getting them right needs a compare-and-branch
         // sequence per conversion, which is a step of its own; getting them wrong is silent.
-        0x85 | 0x88 | 0x86 | 0x87 | 0x89 | 0x8a | 0x8d | 0x90 => simple(1, 1, 1),
+        0x85 | 0x88 | 0x86 | 0x87 | 0x89 | 0x8a | 0x8d | 0x90 | 0x91 | 0x92 | 0x93
+        | 0x8b | 0x8c | 0x8e | 0x8f => simple(1, 1, 1),
 
         // --- stack -------------------------------------------------------------------------
         // Every one of these is read as its **category-1** form, which in this subset is not a
@@ -4368,7 +4507,7 @@ fn decode(
         // The **length** is the one thing that is not shared: an `invokeinterface` is five bytes
         // (its two trailing operands, a count and a zero, are historical), so the length comes from
         // [`invoke_len`] rather than a literal.
-        0xb6..=0xb9 => {
+        0xb6..=0xba => {
             need(invoke_len(op) as usize)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             let callee = first_callee(env, method.unit, pc, index, op)?;
@@ -5049,7 +5188,12 @@ fn link_key(link: u32) -> u32 {
 /// Written once because both [`decode`] and [`plan`] ask, and a disagreement between them would be
 /// an invoke with a body that never got emitted.
 fn is_invoke(op: u8) -> bool {
-    matches!(op, 0xb6..=0xb9)
+    // **`invokedynamic` (0xba) entró acá**, y el rango contiguo no es casualidad: desde que la
+    // concatenación spinea un método Java (ver `concat_factory` en el intérprete), un indy resuelto
+    // *es* una llamada estática a la clase spun, con la misma forma que las otras cuatro. Lo que lo
+    // distingue es cuándo se lo puede resolver: la clase se fabrica la primera vez que el sitio
+    // corre, así que uno que nunca corrió refuta el método — igual que un campo sin observar.
+    matches!(op, 0xb6..=0xba)
 }
 
 /// **How many bytes an invoke occupies.** Three for `invokevirtual`, `invokespecial` and
@@ -5271,9 +5415,31 @@ pub fn compile_with_regs<'a>(
     // opcode leaves the method's value. See [`CompiledCode::result_base`] — the status word no
     // longer carries it.
     let result_base: i32 = bodies.iter().map(|b| b.method.max_locals as i32 + b.max_depth as i32).sum();
-    // Where the **allocation log** starts: right after the result slot. Slot `alloc_base` is the
-    // record count, and record `r` is the pair at `alloc_base + 1 + 2r`.
-    let alloc_base: i32 = result_base + 1;
+    // **El puntero al log compartido** (etapa 1 de F3-H4), un slot por región.
+    //
+    // Hoy cada compilación anota en *su* log, y `JitCache::enter` replica **sólo el de la raíz** —
+    // por eso un callee que aloca mantiene su registro en cero y no se lo puede llamar desde
+    // nativo: sus registros se perderían, y un objeto que el colector nunca conoce es la peor
+    // corrupción que este proyecto sabe producir.
+    //
+    // La razón por la que el callee no puede simplemente escribir en el log del root es de
+    // direccionamiento: cada frame recibe `LOCALS` apuntando a **su propia** región, y la distancia
+    // hasta el root es la suma de los `buffer_slots` de la cadena — un número que el callee no
+    // conoce. Así que el puntero **viaja**: la raíz lo recibe de `enter`, y cada llamada lo copia
+    // al slot homólogo del callee.
+    //
+    // Va en su propio slot y no en un registro porque no queda ninguno callee-saved libre: el cache
+    // de operandos usa `R12`–`R15`, y `LOCALS`/`POLL`/`FRAMES` el resto.
+    let allocates = bodies.iter().any(|b| b.order.iter().any(|&pc| matches!(b.method.code[pc], 0xbb..=0xbd)));
+    let barriers = bodies.iter().any(|b| b.order.iter().any(|&pc| logs_barrier(&b.method, env, pc)));
+    // **Sólo lo paga quien lo necesita**, que es la misma regla que los logs: una compilación que no
+    // aloca, no escribe referencias y no llama a nadie no tiene log que compartir ni a quién
+    // pasárselo, y su región queda **byte por byte** como antes de este paso.
+    let log_ptr_base: i32 = result_base + 1;
+    let log_ptr_slots: i32 = i32::from(allocates || barriers || !calls.is_empty());
+    // Where the **allocation log** starts. Slot `alloc_base` is the record count, and record `r` is
+    // the pair at `alloc_base + 1 + 2r`.
+    let alloc_base: i32 = log_ptr_base + log_ptr_slots;
     // **Which logs this compilation carries, decided before a byte is emitted.** The barrier log
     // sits past the allocation log, so its base is not a number the emitter can discover as it
     // goes — it has to be known when the first record is written, whichever of the two comes
@@ -5283,8 +5449,6 @@ pub fn compile_with_regs<'a>(
     //
     // A method that carries neither log pays **no slot at all** for either feature — the buffer
     // ends at `alloc_base`, exactly as it did before this step.
-    let allocates = bodies.iter().any(|b| b.order.iter().any(|&pc| matches!(b.method.code[pc], 0xbb..=0xbd)));
-    let barriers = bodies.iter().any(|b| b.order.iter().any(|&pc| logs_barrier(&b.method, env, pc)));
     let alloc_slots: i32 = match allocates {
         true => 1 + 2 * ALLOC_LOG_RECORDS as i32,
         false => 0,
@@ -6349,13 +6513,22 @@ fn emit_body(
             // collector nothing — nothing is stored, no object graph changes — and it owes JVMS
             // §6.5 no type check either, because *reading* an element cannot be unsound the way
             // writing one can. So the two guards are `iaload`'s two, unchanged.
-            0x2e | 0x32 => {
+            0x2e | 0x32 | 0x33 | 0x34 | 0x35 | 0x2f | 0x30 | 0x31 => {
                 // Both operands are read into scratch and neither home is touched until the last
                 // `jcc` is behind us — the array's home in particular, which the address
                 // computation would otherwise overwrite with an *address* that the deopt stub of
                 // the bounds check would then spill as if it were a reference.
+                // **El stride lo fija el opcode, no un perfil.** `baload` sólo es legal sobre un
+                // `byte[]`/`boolean[]` y `caload` sólo sobre un `char[]` (JVMS §6.5), así que la
+                // bytecode verificada ya dice el ancho — a diferencia de `aastore`, que necesita
+                // perfilar la clase del arreglo porque el opcode no dice cuál es el tipo elemento.
                 let (kind, stride) = match op {
                     0x2e => (Kind::Int, env.heap.int_element),
+                    0x33 => (Kind::Int, 1),          // baload:  byte[] / boolean[]
+                    0x34 | 0x35 => (Kind::Int, 2),   // caload / saload: char[] / short[]
+                    0x2f => (Kind::Long, 8),         // laload:  long[]
+                    0x30 => (Kind::Float, 4),        // faload:  float[]
+                    0x31 => (Kind::Double, 8),       // daload:  double[]
                     _ => (Kind::Reference, env.heap.reference_element),
                 };
                 read_home(a, T0, home(d - 2)); // the array reference...
@@ -6371,7 +6544,17 @@ fn emit_body(
                 a.imul_rri(T1, T1, stride as i32);
                 a.add_rr(T0, T1);
                 let w = work_reg(home(d - 2));
-                heap_load(a, kind, w, Mem::at(T0, env.heap.array_data as i32));
+                let at = Mem::at(T0, env.heap.array_data as i32);
+                // **Acá está toda la semántica de los angostos, y es una instrucción.** `byte` y
+                // `short` se extienden **con** signo, `char` **sin** — y errarle da la respuesta
+                // correcta para todo valor que no tenga prendido el bit alto, que es lo que hace
+                // al error invisible en cualquier test con datos chicos.
+                match op {
+                    0x33 => a.movsx_rm8(w, at),  // baload: 8 bits con signo
+                    0x34 => a.movzx_rm16(w, at), // caload: 16 bits sin signo
+                    0x35 => a.movsx_rm16(w, at), // saload: 16 bits con signo
+                    _ => heap_load(a, kind, w, at),
+                }
                 write_home(a, home(d - 2), w);
             }
 
@@ -6485,7 +6668,16 @@ fn emit_body(
             // `T1` carries the index into the address computation and is dead immediately after the
             // `add`, which is what lets the value be loaded into it rather than into a fourth
             // register this tier does not have.
-            0x4f => {
+            0x4f | 0x54 | 0x55 | 0x56 | 0x50 | 0x51 | 0x52 => {
+                // El stride, como en la carga, lo fija el opcode: `bastore` sólo cae sobre un
+                // `byte[]`/`boolean[]` y `castore`/`sastore` sobre 16 bits.
+                let stride = match op {
+                    0x54 => 1,
+                    0x55 | 0x56 => 2,
+                    0x50 | 0x52 => 8, // lastore / dastore
+                    0x51 => 4,        // fastore
+                    _ => env.heap.int_element,
+                };
                 read_home(a, T0, home(d - 3)); // the array...
                 a.cmp_ri(T0, 0);
                 a.jcc(Cond::E, deopt);
@@ -6496,10 +6688,25 @@ fn emit_body(
                 a.mov_rm32(T2, Mem::at(T0, env.heap.array_length as i32));
                 a.cmp_rr(T1, T2);
                 a.jcc(Cond::Ge, deopt);
-                a.imul_rri(T1, T1, env.heap.int_element as i32);
+                a.imul_rri(T1, T1, stride as i32);
                 a.add_rr(T0, T1);
                 let v = in_reg(a, home(d - 1), T1); // ...and the value, on top of both
-                a.mov_mr32(Mem::at(T0, env.heap.array_data as i32), v);
+                let at = Mem::at(T0, env.heap.array_data as i32);
+                // **La mitad destructiva.** Un ancho de más no da un valor equivocado: **pisa el
+                // elemento vecino**, y el daño aparece lejos de acá. `castore` y `sastore`
+                // comparten instrucción porque los dos escriben 16 bits crudos — lo que distingue
+                // a `char` de `short` es cómo se los lee, no cómo se los guarda.
+                match op {
+                    0x54 => a.mov_mr8(at, v),          // bastore: 8 bits
+                    0x55 | 0x56 => a.mov_mr16(at, v),  // castore / sastore: 16 bits
+                    // Los de 64 bits van por `heap_store`, que ya elige el ancho por `Kind` — es
+                    // el mismo camino que `putfield` de un `long`, y compartirlo es lo que evita
+                    // que los dos puedan discrepar sobre cuántos bytes ocupa un `double`.
+                    0x50 => heap_store(a, Kind::Long, at, v),
+                    0x51 => heap_store(a, Kind::Float, at, v),
+                    0x52 => heap_store(a, Kind::Double, at, v),
+                    _ => a.mov_mr32(at, v),
+                }
             }
 
             // --- aastore ----------------------------------------------------------------------
@@ -6804,6 +7011,27 @@ fn emit_body(
                 write_home(a, home(d - 1), w);
             }
 
+            // --- i2b / i2c / i2s ---------------------------------------------------------------
+            //
+            // Una instrucción cada una, y la elección entre ellas **es** la semántica: `byte` y
+            // `short` se reinterpretan con signo, `char` sin signo. Confundir `i2c` con `i2s` da la
+            // respuesta correcta para todo valor menor a 32768, que es precisamente lo que hace al
+            // error difícil de ver — de ahí que los tests crucen ese umbral.
+            //
+            // No hace falta re-normalizar después: los tres dejan el registro sign-extendido a 64
+            // bits (`i2c` porque su resultado es siempre positivo y menor a 2^31), que es el
+            // invariante que todo `int` mantiene acá.
+            0x91 | 0x92 | 0x93 => {
+                let w = work_reg(home(d - 1));
+                read_home(a, w, home(d - 1));
+                match op {
+                    0x91 => a.movsx_rr8(w, w),  // i2b
+                    0x92 => a.movzx_rr16(w, w), // i2c
+                    _ => a.movsx_rr16(w, w),    // i2s
+                }
+                write_home(a, home(d - 1), w);
+            }
+
             // --- fadd / fsub / fmul / fdiv and their `double` twins ---------------------------
             //
             // **Six instructions, and four of them are moves.** The operands come out of their
@@ -6984,6 +7212,51 @@ fn emit_body(
                     false => a.movd_rx(w, F0),
                 }
                 write_home(a, home(d - 1), w);
+            }
+
+            // --- f2i / f2l / d2i / d2l ---------------------------------------------------------
+            //
+            // **Una instrucción y una guarda, en vez de la saturación completa.** `cvtt*2si`
+            // trunca hacia cero, que es lo que la JVM pide, pero ante un NaN, un infinito o un
+            // valor fuera de rango devuelve el *integer indefinite value* de x86 — `MIN` — donde
+            // la JLS §5.1.3 manda **0 para NaN** y **`MIN` o `MAX` según el signo** para el resto.
+            //
+            // Emitir esa saturación son cinco instrucciones más y dos saltos: un `ucomis*` contra
+            // sí mismo para detectar NaN por el flag de paridad, una comparación de signo, y dos
+            // constantes que materializar. Acá se hace lo que hace el resto de este tier ante un
+            // caso raro: se **guarda el valor indefinido y se deopta**, y el intérprete aplica la
+            // regla completa. El caso común —un valor en rango— queda en una instrucción.
+            //
+            // El precio, dicho: un resultado legítimo de exactamente `MIN` también deopta. Es
+            // correcto (el intérprete calcula lo mismo) y es raro.
+            //
+            // **El orden importa acá como en todos lados**: la conversión va a un scratch y no al
+            // registro del operando, porque `work_reg` devuelve *el propio home* cuando vive en un
+            // registro — escribir ahí antes de la guarda dejaría al deopt reconstruyendo el
+            // resultado en vez del `float` original, que es el que hay que re-ejecutar.
+            0x8b | 0x8c | 0x8e | 0x8f => {
+                read_home(a, T0, home(d - 1));
+                let wide = matches!(op, 0x8c | 0x8f); // ...2l
+                match op {
+                    0x8b | 0x8c => {
+                        a.movd_xr(F0, T0);
+                        a.cvttss2si(T1, F0, wide);
+                    }
+                    _ => {
+                        a.movq_xr(F0, T0);
+                        a.cvttsd2si(T1, F0, wide);
+                    }
+                }
+                // El destino de 32 bits extiende con cero hasta 64; normalizarlo es lo que hace
+                // que la comparación contra `i32::MIN` sea la correcta y que el `int` que sale
+                // cumpla el invariante del tier.
+                if !wide {
+                    a.movsxd_rr(T1, T1);
+                }
+                a.mov_ri(T2, if wide { i64::MIN } else { i64::from(i32::MIN) });
+                a.cmp_rr(T1, T2);
+                a.jcc(Cond::E, deopt);
+                write_home(a, home(d - 1), T1);
             }
 
             // --- bitwise: no normalisation needed (see the module docs for the proof) --------
@@ -7445,7 +7718,7 @@ fn emit_body(
             // **The order rule holds unchanged.** Both guards precede the first write, and the
             // first write — the callee's entry frame — is into a region of the buffer no
             // interpreter state names. So a deopt here reports an invoke that has not run.
-            0xb6..=0xb9 if body.native.contains_key(&pc) => {
+            0xb6..=0xba if body.native.contains_key(&pc) => {
                 let call = &layout.calls[body.native[&pc]];
                 let args = call.arg_slots as u16;
                 // How many interpreter frames *this* compilation would already have rebuilt here.
@@ -7464,7 +7737,7 @@ fn emit_body(
                 // It goes **first**, before the record is even read, because it is the guard that
                 // decides whether the record is the right one at all; and it may, because like the
                 // two below it writes nothing.
-                emit_guard(a, call.guard, home(d - args), env.heap, deopt);
+                emit_guard(a, call.guard, || home(d - args), env.heap, deopt);
                 // **Guard 1 — is there anything to call.** A record still holding zero is a callee
                 // that is not compiled (yet, or ever). That is not a compile-time refusal but a
                 // run-time deopt, which is also what makes *direct recursion* expressible: a method
@@ -7538,7 +7811,7 @@ fn emit_body(
                 }
             }
 
-            0xb6..=0xb9 => {
+            0xb6..=0xba => {
                 let kids = body.children.get(&pc).expect("plan expanded every invoke it accepted");
                 // The receiver is the **bottom-most** of the operands this call consumes — the slot
                 // that becomes the callee's local 0 — and it is at the same place whichever arm
@@ -7553,7 +7826,7 @@ fn emit_body(
                     // a polymorphic one needs. One function for both answers to a dispatched site;
                     // see [`emit_guard`] for why it is not two.
                     [child] => {
-                        emit_guard(a, bodies[*child].guard, home(d - args), env.heap, deopt);
+                        emit_guard(a, bodies[*child].guard, || home(d - args), env.heap, deopt);
                         emit_expansion(a, bodies, *child, env, frame, layout, st)?;
                     }
                     // **Two or more: the chain.** The receiver's class is read once and compared
@@ -7653,12 +7926,17 @@ fn guards(op: u8) -> bool {
         0x6c | 0x70 // idiv / irem: a zero divisor
         | 0x6d | 0x71 // ldiv / lrem: a zero divisor (the `MIN / -1` case is computed, not deopted)
         | 0x72 | 0x73 // frem / drem: no instruction exists, so the guard is unconditional
+        | 0x8b | 0x8c | 0x8e | 0x8f // f2i / f2l / d2i / d2l: el valor indefinido de x86 (NaN, inf, fuera de rango)
         | 0xb4      // getfield: a null receiver
         | 0xbe      // arraylength: a null array
         | 0x2e      // iaload: a null array, or an index out of range
+        | 0x33 | 0x34 | 0x35 // baload / caload / saload: los mismos dos, con otro ancho
+        | 0x2f | 0x30 | 0x31 // laload / faload / daload: idem, en 8 y 4 bytes
         | 0x32      // aaload: the same two, and nothing else -- see the emitter
         | 0xb5      // putfield: a null receiver
         | 0x4f      // iastore: a null array, or an index out of range
+        | 0x54 | 0x55 | 0x56 // bastore / castore / sastore: los mismos dos, con otro ancho
+        | 0x50 | 0x51 | 0x52 // lastore / fastore / dastore: idem
         | 0x53      // aastore: those two, plus both halves of the type check (a full barrier log
                     // leaves here too, but through the capacity stub -- see `Frames::barriers`)
         | 0xbb      // new: Eden full, or this excursion's allocation log full
@@ -7699,11 +7977,17 @@ fn guards(op: u8) -> bool {
 /// **`null` is a miss, not a dereference**: it is tested before the header is read, so the guard
 /// never touches `eden_base + 0`. The interpreter re-executes the invoke and raises the
 /// `NullPointerException` for it.
-fn emit_guard(a: &mut Asm, guard: Guard, receiver: Home, heap: Heap, deopt: Label) {
+fn emit_guard(a: &mut Asm, guard: Guard, receiver: impl FnOnce() -> Home, heap: Heap, deopt: Label) {
     if guard == Guard::Static {
         return;
     }
-    read_home(a, T0, receiver);
+    // **El receptor se pide recién acá, y por eso es una closure.** Un sitio `Guard::Static` no
+    // tiene receptor, y su `home(d - args)` puede no existir: un método `void` que llama a un
+    // estático `void` sin argumentos nunca apila nada, así que su marco nativo tiene **cero**
+    // slots de operando y pedir la posición 0 revienta el `assert` de `Frame::local`. Evaluarlo
+    // con avidez en el llamador hacía justamente eso — un panic del compilador, que en la VM es
+    // la VM entera cayéndose, sobre un método que se rechaza o se compila sin problema.
+    read_home(a, T0, receiver());
     a.cmp_ri(T0, 0);
     a.jcc(Cond::E, deopt);
     if let Guard::ExactClass(mirror) = guard {
@@ -8205,15 +8489,41 @@ mod tests {
         // rejected outright rather than compiled up to that point.
         let err = compile(&[0x1a, 0xb8, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
         assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xb8 });
-        // The same for an `f2i` and a `d2i` — the narrowing float-to-integer conversions are the
-        // one part of the floating-point group deliberately left out (see `decode`).
+        // **Esta lista se vació dos veces, y conviene decir por qué.** Primero estaban `athrow`
+        // (0xbf) y los monitores (0xc2/0xc3), hasta que el grupo 5 los compiló a un deopt
+        // incondicional. Después `f2i` (0x8b) y `d2i` (0x8e), las conversiones angostas de punto
+        // flotante a entero, **hasta que entraron al subconjunto**: hoy `cvtt*2si` las resuelve en
+        // una instrucción y guarda el *integer indefinite value* de x86 para que el intérprete
+        // aplique la saturación de la JLS §5.1.3.
         //
-        // **`athrow` (0xbf) and the monitors (0xc2/0xc3) used to be in this list and are not any
-        // more**: group 5 compiles all three to an unconditional deopt. What they do reject here is
-        // an operand of the wrong kind, which is a different claim and is checked below.
+        // El patrón es el de siempre en este archivo: **un test que usa "esto todavía no compila"
+        // como andamio se rompe cuando el compilador mejora**. Van tres vueltas: `athrow` y los
+        // monitores, después `f2i`/`d2i`, y después `invokedynamic` — que estuvo acá **una hora**
+        // antes de que la concatenación pasara a spinear un método Java y el indy se volviera una
+        // llamada estática como cualquier otra.
+        //
+        // Así que ahora el andamio son los únicos opcodes que **no pueden** entrar nunca: `jsr`
+        // (0xa8) y `ret` (0xa9), que JVMS §4.9.1 **prohíbe** en class files de versión 50.0 en
+        // adelante. No es que falten: ningún `.class` moderno puede contenerlos.
+        for op in [0xa8u8, 0xa9] {
+            let err = compile(&[0x03, op, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
+            assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: op }, "0x{op:02x} no puede entrar nunca");
+        }
+        // `multianewarray` es el otro, pero **con motivo**: se lo reconoce y se lo rechaza por lo
+        // que es, no por desconocido. La diferencia se ve en el censo y es la que separa "no sé
+        // hacer esto" de "esto no pertenece acá".
+        let err = compile(&[0x03, 0xc5, 0x00, 0x00, 0x02, 0xac], 1, &no_constants).unwrap_err();
+        assert_eq!(err, Ineligible::MultiDimensional { pc: 1, dimensions: 2 });
+        // Y una dimensión reporta lo mismo, porque tampoco está implementada — pero el número que
+        // acompaña dice cuál de los dos casos es, que es justo lo que hizo falta para decidir.
+        let err = compile(&[0x03, 0xc5, 0x00, 0x00, 0x01, 0xac], 1, &no_constants).unwrap_err();
+        assert_eq!(err, Ineligible::MultiDimensional { pc: 1, dimensions: 1 });
+        // Y lo que ahora *sí* se conoce se rechaza por el motivo correcto: un `int` bajo un `f2i`
+        // es un error de **tipo**, no un opcode ajeno. La diferencia importa — la primera dice
+        // "este programa está mal", la segunda decía "no sé hacer esto".
         for op in [0x8bu8, 0x8e] {
             let err = compile(&[0x03, op, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
-            assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: op }, "0x{op:02x} must be rejected");
+            assert_eq!(err, Ineligible::WrongType { pc: 1 }, "0x{op:02x} type-checks now");
         }
         // All three of group 5's opcodes pop a **reference**, so an `int` under one is a type error
         // rather than an unknown opcode — the pop is what types the operand the resume site hands

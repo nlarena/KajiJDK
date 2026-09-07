@@ -3,13 +3,14 @@ package java.beans;
 import java.util.HashMap;
 import java.util.Map;
 
-// El registro de que editor usar para cada tipo de propiedad. Busca en tres lugares y en este
-// orden: lo registrado a mano, la clase `<Tipo>Editor` al lado del tipo, y esa misma clase en los
-// paquetes del search path.
+// The register of which editor to use for each property type. It looks in three places and in this
+// order: what was registered by hand, the `<Type>Editor` class next to the type, and that same class
+// in the search path's packages.
 //
-// Los editores de los tipos primitivos que el JDK trae de fabrica (sun.beans.editors.*) NO estan
-// aca: son clases de implementacion, no API, y este arbol no las tiene. findEditor devuelve null
-// para un tipo sin editor registrado, que es lo que el JDK tambien hace cuando no encuentra nada.
+// The editors for the primitive types the JDK ships out of the box (sun.beans.editors.*) are NOT
+// here: they are implementation classes, not API, and this tree does not have them. findEditor
+// returns null for a type with no registered editor, which is what the JDK also does when it finds
+// nothing.
 public class PropertyEditorManager {
 
     private static Map<Class<?>, Class<?>> registrados = new HashMap<Class<?>, Class<?>>();
@@ -19,15 +20,15 @@ public class PropertyEditorManager {
     public PropertyEditorManager() {
     }
 
-    // Ata un editor a un tipo. Pasar null como editor borra el registro.
+    // It binds an editor to a type. Passing null as the editor deletes the registration.
     public static void registerEditor(Class<?> targetType, Class<?> editorClass) {
         if (targetType == null) {
             throw new NullPointerException();
         }
-        sincronizarRegistro(targetType, editorClass);
+        syncRegistry(targetType, editorClass);
     }
 
-    private static synchronized void sincronizarRegistro(Class<?> targetType, Class<?> editorClass) {
+    private static synchronized void syncRegistry(Class<?> targetType, Class<?> editorClass) {
         if (editorClass == null) {
             registrados.remove(targetType);
         } else {
@@ -35,32 +36,32 @@ public class PropertyEditorManager {
         }
     }
 
-    private static synchronized Class<?> leerRegistro(Class<?> targetType) {
+    private static synchronized Class<?> readRegistry(Class<?> targetType) {
         return registrados.get(targetType);
     }
 
-    // El editor para ese tipo, ya instanciado, o null si no hay ninguno.
+    // The editor for that type, already instantiated, or null if there is none.
     public static PropertyEditor findEditor(Class<?> targetType) {
         if (targetType == null) {
             throw new NullPointerException();
         }
-        PropertyEditor ed = instanciar(leerRegistro(targetType));
+        PropertyEditor ed = instantiateEditor(readRegistry(targetType));
         if (ed == null) {
-            ed = instanciar(porNombre(targetType.getName() + "Editor"));
+            ed = instantiateEditor(byName(targetType.getName() + "Editor"));
         }
         if (ed == null) {
-            String simple = EventSetDescriptor.nombreSimple(targetType);
+            String simple = EventSetDescriptor.simpleName(targetType);
             String[] rutas = getEditorSearchPath();
             for (int i = 0; i < rutas.length; i++) {
                 if (ed == null) {
-                    ed = instanciar(porNombre(rutas[i] + "." + simple + "Editor"));
+                    ed = instantiateEditor(byName(rutas[i] + "." + simple + "Editor"));
                 }
             }
         }
         return ed;
     }
 
-    private static Class<?> porNombre(String nombre) {
+    private static Class<?> byName(String nombre) {
         Class<?> c = null;
         try {
             c = Class.forName(nombre);
@@ -70,9 +71,10 @@ public class PropertyEditorManager {
         return c;
     }
 
-    // Una clase que no es PropertyEditor, o que no se puede instanciar, cuenta como "no hay
-    // editor": el que buscaba uno prefiere null antes que una excepcion desde el registro.
-    private static PropertyEditor instanciar(Class<?> c) {
+    // A class that is not a PropertyEditor, or that cannot be instantiated, counts as "there is no
+    // editor": whoever was looking for one would rather have null than an exception from the
+    // register.
+    private static PropertyEditor instantiateEditor(Class<?> c) {
         PropertyEditor ed = null;
         if (c != null) {
             try {

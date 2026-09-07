@@ -1,14 +1,14 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.OpenFilesHandler -- abre los archivos que le pasa el sistema.
+ * KajiLibrary's java.awt.desktop.OpenFilesHandler -- opens the files the system hands it.
  *
- * <p>Se registra con {@code Desktop.setOpenFilesHandler}. Solo puede haber uno: a diferencia de los
- * {@link SystemEventListener}, esto no es un aviso sino una responsabilidad, y no tendria sentido que
- * dos partes del programa la tomaran.
+ * <p>It is registered with {@code Desktop.setOpenFilesHandler}. There can be only one: unlike the
+ * {@link SystemEventListener}s, this is not a notice but a responsibility, and it would make no sense
+ * for two parts of the program to take it.
  */
 public interface OpenFilesHandler {
 
-    /** Abre esos archivos. */
+    /** Opens those files. */
     void openFiles(OpenFilesEvent e);
 }

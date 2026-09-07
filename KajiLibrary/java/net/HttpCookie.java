@@ -5,46 +5,46 @@ import java.util.List;
 import java.util.Objects;
 import java.util.StringTokenizer;
 
-// Una cookie HTTP: un par nombre-valor con reglas sobre a quien se le manda de vuelta.
+// An HTTP cookie: a name-value pair with rules about who it is sent back to.
 //
-// La clase carga con **tres especificaciones que se contradicen**: el borrador original de Netscape,
-// el RFC 2109 y el RFC 2965. La diferencia visible es la version: una cookie version 0 se imprime
-// "n=v" y usa el atributo `Expires`; una version 1 se imprime con comillas y `$Path`/`$Domain`, y
-// usa `Max-Age`. `parse` no elige la version por gusto sino que la **adivina del texto**, y las
-// reglas de esa adivinanza estan en `guessVersion`: si aparece "expires=" es Netscape, si aparece
-// "version=" o "max-age" es RFC. Eso explica algo que confunde a todo el mundo: parsear "foo=bar"
-// da version 0, pero `new HttpCookie("foo","bar")` da version 1.
+// The class carries **three specifications that contradict each other**: Netscape's original draft,
+// RFC 2109 and RFC 2965. The visible difference is the version: a version 0 cookie prints as "n=v"
+// and uses the `Expires` attribute; a version 1 one prints with quotes and `$Path`/`$Domain`, and
+// uses `Max-Age`. `parse` does not pick the version by taste but **guesses it from the text**, and
+// the rules of that guess are in `guessVersion`: if "expires=" turns up it is Netscape, if
+// "version=" or "max-age" turns up it is RFC. That explains something that confuses everybody:
+// parsing "foo=bar" gives version 0, but `new HttpCookie("foo","bar")` gives version 1.
 //
-// La otra consecuencia de la mezcla: el separador entre cookies. En el formato RFC varias cookies
-// vienen en un header separadas por comas, y en el de Netscape la coma es parte legal de la fecha
-// de `Expires`. Por eso `parse` solo parte por comas cuando adivino version 1 -- y aun ahi respeta
-// las comillas.
+// The other consequence of the mixture: the separator between cookies. In the RFC format several
+// cookies come in one header separated by commas, and in Netscape's the comma is a legal part of the
+// `Expires` date. That is why `parse` only splits on commas when it guessed version 1 -- and even
+// there it respects the quotes.
 //
 // ===========================================================================================
-// LO UNICO QUE NO ES IDENTICO AL JDK: EL PARSEO DE `Expires`
+// THE ONE THING THAT IS NOT IDENTICAL TO THE JDK: PARSING `Expires`
 // ===========================================================================================
 //
-// El JDK prueba seis patrones de `SimpleDateFormat` uno tras otro. Aca la fecha se parsea con un
-// lector propio que reconoce las mismas seis formas --dia de la semana, dia, mes, ano de dos o
-// cuatro digitos, hora-- pero **no** reproduce las rarezas de `SimpleDateFormat` con entradas
-// malformadas. La regla del ano de dos digitos si es la misma que la del RFC 6265 y la del JDK:
-// menor a 70 es 20xx, si no 19xx.
+// The JDK tries six `SimpleDateFormat` patterns one after another. Here the date is parsed with a
+// reader of our own that recognizes the same six forms --day of the week, day, month, two- or
+// four-digit year, time-- but does **not** reproduce `SimpleDateFormat`'s quirks with malformed
+// input. The two-digit year rule is the same as RFC 6265's and the JDK's: under 70 is 20xx,
+// otherwise 19xx.
 //
-// Cuando la fecha no se entiende, el resultado es `maxAge = 0`, o sea "ya vencida", que es tambien
-// lo que hace el JDK. El modo de falla es conservador: una cookie que no se guarda, nunca una que se
-// guarda de mas.
+// When the date is not understood, the result is `maxAge = 0`, that is, "already expired", which is
+// also what the JDK does. The failure mode is conservative: a cookie that is not stored, never one
+// that is stored too readily.
 //
-// Nada mas omitido. Una cookie es un dato, no una conexion.
+// Nothing else is omitted. A cookie is a piece of data, not a connection.
 public final class HttpCookie implements Cloneable {
 
-    // Que el maximo no este seteado se codifica con -1, que ademas es el valor que el usuario puede
-    // poner para decir "hasta que se cierre el navegador". Los dos significan "no vence sola".
+    // That the maximum is unset is encoded as -1, which is also the value the user can set to say
+    // "until the browser closes". Both mean "it does not expire on its own".
     private static final long MAX_AGE_UNSPECIFIED = -1;
 
     private static final String SET_COOKIE = "set-cookie:";
     private static final String SET_COOKIE2 = "set-cookie2:";
 
-    // Lo que no puede aparecer en un token del RFC 2616. El espacio esta adentro a proposito.
+    // What cannot appear in an RFC 2616 token. The space is in there on purpose.
     private static final String TSPECIALS = ",; ";
 
     private final String name;
@@ -61,17 +61,18 @@ public final class HttpCookie implements Cloneable {
     private boolean httpOnly;
     private int version = 1;
 
-    // El momento en que se creo, que es contra lo que se mide `maxAge`. Sin este campo `hasExpired`
-    // no tendria origen: "dura cien segundos" no dice nada sin decir desde cuando.
+    // The moment it was created, which is what `maxAge` is measured against. Without this field
+    // `hasExpired` would have no origin: "it lasts a hundred seconds" says nothing without saying
+    // from when.
     private final long whenCreated;
 
     /**
-     * Una cookie nueva con ese nombre y ese valor.
+     * A new cookie with that name and that value.
      *
-     * <p>Nace en version 1 (RFC 2965). Ver la cabecera: `parse` puede darle version 0.
+     * <p>It is born at version 1 (RFC 2965). See the header: `parse` may give it version 0.
      *
-     * @throws IllegalArgumentException si el nombre no es un token, esta vacio, o empieza con '$'
-     *     (ese prefijo lo reserva el protocolo para sus propios atributos)
+     * @throws IllegalArgumentException if the name is not a token, is empty, or starts with '$'
+     *     (that prefix is reserved by the protocol for its own attributes)
      */
     public HttpCookie(String name, String value) {
         this(name, value, System.currentTimeMillis());
@@ -88,13 +89,12 @@ public final class HttpCookie implements Cloneable {
     }
 
     /**
-     * Las cookies que describe un header {@code Set-Cookie} o {@code Set-Cookie2}.
+     * The cookies a {@code Set-Cookie} or {@code Set-Cookie2} header describes.
      *
-     * <p>El prefijo del header puede venir o no. Los atributos que no se reconocen se ignoran en
-     * silencio, que es lo que manda el protocolo: un servidor nuevo no tiene que romper un cliente
-     * viejo.
+     * <p>The header prefix may or may not be there. Unrecognized attributes are ignored silently,
+     * which is what the protocol requires: a new server must not break an old client.
      *
-     * @throws IllegalArgumentException si el texto no tiene un par nombre-valor valido al principio
+     * @throws IllegalArgumentException if the text has no valid name-value pair at the start
      */
     public static List<HttpCookie> parse(String header) {
         int version = guessVersion(header);
@@ -106,8 +106,8 @@ public final class HttpCookie implements Cloneable {
         }
         List<HttpCookie> cookies = new ArrayList<HttpCookie>();
         if (version == 0) {
-            // Netscape: la coma es parte de la fecha de `Expires`, asi que no se parte por comas y
-            // el header trae una sola cookie.
+            // Netscape: the comma is part of the `Expires` date, so it is not split on commas and
+            // the header carries a single cookie.
             HttpCookie cookie = parseInternal(body);
             cookie.setVersion(0);
             cookies.add(cookie);
@@ -124,7 +124,7 @@ public final class HttpCookie implements Cloneable {
         return cookies;
     }
 
-    /** Si ya vencio segun su {@code maxAge} y el momento en que se creo. */
+    /** Whether it has expired, by its {@code maxAge} and the moment it was created. */
     public boolean hasExpired() {
         if (this.maxAge == 0) {
             return true;
@@ -136,7 +136,7 @@ public final class HttpCookie implements Cloneable {
         return delta > this.maxAge;
     }
 
-    /** El proposito de la cookie, para mostrarle al usuario. Solo version 1. */
+    /** The cookie's purpose, to show the user. Version 1 only. */
     public void setComment(String purpose) {
         this.comment = purpose;
     }
@@ -145,7 +145,7 @@ public final class HttpCookie implements Cloneable {
         return this.comment;
     }
 
-    /** Una URL donde se explica el proposito. Solo version 1. */
+    /** A URL where the purpose is explained. Version 1 only. */
     public void setCommentURL(String purpose) {
         this.commentURL = purpose;
     }
@@ -163,7 +163,7 @@ public final class HttpCookie implements Cloneable {
         return this.toDiscard;
     }
 
-    /** Los puertos a los que se le puede mandar, separados por comas. Solo version 1. */
+    /** The ports it may be sent to, comma-separated. Version 1 only. */
     public void setPortlist(String ports) {
         this.portlist = ports;
     }
@@ -172,7 +172,7 @@ public final class HttpCookie implements Cloneable {
         return this.portlist;
     }
 
-    /** El dominio al que pertenece. Se guarda en minusculas: los dominios no distinguen caja. */
+    /** The domain it belongs to. It is stored in lower case: domains are case-insensitive. */
     public void setDomain(String pattern) {
         if (pattern != null) {
             this.domain = pattern.toLowerCase();
@@ -185,7 +185,7 @@ public final class HttpCookie implements Cloneable {
         return this.domain;
     }
 
-    /** Segundos de vida. Cero la vence en el acto; negativo significa "hasta cerrar el cliente". */
+    /** Seconds of life. Zero expires it on the spot; negative means "until the client closes". */
     public void setMaxAge(long expiry) {
         this.maxAge = expiry;
     }
@@ -194,7 +194,7 @@ public final class HttpCookie implements Cloneable {
         return this.maxAge;
     }
 
-    /** El prefijo de ruta al que se le manda. */
+    /** The path prefix it is sent to. */
     public void setPath(String uri) {
         this.path = uri;
     }
@@ -203,7 +203,7 @@ public final class HttpCookie implements Cloneable {
         return this.path;
     }
 
-    /** Si solo viaja por conexiones seguras. */
+    /** Whether it travels over secure connections only. */
     public void setSecure(boolean flag) {
         this.secure = flag;
     }
@@ -224,7 +224,7 @@ public final class HttpCookie implements Cloneable {
         return this.value;
     }
 
-    /** 0 para el formato Netscape, 1 para el del RFC 2965. */
+    /** 0 for the Netscape format, 1 for RFC 2965's. */
     public int getVersion() {
         return this.version;
     }
@@ -239,7 +239,7 @@ public final class HttpCookie implements Cloneable {
         this.version = v;
     }
 
-    /** Si es invisible para el codigo de la pagina (la defensa clasica contra robo por XSS). */
+    /** Whether it is invisible to the page's code (the classic defence against theft by XSS). */
     public boolean isHttpOnly() {
         return this.httpOnly;
     }
@@ -249,12 +249,12 @@ public final class HttpCookie implements Cloneable {
     }
 
     /**
-     * Si a {@code host} le corresponden las cookies de {@code domain}, segun el RFC 2965.
+     * Whether {@code host} gets {@code domain}'s cookies, per RFC 2965.
      *
-     * <p>Las reglas raras de aca son todas defensivas y vale la pena leerlas al reves: existen para
-     * que ".com" **no** matchee con "banco.com". Un dominio tiene que tener un punto interno, el
-     * sobrante del host no puede tener puntos --asi ".foo.com" cubre "x.foo.com" pero no
-     * "a.b.foo.com"--, y ".foo.com" cubre a "foo.com" pelado como caso especial.
+     * <p>The odd rules here are all defensive and are worth reading backwards: they exist so that
+     * ".com" does **not** match "bank.com". A domain has to have an internal dot, the host's leftover
+     * cannot have dots --so ".foo.com" covers "x.foo.com" but not "a.b.foo.com"-- and ".foo.com"
+     * covers bare "foo.com" as a special case.
      */
     public static boolean domainMatches(String domain, String host) {
         if (domain == null || host == null) {
@@ -287,7 +287,7 @@ public final class HttpCookie implements Cloneable {
         return false;
     }
 
-    /** La cookie en el formato que corresponde a su version. */
+    /** The cookie in the format matching its version. */
     public String toString() {
         if (this.getVersion() > 0) {
             return this.toRFC2965HeaderString();
@@ -310,9 +310,9 @@ public final class HttpCookie implements Cloneable {
         return sb.toString();
     }
 
-    // Dos cookies son la misma si coinciden nombre, dominio y ruta -- **no** el valor. Es del RFC
-    // 2965 y es lo que hace que guardar una cookie nueva pise a la anterior en vez de acumularlas:
-    // esos tres campos son la identidad, el valor es el contenido.
+    // Two cookies are the same if name, domain and path match -- **not** the value. It comes from RFC
+    // 2965 and it is what makes storing a new cookie overwrite the previous one instead of
+    // accumulating them: those three fields are the identity, the value is the content.
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -347,7 +347,7 @@ public final class HttpCookie implements Cloneable {
 
     // ---- parseo ---------------------------------------------------------------------------------
 
-    // La version sale del texto, no de un atributo: ver la cabecera.
+    // The version comes out of the text, not out of an attribute: see the header.
     private static int guessVersion(String header) {
         String h = header.toLowerCase();
         if (h.indexOf("expires=") != -1) {
@@ -395,9 +395,9 @@ public final class HttpCookie implements Cloneable {
         return cookie;
     }
 
-    // El "primero gana" de casi todos los atributos no es capricho: un header con el atributo
-    // repetido es sospechoso, y quedarse con el primero es la unica eleccion que no depende del
-    // orden en que un intermediario los haya reordenado.
+    // The "first one wins" of almost every attribute is not a whim: a header with a repeated
+    // attribute is suspicious, and keeping the first is the only choice that does not depend on the
+    // order some intermediary may have reordered them into.
     private static void assignAttribute(HttpCookie cookie, String attrName, String attrValue) {
         attrValue = stripOffSurroundingQuote(attrValue);
         String key = attrName.toLowerCase();
@@ -441,7 +441,7 @@ public final class HttpCookie implements Cloneable {
             try {
                 cookie.setVersion(Integer.parseInt(attrValue));
             } catch (NumberFormatException e) {
-                // Un numero de version que no se entiende no invalida la cookie.
+                // A version number that is not understood does not invalidate the cookie.
             }
         } else if (key.equals("expires")) {
             if (cookie.getMaxAge() == MAX_AGE_UNSPECIFIED) {
@@ -452,8 +452,8 @@ public final class HttpCookie implements Cloneable {
         // Cualquier otro atributo se ignora: ver el javadoc de `parse`.
     }
 
-    // Convierte una fecha absoluta de `Expires` en los segundos que le quedan de vida contados desde
-    // que esta cookie se creo. Cero --o menos-- significa vencida.
+    // Turns an absolute `Expires` date into the seconds of life it has left, counted from when this
+    // cookie was created. Zero --or less-- means expired.
     private long expiryDate2DeltaSeconds(String dateString) {
         long millis = parseCookieDate(dateString);
         if (millis == Long.MIN_VALUE) {
@@ -465,8 +465,8 @@ public final class HttpCookie implements Cloneable {
     private static final String[] MONTHS = {
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"};
 
-    // Lector de las fechas de cookie. Ver la cabecera para el alcance exacto. Devuelve
-    // `Long.MIN_VALUE` cuando no entiende.
+    // The reader for cookie dates. See the header for the exact scope. It returns `Long.MIN_VALUE`
+    // when it does not understand.
     static long parseCookieDate(String s) {
         if (s == null) {
             return Long.MIN_VALUE;
@@ -513,8 +513,9 @@ public final class HttpCookie implements Cloneable {
             }
             int num = parseUnsigned(tok);
             if (num >= 0) {
-                // Un token numerico es el dia si todavia no hay dia y entra en un mes; si no, el
-                // ano. Es la unica ambiguedad de estas gramaticas y se resuelve por posicion.
+                // A numeric token is the day if there is no day yet and it fits a month; otherwise
+                // the year. It is the only ambiguity of these grammars and it is resolved by
+                // position.
                 if (day == -1 && tok.length() <= 2 && num >= 1 && num <= 31) {
                     day = num;
                 } else if (year == -1) {
@@ -525,14 +526,14 @@ public final class HttpCookie implements Cloneable {
                 }
                 continue;
             }
-            // Dia de la semana, "GMT", desplazamientos horarios: se ignoran. Todas las formas que
-            // acepta el JDK tienen la hora en GMT.
+            // Day of the week, "GMT", time offsets: they are ignored. Every form the JDK accepts has
+            // the time in GMT.
         }
         if (day == -1 || month == -1 || year == -1 || hh == -1) {
             return Long.MIN_VALUE;
         }
         if (twoDigitYear) {
-            // La regla del RFC 6265, igual que la del JDK.
+            // RFC 6265's rule, the same as the JDK's.
             if (year < 70) {
                 year = year + 2000;
             } else {
@@ -593,8 +594,8 @@ public final class HttpCookie implements Cloneable {
         return d[month0];
     }
 
-    // Dias desde 1970-01-01. El truco es correr el ano para que empiece en marzo: asi el dia
-    // bisiesto queda al final y la cuenta de dias por mes se vuelve una formula sin tabla.
+    // Days since 1970-01-01. The trick is to shift the year so that it starts in March: that way the
+    // leap day falls at the end and the count of days per month becomes a formula with no table.
     private static long daysFromCivil(int y, int m, int d) {
         long yy = y;
         yy = yy - (m <= 2 ? 1 : 0);
@@ -649,8 +650,8 @@ public final class HttpCookie implements Cloneable {
                 && start.equalsIgnoreCase(s.substring(0, start.length()));
     }
 
-    // Parte por comas, pero solo por las que estan fuera de comillas: la lista de puertos se escribe
-    // Port="80,81" y esa coma no separa cookies.
+    // Splits on commas, but only on the ones outside quotes: the port list is written Port="80,81"
+    // and that comma does not separate cookies.
     private static List<String> splitMultiCookies(String header) {
         List<String> cookies = new ArrayList<String>();
         int quoteCount = 0;

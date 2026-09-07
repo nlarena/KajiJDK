@@ -1,7 +1,8 @@
 package java.beans;
 
-// Un parametro de un metodo, para que una herramienta pueda ponerle nombre y descripcion propios.
-// Todo lo que aporta viene de FeatureDescriptor: la clase existe para dar el tipo, no campos.
+// A method's parameter, so that a tool can give it a name and a description of its own.
+// Everything it contributes comes from FeatureDescriptor: the class exists to give the type, not
+// fields.
 public class ParameterDescriptor extends FeatureDescriptor {
 
     public ParameterDescriptor() {

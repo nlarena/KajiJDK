@@ -1024,6 +1024,17 @@ impl MetaspaceService {
     /// What it deliberately does **not** do is resolve from scratch. A methodref whose class has
     /// never been loaded stays unanswered, because loading it here would be a compilation with a
     /// side effect, and a `<clinit>` is exactly the thing compiled code cannot run.
+    /// Un [`MethodId`] **ya resuelto**, por `(clase, nombre, descriptor)`, sin resolver nada nuevo.
+    ///
+    /// El gemelo por nombre de [`Self::resolved_call_readonly`], y existe por la misma razón: los
+    /// resolvers que el JIT consulta reciben `&self` porque **compilar no puede tener efectos** —
+    /// ni cargar una clase, ni correr un `<clinit>`, ni acuñar un id. Este mira el mapa y contesta
+    /// lo que ya hay; un `None` significa "todavía nadie resolvió esto", que para el compilador es
+    /// una razón legítima de refutar y no un error.
+    pub fn resolved_readonly(&self, class: &str, name: &str, descriptor: &str) -> Option<MethodId> {
+        self.resolved.get(&(class.to_string(), name.to_string(), descriptor.to_string())).copied()
+    }
+
     pub fn resolved_call_readonly(&self, caller_class: &str, index: u16) -> Option<MethodId> {
         if let Some(&id) = self.resolved_calls.get(&(caller_class.to_string(), index)) {
             return Some(id);

@@ -1,28 +1,27 @@
 package java.awt.geom;
 
-// La caja **ajustada** de una curva de Bezier: la mas chica que la contiene, no la de su poligono de
-// control.
+// A Bezier curve's **tight** box: the smallest one containing it, not its control polygon's.
 //
-// Las dos son cotas validas segun `Shape.getBounds2D`, asi que la eleccion no la fuerza el contrato
-// -- la fuerza el JDK, que devuelve la ajustada. Se comprobo corriendo el mismo caso con `java` de
-// verdad: para la cubica (0,0),(0,10),(10,10),(10,0) devuelve alto 7.5, no 10. La caja del poligono
-// de control es mas facil --sale de cuatro minimos y cuatro maximos, sin resolver nada-- y fue lo
-// que hubo aca hasta que la prueba de comportamiento no coincidio.
+// Both are valid bounds according to `Shape.getBounds2D`, so the contract does not force the choice
+// -- the JDK does, and it returns the tight one. It was checked by running the same case with the
+// real `java`: for the cubic (0,0),(0,10),(10,10),(10,0) it returns height 7.5, not 10. The control
+// polygon's box is easier --it comes out of four minima and four maxima, solving nothing-- and it
+// is what was here until the behaviour test did not match.
 //
-// Como se calcula: una coordenada de una Bezier es un polinomio en `t`, y sus extremos sobre [0,1]
-// estan en los bordes o donde la derivada se anula. Asi que la caja son los dos extremos de la curva
-// mas el valor en cada raiz de la derivada que caiga **dentro** del intervalo abierto (0,1). Las
-// raices de afuera no cuentan: describen extremos de la curva prolongada, que no es esta curva.
+// How it is worked out: a Bezier's coordinate is a polynomial in `t`, and its extrema over [0,1]
+// are at the ends or where the derivative vanishes. So the box is the curve's two ends plus the
+// value at each root of the derivative falling **inside** the open interval (0,1). The roots
+// outside do not count: they describe extrema of the extended curve, which is not this curve.
 final class CurveBounds {
 
     private CurveBounds() {
     }
 
     /**
-     * El minimo y el maximo de una coordenada de una cubica, como un arreglo de dos.
+     * A cubic's coordinate minimum and maximum, as an array of two.
      *
-     * <p>La derivada de una cubica es una cuadratica: `at^2 + bt + c` con `a = 3(-p0+3p1-3p2+p3)`,
-     * `b = 6(p0-2p1+p2)` y `c = 3(p1-p0)`.
+     * <p>A cubic's derivative is a quadratic: `at^2 + bt + c` with `a = 3(-p0+3p1-3p2+p3)`,
+     * `b = 6(p0-2p1+p2)` and `c = 3(p1-p0)`.
      */
     static double[] cubic(double p0, double p1, double p2, double p3) {
         double min = Math.min(p0, p3);
@@ -44,11 +43,12 @@ final class CurveBounds {
     }
 
     /**
-     * Lo mismo para una cuadratica.
+     * The same for a quadratic.
      *
-     * <p>Su derivada es lineal, asi que hay a lo sumo un extremo interior: `t = (p0-p1)/(p0-2p1+p2)`.
-     * El denominador es cero cuando los tres puntos estan alineados en esta coordenada, y ahi la
-     * curva es monotona: los extremos son los bordes y no hay nada que agregar.
+     * <p>Its derivative is linear, so there is at most one interior extremum:
+     * `t = (p0-p1)/(p0-2p1+p2)`. The denominator is zero when the three points are aligned in this
+     * coordinate, and there the curve is monotonic: the extrema are the ends and there is nothing to
+     * add.
      */
     static double[] quad(double p0, double p1, double p2) {
         double min = Math.min(p0, p2);
@@ -65,8 +65,9 @@ final class CurveBounds {
         return new double[] { min, max };
     }
 
-    // La forma de Bernstein, y no la potencia expandida, porque es la numericamente estable: cada
-    // termino es un producto de factores acotados en [0,1] y no hay restas de numeros grandes.
+    // The Bernstein form, and not the expanded power one, because it is the numerically stable
+    // one: each term is a product of factors bounded in [0,1] and there are no subtractions of large
+    // numbers.
     private static double cubicAt(double p0, double p1, double p2, double p3, double t) {
         double u = 1.0 - t;
         return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
@@ -77,10 +78,11 @@ final class CurveBounds {
         return u * u * p0 + 2.0 * u * t * p1 + t * t * p2;
     }
 
-    // Las raices reales de `at^2 + bt + c`, sin ordenar.
+    // The real roots of `at^2 + bt + c`, unordered.
     //
-    // El caso `a == 0` no es una curiosidad: pasa siempre que la cubica degrada a una cuadratica, que
-    // es una de las formas mas comunes de escribirla. Tratarlo como cuadratica dividiria por cero.
+    // The `a == 0` case is no curiosity: it happens whenever the cubic degrades to a quadratic,
+    // which is one of the commonest ways of writing it. Treating it as a quadratic would divide by
+    // zero.
     private static double[] quadraticRoots(double a, double b, double c) {
         if (a == 0.0) {
             if (b == 0.0) {
@@ -95,9 +97,9 @@ final class CurveBounds {
         if (disc == 0.0) {
             return new double[] { -b / (2.0 * a) };
         }
-        // La forma estable: se calcula la raiz que **no** cancela y la otra sale del producto de las
-        // raices (`c/a`). Con la formula de siempre, cuando `b` es grande frente a `4ac` una de las
-        // dos resta dos numeros casi iguales y pierde casi todos los digitos.
+        // The stable form: the root that does **not** cancel is worked out and the other comes
+        // from the product of the roots (`c/a`). With the usual formula, when `b` is large next to
+        // `4ac` one of the two subtracts two nearly equal numbers and loses nearly every digit.
         double sq = Math.sqrt(disc);
         double q = b >= 0.0 ? -0.5 * (b + sq) : -0.5 * (b - sq);
         return new double[] { q / a, c / q };

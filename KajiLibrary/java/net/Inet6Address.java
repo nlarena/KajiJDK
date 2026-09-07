@@ -1,32 +1,34 @@
 package java.net;
 
-// Una direccion IPv6: dieciseis bytes, y opcionalmente un scope.
+// An IPv6 address: sixteen bytes, and optionally a scope.
 //
-// El scope es la parte que sorprende. Una direccion link-local como fe80::1 **no identifica un
-// host**: identifica un host *en un enlace*, y la misma direccion puede existir en dos placas
-// distintas de la misma maquina. Por eso el literal admite el sufijo "%N", y por eso el scope es
-// parte del objeto pero **no** de `equals`: dos objetos con la misma direccion y distinto scope son
-// iguales, porque la direccion es la misma; lo que cambia es por donde se sale. El JDK hace
-// exactamente esto y no es un descuido.
+// The scope is the surprising part. A link-local address like fe80::1 **does not identify a host**:
+// it identifies a host *on a link*, and the same address may exist on two different interfaces of the
+// same machine. That is why the literal admits the "%N" suffix, and why the scope is part of the
+// object but **not** of `equals`: two objects with the same address and different scopes are equal,
+// because the address is the same; what changes is the way out. The JDK does exactly this and it is
+// not an oversight.
 //
-// El scope se guarda con un flag aparte y no como "cero significa ninguno", porque cero es un scope
-// legal: `getByAddress(host, addr, 0)` produce una direccion que se imprime "...%0", mientras que
-// `ofLiteral("::1")` no imprime nada. Colapsarlos perderia esa diferencia.
+// The scope is kept with a separate flag and not as "zero means none", because zero is a legal scope:
+// `getByAddress(host, addr, 0)` produces an address that prints as "...%0", while `ofLiteral("::1")`
+// prints nothing. Collapsing them would lose that difference.
 //
-// Sobre la forma "IPv4-mapped" (::ffff:a.b.c.d): esa direccion **es** una IPv4, y tanto los parsers
-// como `InetAddress.getByAddress` la colapsan a `Inet4Address`. Es lo que hace el JDK, y la razon es
-// que si no, la misma maquina tendria dos objetos distintos y no iguales para la misma direccion.
-// La forma "IPv4-compatible" (::a.b.c.d, sin los ffff) **no** se colapsa: esa es una IPv6 de verdad,
-// deprecada pero distinta.
+// On the "IPv4-mapped" form (::ffff:a.b.c.d): that address **is** an IPv4, and both the parsers and
+// `InetAddress.getByAddress` collapse it to an `Inet4Address`. It is what the JDK does, and the
+// reason is that otherwise the same machine would have two different, unequal objects for the same
+// address. The "IPv4-compatible" form (::a.b.c.d, without the ffff) is **not** collapsed: that one is
+// a real IPv6, deprecated but distinct.
 //
-// El scope se puede nombrar de las dos formas que el JDK admite: por numero
-// (`getByAddress(String, byte[], int)`, `getScopeId()`) y por placa
-// (`getByAddress(String, byte[], NetworkInterface)`, `getScopedInterface()`). Esta clase decia que
-// la segunda no entraba porque `NetworkInterface` no existia en este arbol; ya existe, y entra.
+// The scope can be named in both the ways the JDK admits: by number
+// (`getByAddress(String, byte[], int)`, `getScopeId()`) and by interface
+// (`getByAddress(String, byte[], NetworkInterface)`, `getScopedInterface()`). This class used to say
+// the second did not go in because `NetworkInterface` did not exist in this tree; it exists, and it
+// does.
 //
-// Las dos formas no son intercambiables y por eso se guardan las dos: de una placa se saca su
-// indice, pero de un indice **no** se saca la placa sin volver a enumerar --y el JDK devuelve `null`
-// en `getScopedInterface()` cuando el scope se dio como numero, no la placa de ese indice--.
+// The two forms are not interchangeable and that is why both are kept: an interface's index can be
+// taken from the interface, but the interface **cannot** be taken from an index without enumerating
+// again --and the JDK returns `null` from `getScopedInterface()` when the scope was given as a
+// number, not the interface with that index.
 public final class Inet6Address extends InetAddress {
 
     private static final long serialVersionUID = 6880410070516793377L;
@@ -36,9 +38,10 @@ public final class Inet6Address extends InetAddress {
     private final int scopeId;
     private final boolean scopeIdSet;
 
-    // La placa con la que se creo, si se creo con una. `transient` porque la forma serializada de
-    // esta clase --la del JDK, que este arbol respeta-- lleva el scope como numero y nada mas: una
-    // placa no se puede reconstruir en otra maquina, y guardarla cambiaria el formato.
+    // The interface it was created with, if it was created with one. `transient` because this class's
+    // serialized form --the JDK's, which this tree respects-- carries the scope as a number and
+    // nothing else: an interface cannot be reconstructed on another machine, and storing it would
+    // change the format.
     private final transient NetworkInterface scopedInterface;
 
     Inet6Address(String hostName, byte[] addr) {
@@ -59,7 +62,7 @@ public final class Inet6Address extends InetAddress {
             this.scopeId = 0;
             this.scopeIdSet = false;
         }
-        // Un scope dado como numero no nombra ninguna placa: ver `getScopedInterface`.
+        // A scope given as a number names no interface: see `getScopedInterface`.
         this.scopedInterface = null;
     }
 
@@ -84,7 +87,7 @@ public final class Inet6Address extends InetAddress {
         return true;
     }
 
-    /** "::1", y solo esa. */
+    /** "::1", and only that one. */
     public boolean isLoopbackAddress() {
         int i = 0;
         while (i < 15) {
@@ -101,37 +104,37 @@ public final class Inet6Address extends InetAddress {
         return this.b(0) == 0xfe && (this.b(1) & 0xc0) == 0x80;
     }
 
-    /** fec0::/10 (deprecada, pero el predicado sigue significando lo mismo). */
+    /** fec0::/10 (deprecated, but the predicate still means the same). */
     public boolean isSiteLocalAddress() {
         return this.b(0) == 0xfe && (this.b(1) & 0xc0) == 0xc0;
     }
 
-    /** Multicast con alcance 0xe (global). */
+    /** Multicast with scope 0xe (global). */
     public boolean isMCGlobal() {
         return this.b(0) == 0xff && (this.b(1) & 0x0f) == 0x0e;
     }
 
-    /** Multicast con alcance 0x1 (interface-local). */
+    /** Multicast with scope 0x1 (interface-local). */
     public boolean isMCNodeLocal() {
         return this.b(0) == 0xff && (this.b(1) & 0x0f) == 0x01;
     }
 
-    /** Multicast con alcance 0x2 (link-local). */
+    /** Multicast with scope 0x2 (link-local). */
     public boolean isMCLinkLocal() {
         return this.b(0) == 0xff && (this.b(1) & 0x0f) == 0x02;
     }
 
-    /** Multicast con alcance 0x5 (site-local). */
+    /** Multicast with scope 0x5 (site-local). */
     public boolean isMCSiteLocal() {
         return this.b(0) == 0xff && (this.b(1) & 0x0f) == 0x05;
     }
 
-    /** Multicast con alcance 0x8 (organization-local). */
+    /** Multicast with scope 0x8 (organization-local). */
     public boolean isMCOrgLocal() {
         return this.b(0) == 0xff && (this.b(1) & 0x0f) == 0x08;
     }
 
-    /** Si los primeros doce bytes son cero: la forma "::a.b.c.d" del RFC 4291, ya deprecada. */
+    /** Whether the first twelve bytes are zero: RFC 4291's "::a.b.c.d" form, now deprecated. */
     public boolean isIPv4CompatibleAddress() {
         int i = 0;
         while (i < 12) {
@@ -147,7 +150,7 @@ public final class Inet6Address extends InetAddress {
         return copy(this.addr);
     }
 
-    /** El scope numerico, o 0 si no tiene. */
+    /** The numeric scope, or 0 if it has none. */
     public int getScopeId() {
         return this.scopeId;
     }
@@ -160,9 +163,9 @@ public final class Inet6Address extends InetAddress {
         return s;
     }
 
-    // Suma de los cuatro grupos de cuatro bytes, leidos como enteros con signo. Es el algoritmo del
-    // JDK; no es gran cosa como dispersion, pero cambiarlo haria que dos JDK no coincidan en el
-    // orden de iteracion de un HashSet de direcciones, y eso se nota.
+    // The sum of the four groups of four bytes, read as signed integers. It is the JDK's algorithm;
+    // it is not much as a hash, but changing it would make two JDKs disagree on the iteration order of
+    // a HashSet of addresses, and that gets noticed.
     public int hashCode() {
         int hash = 0;
         int i = 0;
@@ -198,11 +201,11 @@ public final class Inet6Address extends InetAddress {
     // ---- factorias ------------------------------------------------------------------------------
 
     /**
-     * La direccion IPv6 con ese nombre, esos bytes y ese scope.
+     * The IPv6 address with that name, those bytes and that scope.
      *
-     * <p>Un {@code scopeId} negativo cuenta como "sin scope".
+     * <p>A negative {@code scopeId} counts as "no scope".
      *
-     * @throws UnknownHostException si {@code addr} no mide 16
+     * @throws UnknownHostException if {@code addr} is not 16 long
      */
     public static Inet6Address getByAddress(String host, byte[] addr, int scopeId)
             throws UnknownHostException {
@@ -218,15 +221,16 @@ public final class Inet6Address extends InetAddress {
     }
 
     /**
-     * La direccion que describe el literal IPv6 {@code s}, con o sin corchetes.
+     * The address the IPv6 literal {@code s} describes, with or without brackets.
      *
-     * <p>Devuelve un {@link Inet4Address} si el literal es de la forma IPv4-mapped, por lo que el
-     * tipo declarado es {@code InetAddress} y no {@code Inet6Address}.
+     * <p>It returns an {@link Inet4Address} if the literal is of the IPv4-mapped form, which is why
+     * the declared type is {@code InetAddress} and not {@code Inet6Address}.
      *
-     * <p>El scope solo se acepta en forma numerica: un "%eth0" nombraria una placa, y este arbol no
-     * modela placas.
+     * <p>The scope is accepted in numeric form only: a "%eth0" would name an interface, and turning a
+     * name into an index means enumerating the machine's interfaces, which this VM cannot do (see
+     * `NetworkInterface`'s header).
      *
-     * @throws IllegalArgumentException si no es un literal IPv6 valido
+     * @throws IllegalArgumentException if it is not a valid IPv6 literal
      */
     public static InetAddress ofLiteral(String s) {
         if (s == null) {
@@ -253,8 +257,8 @@ public final class Inet6Address extends InetAddress {
         return sb.toString();
     }
 
-    // Los primeros diez bytes en cero y los dos siguientes en 0xff: la marca de una IPv4 escrita como
-    // IPv6. Devuelve los cuatro bytes reales, o null si no es de esa forma.
+    // The first ten bytes zero and the next two 0xff: the mark of an IPv4 written as IPv6. It returns
+    // the four real bytes, or null if it is not of that form.
     static byte[] convertFromIPv4MappedAddress(byte[] addr) {
         if (addr.length != INADDRSZ) {
             return null;
@@ -272,8 +276,8 @@ public final class Inet6Address extends InetAddress {
         return new byte[] {addr[12], addr[13], addr[14], addr[15]};
     }
 
-    // El parser del RFC 4291, con "::" y con cola IPv4. Devuelve null --no tira-- para que los
-    // llamadores encadenen intentos: `InetAddress.ofLiteral` prueba IPv4 primero y IPv6 despues.
+    // RFC 4291's parser, with "::" and with an IPv4 tail. It returns null --it does not throw-- so
+    // that callers can chain attempts: `InetAddress.ofLiteral` tries IPv4 first and IPv6 after.
     static InetAddress parseLiteral(String s, boolean allowBrackets) {
         if (s == null) {
             return null;
@@ -293,7 +297,7 @@ public final class Inet6Address extends InetAddress {
             int i = 0;
             while (i < tail.length()) {
                 int d = digit(tail.charAt(i), 10);
-                // Un scope no numerico nombraria una placa de red; ver la cabecera.
+                // A non-numeric scope would name a network interface; see the header.
                 if (d < 0) {
                     return null;
                 }
@@ -322,12 +326,12 @@ public final class Inet6Address extends InetAddress {
 
     static byte[] textToNumericFormat(String src) {
         int len = src.length();
-        // "::" es el literal mas corto que existe.
+        // "::" is the shortest literal there is.
         if (len < 2) {
             return null;
         }
         byte[] dst = new byte[INADDRSZ];
-        // Donde estaba el "::", para saber cuantos ceros insertar despues.
+        // Where the "::" was, so as to know how many zeros to insert later.
         int colonp = -1;
         int i = 0;
         int j = 0;
@@ -376,8 +380,8 @@ public final class Inet6Address extends InetAddress {
             }
             if (ch == '.' && (j + 4) <= INADDRSZ) {
                 String tail = src.substring(curtok);
-                // La cola tiene que ser una IPv4 completa: "::1.2.3" no es un literal, aunque
-                // "1.2.3" solo si lo sea.
+                // The tail has to be a complete IPv4: "::1.2.3" is not a literal, even though
+                // "1.2.3" on its own is.
                 int dots = 0;
                 int k = 0;
                 while (k < tail.length()) {
@@ -412,7 +416,7 @@ public final class Inet6Address extends InetAddress {
             j = j + 2;
         }
         if (colonp != -1) {
-            // Se corre a la derecha lo que habia despues del "::" y se rellena de ceros el hueco.
+            // What came after the "::" is shifted right and the gap is filled with zeros.
             if (j == INADDRSZ) {
                 return null;
             }
@@ -431,8 +435,8 @@ public final class Inet6Address extends InetAddress {
         return dst;
     }
 
-    // El constructor que toma la placa. El scope numerico sale de su indice, que es lo que va a la
-    // forma textual y a la serializada.
+    // The constructor that takes the interface. The numeric scope comes from its index, which is what
+    // goes into the textual and the serialized form.
     Inet6Address(String hostName, byte[] addr, NetworkInterface nif) {
         super(hostName, addr);
         if (nif == null) {
@@ -446,12 +450,12 @@ public final class Inet6Address extends InetAddress {
     }
 
     /**
-     * La direccion de esos bytes, con el scope de la placa {@code nif}.
+     * The address of those bytes, with the interface {@code nif}'s scope.
      *
-     * <p>El scope numerico que queda es el indice de la placa. Con {@code nif} null la direccion
-     * queda **sin scope**, que no es lo mismo que con el scope cero.
+     * <p>The numeric scope that results is the interface's index. With a null {@code nif} the address
+     * is left **with no scope**, which is not the same as with scope zero.
      *
-     * @throws UnknownHostException si {@code addr} no mide dieciseis bytes
+     * @throws UnknownHostException if {@code addr} is not sixteen bytes long
      */
     public static Inet6Address getByAddress(String host, byte[] addr, NetworkInterface nif)
             throws UnknownHostException {
@@ -467,10 +471,10 @@ public final class Inet6Address extends InetAddress {
     }
 
     /**
-     * La placa con la que se creo esta direccion, o null.
+     * The interface this address was created with, or null.
      *
-     * <p>Null tambien cuando el scope se dio como numero: de un indice no se saca la placa, y
-     * devolver la que hoy tenga ese indice seria inventar. Es lo que hace el JDK.
+     * <p>Null too when the scope was given as a number: the interface cannot be taken from an index,
+     * and returning whichever one has that index today would be inventing. It is what the JDK does.
      */
     public NetworkInterface getScopedInterface() {
         return this.scopedInterface;

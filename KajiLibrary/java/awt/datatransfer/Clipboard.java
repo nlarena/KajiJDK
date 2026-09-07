@@ -5,70 +5,71 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Un lugar donde dejar algo para que otro lo tome.
+ * A place to leave something for someone else to take.
  *
- * <p>Tiene **un** contenido y **un** dueño por vez. Poner algo nuevo desaloja lo anterior y le avisa
- * a su dueño, que es la única señal que tiene para soltar lo que estaba guardando.
+ * <p>It has **one** content and **one** owner at a time. Putting something new evicts what was there
+ * and tells its owner, which is the only signal it has for releasing whatever it was holding.
  *
- * <p>Esta clase es un portapapeles **privado**: vive dentro del programa y sirve para mover datos
- * entre partes de la misma aplicación. El del sistema, el que se comparte con otros programas, lo
- * entrega el {@code Toolkit}, y ahí es donde entra {@link FlavorMap} a traducir formatos.
+ * <p>This class is a **private** clipboard: it lives inside the program and serves to move data
+ * between parts of the same application. The system's, the one shared with other programs, is handed
+ * over by the {@code Toolkit}, and that is where {@link FlavorMap} comes in to translate formats.
  *
- * <p>{@link #getContents} toma un parámetro que **no usa**. Está en la API desde 1.1, donde iba a
- * servir para identificar quién pedía; nunca se usó para nada y quedó. Pasarle `null` es lo normal.
+ * <p>{@link #getContents} takes a parameter it **does not use**. It has been in the API since 1.1,
+ * where it was going to serve to identify who was asking; it was never used for anything and it
+ * stayed. Passing `null` is the normal thing.
  */
 public class Clipboard {
 
-    /** El dueño actual. */
+    /** The current owner. */
     protected ClipboardOwner owner;
 
-    /** Lo que hay adentro. */
+    /** What is inside. */
     protected Transferable contents;
 
     private final String name;
     private final List<FlavorListener> flavorListeners = new ArrayList<FlavorListener>();
 
-    /** Con el nombre dado, para poder distinguirlo en la depuración. */
+    /** With the given name, so that it can be told apart while debugging. */
     public Clipboard(String name) {
         this.name = name;
     }
 
-    /** Cómo se llama. */
+    /** What it is called. */
     public String getName() {
         return this.name;
     }
 
     /**
-     * Pone contenido nuevo y desaloja al dueño anterior.
+     * Puts new contents in and evicts the previous owner.
      *
-     * <p>El aviso al dueño anterior sale **antes** de cambiar el contenido, para que todavía pueda
-     * mirar lo que estaba guardando.
+     * <p>The notice to the previous owner goes out **before** the contents change, so that it can
+     * still look at what it was holding.
      */
     public synchronized void setContents(Transferable contents, ClipboardOwner owner) {
-        ClipboardOwner anterior = this.owner;
-        Transferable anteriorContenido = this.contents;
+        ClipboardOwner previous = this.owner;
+        Transferable previousContents = this.contents;
         this.owner = owner;
         this.contents = contents;
-        if (anterior != null && anterior != owner) {
-            anterior.lostOwnership(this, anteriorContenido);
+        if (previous != null && previous != owner) {
+            previous.lostOwnership(this, previousContents);
         }
-        this.avisarCambio();
+        this.fireFlavorsChanged();
     }
 
     /**
-     * Lo que hay adentro.
+     * What is inside.
      *
-     * @param requestor no se usa; está en la API desde 1.1 y nunca tuvo efecto
-     * @return el contenido, o `null` si no hay
+     * @param requestor unused; it has been in the API since 1.1 and never had any effect
+     * @return the contents, or `null` if there are none
      */
     public synchronized Transferable getContents(Object requestor) {
         return this.contents;
     }
 
     /**
-     * En qué formatos se puede pedir lo que hay.
+     * Which formats what is there can be asked for in.
      *
-     * @throws IllegalStateException si el portapapeles no está disponible
+     * @throws IllegalStateException if the clipboard is not available
      */
     public DataFlavor[] getAvailableDataFlavors() {
         Transferable c = this.getContents(null);
@@ -79,10 +80,10 @@ public class Clipboard {
     }
 
     /**
-     * Si lo que hay se puede pedir en ese formato.
+     * Whether what is there can be asked for in that format.
      *
-     * @throws NullPointerException si el formato es `null`
-     * @throws IllegalStateException si el portapapeles no está disponible
+     * @throws NullPointerException if the format is `null`
+     * @throws IllegalStateException if the clipboard is not available
      */
     public boolean isDataFlavorAvailable(DataFlavor flavor) {
         if (flavor == null) {
@@ -96,12 +97,12 @@ public class Clipboard {
     }
 
     /**
-     * Lo que hay, en ese formato.
+     * What is there, in that format.
      *
-     * @throws NullPointerException si el formato es `null`
-     * @throws IllegalStateException si el portapapeles no está disponible
-     * @throws UnsupportedFlavorException si lo que hay no se puede dar en ese formato
-     * @throws IOException si los datos ya no están
+     * @throws NullPointerException if the format is `null`
+     * @throws IllegalStateException if the clipboard is not available
+     * @throws UnsupportedFlavorException if what is there cannot be given in that format
+     * @throws IOException if the data is gone
      */
     public Object getData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
         if (flavor == null) {
@@ -115,9 +116,9 @@ public class Clipboard {
     }
 
     /**
-     * Suma alguien a quien avisarle de los cambios.
+     * Adds someone to be told about the changes.
      *
-     * <p>Un `null` se ignora en silencio, que es lo que hace el JDK.
+     * <p>A `null` is ignored silently, which is what the JDK does.
      */
     public synchronized void addFlavorListener(FlavorListener listener) {
         if (listener == null) {
@@ -126,7 +127,7 @@ public class Clipboard {
         this.flavorListeners.add(listener);
     }
 
-    /** Saca a ese oyente; un `null` se ignora. */
+    /** Removes that listener; a `null` is ignored. */
     public synchronized void removeFlavorListener(FlavorListener listener) {
         if (listener == null) {
             return;
@@ -134,20 +135,20 @@ public class Clipboard {
         this.flavorListeners.remove(listener);
     }
 
-    /** Los oyentes registrados. */
+    /** The registered listeners. */
     public synchronized FlavorListener[] getFlavorListeners() {
         return this.flavorListeners.toArray(new FlavorListener[this.flavorListeners.size()]);
     }
 
-    /** Le avisa a todos los oyentes que el contenido cambió. */
-    private void avisarCambio() {
+    /** Tells every listener that the contents changed. */
+    private void fireFlavorsChanged() {
         if (this.flavorListeners.isEmpty()) {
             return;
         }
         FlavorEvent e = new FlavorEvent(this);
-        FlavorListener[] copia = this.getFlavorListeners();
-        for (int i = 0; i < copia.length; i++) {
-            copia[i].flavorsChanged(e);
+        FlavorListener[] copy = this.getFlavorListeners();
+        for (int i = 0; i < copy.length; i++) {
+            copy[i].flavorsChanged(e);
         }
     }
 }

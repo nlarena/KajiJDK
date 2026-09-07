@@ -1,19 +1,19 @@
 package java.awt.event;
 
 /**
- * Un {@link FocusListener} que no hace nada, para redefinir sólo lo que interese.
+ * A {@link FocusListener} that does nothing, to override only what matters.
  */
 public abstract class FocusAdapter implements FocusListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FocusAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void focusGained(FocusEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void focusLost(FocusEvent e) {
     }
 }

@@ -6,20 +6,19 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Las claves con las que se le pone estilo a un texto atributo por atributo.
+ * The keys a text is styled with, attribute by attribute.
  *
- * <p>Un {@link java.awt.Font} describe el estilo de un texto entero. Estos atributos describen el de
- * **un tramo**: se cuelgan de un `AttributedCharacterIterator` y valen desde tal carácter hasta tal
- * otro, que es como se representa un párrafo con una palabra en negrita.
+ * <p>A {@link java.awt.Font} describes a whole text's style. These attributes describe **one
+ * stretch**'s: they hang off an `AttributedCharacterIterator` and hold from such a character to such
+ * another, which is how a paragraph with one word in bold is represented.
  *
- * <p>Los valores no son enumeraciones sino números con significado. El grosor es un múltiplo del
- * regular, así que {@link #WEIGHT_BOLD} vale 2.0 porque la negrita es el doble de gruesa, y nada
- * impide pedir 1.6; la inclinación es una tangente, y {@link #POSTURE_OBLIQUE} vale 0,20 porque ése
- * es el ángulo de la cursiva de siempre. Las constantes son los valores usuales, no los únicos
- * posibles.
+ * <p>The values are not enumerations but numbers with a meaning. Weight is a multiple of the
+ * regular, so {@link #WEIGHT_BOLD} is 2.0 because bold is twice as thick, and nothing stops one
+ * asking for 1.6; posture is a tangent, and {@link #POSTURE_OBLIQUE} is 0.20 because that is the
+ * angle of the usual italic. The constants are the usual values, not the only possible ones.
  *
- * <p>Cada instancia es única: son las mismas de siempre y se comparan por identidad. Por eso hay
- * {@link #readResolve}, que devuelve la instancia canónica cuando una llega deserializada.
+ * <p>Each instance is unique: they are always the same ones and they are compared by identity. Hence
+ * {@link #readResolve}, which returns the canonical instance when one arrives deserialized.
  */
 public final class TextAttribute extends AttributedCharacterIterator.Attribute {
 
@@ -29,10 +28,10 @@ public final class TextAttribute extends AttributedCharacterIterator.Attribute {
             new HashMap<String, TextAttribute>(29);
 
     /**
-     * Uno nuevo con ese nombre.
+     * A new one with that name.
      *
-     * <p>Es protegido porque los atributos que existen son los de esta clase; una subclase que
-     * agregue los suyos tiene que ser de este mismo paquete.
+     * <p>It is protected because the attributes that exist are this class's; a subclass adding its
+     * own has to be of this very package.
      */
     protected TextAttribute(String name) {
         super(name);
@@ -42,13 +41,13 @@ public final class TextAttribute extends AttributedCharacterIterator.Attribute {
     }
 
     /**
-     * La instancia canónica que corresponde a este nombre.
+     * The canonical instance corresponding to this name.
      *
-     * <p>Sin esto, un atributo deserializado sería un objeto distinto del que está en las constantes
-     * y las comparaciones por identidad fallarían en silencio.
+     * <p>Without this, a deserialized attribute would be a different object from the one in the
+     * constants and identity comparisons would fail silently.
      *
-     * @throws InvalidObjectException si la subclase no lo redefinió, o si el nombre no es de ninguno
-     *     de los atributos conocidos
+     * @throws InvalidObjectException if the subclass did not override it, or if the name is none of
+     *     the known attributes'
      */
     protected Object readResolve() throws InvalidObjectException {
         if (this.getClass() != TextAttribute.class) {
@@ -62,180 +61,180 @@ public final class TextAttribute extends AttributedCharacterIterator.Attribute {
         throw new InvalidObjectException("unknown attribute name");
     }
 
-    /** La familia tipográfica, por nombre. */
+    /** The type family, by name. */
     public static final TextAttribute FAMILY = new TextAttribute("family");
 
-    /** El grosor del trazo, como múltiplo del regular. */
+    /** The stroke's weight, as a multiple of the regular. */
     public static final TextAttribute WEIGHT = new TextAttribute("weight");
 
-    /** El ancho de los glifos, como múltiplo del regular. */
+    /** The glyphs' width, as a multiple of the regular. */
     public static final TextAttribute WIDTH = new TextAttribute("width");
 
-    /** La inclinación; 0 es derecha y 0,20 la cursiva de siempre. */
+    /** The posture; 0 is upright and 0.20 the usual italic. */
     public static final TextAttribute POSTURE = new TextAttribute("posture");
 
-    /** El cuerpo, en puntos. */
+    /** The size, in points. */
     public static final TextAttribute SIZE = new TextAttribute("size");
 
-    /** Una transformación afín aplicada a los glifos. */
+    /** An affine transform applied to the glyphs. */
     public static final TextAttribute TRANSFORM = new TextAttribute("transform");
 
-    /** Volado o subíndice. */
+    /** Superscript or subscript. */
     public static final TextAttribute SUPERSCRIPT = new TextAttribute("superscript");
 
-    /** Una fuente ya armada, que reemplaza a todos los demás atributos. */
+    /** An already built font, which replaces every other attribute. */
     public static final TextAttribute FONT = new TextAttribute("font");
 
-    /** Un dibujo que ocupa el lugar del carácter. */
+    /** A drawing that takes the character's place. */
     public static final TextAttribute CHAR_REPLACEMENT = new TextAttribute("char_replacement");
 
-    /** Con qué se pinta el texto. */
+    /** What the text is painted with. */
     public static final TextAttribute FOREGROUND = new TextAttribute("foreground");
 
-    /** Con qué se pinta el fondo del texto. */
+    /** What the text's background is painted with. */
     public static final TextAttribute BACKGROUND = new TextAttribute("background");
 
-    /** El subrayado. */
+    /** The underline. */
     public static final TextAttribute UNDERLINE = new TextAttribute("underline");
 
-    /** El tachado. */
+    /** The strikethrough. */
     public static final TextAttribute STRIKETHROUGH = new TextAttribute("strikethrough");
 
-    /** La dirección base del párrafo. */
+    /** The paragraph's base direction. */
     public static final TextAttribute RUN_DIRECTION = new TextAttribute("run_direction");
 
-    /** El nivel de anidamiento bidireccional. */
+    /** The bidirectional embedding level. */
     public static final TextAttribute BIDI_EMBEDDING = new TextAttribute("bidi_embedding");
 
-    /** Qué parte del sobrante absorbe este tramo al justificar. */
+    /** What part of the slack this stretch absorbs when justifying. */
     public static final TextAttribute JUSTIFICATION = new TextAttribute("justification");
 
-    /** El resaltado del texto que todavía está componiendo el método de entrada. */
+    /** The highlight of the text the input method is still composing. */
     public static final TextAttribute INPUT_METHOD_HIGHLIGHT = new TextAttribute("input method highlight");
 
-    /** El subrayado del texto que todavía está componiendo el método de entrada. */
+    /** The underline of the text the input method is still composing. */
     public static final TextAttribute INPUT_METHOD_UNDERLINE = new TextAttribute("input method underline");
 
-    /** Intercambia el color del texto con el del fondo. */
+    /** Swaps the text's colour with the background's. */
     public static final TextAttribute SWAP_COLORS = new TextAttribute("swap_colors");
 
-    /** Cómo se dibujan los dígitos según el idioma. */
+    /** How the digits are drawn according to the language. */
     public static final TextAttribute NUMERIC_SHAPING = new TextAttribute("numeric_shaping");
 
-    /** El ajuste fino de espacio entre pares de letras. */
+    /** The fine adjustment of space between pairs of letters. */
     public static final TextAttribute KERNING = new TextAttribute("kerning");
 
-    /** Si se usan las ligaduras de la fuente. */
+    /** Whether the font's ligatures are used. */
     public static final TextAttribute LIGATURES = new TextAttribute("ligatures");
 
-    /** Espacio agregado o quitado entre todas las letras. */
+    /** Space added or taken away between all the letters. */
     public static final TextAttribute TRACKING = new TextAttribute("tracking");
 
-    /** La mitad del grosor regular. */
+    /** Half the regular weight. */
     public static final Float WEIGHT_EXTRA_LIGHT = Float.valueOf(0.5f);
 
-    /** Fina. */
+    /** Light. */
     public static final Float WEIGHT_LIGHT = Float.valueOf(0.75f);
 
-    /** Entre fina y regular. */
+    /** Between light and regular. */
     public static final Float WEIGHT_DEMILIGHT = Float.valueOf(0.875f);
 
-    /** El grosor normal. */
+    /** The normal weight. */
     public static final Float WEIGHT_REGULAR = Float.valueOf(1.0f);
 
-    /** Apenas más gruesa que la regular. */
+    /** Barely thicker than the regular. */
     public static final Float WEIGHT_SEMIBOLD = Float.valueOf(1.25f);
 
-    /** Entre regular y negrita. */
+    /** Between regular and bold. */
     public static final Float WEIGHT_MEDIUM = Float.valueOf(1.5f);
 
-    /** Casi negrita. */
+    /** Almost bold. */
     public static final Float WEIGHT_DEMIBOLD = Float.valueOf(1.75f);
 
-    /** El doble del grosor regular: la negrita de siempre. */
+    /** Twice the regular weight: the usual bold. */
     public static final Float WEIGHT_BOLD = Float.valueOf(2.0f);
 
-    /** Más que negrita. */
+    /** More than bold. */
     public static final Float WEIGHT_HEAVY = Float.valueOf(2.25f);
 
-    /** Bastante más que negrita. */
+    /** Rather more than bold. */
     public static final Float WEIGHT_EXTRABOLD = Float.valueOf(2.5f);
 
-    /** El grosor máximo previsto. */
+    /** The heaviest weight provided for. */
     public static final Float WEIGHT_ULTRABOLD = Float.valueOf(2.75f);
 
-    /** Estrecha. */
+    /** Condensed. */
     public static final Float WIDTH_CONDENSED = Float.valueOf(0.75f);
 
-    /** Apenas estrecha. */
+    /** Barely condensed. */
     public static final Float WIDTH_SEMI_CONDENSED = Float.valueOf(0.875f);
 
-    /** El ancho normal. */
+    /** The normal width. */
     public static final Float WIDTH_REGULAR = Float.valueOf(1.0f);
 
-    /** Apenas ancha. */
+    /** Barely extended. */
     public static final Float WIDTH_SEMI_EXTENDED = Float.valueOf(1.25f);
 
-    /** Ancha. */
+    /** Extended. */
     public static final Float WIDTH_EXTENDED = Float.valueOf(1.5f);
 
-    /** Derecha. */
+    /** Upright. */
     public static final Float POSTURE_REGULAR = Float.valueOf(0.0f);
 
-    /** La inclinación de la cursiva de siempre. */
+    /** The usual italic's posture. */
     public static final Float POSTURE_OBLIQUE = Float.valueOf(0.20f);
 
-    /** Un nivel de volado. */
+    /** One level of superscript. */
     public static final Integer SUPERSCRIPT_SUPER = Integer.valueOf(1);
 
-    /** Un nivel de subíndice. */
+    /** One level of subscript. */
     public static final Integer SUPERSCRIPT_SUB = Integer.valueOf(-1);
 
-    /** El subrayado normal. */
+    /** The normal underline. */
     public static final Integer UNDERLINE_ON = Integer.valueOf(0);
 
-    /** Tachado. */
+    /** Struck through. */
     public static final Boolean STRIKETHROUGH_ON = Boolean.TRUE;
 
-    /** Párrafo de izquierda a derecha. */
+    /** A left-to-right paragraph. */
     public static final Boolean RUN_DIRECTION_LTR = Boolean.FALSE;
 
-    /** Párrafo de derecha a izquierda. */
+    /** A right-to-left paragraph. */
     public static final Boolean RUN_DIRECTION_RTL = Boolean.TRUE;
 
-    /** Absorbe todo el sobrante que le toque. */
+    /** It absorbs all the slack that falls to it. */
     public static final Float JUSTIFICATION_FULL = Float.valueOf(1.0f);
 
-    /** No se estira. */
+    /** It does not stretch. */
     public static final Float JUSTIFICATION_NONE = Float.valueOf(0.0f);
 
-    /** Subrayado de un píxel, para métodos de entrada. */
+    /** A one-pixel underline, for input methods. */
     public static final Integer UNDERLINE_LOW_ONE_PIXEL = Integer.valueOf(1);
 
-    /** Subrayado de dos píxeles. */
+    /** A two-pixel underline. */
     public static final Integer UNDERLINE_LOW_TWO_PIXEL = Integer.valueOf(2);
 
-    /** Subrayado punteado. */
+    /** A dotted underline. */
     public static final Integer UNDERLINE_LOW_DOTTED = Integer.valueOf(3);
 
-    /** Subrayado gris. */
+    /** A grey underline. */
     public static final Integer UNDERLINE_LOW_GRAY = Integer.valueOf(4);
 
-    /** Subrayado de rayas. */
+    /** A dashed underline. */
     public static final Integer UNDERLINE_LOW_DASHED = Integer.valueOf(5);
 
-    /** Se intercambian los colores. */
+    /** The colours are swapped. */
     public static final Boolean SWAP_COLORS_ON = Boolean.TRUE;
 
-    /** Se aplica el ajuste entre pares. */
+    /** Kerning is applied. */
     public static final Integer KERNING_ON = Integer.valueOf(1);
 
-    /** Se usan las ligaduras. */
+    /** The ligatures are used. */
     public static final Integer LIGATURES_ON = Integer.valueOf(1);
 
-    /** Letras apretadas. */
+    /** Tight letters. */
     public static final Float TRACKING_TIGHT = Float.valueOf(-0.04f);
 
-    /** Letras separadas. */
+    /** Loose letters. */
     public static final Float TRACKING_LOOSE = Float.valueOf(0.04f);
 }

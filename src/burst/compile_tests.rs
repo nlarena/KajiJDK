@@ -1904,6 +1904,35 @@ impl FakeHeap {
         i64::from_le_bytes(bytes)
     }
 
+    /// Lo mismo que [`FakeHeap::array`] pero con elementos de `width` bytes (1 o 2), que es lo que
+    /// un `byte[]` o un `char[]` guarda de verdad. Los valores se escriben **crudos**: es el
+    /// `baload`/`caload` el que decide si esos bits se leen con signo o sin él.
+    fn narrow_array(&mut self, offset: usize, width: usize, values: &[u16]) {
+        self.write(offset, 0x5a5a_5a5a);
+        self.write(offset + 8, values.len() as i32);
+        for (i, &v) in values.iter().enumerate() {
+            let at = offset + 12 + width * i;
+            match at < Self::EDEN_END as usize {
+                true => self.eden[at - Self::NULL_PAGE..][..width]
+                    .copy_from_slice(&v.to_le_bytes()[..width]),
+                false => self.other[at..][..width].copy_from_slice(&v.to_le_bytes()[..width]),
+            }
+        }
+    }
+
+    /// Lee `width` bytes crudos del elemento `i`, para comprobar qué dejó un store angosto —
+    /// incluido si pisó al vecino.
+    fn narrow_at(&self, offset: usize, width: usize, i: usize) -> u16 {
+        let at = offset + 12 + width * i;
+        let mut buf = [0u8; 2];
+        let src = match at < Self::EDEN_END as usize {
+            true => &self.eden[at - Self::NULL_PAGE..][..width],
+            false => &self.other[at..][..width],
+        };
+        buf[..width].copy_from_slice(src);
+        u16::from_le_bytes(buf)
+    }
+
     /// Lays out an `int[]` of `values` at `offset`: `[class_id | mark | length | elements…]`.
     fn array(&mut self, offset: usize, values: &[i32]) {
         self.write(offset, 0x5a5a_5a5a); // a class id, never read by compiled code
@@ -3114,7 +3143,11 @@ fn new_bumps_eden_writes_the_header_and_logs_the_object() {
     assert_eq!(compiled.alloc_records, super::compile::ALLOC_LOG_RECORDS, "the method allocates");
     // The result slot sits between the last body's region and the log — see the boundary contract.
     assert_eq!(compiled.result_base, compiled.stack_base + compiled.stack_slots);
-    assert_eq!(compiled.alloc_base, compiled.result_base + 1);
+    // **Y entre los dos va el puntero al log compartido** (F3-H4): una compilación que aloca tiene
+    // un log que compartir, así que reserva el slot por el que ese log viaja hacia sus callees. Una
+    // que no aloca, no escribe referencias y no llama a nadie no lo paga — de ahí que este número
+    // sea `+2` acá y siga siendo `+1` en los tests de métodos simples.
+    assert_eq!(compiled.alloc_base, compiled.result_base + 2);
 
     let (outcome, buffer) = call_at(&compiled, &[0, 0], 0);
     // The first object starts at arena-local 0, i.e. the heap offset `NULL_PAGE` — and it is a
@@ -5025,10 +5058,14 @@ fn an_array_class_without_a_mirror_refuses_the_whole_method() {
     let err = compile_array(&code, 2, "()[F", heap.bases()).unwrap_err();
     assert_eq!(err, Ineligible::UnresolvedClass { pc: 1, index: 6 }, "the `atype` names the class here");
     // And `multianewarray` (0xc5) is outside the subset entirely — a recursion over allocations
-    // rather than an allocation. It is refused as an unknown opcode, not as an unresolved class.
+    // rather than an allocation. Se lo rechaza **con motivo propio** y no como opcode desconocido:
+    // el problema no es que falte emitirlo sino que aloca `1 + n` arreglos, una cantidad que
+    // depende de un operando, y las salidas de este tier reanudan en un límite de instrucción —
+    // así que un intento que se queda sin log re-ejecuta el opcode entero y nunca progresa.
+    // Ver `Ineligible::MultiDimensional`.
     let code = [ILOAD_0, ILOAD_0, 0xc5, 0x00, 0x01, 0x02, ASTORE_1, ALOAD_1, ARETURN];
     let err = compile_array(&code, 2, "()[[I", heap.bases()).unwrap_err();
-    assert_eq!(err, Ineligible::Opcode { pc: 2, opcode: 0xc5 });
+    assert_eq!(err, Ineligible::MultiDimensional { pc: 2, dimensions: 2 });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -5599,4 +5636,238 @@ fn un_callee_cuyos_argumentos_no_entran_en_sus_locales_se_rechaza() {
             "con max_locals = {miente} los argumentos no entran y hay que rechazar"
         );
     }
+}
+
+/// **Un sitio `Guard::Static` no puede pedir un receptor que no existe.**
+///
+/// El caso mínimo: un método `void` cuyo único cuerpo es llamar a un estático `void` sin
+/// argumentos y volver. Nada se apila nunca, así que `max_depth` es 0 para el llamador y para el
+/// llamado, el marco nativo se dimensiona en **cero slots de operando**, y la posición 0 no existe.
+/// El brazo de llamada evaluaba `home(d - args)` —con `d == args == 0`— para pasárselo a la guarda,
+/// y `emit_guard` lo descarta enseguida porque una guarda `Static` no mira ningún receptor: el
+/// cálculo se hacía sólo para tirarlo, y reventaba el `assert` de `Frame::local`.
+///
+/// Lo que se fija acá no es el rendimiento sino que **`compile()` nunca panique**. Un panic del
+/// compilador en la VM real no es un método que no se optimiza: es el proceso entero cayéndose.
+/// Este método existía en la biblioteca y estuvo tapado por el `catch_unwind` del censo.
+#[test]
+fn un_sitio_estatico_sin_operandos_no_pide_el_receptor_que_no_tiene() {
+    // `invokestatic #0; return` — el llamador es `()V` y el llamado también.
+    const LLAMADOR_VOID: [u8; 4] = [0xb8, 0x00, 0x00, 0xb1];
+    const LLAMADO_VOID: [u8; 1] = [0xb1];
+    let llamado = Called::new(&LLAMADO_VOID, 0, "()V");
+    // `caller_calling` hace `.expect(...)`, así que si esto panica el test falla — que es
+    // exactamente lo que se quiere fijar.
+    let llamador = caller_calling(&LLAMADOR_VOID, 1, "()V", &llamado, (&LLAMADO_VOID, 0, "()V", 0));
+    assert_eq!(llamador.native_sites, 1, "el invoke es una llamada, no una expansión");
+    assert_eq!(llamador.stack_slots, 0, "nada se apila nunca: el marco no tiene operandos");
+    assert!(llamador.returns_void);
+}
+
+/// **`i2b` / `i2c` / `i2s`** (JLS §5.1.3): truncar un `int` a 8 o 16 bits y reinterpretarlo.
+///
+/// Los valores están elegidos para que **cada conversión dé algo distinto de las otras dos**, que
+/// es lo único que convierte esto en una prueba en vez de una coincidencia:
+///
+/// * `0x1234_5678` → `i2b` da `0x78` = 120; `i2c` y `i2s` dan `0x5678` = 22136 (positivo, así que
+///   las dos de 16 bits coinciden acá y el caso **no** las distingue).
+/// * `0x0000_ABCD` → `i2c` da 43981 (sin signo) y `i2s` da **-21555** (con signo). Este es el caso
+///   que las separa: por debajo de 32768 las dos responden igual, y un emisor que use `movzx`
+///   donde va `movsx` pasa todos los tests que no crucen ese umbral.
+/// * `-1` → las tres dan -1, -1 y 65535 respectivamente.
+#[test]
+fn las_tres_conversiones_angostas_truncan_y_reinterpretan() {
+    // ldc #0; i2X; ireturn — el constante lo provee `int_const`.
+    const I2B: [u8; 4] = [0x12, 0x00, 0x91, 0xAC];
+    const I2C: [u8; 4] = [0x12, 0x00, 0x92, 0xAC];
+    const I2S: [u8; 4] = [0x12, 0x00, 0x93, 0xAC];
+
+    for (valor, b, c, sh) in [
+        (0x1234_5678i32, 0x78i32, 0x5678i32, 0x5678i32),
+        (0x0000_ABCDi32, -51i32, 43981i32, -21555i32),
+        (-1i32, -1i32, 65535i32, -1i32),
+        (i32::MIN, 0i32, 0i32, 0i32),
+    ] {
+        let k = [(0u16, valor)];
+        assert_eq!(run_with(&I2B, &[], &k), Some(b), "i2b de {valor:#x}");
+        assert_eq!(run_with(&I2C, &[], &k), Some(c), "i2c de {valor:#x}");
+        assert_eq!(run_with(&I2S, &[], &k), Some(sh), "i2s de {valor:#x}");
+    }
+}
+
+/// **Los accesos angostos a arreglos**: `baload`/`caload`/`saload` y `bastore`/`castore`/`sastore`.
+///
+/// Dos propiedades, y las dos se rompen en silencio si uno se equivoca:
+///
+/// 1. **El signo al leer.** El mismo patrón de 16 bits `0xABCD` vale **43981** leído como `char` y
+///    **-21555** leído como `short`; el mismo byte `0xFF` vale **-1** como `byte`. Un emisor que
+///    use `movzx` donde va `movsx` responde bien para todo valor sin el bit alto prendido, que es
+///    todo lo que aparece en un test escrito sin cuidado.
+/// 2. **El ancho al escribir**, que es la mitad *destructiva*: un store de 4 bytes en un `byte[]`
+///    no da un valor equivocado, **pisa los tres elementos siguientes**. Por eso el test lee los
+///    vecinos después de escribir, y no sólo el elemento escrito.
+#[test]
+fn los_accesos_angostos_respetan_ancho_y_signo() {
+    const BALOAD: u8 = 0x33;
+    const CALOAD: u8 = 0x34;
+    const SALOAD: u8 = 0x35;
+    const BASTORE: u8 = 0x54;
+    const CASTORE: u8 = 0x55;
+
+    let mut heap = FakeHeap::new();
+    heap.narrow_array(2000, 1, &[0x7F, 0xFF, 0x01, 0x80]); // byte[]:  127, -1, 1, -128
+    heap.narrow_array(2100, 2, &[0x0001, 0xABCD, 0x7FFF, 0xFFFF]); // 16 bits crudos
+
+    // --- lecturas ---
+    let leer = |op: u8| compile_heap(&[ALOAD_0, ILOAD_1, op, IRETURN], 2, "([II)I", heap.bases(), 0).unwrap();
+    let (b, c, sh) = (leer(BALOAD), leer(CALOAD), leer(SALOAD));
+
+    assert_eq!(call_at(&b, &[2000, 0], 0).0, Outcome::Returned(127));
+    assert_eq!(call_at(&b, &[2000, 1], 0).0, Outcome::Returned(-1), "0xFF es -1 en un byte[]");
+    assert_eq!(call_at(&b, &[2000, 3], 0).0, Outcome::Returned(-128), "el extremo negativo");
+    // El mismo elemento, leído con los dos anchos de 16 bits: acá se separan.
+    assert_eq!(call_at(&c, &[2100, 1], 0).0, Outcome::Returned(43981), "0xABCD como char");
+    assert_eq!(call_at(&sh, &[2100, 1], 0).0, Outcome::Returned(-21555), "0xABCD como short");
+    assert_eq!(call_at(&c, &[2100, 3], 0).0, Outcome::Returned(65535), "0xFFFF como char");
+    assert_eq!(call_at(&sh, &[2100, 3], 0).0, Outcome::Returned(-1), "0xFFFF como short");
+    assert_eq!(call_at(&c, &[2100, 2], 0).0, Outcome::Returned(32767), "por debajo del umbral coinciden");
+    assert_eq!(call_at(&sh, &[2100, 2], 0).0, Outcome::Returned(32767));
+    // Las guardas siguen siendo las de `iaload`.
+    assert_eq!(call_at(&b, &[2000, 4], 0).0, Outcome::Deopt(2), "una pasada del final");
+    assert_eq!(call_at(&b, &[0, 0], 0).0, Outcome::Deopt(2), "arreglo nulo");
+
+    // --- escrituras: lo que importa es que NO pisen al vecino ---
+    let mut escrito = FakeHeap::new();
+    escrito.narrow_array(2000, 1, &[0x11, 0x22, 0x33, 0x44]);
+    let sb2 = compile_heap(&[ALOAD_0, ILOAD_1, ILOAD_2, BASTORE, 0x03, IRETURN], 3, "([III)I", escrito.bases(), 0).unwrap();
+    call_at(&sb2, &[2000, 1, 0x1234_5678], 0);
+    assert_eq!(escrito.narrow_at(2000, 1, 1), 0x78, "trunca a 8 bits");
+    // Los tres vecinos, uno por uno. Un `mov_mr32` acá dejaría 0x56, 0x34 y 0x12 en ellos.
+    assert_eq!(escrito.narrow_at(2000, 1, 0), 0x11, "el de la izquierda, intacto");
+    assert_eq!(escrito.narrow_at(2000, 1, 2), 0x33, "el de la derecha, intacto");
+    assert_eq!(escrito.narrow_at(2000, 1, 3), 0x44, "y el siguiente");
+
+    let mut ancho = FakeHeap::new();
+    ancho.narrow_array(2100, 2, &[0x1111, 0x2222, 0x3333]);
+    let sc2 = compile_heap(&[ALOAD_0, ILOAD_1, ILOAD_2, CASTORE, 0x03, IRETURN], 3, "([III)I", ancho.bases(), 0).unwrap();
+    call_at(&sc2, &[2100, 1, 0x1234_5678], 0);
+    assert_eq!(ancho.narrow_at(2100, 2, 1), 0x5678, "trunca a 16 bits");
+    assert_eq!(ancho.narrow_at(2100, 2, 2), 0x3333, "no pisó al vecino");
+}
+
+/// **Los accesos de 8 bytes** (`laload`/`lastore`, `daload`/`dastore`) y los de `float`
+/// (`faload`/`fastore`).
+///
+/// Lo que se prueba no es que devuelvan "algo razonable" sino las dos formas de romperlos:
+///
+/// 1. **El ancho al leer.** Un `laload` emitido con una carga de 4 bytes devuelve la mitad baja y
+///    pierde la alta — invisible para todo valor que entre en 32 bits, que es la mayoría de los que
+///    uno escribe en un test. Por eso los valores tienen bits prendidos **arriba** de la palabra
+///    baja.
+/// 2. **El ancho al escribir**, que es destructivo: un `lastore` de 4 bytes deja la mitad alta del
+///    valor anterior en su lugar, y el resultado es un `long` que nadie escribió nunca. El test lee
+///    el elemento vecino después de escribir, que es donde eso se ve.
+///
+/// El `double` viaja como su patrón IEEE de 64 bits, así que un ancho equivocado lo convierte en
+/// otro número real perfectamente válido — el peor modo de falla posible, porque no parece un error.
+#[test]
+fn los_accesos_de_ocho_bytes_no_pierden_ni_pisan_la_mitad_alta() {
+    const LALOAD: u8 = 0x2f;
+    const LASTORE: u8 = 0x50;
+    const LRETURN: u8 = 0xad;
+    const LLOAD_2: u8 = 0x20;
+
+    // Un `long[]` de tres elementos, todos con bits arriba de la palabra baja.
+    let mut heap = FakeHeap::new();
+    heap.write(2000, 0x5a5a_5a5a);
+    heap.write(2008, 3);
+    heap.write64(2012, 0x0123_4567_89AB_CDEF_u64 as i64);
+    heap.write64(2020, -1i64);
+    heap.write64(2028, i64::MIN);
+
+    let leer =
+        compile_heap(&[ALOAD_0, ILOAD_1, LALOAD, LRETURN], 2, "([JI)J", heap.bases(), 0).unwrap();
+    assert_eq!(call_at(&leer, &[2000, 0], 0).0, Outcome::Returned(0x0123_4567_89AB_CDEF));
+    assert_eq!(call_at(&leer, &[2000, 1], 0).0, Outcome::Returned(-1), "los 64 bits, no 32");
+    assert_eq!(call_at(&leer, &[2000, 2], 0).0, Outcome::Returned(i64::MIN), "el extremo");
+    // Las guardas son las de `iaload`: mismo camino, otro ancho.
+    assert_eq!(call_at(&leer, &[2000, 3], 0).0, Outcome::Deopt(2), "una pasada del final");
+    assert_eq!(call_at(&leer, &[2000, -1], 0).0, Outcome::Deopt(2), "índice negativo");
+    assert_eq!(call_at(&leer, &[0, 0], 0).0, Outcome::Deopt(2), "arreglo nulo");
+
+    // Escribir el elemento 1 y comprobar que 0 y 2 quedan intactos.
+    let mut h = FakeHeap::new();
+    h.write(2000, 0x5a5a_5a5a);
+    h.write(2008, 3);
+    h.write64(2012, 0x1111_1111_1111_1111);
+    h.write64(2020, 0x2222_2222_2222_2222);
+    h.write64(2028, 0x3333_3333_3333_3333);
+    let escribir = compile_heap(
+        &[ALOAD_0, ILOAD_1, LLOAD_2, LASTORE, 0x03, IRETURN],
+        4,
+        "([JIJ)I",
+        h.bases(),
+        0,
+    )
+    .unwrap();
+    call_at_raw(&escribir, &[2000, 1, 0x7EDC_BA98_7654_3210], 0);
+    assert_eq!(h.read64(2020), 0x7EDC_BA98_7654_3210, "los 64 bits completos");
+    assert_eq!(h.read64(2012), 0x1111_1111_1111_1111, "el vecino de la izquierda, intacto");
+    assert_eq!(h.read64(2028), 0x3333_3333_3333_3333, "el de la derecha, intacto");
+}
+
+/// **`f2i` / `f2l` / `d2i` / `d2l`**: truncan hacia cero, y **deoptan** en todo lo que la JLS
+/// §5.1.3 resuelve con una regla que x86 no implementa.
+///
+/// La instrucción `cvtt*2si` hace la parte fácil —redondeo hacia cero— pero ante un NaN, un
+/// infinito o un valor fuera de rango devuelve el *integer indefinite value* de x86, que es `MIN`.
+/// La JLS pide **0 para NaN** y **`MIN`/`MAX` según el signo** para el resto. En vez de emitir esa
+/// saturación (cinco instrucciones y dos saltos), el tier guarda el valor indefinido y deopta.
+///
+/// Lo que hay que probar es justamente eso: que **ninguno de los casos raros devuelva un número**,
+/// porque un emisor que se olvide la guarda no falla ruidosamente — devuelve `MIN` para un NaN,
+/// que es un `int` perfectamente plausible.
+#[test]
+fn las_conversiones_de_punto_flotante_a_entero_truncan_o_deoptan() {
+    const D2I: u8 = 0x8e;
+    const D2L: u8 = 0x8f;
+    const F2I: u8 = 0x8b;
+    const LRETURN: u8 = 0xad;
+    const DLOAD_0: u8 = 0x26;
+    const FLOAD_0: u8 = 0x22;
+
+    // dload_0; d2i; ireturn — el `double` entra por el local 0 como su patrón de 64 bits.
+    let d2i = compile_shaped(&[DLOAD_0, D2I, IRETURN], 2, "(D)I", true, &|_| None, Heap::default(), 0).unwrap();
+    let d2l = compile_shaped(&[DLOAD_0, D2L, LRETURN], 2, "(D)J", true, &|_| None, Heap::default(), 0).unwrap();
+    let f2i = compile_shaped(&[FLOAD_0, F2I, IRETURN], 1, "(F)I", true, &|_| None, Heap::default(), 0).unwrap();
+
+    let d = |v: f64| v.to_bits() as i64;
+    // --- el camino rápido: truncado hacia cero, incluidos los negativos ---
+    assert_eq!(call_at_raw(&d2i, &[d(3.99)], 0).0, Outcome::Returned(3));
+    assert_eq!(call_at_raw(&d2i, &[d(-3.99)], 0).0, Outcome::Returned(-3), "hacia cero, no hacia abajo");
+    assert_eq!(call_at_raw(&d2i, &[d(0.0)], 0).0, Outcome::Returned(0));
+    assert_eq!(call_at_raw(&d2i, &[d(2_147_483_647.0)], 0).0, Outcome::Returned(2_147_483_647));
+    assert_eq!(call_at_raw(&d2l, &[d(1e18)], 0).0, Outcome::Returned(1_000_000_000_000_000_000));
+
+    // --- los casos de la JLS: todos deoptan, ninguno devuelve un número ---
+    for (nombre, bits) in [
+        ("NaN", d(f64::NAN)),
+        ("+inf", d(f64::INFINITY)),
+        ("-inf", d(f64::NEG_INFINITY)),
+        ("desborde por arriba", d(1e30)),
+        ("desborde por abajo", d(-1e30)),
+    ] {
+        assert_eq!(call_at_raw(&d2i, &[bits], 0).0, Outcome::Deopt(1), "d2i de {nombre}");
+    }
+    assert_eq!(call_at_raw(&d2l, &[d(f64::NAN)], 0).0, Outcome::Deopt(1), "d2l de NaN");
+    assert_eq!(call_at_raw(&d2l, &[d(1e30)], 0).0, Outcome::Deopt(1), "d2l desborda");
+    // Y el `float`, que tiene su propio camino por `movd`/`cvttss2si`.
+    let f = |v: f32| i64::from(v.to_bits());
+    assert_eq!(call_at_raw(&f2i, &[f(7.9)], 0).0, Outcome::Returned(7));
+    assert_eq!(call_at_raw(&f2i, &[f(-7.9)], 0).0, Outcome::Returned(-7));
+    assert_eq!(call_at_raw(&f2i, &[f(f32::NAN)], 0).0, Outcome::Deopt(1), "f2i de NaN");
+
+    // El precio declarado: un resultado legítimo de exactamente `MIN` también deopta. Es correcto
+    // —el intérprete calcula lo mismo— y queda fijado acá para que no se lea como un bug.
+    assert_eq!(call_at_raw(&d2i, &[d(-2_147_483_648.0)], 0).0, Outcome::Deopt(1), "el falso positivo aceptado");
 }

@@ -502,6 +502,13 @@ pub enum ExprKind {
     /// `Outer.this` (§15.8.4): la **instancia envolvente** cualificada de una clase interna — el
     /// `this` de la clase `Type` que encierra a la actual. El desugar la reescribe a `this.this$0`.
     QualifiedThis(Type),
+    /// `Interfaz.super` (§15.11.2, §15.12): el **super cualificado** de una superinterfaz — la forma
+    /// de llamar a la implementación `default` de una interfaz concreta cuando la clase implementa
+    /// varias que declaran el mismo método. El receptor sigue siendo `this`; lo que cambia es el
+    /// **dueño** del `invokespecial`, que pasa a ser la interfaz nombrada en vez de la superclase.
+    ///
+    /// Sólo vale como receptor de una llamada: `Interfaz.super` a secas no es una expresión.
+    QualifiedSuper(Type),
     /// `new Type(args)`, o con `body` una **clase anónima** (§15.9.5): `new Type(args) { members }`.
     /// El `body` son los miembros del cuerpo `{ … }`; `None` en el caso corriente. Una clase anónima
     /// no puede declarar constructores (§15.9.5.1), así que sus miembros son campos, métodos e

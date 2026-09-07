@@ -3,29 +3,30 @@ package java.awt.datatransfer;
 import java.io.IOException;
 
 /**
- * Algo que se puede transferir: al portapapeles, o arrastrando.
+ * Something that can be transferred: to the clipboard, or by dragging.
  *
- * <p>La idea central es que un mismo dato se ofrece en **varios formatos** a la vez, y quien lo
- * recibe elige el que entiende. Copiar una selección de una planilla ofrece a la vez el texto plano,
- * el HTML con formato y el objeto nativo: pegarla en un editor de texto trae lo primero y pegarla en
- * la misma planilla trae lo último, sin que nadie tenga que convertir nada de más.
+ * <p>The central idea is that one and the same datum is offered in **several formats** at once, and
+ * whoever receives it picks the one it understands. Copying a selection from a spreadsheet offers at
+ * the same time the plain text, the formatted HTML and the native object: pasting it into a text
+ * editor brings the first and pasting it into the same spreadsheet brings the last, without anyone
+ * having to convert anything unnecessarily.
  *
- * <p>Por eso los datos se piden **por formato** y no de una vez: convertir cuesta, y sólo se paga la
- * conversión del formato que efectivamente se pidió.
+ * <p>That is why the data is asked for **by format** and not all at once: converting costs, and only
+ * the conversion of the format that was actually asked for is paid for.
  */
 public interface Transferable {
 
-    /** En qué formatos se puede entregar, del mejor al peor. */
+    /** Which formats it can be handed over in, from best to worst. */
     DataFlavor[] getTransferDataFlavors();
 
-    /** Si se puede entregar en ese formato. */
+    /** Whether it can be handed over in that format. */
     boolean isDataFlavorSupported(DataFlavor flavor);
 
     /**
-     * Los datos en ese formato.
+     * The data in that format.
      *
-     * @throws UnsupportedFlavorException si el formato no se admite
-     * @throws IOException si los datos ya no están disponibles
+     * @throws UnsupportedFlavorException if the format is not admitted
+     * @throws IOException if the data is no longer available
      */
     Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException;
 }

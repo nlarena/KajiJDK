@@ -2,13 +2,13 @@ package java.beans;
 
 import java.util.EventObject;
 
-// El cambio de una propiedad: quien lo sufrio, que propiedad, y los dos valores.
+// A property's change: who underwent it, which property, and the two values.
 //
-// `propertyName` puede ser null, y no es un descuido: significa "cambiaron varias propiedades a
-// la vez, revisa el objeto entero". Los oyentes tienen que tolerar ese caso.
+// `propertyName` may be null, and it is no oversight: it means "several properties changed at once,
+// check the whole object". The listeners have to tolerate that case.
 //
-// Los valores viejo y nuevo tambien pueden ser null cuando no se conocen; recibir ambos en null
-// no dice "paso de null a null", dice "no se sabe".
+// The old and new values may also be null when they are not known; receiving both as null does not
+// say "it went from null to null", it says "it is not known".
 public class PropertyChangeEvent extends EventObject {
 
     private String propertyName;
@@ -23,7 +23,7 @@ public class PropertyChangeEvent extends EventObject {
         this.newValue = newValue;
     }
 
-    // El nombre de la propiedad, o null si cambio mas de una.
+    // The property's name, or null if more than one changed.
     public String getPropertyName() {
         return this.propertyName;
     }
@@ -36,7 +36,8 @@ public class PropertyChangeEvent extends EventObject {
         return this.oldValue;
     }
 
-    // Marca libre para que quien encadena eventos evite ciclos; la biblioteca no la interpreta.
+    // A free mark so that whoever chains events can avoid cycles; the library does not interpret
+    // it.
     public void setPropagationId(Object propagationId) {
         this.propagationId = propagationId;
     }
@@ -58,7 +59,8 @@ public class PropertyChangeEvent extends EventObject {
         return sb.toString();
     }
 
-    // Gancho para que IndexedPropertyChangeEvent meta su indice sin rehacer todo el toString.
+    // A hook so that IndexedPropertyChangeEvent can put its index in without redoing the whole
+    // toString.
     void appendTo(StringBuilder sb) {
     }
 }

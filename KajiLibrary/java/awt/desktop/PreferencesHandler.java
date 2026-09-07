@@ -1,14 +1,14 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.PreferencesHandler -- responde al pedido de preferencias.
+ * KajiLibrary's java.awt.desktop.PreferencesHandler -- answers the preferences request.
  *
- * <p>Se registra con {@code Desktop.setPreferencesHandler}. Solo puede haber uno: a diferencia de los
- * {@link SystemEventListener}, esto no es un aviso sino una responsabilidad, y no tendria sentido que
- * dos partes del programa la tomaran.
+ * <p>It is registered with {@code Desktop.setPreferencesHandler}. There can be only one: unlike the
+ * {@link SystemEventListener}s, this is not a notice but a responsibility, and it would make no sense
+ * for two parts of the program to take it.
  */
 public interface PreferencesHandler {
 
-    /** Abre las preferencias del programa. */
+    /** Opens the program's preferences. */
     void handlePreferences(PreferencesEvent e);
 }

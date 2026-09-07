@@ -3,37 +3,37 @@ package java.applet;
 import java.net.URL;
 
 /**
- * Lo que el navegador le cuenta al applet sobre dónde está corriendo.
+ * What the browser tells the applet about where it is running.
  *
- * <p>Un applet no sabe nada por sí mismo: ni qué página lo contiene, ni de dónde se bajó, ni qué
- * parámetros le pusieron en el HTML. Todo eso se lo da el navegador a través de este objeto, que le
- * pone con {@link Applet#setStub}. Es un "stub" en el sentido viejo: un representante de algo que
- * está del otro lado.
+ * <p>An applet knows nothing by itself: not which page contains it, nor where it was downloaded from,
+ * nor which parameters were set on it in the HTML. All of that the browser gives it through this
+ * object, which it sets with {@link Applet#setStub}. It is a "stub" in the old sense: a
+ * representative of something that is on the other side.
  *
- * @deprecated el modelo de applets está en desuso desde Java 9 y marcado para borrarse desde 17.
+ * @deprecated the applet model has been deprecated since Java 9 and marked for removal since 17.
  */
 @Deprecated(since = "9", forRemoval = true)
 public interface AppletStub {
 
-    /** Si el applet está corriendo, o sea entre {@link Applet#start} y {@link Applet#stop}. */
+    /** Whether the applet is running, that is, between {@link Applet#start} and {@link Applet#stop}. */
     boolean isActive();
 
-    /** La dirección de la página que contiene al applet. */
+    /** The address of the page containing the applet. */
     URL getDocumentBase();
 
-    /** La dirección de la que se bajó el código del applet. */
+    /** The address the applet's code was downloaded from. */
     URL getCodeBase();
 
     /**
-     * El valor de un parámetro del HTML.
+     * The value of a parameter from the HTML.
      *
-     * @return el valor, o `null` si no hay un parámetro con ese nombre
+     * @return the value, or `null` if there is no parameter with that name
      */
     String getParameter(String name);
 
-    /** El navegador, visto como contexto del applet. */
+    /** The browser, seen as the applet's context. */
     AppletContext getAppletContext();
 
-    /** Le pide al navegador que le dé al applet ese tamaño. */
+    /** Asks the browser to give the applet that size. */
     void appletResize(int width, int height);
 }

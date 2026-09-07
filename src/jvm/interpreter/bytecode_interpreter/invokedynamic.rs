@@ -32,7 +32,7 @@
 //! `LambdaMetafactory.metafactory` — lambdas and method references — spins the implementing
 //! class (see above).
 
-use super::{array_operations, class_operations, lambda_factory, objects_operations, Exec};
+use super::{array_operations, class_operations, concat_factory, lambda_factory, objects_operations, Exec};
 use crate::jvm::class_file::MethodHandleKind;
 use crate::jvm::interpreter::frame::Value;
 use crate::jvm::interpreter::heap::HeapService;
@@ -236,21 +236,103 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
 
     match &site.bootstrap {
         Bootstrap::StringConcat { recipe, constants } => {
-            let text = match recipe {
-                Some(recipe) => concat_with_recipe(&self.shared.heap, recipe, &args, &params, constants),
-                // No recipe: the arguments, in order, and nothing else.
-                None => args
-                    .iter()
-                    .zip(&params)
-                    .map(|(value, descriptor)| render(&self.shared.heap, value, descriptor))
-                    .collect(),
+            // **Se spinea un método Java en vez de calcular en Rust** — la misma jugada que
+            // `metafactory` hace unas líneas más abajo, y por la misma razón llevada un paso más
+            // lejos: un intrínseco de Rust no deja bytecode, y sin bytecode el JIT no tiene nada
+            // que compilar. La concatenación es el `invokedynamic` más común y lejos, así que el
+            // atajo nativo era el techo del compilador sobre todo el código que concatena.
+            //
+            // El cuerpo emitido es el que `javac` producía antes de Java 9 —
+            // `new StringBuilder().append(…)….toString()` — o sea una alocación y una cadena de
+            // llamadas, que es exactamente lo que este JIT sabe hacer. Ver [`concat_factory`].
+            //
+            // **El precio**: interpretada, esta secuencia es más lenta que el bucle nativo que
+            // reemplaza. Se cambia velocidad del intérprete por *compilabilidad*, que es la misma
+            // decisión del JDK real (ahí la cadena de `MethodHandle` la inlinea HotSpot).
+            //
+            // Una clase spun **por call site**, como el lambda: la receta y los tipos son fijos
+            // para el sitio, así que la clase también.
+            let receta = match recipe {
+                Some(r) => r.clone(),
+                // Sin receta (`makeConcat`): los argumentos en orden y nada más.
+                None => TAG_ARG.to_string().repeat(params.len()),
             };
-            // **Computed, so not pooled.** A concatenation's result is a new object even when it
-            // happens to equal a literal — JLS §3.10.5 only interns constants, and `("a" + b) == "a"`
-            // must be `false` when `b` is `""` at runtime.
-            let offset =
-                strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, &text);
-            self.top().push(Value::Reference(offset));
+            // **La concatenación es más primitiva que `StringBuilder`, y por eso hay dos caminos.**
+            // El conjunto de arranque (`boot/`) es deliberadamente mínimo y no lo incluye — pero un
+            // `"a" + b` puede aparecer en cualquier lado, incluida la propia biblioteca que se está
+            // levantando. Spinear una clase que referencia algo que no existe deja al programa sin
+            // poder resolver nada, así que cuando `StringBuilder` no está se cae al intrínseco de
+            // Rust, que es exactamente lo que había antes.
+            //
+            // No es una comodidad: es la única forma de que la VM arranque. El camino compilable
+            // vale igual, porque donde importa —la biblioteca completa, que es lo que el JIT ve—
+            // `StringBuilder` siempre está. Lo que haría innecesaria esta bifurcación es meter
+            // `StringBuilder` en `boot/`, y eso es trabajo de biblioteca, no de acá.
+            // **DESACTIVADO (2026-09-06), y no por estar mal sino por costar sin rendir.**
+            //
+            // El camino spinado está entero y probado —`concat_factory` emite la clase, el resolver
+            // del JIT la encuentra, y el resultado coincide con el intérprete y con el `java` real—
+            // pero **medido, hoy es pura pérdida**: sobre `java/JcCat` da **784.672 opcodes
+            // interpretados contra 73.743** del intrínseco, o sea **10,6× más trabajo**, y el JIT no
+            // lo compensa.
+            //
+            // La razón por la que no compensa no es de este archivo: el `concat` spinado **aloca**
+            // (el `StringBuilder` y el `String`), y un callee que aloca mantiene su registro en cero
+            // porque su log vive en su propia región del buffer y sólo se replaya el de la raíz. Con
+            // lo cual `run` compila, emite la llamada nativa, y **rebota**: 11.821 deopts sobre
+            // 13.825 llamadas.
+            //
+            // **El disparador para volver a prenderlo es concreto: el log compartido entre frames.**
+            // Esa restricción se había medido como poco rentable (21 sitios de llamada) cuando la
+            // concatenación se resolvía en Rust y por lo tanto no competía; con la concatenación
+            // compilable, es lo único que separa a este trabajo de rendir. Cuando exista, esto es
+            // una línea: cambiar el `false` por el `get_or_load`.
+            let hay_builder = false;
+            let _ = concat_factory::generate_concat_class; // el generador sigue vivo y testeado
+            if !hay_builder {
+                let text = match recipe {
+                    Some(recipe) => {
+                        concat_with_recipe(&self.shared.heap, recipe, &args, &params, constants)
+                    }
+                    None => args
+                        .iter()
+                        .zip(&params)
+                        .map(|(value, descriptor)| render(&self.shared.heap, value, descriptor))
+                        .collect(),
+                };
+                let offset =
+                    strings::allocate(&mut self.shared.metaspace, &mut self.shared.heap, &text);
+                self.top().push(Value::Reference(offset));
+                return;
+            }
+            let synthetic = format!("{caller}$$concat$${cp_index}");
+            if self.shared.metaspace.get(&synthetic).is_none() {
+                let bytes = concat_factory::generate_concat_class(
+                    &synthetic,
+                    &receta,
+                    &params,
+                    constants,
+                    TAG_ARG,
+                    TAG_CONST,
+                );
+                let class = crate::jvm::class_file::ClassFile::from_bytes(&bytes)
+                    .expect("stringconcat: la clase spun debe parsear");
+                self.shared.metaspace.add(synthetic.clone(), class);
+            }
+            class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, &synthetic);
+            let descriptor = format!("({})Ljava/lang/String;", params.concat());
+            let concat = self
+                .shared
+                .metaspace
+                .resolve_method(&synthetic, "concat", &descriptor)
+                .expect("stringconcat: la clase spun debe tener su `concat`");
+            let widths = MetaspaceService::param_slot_widths(&descriptor);
+            // El resultado es un objeto **nuevo** aunque coincida con un literal: JLS §3.10.5
+            // interna constantes, no cómputos, y `("a" + b) == "a"` tiene que dar `false` con `b`
+            // vacío en runtime. `StringBuilder.toString()` aloca, así que eso se cumple solo.
+            if let Some(value) = self.call_java(concat, args, &widths) {
+                self.top().push(value);
+            }
         }
         Bootstrap::TypeSwitch { labels } => {
             // Dynamic labels are resolved *now*, outside the class-file borrow — this is

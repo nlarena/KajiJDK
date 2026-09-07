@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.io.StringReader;
 
 /**
- * Una cadena lista para copiar al portapapeles.
+ * A string ready to be copied to the clipboard.
  *
- * <p>Es la implementación de {@link Transferable} que resuelve el noventa por ciento de los casos, y
- * está escrita para que copiar texto sea una línea.
+ * <p>It is the {@link Transferable} implementation that settles ninety per cent of the cases, and it
+ * is written so that copying text is one line.
  *
- * <p>Implementa además {@link ClipboardOwner} sin hacer nada al perder el portapapeles: una cadena
- * ya está en memoria y no hay recurso que soltar. Es el aviso que se puede ignorar con la conciencia
- * tranquila.
+ * <p>It also implements {@link ClipboardOwner} doing nothing on losing the clipboard: a string is
+ * already in memory and there is no resource to release. It is the notice that can be ignored with a
+ * clear conscience.
  */
 public class StringSelection implements Transferable, ClipboardOwner {
 
@@ -25,17 +25,17 @@ public class StringSelection implements Transferable, ClipboardOwner {
 
     private final String data;
 
-    /** Con la cadena a transferir. */
+    /** With the string to transfer. */
     public StringSelection(String data) {
         this.data = data;
     }
 
-    /** Texto de Java primero, texto plano después. */
+    /** Java text first, plain text after. */
     public DataFlavor[] getTransferDataFlavors() {
         return flavors.clone();
     }
 
-    /** Si es uno de los dos formatos de texto. */
+    /** Whether it is one of the two text formats. */
     public boolean isDataFlavorSupported(DataFlavor flavor) {
         for (int i = 0; i < flavors.length; i++) {
             if (flavor.equals(flavors[i])) {
@@ -46,13 +46,13 @@ public class StringSelection implements Transferable, ClipboardOwner {
     }
 
     /**
-     * La cadena, o un lector sobre ella.
+     * The string, or a reader over it.
      *
-     * <p>El formato de texto plano entrega un {@code Reader} y no la cadena: es lo que declara su
-     * clase de representación, y devolver la cadena rompería a quien confíe en ella.
+     * <p>The plain-text format hands over a {@code Reader} and not the string: it is what its
+     * representation class declares, and returning the string would break whoever relies on it.
      *
-     * @throws UnsupportedFlavorException si el formato no es de texto
-     * @throws IOException nunca en la práctica: la cadena ya está en memoria
+     * @throws UnsupportedFlavorException if the format is not a text one
+     * @throws IOException never in practice: the string is already in memory
      */
     public Object getTransferData(DataFlavor flavor)
             throws UnsupportedFlavorException, IOException {
@@ -65,7 +65,7 @@ public class StringSelection implements Transferable, ClipboardOwner {
         throw new UnsupportedFlavorException(flavor);
     }
 
-    /** No hace nada: una cadena en memoria no tiene recursos que soltar. */
+    /** It does nothing: a string in memory has no resources to release. */
     public void lostOwnership(Clipboard clipboard, Transferable contents) {
     }
 }

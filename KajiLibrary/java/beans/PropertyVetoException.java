@@ -1,10 +1,11 @@
 package java.beans;
 
-// Un oyente de cambios vetables rechazo el cambio. Lleva consigo el evento que se vetó, para que
-// quien lo reciba sepa que propiedad era y con que valores; sin eso el veto no seria accionable.
+// A vetoable-change listener refused the change. It carries the vetoed event with it, so that
+// whoever receives it knows which property it was and with what values; without that the veto would
+// not be actionable.
 public class PropertyVetoException extends Exception {
 
-    // El evento vetado. `serialVersionUID` aparte, este es el unico estado propio de la clase.
+    // The vetoed event. `serialVersionUID` apart, this is the class's only state of its own.
     private PropertyChangeEvent evt;
 
     public PropertyVetoException(String mess, PropertyChangeEvent evt) {

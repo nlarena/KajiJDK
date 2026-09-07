@@ -3,36 +3,36 @@ package java.awt.font;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Las medidas de **un** glifo.
+ * **One** glyph's measurements.
  *
- * <p>Hay dos medidas distintas y conviene no confundirlas. El **avance** es cuánto hay que correrse
- * para dibujar el glifo siguiente; el **rectángulo** es dónde cae la tinta. No coinciden: un espacio
- * tiene avance y no tiene tinta, y una letra inclinada puede pintar más allá de su avance.
+ * <p>There are two different measurements and they are best not confused. The **advance** is how far
+ * to move over to draw the next glyph; the **rectangle** is where the ink falls. They do not agree: a
+ * space has an advance and no ink, and a slanted letter may paint beyond its advance.
  *
- * <p>De esa diferencia salen los dos márgenes. El izquierdo ({@link #getLSB}) es el aire entre el
- * origen y donde empieza la tinta, y el derecho ({@link #getRSB}), el que queda entre donde termina
- * y el avance. Cualquiera de los dos puede ser **negativo**, y eso es lo que permite que una letra
- * se meta debajo de la anterior.
+ * <p>Out of that difference come the two side bearings. The left one ({@link #getLSB}) is the air
+ * between the origin and where the ink starts, and the right one ({@link #getRSB}) the one left
+ * between where it ends and the advance. Either of the two may be **negative**, and that is what lets
+ * a letter tuck under the previous one.
  *
- * <p>El tipo dice qué es el glifo respecto de los caracteres: uno normal es un carácter, una
- * ligadura son varios en un solo dibujo, y un combinante —un acento suelto— es un glifo que se apoya
- * sobre otro sin avanzar.
+ * <p>The type says what the glyph is with respect to the characters: an ordinary one is a character,
+ * a ligature is several in a single drawing, and a combining one --a loose accent-- is a glyph that
+ * rests on another without advancing.
  */
 public final class GlyphMetrics {
 
-    /** Un glifo por carácter. */
+    /** One glyph per character. */
     public static final byte STANDARD = 0;
 
-    /** Un glifo que dibuja varios caracteres juntos. */
+    /** A glyph that draws several characters together. */
     public static final byte LIGATURE = 1;
 
-    /** Un glifo que se apoya sobre otro, como un acento. */
+    /** A glyph that rests on another, such as an accent. */
     public static final byte COMBINING = 2;
 
-    /** Un glifo que es parte de otro y no tiene carácter propio. */
+    /** A glyph that is part of another and has no character of its own. */
     public static final byte COMPONENT = 3;
 
-    /** Un glifo sin tinta, que sólo avanza. */
+    /** A glyph with no ink, which only advances. */
     public static final byte WHITESPACE = 4;
 
     private final boolean horizontal;
@@ -41,7 +41,7 @@ public final class GlyphMetrics {
     private final Rectangle2D.Float bounds;
     private final byte glyphType;
 
-    /** Con avance horizontal. */
+    /** With a horizontal advance. */
     public GlyphMetrics(float advance, Rectangle2D bounds, byte glyphType) {
         this.horizontal = true;
         this.advanceX = advance;
@@ -51,7 +51,7 @@ public final class GlyphMetrics {
         this.glyphType = glyphType;
     }
 
-    /** Con avance en la dirección que se indique. */
+    /** With an advance in whichever direction is stated. */
     public GlyphMetrics(boolean horizontal, float advanceX, float advanceY, Rectangle2D bounds,
             byte glyphType) {
         this.horizontal = horizontal;
@@ -62,7 +62,7 @@ public final class GlyphMetrics {
         this.glyphType = glyphType;
     }
 
-    /** El avance en la dirección del texto. */
+    /** The advance in the text's direction. */
     public float getAdvance() {
         if (this.horizontal) {
             return this.advanceX;
@@ -70,23 +70,23 @@ public final class GlyphMetrics {
         return this.advanceY;
     }
 
-    /** El avance horizontal. */
+    /** The horizontal advance. */
     public float getAdvanceX() {
         return this.advanceX;
     }
 
-    /** El avance vertical. */
+    /** The vertical advance. */
     public float getAdvanceY() {
         return this.advanceY;
     }
 
-    /** Dónde cae la tinta, relativo al origen del glifo. */
+    /** Where the ink falls, relative to the glyph's origin. */
     public Rectangle2D getBounds2D() {
         return new Rectangle2D.Float(this.bounds.x, this.bounds.y, this.bounds.width,
                 this.bounds.height);
     }
 
-    /** El aire antes de la tinta; puede ser negativo. */
+    /** The air before the ink; it may be negative. */
     public float getLSB() {
         if (this.horizontal) {
             return this.bounds.x;
@@ -94,7 +94,7 @@ public final class GlyphMetrics {
         return this.bounds.y;
     }
 
-    /** El aire después de la tinta; puede ser negativo. */
+    /** The air after the ink; it may be negative. */
     public float getRSB() {
         if (this.horizontal) {
             return this.advanceX - this.bounds.x - this.bounds.width;
@@ -102,36 +102,36 @@ public final class GlyphMetrics {
         return this.advanceY - this.bounds.y - this.bounds.height;
     }
 
-    /** El tipo crudo, con los bits de clase y el de espacio en blanco juntos. */
+    /** The raw type, with the class bits and the whitespace one together. */
     public int getType() {
         return this.glyphType;
     }
 
-    /** Si es un glifo por carácter. */
+    /** Whether it is one glyph per character. */
     public boolean isStandard() {
         return (this.glyphType & 0x3) == STANDARD;
     }
 
-    /** Si dibuja varios caracteres juntos. */
+    /** Whether it draws several characters together. */
     public boolean isLigature() {
         return (this.glyphType & 0x3) == LIGATURE;
     }
 
-    /** Si se apoya sobre otro glifo. */
+    /** Whether it rests on another glyph. */
     public boolean isCombining() {
         return (this.glyphType & 0x3) == COMBINING;
     }
 
-    /** Si es parte de otro glifo. */
+    /** Whether it is part of another glyph. */
     public boolean isComponent() {
         return (this.glyphType & 0x3) == COMPONENT;
     }
 
     /**
-     * Si no tiene tinta.
+     * Whether it has no ink.
      *
-     * <p>Es independiente de las otras cuatro: el espacio en blanco vive en su propio bit, así que
-     * un glifo puede ser a la vez estándar y blanco.
+     * <p>It is independent of the other four: whitespace lives in its own bit, so a glyph can be
+     * standard and white at the same time.
      */
     public boolean isWhitespace() {
         return (this.glyphType & 0x4) == WHITESPACE;

@@ -1,47 +1,47 @@
 package java.awt.event;
 
 /**
- * Un oyente de ratón que no hace nada, para redefinir sólo lo que interese.
-
- <p>Implementa las **tres** interfaces de ratón, así que un solo objeto puede atender botones,
- movimiento y rueda. Es el adaptador más útil de todos justamente por eso: casi nadie quiere las tres
- por separado.
+ * A mouse listener that does nothing, to override only what matters.
+ *
+ * <p>It implements the **three** mouse interfaces, so a single object can attend to buttons, motion
+ * and wheel. It is the most useful adapter of all precisely because of that: hardly anyone wants the
+ * three separately.
  */
 public abstract class MouseAdapter implements MouseListener, MouseMotionListener, MouseWheelListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MouseAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseClicked(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mousePressed(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseReleased(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseEntered(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseExited(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseDragged(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseMoved(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void mouseWheelMoved(MouseWheelEvent e) {
     }
 }

@@ -1,14 +1,14 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.AboutHandler -- responde al pedido de {@code Acerca de}.
+ * KajiLibrary's java.awt.desktop.AboutHandler -- answers the {@code About} request.
  *
- * <p>Se registra con {@code Desktop.setAboutHandler}. Solo puede haber uno: a diferencia de los
- * {@link SystemEventListener}, esto no es un aviso sino una responsabilidad, y no tendria sentido que
- * dos partes del programa la tomaran.
+ * <p>It is registered with {@code Desktop.setAboutHandler}. There can be only one: unlike the
+ * {@link SystemEventListener}s, this is not a notice but a responsibility, and it would make no sense
+ * for two parts of the program to take it.
  */
 public interface AboutHandler {
 
-    /** Muestra el cuadro propio del programa. */
+    /** Shows the program's own box. */
     void handleAbout(AboutEvent e);
 }

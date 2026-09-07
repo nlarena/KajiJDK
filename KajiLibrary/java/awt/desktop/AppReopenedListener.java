@@ -1,12 +1,12 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.AppReopenedListener -- escucha los relanzamientos.
+ * KajiLibrary's java.awt.desktop.AppReopenedListener -- listens for relaunches.
  *
- * <p>Se registra con {@code Desktop.addAppEventListener}. Ver {@link AppReopenedEvent}.
+ * <p>It is registered with {@code Desktop.addAppEventListener}. See {@link AppReopenedEvent}.
  */
 public interface AppReopenedListener extends SystemEventListener {
 
-    /** Alguien volvio a lanzarlo. */
+    /** Someone launched it again. */
     void appReopened(AppReopenedEvent e);
 }

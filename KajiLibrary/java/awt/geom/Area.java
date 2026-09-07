@@ -4,57 +4,57 @@ import java.awt.Rectangle;
 import java.awt.Shape;
 import java.util.ArrayList;
 
-// java.awt.geom.Area de KajiLibrary -- una region del plano cerrada bajo union, interseccion,
-// diferencia y diferencia simetrica. Superficie completa.
+// KajiLibrary's java.awt.geom.Area -- a region of the plane closed under union, intersection,
+// difference and symmetric difference. The surface is complete.
 //
-// Lo que distingue a Area de Path2D no son las cuatro operaciones booleanas sino la **forma
-// normal**: un Area no guarda el camino que le dieron, guarda el borde de la region que ese camino
-// encierra, con la regla no-cero, sin cruces y sin tramos que se pisen. Por eso `new Area(shape)`
-// ya hace trabajo aunque no se opere nada, y por eso `isEmpty`, `isPolygonal`, `isRectangular`,
-// `isSingular` y `equals` significan algo: preguntan sobre la region, no sobre como venia escrita.
-// Un camino en ocho que se anula a si mismo da un Area vacia; dos rectangulos pegados dan un solo
-// lazo sin el lado compartido.
+// What sets Area apart from Path2D is not the four boolean operations but the **normal form**: an
+// Area does not keep the path it was given, it keeps the edge of the region that path encloses, with
+// the non-zero rule, with no crossings and with no stretches that overlap. That is why
+// `new Area(shape)` already does work even if nothing is operated on, and why `isEmpty`,
+// `isPolygonal`, `isRectangular`, `isSingular` and `equals` mean something: they ask about the
+// region, not about how it was written. A figure-of-eight path that cancels itself out gives an
+// empty Area; two abutting rectangles give a single loop with no shared side.
 //
-// La normalizacion y las cuatro operaciones son el mismo calculo con distinta funcion booleana, y
-// viven en AreaOp. El encabezado de ese archivo explica por que esta hecho en tres pasadas y no
-// como el barrido del JDK.
+// The normalization and the four operations are the same computation with a different boolean
+// function, and they live in AreaOp. That file's header explains why it is done in three passes and
+// not like the JDK's sweep.
 //
-// Dos cosas observables que conviene saber:
+// Two observable things worth knowing:
 //
-//   * **La orientacion de los lazos no es la del JDK.** Aca el interior queda a la derecha del
-//     trozo recorrido de arriba hacia abajo, o sea vuelta +1; el JDK elige la contraria. Las dos
-//     rellenan la misma region con la regla no-cero --que es lo unico que el contrato promete-- y
-//     nada de la API expone el signo. Se anota porque un `getPathIterator` comparado coordenada por
-//     coordenada contra el JDK va a diferir en el orden de recorrido.
+//   * **The loops' orientation is not the JDK's.** Here the interior ends up to the right of the
+//     piece walked top to bottom, that is, winding +1; the JDK chooses the opposite. Both fill the
+//     same region with the non-zero rule --which is all the contract promises-- and nothing in the
+//     API exposes the sign. It is noted because a `getPathIterator` compared coordinate by
+//     coordinate against the JDK is going to differ in the walking order.
 //
-//   * **`equals(Area)` no es `equals(Object)`.** No hay override de `equals(Object)`, igual que en
-//     el JDK: `unArea.equals((Object) otra)` cae en la identidad de Object. Es una rareza heredada
-//     y esta respetada a proposito, porque un `List.contains` o un `HashSet` que empezara a usar
-//     igualdad geometrica seria un cambio de comportamiento observable.
+//   * **`equals(Area)` is not `equals(Object)`.** There is no override of `equals(Object)`, just as
+//     in the JDK: `anArea.equals((Object) another)` falls back on Object's identity. It is an
+//     inherited oddity and it is honoured on purpose, because a `List.contains` or a `HashSet` that
+//     started using geometric equality would be an observable change of behaviour.
 //
-// Nada quedo afuera de esta clase.
+// Nothing was left out of this class.
 public class Area implements Shape, Cloneable {
 
-    // El borde ya normalizado. Siempre WIND_NON_ZERO y siempre con todos los subcaminos cerrados.
+    // The already normalized edge. Always WIND_NON_ZERO and always with every subpath closed.
     private Path2D path;
 
-    /** Una region vacia. */
+    /** An empty region. */
     public Area() {
         this.path = Path2D.newDouble(PathIterator.WIND_NON_ZERO);
     }
 
     /**
-     * La region encerrada por `s`, normalizada.
+     * The region enclosed by `s`, normalized.
      *
-     * Los subcaminos abiertos se cierran implicitamente: el area encerrada por un camino sin
-     * `closePath` es la del camino cerrado, que es lo que dice la spec de Shape.
+     * The open subpaths are closed implicitly: the area enclosed by a path with no `closePath` is
+     * the closed path's, which is what Shape's spec says.
      */
     public Area(Shape s) {
         if (s == null) {
             throw new NullPointerException("s");
         }
         if (s instanceof Area) {
-            // Ya esta normalizada: copiarla es mas barato y da exactamente lo mismo.
+            // It is normalized already: copying it is cheaper and gives exactly the same thing.
             this.path = Path2D.newDouble(((Area) s).path, null);
         } else {
             ArrayList<AreaCurve> curves = new ArrayList<AreaCurve>();
@@ -65,24 +65,24 @@ public class Area implements Shape, Cloneable {
         }
     }
 
-    // --- operaciones booleanas -------------------------------------------------------------------
+    // --- boolean operations ----------------------------------------------------------------------
 
-    /** Union con `rhs`. */
+    /** Union with `rhs`. */
     public void add(Area rhs) {
         applyOp(rhs, AreaOp.ADD);
     }
 
-    /** Resta de `rhs`. */
+    /** Subtraction of `rhs`. */
     public void subtract(Area rhs) {
         applyOp(rhs, AreaOp.SUB);
     }
 
-    /** Interseccion con `rhs`. */
+    /** Intersection with `rhs`. */
     public void intersect(Area rhs) {
         applyOp(rhs, AreaOp.INT);
     }
 
-    /** Diferencia simetrica con `rhs`: lo que esta en una y no en la otra. */
+    /** Symmetric difference with `rhs`: what is in one and not in the other. */
     public void exclusiveOr(Area rhs) {
         applyOp(rhs, AreaOp.XOR);
     }
@@ -102,19 +102,19 @@ public class Area implements Shape, Cloneable {
                 PathIterator.WIND_NON_ZERO, op);
     }
 
-    /** Deja la region vacia. */
+    /** Leaves the region empty. */
     public void reset() {
         this.path = Path2D.newDouble(PathIterator.WIND_NON_ZERO);
     }
 
-    // --- preguntas sobre la region ---------------------------------------------------------------
+    // --- questions about the region --------------------------------------------------------------
 
-    /** Si la region no encierra nada. */
+    /** Whether the region encloses nothing. */
     public boolean isEmpty() {
         return this.path.getPathIterator(null).isDone();
     }
 
-    /** Si el borde es todo de segmentos rectos. */
+    /** Whether the edge is all straight segments. */
     public boolean isPolygonal() {
         PathIterator pi = this.path.getPathIterator(null);
         double[] coords = new double[6];
@@ -129,12 +129,12 @@ public class Area implements Shape, Cloneable {
     }
 
     /**
-     * Si la region es un rectangulo con los lados paralelos a los ejes.
+     * Whether the region is a rectangle with its sides parallel to the axes.
      *
-     * Se comprueba contra el rectangulo envolvente y no contando vertices: un borde poligonal puede
-     * tener vertices de mas en el medio de un lado --los deja la union de dos rectangulos que
-     * comparten parte de un lado-- y seguir siendo geometricamente un rectangulo. Comparar las dos
-     * regiones responde la pregunta que el nombre del metodo hace.
+     * It is checked against the bounding rectangle and not by counting vertices: a polygonal edge
+     * may have extra vertices in the middle of a side --the union of two rectangles sharing part of
+     * a side leaves them-- and go on being geometrically a rectangle. Comparing the two regions
+     * answers the question the method's name asks.
      */
     public boolean isRectangular() {
         if (isEmpty()) {
@@ -146,7 +146,7 @@ public class Area implements Shape, Cloneable {
         return new Area(getBounds2D()).equals(this);
     }
 
-    /** Si la region es de una sola pieza sin agujeros, o sea un solo lazo. */
+    /** Whether the region is of a single piece with no holes, that is, a single loop. */
     public boolean isSingular() {
         PathIterator pi = this.path.getPathIterator(null);
         double[] coords = new double[6];
@@ -164,12 +164,12 @@ public class Area implements Shape, Cloneable {
     }
 
     /**
-     * Si `other` encierra exactamente la misma region.
+     * Whether `other` encloses exactly the same region.
      *
-     * Se calcula la diferencia simetrica y se pregunta si quedo vacia. La comparacion directa de
-     * los dos bordes vale como atajo --las dos formas normales de la misma region coinciden cuando
-     * se llego a ellas por el mismo camino-- pero no como respuesta: dos regiones iguales pueden
-     * tener el borde partido en distintos trozos segun con quien se hayan operado antes.
+     * The symmetric difference is worked out and it is asked whether it came out empty. Comparing
+     * the two edges directly is good as a shortcut --the same region's two normal forms agree when
+     * they were arrived at by the same route-- but not as an answer: two equal regions may have the
+     * edge split into different pieces according to what they were operated with before.
      */
     public boolean equals(Area other) {
         if (other == this) {
@@ -216,15 +216,15 @@ public class Area implements Shape, Cloneable {
         return pa.isDone() && pb.isDone();
     }
 
-    // --- transformacion --------------------------------------------------------------------------
+    // --- transformation --------------------------------------------------------------------------
 
     /**
-     * Aplica la transformacion en el lugar.
+     * Applies the transform in place.
      *
-     * Se renormaliza despues de transformar y no solo se mueven los puntos: una reflexion da vuelta
-     * el sentido de recorrido de todos los lazos, y una matriz singular aplasta la region contra
-     * una recta y la deja sin area. Los dos casos los resuelve la normalizacion, que es la misma de
-     * `new Area(Shape)`.
+     * It renormalizes after transforming and does not just move the points: a reflection turns every
+     * loop's walking direction around, and a singular matrix flattens the region against a line and
+     * leaves it with no area. Both cases are settled by the normalization, which is the same one as
+     * `new Area(Shape)`'s.
      */
     public void transform(AffineTransform t) {
         if (t == null) {
@@ -237,7 +237,7 @@ public class Area implements Shape, Cloneable {
                 PathIterator.WIND_NON_ZERO, AreaOp.ADD);
     }
 
-    /** Una copia transformada, sin tocar esta. */
+    /** A transformed copy, without touching this one. */
     public Area createTransformedArea(AffineTransform t) {
         Area a = new Area(this);
         a.transform(t);

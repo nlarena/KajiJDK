@@ -4,16 +4,16 @@ import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 
 /**
- * Las condiciones en las que se va a medir y dibujar un texto.
+ * The conditions a text is going to be measured and drawn under.
  *
- * <p>Un texto no tiene un tamaño absoluto: cuánto mide depende de la escala a la que se dibuje y de
- * si se suaviza el contorno o no. Este objeto junta esas condiciones para que medir y dibujar den lo
- * mismo.
+ * <p>A text has no absolute size: how much it measures depends on the scale it is drawn at and on
+ * whether the outline is smoothed or not. This object gathers those conditions so that measuring and
+ * drawing agree.
  *
- * <p>Las métricas fraccionarias son la distinción menos obvia. Sin ellas, el avance de cada carácter
- * se redondea a un píxel entero, y el ancho de una palabra es la suma de esos redondeos; con ellas
- * el avance se lleva con decimales y sólo se redondea al final. La diferencia se acumula: la misma
- * frase puede medir varios píxeles distinto según cuál se use.
+ * <p>Fractional metrics are the least obvious distinction. Without them, each character's advance is
+ * rounded to a whole pixel, and a word's width is the sum of those roundings; with them the advance
+ * is carried with decimals and only rounded at the end. The difference accumulates: the same
+ * sentence may measure several pixels differently depending on which is used.
  */
 public class FontRenderContext {
 
@@ -23,9 +23,9 @@ public class FontRenderContext {
     private final boolean defaulting;
 
     /**
-     * Uno con todo por omisión.
+     * One with everything defaulted.
      *
-     * <p>Es para las subclases que calculan sus condiciones a demanda.
+     * <p>It is for the subclasses that work out their conditions on demand.
      */
     protected FontRenderContext() {
         this.tx = null;
@@ -34,7 +34,7 @@ public class FontRenderContext {
         this.defaulting = true;
     }
 
-    /** Con el suavizado y las métricas dados como booleanos. */
+    /** With the smoothing and the metrics given as booleans. */
     public FontRenderContext(AffineTransform tx, boolean isAntiAliased,
             boolean usesFractionalMetrics) {
         if (tx != null && !tx.isIdentity()) {
@@ -56,12 +56,12 @@ public class FontRenderContext {
     }
 
     /**
-     * Con el suavizado y las métricas dados como valores de {@link RenderingHints}.
+     * With the smoothing and the metrics given as {@link RenderingHints} values.
      *
-     * <p>Acepta más matices que la versión de booleanos: el suavizado tiene, además de sí y no, los
-     * modos para pantallas de subpíxeles.
+     * <p>It accepts more shades than the boolean version: smoothing has, besides yes and no, the
+     * modes for subpixel screens.
      *
-     * @throws IllegalArgumentException si alguno de los dos valores no corresponde a su clave
+     * @throws IllegalArgumentException if either of the two values does not match its key
      */
     public FontRenderContext(AffineTransform tx, Object aaHint, Object fmHint) {
         if (tx != null && !tx.isIdentity()) {
@@ -86,7 +86,7 @@ public class FontRenderContext {
         this.defaulting = false;
     }
 
-    /** Si hay una transformación que no sea la identidad. */
+    /** Whether there is a transform other than the identity. */
     public boolean isTransformed() {
         if (this.defaulting) {
             return false;
@@ -94,7 +94,7 @@ public class FontRenderContext {
         return this.tx != null;
     }
 
-    /** El tipo de la transformación, como lo clasifica {@link AffineTransform#getType}. */
+    /** The transform's type, as {@link AffineTransform#getType} classifies it. */
     public int getTransformType() {
         if (this.defaulting || this.tx == null) {
             return AffineTransform.TYPE_IDENTITY;
@@ -102,7 +102,7 @@ public class FontRenderContext {
         return this.tx.getType();
     }
 
-    /** La transformación; la identidad si no hay. */
+    /** The transform; the identity if there is none. */
     public AffineTransform getTransform() {
         if (this.tx == null) {
             return new AffineTransform();
@@ -111,22 +111,22 @@ public class FontRenderContext {
     }
 
     /**
-     * Si el texto se va a suavizar.
+     * Whether the text is going to be smoothed.
      *
-     * <p>Devuelve `true` para cualquier modo de suavizado, incluidos los de subpíxeles; para saber
-     * cuál, {@link #getAntiAliasingHint}.
+     * <p>It returns `true` for any smoothing mode, the subpixel ones included; to know which one,
+     * {@link #getAntiAliasingHint}.
      */
     public boolean isAntiAliased() {
         return this.aaHintValue != RenderingHints.VALUE_TEXT_ANTIALIAS_OFF
                 && this.aaHintValue != RenderingHints.VALUE_TEXT_ANTIALIAS_DEFAULT;
     }
 
-    /** Si los avances se llevan con decimales. */
+    /** Whether the advances are carried with decimals. */
     public boolean usesFractionalMetrics() {
         return this.fmHintValue == RenderingHints.VALUE_FRACTIONALMETRICS_ON;
     }
 
-    /** El modo de suavizado. */
+    /** The smoothing mode. */
     public Object getAntiAliasingHint() {
         if (this.defaulting) {
             return RenderingHints.VALUE_TEXT_ANTIALIAS_DEFAULT;
@@ -134,7 +134,7 @@ public class FontRenderContext {
         return this.aaHintValue;
     }
 
-    /** El modo de métricas. */
+    /** The metrics mode. */
     public Object getFractionalMetricsHint() {
         if (this.defaulting) {
             return RenderingHints.VALUE_FRACTIONALMETRICS_DEFAULT;
@@ -142,7 +142,7 @@ public class FontRenderContext {
         return this.fmHintValue;
     }
 
-    /** Igualdad por transformación y por los dos modos. */
+    /** Equality by transform and by the two modes. */
     public boolean equals(Object obj) {
         if (obj == null) {
             return false;
@@ -154,10 +154,10 @@ public class FontRenderContext {
     }
 
     /**
-     * Lo mismo, con el tipo ya conocido.
+     * The same, with the type already known.
      *
-     * <p>Existe además de {@link #equals(Object)} porque se llama por texto y por glifo, y ahorrar
-     * la comprobación de tipo en ese camino se nota.
+     * <p>It exists on top of {@link #equals(Object)} because it is called per text and per glyph,
+     * and saving the type check on that path shows.
      */
     public boolean equals(FontRenderContext rhs) {
         if (this == rhs) {

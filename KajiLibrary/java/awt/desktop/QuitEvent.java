@@ -1,16 +1,16 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.QuitEvent -- el sistema pide cerrar el programa.
+ * KajiLibrary's java.awt.desktop.QuitEvent -- the system asks for the program to be closed.
  *
- * <p>Lo entrega {@link QuitHandler}, junto con un {@link QuitResponse}. Ver ahi por que la respuesta
- * va aparte.
+ * <p>It is handed over by {@link QuitHandler}, together with a {@link QuitResponse}. See there why
+ * the answer travels apart.
  */
 public final class QuitEvent extends AppEvent {
 
     private static final long serialVersionUID = -256100795532403146L;
 
-    /** Sin datos: el evento es el aviso. */
+    /** No data: the event is the notice. */
     public QuitEvent() {
     }
 }

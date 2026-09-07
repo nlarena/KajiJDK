@@ -3,25 +3,26 @@ package java.beans;
 import java.util.ArrayList;
 import java.util.List;
 
-// Base comoda para escribir un PropertyEditor: guarda el valor, avisa de los cambios y da
-// respuestas razonables al resto. Un editor concreto normalmente solo redefine getAsText/setAsText.
+// A comfortable base for writing a PropertyEditor: it keeps the value, reports the changes and
+// gives reasonable answers to the rest. A concrete editor normally only overrides
+// getAsText/setAsText.
 //
-// El `source` existe porque un editor suele ser creado por una herramienta y no por el bean: los
-// eventos tienen que decir que el origen es el bean editado, no el editor. Por defecto es el editor
-// mismo, que es lo correcto cuando nadie dijo otra cosa.
+// The `source` exists because an editor is usually created by a tool and not by the bean: the events
+// have to say that the source is the bean being edited, not the editor. By default it is the editor
+// itself, which is right when nobody said otherwise.
 public class PropertyEditorSupport implements PropertyEditor {
 
     private Object value;
     private Object source;
     private List<PropertyChangeListener> oyentes;
 
-    // El editor es su propio origen de eventos.
+    // The editor is its own event source.
     public PropertyEditorSupport() {
         this.source = this;
         this.oyentes = new ArrayList<PropertyChangeListener>();
     }
 
-    // Los eventos van a decir que vienen de `source`, no de este editor.
+    // The events are going to say they come from `source`, not from this editor.
     public PropertyEditorSupport(Object source) {
         if (source == null) {
             throw new NullPointerException();
@@ -42,23 +43,24 @@ public class PropertyEditorSupport implements PropertyEditor {
         return this.value;
     }
 
-    // Fijar el valor avisa siempre, aunque sea el mismo: a diferencia de PropertyChangeSupport, un
-    // editor no compara. Quien lo llama fue una accion explicita del usuario.
+    // Setting the value always reports, even if it is the same one: unlike PropertyChangeSupport,
+    // an editor does not compare. Whoever called it was an explicit action of the user's.
     public void setValue(Object value) {
         this.value = value;
         this.firePropertyChange();
     }
 
-    // El de base no sabe dibujarse: la herramienta va a mostrar getAsText().
+    // The base one does not know how to draw itself: the tool is going to show getAsText().
     public boolean isPaintable() {
         return false;
     }
 
     /**
-     * Dibuja el valor.
+     * Draws the value.
      *
-     * <p>El de base no hace nada, y es coherente con {@link #isPaintable}: dijo que no sabe. Una
-     * subclase que redefina esto tiene que redefinir también aquél, o nadie la va a llamar.
+     * <p>The base one does nothing, and it is consistent with {@link #isPaintable}: it said it does
+     * not know how. A subclass overriding this has to override that one too, or nobody will call
+     * it.
      */
     public void paintValue(java.awt.Graphics gfx, java.awt.Rectangle box) {
     }
@@ -68,9 +70,9 @@ public class PropertyEditorSupport implements PropertyEditor {
     }
 
     /**
-     * Un panel propio para editar el valor.
+     * A panel of its own for editing the value.
      *
-     * @return `null`: el de base no tiene, como anticipa {@link #supportsCustomEditor}
+     * @return `null`: the base one has none, as {@link #supportsCustomEditor} announces
      */
     public java.awt.Component getCustomEditor() {
         return null;
@@ -84,8 +86,8 @@ public class PropertyEditorSupport implements PropertyEditor {
         return s;
     }
 
-    // La base no sabe convertir texto a ningun tipo en particular. Aceptarlo cuando el valor ya es
-    // texto es lo unico honesto que puede hacer; para cualquier otro tipo, rechazar.
+    // The base does not know how to convert text into any particular type. Accepting it when the
+    // value is already text is the only honest thing it can do; for any other type, refuse.
     public void setAsText(String text) throws IllegalArgumentException {
         if (this.value == null || this.value instanceof String) {
             this.setValue(text);
@@ -94,14 +96,14 @@ public class PropertyEditorSupport implements PropertyEditor {
         }
     }
 
-    // La propiedad no es de lista cerrada mientras una subclase no diga lo contrario.
+    // The property is not of a closed list unless a subclass says otherwise.
     public String[] getTags() {
         return null;
     }
 
-    // El codigo Java que reconstruye el valor. "???" es literalmente lo que devuelve el JDK cuando
-    // no sabe: un generador que lo reciba produce codigo que no compila, y eso es preferible a
-    // producir codigo que compile y arme otra cosa.
+    // The Java code that rebuilds the value. "???" is literally what the JDK returns when it does
+    // not know: a generator receiving it produces code that does not compile, and that is preferable
+    // to producing code that compiles and builds something else.
     public String getJavaInitializationString() {
         String s = "???";
         if (this.value == null) {
@@ -124,13 +126,14 @@ public class PropertyEditorSupport implements PropertyEditor {
         }
     }
 
-    // Avisa que el valor cambio. Igual que en PropertyChangeSupport se despacha sobre una copia,
-    // por la misma razon: un oyente puede desuscribirse desde adentro.
+    // It reports that the value changed. Just as in PropertyChangeSupport it dispatches over a
+    // copy, for the same reason: a listener may unsubscribe from inside.
     public void firePropertyChange() {
         PropertyChangeListener[] copia = this.instantanea();
         if (copia.length > 0) {
-            // El JDK manda los tres campos en null: el editor no lleva el nombre de la propiedad
-            // que edita, y un evento con nombre inventado seria peor que uno sin nombre.
+            // The JDK sends the three fields as null: the editor does not carry the name of the
+            // property it edits, and an event with an invented name would be worse than one with no
+            // name.
             PropertyChangeEvent evt = new PropertyChangeEvent(this.source, null, null, null);
             for (int i = 0; i < copia.length; i++) {
                 copia[i].propertyChange(evt);

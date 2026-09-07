@@ -14,83 +14,84 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Un formato en el que se pueden entregar datos transferidos.
+ * A format transferred data can be handed over in.
  *
- * <p>Son **dos cosas a la vez**, y no entenderlo es la causa de casi toda la confusión con esta
- * clase:
+ * <p>It is **two things at once**, and not seeing that is the cause of nearly all the confusion
+ * around this class:
  *
  * <ul>
- *   <li>un <strong>tipo MIME</strong>, que dice qué son los datos — `text/plain`, `image/png`;
- *   <li>una <strong>clase de representación</strong>, que dice en qué objeto de Java llegan —
+ *   <li>a <strong>MIME type</strong>, which says what the data is — `text/plain`, `image/png`;
+ *   <li>a <strong>representation class</strong>, which says which Java object it arrives in —
  *       {@code String}, {@code InputStream}, {@code java.util.List}.
  * </ul>
  *
- * <p>Los dos hacen falta porque son preguntas distintas. `text/plain` puede llegar como cadena, como
- * lector o como flujo de bytes, y quien recibe no puede tratarlos igual. Por eso el tipo MIME de un
- * formato de Java lleva el parámetro `class=` adentro: es el tipo MIME el que carga con la clase.
+ * <p>Both are needed because they are different questions. `text/plain` may arrive as a string, as a
+ * reader or as a byte stream, and whoever receives it cannot treat them alike. That is why a Java
+ * format's MIME type carries the `class=` parameter inside it: it is the MIME type that bears the
+ * class.
  *
- * <p>La igualdad sigue esa lógica y sorprende: dos formatos son iguales si coinciden **el tipo MIME
- * y la clase**, y el nombre legible no cuenta. Cambiarle el nombre a un formato no lo vuelve otro,
- * porque ese nombre es para mostrárselo a una persona.
+ * <p>Equality follows that logic and it surprises: two formats are equal if **the MIME type and the
+ * class** coincide, and the human-readable name does not count. Renaming a format does not make it
+ * another one, because that name is there to be shown to a person.
  *
- * <p>{@link #match} es la comparación floja, la que ignora el resto de los parámetros del tipo MIME
- * — como la codificación de un texto. Sirve para preguntar "¿esto es texto?" sin exigir que sea
- * exactamente el mismo texto.
+ * <p>{@link #match} is the loose comparison, the one that ignores the rest of the MIME type's
+ * parameters — such as a text's encoding. It serves to ask "is this text?" without demanding that it
+ * be exactly the same text.
  */
 public class DataFlavor implements Externalizable, Cloneable {
 
     private static final long serialVersionUID = 8367026044764648243L;
 
-    /** El tipo MIME de un objeto serializado de Java. */
+    /** The MIME type of a serialized Java object. */
     public static final String javaSerializedObjectMimeType =
             "application/x-java-serialized-object";
 
     /**
-     * El tipo MIME de una referencia a un objeto **de esta misma máquina virtual**.
+     * The MIME type of a reference to an object **of this very virtual machine**.
      *
-     * <p>No se serializa nada: se pasa la referencia. Sólo sirve dentro del mismo proceso, y por eso
-     * un formato así no cruza al portapapeles del sistema.
+     * <p>Nothing is serialized: the reference is passed. It only serves inside the same process, and
+     * that is why such a format does not cross over to the system clipboard.
      */
     public static final String javaJVMLocalObjectMimeType = "application/x-java-jvm-local-objectref";
 
-    /** El tipo MIME de una referencia a un objeto remoto. */
+    /** The MIME type of a reference to a remote object. */
     public static final String javaRemoteObjectMimeType = "application/x-java-remote-object";
 
-    /** Texto de Java, como {@code String}. */
+    /** Java text, as a {@code String}. */
     public static final DataFlavor stringFlavor =
             new DataFlavor(String.class, "Unicode String");
 
-    /** Una imagen, como {@code java.awt.Image}. */
+    /** An image, as a {@code java.awt.Image}. */
     public static final DataFlavor imageFlavor =
             new DataFlavor("image/x-java-image; class=java.awt.Image", "Image");
 
     /**
-     * Texto plano, como {@code java.io.Reader}.
+     * Plain text, as a {@code java.io.Reader}.
      *
-     * @deprecated su tipo MIME dice `charset=unicode`, que no es un juego de caracteres real, y las
-     *     implementaciones nunca se pusieron de acuerdo sobre qué significaba. Usar
-     *     {@link #stringFlavor} o {@link #getTextPlainUnicodeFlavor}.
+     * @deprecated its MIME type says `charset=unicode`, which is not a real character set, and the
+     *     implementations never agreed on what it meant. Use {@link #stringFlavor} or
+     *     {@link #getTextPlainUnicodeFlavor}.
      */
     @Deprecated
     public static final DataFlavor plainTextFlavor =
             new DataFlavor("text/plain; charset=unicode; class=java.io.InputStream", "Plain Text");
 
-    /** Una lista de archivos, como {@code java.util.List} de {@code java.io.File}. */
+    /** A list of files, as a {@code java.util.List} of {@code java.io.File}. */
     public static final DataFlavor javaFileListFlavor =
             new DataFlavor("application/x-java-file-list; class=java.util.List",
                     "application/x-java-file-list");
 
-    /** El HTML de lo que se seleccionó, sin el contexto que lo rodea. */
+    /** The HTML of what was selected, without the context around it. */
     public static final DataFlavor selectionHtmlFlavor =
             new DataFlavor("text/html; class=java.lang.String; document=selection; "
                     + "charset=Unicode", "HTML Selection");
 
-    /** El HTML de lo seleccionado más las etiquetas que hacen falta para que se entienda. */
+    /** The HTML of what was selected plus the tags needed for it to make sense. */
     public static final DataFlavor fragmentHtmlFlavor =
             new DataFlavor("text/html; class=java.lang.String; document=fragment; "
                     + "charset=Unicode", "HTML Fragment");
 
-    /** El documento HTML entero. */
+    /** The whole HTML document. */
     public static final DataFlavor allHtmlFlavor =
             new DataFlavor("text/html; class=java.lang.String; document=all; charset=Unicode",
                     "HTML All");
@@ -103,10 +104,10 @@ public class DataFlavor implements Externalizable, Cloneable {
     private String humanPresentableName;
 
     /**
-     * Un formato vacío, para deserializar.
+     * An empty format, for deserializing.
      *
-     * <p>El objeto que sale no sirve para nada hasta que se lo llene con
-     * {@link #readExternal}; está sólo porque {@link Externalizable} lo exige.
+     * <p>The object that comes out is good for nothing until it is filled in by
+     * {@link #readExternal}; it is there only because {@link Externalizable} demands it.
      */
     public DataFlavor() {
         this.mimeType = null;
@@ -116,108 +117,108 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * Un formato de objeto serializado con esa clase de representación.
+     * A serialized-object format with that representation class.
      *
-     * @throws NullPointerException si la clase es `null`
+     * @throws NullPointerException if the class is `null`
      */
     public DataFlavor(Class<?> representationClass, String humanPresentableName) {
         if (representationClass == null) {
             throw new NullPointerException("representationClass");
         }
-        this.armar(javaSerializedObjectMimeType + "; class=" + representationClass.getName(),
+        this.build(javaSerializedObjectMimeType + "; class=" + representationClass.getName(),
                 humanPresentableName, representationClass);
     }
 
     /**
-     * Un formato a partir de su tipo MIME.
+     * A format out of its MIME type.
      *
-     * @throws IllegalArgumentException si el tipo MIME está mal escrito
-     * @throws NullPointerException si el tipo MIME es `null`
+     * @throws IllegalArgumentException if the MIME type is malformed
+     * @throws NullPointerException if the MIME type is `null`
      */
     public DataFlavor(String mimeType, String humanPresentableName) {
         if (mimeType == null) {
             throw new NullPointerException("mimeType");
         }
-        this.armar(mimeType, humanPresentableName, null);
+        this.build(mimeType, humanPresentableName, null);
     }
 
     /**
-     * Como el anterior, cargando la clase con el cargador dado.
+     * Like the previous one, loading the class with the given loader.
      *
-     * @throws ClassNotFoundException si la clase de `class=` no se puede cargar
-     * @throws IllegalArgumentException si el tipo MIME está mal escrito
-     * @throws NullPointerException si el tipo MIME es `null`
+     * @throws ClassNotFoundException if the class of `class=` cannot be loaded
+     * @throws IllegalArgumentException if the MIME type is malformed
+     * @throws NullPointerException if the MIME type is `null`
      */
     public DataFlavor(String mimeType, String humanPresentableName, ClassLoader classLoader)
             throws ClassNotFoundException {
         if (mimeType == null) {
             throw new NullPointerException("mimeType");
         }
-        this.armar(mimeType, humanPresentableName, null);
-        String nombre = this.parameters.get("class");
-        if (nombre != null) {
-            this.representationClass = tryToLoadClass(nombre, classLoader);
+        this.build(mimeType, humanPresentableName, null);
+        String name = this.parameters.get("class");
+        if (name != null) {
+            this.representationClass = tryToLoadClass(name, classLoader);
         }
     }
 
     /**
-     * Un formato a partir de su tipo MIME, con el nombre legible tomado del propio tipo.
+     * A format out of its MIME type, with the human-readable name taken from the type itself.
      *
-     * @throws ClassNotFoundException si la clase de `class=` no se puede cargar
-     * @throws NullPointerException si el tipo MIME es `null`
+     * @throws ClassNotFoundException if the class of `class=` cannot be loaded
+     * @throws NullPointerException if the MIME type is `null`
      */
     public DataFlavor(String mimeType) throws ClassNotFoundException {
         if (mimeType == null) {
             throw new NullPointerException("mimeType");
         }
-        this.armar(mimeType, null, null);
-        String nombre = this.parameters.get("class");
-        if (nombre != null) {
-            this.representationClass = tryToLoadClass(nombre, null);
+        this.build(mimeType, null, null);
+        String name = this.parameters.get("class");
+        if (name != null) {
+            this.representationClass = tryToLoadClass(name, null);
         }
     }
 
     /**
-     * Parte el tipo MIME y guarda todo.
+     * Splits the MIME type and stores everything.
      *
-     * @throws IllegalArgumentException si el tipo MIME no tiene la forma `tipo/subtipo`
+     * @throws IllegalArgumentException if the MIME type does not have the form `type/subtype`
      */
-    private void armar(String mimeType, String humanPresentableName, Class<?> repClass) {
+    private void build(String mimeType, String humanPresentableName, Class<?> repClass) {
         this.parameters = new HashMap<String, String>();
-        String[] partes = mimeType.split(";");
-        String base = partes[0].trim();
-        int barra = base.indexOf('/');
-        if (barra < 0) {
+        String[] parts = mimeType.split(";");
+        String base = parts[0].trim();
+        int slash = base.indexOf('/');
+        if (slash < 0) {
             throw new IllegalArgumentException("failed to parse:" + mimeType);
         }
-        this.primaryType = base.substring(0, barra).trim().toLowerCase();
-        this.subType = base.substring(barra + 1).trim().toLowerCase();
-        for (int i = 1; i < partes.length; i++) {
-            String p = partes[i].trim();
-            int igual = p.indexOf('=');
-            if (igual > 0) {
-                String clave = p.substring(0, igual).trim();
-                String valor = p.substring(igual + 1).trim();
-                // Las comillas del valor de un parametro MIME no son parte del valor.
-                if (valor.length() >= 2 && valor.charAt(0) == '"'
-                        && valor.charAt(valor.length() - 1) == '"') {
-                    valor = valor.substring(1, valor.length() - 1);
+        this.primaryType = base.substring(0, slash).trim().toLowerCase();
+        this.subType = base.substring(slash + 1).trim().toLowerCase();
+        for (int i = 1; i < parts.length; i++) {
+            String p = parts[i].trim();
+            int eq = p.indexOf('=');
+            if (eq > 0) {
+                String key = p.substring(0, eq).trim();
+                String value = p.substring(eq + 1).trim();
+                // The quotes around a MIME parameter's value are not part of the value.
+                if (value.length() >= 2 && value.charAt(0) == '"'
+                        && value.charAt(value.length() - 1) == '"') {
+                    value = value.substring(1, value.length() - 1);
                 }
-                this.parameters.put(clave, valor);
+                this.parameters.put(key, value);
             }
         }
         this.mimeType = mimeType;
         if (repClass != null) {
             this.representationClass = repClass;
         } else {
-            String nombre = this.parameters.get("class");
-            if (nombre == null) {
-                // Sin `class=`, la representacion por omision es un flujo de bytes: es lo unico que
-                // se puede entregar de un tipo MIME cualquiera sin saber nada mas de el.
+            String name = this.parameters.get("class");
+            if (name == null) {
+                // Without `class=`, the default representation is a byte stream: it is the only
+                // thing any MIME type can be handed over as without knowing anything more about it.
                 this.representationClass = InputStream.class;
             } else {
                 try {
-                    this.representationClass = tryToLoadClass(nombre, null);
+                    this.representationClass = tryToLoadClass(name, null);
                 } catch (ClassNotFoundException e) {
                     this.representationClass = null;
                 }
@@ -231,13 +232,13 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * Carga una clase por nombre.
+     * Loads a class by name.
      *
-     * <p>Prueba con el cargador dado, después con el del contexto del hilo y por último con el de
-     * esta clase. Es el orden del JDK, y el que hace que un formato definido en un módulo cargado
-     * aparte se pueda resolver desde otro.
+     * <p>It tries the given loader, then the thread's context one and lastly this class's. It is the
+     * JDK's order, and the one that makes a format defined in a separately loaded module resolvable
+     * from another.
      *
-     * @throws ClassNotFoundException si ninguno la encuentra
+     * @throws ClassNotFoundException if none of them finds it
      */
     protected static final Class<?> tryToLoadClass(String className, ClassLoader fallback)
             throws ClassNotFoundException {
@@ -245,52 +246,52 @@ public class DataFlavor implements Externalizable, Cloneable {
             try {
                 return Class.forName(className, true, fallback);
             } catch (ClassNotFoundException e) {
-                // Se sigue probando con los otros cargadores.
+                // The other loaders are still tried.
             }
         }
-        ClassLoader hilo = Thread.currentThread().getContextClassLoader();
-        if (hilo != null) {
+        ClassLoader thread = Thread.currentThread().getContextClassLoader();
+        if (thread != null) {
             try {
-                return Class.forName(className, true, hilo);
+                return Class.forName(className, true, thread);
             } catch (ClassNotFoundException e) {
-                // Idem.
+                // Likewise.
             }
         }
         return Class.forName(className);
     }
 
-    /** El tipo MIME completo, con sus parámetros. */
+    /** The whole MIME type, with its parameters. */
     public String getMimeType() {
         return this.mimeType;
     }
 
-    /** En qué clase de Java llegan los datos. */
+    /** Which Java class the data arrives in. */
     public Class<?> getRepresentationClass() {
         return this.representationClass;
     }
 
-    /** El nombre para mostrarle a una persona. */
+    /** The name to show a person. */
     public String getHumanPresentableName() {
         return this.humanPresentableName;
     }
 
-    /** La parte de antes de la barra del tipo MIME. */
+    /** The part of the MIME type before the slash. */
     public String getPrimaryType() {
         return this.primaryType;
     }
 
-    /** La parte de después de la barra. */
+    /** The part after the slash. */
     public String getSubType() {
         return this.subType;
     }
 
     /**
-     * El valor de un parámetro del tipo MIME.
+     * The value of one of the MIME type's parameters.
      *
-     * <p>`humanPresentableName` se contesta desde el nombre legible y no desde los parámetros, que
-     * es una rareza de la API que se conserva.
+     * <p>`humanPresentableName` is answered from the human-readable name and not from the
+     * parameters, an oddity of the API that is preserved.
      *
-     * @return el valor, o `null` si el parámetro no está
+     * @return the value, or `null` if the parameter is not there
      */
     public String getParameter(String paramName) {
         if ("humanPresentableName".equals(paramName)) {
@@ -299,17 +300,17 @@ public class DataFlavor implements Externalizable, Cloneable {
         return this.parameters.get(paramName);
     }
 
-    /** Cambia el nombre para mostrar; no cambia la identidad del formato. */
+    /** Changes the name to show; it does not change the format's identity. */
     public void setHumanPresentableName(String humanPresentableName) {
         this.humanPresentableName = humanPresentableName;
     }
 
-    /** Igualdad por tipo MIME y clase de representación; el nombre legible no cuenta. */
+    /** Equality by MIME type and representation class; the human-readable name does not count. */
     public boolean equals(Object o) {
         return o instanceof DataFlavor && this.equals((DataFlavor) o);
     }
 
-    /** Lo mismo, con el tipo ya conocido. */
+    /** The same, with the type already known. */
     public boolean equals(DataFlavor that) {
         if (that == null) {
             return false;
@@ -330,8 +331,8 @@ public class DataFlavor implements Externalizable, Cloneable {
         if (!this.primaryType.equals(that.primaryType) || !this.subType.equals(that.subType)) {
             return false;
         }
-        // El texto compara ademas la codificacion: dos textos en juegos de caracteres distintos no
-        // son el mismo formato, aunque digan lo mismo.
+        // Text compares the encoding as well: two texts in different character sets are not the
+        // same format, even if they say the same thing.
         if (this.isFlavorTextType()) {
             String a = this.getParameter("charset");
             String b = that.getParameter("charset");
@@ -344,10 +345,10 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * Si el tipo MIME es igual a esa cadena.
+     * Whether the MIME type equals that string.
      *
-     * @deprecated no compara la clase de representación, así que dice que son iguales dos formatos
-     *     que entregan objetos distintos. Usar {@link #isMimeTypeEqual(String)}.
+     * @deprecated it does not compare the representation class, so it calls equal two formats that
+     *     hand over different objects. Use {@link #isMimeTypeEqual(String)}.
      */
     @Deprecated
     public boolean equals(String s) {
@@ -372,11 +373,11 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * La comparación floja: mismo tipo y subtipo y misma clase, ignorando el resto de los
-     * parámetros.
+     * The loose comparison: same type and subtype and same class, ignoring the rest of the
+     * parameters.
      *
-     * <p>Es lo que hay que usar para preguntar "¿esto es texto?" sin exigir que sea el mismo texto
-     * con la misma codificación.
+     * <p>It is what has to be used to ask "is this text?" without demanding that it be the same text
+     * with the same encoding.
      */
     public boolean match(DataFlavor that) {
         if (that == null) {
@@ -395,10 +396,10 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * Si el tipo MIME es igual a ese, ignorando los parámetros.
+     * Whether the MIME type equals that one, ignoring the parameters.
      *
-     * @throws NullPointerException si la cadena es `null`
-     * @throws IllegalArgumentException si la cadena no es un tipo MIME válido
+     * @throws NullPointerException if the string is `null`
+     * @throws IllegalArgumentException if the string is not a valid MIME type
      */
     public boolean isMimeTypeEqual(String mimeType) {
         if (mimeType == null) {
@@ -407,11 +408,11 @@ public class DataFlavor implements Externalizable, Cloneable {
         if (this.mimeType == null) {
             return false;
         }
-        String otro = mimeType.split(";")[0].trim().toLowerCase();
-        return otro.equals(this.primaryType + "/" + this.subType);
+        String other = mimeType.split(";")[0].trim().toLowerCase();
+        return other.equals(this.primaryType + "/" + this.subType);
     }
 
-    /** Lo mismo, contra otro formato. */
+    /** The same, against another format. */
     public final boolean isMimeTypeEqual(DataFlavor dataFlavor) {
         if (dataFlavor == null) {
             return false;
@@ -419,72 +420,67 @@ public class DataFlavor implements Externalizable, Cloneable {
         return this.isMimeTypeEqual(dataFlavor.getMimeType());
     }
 
-    /** Si es un objeto serializado de Java. */
+    /** Whether it is a serialized Java object. */
     public boolean isMimeTypeSerializedObject() {
         return this.isMimeTypeEqual(javaSerializedObjectMimeType);
     }
 
-    /** La clase en la que llegan los datos si el tipo MIME no dice otra cosa. */
+    /** The class the data arrives in if the MIME type does not say otherwise. */
     public final Class<?> getDefaultRepresentationClass() {
         return InputStream.class;
     }
 
-    /** El nombre de esa clase. */
+    /** That class's name. */
     public final String getDefaultRepresentationClassAsString() {
         return this.getDefaultRepresentationClass().getName();
     }
 
-    /** Si los datos llegan como flujo de bytes. */
+    /** Whether the data arrives as a byte stream. */
     public boolean isRepresentationClassInputStream() {
         return InputStream.class.isAssignableFrom(this.representationClass);
     }
 
-    /** Si los datos llegan como lector de caracteres. */
+    /** Whether the data arrives as a character reader. */
     public boolean isRepresentationClassReader() {
         return this.representationClass != null
                 && Reader.class.isAssignableFrom(this.representationClass);
     }
 
-    /** Si los datos llegan como buffer de caracteres. */
+    /** Whether the data arrives as a character buffer. */
     public boolean isRepresentationClassCharBuffer() {
         return CharBuffer.class.equals(this.representationClass);
     }
 
-    /** Si los datos llegan como buffer de bytes. */
+    /** Whether the data arrives as a byte buffer. */
     public boolean isRepresentationClassByteBuffer() {
         return ByteBuffer.class.equals(this.representationClass);
     }
 
-    /** Si los datos llegan como objeto serializable. */
+    /** Whether the data arrives as a serializable object. */
     public boolean isRepresentationClassSerializable() {
         return this.representationClass != null
                 && Serializable.class.isAssignableFrom(this.representationClass);
     }
 
-    /**
-     * Si los datos llegan como objeto remoto.
-     *
-     * <p>Devuelve `false` siempre: `java.rmi.Remote` no está en esta biblioteca, así que ninguna
-     * clase de representación puede implementarla. No es un relleno — es la verdad sobre cualquier
-     * formato que se pueda construir acá.
-     */
+    /** Whether the data arrives as a remote object. */
     public boolean isRepresentationClassRemote() {
-        return false;
+        return this.representationClass != null
+                && java.rmi.Remote.class.isAssignableFrom(this.representationClass);
     }
 
-    /** Si es un objeto serializado que además llega como clase serializable. */
+    /** Whether it is a serialized object that also arrives as a serializable class. */
     public boolean isFlavorSerializedObjectType() {
         return this.isRepresentationClassSerializable() && this.isMimeTypeSerializedObject();
     }
 
-    /** Si es una referencia a un objeto remoto. */
+    /** Whether it is a reference to a remote object. */
     public boolean isFlavorRemoteObjectType() {
         return this.isRepresentationClassRemote()
                 && this.isRepresentationClassSerializable()
                 && this.isMimeTypeEqual(javaRemoteObjectMimeType);
     }
 
-    /** Si es la lista de archivos. */
+    /** Whether it is the file list. */
     public boolean isFlavorJavaFileListType() {
         if (this.mimeType == null || this.representationClass == null) {
             return false;
@@ -494,11 +490,11 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * Si el formato es texto que se puede leer como caracteres.
+     * Whether the format is text that can be read as characters.
      *
-     * <p>No alcanza con que el tipo MIME empiece con `text/`: también tiene que entregarse en una
-     * clase que sirva para leer texto. Un `text/plain` que llegue como un objeto cualquiera no es
-     * texto a estos efectos.
+     * <p>It is not enough for the MIME type to begin with `text/`: it also has to be handed over in
+     * a class good for reading text. A `text/plain` arriving as any old object is not text for these
+     * purposes.
      */
     public boolean isFlavorTextType() {
         if (!"text".equals(this.primaryType)) {
@@ -514,90 +510,91 @@ public class DataFlavor implements Externalizable, Cloneable {
                 || byte[].class.equals(c);
     }
 
-    /** Texto plano en Unicode, entregado como {@code String}. */
+    /** Plain Unicode text, handed over as a {@code String}. */
     public static final DataFlavor getTextPlainUnicodeFlavor() {
         return new DataFlavor("text/plain; charset=UTF-8; class=java.lang.String", "Plain Text");
     }
 
     /**
-     * El mejor de esos formatos de texto.
+     * The best of those text formats.
      *
-     * <p>El criterio es el del JDK: se prefiere el que entrega caracteres —{@code String},
-     * {@code Reader}, {@code CharBuffer}— sobre el que entrega bytes, porque con bytes hay que
-     * adivinar la codificación. Entre dos de la misma categoría gana el que aparece primero.
+     * <p>The criterion is the JDK's: the one handing over characters —{@code String},
+     * {@code Reader}, {@code CharBuffer}— is preferred over the one handing over bytes, because with
+     * bytes the encoding has to be guessed. Between two of the same category the one appearing first
+     * wins.
      *
-     * @return el mejor, o `null` si el arreglo es `null`, está vacío o no trae ningún texto
+     * @return the best, or `null` if the array is `null`, is empty or brings no text at all
      */
     public static final DataFlavor selectBestTextFlavor(DataFlavor[] availableFlavors) {
         if (availableFlavors == null || availableFlavors.length == 0) {
             return null;
         }
-        DataFlavor mejor = null;
-        int mejorPuntaje = -1;
+        DataFlavor best = null;
+        int bestScore = -1;
         for (int i = 0; i < availableFlavors.length; i++) {
             DataFlavor f = availableFlavors[i];
             if (f == null || !f.isFlavorTextType()) {
                 continue;
             }
             Class<?> c = f.getRepresentationClass();
-            int puntaje;
+            int score;
             if (String.class.equals(c)) {
-                puntaje = 3;
+                score = 3;
             } else if (Reader.class.isAssignableFrom(c) || CharBuffer.class.equals(c)
                     || char[].class.equals(c)) {
-                puntaje = 2;
+                score = 2;
             } else {
-                puntaje = 1;
+                score = 1;
             }
-            if (puntaje > mejorPuntaje) {
-                mejorPuntaje = puntaje;
-                mejor = f;
+            if (score > bestScore) {
+                bestScore = score;
+                best = f;
             }
         }
-        return mejor;
+        return best;
     }
 
     /**
-     * Un lector sobre el texto que entrega ese origen en este formato.
+     * A reader over the text that source hands over in this format.
      *
-     * <p>Envuelve lo que el origen devuelva —una cadena, un lector, un flujo— en un {@code Reader},
-     * decodificando con el juego de caracteres del tipo MIME si hace falta.
+     * <p>It wraps whatever the source returns —a string, a reader, a stream— in a {@code Reader},
+     * decoding with the MIME type's character set if need be.
      *
-     * @throws IllegalArgumentException si este formato no es de texto
-     * @throws UnsupportedFlavorException si el origen no lo admite
-     * @throws IOException si los datos no se pueden leer
+     * @throws IllegalArgumentException if this format is not a text one
+     * @throws UnsupportedFlavorException if the source does not admit it
+     * @throws IOException if the data cannot be read
      */
     public Reader getReaderForText(Transferable transferable)
             throws UnsupportedFlavorException, IOException {
-        Object datos = transferable.getTransferData(this);
-        if (datos == null) {
+        Object data = transferable.getTransferData(this);
+        if (data == null) {
             throw new IllegalArgumentException("getTransferData() returned null");
         }
-        if (datos instanceof Reader) {
-            return (Reader) datos;
+        if (data instanceof Reader) {
+            return (Reader) data;
         }
-        if (datos instanceof String) {
-            return new StringReader((String) datos);
+        if (data instanceof String) {
+            return new StringReader((String) data);
         }
-        if (datos instanceof CharBuffer) {
-            CharBuffer cb = (CharBuffer) datos;
+        if (data instanceof CharBuffer) {
+            CharBuffer cb = (CharBuffer) data;
             char[] chars = new char[cb.remaining()];
             cb.get(chars);
             return new java.io.CharArrayReader(chars);
         }
-        if (datos instanceof char[]) {
-            return new java.io.CharArrayReader((char[]) datos);
+        if (data instanceof char[]) {
+            return new java.io.CharArrayReader((char[]) data);
         }
         InputStream in;
-        if (datos instanceof InputStream) {
-            in = (InputStream) datos;
-        } else if (datos instanceof ByteBuffer) {
-            ByteBuffer bb = (ByteBuffer) datos;
+        if (data instanceof InputStream) {
+            in = (InputStream) data;
+        } else if (data instanceof ByteBuffer) {
+            ByteBuffer bb = (ByteBuffer) data;
             byte[] bytes = new byte[bb.remaining()];
             bb.get(bytes);
             in = new java.io.ByteArrayInputStream(bytes);
-        } else if (datos instanceof byte[]) {
-            in = new java.io.ByteArrayInputStream((byte[]) datos);
+        } else if (data instanceof byte[]) {
+            in = new java.io.ByteArrayInputStream((byte[]) data);
         } else {
             throw new IllegalArgumentException("transferable is not a text flavor");
         }
@@ -608,40 +605,40 @@ public class DataFlavor implements Externalizable, Cloneable {
         return new java.io.InputStreamReader(in, charset);
     }
 
-    /** Escribe el formato para serializarlo. */
+    /** Writes the format out to serialize it. */
     public synchronized void writeExternal(ObjectOutput os) throws IOException {
         os.writeObject(this.mimeType);
         os.writeObject(this.humanPresentableName);
     }
 
     /**
-     * Lee un formato serializado.
+     * Reads a serialized format.
      *
-     * @throws ClassNotFoundException si la clase de representación no se puede cargar
-     * @throws IOException si el flujo está mal
+     * @throws ClassNotFoundException if the representation class cannot be loaded
+     * @throws IOException if the stream is malformed
      */
     public synchronized void readExternal(ObjectInput is)
             throws IOException, ClassNotFoundException {
-        String tipo = (String) is.readObject();
-        String nombre = (String) is.readObject();
-        if (tipo != null) {
-            this.armar(tipo, nombre, null);
+        String type = (String) is.readObject();
+        String name = (String) is.readObject();
+        if (type != null) {
+            this.build(type, name, null);
         }
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * @throws CloneNotSupportedException nunca: esta clase declara `Cloneable`
+     * @throws CloneNotSupportedException never: this class declares `Cloneable`
      */
     public Object clone() throws CloneNotSupportedException {
         return super.clone();
     }
 
     /**
-     * Normaliza el valor de un parámetro del tipo MIME.
+     * Normalizes the value of one of the MIME type's parameters.
      *
-     * @deprecated el JDK ya no la llama; la normalización está adentro del análisis del tipo MIME.
+     * @deprecated the JDK no longer calls it; normalization is inside the MIME type's parsing.
      */
     @Deprecated
     protected String normalizeMimeTypeParameter(String parameterName, String parameterValue) {
@@ -649,9 +646,9 @@ public class DataFlavor implements Externalizable, Cloneable {
     }
 
     /**
-     * Normaliza un tipo MIME.
+     * Normalizes a MIME type.
      *
-     * @deprecated el JDK ya no la llama, por el mismo motivo.
+     * @deprecated the JDK no longer calls it, for the same reason.
      */
     @Deprecated
     protected String normalizeMimeType(String mimeType) {

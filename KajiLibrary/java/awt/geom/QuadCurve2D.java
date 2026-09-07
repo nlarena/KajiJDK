@@ -3,20 +3,20 @@ package java.awt.geom;
 import java.awt.Rectangle;
 import java.awt.Shape;
 
-// java.awt.geom.QuadCurve2D de KajiLibrary -- un segmento de curva de Bezier cuadratica. Superficie
-// completa.
+// KajiLibrary's java.awt.geom.QuadCurve2D -- a segment of a quadratic Bezier curve. The surface is
+// complete.
 //
-// Vale lo mismo que en CubicCurve2D y por los mismos motivos: `getBounds2D` es la caja del triangulo
-// de control (cota superior valida por la envolvente convexa, no la caja minima) y `contains` mide
-// la region que encierran la curva y la cuerda entre los extremos, con la regla par/impar.
+// The same holds as in CubicCurve2D and for the same reasons: `getBounds2D` is the control
+// triangle's box (a valid upper bound by the convex hull, not the minimal box) and `contains`
+// measures the region enclosed by the curve and the chord between the ends, with the even-odd rule.
 //
-// `solveQuadratic` tiene un detalle que se implementa mal seguido: **devuelve -1**, no 0, cuando la
-// ecuacion es 0 = 0 (todos los coeficientes nulos). -1 significa "infinitas raices"; devolver 0 seria
-// decir que no hay ninguna, que es lo contrario. Y con a == 0 la ecuacion es lineal y hay que
-// resolverla como tal en vez de dividir por cero.
+// `solveQuadratic` has a detail that is often implemented wrongly: it **returns -1**, not 0, when
+// the equation is 0 = 0 (every coefficient null). -1 means "infinitely many roots"; returning 0
+// would be saying there is none, which is the opposite. And with a == 0 the equation is linear and
+// has to be solved as such instead of dividing by zero.
 public abstract class QuadCurve2D implements Shape, Cloneable {
 
-    // Curva con coordenadas float.
+    // A curve with float coordinates.
     public static class Float extends QuadCurve2D implements java.io.Serializable {
 
         public float x1;
@@ -89,7 +89,7 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
         }
     }
 
-    // Curva con coordenadas double.
+    // A curve with double coordinates.
     public static class Double extends QuadCurve2D implements java.io.Serializable {
 
         public double x1;
@@ -197,8 +197,9 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
         setCurve(c.getX1(), c.getY1(), c.getCtrlX(), c.getCtrlY(), c.getX2(), c.getY2());
     }
 
-    // Distancia (al cuadrado) del punto de control a la cuerda: cuanto se aparta la curva de un
-    // segmento. Es la medida con la que el aplanador decide si un trozo ya se puede dibujar recto.
+    // The (squared) distance from the control point to the chord: how far the curve departs from a
+    // segment. It is the measure the flattener decides with whether a piece can be drawn straight
+    // already.
     public static double getFlatnessSq(double x1, double y1, double ctrlx, double ctrly,
                                        double x2, double y2) {
         return Line2D.ptSegDistSq(x1, y1, x2, y2, ctrlx, ctrly);
@@ -233,7 +234,7 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
         subdivide(this, left, right);
     }
 
-    // Corte de De Casteljau en t=0.5: solo sumas y divisiones por 2, exactas en binario.
+    // A De Casteljau cut at t=0.5: only additions and divisions by 2, exact in binary.
     public static void subdivide(QuadCurve2D src, QuadCurve2D left, QuadCurve2D right) {
         double x1 = src.getX1();
         double y1 = src.getY1();
@@ -296,18 +297,19 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
         return solveQuadratic(eqn, eqn);
     }
 
-    // eqn = {c, b, a} con a*t^2 + b*t + c = 0. Devuelve cuantas raices reales hay, o -1 si la
-    // ecuacion se satisface para todo t.
+    // eqn = {c, b, a} with a*t^2 + b*t + c = 0. It returns how many real roots there are, or -1 if
+    // the equation is satisfied for every t.
     public static int solveQuadratic(double[] eqn, double[] res) {
         double a = eqn[2];
         double b = eqn[1];
         double c = eqn[0];
         int roots = 0;
         if (a == 0.0) {
-            // No es cuadratica: es lineal. Y si tampoco hay termino en t, la ecuacion es una
-            // **constante**: el contrato dice devolver -1 ahi, tanto si esa constante es cero
-            // (infinitas soluciones) como si no (ninguna). No se distinguen los dos casos porque el
-            // contrato no lo hace y el JDK tampoco; -1 quiere decir "esto no es una ecuacion en t".
+            // It is not quadratic: it is linear. And if there is no term in t either, the equation
+            // is a **constant**: the contract says to return -1 there, whether that constant is zero
+            // (infinitely many solutions) or not (none). The two cases are not told apart because
+            // the contract does not tell them apart and neither does the JDK; -1 means "this is not
+            // an equation in t".
             if (b == 0.0) {
                 return -1;
             }
@@ -319,9 +321,9 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
                 return 0;
             }
             d = Math.sqrt(d);
-            // La forma "estable" de la cuadratica: se calcula primero la raiz cuyo numerador no
-            // resta cantidades parecidas y la otra sale por el producto de raices (c/a). Con
-            // -b+sqrt(d) directo se pierden digitos cuando b^2 >> 4ac.
+            // The "stable" form of the quadratic: the root whose numerator does not subtract
+            // similar quantities is worked out first and the other comes from the product of the
+            // roots (c/a). With -b+sqrt(d) straight, digits are lost when b^2 >> 4ac.
             double q;
             if (b < 0.0) {
                 q = (-b + d) / 2.0;
@@ -338,8 +340,8 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
         return roots;
     }
 
-    // "Adentro" es la region que encierran la curva y la cuerda entre sus extremos, con la regla
-    // par/impar. Un x o y infinito o NaN da false.
+    // "Inside" is the region enclosed by the curve and the chord between its ends, with the
+    // even-odd rule. An infinite or NaN x or y gives false.
     public boolean contains(double x, double y) {
         if (!(x * 0.0 + y * 0.0 == 0.0)) {
             return false;
@@ -392,8 +394,8 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
                 return crossings;
             }
         }
-        // La curva se recorre al reves para cerrar el contorno con la cuerda, que ya se conto en el
-        // otro sentido. Ver la misma nota en CubicCurve2D.
+        // The curve is walked backwards so as to close the contour with the chord, which was
+        // already counted the other way round. See the same note in CubicCurve2D.
         return Curve.rectCrossingsForQuad(crossings, x, y, x + w, y + h,
                                           getX2(), getY2(),
                                           getCtrlX(), getCtrlY(),
@@ -401,9 +403,9 @@ public abstract class QuadCurve2D implements Shape, Cloneable {
     }
 
     /**
-     * La caja **ajustada** de la curva: la mas chica que la contiene.
+     * The curve's **tight** box: the smallest one containing it.
      *
-     * <p>Ver {@link CubicCurve2D#getBounds2D} y {@link CurveBounds}: mismo criterio, misma razon.
+     * <p>See {@link CubicCurve2D#getBounds2D} and {@link CurveBounds}: same criterion, same reason.
      */
     public Rectangle2D getBounds2D() {
         double[] xs = CurveBounds.quad(getX1(), getCtrlX(), getX2());

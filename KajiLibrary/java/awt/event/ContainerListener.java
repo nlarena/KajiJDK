@@ -3,13 +3,13 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que a un contenedor le agregaron o le sacaron un hijo.
+ * Whoever wants to hear that a child was added to or taken from a container.
  */
 public interface ContainerListener extends EventListener {
 
-    /** Se agregó un hijo. */
+    /** A child was added. */
     void componentAdded(ContainerEvent e);
 
-    /** Se sacó un hijo. */
+    /** A child was taken away. */
     void componentRemoved(ContainerEvent e);
 }

@@ -1,7 +1,7 @@
 package java.beans;
 
-// Recibe las excepciones que un Encoder o un decodificador prefiere reportar antes que propagar:
-// serializar un grafo entero no deberia abortar por un nodo que falla.
+// It receives the exceptions an Encoder or a decoder would rather report than propagate:
+// serializing a whole graph should not abort because of one node that fails.
 public interface ExceptionListener {
 
     void exceptionThrown(Exception e);

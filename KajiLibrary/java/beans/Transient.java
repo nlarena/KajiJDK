@@ -5,15 +5,15 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-// Marca un par de accesores como NO persistible: la propiedad existe para el programa pero no
-// tiene que viajar cuando el bean se serializa.
+// It marks a pair of accessors as NOT persistable: the property exists for the program but does not
+// have to travel when the bean is serialized.
 //
-// Se declara sobre el metodo y no sobre el campo a proposito: lo que se persiste es la propiedad,
-// y la propiedad son sus accesores.
+// It is declared on the method and not on the field on purpose: what is persisted is the property,
+// and the property is its accessors.
 //
-// Nota: en este arbol la anotacion se declara pero NO la lee nadie. El javac pierde
-// @Retention(RUNTIME) cuando el tipo anotacion viene del classpath, asi que en ejecucion no se ve.
-// Ver el encabezado de Introspector.
+// Note: in this tree the annotation is declared but NOBODY reads it. The javac loses
+// @Retention(RUNTIME) when the annotation type comes from the classpath, so at run time it is not
+// seen. See Introspector's header.
 @Target({ ElementType.METHOD })
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Transient {

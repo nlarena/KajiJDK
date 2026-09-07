@@ -6,38 +6,42 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 
 /**
- * Utilidades sueltas sobre beans: en qué modo corre el entorno, y cómo traer un bean por nombre.
+ * Loose utilities about beans: which mode the environment runs in, and how to bring a bean in by
+ * name.
  *
- * <h2>Cómo se trae un bean, y por qué en ese orden</h2>
+ * <h2>How a bean is brought in, and why in that order</h2>
  *
- * <p>{@link #instantiate} busca **primero un `.ser`** con el nombre del bean y, si está, lo
- * deserializa; recién si no está carga la clase y llama a su constructor sin argumentos. El orden no
- * es arbitrario: un bean guardado en un `.ser` viene con sus propiedades ya puestas —eso es todo el
- * punto de haberlo guardado— y construirlo de cero daría un objeto distinto del que se pidió, con
- * los valores por omisión en vez de los que alguien configuró.
+ * <p>{@link #instantiate} looks **first for a `.ser`** with the bean's name and, if it is there,
+ * deserializes it; only if it is not there does it load the class and call its no-argument
+ * constructor. The order is not arbitrary: a bean stored in a `.ser` comes with its properties
+ * already set --that is the whole point of having stored it-- and constructing it from scratch would
+ * give a different object from the one that was asked for, with the default values instead of the
+ * ones somebody configured.
  *
- * <h2>La forma con `AppletInitializer`</h2>
+ * <h2>The form with `AppletInitializer`</h2>
  *
- * <p>La cuarta forma de `instantiate` existe para los beans que son applets: además de construirlos
- * los prepara como lo haría un navegador, con {@link AppletInitializer#initialize} antes de entrar al
- * contexto y {@link AppletInitializer#activate} después. Acá ese camino nunca se recorre, porque un
- * {@link java.applet.Applet} no se puede construir sin pantalla; la forma está entera igual, y para
- * un bean que no es applet hace exactamente lo mismo que la de tres argumentos.
+ * <p>The fourth form of `instantiate` exists for the beans that are applets: besides constructing
+ * them it prepares them as a browser would, with {@link AppletInitializer#initialize} before entering
+ * the context and {@link AppletInitializer#activate} afterwards. Here that path is never walked,
+ * because a {@link java.applet.Applet} cannot be constructed with no screen; the form is here in full
+ * all the same, and for a bean that is not an applet it does exactly the same as the three-argument
+ * one.
  */
 public class Beans {
 
     private static boolean designTime;
     private static boolean guiAvailable = true;
 
-    /** Un `Beans`. La clase es toda estática; el constructor está porque el JDK lo declara. */
+    /** A `Beans`. The class is entirely static; the constructor is here because the JDK declares
+     * it. */
     public Beans() {
     }
 
     /**
-     * Trae un bean por nombre.
+     * Brings a bean in by name.
      *
-     * @throws IOException si el `.ser` existe y no se pudo leer
-     * @throws ClassNotFoundException si no se encontró la clase, o si no se pudo construir
+     * @throws IOException if the `.ser` exists and could not be read
+     * @throws ClassNotFoundException if the class was not found, or if it could not be constructed
      */
     public static Object instantiate(ClassLoader cls, String beanName)
             throws IOException, ClassNotFoundException {
@@ -45,14 +49,14 @@ public class Beans {
     }
 
     /**
-     * Trae un bean por nombre y lo mete en ese contexto.
+     * Brings a bean in by name and puts it into that context.
      *
-     * <p>El bean entra al contexto **después** de estar construido, que es la única forma posible: un
-     * contexto valida y avisa de sus altas, y no puede hacerlo sobre un objeto a medio hacer.
+     * <p>The bean enters the context **after** being constructed, which is the only possible way: a
+     * context validates and reports its additions, and it cannot do that over a half-made object.
      *
-     * @param beanContext el contexto que lo va a alojar, o `null` para no alojarlo en ninguno
-     * @throws IOException si el `.ser` existe y no se pudo leer
-     * @throws ClassNotFoundException si no se encontró la clase, o si no se pudo construir
+     * @param beanContext the context that is going to host it, or `null` for hosting it in none
+     * @throws IOException if the `.ser` exists and could not be read
+     * @throws ClassNotFoundException if the class was not found, or if it could not be constructed
      */
     public static Object instantiate(ClassLoader cls, String beanName, BeanContext beanContext)
             throws IOException, ClassNotFoundException {
@@ -70,16 +74,16 @@ public class Beans {
     }
 
     /**
-     * Trae un bean por nombre, lo mete en ese contexto y, si es un applet, lo prepara.
+     * Brings a bean in by name, puts it into that context and, if it is an applet, prepares it.
      *
-     * <p>El orden es el de un navegador: el applet se inicializa **antes** de entrar al contexto,
-     * para que al entrar ya tenga su representante puesto, y se activa **después**, porque activar
-     * es "arrancá", y arrancar sin estar alojado no tiene dónde mostrarse. Un bean que no es applet
-     * ignora al inicializador.
+     * <p>The order is a browser's: the applet is initialized **before** entering the context, so
+     * that on entering it already has its stub in place, and it is activated **afterwards**, because
+     * activating means "get going", and getting going without being hosted has nowhere to show
+     * itself. A bean that is not an applet ignores the initializer.
      *
-     * @param initializer quien prepara al applet, o `null` para no prepararlo
-     * @throws IOException si el `.ser` existe y no se pudo leer
-     * @throws ClassNotFoundException si no se encontró la clase, o si no se pudo construir
+     * @param initializer whoever prepares the applet, or `null` for not preparing it
+     * @throws IOException if the `.ser` exists and could not be read
+     * @throws ClassNotFoundException if the class was not found, or if it could not be constructed
      */
     public static Object instantiate(ClassLoader cls, String beanName, BeanContext beanContext,
             AppletInitializer initializer) throws IOException, ClassNotFoundException {
@@ -103,12 +107,12 @@ public class Beans {
         return bean;
     }
 
-    // El bean guardado en `<nombre con / >.ser`, o `null` si no hay tal recurso.
+    // The bean stored in `<name with / >.ser`, or `null` if there is no such resource.
     //
-    // Un recurso que existe pero no se puede leer NO se trata como si no existiera: se propaga la
-    // IOException. La diferencia importa -- caer a construir la clase de cero ante un `.ser` roto
-    // devolvería un bean con los valores por omisión y nadie se enteraría de que se perdió el estado
-    // guardado.
+    // A resource that exists but cannot be read is NOT treated as if it did not exist: the
+    // IOException is propagated. The difference matters -- falling back to constructing the class
+    // from scratch on a broken `.ser` would return a bean with the default values and nobody would
+    // hear that the stored state had been lost.
     private static Object fromSerializedForm(ClassLoader cls, String beanName)
             throws IOException, ClassNotFoundException {
         String resource = beanName.replace('.', '/') + ".ser";
@@ -133,51 +137,51 @@ public class Beans {
         } catch (ClassNotFoundException e) {
             throw e;
         } catch (Exception e) {
-            // El JDK envuelve el fallo de instanciación en ClassNotFoundException: desde afuera, un
-            // bean que no se puede construir es indistinguible de uno que no está.
+            // The JDK wraps the instantiation failure in ClassNotFoundException: from outside, a
+            // bean that cannot be constructed is indistinguishable from one that is not there.
             throw new ClassNotFoundException(beanName + ": " + e);
         }
     }
 
     /**
-     * Si `bean` puede verse como `targetType`.
+     * Whether `bean` can be seen as `targetType`.
      *
-     * <p>La respuesta es la del sistema de tipos y nada más. El JDK deja abierta la puerta a que un
-     * bean ofrezca "vistas" de sí mismo bajo otro tipo; ninguna implementación estándar la usa, y
-     * acá tampoco.
+     * <p>The answer is the type system's and nothing else. The JDK leaves the door open for a bean to
+     * offer "views" of itself under another type; no standard implementation uses it, and nor does
+     * this one.
      */
     public static boolean isInstanceOf(Object bean, Class<?> targetType) {
         return bean != null && targetType != null && targetType.isInstance(bean);
     }
 
-    /** El bean visto como `targetType`. La única vista posible de un bean es el bean mismo. */
+    /** The bean seen as `targetType`. A bean's only possible view is the bean itself. */
     public static Object getInstanceOf(Object bean, Class<?> targetType) {
         return bean;
     }
 
-    /** Si el entorno corre en modo diseño. */
+    /** Whether the environment runs in design mode. */
     public static boolean isDesignTime() {
         return Beans.readDesignTime();
     }
 
-    /** Fija el modo diseño. */
+    /** Sets the design mode. */
     public static void setDesignTime(boolean isDesignTime) {
         Beans.writeDesignTime(isDesignTime);
     }
 
-    /** Si hay interfaz gráfica disponible. */
+    /** Whether a graphical interface is available. */
     public static boolean isGuiAvailable() {
         return Beans.readGuiAvailable();
     }
 
-    /** Fija si hay interfaz gráfica disponible. */
+    /** Sets whether a graphical interface is available. */
     public static void setGuiAvailable(boolean isGuiAvailable) {
         Beans.writeGuiAvailable(isGuiAvailable);
     }
 
-    // Las cuatro banderas se leen y se escriben bajo el candado de la clase. Son estáticas y
-    // globales al proceso: un hilo que las cambia tiene que hacerlo visible para los demás, y sin
-    // sincronizar no hay nada que lo garantice.
+    // The four flags are read and written under the class's lock. They are static and global to the
+    // process: a thread changing them has to make that visible to the rest, and without
+    // synchronizing there is nothing that guarantees it.
     private static synchronized boolean readDesignTime() {
         return Beans.designTime;
     }

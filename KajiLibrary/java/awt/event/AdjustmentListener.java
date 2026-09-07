@@ -3,10 +3,10 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que se movió una barra de desplazamiento.
+ * Whoever wants to hear that a scrollbar was moved.
  */
 public interface AdjustmentListener extends EventListener {
 
-    /** Cambió el valor. */
+    /** The value changed. */
     void adjustmentValueChanged(AdjustmentEvent e);
 }

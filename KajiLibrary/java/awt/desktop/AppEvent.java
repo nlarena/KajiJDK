@@ -3,34 +3,36 @@ package java.awt.desktop;
 import java.util.EventObject;
 
 /**
- * KajiLibrary's java.awt.desktop.AppEvent -- la raiz de los eventos del escritorio.
+ * KajiLibrary's java.awt.desktop.AppEvent -- the root of the desktop's events.
  *
- * <p>No agrega nada sobre {@link EventObject}: existe para que los quince eventos del paquete tengan
- * un tipo comun, y para que su constructor --de acceso de paquete-- ponga siempre la misma fuente.
+ * <p>It adds nothing over {@link EventObject}: it exists so that the package's thirteen events have a
+ * common type, and so that its constructor --package-private-- always sets the same source.
  *
- * <p>Que el constructor no sea publico es lo que garantiza que estos eventos los emita el escritorio y
- * no cualquiera. Las subclases si tienen constructor publico, para poder probarlas.
+ * <p>That the constructor is not public is what guarantees these events are emitted by the desktop
+ * and not by anyone. The subclasses do have a public constructor, so that they can be tested.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>En el JDK la fuente es la instancia de {@code java.awt.Desktop}. Esta biblioteca todavia no tiene
- * esa clase, asi que la fuente es un objeto propio de este paquete. {@link EventObject} exige una
- * fuente no nula y la documentacion de {@code AppEvent} no promete de que clase es, asi que esto es
- * legal; lo que no se puede hacer es castear {@link #getSource} a {@code Desktop}.
+ * <p>In the JDK the source is the {@code java.awt.Desktop} instance. That class is here, but there is
+ * no instance to be had: this library is headless, {@code Desktop.isDesktopSupported} answers false
+ * and {@code Desktop.getDesktop} throws. So the source is an object of this package's own.
+ * {@link EventObject} demands a non-null source and {@code AppEvent}'s documentation does not promise
+ * which class it is, so this is legal; what cannot be done is casting {@link #getSource} to
+ * {@code Desktop}.
  */
 public class AppEvent extends EventObject {
 
     private static final long serialVersionUID = -5958503993556009432L;
 
     /**
-     * La fuente comun de todos estos eventos. Ver la nota de la clase.
+     * The common source of all these events. See the class note.
      *
-     * <p>Su {@code toString} lo dice, para que quien inspeccione un evento entienda que esta viendo en
-     * lugar de suponer que es un {@code Desktop}.
+     * <p>Its {@code toString} says so, so that whoever inspects an event understands what they are
+     * looking at instead of assuming it is a {@code Desktop}.
      */
     private static final Object SOURCE = new EventSource();
 
-    /** La fuente comun. Named y no anonima para que su {@code toString} sea legible en un volcado. */
+    /** The common source. Named and not anonymous so that its {@code toString} reads well in a dump. */
     private static final class EventSource {
         @Override
         public String toString() {
@@ -38,7 +40,7 @@ public class AppEvent extends EventObject {
         }
     }
 
-    /** De acceso de paquete a proposito; ver la nota de la clase. */
+    /** Package-private on purpose; see the class note. */
     AppEvent() {
         super(SOURCE);
     }

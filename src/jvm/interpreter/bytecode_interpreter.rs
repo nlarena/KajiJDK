@@ -50,6 +50,7 @@ pub mod jvmti;
 
 /// Spins the implementing class a `LambdaMetafactory` call site produces (via the `.class` writer).
 pub mod annotation_factory;
+pub mod concat_factory;
 pub mod lambda_factory;
 
 /// The per-call-site resolution cache the four invoke modules below share (F0 quickening).
@@ -2239,10 +2240,39 @@ impl Exec<'_> {
         // against the opcode's operand bytes, so a cache entry can never be read for a pc that is
         // not this invoke.
         let op = *code.get(pc)?;
-        if !matches!(op, 0xb6..=0xb9) {
+        if u16::from_be_bytes([*code.get(pc + 1)?, *code.get(pc + 2)?]) != index {
             return None;
         }
-        if u16::from_be_bytes([*code.get(pc + 1)?, *code.get(pc + 2)?]) != index {
+        // **`invokedynamic` de concatenación: una llamada estática, una vez que corrió.**
+        //
+        // Acá un indy no era una llamada porque el intérprete resolvía en Rust. Desde que la
+        // concatenación **spinea un método Java** (ver `concat_factory`), el sitio *sí* tiene un
+        // target: el `concat` estático de una clase cuyo nombre es función del call site, y por lo
+        // tanto derivable sin ejecutar. Lo que no es derivable es si la clase **existe** — se
+        // fabrica la primera vez que el sitio corre—, y eso es justo lo que `get` responde.
+        //
+        // Es el mismo trato que un campo sin resolver: un sitio que nunca se ejecutó refuta el
+        // método, y para cuando un método está caliente sus indy ya corrieron. Y no necesita
+        // guarda: la clase spun es **fija por sitio**, no depende de ningún receptor.
+        if op == 0xba {
+            let caller = metaspace.class_of(unit).to_string();
+            let synthetic = format!("{caller}$$concat$${index}");
+            // La clase spun sólo existe si el sitio ya corrió alguna vez.
+            metaspace.get(&synthetic)?;
+            // El descriptor del `concat` es el del call site con `String` de retorno — la misma
+            // cuenta que hace `concat_factory` al emitirlo, y por eso se deriva y no se guarda.
+            let site_descriptor = metaspace.get(&caller)?.invokedynamic_site(index)?.2.to_string();
+            let args = site_descriptor.split(')').next()?.trim_start_matches('(').to_string();
+            let concat_descriptor = format!("({args})Ljava/lang/String;");
+            let target = metaspace.resolved_readonly(&synthetic, "concat", &concat_descriptor)?;
+            return Some(vec![crate::burst::compile::Callee {
+                method: Self::jit_shape(metaspace, target),
+                arg_slots: metaspace.arg_count(target),
+                guard: Guard::Static,
+                record: Some(jit.record_address(target)),
+            }]);
+        }
+        if !matches!(op, 0xb6..=0xb9) {
             return None;
         }
         // **A cold site is still inlinable when the call is statically bound.** The F0 cache is

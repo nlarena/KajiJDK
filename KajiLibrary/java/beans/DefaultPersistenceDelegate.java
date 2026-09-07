@@ -5,22 +5,23 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
 
-// El delegado que se usa cuando nadie dijo otra cosa: sirve para cualquier clase que respete el
-// contrato de bean —constructor sin argumentos y pares get/set—.
+// The delegate used when nobody said otherwise: it serves any class honouring the bean contract
+// --a no-argument constructor and get/set pairs.
 //
-// Su trabajo son dos preguntas:
+// Its work is two questions:
 //
-//   1. Como se construye. Por defecto, `new Foo()`. Si la clase es inmutable y su estado va por el
-//      constructor, se le pasan al constructor los nombres de las propiedades que lo alimentan:
-//      `new DefaultPersistenceDelegate(new String[] { "x", "y" })` produce `new Punto(getX(), getY())`.
-//   2. Que hay que ajustar despues. Se recorren los campos publicos y las propiedades, se compara
-//      contra el objeto recien creado y **solo se emite lo que difiere**. Por eso guardar un bean
-//      con todo en su valor por defecto no produce ninguna llamada.
+//   1. How it is constructed. By default, `new Foo()`. If the class is immutable and its state goes
+//      through the constructor, the names of the properties feeding it are passed to the
+//      constructor: `new DefaultPersistenceDelegate(new String[] { "x", "y" })` produces
+//      `new Point(getX(), getY())`.
+//   2. What has to be adjusted afterwards. The public fields and the properties are walked, compared
+//      against the freshly created object, and **only what differs is emitted**. That is why storing
+//      a bean with everything at its default value produces no call at all.
 //
-// El `mutatesTo` tambien cambia respecto del de la superclase, pero solo para el caso 1 de arriba:
-// si el objeto se arma desde sus propiedades y define `equals`, dos instancias iguales describen el
-// mismo valor y no hace falta construir otra. Para el caso corriente —constructor sin argumentos,
-// objeto mutable— se usa la regla de la superclase; ver el comentario de `mutatesTo`.
+// The `mutatesTo` also differs from the superclass's, but only for case 1 above: if the object is
+// built from its properties and defines `equals`, two equal instances describe the same value and
+// there is no need to construct another. For the ordinary case --a no-argument constructor, a
+// mutable object-- the superclass's rule is used; see `mutatesTo`'s comment.
 public class DefaultPersistenceDelegate extends PersistenceDelegate {
 
     private String[] constructor;
@@ -33,8 +34,8 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         this.constructor = constructorPropertyNames == null ? new String[0] : constructorPropertyNames;
     }
 
-    // Si la clase escribio su propio `equals`, es ella la que sabe cuando dos instancias valen lo
-    // mismo. Si no lo escribio, `equals` es identidad y no dice nada util.
+    // If the class wrote its own `equals`, it is the one that knows when two instances are worth
+    // the same. If it did not write one, `equals` is identity and says nothing useful.
     private static boolean defineEquals(Class<?> type) {
         boolean r = false;
         Method[] ms = type.getDeclaredMethods();
@@ -47,16 +48,16 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         return r;
     }
 
-    // Preguntarle a `equals` solo vale cuando el objeto se construye desde sus propiedades, o sea
-    // cuando este delegado tiene nombres de constructor. La condicion no es un detalle: si el
-    // objeto tiene constructor sin argumentos, es mutable, y para uno mutable `equals` responde
-    // otra pregunta —"¿valen lo mismo AHORA?"— que no es la que se esta haciendo.
+    // Asking `equals` is only worth doing when the object is constructed from its properties, that
+    // is, when this delegate has constructor names. The condition is no detail: if the object has a
+    // no-argument constructor, it is mutable, and for a mutable one `equals` answers another
+    // question --"are they worth the same NOW?"-- which is not the one being asked.
     //
-    // Sin la condicion, una lista con elementos nunca es igual a la lista vacia recien creada, asi
-    // que `writeObject` decide una y otra vez que hay que crearla de nuevo, y vuelve a crearla, y
-    // vuelve: guardar cualquier coleccion no vacia desborda la pila. Para un objeto mutable la
-    // pregunta correcta es la de la superclase —¿es del mismo molde?— y las diferencias las arregla
-    // despues `initialize`.
+    // Without the condition, a list with elements is never equal to the freshly created empty list,
+    // so `writeObject` decides over and over that it has to be created again, and creates it again,
+    // and again: storing any non-empty collection overflows the stack. For a mutable object the
+    // right question is the superclass's --is it the same mould?-- and the differences are settled
+    // afterwards by `initialize`.
     protected boolean mutatesTo(Object oldInstance, Object newInstance) {
         boolean r;
         if (this.constructor.length != 0 && oldInstance != null
@@ -74,8 +75,8 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         Object[] args = new Object[n];
         for (int i = 0; i < n; i++) {
             try {
-                Method lector = lectorDe(type, this.constructor[i]);
-                args[i] = lector.invoke(oldInstance);
+                Method reader = readerOf(type, this.constructor[i]);
+                args[i] = reader.invoke(oldInstance);
             } catch (Exception e) {
                 out.getExceptionListener().exceptionThrown(e);
             }
@@ -83,38 +84,38 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         return new Expression(oldInstance, type, "new", args);
     }
 
-    private static Method lectorDe(Class<?> type, String propiedad) throws Exception {
-        if (propiedad == null) {
+    private static Method readerOf(Class<?> type, String propertyName) throws Exception {
+        if (propertyName == null) {
             throw new IllegalArgumentException("Property name is null");
         }
-        PropertyDescriptor elegida = null;
+        PropertyDescriptor chosen = null;
         PropertyDescriptor[] pds = Introspector.getBeanInfo(type).getPropertyDescriptors();
         for (int i = 0; i < pds.length; i++) {
-            if (elegida == null && propiedad.equals(pds[i].getName())) {
-                elegida = pds[i];
+            if (chosen == null && propertyName.equals(pds[i].getName())) {
+                chosen = pds[i];
             }
         }
-        if (elegida == null) {
-            throw new IllegalStateException("Could not find property by the name " + propiedad);
+        if (chosen == null) {
+            throw new IllegalStateException("Could not find property by the name " + propertyName);
         }
-        Method m = elegida.getReadMethod();
+        Method m = chosen.getReadMethod();
         if (m == null) {
-            throw new IllegalStateException("Could not find getter for the property " + propiedad);
+            throw new IllegalStateException("Could not find getter for the property " + propertyName);
         }
         return m;
     }
 
     protected void initialize(Class<?> type, Object oldInstance, Object newInstance, Encoder out) {
         super.initialize(type, oldInstance, newInstance, out);
-        // Solo cuando la cadena de superclases llega a la clase real del objeto: initialize se
-        // llama una vez por nivel y el estado se copia entero de una sola pasada, no por nivel.
+        // Only when the chain of superclasses reaches the object's real class: initialize is
+        // called once per level and the state is copied whole in a single pass, not per level.
         if (oldInstance.getClass() == type) {
-            this.copiarEstado(type, oldInstance, newInstance, out);
+            this.copyState(type, oldInstance, newInstance, out);
         }
     }
 
-    private void copiarEstado(Class<?> type, Object oldInstance, Object newInstance, Encoder out) {
-        this.copiarCampos(type, oldInstance, newInstance, out);
+    private void copyState(Class<?> type, Object oldInstance, Object newInstance, Encoder out) {
+        this.copyFields(type, oldInstance, newInstance, out);
         BeanInfo info;
         try {
             info = Introspector.getBeanInfo(type);
@@ -125,9 +126,9 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         if (info != null) {
             PropertyDescriptor[] pds = info.getPropertyDescriptors();
             for (int i = 0; i < pds.length; i++) {
-                if (!esTransitorio(pds[i])) {
+                if (!isTransientProperty(pds[i])) {
                     try {
-                        this.copiarPropiedad(pds[i], oldInstance, newInstance, out);
+                        this.copyProperty(pds[i], oldInstance, newInstance, out);
                     } catch (Exception e) {
                         out.getExceptionListener().exceptionThrown(e);
                     }
@@ -136,15 +137,16 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         }
     }
 
-    // Un descriptor marcado `transient` queda afuera a proposito: es como una clase dice "esto no
-    // se guarda". La marca la pone la anotacion @Transient o un BeanInfo a mano.
-    static boolean esTransitorio(FeatureDescriptor d) {
+    // A descriptor marked `transient` is left out on purpose: it is how a class says "this is not
+    // stored". The mark is put there by the @Transient annotation or by a BeanInfo written by
+    // hand.
+    static boolean isTransientProperty(FeatureDescriptor d) {
         return Boolean.TRUE.equals(d.getValue("transient"));
     }
 
-    // Los campos publicos y mutables tambien son estado. Se los lee con un Expression sobre el
-    // propio Field para que el codificador sepa reproducir la lectura, no solo su resultado.
-    private void copiarCampos(Class<?> type, Object oldInstance, Object newInstance, Encoder out) {
+    // The public, mutable fields are state too. They are read with an Expression over the Field
+    // itself so that the encoder knows how to reproduce the reading, not just its result.
+    private void copyFields(Class<?> type, Object oldInstance, Object newInstance, Encoder out) {
         Field[] fs = type.getFields();
         for (int i = 0; i < fs.length; i++) {
             Field f = fs[i];
@@ -152,9 +154,9 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
             if (!Modifier.isFinal(mod) && !Modifier.isStatic(mod) && !Modifier.isTransient(mod)) {
                 try {
                     Expression viejo = new Expression(f, "get", new Object[] { oldInstance });
-                    Expression nuevo = new Expression(f, "get", new Object[] { newInstance });
+                    Expression fresh = new Expression(f, "get", new Object[] { newInstance });
                     Object oldValue = viejo.getValue();
-                    Object newValue = nuevo.getValue();
+                    Object newValue = fresh.getValue();
                     out.writeExpression(viejo);
                     if (!Objects.equals(newValue, out.get(oldValue))) {
                         out.writeStatement(new Statement(f, "set", new Object[] { oldInstance, oldValue }));
@@ -166,21 +168,22 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         }
     }
 
-    // El corazon del ahorro: se lee la propiedad en los dos objetos y solo se emite el `set` si el
-    // nuevo todavia no tiene ese valor.
+    // The heart of the saving: the property is read on both objects and the `set` is only emitted
+    // if the new one does not have that value yet.
     //
-    // La comparacion es contra `out.get(oldValue)` y no contra `oldValue` a secas: lo que hay que
-    // preguntar es si el objeto nuevo ya apunta a la CONTRAPARTE del valor viejo, no si apunta al
-    // valor viejo mismo —que vive en el otro grafo y nunca va a estar ahi—.
-    private void copiarPropiedad(PropertyDescriptor pd, Object oldInstance, Object newInstance,
+    // The comparison is against `out.get(oldValue)` and not against `oldValue` alone: what has to be
+    // asked is whether the new object already points at the old value's COUNTERPART, not whether it
+    // points at the old value itself --which lives in the other graph and is never going to be
+    // there.
+    private void copyProperty(PropertyDescriptor pd, Object oldInstance, Object newInstance,
                                  Encoder out) throws Exception {
-        Method lector = pd.getReadMethod();
+        Method reader = pd.getReadMethod();
         Method escritor = pd.getWriteMethod();
-        if (lector != null && escritor != null) {
-            Expression viejo = new Expression(oldInstance, lector.getName(), new Object[0]);
-            Expression nuevo = new Expression(newInstance, lector.getName(), new Object[0]);
+        if (reader != null && escritor != null) {
+            Expression viejo = new Expression(oldInstance, reader.getName(), new Object[0]);
+            Expression fresh = new Expression(newInstance, reader.getName(), new Object[0]);
             Object oldValue = viejo.getValue();
-            Object newValue = nuevo.getValue();
+            Object newValue = fresh.getValue();
             out.writeExpression(viejo);
             if (!Objects.equals(newValue, out.get(oldValue))) {
                 out.writeStatement(new Statement(oldInstance, escritor.getName(),
@@ -189,8 +192,8 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
         }
     }
 
-    // Atajo que usan los delegados incorporados para emitir "llamale esto al objeto viejo".
-    static void invocar(Object instancia, String metodo, Object[] args, Encoder out) {
-        out.writeStatement(new Statement(instancia, metodo, args));
+    // The shortcut the built-in delegates use to emit "call this on the old object".
+    static void emitCall(Object instance, String methodName, Object[] args, Encoder out) {
+        out.writeStatement(new Statement(instance, methodName, args));
     }
 }

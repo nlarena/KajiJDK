@@ -1,34 +1,36 @@
 package java.awt.geom;
 
-// Helper interno (no es API): cuenta cruces de un camino contra un punto o contra un rectangulo.
-// Es el motor de `contains`/`intersects` de Path2D, CubicCurve2D, QuadCurve2D, Line2D y Area.
+// An internal helper (not API): it counts a path's crossings against a point or against a
+// rectangle. It is the engine of `contains`/`intersects` for Path2D, CubicCurve2D, QuadCurve2D,
+// Line2D and Area.
 //
-// Hay dos cuentas distintas y conviene no mezclarlas:
+// There are two different counts and they are best not mixed up:
 //
-//   * **Cruces de punto** (`pointCrossingsFor*`): se tira un rayo desde (px,py) hacia -X y se suma
-//     +1 por cada segmento que lo cruza hacia abajo y -1 hacia arriba. Con WIND_NON_ZERO el punto
-//     esta dentro si la suma no es cero; con WIND_EVEN_ODD, si es impar. La asimetria de los
-//     bordes (`>=` de un lado, `<` del otro) es lo que hace que un vertice compartido por dos
-//     segmentos se cuente una sola vez -- si se usara `<=` en los dos, un punto a la altura exacta
-//     de un vertice contaria doble y daria "afuera" donde debe dar "adentro".
+//   * **Point crossings** (`pointCrossingsFor*`): a ray is cast from (px,py) towards -X and +1 is
+//     added for each segment crossing it downwards and -1 upwards. With WIND_NON_ZERO the point is
+//     inside if the sum is not zero; with WIND_EVEN_ODD, if it is odd. The asymmetry of the edges
+//     (`>=` on one side, `<` on the other) is what makes a vertex shared by two segments count once
+//     only -- if `<=` were used on both, a point at a vertex's exact height would count twice and
+//     give "outside" where it must give "inside".
 //
-//   * **Cruces de rectangulo** (`rectCrossingsFor*`): igual pero contra los cuatro bordes, con un
-//     valor centinela RECT_INTERSECTS que corta la cuenta ni bien se sabe que el borde del camino
-//     entra al rectangulo. Ese centinela es lo que distingue `intersects` (borde tocado O interior
-//     no vacio) de `contains` (interior no vacio Y borde intacto): con un solo numero no alcanza.
+//   * **Rectangle crossings** (`rectCrossingsFor*`): the same but against the four edges, with a
+//     RECT_INTERSECTS sentinel value that cuts the count short as soon as it is known that the
+//     path's edge enters the rectangle. That sentinel is what tells `intersects` (an edge touched OR
+//     a non-empty interior) from `contains` (a non-empty interior AND an untouched edge): one number
+//     alone is not enough.
 //
-// Las curvas se resuelven subdividiendo en el punto medio hasta que el trozo es indistinguible de
-// un segmento. El limite de 52 niveles es la mantisa de un double: mas subdivisiones no cambian
-// nada porque los puntos medios ya no se mueven.
+// The curves are resolved by subdividing at the midpoint until the piece is indistinguishable from a
+// segment. The limit of 52 levels is a double's mantissa: more subdivisions change nothing because
+// the midpoints stop moving.
 class Curve {
 
-    /** El borde del camino entra al rectangulo: la cuenta de cruces ya no significa nada. */
+    /** The path's edge enters the rectangle: the crossing count no longer means anything. */
     static final int RECT_INTERSECTS = 0x80000000;
 
     private Curve() {
     }
 
-    // --- cruces contra un punto ------------------------------------------------------------------
+    // --- crossings against a point ---------------------------------------------------------------
 
     static int pointCrossingsForPath(PathIterator pi, double px, double py) {
         if (pi.isDone()) {
@@ -89,7 +91,7 @@ class Curve {
             }
             pi.next();
         }
-        // Un subcamino sin CLOSE se cierra igual a los efectos de "dentro/fuera".
+        // A subpath with no CLOSE is closed all the same for the purposes of "in/out".
         if (cury != movy) {
             crossings = crossings + pointCrossingsForLine(px, py, curx, cury, movx, movy);
         }
@@ -105,7 +107,7 @@ class Curve {
         if (py >= y0 && py >= y1) {
             return 0;
         }
-        // py esta estrictamente entre y0 e y1, asi que y0 != y1 y no hay division por cero.
+        // py is strictly between y0 and y1, so y0 != y1 and there is no division by zero.
         if (px >= x0 && px >= x1) {
             return 0;
         }
@@ -139,7 +141,8 @@ class Curve {
             return 0;
         }
         if (px < x0 && px < xc && px < x1) {
-            // La curva entera esta a la derecha del rayo: solo importa si cruza la altura py.
+            // The whole curve is right of the ray: all that matters is whether it crosses the
+            // height py.
             if (py >= y0) {
                 if (py < y1) {
                     return 1;
@@ -161,7 +164,7 @@ class Curve {
         double xm = (x0c + xc1) / 2.0;
         double ym = (y0c + yc1) / 2.0;
         if (Double.isNaN(xm) || Double.isNaN(ym)) {
-            // Un punto de control infinito o NaN no define nada: no se cuenta ningun cruce.
+            // An infinite or NaN control point defines nothing: no crossing is counted.
             return 0;
         }
         return pointCrossingsForQuad(px, py, x0, y0, x0c, y0c, xm, ym, level + 1)
@@ -216,7 +219,7 @@ class Curve {
                 + pointCrossingsForCubic(px, py, xm, ym, xmc1, ymc1, xc1a, yc1a, x1, y1, level + 1);
     }
 
-    // --- cruces contra un rectangulo -------------------------------------------------------------
+    // --- crossings against a rectangle -----------------------------------------------------------
 
     static int rectCrossingsForPath(PathIterator pi,
                                     double rxmin, double rymin,
@@ -305,7 +308,8 @@ class Curve {
             return crossings;
         }
         if (x0 >= rxmax && x1 >= rxmax) {
-            // Enteramente a la derecha: cuenta como cruce del rayo horizontal, sin tocar el rect.
+            // Entirely to the right: it counts as a crossing of the horizontal ray, without
+            // touching the rect.
             if (y0 < y1) {
                 if (y0 <= rymin) {
                     crossings = crossings + 1;
@@ -323,12 +327,13 @@ class Curve {
             }
             return crossings;
         }
-        // Un extremo estrictamente adentro ya alcanza para saber que el borde entra.
+        // One end strictly inside is already enough to know that the edge enters.
         if ((x0 > rxmin && x0 < rxmax && y0 > rymin && y0 < rymax)
                 || (x1 > rxmin && x1 < rxmax && y1 > rymin && y1 < rymax)) {
             return RECT_INTERSECTS;
         }
-        // Se recorta el segmento contra las alturas del rectangulo y se mira donde queda en X.
+        // The segment is clipped against the rectangle's heights and where it ends up in X is
+        // looked at.
         double xi0 = x0;
         if (y0 < rymin) {
             xi0 = xi0 + ((rymin - y0) * (x1 - x0) / (y1 - y0));
@@ -381,7 +386,8 @@ class Curve {
             return crossings;
         }
         if (x0 >= rxmax && xc >= rxmax && x1 >= rxmax) {
-            // La curva entera esta a la derecha: los cruces los decide solo el trayecto vertical.
+            // The whole curve is to the right: the crossings are decided by the vertical travel
+            // alone.
             if (y0 < y1) {
                 if (y0 <= rymin && y1 > rymin) {
                     crossings = crossings + 1;

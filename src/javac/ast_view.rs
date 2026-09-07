@@ -265,6 +265,7 @@ fn expr_node(expr: &Expr) -> Node {
         ExprKind::Name(n) => leaf(format!("Name {n}")),
         ExprKind::This => leaf("This"),
         ExprKind::QualifiedThis(ty) => leaf(format!("QualifiedThis {}.this", type_str(ty))),
+        ExprKind::QualifiedSuper(ty) => leaf(format!("QualifiedSuper {}.super", type_str(ty))),
         ExprKind::Super => leaf("Super"),
         ExprKind::Binary { op, lhs, rhs } => {
             branch(format!("Binary {}", bin_op(*op)), vec![expr_node(lhs), expr_node(rhs)])

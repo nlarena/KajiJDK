@@ -3,26 +3,26 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de los botones del ratón y de cuándo entra y sale del componente.
-
- <p>{@code mouseClicked} llega **además** de apretar y soltar, y sólo si el ratón no se movió entre
- los dos. Quien quiera reaccionar a un clic sin importar el arrastre tiene que usar
- {@code mouseReleased}.
+ * Whoever wants to hear about the mouse buttons and about when it enters and leaves the component.
+ *
+ * <p>{@code mouseClicked} arrives **on top of** the press and the release, and only if the mouse did
+ * not move between the two. Whoever wants to react to a click regardless of dragging has to use
+ * {@code mouseReleased}.
  */
 public interface MouseListener extends EventListener {
 
-    /** Se apretó y se soltó sin mover. */
+    /** It was pressed and released without moving. */
     void mouseClicked(MouseEvent e);
 
-    /** Se apretó un botón. */
+    /** A button was pressed. */
     void mousePressed(MouseEvent e);
 
-    /** Se soltó un botón. */
+    /** A button was released. */
     void mouseReleased(MouseEvent e);
 
-    /** El ratón entró al componente. */
+    /** The mouse entered the component. */
     void mouseEntered(MouseEvent e);
 
-    /** El ratón salió del componente. */
+    /** The mouse left the component. */
     void mouseExited(MouseEvent e);
 }

@@ -1,15 +1,15 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.AppForegroundListener -- escucha los cambios de primer plano.
+ * KajiLibrary's java.awt.desktop.AppForegroundListener -- listens for foreground changes.
  *
- * <p>Se registra con {@code Desktop.addAppEventListener}. Ver {@link AppForegroundEvent}.
+ * <p>It is registered with {@code Desktop.addAppEventListener}. See {@link AppForegroundEvent}.
  */
 public interface AppForegroundListener extends SystemEventListener {
 
-    /** Paso a primer plano. */
+    /** It came to the foreground. */
     void appRaisedToForeground(AppForegroundEvent e);
 
-    /** Se fue al fondo. */
+    /** It went to the background. */
     void appMovedToBackground(AppForegroundEvent e);
 }

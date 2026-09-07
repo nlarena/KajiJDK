@@ -3,10 +3,10 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que el componente cambió de lugar en el árbol, o de que cambió si se ve.
+ * Whoever wants to hear that the component moved place in the tree, or that whether it shows changed.
  */
 public interface HierarchyListener extends EventListener {
 
-    /** Cambió el árbol. */
+    /** The tree changed. */
     void hierarchyChanged(HierarchyEvent e);
 }

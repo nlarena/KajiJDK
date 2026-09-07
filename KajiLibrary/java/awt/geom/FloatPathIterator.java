@@ -2,23 +2,25 @@ package java.awt.geom;
 
 import java.util.NoSuchElementException;
 
-// Iterador interno de Path2D.Float (no es API). Recorre el arreglo plano de tipos y el de
-// coordenadas en paralelo, y aplica la transformacion --si la hay-- al vuelo, sin copiar el camino.
+// Path2D.Float's internal iterator (not API). It walks the flat array of types and the one of
+// coordinates in parallel, and applies the transform --if there is one-- on the fly, without
+// copying the path.
 //
-// El indice `typeIdx` avanza de a un tipo y `pointIdx` de a tantas coordenadas como consuma ese
-// tipo, que es de donde sale la tabla `CURVESIZE`. Un CLOSE no consume coordenadas: por eso su
-// entrada es 0 y por eso `currentSegment` no toca el arreglo del llamador cuando devuelve CLOSE.
+// The `typeIdx` index advances one type at a time and `pointIdx` by as many coordinates as that
+// type consumes, which is where the `CURVESIZE` table comes from. A CLOSE consumes no coordinates:
+// that is why its entry is 0 and why `currentSegment` does not touch the caller's array when it
+// returns CLOSE.
 //
-// Detalle que se ve raro y no lo es: el campo es un `Path2D` y las coordenadas se piden por
-// `floatCoordsRef()`/`doubleCoordsRef()` en vez de tipar el campo como la subclase anidada. El javac
-// de esta casa no resuelve la relacion de herencia de un `Outer.Inner` mientras Outer no tenga
-// .class, y este paquete tiene que compilarse de una sola invocacion por los ciclos de tipos --asi
-// que ningun archivo puede depender de que `Path2D.Float` sea un `Path2D`. Con el tipo declarante no
-// hay busqueda por herencia y resuelve.
+// A detail that looks odd and is not: the field is a `Path2D` and the coordinates are asked for
+// through `floatCoordsRef()`/`doubleCoordsRef()` instead of typing the field as the nested subclass.
+// This house's javac does not resolve an `Outer.Inner`'s inheritance relation while Outer has no
+// .class, and this package has to be compiled in a single invocation because of the type cycles
+// --so no file may depend on `Path2D.Float` being a `Path2D`. With the declaring type there is no
+// lookup through inheritance and it resolves.
 class FloatPathIterator implements PathIterator {
 
-    // Cuantas coordenadas escribe cada tipo de segmento: MOVETO 2, LINETO 2, QUADTO 4, CUBICTO 6,
-    // CLOSE 0. Indexada por el valor de la constante SEG_*.
+    // How many coordinates each segment type writes: MOVETO 2, LINETO 2, QUADTO 4, CUBICTO 6,
+    // CLOSE 0. Indexed by the SEG_* constant's value.
     static final int[] CURVESIZE = {2, 2, 4, 6, 0};
 
     Path2D path;
@@ -77,8 +79,8 @@ class FloatPathIterator implements PathIterator {
                     i = i + 1;
                 }
             } else {
-                // Se amplia a double **dentro** de la transformacion, no antes: transformar en float
-                // y ampliar despues redondearia dos veces y daria otro punto.
+                // It is widened to double **inside** the transform, not before: transforming in
+                // float and widening afterwards would round twice and give another point.
                 this.affine.transform(this.coordsRef, this.pointIdx, coords, 0, numCoords / 2);
             }
         }

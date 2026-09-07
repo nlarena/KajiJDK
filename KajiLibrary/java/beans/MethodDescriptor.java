@@ -2,8 +2,8 @@ package java.beans;
 
 import java.lang.reflect.Method;
 
-// Un metodo del bean que vale la pena exponer, con descriptores opcionales para sus parametros.
-// El nombre del descriptor es el del metodo.
+// A method of the bean worth exposing, with optional descriptors for its parameters. The
+// descriptor's name is the method's.
 public class MethodDescriptor extends FeatureDescriptor {
 
     private Method method;
@@ -25,8 +25,8 @@ public class MethodDescriptor extends FeatureDescriptor {
         return this.method;
     }
 
-    // Puede ser null: describir los parametros es opcional, y no describirlos no es lo mismo que
-    // decir que no tiene.
+    // It may be null: describing the parameters is optional, and not describing them is not the
+    // same as saying it has none.
     public ParameterDescriptor[] getParameterDescriptors() {
         ParameterDescriptor[] r = null;
         if (this.parameterDescriptors != null) {

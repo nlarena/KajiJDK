@@ -3,25 +3,24 @@ package java.awt.event;
 import java.awt.Component;
 
 /**
- * Se movió la rueda del ratón.
+ * The mouse wheel was moved.
  *
- * <p>La rueda no informa píxeles sino **muescas**, y cuánto vale una muesca lo decide el sistema, no
- * la aplicación. Por eso hay dos números: la rotación —cuántas muescas— y la cantidad de
- * desplazamiento —cuántas unidades por muesca quiere el usuario, según su configuración—.
- * {@link #getUnitsToScroll} multiplica los dos y es lo que casi siempre se quiere.
+ * <p>The wheel does not report pixels but **notches**, and what a notch is worth is decided by the
+ * system, not by the application. That is why there are two numbers: the rotation --how many
+ * notches-- and the scroll amount --how many units per notch the user wants, according to their
+ * settings. {@link #getUnitsToScroll} multiplies the two and is what is nearly always wanted.
  *
- * <p>{@link #getPreciseWheelRotation} existe para las ruedas y los trackpads que informan
- * fracciones: con ellos {@link #getWheelRotation} redondea y un desplazamiento suave se ve a
- * saltos.
+ * <p>{@link #getPreciseWheelRotation} exists for the wheels and trackpads that report fractions: with
+ * those {@link #getWheelRotation} rounds and a smooth scroll comes out in jumps.
  */
 public class MouseWheelEvent extends MouseEvent {
 
     private static final long serialVersionUID = 6459879390515399677L;
 
-    /** Desplazar por bloques: una pantalla por muesca. */
+    /** Scroll by blocks: one screenful per notch. */
     public static final int WHEEL_BLOCK_SCROLL = 1;
 
-    /** Desplazar por unidades, según la configuración del usuario. */
+    /** Scroll by units, according to the user's settings. */
     public static final int WHEEL_UNIT_SCROLL = 0;
 
     private final int scrollType;
@@ -30,9 +29,9 @@ public class MouseWheelEvent extends MouseEvent {
     private final double preciseWheelRotation;
 
     /**
-     * Con la rotación entera.
+     * With the whole rotation.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public MouseWheelEvent(Component source, int id, long when, int modifiers, int x, int y,
             int clickCount, boolean popupTrigger, int scrollType, int scrollAmount,
@@ -42,9 +41,9 @@ public class MouseWheelEvent extends MouseEvent {
     }
 
     /**
-     * Como el anterior, con la posición en pantalla.
+     * Like the previous one, with the position on screen.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public MouseWheelEvent(Component source, int id, long when, int modifiers, int x, int y,
             int xAbs, int yAbs, int clickCount, boolean popupTrigger, int scrollType,
@@ -54,9 +53,9 @@ public class MouseWheelEvent extends MouseEvent {
     }
 
     /**
-     * Con la rotación fraccionaria.
+     * With the fractional rotation.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public MouseWheelEvent(Component source, int id, long when, int modifiers, int x, int y,
             int xAbs, int yAbs, int clickCount, boolean popupTrigger, int scrollType,
@@ -69,45 +68,49 @@ public class MouseWheelEvent extends MouseEvent {
         this.preciseWheelRotation = preciseWheelRotation;
     }
 
-    /** Por unidades o por bloques. */
+    /** By units or by blocks. */
     public int getScrollType() {
         return this.scrollType;
     }
 
-    /** Cuántas unidades por muesca quiere el usuario. */
+    /** How many units per notch the user wants. */
     public int getScrollAmount() {
         return this.scrollAmount;
     }
 
-    /** Cuántas muescas se movió; negativo es hacia arriba. */
+    /** How many notches it moved; negative is upwards. */
     public int getWheelRotation() {
         return this.wheelRotation;
     }
 
-    /** Cuántas muescas se movió, con fracciones. */
+    /** How many notches it moved, with fractions. */
     public double getPreciseWheelRotation() {
         return this.preciseWheelRotation;
     }
 
     /**
-     * Cuántas unidades hay que desplazar.
+     * How many units have to be scrolled.
      *
-     * @return el producto de las muescas por las unidades, o 0 si el desplazamiento es por bloques
+     * <p>It multiplies whatever the scroll type is, as the JDK does. The number only means something
+     * when the type is {@link #WHEEL_UNIT_SCROLL}: with blocks the unit is a screenful and this
+     * product does not describe it.
+     *
+     * @return the notches times the units
      */
     public int getUnitsToScroll() {
         return this.scrollAmount * this.wheelRotation;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.scrollType == WHEEL_UNIT_SCROLL) {
-            tipo = "WHEEL_UNIT_SCROLL";
+            type = "WHEEL_UNIT_SCROLL";
         } else if (this.scrollType == WHEEL_BLOCK_SCROLL) {
-            tipo = "WHEEL_BLOCK_SCROLL";
+            type = "WHEEL_BLOCK_SCROLL";
         } else {
-            tipo = "unknown scroll type";
+            type = "unknown scroll type";
         }
-        return super.paramString() + ",scrollType=" + tipo + ",scrollAmount=" + this.scrollAmount
+        return super.paramString() + ",scrollType=" + type + ",scrollAmount=" + this.scrollAmount
                 + ",wheelRotation=" + this.wheelRotation + ",preciseWheelRotation="
                 + this.preciseWheelRotation;
     }

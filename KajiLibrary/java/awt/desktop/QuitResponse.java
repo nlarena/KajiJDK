@@ -1,23 +1,23 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.QuitResponse -- la respuesta a un pedido de cierre.
+ * KajiLibrary's java.awt.desktop.QuitResponse -- the answer to a request to close.
  *
- * <p>Existe porque la decision de cerrar puede tardar. Si {@link QuitHandler} devolviera un booleano,
- * habria que decidir <b>en el momento</b>; con esto, el manejador puede mostrar un "guardar cambios",
- * volver enseguida, y responder cuando el usuario conteste.
+ * <p>It exists because the decision to close may take time. If {@link QuitHandler} returned a
+ * boolean, it would have to be decided <b>on the spot</b>; with this, the handler can put up a "save
+ * changes", come straight back, and answer once the user replies.
  *
- * <p>Lo que hay que cumplir es simple y se olvida: <b>alguno de los dos metodos tiene que llamarse</b>.
- * Si no, el sistema queda esperando una respuesta que no llega, y en varios escritorios eso deja el
- * dialogo de apagado colgado.
+ * <p>What has to be honoured is simple and gets forgotten: <b>one of the two methods has to be
+ * called</b>. If not, the system is left waiting for an answer that never comes, and on several
+ * desktops that leaves the shutdown dialog hanging.
  *
- * <p>{@link #performQuit} no vuelve: cierra el programa.
+ * <p>{@link #performQuit} does not return: it closes the program.
  */
 public interface QuitResponse {
 
-    /** Adelante. No vuelve. */
+    /** Go ahead. Does not return. */
     void performQuit();
 
-    /** No cerrar. */
+    /** Do not close. */
     void cancelQuit();
 }

@@ -1,13 +1,14 @@
 package java.awt.geom;
 
-// java.awt.geom.RoundRectangle2D de KajiLibrary -- rectangulo con esquinas redondeadas.
-// Superficie completa.
+// KajiLibrary's java.awt.geom.RoundRectangle2D -- a rectangle with rounded corners. The surface is
+// complete.
 //
-// El ancho y el alto del arco se recortan al ancho y alto del marco (`Math.min`) y se toman en valor
-// absoluto: un arco mas grande que el rectangulo no tiene sentido y uno negativo tampoco.
+// The arc's width and height are clamped to the frame's width and height (`Math.min`) and taken in
+// absolute value: an arc larger than the rectangle makes no sense and a negative one does not
+// either.
 public abstract class RoundRectangle2D extends RectangularShape {
 
-    // Rectangulo redondeado con coordenadas float.
+    // A rounded rectangle with float coordinates.
     public static class Float extends RoundRectangle2D implements java.io.Serializable {
 
         public float x;
@@ -85,7 +86,7 @@ public abstract class RoundRectangle2D extends RectangularShape {
         }
     }
 
-    // Rectangulo redondeado con coordenadas double.
+    // A rounded rectangle with double coordinates.
     public static class Double extends RoundRectangle2D implements java.io.Serializable {
 
         public double x;
@@ -169,13 +170,14 @@ public abstract class RoundRectangle2D extends RectangularShape {
                      rr.getArcWidth(), rr.getArcHeight());
     }
 
-    // Cambiar el marco conserva el redondeo.
+    // Changing the frame keeps the rounding.
     public void setFrame(double x, double y, double w, double h) {
         setRoundRect(x, y, w, h, getArcWidth(), getArcHeight());
     }
 
-    // Rechazo rapido por el marco; si el punto cae en la banda central (horizontal o vertical) esta
-    // adentro sin mas; si no, cae en una esquina y hay que probarlo contra el cuarto de elipse.
+    // A quick rejection by the frame; if the point falls in the central band (horizontal or
+    // vertical) it is inside without more ado; if not, it falls in a corner and has to be tested
+    // against the quarter ellipse.
     public boolean contains(double x, double y) {
         if (isEmpty()) {
             return false;
@@ -214,8 +216,8 @@ public abstract class RoundRectangle2D extends RectangularShape {
         return (nx * nx + ny * ny <= 1.0);
     }
 
-    // Ubica una coordenada en una de cinco franjas: 0 = antes del marco, 1 = en el arco de este
-    // lado, 2 = en el rectangulo interior, 3 = en el arco del otro lado, 4 = pasado el marco.
+    // It places a coordinate in one of five bands: 0 = before the frame, 1 = in this side's arc,
+    // 2 = in the inner rectangle, 3 = in the other side's arc, 4 = past the frame.
     private int classify(double coord, double left, double right, double arcsize) {
         if (coord < left) {
             return 0;
@@ -249,16 +251,16 @@ public abstract class RoundRectangle2D extends RectangularShape {
         int x1class = classify(x + w, rrx0, rrx1, aw);
         int y0class = classify(y, rry0, rry1, ah);
         int y1class = classify(y + h, rry0, rry1, ah);
-        // Si algun borde cae en el rectangulo interior, hay interseccion seguro.
+        // If some edge falls in the inner rectangle, they certainly intersect.
         if (x0class == 2 || x1class == 2 || y0class == 2 || y1class == 2) {
             return true;
         }
-        // O si algun lado lo cruza de lado a lado.
+        // Or if some side crosses it from end to end.
         if ((x0class < 2 && x1class > 2) || (y0class < 2 && y1class > 2)) {
             return true;
         }
-        // Si no, alguna esquina del rectangulo cae en alguna esquina redondeada: se prueba el punto
-        // mas cercano contra el cuarto de elipse.
+        // If not, some corner of the rectangle falls in some rounded corner: the nearest point is
+        // tested against the quarter ellipse.
         double nx;
         double ny;
         if (x1class == 1) {
@@ -276,7 +278,7 @@ public abstract class RoundRectangle2D extends RectangularShape {
         return (nx * nx + ny * ny <= 1.0);
     }
 
-    // La figura es convexa: alcanza con las cuatro esquinas.
+    // The shape is convex: the four corners are enough.
     public boolean contains(double x, double y, double w, double h) {
         if (isEmpty() || w <= 0 || h <= 0) {
             return false;

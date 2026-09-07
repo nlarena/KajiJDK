@@ -3,21 +3,21 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que un componente cambió de tamaño, de lugar o de visibilidad.
-
- <p>Estos eventos llegan **después** del cambio, así que sirven para reaccionar y no para vetarlo.
+ * Whoever wants to hear that a component changed size, place or visibility.
+ *
+ * <p>These events arrive **after** the change, so they serve to react and not to veto it.
  */
 public interface ComponentListener extends EventListener {
 
-    /** Cambió de tamaño. */
+    /** It changed size. */
     void componentResized(ComponentEvent e);
 
-    /** Cambió de lugar. */
+    /** It changed place. */
     void componentMoved(ComponentEvent e);
 
-    /** Se hizo visible. */
+    /** It became visible. */
     void componentShown(ComponentEvent e);
 
-    /** Se ocultó. */
+    /** It was hidden. */
     void componentHidden(ComponentEvent e);
 }

@@ -3,38 +3,38 @@ package java.awt.event;
 import java.awt.AWTEvent;
 
 /**
- * Se ejecutó una acción: se apretó un botón, se eligió una opción, se dio Enter en un campo.
+ * An action was carried out: a button was pressed, an option chosen, Enter given in a field.
  *
- * <p>Es el evento de más alto nivel de AWT y por eso el más usado. No dice qué tecla ni qué botón:
- * dice que **pasó lo que el componente quería que pasara**, sin importar cómo se llegó. El mismo
- * evento sale de un clic, de la barra espaciadora o de un atajo de teclado.
+ * <p>It is AWT's highest-level event and therefore the most used one. It does not say which key or
+ * which button: it says that **what the component wanted to happen happened**, no matter how it was
+ * arrived at. The same event comes out of a click, of the space bar or of a keyboard shortcut.
  *
- * <p>El "comando" es una cadena que identifica **qué** acción fue, y sirve para que un solo oyente
- * atienda varios componentes sin comparar referencias.
+ * <p>The "command" is a string identifying **which** action it was, and it serves so that a single
+ * listener can attend to several components without comparing references.
  */
 public class ActionEvent extends AWTEvent {
 
     private static final long serialVersionUID = -7671078796273832149L;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int ACTION_FIRST = 1001;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int ACTION_LAST = 1001;
 
-    /** Se ejecutó la acción. */
+    /** The action was carried out. */
     public static final int ACTION_PERFORMED = 1001;
 
-    /** Alt estaba apretada. */
+    /** Alt was down. */
     public static final int ALT_MASK = 8;
 
-    /** Control estaba apretada. */
+    /** Control was down. */
     public static final int CTRL_MASK = 2;
 
-    /** Meta estaba apretada. */
+    /** Meta was down. */
     public static final int META_MASK = 4;
 
-    /** Mayúsculas estaba apretada. */
+    /** Shift was down. */
     public static final int SHIFT_MASK = 1;
 
     private final String actionCommand;
@@ -42,27 +42,27 @@ public class ActionEvent extends AWTEvent {
     private final int modifiers;
 
     /**
-     * Con la fuente, el identificador y el comando.
+     * With the source, the identifier and the command.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public ActionEvent(Object source, int id, String command) {
         this(source, id, command, 0, 0);
     }
 
     /**
-     * Como el anterior, con los modificadores.
+     * Like the previous one, with the modifiers.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public ActionEvent(Object source, int id, String command, int modifiers) {
         this(source, id, command, 0, modifiers);
     }
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public ActionEvent(Object source, int id, String command, long when, int modifiers) {
         super(source, id);
@@ -71,24 +71,24 @@ public class ActionEvent extends AWTEvent {
         this.modifiers = modifiers;
     }
 
-    /** Qué acción fue. */
+    /** Which action it was. */
     public String getActionCommand() {
         return this.actionCommand;
     }
 
-    /** Cuándo pasó. */
+    /** When it happened. */
     public long getWhen() {
         return this.when;
     }
 
-    /** Qué modificadores estaban apretados. */
+    /** Which modifiers were down. */
     public int getModifiers() {
         return this.modifiers;
     }
 
     public String paramString() {
-        String tipo = this.id == ACTION_PERFORMED ? "ACTION_PERFORMED" : "unknown type";
-        return tipo + ",cmd=" + this.actionCommand + ",when=" + this.when + ",modifiers="
+        String type = this.id == ACTION_PERFORMED ? "ACTION_PERFORMED" : "unknown type";
+        return type + ",cmd=" + this.actionCommand + ",when=" + this.when + ",modifiers="
                 + java.awt.event.InputEvent.getModifiersExText(this.modifiers);
     }
 }

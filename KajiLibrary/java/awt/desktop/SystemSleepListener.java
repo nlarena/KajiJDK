@@ -1,15 +1,15 @@
 package java.awt.desktop;
 
 /**
- * KajiLibrary's java.awt.desktop.SystemSleepListener -- escucha la suspension de la maquina.
+ * KajiLibrary's java.awt.desktop.SystemSleepListener -- listens for the machine suspending.
  *
- * <p>Se registra con {@code Desktop.addAppEventListener}. Ver {@link SystemSleepEvent}.
+ * <p>It is registered with {@code Desktop.addAppEventListener}. See {@link SystemSleepEvent}.
  */
 public interface SystemSleepListener extends SystemEventListener {
 
-    /** La maquina se va a suspender. */
+    /** The machine is about to suspend. */
     void systemAboutToSleep(SystemSleepEvent e);
 
-    /** La maquina desperto. */
+    /** The machine woke up. */
     void systemAwoke(SystemSleepEvent e);
 }

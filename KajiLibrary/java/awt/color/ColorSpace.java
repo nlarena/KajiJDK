@@ -3,33 +3,34 @@ package java.awt.color;
 import java.io.Serializable;
 
 /**
- * Un espacio de color: cuántos componentes tiene, qué rango tiene cada uno, y cómo se convierte a
- * sRGB y a CIEXYZ.
+ * A colour space: how many components it has, what range each of them has, and how it converts to
+ * sRGB and to CIEXYZ.
  *
- * <p>CIEXYZ es el eje de todo el diseño y conviene decir por qué: es un espacio **absoluto**, atado
- * a cómo ve el ojo humano y no a ningún dispositivo. Cualquier par de espacios se convierte entre sí
- * pasando por él, y por eso todo espacio tiene que saber ir y volver de XYZ aunque no sepa nada de
- * los demás. `toRGB`/`fromRGB` existen aparte porque el camino a sRGB es el que más se usa y hacerlo
- * en dos pasos sería más caro y menos exacto.
+ * <p>CIEXYZ is the axis of the whole design and it is worth saying why: it is an **absolute** space,
+ * tied to how the human eye sees and not to any device. Any pair of spaces converts between each
+ * other by passing through it, and that is why every space has to know how to go to and from XYZ
+ * even though it knows nothing about the others. `toRGB`/`fromRGB` exist separately because the road
+ * to sRGB is the most used one and doing it in two steps would be dearer and less exact.
  *
- * <h2>Los espacios estándar salen de perfiles ICC</h2>
+ * <h2>The standard spaces come out of ICC profiles</h2>
  *
- * <p>{@link #getInstance} devuelve un {@link ICC_ColorSpace}, como el JDK: detrás de cada uno hay
- * un {@link ICC_Profile} de verdad, con su matriz, sus curvas y su punto blanco. La diferencia con
- * el JDK es de dónde salen los bytes del perfil — el JDK los trae como archivo de recurso y acá se
- * **construyen** a partir de las constantes del estándar. El resultado es un perfil ICC válido que
- * se puede escribir a un archivo y que otro programa lee.
+ * <p>{@link #getInstance} returns an {@link ICC_ColorSpace}, as the JDK does: behind each one there
+ * is a real {@link ICC_Profile}, with its matrix, its curves and its white point. The difference from
+ * the JDK is where the profile's bytes come from — the JDK ships them as a resource file and here
+ * they are **built** out of the standard's constants. The result is a valid ICC profile that can be
+ * written to a file and that another program reads.
  *
- * <p>La consecuencia observable es que los números difieren en los últimos dígitos: los dos caminos
- * cuantizan a 16 bits pero no en los mismos puntos, así que el `toRGB({0.5,0.5,0.5})` del JDK sobre
- * sRGB da `0.5000076` y el de acá otro valor igual de cercano a 0.5. Una prueba que compare bit a
- * bit contra el JDK va a fallar; las de esta casa comparan con tolerancia y verifican
- * **propiedades** — ida y vuelta, puntos conocidos — en vez de dígitos.
+ * <p>The observable consequence is that the numbers differ in the last digits: both roads quantize to
+ * 16 bits but not at the same points, so the JDK's `toRGB({0.5,0.5,0.5})` over sRGB gives `0.5000076`
+ * and this one another value just as close to 0.5. A test comparing bit for bit against the JDK will
+ * fail; this house's tests compare with a tolerance and verify **properties** — round trips, known
+ * points — instead of digits.
  *
- * <p><strong>Lo único que falta es {@link #CS_PYCC}</strong>, y el motivo es concreto: PhotoYCC no
- * se define por fórmulas sino por tablas de interpolación de 230 KB que viven dentro de su perfil.
- * Sin ese archivo no hay nada que construir, y armar un perfil vacío con su firma sería un objeto
- * que dice ser PhotoYCC y no convierte como PhotoYCC. `getInstance(CS_PYCC)` tira diciendo eso.
+ * <p><strong>The one thing missing is {@link #CS_PYCC}</strong>, and the reason is concrete:
+ * PhotoYCC is defined not by formulas but by 230 KB of interpolation tables that live inside its
+ * profile. Without that file there is nothing to build, and assembling an empty profile with its
+ * signature would be an object claiming to be PhotoYCC that does not convert like PhotoYCC.
+ * `getInstance(CS_PYCC)` throws saying so.
  */
 public abstract class ColorSpace implements Serializable {
 
@@ -86,27 +87,27 @@ public abstract class ColorSpace implements Serializable {
     /** Genérico de 15 componentes. */
     public static final int TYPE_FCLR = 25;
 
-    /** El sRGB de siempre, con su curva de gamma. */
+    /** The usual sRGB, with its gamma curve. */
     public static final int CS_sRGB = 1000;
-    /** RGB **lineal**: los mismos primarios que sRGB pero sin la curva. */
+    /** **Linear** RGB: the same primaries as sRGB but without the curve. */
     public static final int CS_LINEAR_RGB = 1004;
-    /** CIEXYZ con blanco D50, que es el que usa ICC. */
+    /** CIEXYZ with a D50 white, which is the one ICC uses. */
     public static final int CS_CIEXYZ = 1001;
     /** PhotoYCC. **No disponible acá**; ver la nota de la clase. */
     public static final int CS_PYCC = 1002;
     /** Escala de grises lineal. */
     public static final int CS_GRAY = 1003;
 
-    // Los 20 y pico `TYPE_` que faltan (10 no existe: el JDK saltea el hueco entre CMYK y CMY) no
-    // son un olvido -- el estándar tampoco define un tipo 10.
+    // The twenty-odd `TYPE_` constants that are missing (there is no 10: the JDK skips the gap
+    // between CMYK and CMY) are not an oversight -- the standard does not define a type 10 either.
 
     private final int type;
     private final int numComponents;
 
     /**
-     * Un espacio de ese tipo y con esa cantidad de componentes.
+     * A space of that type and with that number of components.
      *
-     * @throws IllegalArgumentException si la cantidad de componentes es menor que 1
+     * @throws IllegalArgumentException if the number of components is less than 1
      */
     protected ColorSpace(int type, int numcomponents) {
         if (numcomponents < 1) {
@@ -116,19 +117,19 @@ public abstract class ColorSpace implements Serializable {
         this.numComponents = numcomponents;
     }
 
-    // Las instancias son únicas por identificador: `getInstance(CS_sRGB) == getInstance(CS_sRGB)`,
-    // como en el JDK. Se crean tarde porque construir las cinco al cargar la clase costaría el
-    // trabajo de las cuatro que nadie pidió.
+    // The instances are unique per identifier: `getInstance(CS_sRGB) == getInstance(CS_sRGB)`, as in
+    // the JDK. They are created late because building all five on class load would cost the work of
+    // the four nobody asked for.
     private static ColorSpace sRGBcs;
     private static ColorSpace linearRGBcs;
     private static ColorSpace xyzCS;
     private static ColorSpace grayCS;
 
     /**
-     * Uno de los espacios estándar.
+     * One of the standard spaces.
      *
-     * @throws IllegalArgumentException si el identificador no es uno de los `CS_`, o si es
-     *     {@link #CS_PYCC} — que existe como constante pero no como espacio en esta biblioteca
+     * @throws IllegalArgumentException if the identifier is not one of the `CS_`, or if it is
+     *     {@link #CS_PYCC} — which exists as a constant but not as a space in this library
      */
     public static ColorSpace getInstance(int colorspace) {
         if (colorspace == CS_sRGB) {
@@ -164,62 +165,62 @@ public abstract class ColorSpace implements Serializable {
             }
         }
         if (colorspace == CS_PYCC) {
-            // PhotoYCC se define **como perfil ICC** y no por una fórmula: sin el archivo del
-            // perfil no hay nada que calcular. Tirar es decir eso; devolver un sRGB disfrazado
-            // sería el miembro que miente.
+            // PhotoYCC is defined **as an ICC profile** and not by a formula: without the profile's
+            // file there is nothing to compute. Throwing says that; returning an sRGB in disguise
+            // would be the member that lies.
             throw new IllegalArgumentException(
-                    "CS_PYCC no está disponible: hace falta su perfil ICC, que esta biblioteca "
-                            + "no trae");
+                    "CS_PYCC is not available: it needs its ICC profile, which this library "
+                            + "does not ship");
         }
         throw new IllegalArgumentException("Unknown color space");
     }
 
-    /** Si es el sRGB estándar. */
+    /** Whether it is the standard sRGB. */
     public boolean isCS_sRGB() {
         return this == sRGBcs;
     }
 
     /**
-     * Este color, en sRGB.
+     * This colour, in sRGB.
      *
-     * @param colorvalue los componentes en este espacio
+     * @param colorvalue the components in this space
      */
     public abstract float[] toRGB(float[] colorvalue);
 
     /**
-     * Un color sRGB, en este espacio.
+     * An sRGB colour, in this space.
      *
-     * @param rgbvalue los tres componentes sRGB
+     * @param rgbvalue the three sRGB components
      */
     public abstract float[] fromRGB(float[] rgbvalue);
 
     /**
-     * Este color, en CIEXYZ con blanco D50.
+     * This colour, in CIEXYZ with a D50 white.
      *
-     * <p>D50 y no D65 porque es lo que usa ICC, y con eso las conversiones encadenadas no necesitan
-     * una adaptación cromática en el medio.
+     * <p>D50 and not D65 because that is what ICC uses, and with it the chained conversions need no
+     * chromatic adaptation in between.
      */
     public abstract float[] toCIEXYZ(float[] colorvalue);
 
-    /** Un color CIEXYZ (D50), en este espacio. */
+    /** A CIEXYZ (D50) colour, in this space. */
     public abstract float[] fromCIEXYZ(float[] colorvalue);
 
-    /** El `TYPE_` de este espacio. */
+    /** This space's `TYPE_`. */
     public int getType() {
         return this.type;
     }
 
-    /** Cuántos componentes tiene un color de este espacio. */
+    /** How many components a colour of this space has. */
     public int getNumComponents() {
         return this.numComponents;
     }
 
     /**
-     * El nombre del componente `idx`.
+     * The name of component `idx`.
      *
-     * <p>Por omisión, un nombre genérico. Las implementaciones que saben decir "Red" lo redefinen.
+     * <p>By default, a generic name. The implementations that can say "Red" override it.
      *
-     * @throws IllegalArgumentException si el índice no es un componente de este espacio
+     * @throws IllegalArgumentException if the index is not a component of this space
      */
     public String getName(int idx) {
         this.rangeCheck(idx);
@@ -227,9 +228,9 @@ public abstract class ColorSpace implements Serializable {
     }
 
     /**
-     * El valor mínimo del componente `idx`. Por omisión 0.
+     * The minimum value of component `idx`. 0 by default.
      *
-     * @throws IllegalArgumentException si el índice no es un componente de este espacio
+     * @throws IllegalArgumentException if the index is not a component of this space
      */
     public float getMinValue(int component) {
         this.rangeCheck(component);
@@ -237,16 +238,16 @@ public abstract class ColorSpace implements Serializable {
     }
 
     /**
-     * El valor máximo del componente `idx`. Por omisión 1.
+     * The maximum value of component `idx`. 1 by default.
      *
-     * @throws IllegalArgumentException si el índice no es un componente de este espacio
+     * @throws IllegalArgumentException if the index is not a component of this space
      */
     public float getMaxValue(int component) {
         this.rangeCheck(component);
         return 1.0f;
     }
 
-    // De paquete, como en el JDK: la usan las subclases de acá y no es API.
+    // Package-private, as in the JDK: the subclasses here use it and it is not API.
     final void rangeCheck(int component) {
         if (component < 0 || component > this.numComponents - 1) {
             throw new IllegalArgumentException(
@@ -254,11 +255,11 @@ public abstract class ColorSpace implements Serializable {
         }
     }
 
-    // ---- la matemática compartida ----------------------------------------------------------
+    // ---- the shared mathematics ------------------------------------------------------------
     //
-    // Las matrices son las del perfil sRGB de ICC, adaptadas a D50 por Bradford. Están escritas y
-    // no calculadas porque son constantes del estándar: recalcularlas en cada arranque sería
-    // trabajo para llegar a los mismos números con menos dígitos.
+    // The matrices are ICC's sRGB profile's, adapted to D50 by Bradford. They are written out and not
+    // computed because they are the standard's constants: recomputing them on every start would be
+    // work to arrive at the same numbers with fewer digits.
 
     static final float[] RGB_A_XYZ = {
         0.4360747f, 0.3850649f, 0.1430804f,
@@ -270,35 +271,34 @@ public abstract class ColorSpace implements Serializable {
         -0.9787684f, 1.9161415f, 0.0334540f,
         0.0719453f, -0.2289914f, 1.4052427f };
 
-    /** El blanco D50, que es el punto blanco de ICC. */
+    /** The D50 white, which is ICC's white point. */
     static final float[] BLANCO_D50 = { 0.9642f, 1.0f, 0.8249f };
 
     /**
-     * El techo de un componente XYZ.
+     * The ceiling of an XYZ component.
      *
-     * <p>No es 2 sino `2 - 1/32768`: XYZ se codifica en ICC como punto fijo de 16 bits con el 1 en
-     * 0x8000, así que el valor más grande representable es 0xFFFF/0x8000. El JDK contesta este
-     * mismo número.
+     * <p>It is not 2 but `2 - 1/32768`: XYZ is encoded in ICC as 16-bit fixed point with the 1 at
+     * 0x8000, so the largest representable value is 0xFFFF/0x8000. The JDK answers this same number.
      */
     static final float XYZ_MAX = 1.0f + (32767.0f / 32768.0f);
 
-    /** La curva de sRGB: de un componente con gamma a uno lineal (IEC 61966-2-1). */
-    static float aLineal(float c) {
+    /** sRGB's curve: from a component with gamma to a linear one (IEC 61966-2-1). */
+    static float toLinear(float c) {
         if (c <= 0.04045f) {
             return c / 12.92f;
         }
         return (float) Math.pow((c + 0.055) / 1.055, 2.4);
     }
 
-    /** La inversa: de lineal a sRGB. */
-    static float aGamma(float c) {
+    /** The inverse: from linear to sRGB. */
+    static float toGamma(float c) {
         if (c <= 0.0031308f) {
             return c * 12.92f;
         }
         return (float) (1.055 * Math.pow(c, 1.0 / 2.4) - 0.055);
     }
 
-    static float[] multiplicar(float[] m, float[] v) {
+    static float[] multiply(float[] m, float[] v) {
         float[] out = new float[3];
         out[0] = m[0] * v[0] + m[1] * v[1] + m[2] * v[2];
         out[1] = m[3] * v[0] + m[4] * v[1] + m[5] * v[2];
@@ -306,13 +306,13 @@ public abstract class ColorSpace implements Serializable {
         return out;
     }
 
-    static void exigir(float[] v, int n) {
+    static void require(float[] v, int n) {
         if (v == null) {
-            throw new NullPointerException("el color no puede ser nulo");
+            throw new NullPointerException("the colour cannot be null");
         }
         if (v.length < n) {
             throw new ArrayIndexOutOfBoundsException(
-                    "el color necesita " + n + " componentes y tiene " + v.length);
+                    "the colour needs " + n + " components and has " + v.length);
         }
     }
 }

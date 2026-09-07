@@ -3,18 +3,18 @@ package java.awt.datatransfer;
 import java.util.List;
 
 /**
- * Un {@link FlavorMap} que admite traducciones **de uno a varios**.
+ * A {@link FlavorMap} that admits **one-to-many** translations.
  *
- * <p>La correspondencia entre formatos y nombres nativos no es una biyección: un texto de Java puede
- * entregarse como varios formatos nativos distintos, y un formato nativo puede corresponder a varias
- * clases de Java. El mapa base devuelve uno solo, el mejor; esta interfaz devuelve la lista entera,
- * ordenada de mejor a peor.
+ * <p>The correspondence between formats and native names is not a bijection: a Java text may be
+ * handed over as several different native formats, and a native format may correspond to several
+ * Java classes. The base map returns a single one, the best; this interface returns the whole list,
+ * ordered from best to worst.
  */
 public interface FlavorTable extends FlavorMap {
 
-    /** Todos los nombres nativos que sirven para ese formato, del mejor al peor. */
+    /** Every native name that serves that format, from best to worst. */
     List<String> getNativesForFlavor(DataFlavor flav);
 
-    /** Todos los formatos que sirven para ese nombre nativo, del mejor al peor. */
+    /** Every format that serves that native name, from best to worst. */
     List<DataFlavor> getFlavorsForNative(String nat);
 }

@@ -6,39 +6,33 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-// Un socket de datagramas: el objeto que se configura para mandar y recibir UDP.
+// A datagram socket: the object that is configured to send and receive UDP.
 //
 // ===========================================================================================
-// QUE ENTRA Y QUE NO, Y DONDE ESTA EXACTAMENTE LA LINEA
+// WHERE THE LINE IS
 // ===========================================================================================
 //
-// La linea es la misma de todo `java.net` en KajiJDK: **entra lo que se configura, no entra lo que
-// transporta**. Un `DatagramSocket` es dos cosas pegadas --un puñado de opciones y un par de
-// metodos que mueven bytes-- y solo la primera se puede cumplir aca.
+// This header used to say that `send`, `receive` and the multicast memberships were not here because
+// there was no UDP stack in this VM, and that the line of the whole of `java.net` in KajiJDK was
+// "what is configured goes in, what transports does not". **Everything is in now.** The stack exists
+// --`jdk.internal.net.Net`, the same seam that opened TCP-- so all four are here, the constructors
+// that bind really bind, and `MulticastSocket` really joins groups.
 //
-// **YA ENTRA TODO.** Esta cabecera decia que `send`, `receive` y las membresias multicast no
-// entraban porque no habia pila de UDP en esta VM. Ahora la hay --`jdk.internal.net.Net`, la misma
-// costura que abrio TCP-- asi que los cuatro estan, los constructores que atan atan de verdad, y
-// `MulticastSocket` entra a los grupos de verdad.
+// **How a datagram is waited for.** The native does **not** block: it answers -3 when nothing has
+// arrived yet. It has to be that way, and it is not a convenience: this VM's Java threads share one
+// interpreter, so a native standing still waiting would not let the thread that was going to send the
+// packet run. `receive` waits on this side, retrying with a short `Thread.sleep` --sleeping releases
+// the interpreter-- and that is why it can really honour `setSoTimeout`.
 //
-// **Como se espera un datagrama.** El nativo **no bloquea**: contesta -3 cuando todavia no llego
-// nada. Tiene que ser asi, y no es una comodidad: los hilos de Java de esta VM comparten un
-// interprete, asi que un nativo parado esperando no deja correr al hilo que iba a mandar el
-// paquete. `receive` espera de este lado, reintentando con un `Thread.sleep` corto --dormir suelta
-// el interprete-- y por eso puede respetar `setSoTimeout` de verdad.
+// **On `connect`:** in UDP there is no handshake. `connect` is a **local** decision --it fixes who is
+// being talked to so that the rest of the datagrams are filtered-- and it sends not one byte. That is
+// why it is really implemented and not omitted: it records state, and everything observable
+// afterwards (`isConnected`, `getInetAddress`, `getPort`, `getRemoteSocketAddress`) is true.
 //
-// **Sobre `connect`:** en UDP no hay handshake. `connect` es una decision **local** --fija con
-// quien se habla para que el resto de los datagramas se filtren-- y no manda un solo byte.
-//
-// **Sobre `connect`:** en UDP no hay handshake. `connect` es una decision **local** -- fija con
-// quien se habla para que el resto de los datagramas se filtren-- y no manda un solo byte. Por eso
-// se implementa de verdad y no se omite: registra estado, y todo lo que se puede observar despues
-// (`isConnected`, `getInetAddress`, `getPort`, `getRemoteSocketAddress`) es cierto.
-//
-// **Sobre los valores por defecto de las opciones:** en el JDK los fija el sistema operativo y
-// cambian de maquina en maquina. Aca los fija esta clase, y estan documentados uno por uno. Ningun
-// programa correcto depende de ellos --por eso el JDK nunca los promete-- y lo que si se garantiza
-// es lo unico que importa de un objeto de configuracion: lo que se fija es lo que se lee.
+// **On the options' default values:** in the JDK the operating system sets them and they vary from
+// machine to machine. Here this class sets them, and they are documented one by one. No correct
+// program depends on them --which is why the JDK never promises them-- and what is guaranteed is the
+// only thing that matters about a configuration object: what is set is what is read.
 public class DatagramSocket implements Closeable {
 
     private static volatile DatagramSocketImplFactory factory;
@@ -50,7 +44,7 @@ public class DatagramSocket implements Closeable {
     private InetAddress remoteAddr;
     private int remotePort = -1;
 
-    /** El socket de la VM, o -1 si este no se ato. */
+    /** The VM's socket, or -1 if this one was not bound. */
     int handle = -1;
 
     // What a `DatagramChannel` needs in order to hand over the socket that wraps it. See
@@ -60,9 +54,8 @@ public class DatagramSocket implements Closeable {
         this.bound = true;
     }
 
-    // Valores por defecto: ver la nota de la cabecera. `soTimeout` en 0 significa "esperar para
-    // siempre" y es el unico que el JDK si fija en Java. Los otros son los que usa la mayoria de
-    // los sistemas.
+    // Default values: see the header's note. `soTimeout` at 0 means "wait forever" and is the only
+    // one the JDK does fix in Java. The others are the ones most systems use.
     private int soTimeout = 0;
     private int sendBufferSize = 65507;
     private int receiveBufferSize = 65507;
@@ -71,62 +64,61 @@ public class DatagramSocket implements Closeable {
     private int trafficClass = 0;
 
     /**
-     * Un socket atado a un puerto cualquiera de todas las placas.
+     * A socket bound to any port on every interface.
      *
-     * @throws SocketException siempre en KajiJDK -- no hay pila de UDP que abrir ni puerto que
-     *     atar. Para un socket **sin atar**, que si se puede tener y se puede configurar entero,
-     *     usar {@code new DatagramSocket(null)}.
+     * @throws SocketException if it could not be bound. For an **unbound** socket, which can be had
+     *     and configured in full, use {@code new DatagramSocket(null)}.
      */
     public DatagramSocket() throws SocketException {
         this.impl = null;
-        this.atar("0.0.0.0", 0);
+        this.bindTo("0.0.0.0", 0);
     }
 
     /**
-     * Un socket atado a {@code port} en todas las placas.
+     * A socket bound to {@code port} on every interface.
      *
-     * @throws SocketException siempre en KajiJDK; ver {@link #DatagramSocket()}
+     * @throws SocketException if it could not be bound
      */
     public DatagramSocket(int port) throws SocketException {
         this(port, null);
     }
 
     /**
-     * Un socket atado a {@code laddr}:{@code port}.
+     * A socket bound to {@code laddr}:{@code port}.
      *
-     * @throws IllegalArgumentException si el puerto esta fuera de rango
-     * @throws SocketException siempre en KajiJDK; ver {@link #DatagramSocket()}
+     * @throws IllegalArgumentException if the port is out of range
+     * @throws SocketException if it could not be bound
      */
     public DatagramSocket(int port, InetAddress laddr) throws SocketException {
         this.impl = null;
         if (port < 0 || port > 0xFFFF) {
             throw new IllegalArgumentException("Port out of range:" + port);
         }
-        this.atar(laddr == null ? "0.0.0.0" : laddr.getHostAddress(), port);
+        this.bindTo(laddr == null ? "0.0.0.0" : laddr.getHostAddress(), port);
     }
 
     /**
-     * Un socket atado a {@code bindaddr}, o **sin atar** si {@code bindaddr} es null.
+     * A socket bound to {@code bindaddr}, or **unbound** if {@code bindaddr} is null.
      *
-     * <p>El caso de null es el que anda entero en KajiJDK, y no es una excepcion inventada: el JDK
-     * lo documenta asi mismo ("si la direccion es null, crea un socket sin atar").
+     * <p>The null case is not an invented exception: the JDK documents it in just this way ("if the
+     * address is null, creates an unbound socket").
      *
-     * @throws SocketException si {@code bindaddr} no es null -- en KajiJDK no hay como atar
+     * @throws SocketException if it could not be bound
      */
     public DatagramSocket(SocketAddress bindaddr) throws SocketException {
-        this.impl = crearImpl();
+        this.impl = createImpl();
         if (bindaddr != null) {
             this.bind(bindaddr);
         }
     }
 
     /**
-     * Un socket sin atar, sobre la implementacion dada.
+     * An unbound socket over the given implementation.
      *
-     * <p>Es el constructor que usa una subclase que trae su propia pila. No ata nada, asi que anda
-     * completo.
+     * <p>It is the constructor a subclass bringing its own stack uses. It binds nothing, so it works
+     * in full.
      *
-     * @throws NullPointerException si {@code impl} es null
+     * @throws NullPointerException if {@code impl} is null
      */
     protected DatagramSocket(DatagramSocketImpl impl) {
         if (impl == null) {
@@ -135,64 +127,63 @@ public class DatagramSocket implements Closeable {
         this.impl = impl;
     }
 
-    private static DatagramSocketImpl crearImpl() {
+    private static DatagramSocketImpl createImpl() {
         DatagramSocketImplFactory f = factory;
         return f == null ? null : f.createDatagramSocketImpl();
     }
 
-    // Ata el socket de la VM y deja el handle. Es lo unico que hacen los constructores que atan y
-    // `bind`, y esta junto para que los cuatro caminos no se separen nunca.
-    private void atar(String host, int port) throws SocketException {
+    // Binds the VM's socket and keeps the handle. It is all the binding constructors and `bind` do,
+    // and it is kept together so that the four paths never drift apart.
+    private void bindTo(String host, int port) throws SocketException {
         int h = jdk.internal.net.Net.udpBind(host, port);
         if (h < 0) {
-            // El nativo no distingue "puerto ocupado" de "sin permiso"; el mensaje nombra lo unico
-            // que se sabe con certeza.
+            // The native does not tell "port taken" from "no permission"; the message names the only
+            // thing known for certain.
             throw new SocketException("Cannot bind: " + host + ":" + port);
         }
         this.handle = h;
         this.bound = true;
     }
 
-    private void chequearAbierto() throws SocketException {
+    private void checkOpen() throws SocketException {
         if (this.closed) {
             throw new SocketException("Socket is closed");
         }
     }
 
     /**
-     * Ata el socket a {@code addr}.
+     * Binds the socket to {@code addr}.
      *
-     * @throws SocketException siempre en KajiJDK, salvo que el socket este cerrado o ya atado, que
-     *     se chequean antes
+     * @throws SocketException if the socket is closed, already bound, or could not be bound
      */
     public void bind(SocketAddress addr) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (this.bound) {
             throw new SocketException("already bound");
         }
         if (addr != null && !(addr instanceof InetSocketAddress)) {
             throw new IllegalArgumentException("Unsupported address type");
         }
-        // Sin direccion, el comodin: atar a un puerto cualquiera de todas las placas, que es lo que
-        // el JDK documenta para `bind(null)`.
+        // With no address, the wildcard: bind to any port on every interface, which is what the JDK
+        // documents for `bind(null)`.
         String host = "0.0.0.0";
-        int puerto = 0;
+        int port = 0;
         if (addr != null) {
-            InetSocketAddress dir = (InetSocketAddress) addr;
-            if (dir.getAddress() != null && !dir.getAddress().isAnyLocalAddress()) {
-                host = dir.getAddress().getHostAddress();
+            InetSocketAddress isa = (InetSocketAddress) addr;
+            if (isa.getAddress() != null && !isa.getAddress().isAnyLocalAddress()) {
+                host = isa.getAddress().getHostAddress();
             }
-            puerto = dir.getPort();
+            port = isa.getPort();
         }
-        this.atar(host, puerto);
+        this.bindTo(host, port);
     }
 
     /**
-     * Fija con quien habla este socket.
+     * Fixes who this socket talks to.
      *
-     * <p>Es una decision local: no manda nada. Ver la nota de la cabecera.
+     * <p>It is a local decision: it sends nothing. See the header's note.
      *
-     * @throws IllegalArgumentException si la direccion es null o el puerto esta fuera de rango
+     * @throws IllegalArgumentException if the address is null or the port is out of range
      */
     public void connect(InetAddress address, int port) {
         if (port < 0 || port > 0xFFFF) {
@@ -209,10 +200,10 @@ public class DatagramSocket implements Closeable {
     }
 
     /**
-     * Como {@link #connect(InetAddress, int)}, con la direccion y el puerto juntos.
+     * Like {@link #connect(InetAddress, int)}, with the address and the port together.
      *
-     * @throws IllegalArgumentException si {@code addr} es null o no es una {@link InetSocketAddress}
-     * @throws SocketException si {@code addr} no tiene la direccion resuelta
+     * @throws IllegalArgumentException if {@code addr} is null or is not an {@link InetSocketAddress}
+     * @throws SocketException if {@code addr} does not have its address resolved
      */
     public void connect(SocketAddress addr) throws SocketException {
         if (addr == null) {
@@ -228,18 +219,18 @@ public class DatagramSocket implements Closeable {
         this.connect(epoint.getAddress(), epoint.getPort());
     }
 
-    /** Deja de estar fijado a un destino. Si no lo estaba, no hace nada. */
+    /** Stops being fixed to a destination. If it was not, it does nothing. */
     public void disconnect() {
         this.remoteAddr = null;
         this.remotePort = -1;
     }
 
-    /** Si el socket esta atado a un puerto local. */
+    /** Whether the socket is bound to a local port. */
     public boolean isBound() {
         return this.bound;
     }
 
-    /** Si el socket tiene fijado un destino. */
+    /** Whether the socket has a destination fixed. */
     public boolean isConnected() {
         return this.remoteAddr != null;
     }
@@ -249,12 +240,12 @@ public class DatagramSocket implements Closeable {
         return this.remoteAddr;
     }
 
-    /** El puerto del destino fijado, o -1. */
+    /** The fixed destination's port, or -1. */
     public int getPort() {
         return this.remotePort;
     }
 
-    /** El destino fijado como {@link SocketAddress}, o null si no hay. */
+    /** The fixed destination as a {@link SocketAddress}, or null if there is none. */
     public SocketAddress getRemoteSocketAddress() {
         if (!this.isConnected()) {
             return null;
@@ -262,7 +253,7 @@ public class DatagramSocket implements Closeable {
         return new InetSocketAddress(this.remoteAddr, this.remotePort);
     }
 
-    /** La direccion local a la que esta atado, o null si no esta atado. */
+    /** The local address it is bound to, or null if it is not bound. */
     public SocketAddress getLocalSocketAddress() {
         if (this.closed || !this.bound) {
             return null;
@@ -271,10 +262,10 @@ public class DatagramSocket implements Closeable {
     }
 
     /**
-     * La direccion local.
+     * The local address.
      *
-     * <p>Null si esta cerrado, y la direccion comodin si no esta atado -- que es el caso siempre en
-     * KajiJDK, y es lo que el JDK devuelve en la misma situacion.
+     * <p>Null if it is closed, and the wildcard address if it is not bound -- which is what the JDK
+     * returns in the same situation.
      */
     public InetAddress getLocalAddress() {
         if (this.closed) {
@@ -287,7 +278,7 @@ public class DatagramSocket implements Closeable {
                     // Es un literal numerico: esto no consulta ningun DNS.
                     return InetAddress.getByName(d);
                 } catch (UnknownHostException e) {
-                    // No puede pasar con un literal numerico; si pasara, cae al comodin de abajo.
+                    // It cannot happen with a numeric literal; if it did, it falls to the wildcard below.
                 }
             }
         }
@@ -298,7 +289,7 @@ public class DatagramSocket implements Closeable {
         }
     }
 
-    /** El puerto local: -1 si esta cerrado, 0 si no esta atado. */
+    /** The local port: -1 if it is closed, 0 if it is not bound. */
     public int getLocalPort() {
         if (this.closed) {
             return -1;
@@ -315,13 +306,13 @@ public class DatagramSocket implements Closeable {
     // ---- opciones ----
 
     /**
-     * Milisegundos que espera una recepcion; 0 es "para siempre".
+     * Milliseconds a reception waits; 0 is "forever".
      *
-     * @throws SocketException si el socket esta cerrado
-     * @throws IllegalArgumentException si el timeout es negativo
+     * @throws SocketException if the socket is closed
+     * @throws IllegalArgumentException if the timeout is negative
      */
     public void setSoTimeout(int timeout) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (timeout < 0) {
             throw new IllegalArgumentException("timeout < 0");
         }
@@ -329,21 +320,21 @@ public class DatagramSocket implements Closeable {
     }
 
     public int getSoTimeout() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.soTimeout;
     }
 
     /**
-     * Tamano sugerido del buffer de salida.
+     * Suggested size of the output buffer.
      *
-     * <p>"Sugerido" es del JDK, no una escapatoria de aca: el sistema operativo puede darte otro, y
-     * por eso el getter nunca prometio devolver lo mismo que pusiste. Aca no hay sistema que lo
-     * cambie, asi que devuelve exactamente lo que se fijo.
+     * <p>"Suggested" comes from the JDK, it is not a get-out of ours: the operating system may give
+     * you another, and that is why the getter never promised to return what you set. Here there is no
+     * system to change it, so it returns exactly what was set.
      *
-     * @throws IllegalArgumentException si el tamano no es positivo
+     * @throws IllegalArgumentException if the size is not positive
      */
     public void setSendBufferSize(int size) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (size <= 0) {
             throw new IllegalArgumentException("negative send size");
         }
@@ -351,17 +342,17 @@ public class DatagramSocket implements Closeable {
     }
 
     public int getSendBufferSize() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.sendBufferSize;
     }
 
     /**
-     * Tamano sugerido del buffer de entrada. Ver {@link #setSendBufferSize}.
+     * Suggested size of the input buffer. See {@link #setSendBufferSize}.
      *
-     * @throws IllegalArgumentException si el tamano no es positivo
+     * @throws IllegalArgumentException if the size is not positive
      */
     public void setReceiveBufferSize(int size) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (size <= 0) {
             throw new IllegalArgumentException("invalid receive size");
         }
@@ -369,29 +360,29 @@ public class DatagramSocket implements Closeable {
     }
 
     public int getReceiveBufferSize() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.receiveBufferSize;
     }
 
-    /** Si se puede reusar una direccion que quedo ocupada. */
+    /** Whether an address left taken may be reused. */
     public void setReuseAddress(boolean on) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         this.reuseAddress = on;
     }
 
     public boolean getReuseAddress() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.reuseAddress;
     }
 
     /** Si se pueden mandar datagramas a la direccion de broadcast. */
     public void setBroadcast(boolean on) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         this.broadcast = on;
     }
 
     public boolean getBroadcast() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.broadcast;
     }
 
@@ -401,7 +392,7 @@ public class DatagramSocket implements Closeable {
      * @throws IllegalArgumentException si no entra en un byte
      */
     public void setTrafficClass(int tc) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (tc < 0 || tc > 255) {
             throw new IllegalArgumentException("tc is not in range 0 -- 255");
         }
@@ -409,18 +400,18 @@ public class DatagramSocket implements Closeable {
     }
 
     public int getTrafficClass() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.trafficClass;
     }
 
     /**
-     * Fija una opcion por su constante tipada.
+     * Sets an option by its typed constant.
      *
-     * @throws UnsupportedOperationException si esta clase no soporta esa opcion
-     * @throws IllegalArgumentException si el valor no sirve para esa opcion
+     * @throws UnsupportedOperationException if this class does not support that option
+     * @throws IllegalArgumentException if the value is no good for that option
      */
     public <T> DatagramSocket setOption(SocketOption<T> name, T value) throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (name == null) {
             throw new NullPointerException();
         }
@@ -441,12 +432,12 @@ public class DatagramSocket implements Closeable {
     }
 
     /**
-     * El valor de una opcion.
+     * An option's value.
      *
-     * @throws UnsupportedOperationException si esta clase no soporta esa opcion
+     * @throws UnsupportedOperationException if this class does not support that option
      */
     public <T> T getOption(SocketOption<T> name) throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (name == null) {
             throw new NullPointerException();
         }
@@ -468,7 +459,7 @@ public class DatagramSocket implements Closeable {
         throw new UnsupportedOperationException("'" + name + "' not supported");
     }
 
-    /** Las opciones que este socket entiende. */
+    /** The options this socket understands. */
     public Set<SocketOption<?>> supportedOptions() {
         Set<SocketOption<?>> s = new HashSet<SocketOption<?>>();
         s.add(StandardSocketOptions.SO_SNDBUF);
@@ -481,7 +472,7 @@ public class DatagramSocket implements Closeable {
 
     // ---- ciclo de vida ----
 
-    /** Cierra el socket. Cerrar dos veces no hace nada, que es lo que exige {@link Closeable}. */
+    /** Closes the socket. Closing twice does nothing, which is what {@link Closeable} requires. */
     public void close() {
         if (this.closed) {
             return;
@@ -499,20 +490,20 @@ public class DatagramSocket implements Closeable {
     }
 
     /**
-     * El canal NIO asociado, o null.
+     * The associated NIO channel, or null.
      *
-     * <p>Null salvo que el socket haya salido de un `DatagramChannel`, que es lo que hace el JDK:
-     * un socket creado con `new` no tiene canal.
+     * <p>Null unless the socket came out of a `DatagramChannel`, which is what the JDK does: a socket
+     * created with `new` has no channel.
      */
     public java.nio.channels.DatagramChannel getChannel() {
         return null;
     }
 
     /**
-     * Instala la factoria de implementaciones para toda la VM. Una sola vez.
+     * Installs the implementation factory for the whole VM. Once only.
      *
-     * @throws Error si ya se habia instalado una
-     * @deprecated el JDK deprecio el mecanismo de {@link DatagramSocketImpl}
+     * @throws Error if one had already been installed
+     * @deprecated the JDK deprecated the {@link DatagramSocketImpl} mechanism
      */
     @Deprecated
     public static synchronized void setDatagramSocketImplFactory(DatagramSocketImplFactory fac)
@@ -526,39 +517,40 @@ public class DatagramSocket implements Closeable {
     // ---- mover datagramas -------------------------------------------------------------------
 
     /**
-     * Manda ese datagrama.
+     * Sends that datagram.
      *
-     * <p>Si el socket esta conectado, el paquete puede no traer destino: se usa el fijado. Si trae
-     * uno **distinto** del fijado, se rechaza, que es lo que exige el contrato.
+     * <p>If the socket is connected, the packet may carry no destination: the fixed one is used. If
+     * it carries one **different** from the fixed one, it is refused, which is what the contract
+     * requires.
      *
-     * @throws IOException si el datagrama no se pudo mandar entero
-     * @throws IllegalArgumentException si el paquete no tiene destino y el socket no esta conectado
-     * @throws SocketException si el socket esta cerrado
+     * @throws IOException if the datagram could not be sent whole
+     * @throws IllegalArgumentException if the packet has no destination and the socket is not connected
+     * @throws SocketException if the socket is closed
      */
     public void send(DatagramPacket p) throws IOException {
         if (p == null) {
             throw new NullPointerException("p");
         }
-        this.chequearAbierto();
+        this.checkOpen();
         InetAddress destino = p.getAddress();
-        int puerto = p.getPort();
+        int port = p.getPort();
         if (this.isConnected()) {
             if (destino == null) {
                 destino = this.remoteAddr;
-                puerto = this.remotePort;
-            } else if (!destino.equals(this.remoteAddr) || puerto != this.remotePort) {
+                port = this.remotePort;
+            } else if (!destino.equals(this.remoteAddr) || port != this.remotePort) {
                 throw new IllegalArgumentException("connected address and packet address differ");
             }
         }
         if (destino == null) {
             throw new IllegalArgumentException("Address not set");
         }
-        // Mandar sin atar ata: el sistema elige el puerto de salida. Es lo que hace el JDK, y sin
-        // esto un `new DatagramSocket(null)` que solo manda no podria mandar nunca.
+        // Sending while unbound binds: the system chooses the outgoing port. It is what the JDK does,
+        // and without it a `new DatagramSocket(null)` that only sends could never send.
         if (this.handle < 0) {
-            this.atar("0.0.0.0", 0);
+            this.bindTo("0.0.0.0", 0);
         }
-        boolean ok = jdk.internal.net.Net.udpSend(this.handle, destino.getHostAddress(), puerto,
+        boolean ok = jdk.internal.net.Net.udpSend(this.handle, destino.getHostAddress(), port,
                 p.getData(), p.getOffset(), p.getLength());
         if (!ok) {
             throw new IOException("send failed");
@@ -566,26 +558,27 @@ public class DatagramSocket implements Closeable {
     }
 
     /**
-     * Espera un datagrama y lo deja en {@code p}, junto con quien lo mando.
+     * Waits for a datagram and leaves it in {@code p}, together with who sent it.
      *
-     * <p>Respeta {@link #setSoTimeout}: el nativo no espera --contesta "todavia no" en el acto-- y
-     * quien cuenta el tiempo es este metodo, que es el que sabe cuando empezo a esperar.
+     * <p>It honours {@link #setSoTimeout}: the native does not wait --it answers "not yet" on the
+     * spot-- and the one counting the time is this method, which is the one that knows when it
+     * started waiting.
      *
-     * <p>Es `synchronized` porque recibir y preguntar de quien vino son **una sola operacion**
-     * partida en tres llamadas al nativo; sin el candado, dos hilos recibiendo sobre el mismo socket
-     * podrian llevarse el remitente del otro.
+     * <p>It is `synchronized` because receiving and asking who it came from are **a single
+     * operation** split into three calls to the native; without the lock, two threads receiving over
+     * the same socket could take each other's sender.
      *
-     * @throws SocketTimeoutException si vencio el plazo sin que llegara nada
-     * @throws IOException si fallo la recepcion
+     * @throws SocketTimeoutException if the deadline expired with nothing arriving
+     * @throws IOException if the reception failed
      */
     public synchronized void receive(DatagramPacket p) throws IOException {
         if (p == null) {
             throw new NullPointerException("p");
         }
-        this.chequearAbierto();
+        this.checkOpen();
         if (this.handle < 0) {
-            // Recibir sin atar ata, igual que mandar.
-            this.atar("0.0.0.0", 0);
+            // Receiving while unbound binds, just as sending does.
+            this.bindTo("0.0.0.0", 0);
         }
         long comienzo = System.currentTimeMillis();
         byte[] buf = p.getData();
@@ -610,9 +603,9 @@ public class DatagramSocket implements Closeable {
             throw new IOException("receive failed");
         }
         p.setLength(n);
-        String dir = jdk.internal.net.Net.udpSenderAddress(this.handle);
-        if (dir != null) {
-            p.setAddress(InetAddress.getByName(dir));
+        String isa = jdk.internal.net.Net.udpSenderAddress(this.handle);
+        if (isa != null) {
+            p.setAddress(InetAddress.getByName(isa));
             p.setPort(jdk.internal.net.Net.udpSenderPort(this.handle));
         }
     }
@@ -620,46 +613,46 @@ public class DatagramSocket implements Closeable {
     // ---- multicast --------------------------------------------------------------------------
 
     /**
-     * Entra al grupo multicast {@code mcastaddr} por la placa {@code netIf}.
+     * Joins the multicast group {@code mcastaddr} through the interface {@code netIf}.
      *
-     * @param netIf null deja que el sistema elija la placa, que es lo que documenta el JDK
-     * @throws SocketException si la direccion no es multicast -- que es lo que tira el JDK 25,
-     *     aunque su javadoc prometa `IllegalArgumentException`
-     * @throws IOException si no se pudo entrar al grupo
-     * @throws IllegalArgumentException si la direccion no es una {@link InetSocketAddress}
+     * @param netIf null lets the system choose the interface, which is what the JDK documents
+     * @throws SocketException if the address is not multicast -- which is what JDK 25 throws, even
+     *     though its javadoc promises `IllegalArgumentException`
+     * @throws IOException if the group could not be joined
+     * @throws IllegalArgumentException if the address is not an {@link InetSocketAddress}
      */
     public void joinGroup(SocketAddress mcastaddr, NetworkInterface netIf) throws IOException {
-        this.membresia(mcastaddr, netIf, true);
+        this.membership(mcastaddr, netIf, true);
     }
 
     /**
-     * Sale del grupo multicast {@code mcastaddr}. Ver {@link #joinGroup(SocketAddress,
+     * Leaves the multicast group {@code mcastaddr}. See {@link #joinGroup(SocketAddress,
      * NetworkInterface)}.
      *
-     * @throws IOException si no se pudo salir del grupo
+     * @throws IOException if the group could not be left
      */
     public void leaveGroup(SocketAddress mcastaddr, NetworkInterface netIf) throws IOException {
-        this.membresia(mcastaddr, netIf, false);
+        this.membership(mcastaddr, netIf, false);
     }
 
-    // Entrar y salir de un grupo resuelven exactamente lo mismo --la direccion, la placa, y si son
-    // v4 o v6--, asi que estan juntos: separarlos duplicaria esa resolucion, que es donde estan
-    // todos los casos raros.
-    private void membresia(SocketAddress mcastaddr, NetworkInterface netIf, boolean entrar)
+    // Joining and leaving a group resolve exactly the same things --the address, the interface, and
+    // whether they are v4 or v6-- so they are kept together: separating them would duplicate that
+    // resolution, which is where all the odd cases live.
+    private void membership(SocketAddress mcastaddr, NetworkInterface netIf, boolean entrar)
             throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (!(mcastaddr instanceof InetSocketAddress)) {
             throw new IllegalArgumentException("Unsupported address type");
         }
         InetAddress grupo = ((InetSocketAddress) mcastaddr).getAddress();
         if (grupo == null || !grupo.isMulticastAddress()) {
-            // El javadoc del JDK dice `IllegalArgumentException`, pero el JDK 25 tira
-            // `SocketException("Not a multicast address")`. Se sigue lo que **hace**, no lo que
-            // dice: es lo que un programa que corra contra los dos va a atrapar.
+            // The JDK's javadoc says `IllegalArgumentException`, but JDK 25 throws
+            // `SocketException("Not a multicast address")`. What it **does** is followed, not what it
+            // says: it is what a program running against both will catch.
             throw new SocketException("Not a multicast address");
         }
         if (this.handle < 0) {
-            this.atar("0.0.0.0", 0);
+            this.bindTo("0.0.0.0", 0);
         }
         String placa = DatagramSocket.nombrarPlaca(grupo, netIf);
         boolean ok = entrar
@@ -670,8 +663,8 @@ public class DatagramSocket implements Closeable {
         }
     }
 
-    // Como nombrar la placa para el nativo: en IPv4 se la nombra por direccion y en IPv6 por
-    // indice, y son dos cadenas distintas. La cadena vacia significa "la que elija el sistema".
+    // How to name the interface for the native: in IPv4 it is named by address and in IPv6 by index,
+    // and they are two different strings. The empty string means "whichever the system chooses".
     static String nombrarPlaca(InetAddress grupo, NetworkInterface netIf) {
         if (netIf == null) {
             return "";
@@ -686,8 +679,8 @@ public class DatagramSocket implements Closeable {
                 return d.getHostAddress();
             }
         }
-        // Una placa sin ninguna direccion IPv4 no puede recibir multicast v4; que el sistema elija
-        // es mas util que fallar, y es lo que hace el JDK con una placa sin direcciones.
+        // An interface with no IPv4 address cannot receive v4 multicast; letting the system choose is
+        // more useful than failing, and it is what the JDK does with an interface with no addresses.
         return "";
     }
 }

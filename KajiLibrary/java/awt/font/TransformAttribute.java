@@ -4,31 +4,31 @@ import java.awt.geom.AffineTransform;
 import java.io.Serializable;
 
 /**
- * Una {@link AffineTransform} envuelta para poder usarse como valor de atributo de texto.
+ * An {@link AffineTransform} wrapped so that it can be used as a text attribute's value.
  *
- * <p>La envoltura no es burocracia. `AffineTransform` es **mutable**, y un atributo de texto se
- * guarda en mapas y se comparte entre tramos: si el valor fuera la transformación misma, cambiarla
- * desde afuera cambiaría el estilo de todo lo que la usara. Acá se copia al entrar y al salir, así
- * que lo que se guarda es un valor.
+ * <p>The wrapper is not bureaucracy. `AffineTransform` is **mutable**, and a text attribute is kept
+ * in maps and shared between stretches: if the value were the transform itself, changing it from
+ * outside would change the style of everything using it. Here it is copied on the way in and on the
+ * way out, so what is kept is a value.
  *
- * <p>Una transformación identidad se guarda como `null` adentro. Es la forma de que
- * {@link #isIdentity} sea una comparación contra `null` y no un recorrido de seis coeficientes, que
- * es una pregunta que se hace por cada tramo de texto que se dibuja.
+ * <p>An identity transform is kept as `null` inside. It is the way for {@link #isIdentity} to be a
+ * comparison against `null` and not a walk over six coefficients, which is a question asked for every
+ * stretch of text that is drawn.
  */
 public final class TransformAttribute implements Serializable {
 
     private static final long serialVersionUID = 3356247357827709530L;
 
-    /** La transformación que no hace nada. */
+    /** The transform that does nothing. */
     public static final TransformAttribute IDENTITY = new TransformAttribute(null);
 
     private final AffineTransform transform;
 
     /**
-     * Con la transformación dada, que se copia.
+     * With the given transform, which is copied.
      *
-     * <p>Acepta `null` y lo toma como la identidad. La documentación del JDK dice que tira, pero su
-     * implementación lo acepta, y es lo que hace lo que vale.
+     * <p>It accepts `null` and takes it as the identity. The JDK's documentation says it throws, but
+     * its implementation accepts it, and what it does is what counts.
      */
     public TransformAttribute(AffineTransform transform) {
         if (transform != null && !transform.isIdentity()) {
@@ -38,7 +38,7 @@ public final class TransformAttribute implements Serializable {
         }
     }
 
-    /** Una copia de la transformación; la identidad si no hay. */
+    /** A copy of the transform; the identity if there is none. */
     public AffineTransform getTransform() {
         AffineTransform at = this.transform;
         if (at == null) {
@@ -47,7 +47,7 @@ public final class TransformAttribute implements Serializable {
         return new AffineTransform(at);
     }
 
-    /** Si no hace nada. */
+    /** Whether it does nothing. */
     public boolean isIdentity() {
         return this.transform == null;
     }
@@ -59,7 +59,7 @@ public final class TransformAttribute implements Serializable {
         return this.transform.hashCode();
     }
 
-    /** Igualdad por la transformación que envuelve. */
+    /** Equality by the transform it wraps. */
     public boolean equals(Object rhs) {
         if (rhs == null) {
             return false;

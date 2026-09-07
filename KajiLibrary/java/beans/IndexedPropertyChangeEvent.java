@@ -1,7 +1,7 @@
 package java.beans;
 
-// El cambio de UN elemento de una propiedad indexada. Sin el indice el oyente tendria que
-// recorrer el arreglo entero para saber que se movio.
+// The change of ONE element of an indexed property. Without the index the listener would have to
+// walk the whole array to know what moved.
 public class IndexedPropertyChangeEvent extends PropertyChangeEvent {
 
     private int index;

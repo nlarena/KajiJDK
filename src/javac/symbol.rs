@@ -298,8 +298,19 @@ impl SymbolTable {
 
     /// Guarda el mapa de **valores de campos constantes** (ver [`Self::const_fields`]). Lo produce el
     /// plegado de constantes (fixpoint) tras el atributado, antes del desugar.
+    ///
+    /// **Extiende, no reemplaza**: las constantes de los tipos del **classpath** se registran mucho
+    /// antes, al entrar cada `.class`, y pisarlas acá dejaba sin plegar cualquier
+    /// `case OtraClase.CONSTANTE:` que viniera de afuera de la compilación (finding #503). Las de
+    /// esta compilación ganan si el mismo símbolo estuviera en los dos, que no puede pasar.
     pub(crate) fn set_const_fields(&mut self, map: HashMap<SymbolId, super::codegen::ConstVal>) {
-        self.const_fields = map;
+        self.const_fields.extend(map);
+    }
+
+    /// Registra el valor constante de **un** campo, leído del atributo `ConstantValue` de un
+    /// `.class` del classpath. Ver [`Self::set_const_fields`].
+    pub(crate) fn add_const_field(&mut self, id: SymbolId, v: super::codegen::ConstVal) {
+        self.const_fields.insert(id, v);
     }
 
     /// El mapa de **campos constantes** de la unidad (`SymbolId del campo → valor plegado`), que el

@@ -1,24 +1,24 @@
 package java.applet;
 
 /**
- * Un sonido que se puede reproducir, repetir y parar.
+ * A sound that can be played, looped and stopped.
  *
- * <p>Es la interfaz de sonido más vieja de Java —anterior a `javax.sound`— y por eso no dice nada
- * del formato ni del volumen: sólo tres verbos. {@link #loop} no es "reproducir varias veces" sino
- * "reproducir hasta que alguien pare", que es la diferencia entre una música de fondo y un aviso.
+ * <p>It is Java's oldest sound interface —older than `javax.sound`— and that is why it says nothing
+ * about the format or the volume: only three verbs. {@link #loop} is not "play several times" but
+ * "play until somebody stops it", which is the difference between background music and a chime.
  *
- * @deprecated el modelo de applets está en desuso desde Java 9 y marcado para borrarse desde 17; el
- *     sonido se maneja con `javax.sound.sampled`.
+ * @deprecated the applet model has been deprecated since Java 9 and marked for removal since 17;
+ *     sound is handled with `javax.sound.sampled`.
  */
 @Deprecated(since = "9", forRemoval = true)
 public interface AudioClip {
 
-    /** Lo reproduce una vez desde el principio; si ya sonaba, arranca de nuevo. */
+    /** Plays it once from the start; if it was already sounding, it starts again. */
     void play();
 
-    /** Lo reproduce en bucle hasta que alguien llame a {@link #stop}. */
+    /** Plays it in a loop until somebody calls {@link #stop}. */
     void loop();
 
-    /** Lo para, esté sonando una vez o en bucle. */
+    /** Stops it, whether it is sounding once or in a loop. */
     void stop();
 }

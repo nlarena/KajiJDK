@@ -3,41 +3,39 @@ package java.awt.geom;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-// El motor de las operaciones booleanas de Area (no es API).
+// The engine of Area's boolean operations (not API).
 //
-// La forma clasica de resolver esto --la del JDK-- es un barrido por lineas de exploracion que va
-// clasificando los bordes activos a medida que baja. Es rapido y es un infierno de casos de borde:
-// el orden de la lista activa hay que mantenerlo mientras dos curvas se cruzan, y cada empate
-// numerico se paga en el resultado.
+// The classic way of settling this --the JDK's-- is a sweep by scan lines that classifies the active
+// edges as it goes down. It is fast and it is an inferno of edge cases: the active list's order has
+// to be kept while two curves cross, and every numeric tie is paid for in the result.
 //
-// Aca esta hecho al reves, en tres pasadas independientes, y a proposito:
+// Here it is done the other way round, in three independent passes, and on purpose:
 //
-//   1. **Partir.** Se cortan todas las curvas contra todas en sus intersecciones. Al terminar,
-//      ninguna curva atraviesa el interior de otra: solo se tocan en las puntas. Cuadratico en la
-//      cantidad de trozos, y ahi se paga la simplicidad de lo que sigue.
+//   1. **Split.** Every curve is cut against every other at their intersections. When that is over,
+//      no curve passes through another's interior: they only touch at the tips. Quadratic in the
+//      number of pieces, and that is where the simplicity of what follows is paid for.
 //
-//   2. **Clasificar.** Cada trozo se mira **solo a el**: se evalua en su punto medio --que por lo
-//      de arriba no es punta de nadie ni lo cruza nadie-- y se cuenta el numero de vuelta de cada
-//      operando tirando un rayo hacia -X. Con eso se sabe si el operando esta adentro justo a la
-//      izquierda y justo a la derecha del trozo; se aplica la operacion booleana a los dos lados; y
-//      el trozo sobrevive si y solo si los dos lados dan distinto. No hay estado compartido entre
-//      trozos, asi que un empate mal resuelto en uno no contamina a los demas.
+//   2. **Classify.** Each piece is looked at **on its own**: it is evaluated at its midpoint
+//      --which, by the above, is nobody's tip and is crossed by nobody-- and each operand's winding
+//      number is counted by casting a ray towards -X. That tells whether the operand is inside just
+//      to the left and just to the right of the piece; the boolean operation is applied to both
+//      sides; and the piece survives if and only if the two sides come out different. There is no
+//      state shared between pieces, so a tie settled wrongly in one does not contaminate the rest.
 //
-//   3. **Cerrar.** Los tramos horizontales se descartaron al construir los trozos, asi que los
-//      lazos quedan con agujeros horizontales. Se rehacen con el mismo criterio del paso 2, pero
-//      preguntando arriba y abajo en vez de izquierda y derecha, en cada Y donde algun trozo
-//      sobreviviente tiene una punta.
+//   3. **Close.** The horizontal stretches were discarded when the pieces were built, so the loops
+//      are left with horizontal holes. They are remade with pass 2's criterion, but asking above and
+//      below instead of left and right, at every Y where some surviving piece has a tip.
 //
-// Dos curvas exactamente coincidentes --dos rectangulos que comparten un lado, o el XOR de una
-// figura consigo misma-- no se cortan entre si: se **agrupan**, y el grupo lleva la suma de las
-// direcciones y la cuenta de trozos de cada operando. Eso es lo que hace que el caso pegado
-// funcione sin epsilons: los dos bordes son un solo objeto geometrico con contribucion +2, o +1 y
-// -1, o la que sea.
+// Two exactly coincident curves --two rectangles sharing a side, or the XOR of a shape with itself--
+// are not cut against each other: they are **grouped**, and the group carries the sum of the
+// directions and each operand's count of pieces. That is what makes the abutting case work without
+// epsilons: the two edges are a single geometric object with contribution +2, or +1 and -1, or
+// whatever it may be.
 //
-// La orientacion del resultado es "el interior queda a la derecha del trozo cuando se recorre de
-// arriba hacia abajo", que le da vuelta +1 a los puntos interiores con la regla no-cero. Es una de
-// las dos orientaciones validas y no coincide necesariamente con la que elige el JDK; la regla de
-// relleno es no-cero en los dos casos, asi que la region es la misma.
+// The result's orientation is "the interior ends up to the right of the piece when it is walked top
+// to bottom", which gives interior points winding +1 with the non-zero rule. It is one of the two
+// valid orientations and does not necessarily agree with the one the JDK chooses; the fill rule is
+// non-zero in both cases, so the region is the same.
 final class AreaOp {
 
     static final int ADD = 0;
@@ -48,7 +46,8 @@ final class AreaOp {
     private AreaOp() {
     }
 
-    // Un objeto geometrico del plano ya partido: los trozos coincidentes caen todos en el mismo.
+    // One geometric object of the already split plane: the coincident pieces all fall into the
+    // same one.
     private static final class Group {
         AreaCurve rep;
         int dirL;
@@ -58,7 +57,7 @@ final class AreaOp {
         int keep;
     }
 
-    // Un borde del resultado, con los puntos de control ya en el orden en que se recorre.
+    // One edge of the result, with the control points already in the order it is walked in.
     private static final class Edge {
         int order;
         double[] c;
@@ -66,8 +65,8 @@ final class AreaOp {
     }
 
     /**
-     * La operacion `op` entre los trozos marcados LEFT (con regla `ruleL`) y los marcados RIGHT
-     * (con regla `ruleR`), como camino cerrado con regla no-cero.
+     * The `op` operation between the pieces marked LEFT (with rule `ruleL`) and those marked RIGHT
+     * (with rule `ruleR`), as a closed path with the non-zero rule.
      */
     static Path2D compute(ArrayList<AreaCurve> curves, int ruleL, int ruleR, int op) {
         Path2D path = Path2D.newDouble(PathIterator.WIND_NON_ZERO);
@@ -88,7 +87,7 @@ final class AreaOp {
         return path;
     }
 
-    // --- paso 1: partir --------------------------------------------------------------------------
+    // --- pass 1: split ---------------------------------------------------------------------------
 
     private static ArrayList<AreaCurve> split(ArrayList<AreaCurve> curves) {
         int n = curves.size();
@@ -126,10 +125,10 @@ final class AreaOp {
         return pieces;
     }
 
-    // El punto de corte se elige una sola vez para las dos curvas: si cae sobre una punta se usa
-    // esa punta tal cual (asi el trozo vecino, que no se parte, sigue pegado con igualdad exacta) y
-    // si no, el promedio de las dos evaluaciones. Sin este acuerdo los dos trozos terminarian en
-    // puntos que difieren en el ulp y el encadenado no los uniria.
+    // The cut point is chosen once only for both curves: if it falls on a tip that tip is used as
+    // it stands (that way the neighbouring piece, which is not split, stays joined by exact
+    // equality) and if not, the average of the two evaluations. Without this agreement the two
+    // pieces would end at points differing by an ulp and the chaining would not join them.
     private static void recordCut(AreaCurve a, double ta, AreaCurve b, double tb,
                                   ArrayList<double[]> cutsA, ArrayList<double[]> cutsB) {
         double tol = 1.0e-9 * scaleOf(a, b);
@@ -270,7 +269,7 @@ final class AreaOp {
         }
     }
 
-    // --- paso 2: agrupar y clasificar ------------------------------------------------------------
+    // --- pass 2: group and classify --------------------------------------------------------------
 
     private static ArrayList<Group> group(ArrayList<AreaCurve> pieces) {
         HashMap<String, Group> byKey = new HashMap<String, Group>();
@@ -372,7 +371,7 @@ final class AreaOp {
         return a != b;
     }
 
-    // --- paso 3: los tramos horizontales ---------------------------------------------------------
+    // --- pass 3: the horizontal stretches --------------------------------------------------------
 
     private static void horizontals(ArrayList<Group> groups, int ruleL, int ruleR, int op,
                                     ArrayList<Edge> out) {
@@ -409,8 +408,8 @@ final class AreaOp {
 
     private static void horizontalsAt(ArrayList<Group> groups, double y, int ruleL, int ruleR,
                                       int op, ArrayList<Edge> out) {
-        // Las X donde el borde del resultado corta esta altura. Entre dos cortes consecutivos, el
-        // "adentro" no cambia, asi que basta preguntar en el medio.
+        // The Xs where the result's edge cuts this height. Between two consecutive cuts the
+        // "inside" does not change, so asking in the middle is enough.
         ArrayList<double[]> xs = new ArrayList<double[]>();
         int i = 0;
         while (i < groups.size()) {
@@ -450,8 +449,8 @@ final class AreaOp {
         }
     }
 
-    // El resultado justo arriba (o justo abajo) de (mx, y). "Justo arriba" son los grupos que
-    // todavia existen en y-delta: los que empiezan antes de `y` y no terminaron antes de llegar.
+    // The result just above (or just below) (mx, y). "Just above" means the groups that still
+    // exist at y-delta: those beginning before `y` and not ended before reaching it.
     private static boolean horizontalSide(ArrayList<Group> groups, double mx, double y,
                                           boolean above, int ruleL, int ruleR, int op) {
         int wL = 0;
@@ -478,7 +477,7 @@ final class AreaOp {
         return apply(op, inside(wL, cL, ruleL), inside(wR, cR, ruleR));
     }
 
-    // --- cierre: armar los lazos -----------------------------------------------------------------
+    // --- closing: building the loops -------------------------------------------------------------
 
     private static Edge edgeFromCurve(AreaCurve c, int keep) {
         Edge e = new Edge();
@@ -516,8 +515,8 @@ final class AreaOp {
                 while (current != null && steps < limit) {
                     current.used = true;
                     Edge next = nextEdge(byStart, current);
-                    // El ultimo tramo recto de un lazo lo dibuja `closePath`: emitirlo tambien
-                    // dejaria un `lineTo` redundante al punto de partida en cada subcamino.
+                    // A loop's last straight stretch is drawn by `closePath`: emitting it as well
+                    // would leave a redundant `lineTo` to the starting point in every subpath.
                     boolean lastLine = next == null && current.order == 1
                             && current.c[2] == e.c[0] && current.c[3] == e.c[1];
                     if (!lastLine) {

@@ -6,30 +6,30 @@ import java.awt.font.TextHitInfo;
 import java.text.AttributedCharacterIterator;
 
 /**
- * El método de entrada está componiendo texto.
+ * The input method is composing text.
  *
- * <p>Escribir en japonés, chino o coreano no es teclear caracteres: se teclea una pronunciación, el
- * método de entrada ofrece candidatos, y recién al elegir uno el texto queda **confirmado**. Estos
- * eventos son ese proceso.
+ * <p>Writing in Japanese, Chinese or Korean is not typing characters: a pronunciation is typed, the
+ * input method offers candidates, and only on choosing one does the text become **committed**. These
+ * events are that process.
  *
- * <p>De ahí el número que parte el texto en dos: los primeros caracteres están confirmados y el
- * resto todavía se está componiendo. Un editor tiene que mostrar los dos, y distinguirlos, porque lo
- * que está en composición todavía puede cambiar entero.
+ * <p>Hence the number that splits the text in two: the first characters are committed and the rest
+ * is still being composed. An editor has to show both, and tell them apart, because what is being
+ * composed may still change entirely.
  */
 public class InputMethodEvent extends AWTEvent {
 
     private static final long serialVersionUID = 4727190874778922661L;
 
-    /** Se movió el cursor dentro del texto en composición. */
+    /** The caret moved inside the text being composed. */
     public static final int CARET_POSITION_CHANGED = 1101;
 
-    /** El primer identificador de la familia. */
+    /** The family's first identifier. */
     public static final int INPUT_METHOD_FIRST = 1100;
 
-    /** El último identificador de la familia. */
+    /** The family's last identifier. */
     public static final int INPUT_METHOD_LAST = 1101;
 
-    /** Cambió el texto en composición. */
+    /** The text being composed changed. */
     public static final int INPUT_METHOD_TEXT_CHANGED = 1100;
 
     private final AttributedCharacterIterator text;
@@ -39,10 +39,10 @@ public class InputMethodEvent extends AWTEvent {
     private final long when;
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si la fuente es `null` o si el identificador no es uno de los
-     *     dos
+     * @throws IllegalArgumentException if the source is `null` or if the identifier is neither of
+     *     the two
      */
     public InputMethodEvent(Component source, int id, long when, AttributedCharacterIterator text,
             int committedCharacterCount, TextHitInfo caret, TextHitInfo visiblePosition) {
@@ -61,9 +61,9 @@ public class InputMethodEvent extends AWTEvent {
     }
 
     /**
-     * Sin el momento.
+     * Without the moment.
      *
-     * @throws IllegalArgumentException si la fuente es `null` o el identificador no es válido
+     * @throws IllegalArgumentException if the source is `null` or the identifier is not valid
      */
     public InputMethodEvent(Component source, int id, AttributedCharacterIterator text,
             int committedCharacterCount, TextHitInfo caret, TextHitInfo visiblePosition) {
@@ -72,60 +72,60 @@ public class InputMethodEvent extends AWTEvent {
     }
 
     /**
-     * Sólo con las posiciones, para los cambios de cursor.
+     * With the positions alone, for the caret changes.
      *
-     * @throws IllegalArgumentException si la fuente es `null`
+     * @throws IllegalArgumentException if the source is `null`
      */
     public InputMethodEvent(Component source, int id, TextHitInfo caret,
             TextHitInfo visiblePosition) {
         this(source, id, System.currentTimeMillis(), null, 0, caret, visiblePosition);
     }
 
-    /** El texto completo, confirmado y en composición. */
+    /** The whole text, committed and being composed. */
     public AttributedCharacterIterator getText() {
         return this.text;
     }
 
-    /** Cuántos caracteres del principio ya están confirmados. */
+    /** How many characters from the start are already committed. */
     public int getCommittedCharacterCount() {
         return this.committedCharacterCount;
     }
 
-    /** Dónde está el cursor dentro del texto en composición. */
+    /** Where the caret is inside the text being composed. */
     public TextHitInfo getCaret() {
         return this.caret;
     }
 
-    /** Qué parte conviene mantener a la vista si el texto no entra. */
+    /** Which part is worth keeping in view if the text does not fit. */
     public TextHitInfo getVisiblePosition() {
         return this.visiblePosition;
     }
 
-    /** Marca que alguien se hizo cargo. */
+    /** Marks that someone took charge. */
     public void consume() {
         this.consumed = true;
     }
 
-    /** Si alguien ya se hizo cargo. */
+    /** Whether someone already took charge. */
     public boolean isConsumed() {
         return this.consumed;
     }
 
-    /** Cuándo pasó. */
+    /** When it happened. */
     public long getWhen() {
         return this.when;
     }
 
     public String paramString() {
-        String tipo;
+        String type;
         if (this.id == INPUT_METHOD_TEXT_CHANGED) {
-            tipo = "INPUT_METHOD_TEXT_CHANGED";
+            type = "INPUT_METHOD_TEXT_CHANGED";
         } else if (this.id == CARET_POSITION_CHANGED) {
-            tipo = "CARET_POSITION_CHANGED";
+            type = "CARET_POSITION_CHANGED";
         } else {
-            tipo = "unknown type";
+            type = "unknown type";
         }
-        return tipo + ", committedCharacterCount=" + this.committedCharacterCount + ", caret="
+        return type + ", committedCharacterCount=" + this.committedCharacterCount + ", caret="
                 + this.caret + ", visiblePosition=" + this.visiblePosition;
     }
 }

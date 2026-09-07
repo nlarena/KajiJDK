@@ -5239,6 +5239,9 @@ impl<'a> Emitter<'a> {
             ExprKind::QualifiedThis(_) => {
                 self.unsupported(e.pos, "un `Clase.this` que el desugar debía haber bajado")
             }
+            // `Interfaz.super` como receptor: el objeto es `this`. Lo que lo distingue de un
+            // `super` común es el dueño del `invokespecial`, y de eso se ocupa el arm de `Call`.
+            ExprKind::QualifiedSuper(_) => self.load_this(),
             // Un nombre suelto: un local (slot de la frame) o un campo **implícito** de `this`.
             ExprKind::Name(_) => match e.binding {
                 Some(Binding::Local { slot }) => {
@@ -5700,6 +5703,22 @@ impl<'a> Emitter<'a> {
                 self.pool.methodref(&class_internal, &mname, &desc)
             };
             self.op(INVOKESTATIC);
+            self.u16(mref);
+        } else if matches!(&call.kind,
+            ExprKind::Call { target: Some(t), .. }
+                if matches!(t.kind, ExprKind::QualifiedSuper(_)))
+        {
+            // `Interfaz.super.m(...)` (§15.12.4.4): `invokespecial` con la **interfaz nombrada**
+            // como dueño, y con etiqueta `InterfaceMethodref` --no `Methodref`--, que es lo que
+            // pide JVMS 4.4.2 para un miembro de interfaz. Es la única forma de llamar a la
+            // implementación `default` de *una* superinterfaz cuando la clase implementa varias
+            // que declaran el mismo método.
+            //
+            // El receptor es `this`, igual que en un `super` común; lo que cambia es dónde empieza
+            // a buscar la JVM.
+            let iface = explicit_recv_owner.clone().unwrap_or_else(|| class_internal.clone());
+            let mref = self.pool.interface_methodref(&iface, &mname, &desc);
+            self.op(INVOKESPECIAL);
             self.u16(mref);
         } else if via_super {
             // `super.m(...)`: `invokespecial` con la **superclase directa** como dueño. Que sea la

@@ -570,6 +570,7 @@ impl Checker<'_> {
             | ExprKind::This
             | ExprKind::QualifiedThis(_)
             | ExprKind::Super
+            | ExprKind::QualifiedSuper(_)
             | ExprKind::ClassLit(_)
             | ExprKind::MethodRef { .. }
             // `Indy` lo produce el desugar, después de esta pasada: nunca llega acá.
@@ -807,6 +808,7 @@ impl Checker<'_> {
             | ExprKind::This
             | ExprKind::QualifiedThis(_)
             | ExprKind::Super
+            | ExprKind::QualifiedSuper(_)
             | ExprKind::ClassLit(_)
             | ExprKind::MethodRef { .. }
             | ExprKind::Indy { .. }
@@ -994,12 +996,31 @@ impl Checker<'_> {
                 if !matches!(self.table.symbol(id).kind, SymbolKind::Method { .. }) {
                     continue;
                 }
+                // Un método `static` declarado en una **interfaz** no se hereda nunca (§9.4.1):
+                // no lo hereda quien la implementa ni quien la extiende, y por lo tanto no puede
+                // ser sobrescrito ni ocultado. Tratarlo como heredado daba dos síntomas y ninguno
+                // nombraba la causa: un `static of(...)` propio se rechazaba por *"reduce la
+                // visibilidad heredada"* contra `Set.of`, y si las visibilidades coincidían
+                // --el caso de `EnumSet.of`-- la llamada resolvía contra el `Set.of` heredado y
+                // devolvía `Set<E>` en vez de `EnumSet<E>`, o sea *"tipo incompatible"* en el
+                // destino. El JDK compila las dos formas.
+                if is_static(self.table, id) && self.declara_una_interfaz(sup) {
+                    continue;
+                }
                 if erased_params(self.table, id).as_deref() == Some(sig) {
                     return Some(id);
                 }
             }
         }
         None
+    }
+
+    /// ¿`sup` es una interfaz (o un `@interface`, que también lo es)?
+    fn declara_una_interfaz(&self, sup: SymbolId) -> bool {
+        matches!(
+            &self.table.symbol(sup).kind,
+            SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
+        )
     }
 
     /// Los supertipos de `cid` en orden de búsqueda: superclases primero, después interfaces —

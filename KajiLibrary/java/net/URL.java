@@ -13,21 +13,22 @@ import java.io.Serializable;
 // string differently from the URI built out of the same string would be a bug nobody would think
 // to look for.
 //
-// La nota anterior decia que `openConnection()`, `getContent()` y la maquinaria de handlers quedaban
-// afuera porque "no hay capa de IO, ni handler de protocolo, ni socket para que funcionen". Las tres
-// cosas cambiaron: `java.io` anda, `URLConnection` esta entera --su unico metodo abstracto es
-// `connect()`-- y `URLStreamHandler` existe. Lo que faltaba no era la capa sino la **costura**: quien
-// elige el handler de un protocolo. Es lo que se agrega aca.
+// The earlier note said that `openConnection()`, `getContent()` and the handler machinery were left
+// out because "there is no IO layer, no protocol handler, and no socket for them to work over". All
+// three changed: `java.io` works, `URLConnection` is complete --its only abstract method is
+// `connect()`-- and `URLStreamHandler` exists. What was missing was not the layer but the **seam**:
+// whoever chooses a protocol's handler. That is what is added here.
 //
-// **Que anda y que no, sin vueltas.** `file:` anda de punta a punta: tiene handler propio y lee del
-// disco. Cualquier otro protocolo anda **si el programa registra un handler**, por
-// `setURLStreamHandlerFactory` o pasandolo al constructor. Y si nadie lo registro, `openConnection`
-// tira un `IOException` que dice `unknown protocol`, que es exactamente lo que el JDK dice.
+// **What works and what does not, plainly.** `file:` works end to end: it has its own handler and
+// reads from disk. Any other protocol works **if the program registers a handler**, through
+// `setURLStreamHandlerFactory` or by passing one to the constructor. And if nobody registered one,
+// `openConnection` throws an `IOException` saying `unknown protocol`, which is exactly what the JDK
+// says.
 //
-// Esa ultima parte es la que hace que el metodo no sea "un miembro que existe para fallar", que era
-// el argumento de la nota vieja y era bueno mientras no hubiera ningun handler posible. Con uno que
-// funciona y una via para traer mas, `openConnection` es un metodo que hace su trabajo y avisa
-// cuando el protocolo no esta cubierto.
+// That last part is what keeps the method from being "a member that exists in order to fail", which
+// was the old note's argument and was a good one while no handler was possible. With one that works
+// and a way to bring more, `openConnection` is a method that does its job and says so when the
+// protocol is not covered.
 //
 // A missing member is a legal subset; a member that lies is not.
 public final class URL implements Serializable {
@@ -36,27 +37,27 @@ public final class URL implements Serializable {
     private final String spec;
 
     /**
-     * El handler que esta URL usa, si se le dio uno explicito al construirla.
+     * The handler this URL uses, if it was given an explicit one at construction.
      *
-     * <p>`null` significa "el que corresponda al protocolo cuando haga falta", que se resuelve tarde
-     * y no al construir. Resolverlo temprano obligaria a que el constructor fallara para un protocolo
-     * sin handler --que es lo que hace el JDK-- y aca eso romperia todo el uso de `URL` como simple
-     * portadora de una direccion, que es para lo que mas se la usa.
+     * <p>`null` means "whichever suits the protocol when it is needed", which is resolved late and
+     * not at construction. Resolving it early would force the constructor to fail for a protocol with
+     * no handler --which is what the JDK does-- and here that would break the whole use of `URL` as a
+     * plain carrier of an address, which is what it is most used for.
      */
     private final URLStreamHandler handler;
 
-    // La fabrica que el programa registro, o `null`. Se puede fijar **una sola vez**, igual que en el
-    // JDK: dos librerias que la fijaran se pisarian, y la segunda cambiaria el significado de las URL
-    // que la primera ya creo.
+    // The factory the program registered, or `null`. It can be set **once only**, just as in the
+    // JDK: two libraries setting it would trample each other, and the second would change the meaning
+    // of the URLs the first had already created.
     private static URLStreamHandlerFactory fabrica;
 
-    // El handler de `file:`, uno solo y compartido: no tiene estado.
+    // The `file:` handler, one only and shared: it has no state.
     private static final URLStreamHandler ARCHIVO = new KajiFileHandler();
 
     /**
-     * Fija la fabrica de handlers del programa.
+     * Sets the program's handler factory.
      *
-     * @throws Error si ya se habia fijado una
+     * @throws Error if one had already been set
      */
     public static void setURLStreamHandlerFactory(URLStreamHandlerFactory fac) {
         synchronized (URL.class) {
@@ -67,8 +68,8 @@ public final class URL implements Serializable {
         }
     }
 
-    // El handler de un protocolo: el explicito de esta URL, el que diga la fabrica, o el de `file:`.
-    // `null` = no hay ninguno, y quien pregunte decide que hacer con eso.
+    // A protocol's handler: this URL's explicit one, whatever the factory says, or `file:`'s.
+    // `null` = there is none, and whoever asks decides what to do about it.
     private URLStreamHandler handlerDelProtocolo() {
         if (this.handler != null) {
             return this.handler;
@@ -97,8 +98,8 @@ public final class URL implements Serializable {
         this(spec, (URLStreamHandler) null);
     }
 
-    // El unico constructor que asigna: todos los demas terminan aca. Tener uno solo es lo que
-    // garantiza que el `handler` no se olvide en alguna variante.
+    // The only constructor that assigns: every other one ends up here. Having a single one is what
+    // guarantees the `handler` is not forgotten in some variant.
     private URL(String spec, URLStreamHandler handler) throws MalformedURLException {
         URI parsed;
         try {
@@ -115,13 +116,14 @@ public final class URL implements Serializable {
     }
 
     /**
-     * Una URL con un handler **propio**, distinto del que le tocaria a su protocolo.
+     * A URL with a handler **of its own**, different from the one its protocol would get.
      *
-     * <p>Es lo que permite hablar un protocolo que nadie registro globalmente, o hablar uno conocido
-     * de otra manera, sin tocar la fabrica del programa -- que se fija una sola vez y es de todos.
+     * <p>It is what allows speaking a protocol nobody registered globally, or speaking a known one in
+     * another way, without touching the program's factory -- which is set once and belongs to
+     * everyone.
      *
-     * @deprecated el JDK lo marca asi desde Java 20 y recomienda {@link #of(URI, URLStreamHandler)},
-     *             que separa el parseo de la construccion
+     * @deprecated the JDK has marked it so since Java 20 and recommends
+     *             {@link #of(URI, URLStreamHandler)}, which separates parsing from construction
      */
     @Deprecated
     public URL(String protocol, String host, int port, String file, URLStreamHandler handler)
@@ -130,16 +132,16 @@ public final class URL implements Serializable {
     }
 
     /**
-     * El de {@link #URL(URL, String)} con un handler propio.
+     * The {@link #URL(URL, String)} one with a handler of its own.
      *
-     * @deprecated igual que el de arriba
+     * @deprecated the same as the one above
      */
     @Deprecated
     public URL(URL context, String spec, URLStreamHandler handler) throws MalformedURLException {
         this(resolverContra(context, spec), handler);
     }
 
-    /** Una URL desde un `URI` con un handler propio. */
+    /** A URL from a `URI` with a handler of its own. */
     public static URL of(URI uri, URLStreamHandler handler) throws MalformedURLException {
         if (uri == null) {
             throw new NullPointerException("uri");
@@ -175,13 +177,13 @@ public final class URL implements Serializable {
     }
 
     /**
-     * Resuelve `spec` contra `context`, que hace de base.
+     * Resolves `spec` against `context`, which acts as the base.
      *
-     * <p>Es el constructor que hace utiles a los enlaces relativos: `new URL(pagina, "../img/a.png")`
-     * es lo que un navegador hace con cada `href`. La resolucion es la del RFC 3986 y vive en
-     * {@link java.net.URI#resolve}, para que las dos clases no puedan discrepar.
+     * <p>It is the constructor that makes relative links useful: `new URL(page, "../img/a.png")` is
+     * what a browser does with every `href`. The resolution is RFC 3986's and lives in
+     * {@link java.net.URI#resolve}, so that the two classes cannot disagree.
      *
-     * @throws MalformedURLException si el resultado no es una URL valida
+     * @throws MalformedURLException if the result is not a valid URL
      */
     public URL(URL context, String spec) throws MalformedURLException {
         this(resolverContra(context, spec));
@@ -189,7 +191,7 @@ public final class URL implements Serializable {
 
     private static String resolverContra(URL context, String spec) throws MalformedURLException {
         if (spec == null) {
-            throw new MalformedURLException("spec nulo");
+            throw new MalformedURLException("null spec");
         }
         if (context == null) {
             return spec;
@@ -200,18 +202,18 @@ public final class URL implements Serializable {
         } catch (URISyntaxException bad) {
             throw new MalformedURLException(bad.getMessage());
         }
-        // Ligado a una local: encadenar por un intermedio se pierde (#108).
+        // Bound to a local: chaining through an intermediate is lost (#108).
         URI base = context.toURI();
         URI resuelto = base.resolve(relativo);
         return resuelto.toString();
     }
 
     /**
-     * El puerto que este protocolo usa cuando no se escribe uno.
+     * The port this protocol uses when none is written.
      *
-     * <p>`-1` para un protocolo cuyo puerto por defecto esta biblioteca no conoce, que es lo que el
-     * JDK devuelve para un protocolo sin manejador registrado. Los cuatro que se conocen son los que
-     * aparecen en la practica; inventar los demas seria peor que decir "no se".
+     * <p>`-1` for a protocol whose default port this library does not know, which is what the JDK
+     * returns for a protocol with no registered handler. The four that are known are the ones that
+     * turn up in practice; inventing the rest would be worse than saying "I do not know".
      */
     public int getDefaultPort() {
         String p = this.getProtocol();
@@ -225,18 +227,18 @@ public final class URL implements Serializable {
             return 21;
         }
         if ("file".equals(p)) {
-            // `file:` no tiene puerto, y el JDK lo reporta asi -- no como "desconocido".
+            // `file:` has no port, and the JDK reports it that way -- not as "unknown".
             return -1;
         }
         return -1;
     }
 
     /**
-     * Si las dos URLs nombran el **mismo recurso**, ignorando el fragmento.
+     * Whether the two URLs name the **same resource**, ignoring the fragment.
      *
-     * <p>Que el fragmento no cuente es todo el punto: `pagina#seccion1` y `pagina#seccion2` son el
-     * mismo documento traido una sola vez, y un cache que las tratara como distintas lo bajaria dos
-     * veces.
+     * <p>That the fragment does not count is the whole point: `page#section1` and `page#section2` are
+     * the same document fetched once, and a cache treating them as different would download it
+     * twice.
      */
     public boolean sameFile(URL other) {
         if (other == null) {
@@ -254,7 +256,7 @@ public final class URL implements Serializable {
         return igual(this.getFile(), other.getFile());
     }
 
-    // El puerto escrito, o el del protocolo: `http://a` y `http://a:80` son el mismo recurso.
+    // The written port, or the protocol's: `http://a` and `http://a:80` are the same resource.
     private int puertoEfectivo() {
         int p = this.getPort();
         if (p == -1) {
@@ -270,11 +272,11 @@ public final class URL implements Serializable {
         return a.equals(b);
     }
 
-    // Los accesores de abajo piden las formas **crudas** de `URI` a proposito: `URL.getPath()` del
-    // JDK devuelve el camino tal como aparece en la URL, sin decodificar los %XX, y quien quiera el
-    // valor decodificado pasa por `toURI().getPath()`. Delegar en `URI.getPath()` --que si
-    // decodifica-- haria que `new URL("file:/a%20b").getPath()` devolviera "/a b", y ahi la URL
-    // dejaria de poder reconstruirse a partir de sus partes.
+    // The accessors below ask `URI` for the **raw** forms on purpose: the JDK's `URL.getPath()`
+    // returns the path as it appears in the URL, without decoding the %XX, and whoever wants the
+    // decoded value goes through `toURI().getPath()`. Delegating to `URI.getPath()` --which does
+    // decode-- would make `new URL("file:/a%20b").getPath()` return "/a b", and there the URL would
+    // stop being reconstructible from its parts.
 
     /** The scheme: {@code http}, {@code file}, {@code jar}. */
     public String getProtocol() {
@@ -282,11 +284,11 @@ public final class URL implements Serializable {
     }
 
     /**
-     * El host, o la cadena vacia si la URL no tiene autoridad.
+     * The host, or the empty string if the URL has no authority.
      *
-     * <p>Vacia y no `null`, que es lo que devuelve el JDK: una URL opaca --`jar:`, `mailto:`-- no
-     * tiene host, y `URL` lo representa con `""`. `URI` usa `null` para lo mismo; la diferencia es
-     * de las dos clases y no de esta implementacion.
+     * <p>Empty and not `null`, which is what the JDK returns: an opaque URL --`jar:`, `mailto:`-- has
+     * no host, and `URL` represents that with `""`. `URI` uses `null` for the same thing; the
+     * difference belongs to the two classes and not to this implementation.
      */
     public String getHost() {
         String h = this.uri.getHost();
@@ -302,16 +304,16 @@ public final class URL implements Serializable {
     }
 
     /**
-     * La ruta de la URL.
+     * The URL's path.
      *
-     * <p>Para una URL **opaca** --una cuya parte especifica no empieza con `/`, como
-     * `jar:file:/x/a.jar!/e.txt` o `mailto:a@b`-- devuelve la parte especifica entera. `URI` la
-     * llama de otra forma y su `getRawPath()` da `null` ahi, pero `URL` no distingue las dos cosas:
-     * el JDK devuelve `file:/x/a.jar!/e.txt` para esa URL, y de ahi es de donde `JarURLConnection`
-     * saca el `!/` que parte al `.jar` de su entrada.
+     * <p>For an **opaque** URL --one whose scheme-specific part does not start with `/`, like
+     * `jar:file:/x/a.jar!/e.txt` or `mailto:a@b`-- it returns the whole scheme-specific part. `URI`
+     * calls it something else and its `getRawPath()` gives `null` there, but `URL` does not tell the
+     * two apart: the JDK returns `file:/x/a.jar!/e.txt` for that URL, and that is where
+     * `JarURLConnection` gets the `!/` that splits the `.jar` from its entry.
      *
-     * <p>Devolvia `null` para toda URL opaca, y eso rompia a `JarURLConnection` en la primera linea:
-     * sin ruta no hay `!/` que encontrar.
+     * <p>It used to return `null` for every opaque URL, and that broke `JarURLConnection` on its
+     * first line: with no path there is no `!/` to find.
      */
     public String getPath() {
         String p = this.uri.getRawPath();
@@ -351,31 +353,31 @@ public final class URL implements Serializable {
     }
 
     /**
-     * Abre un flujo para leer el contenido de esta URL.
+     * Opens a stream to read this URL's content.
      *
-     * <p>**Solo `file:`.** Es el unico esquema que esta biblioteca puede atender: leer de `http:`
-     * pide un cliente HTTP, y `jar:` pide leer un ZIP anidado -- las dos cosas son maquinaria que no
-     * esta. Para cualquier otro esquema tira, con el mismo tipo de excepcion que el JDK usa cuando no
-     * tiene un manejador para el protocolo.
+     * <p>**`file:` only.** It is the one scheme this library can serve: reading from `http:` asks for
+     * an HTTP client, and `jar:` asks for reading a nested ZIP -- both are machinery that is not
+     * here. For any other scheme it throws, with the same type of exception the JDK uses when it has
+     * no handler for the protocol.
      *
-     * <p>El JDK hace esto en dos pasos --`openConnection().getInputStream()`-- porque tiene una
-     * jerarquia de `URLConnection` por protocolo. Aca hay uno solo, asi que el paso intermedio no
-     * agregaria mas que una capa.
+     * <p>The JDK does this in two steps --`openConnection().getInputStream()`-- because it has a
+     * `URLConnection` hierarchy per protocol. Here there is only one, so the intermediate step would
+     * add nothing but a layer.
      *
-     * @throws java.io.IOException si el esquema no es `file:`, o si el archivo no se puede leer
+     * @throws java.io.IOException if the scheme is not `file:`, or if the file cannot be read
      */
     public final java.io.InputStream openStream() throws java.io.IOException {
-        String esquema = this.getProtocol();
-        if (!"file".equals(esquema)) {
+        String scheme = this.getProtocol();
+        if (!"file".equals(scheme)) {
             throw new java.net.UnknownServiceException(
-                    "esta biblioteca solo sabe abrir URLs file:, no " + esquema + ":");
+                    "this library can only open file: URLs, not " + scheme + ":");
         }
         String ruta = this.getPath();
         if (ruta == null || ruta.length() == 0) {
-            throw new java.io.IOException("la URL no tiene ruta: " + this.spec);
+            throw new java.io.IOException("the URL has no path: " + this.spec);
         }
-        // Una ruta de Windows llega como `/C:/x`: la barra de mas es del formato de la URL, no del
-        // sistema de archivos, y hay que sacarla antes de tocar el disco.
+        // A Windows path arrives as `/C:/x`: the extra slash belongs to the URL's format, not to the
+        // file system, and it has to come off before touching the disk.
         if (ruta.length() > 2 && ruta.charAt(0) == '/' && ruta.charAt(2) == ':') {
             ruta = ruta.substring(1);
         }
@@ -414,18 +416,19 @@ public final class URL implements Serializable {
         return this.uri.hashCode();
     }
 
-    // ---- recuperar el recurso -----------------------------------------------------------------
+    // ---- fetching the resource -----------------------------------------------------------------
     //
-    // La mitad de una URL que **trae** lo que la direccion nombra. Los cuatro cuelgan del handler, y
-    // el handler existe para `file:` siempre y para lo demas si el programa lo registro.
+    // The half of a URL that **brings** what the address names. All four hang off the handler, and the
+    // handler exists for `file:` always and for the rest if the program registered one.
 
     /**
-     * Una conexion al recurso que esta URL nombra.
+     * A connection to the resource this URL names.
      *
-     * <p>No conecta: devuelve el objeto con el que se configura la conexion y despues se conecta.
-     * Esa separacion es la que deja fijar tiempos de espera y cabeceras antes de tocar nada.
+     * <p>It does not connect: it returns the object the connection is configured on and then
+     * connected. That separation is what allows timeouts and headers to be set before anything is
+     * touched.
      *
-     * @throws IOException si el protocolo no tiene handler, o si armarla falla
+     * @throws IOException if the protocol has no handler, or if building it fails
      */
     public URLConnection openConnection() throws java.io.IOException {
         URLStreamHandler h = this.handlerDelProtocolo();
@@ -436,15 +439,14 @@ public final class URL implements Serializable {
     }
 
     /**
-     * La de arriba a traves de un proxy.
+     * The one above through a proxy.
      *
-     * <p>El proxy se **acepta y se ignora**, y eso hay que decirlo: no hay socket en esta VM, asi que
-     * ningun handler propio puede estar hablando por TCP, y el unico que viene puesto --`file:`-- no
-     * atraviesa ninguna red. Un handler que el programa registre puede honrarlo si quiere; esta clase
-     * no tiene como pasarselo, porque `URLStreamHandler.openConnection(URL, Proxy)` es `protected` y
-     * su version sin proxy es la unica abstracta.
+     * <p>The proxy is **accepted and ignored**, and that has to be said: a handler the program
+     * registers may honour it if it wants; this class has no way of passing it on, because
+     * `URLStreamHandler.openConnection(URL, Proxy)` is `protected` and its proxy-less version is the
+     * only abstract one. The one handler that comes installed --`file:`-- crosses no network anyway.
      *
-     * @throws IllegalArgumentException si `proxy` es null
+     * @throws IllegalArgumentException if `proxy` is null
      */
     public URLConnection openConnection(Proxy proxy) throws java.io.IOException {
         if (proxy == null) {
@@ -453,12 +455,12 @@ public final class URL implements Serializable {
         return this.openConnection();
     }
 
-    /** El contenido del recurso, del tipo que el handler decida. */
+    /** The resource's content, of whichever type the handler decides. */
     public final Object getContent() throws java.io.IOException {
         return this.openConnection().getContent();
     }
 
-    /** El contenido convertido al primero de esos tipos que se pueda. */
+    /** The content converted to the first of those types it can be. */
     public final Object getContent(Class<?>[] classes) throws java.io.IOException {
         return this.openConnection().getContent(classes);
     }

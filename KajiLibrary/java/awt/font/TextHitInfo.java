@@ -1,43 +1,43 @@
 package java.awt.font;
 
 /**
- * Un lugar del texto donde se puede poner el cursor: **entre** dos caracteres.
+ * A place in the text where the caret can go: **between** two characters.
  *
- * <p>Un punto de inserción no es un carácter, es una frontera, y hay dos maneras de nombrar la misma
- * frontera: el borde de entrada del carácter que sigue o el de salida del que viene. Esta clase
- * guarda cuál de las dos, y ésa es toda su razón de ser.
+ * <p>An insertion point is not a character, it is a boundary, and there are two ways of naming the
+ * same boundary: the leading edge of the character that follows or the trailing edge of the one that
+ * comes before. This class keeps which of the two, and that is its whole reason for being.
  *
- * <p>Parece una distinción sin diferencia hasta que el renglón mezcla direcciones. En un texto que
- * va de izquierda a derecha con una palabra en árabe adentro, la frontera lógica entre dos
- * caracteres cae en **dos lugares distintos de la pantalla** según de qué lado se venga, y sin
- * decirlo no hay forma de saber dónde dibujar el cursor.
+ * <p>It looks like a distinction without a difference until the line mixes directions. In a text
+ * running left to right with an Arabic word inside it, the logical boundary between two characters
+ * falls in **two different places on the screen** depending on which side one comes from, and
+ * without saying so there is no way of knowing where to draw the caret.
  */
 public final class TextHitInfo {
 
     private final int charIndex;
     private final boolean isLeadingEdge;
 
-    /** Con el carácter y de qué lado. */
+    /** With the character and which side. */
     private TextHitInfo(int charIndex, boolean isLeadingEdge) {
         this.charIndex = charIndex;
         this.isLeadingEdge = isLeadingEdge;
     }
 
-    /** El carácter al que se refiere. */
+    /** The character it refers to. */
     public int getCharIndex() {
         return this.charIndex;
     }
 
-    /** Si es el borde de entrada de ese carácter. */
+    /** Whether it is that character's leading edge. */
     public boolean isLeadingEdge() {
         return this.isLeadingEdge;
     }
 
     /**
-     * La posición de inserción, contada en caracteres.
+     * The insertion position, counted in characters.
      *
-     * <p>Es donde entraría un carácter nuevo. Dos `TextHitInfo` distintos pueden dar la misma:
-     * el borde de salida del carácter `n` y el de entrada del `n+1` son la misma frontera.
+     * <p>It is where a new character would go. Two different `TextHitInfo`s may give the same one:
+     * character `n`'s trailing edge and `n+1`'s leading edge are the same boundary.
      */
     public int getInsertionIndex() {
         if (this.isLeadingEdge) {
@@ -50,16 +50,16 @@ public final class TextHitInfo {
         return this.charIndex;
     }
 
-    /** Igualdad por carácter y por lado. */
+    /** Equality by character and by side. */
     public boolean equals(Object obj) {
         return obj instanceof TextHitInfo && this.equals((TextHitInfo) obj);
     }
 
     /**
-     * Lo mismo, con el tipo ya conocido.
+     * The same, with the type already known.
      *
-     * <p>Dos que apunten a la misma frontera desde lados distintos **no** son iguales: la clase
-     * guarda de qué lado se llegó, y eso es lo que la distingue.
+     * <p>Two that point at the same boundary from different sides are **not** equal: the class keeps
+     * which side it was reached from, and that is what tells them apart.
      */
     public boolean equals(TextHitInfo hitInfo) {
         return hitInfo != null && this.charIndex == hitInfo.charIndex
@@ -70,27 +70,27 @@ public final class TextHitInfo {
         return "TextHitInfo[" + this.charIndex + (this.isLeadingEdge ? "L" : "T") + "]";
     }
 
-    /** El borde de entrada de ese carácter. */
+    /** That character's leading edge. */
     public static TextHitInfo leading(int charIndex) {
         return new TextHitInfo(charIndex, true);
     }
 
-    /** El borde de salida de ese carácter. */
+    /** That character's trailing edge. */
     public static TextHitInfo trailing(int charIndex) {
         return new TextHitInfo(charIndex, false);
     }
 
-    /** La frontera de antes de esa posición, nombrada desde el carácter anterior. */
+    /** The boundary before that position, named from the preceding character. */
     public static TextHitInfo beforeOffset(int offset) {
         return new TextHitInfo(offset - 1, false);
     }
 
-    /** La frontera de después de esa posición, nombrada desde el carácter siguiente. */
+    /** The boundary after that position, named from the following character. */
     public static TextHitInfo afterOffset(int offset) {
         return new TextHitInfo(offset, true);
     }
 
-    /** La otra manera de nombrar la misma frontera. */
+    /** The other way of naming the same boundary. */
     public TextHitInfo getOtherHit() {
         if (this.isLeadingEdge) {
             return trailing(this.charIndex - 1);
@@ -98,7 +98,7 @@ public final class TextHitInfo {
         return leading(this.charIndex + 1);
     }
 
-    /** El mismo lado, tantos caracteres más allá. */
+    /** The same side, so many characters further along. */
     public TextHitInfo getOffsetHit(int delta) {
         return new TextHitInfo(this.charIndex + delta, this.isLeadingEdge);
     }

@@ -1,37 +1,37 @@
 package java.beans;
 
-// Un Statement que ademas se queda con lo que la llamada devolvio. La diferencia con Statement es
-// justo esa: un Statement se ejecuta por su efecto, una Expression por su valor.
+// A Statement that also keeps what the call returned. The difference from Statement is exactly
+// that: a Statement is executed for its effect, an Expression for its value.
 //
-// El valor se calcula una sola vez, perezosamente. La marca de "todavia no se calculo" no puede ser
-// null —null es un resultado legitimo— asi que se usa un centinela propio. Sin el, una expresion
-// que devuelve null se reevaluaria en cada getValue().
+// The value is worked out once only, lazily. The mark for "not worked out yet" cannot be null —null
+// is a legitimate result— so a sentinel of its own is used. Without it, an expression returning null
+// would be re-evaluated on every getValue().
 public class Expression extends Statement {
 
-    // Centinela de "sin calcular". Un objeto privado y unico: ningun metodo puede devolverlo.
-    private static final Object SIN_CALCULAR = new Object();
+    // The "not worked out" sentinel. A private, unique object: no method can return it.
+    private static final Object NOT_COMPUTED = new Object();
 
-    private Object value = SIN_CALCULAR;
+    private Object value = NOT_COMPUTED;
 
     public Expression(Object target, String methodName, Object[] arguments) {
         super(target, methodName, arguments);
     }
 
-    // Con el valor ya sabido: no se va a ejecutar nada.
+    // With the value already known: nothing is going to be executed.
     public Expression(Object value, Object target, String methodName, Object[] arguments) {
         super(target, methodName, arguments);
         this.value = value;
     }
 
-    // Ejecuta y guarda el resultado, incluso si es null.
+    // It executes and stores the result, even if it is null.
     public void execute() throws Exception {
-        this.value = this.invocar();
+        this.value = this.emitCall();
     }
 
-    // El valor, ejecutando la llamada la primera vez que se lo pide.
+    // The value, executing the call the first time it is asked for.
     public Object getValue() throws Exception {
-        if (this.value == SIN_CALCULAR) {
-            this.value = this.invocar();
+        if (this.value == NOT_COMPUTED) {
+            this.value = this.emitCall();
         }
         return this.value;
     }
@@ -41,7 +41,7 @@ public class Expression extends Statement {
     }
 
     public String toString() {
-        String v = this.value == SIN_CALCULAR ? "<unbound>" : String.valueOf(this.value);
+        String v = this.value == NOT_COMPUTED ? "<unbound>" : String.valueOf(this.value);
         return v + "=" + super.toString();
     }
 }

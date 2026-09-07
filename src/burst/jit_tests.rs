@@ -2174,17 +2174,49 @@ fn subset_census() {
                     // well be `Base.m()`. Bounded by the chain's length, and a class outside the
                     // corpus simply ends the walk — the census stays an upper bound on a *loaded*
                     // world, never a claim about one it cannot see.
-                    let mut owner = owner.to_string();
+                    // **Superclases y superinterfaces**, no sólo lo primero. El paseo original
+                    // subía por `super_class` y nada más, lo que alcanza para `invokevirtual` pero
+                    // no para `invokeinterface`: el dueño ahí es una **interfaz**, cuya
+                    // `super_class` es `java/lang/Object`, así que un método `default` heredado de
+                    // una **superinterfaz** terminaba la búsqueda en Object y fallaba.
+                    //
+                    // **Cuánto rinde, medido: +10 métodos, y los rechazos por `invokeinterface`
+                    // no se movieron** (417 → 418). Se anota porque la sospecha de partida era que
+                    // ahí estaban escondidos cientos de sitios, y es falsa. La causa de esos
+                    // rechazos es otra y es **estructural al censo**: un método de interfaz
+                    // abstracto no tiene `Code`, así que no tiene unidad en esta tabla, y una
+                    // llamada de interfaz se liga a la **implementación**, que depende del
+                    // receptor — algo que un censo que no ejecuta nada no puede saber. La VM sí
+                    // (el intérprete observa la clase real y el inline cache la fija), y por eso
+                    // ese número **subestima** al compilador y no lo describe.
+                    //
+                    // Es un recorrido en anchura y por lo tanto una **aproximación**: la regla real
+                    // (JVMS §5.4.3.3/§5.4.3.4) agota la cadena de superclases antes de mirar
+                    // interfaces, y entre varias superinterfaces elige la *maximally-specific*.
+                    // Para una cota superior alcanza, y decirlo es parte del contrato de este
+                    // stub — como los demás de acá, responde por un mundo que no cargó.
+                    let mut pendientes = vec![owner.to_string()];
+                    let mut vistos = std::collections::HashSet::new();
                     let target = loop {
-                        if let Some(&unit) = by_name.get(&(owner.clone(), name.to_string(), desc.to_string())) {
+                        let Some(actual) = pendientes.pop() else { return None };
+                        if !vistos.insert(actual.clone()) {
+                            continue;
+                        }
+                        if let Some(&unit) = by_name.get(&(actual.clone(), name.to_string(), desc.to_string())) {
                             break unit;
                         }
-                        let ci = *by_class.get(&owner)?;
-                        let up = classes[ci].1.class_name(classes[ci].1.super_class)?;
-                        if up == owner {
-                            return None;
+                        let Some(&ci) = by_class.get(&actual) else { continue };
+                        let cf = &classes[ci].1;
+                        if let Some(up) = cf.class_name(cf.super_class) {
+                            if up != actual {
+                                pendientes.push(up.to_string());
+                            }
                         }
-                        owner = up.to_string();
+                        for &i in &cf.interfaces {
+                            if let Some(n) = cf.class_name(i) {
+                                pendientes.push(n.to_string());
+                            }
+                        }
                     };
                     Some(vec![crate::burst::compile::Callee {
                         method: shape(&classes, &units, &bodies, target),
@@ -2242,6 +2274,26 @@ fn subset_census() {
                 std::panic::set_hook(Box::new(|_| {}));
                 let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(attempt));
                 std::panic::set_hook(hushed);
+                // **Un panic acá se reporta, no se traga.** `compile()` debe *rechazar* una entrada
+                // que no puede manejar, nunca panicar: en la VM real un panic del compilador es la
+                // VM entera cayéndose. Este `catch_unwind` existe para que el censo pueda seguir
+                // contando, pero durante toda una sesión escondió un `assert` real (un método
+                // `void` que llama a un estático `void` sin argumentos tiene un marco nativo de
+                // **cero** slots, y el brazo de llamada pedía la posición de operando 0 para una
+                // guarda `Static` que ni siquiera la usa). Imprimir el caso es lo que lo vuelve a
+                // hacer visible sin volver frágil al censo.
+                if let Err(payload) = &answer {
+                    let msg = payload
+                        .downcast_ref::<String>()
+                        .cloned()
+                        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                        .unwrap_or_else(|| "<sin mensaje>".to_string());
+                    let b = &bodies[root];
+                    println!(
+                        "PANIC AL COMPILAR (root={root:?} max_stack={} max_locals={} code={:02x?}): {msg}",
+                        b.max_stack, b.max_locals, b.code
+                    );
+                }
                 answer.unwrap_or(Err(crate::burst::compile::Ineligible::TooBig))
             }
         };
@@ -2462,12 +2514,23 @@ fn methods_outside_the_subset_are_scanned_once_and_never_again() {
     // back only by a successful install, so a method rescanned on every call would send it through
     // the roof rather than leave it at the number of methods.
     //
-    // **The workload had to change with group 4**, and the reason is worth recording: this used to
-    // be `BmInvoke`, whose two methods were refused for a recursive call — and a call is no longer
-    // a refusal. `JaArray.scanChars`/`scanBytes` are refused for an *opcode* (`caload`, `baload`),
-    // which is the only kind of refusal left that a hot loop can keep hitting.
-    let (_, _, stats) = run("java/JaArray.class", true);
-    assert_eq!(stats.rejected, 2, "each scanner is scanned exactly once, and refused");
+    // **Este workload ya cambió tres veces, y por la misma razón las tres.** Primero era
+    // `BmInvoke`, refutado por una llamada recursiva — hasta que las llamadas reales dejaron de ser
+    // un impedimento. Después `JaArray.scanChars`/`scanBytes`, refutados por un *opcode*
+    // (`caload`, `baload`) — hasta que los accesos angostos entraron al subconjunto. El patrón es
+    // el mismo: **un test que usa "esto todavía no compila" como andamio se rompe cuando el
+    // compilador mejora**, que es exactamente cuando uno menos quiere ruido.
+    //
+    // Por eso ahora apunta a un **gemelo del banco**, cuya refutación no es una carencia del
+    // emisor sino **estructural**: lleva un `invokedynamic` en una rama nunca tomada, y acá un
+    // indy no es una llamada — el intérprete re-corre el bootstrap en cada ejecución, así que no
+    // hay `MethodId` ligado que darle al JIT. Cerrar eso empieza siendo trabajo del *intérprete*,
+    // no del compilador. Y si algún día se cierra, el que avisa no es este test sino
+    // `los_controles_del_banco_no_compilan_nada`, que cuenta las compilaciones de cada control y
+    // falla ruidosamente — que es el orden correcto para enterarse.
+    let (_, _, stats) = run("bench/BkArithC.class", true);
+    assert_eq!(stats.compiled, 0, "un gemelo del banco no compila nada, por construcción");
+    assert_eq!(stats.rejected, 2, "cada método se escanea exactamente una vez, y se rechaza");
 }
 
 // =============================================================================================
@@ -3449,14 +3512,16 @@ fn array_allocation_agrees_with_the_interpreter() {
     // the arithmetic around it — **and, since F3-H3, `countNulls`**: `aaload` joined the subset,
     // and this counter is where that shows up. **And `run` since group 4**: its `try`/`catch` was
     // never the refusal — the two invokes it makes to methods this tier cannot compile were, and a
-    // call it cannot expand is now a call it can *make*. Still out: `scanChars`/`scanBytes`, whose
-    // `caload`/`baload` are outside the subset.
-    assert_eq!(stats.compiled, 8, "the six allocators, `countNulls`, and `run` now that it may call");
-    assert_eq!(stats.rejected, 2, "the two remaining scanners");
-    // Two of `run`'s invokes are emitted as real calls — to the two scanners, which never compile,
-    // so each one is a deopt at the invoke and the interpreter makes the call. That is the honest
-    // shape of the fallback and the reason a site is not refused for a callee that never compiles.
-    assert_eq!(stats.native_sites, 2, "`run`'s two calls to the scanners");
+    // call it cannot expand is now a call it can *make*.
+    //
+    // **Y desde los accesos angostos, los dos scanners también**: `scanChars` y `scanBytes` eran
+    // los últimos dos afuera, refutados por `caload`/`baload`. Con esos opcodes adentro, la clase
+    // entera compila y no queda nada que rechazar — por eso `rejected` pasó de 2 a 0 y
+    // `native_sites` de 2 a 0: las dos llamadas de `run` a los scanners dejaron de ser llamadas
+    // reales para volver a ser **expansiones**, que es lo que el planificador prefiere cuando el
+    // callee entra en el presupuesto.
+    assert_eq!(stats.compiled, 10, "los seis alocadores, `countNulls`, `run` y los dos scanners");
+    assert_eq!(stats.rejected, 0, "ya no queda ningún método fuera del subconjunto");
     // **The negative count is not a deopt**, and that is deliberate rather than incidental: the
     // guard rides the same stub as the Eden-full one, which reports `Status::ALLOC`. The two are
     // the same rebuilt state resumed at the same instruction, so what the interpreter does next is
@@ -3834,3 +3899,117 @@ fn una_llamada_nativa_despachada_da_lo_mismo_que_el_jdk_real() {
     // callee's own — so this is the reconstruction of site B's two frames, counted.
     assert!(stats.virtual_frames > 0, "el frame que creó la llamada tiene que reconstruirse");
 }
+
+/// **Qué son, de verdad, los `invokedynamic` de este corpus** — la medición que decide si vale la
+/// pena atacarlos, y que dio que **no**.
+///
+/// El censo los cuenta como el bloqueante más grande del JIT, y eso invita a leerlos como "trabajo
+/// pendiente". Esta sonda dice de qué están hechos, y el reparto es el argumento:
+///
+/// ```text
+/// 5897  StringConcatFactory::makeConcatWithConstants
+/// 1092  <sin resolver>
+///  426  LambdaMetafactory::metafactory
+///   32  ObjectMethods::bootstrap
+///    1  SwitchBootstraps::typeSwitch
+/// ```
+///
+/// **El 86% es concatenación de strings.** Lo que la traba no es el compilador: es que esta VM la
+/// implementa **en Rust** (`concat_with_recipe`), y un intrínseco de Rust no tiene bytecode que
+/// compilar. Eso es una decisión de implementación, no un límite.
+///
+/// **El camino existe y es el que la VM ya recorre para los lambdas**: que el bootstrap *spinee un
+/// método Java* con el cuerpo que javac emitía antes de Java 9 —`new StringBuilder().append(…)
+/// .toString()`— en vez de calcular en Rust. `LambdaMetafactory` ya fabrica una clase estable por
+/// call site y `StringBuilder` ya está en la biblioteca; con eso el indy pasa a ser una llamada
+/// estática ordinaria y el JIT la compila sin una línea nueva. El precio: el intrínseco es más
+/// rápido *interpretado*, así que se cambia velocidad del intérprete por compilabilidad — la misma
+/// jugada que hace el JDK real, donde HotSpot inlinea la cadena de `MethodHandle`.
+///
+/// `LambdaMetafactory` (426, un 6%) es el que ya tiene forma compilable hoy sin tocar nada de eso.
+/// El resto no está cerrado: está esperando trabajo **en la VM**, no en el compilador.
+///
+/// El escaneo es a propósito tosco —byte a byte, sin decodificar longitudes— así que sobrecuenta un
+/// poco: un `0xba` que sea el operando de otra instrucción entra igual. Para un reparto alcanza, y
+/// decirlo es parte de lo que hace usable al número.
+#[test]
+#[ignore]
+fn de_que_estan_hechos_los_invokedynamic_del_corpus() {
+    use crate::jvm::class_file::ClassFile;
+    let mut paths = Vec::new();
+    fn walk(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(root) else { return };
+        for e in entries.filter_map(|e| e.ok()) {
+            let p = e.path();
+            match p.is_dir() {
+                true => walk(&p, out),
+                false => {
+                    if p.extension().is_some_and(|x| x == "class") {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+    }
+    walk(std::path::Path::new("java"), &mut paths);
+    walk(std::path::Path::new("KajiLibrary"), &mut paths);
+    let mut tally: std::collections::BTreeMap<String, usize> = Default::default();
+    for p in paths {
+        let Ok(cf) = ClassFile::from_path(p.to_str().unwrap()) else { continue };
+        let bsms = cf.bootstrap_methods();
+        for m in &cf.methods {
+            let Some(code) = cf.member_code(m) else { continue };
+            let mut pc = 0usize;
+            while pc + 2 < code.code.len() {
+                if code.code[pc] == 0xba {
+                    let idx = u16::from_be_bytes([code.code[pc + 1], code.code[pc + 2]]);
+                    let etiqueta = cf
+                        .invokedynamic_site(idx)
+                        .and_then(|(b, _, _)| bsms.get(b as usize))
+                        .and_then(|b| cf.method_handle(b.method_ref))
+                        .map(|h| format!("{}::{}", h.class, h.name))
+                        .unwrap_or_else(|| "<sin resolver>".into());
+                    *tally.entry(etiqueta).or_default() += 1;
+                }
+                pc += 1;
+            }
+        }
+    }
+    let mut v: Vec<_> = tally.into_iter().collect();
+    v.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+    for (k, n) in v.iter().take(12) {
+        println!("INDY {n:6}  {k}");
+    }
+}
+
+/// **La concatenación por método spinado: hecha, medida y apagada.**
+///
+/// Lo que queda vivo y este test fija: `concat_factory` emite una clase con un `concat` estático
+/// cuyo cuerpo es `new StringBuilder().append(…).toString()`, el resolver del JIT la encuentra, y
+/// el `0xba` entró al rango de invokes. Todo eso está probado por sus propios tests.
+///
+/// Lo que **no** quedó prendido, y por qué: medido sobre este workload, el camino spinado cuesta
+/// **784.672 opcodes interpretados contra 73.743** del intrínseco de Rust — **10,6× más trabajo** —
+/// y el JIT no lo compensa porque el `concat` **aloca**, y un callee que aloca mantiene su registro
+/// en cero (su log vive en su propia región y sólo se replaya el de la raíz). Resultado: `run`
+/// compila, emite la llamada, y rebota — **11.821 deopts sobre 13.825 llamadas**.
+///
+/// Así que el interruptor está en `false` en `invokedynamic.rs`, con el disparador anotado ahí: el
+/// **log compartido entre frames**. Esa restricción se había medido como poco rentable (21 sitios)
+/// cuando la concatenación no competía; con ella compilable, es lo único que falta.
+///
+/// Este test sigue existiendo porque la **corrección** vale por sí sola: 232890 es lo que imprime
+/// el `java` real del JDK 25, y el resultado tiene que coincidir esté el interruptor donde esté.
+#[test]
+fn una_concatenacion_caliente_coincide_con_el_interprete_y_con_el_jdk() {
+    // **No usa `differential` a propósito**: ese helper exige que algo compile ("nothing was
+    // compiled, so nothing was tested"), y con el interruptor apagado este workload no compila
+    // nada. La aserción del helper es correcta y el que no encaja es este caso, así que se hace la
+    // comparación a mano — que además es lo único que hoy tiene sentido medir acá.
+    let (sin_jit, _, _) = run("java/JcCat.class", false);
+    let (con_jit, _, _) = run("java/JcCat.class", true);
+    assert_eq!(sin_jit, 232890, "el intérprete no coincide con el `java` real del JDK 25");
+    assert_eq!(con_jit, sin_jit, "el JIT calcula otra cosa que el intérprete");
+}
+
+

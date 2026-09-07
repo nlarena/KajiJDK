@@ -4,123 +4,123 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.Permission;
 
-// Una conexion HTTP: metodo, codigo de respuesta, redirecciones y streaming del cuerpo.
+// An HTTP connection: method, response code, redirects and body streaming.
 //
 // ===========================================================================================
-// ESTA CLASE ES ABSTRACTA, Y ESO ES TODA LA DIFERENCIA
+// THIS CLASS IS ABSTRACT, AND THAT IS THE WHOLE DIFFERENCE
 // ===========================================================================================
 //
-// KajiJDK no tiene un cliente HTTP y no lo va a tener sin sockets. Pero `HttpURLConnection` **no es
-// un cliente HTTP**: es la descripcion de uno. Sus dos metodos abstractos --`disconnect()` y
-// `usingProxy()`-- son los unicos que necesitan saber si hay una conexion viva, y esta clase no los
-// escribe: los declara.
+// KajiJDK has no HTTP client and will not have one without sockets. But `HttpURLConnection` **is not
+// an HTTP client**: it is the description of one. Its two abstract methods --`disconnect()` and
+// `usingProxy()`-- are the only ones that need to know whether a connection is alive, and this class
+// does not write them: it declares them.
 //
-// Todo lo demas es de esta clase y no necesita red:
+// Everything else belongs to this class and needs no network:
 //
-//  - **El estado del pedido**: `method`, `instanceFollowRedirects`, los modos de streaming. Son
-//    campos con sus validaciones, y las validaciones son reales: `setRequestMethod("BORRAR")` tira
-//    `ProtocolException`, `setChunkedStreamingMode` despues de conectar tira `IllegalStateException`,
-//    y fijar los dos modos de streaming a la vez tira, porque son excluyentes.
-//  - **La lectura de la respuesta**: `getResponseCode()` y `getResponseMessage()` parsean la linea
-//    de estado ("HTTP/1.1 404 Not Found") que la subclase haya puesto en la cabecera 0. Es parseo de
-//    texto, es exacto, y esta entero.
-//  - **Los cuarenta codigos de estado**, que son numeros acordados.
-//  - **`getPermission()`**, que arma el `SocketPermission` del host y el puerto de la URL.
+//  - **The request's state**: `method`, `instanceFollowRedirects`, the streaming modes. They are
+//    fields with their validations, and the validations are real: `setRequestMethod("DELETE_IT")`
+//    throws `ProtocolException`, `setChunkedStreamingMode` after connecting throws
+//    `IllegalStateException`, and setting both streaming modes at once throws, because they are
+//    mutually exclusive.
+//  - **Reading the response**: `getResponseCode()` and `getResponseMessage()` parse the status line
+//    ("HTTP/1.1 404 Not Found") the subclass put in header 0. It is text parsing, it is exact, and it
+//    is complete.
+//  - **The forty status codes**, which are agreed numbers.
+//  - **`getPermission()`**, which builds the `SocketPermission` for the URL's host and port.
 //
-// Ninguno de esos miembros promete una conexion. La promesa esta concentrada en `connect()` --que
-// hereda abstracto de `URLConnection`-- y en los dos abstractos de aca.
+// None of those members promises a connection. The promise is concentrated in `connect()` --which it
+// inherits abstract from `URLConnection`-- and in the two abstract methods here.
 //
 // ===========================================================================================
-// QUIEN LA INSTANCIA
+// WHO INSTANTIATES IT
 // ===========================================================================================
 //
-// **Nadie, en este arbol.** `URL.openConnection()` de una URL `http:` no llega hasta aca: tira
-// antes, diciendo que no hay manejador para ese protocolo. Esta clase es el contrato que tendria que
-// cumplir un cliente HTTP el dia que exista, y el tipo que las firmas pueden nombrar mientras tanto.
+// **Nobody, in this tree.** `URL.openConnection()` of an `http:` URL does not get this far: it throws
+// before, saying there is no handler for that protocol. This class is the contract an HTTP client
+// would have to fulfil the day one exists, and the type the signatures can name meanwhile.
 //
-// Lo que no se hizo, y es la tentacion obvia: **no** hay una subclase concreta que devuelva 200 y un
-// cuerpo vacio para que "algo ande". Eso seria una respuesta inventada presentada como una respuesta
-// del servidor, que es la peor clase de mentira que se puede escribir en un cliente HTTP.
+// What was not done, and it is the obvious temptation: there is **no** concrete subclass returning
+// 200 and an empty body so that "something works". That would be an invented answer presented as an
+// answer from the server, which is the worst kind of lie that can be written in an HTTP client.
 //
-// Los sesenta y tres miembros estan.
+// All sixty-three members are here.
 public abstract class HttpURLConnection extends URLConnection {
 
-    /** El metodo del pedido. */
+    /** The request's method. */
     protected String method = "GET";
 
-    /** El tamano de los trozos en modo chunked, o -1 si no esta en ese modo. */
+    /** The chunk size in chunked mode, or -1 if it is not in that mode. */
     protected int chunkLength = -1;
 
     /**
-     * El largo fijo del cuerpo, o -1.
+     * The body's fixed length, or -1.
      *
-     * @deprecated Se desborda con cuerpos de mas de dos gigas; usar
-     *             {@link #fixedContentLengthLong}.
+     * @deprecated It overflows with bodies over two gigabytes; use {@link #fixedContentLengthLong}.
      */
     @Deprecated
     protected int fixedContentLength = -1;
 
-    /** El largo fijo del cuerpo, o -1 si no esta en ese modo. */
+    /** The body's fixed length, or -1 if it is not in that mode. */
     protected long fixedContentLengthLong = -1;
 
-    /** El codigo de estado, o -1 si todavia no se leyo. */
+    /** The status code, or -1 if it has not been read yet. */
     protected int responseCode = -1;
 
-    /** El texto que acompana al codigo de estado ("Not Found"), o null. */
+    /** The text accompanying the status code ("Not Found"), or null. */
     protected String responseMessage = null;
 
-    /** Si esta conexion sigue las redirecciones sola. */
+    /** Whether this connection follows redirects on its own. */
     protected boolean instanceFollowRedirects = followRedirects;
 
     private static boolean followRedirects = true;
 
-    // Los metodos que el JDK acepta. La lista es cerrada a proposito: un metodo cualquiera se
-    // rechaza, porque `URLConnection` no sabria como armar el pedido.
+    // The methods the JDK accepts. The list is closed on purpose: an arbitrary method is refused,
+    // because `URLConnection` would not know how to assemble the request.
     private static final String[] METODOS = {
         "GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE"};
 
-    /** Construye la conexion sin conectarla. */
+    /** Builds the connection without connecting it. */
     protected HttpURLConnection(URL u) {
         super(u);
     }
 
-    // ---- redirecciones --------------------------------------------------------------------------
+    // ---- redirects ------------------------------------------------------------------------------
 
-    /** Si las conexiones **nuevas** siguen redirecciones. */
+    /** Whether **new** connections follow redirects. */
     public static void setFollowRedirects(boolean set) {
         followRedirects = set;
     }
 
-    /** Si las conexiones nuevas siguen redirecciones. */
+    /** Whether new connections follow redirects. */
     public static boolean getFollowRedirects() {
         return followRedirects;
     }
 
     /**
-     * Si **esta** conexion sigue redirecciones.
+     * Whether **this** connection follows redirects.
      *
-     * <p>Que haya una bandera por instancia ademas de la de toda la VM es lo que permite decir "esta
-     * no", que es lo que hace falta para inspeccionar un `301` en vez de seguirlo.
+     * <p>That there is a per-instance flag as well as the whole VM's is what allows saying "not this
+     * one", which is what is needed to inspect a `301` instead of following it.
      *
-     * @throws IllegalStateException si ya se conecto
+     * @throws IllegalStateException if it has already connected
      */
     public void setInstanceFollowRedirects(boolean followRedirects) {
         this.instanceFollowRedirects = followRedirects;
     }
 
-    /** Si esta conexion sigue redirecciones. */
+    /** Whether this connection follows redirects. */
     public boolean getInstanceFollowRedirects() {
         return this.instanceFollowRedirects;
     }
 
-    // ---- el pedido ------------------------------------------------------------------------------
+    // ---- the request ----------------------------------------------------------------------------
 
     /**
-     * El metodo del pedido: GET, POST, HEAD, OPTIONS, PUT, DELETE o TRACE.
+     * The request's method: GET, POST, HEAD, OPTIONS, PUT, DELETE or TRACE.
      *
-     * @throws ProtocolException     si el metodo no es uno de esos, o si ya se conecto
-     * @throws IllegalStateException nunca -- el JDK usa `ProtocolException` tambien para el caso de
-     *                               "ya conectado", y se respeta
+     * @throws ProtocolException     if the method is not one of those, or if it has already connected
+     * @throws IllegalStateException never -- the JDK uses `ProtocolException` for the "already
+     *                               connected" case too, and that is respected
      */
     public void setRequestMethod(String method) throws ProtocolException {
         if (this.connected) {
@@ -135,24 +135,24 @@ public abstract class HttpURLConnection extends URLConnection {
         throw new ProtocolException("Invalid HTTP method: " + method);
     }
 
-    /** El metodo del pedido. */
+    /** The request's method. */
     public String getRequestMethod() {
         return this.method;
     }
 
     /**
-     * Manda el cuerpo con un largo conocido de antemano, sin juntarlo todo en memoria.
+     * Sends the body with a length known in advance, without gathering it all in memory.
      *
-     * <p>Sirve para subir un archivo grande: sin esto, `URLConnection` tiene que acumular el cuerpo
-     * entero para poder poner el `Content-Length`.
+     * <p>It serves to upload a large file: without it, `URLConnection` has to accumulate the whole
+     * body in order to set the `Content-Length`.
      *
-     * @throws IllegalStateException    si ya se conecto o ya se fijo el modo chunked
-     * @throws IllegalArgumentException si el largo es negativo
-     * @deprecated Se desborda con cuerpos de mas de dos gigas; usar la sobrecarga con `long`.
+     * @throws IllegalStateException    if it has already connected or the chunked mode is already set
+     * @throws IllegalArgumentException if the length is negative
+     * @deprecated It overflows with bodies over two gigabytes; use the `long` overload.
      */
     @Deprecated
     public void setFixedLengthStreamingMode(int contentLength) {
-        chequearModoDeStreaming();
+        checkStreamingMode();
         if (contentLength < 0) {
             throw new IllegalArgumentException("invalid content length");
         }
@@ -160,13 +160,13 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * Manda el cuerpo con un largo conocido de antemano.
+     * Sends the body with a length known in advance.
      *
-     * @throws IllegalStateException    si ya se conecto o ya se fijo el modo chunked
-     * @throws IllegalArgumentException si el largo es negativo
+     * @throws IllegalStateException    if it has already connected or the chunked mode is already set
+     * @throws IllegalArgumentException if the length is negative
      */
     public void setFixedLengthStreamingMode(long contentLength) {
-        chequearModoDeStreaming();
+        checkStreamingMode();
         if (contentLength < 0) {
             throw new IllegalArgumentException("invalid content length");
         }
@@ -174,16 +174,16 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * Manda el cuerpo en trozos, sin saber de antemano cuanto mide.
+     * Sends the body in chunks, without knowing in advance how big it is.
      *
-     * <p>Es el otro modo de no acumular en memoria, y el que sirve cuando el largo **no se puede**
-     * saber -- una respuesta generada al vuelo, por ejemplo.
+     * <p>It is the other way of not accumulating in memory, and the one that serves when the length
+     * **cannot** be known -- a response generated on the fly, for instance.
      *
-     * @param chunklen el tamano de trozo sugerido; {@code <= 0} deja elegir a la implementacion
-     * @throws IllegalStateException si ya se conecto o ya se fijo un largo fijo
+     * @param chunklen the suggested chunk size; {@code <= 0} leaves the choice to the implementation
+     * @throws IllegalStateException if it has already connected or a fixed length is already set
      */
     public void setChunkedStreamingMode(int chunklen) {
-        chequearModoDeStreaming();
+        checkStreamingMode();
         if (chunklen <= 0) {
             this.chunkLength = 4096;
         } else {
@@ -191,9 +191,10 @@ public abstract class HttpURLConnection extends URLConnection {
         }
     }
 
-    // Los dos modos de streaming son excluyentes: uno dice cuanto mide el cuerpo y el otro dice que
-    // no se sabe. Tenerlos juntos no significa nada, y por eso se rechaza en vez de elegir uno.
-    private void chequearModoDeStreaming() {
+    // The two streaming modes are mutually exclusive: one says how big the body is and the other says
+    // it is not known. Having them together means nothing, and that is why it is refused instead of
+    // one being chosen.
+    private void checkStreamingMode() {
         if (this.connected) {
             throw new IllegalStateException("Can't set streaming mode: already connected");
         }
@@ -206,97 +207,99 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * Instala el autenticador de esta conexion.
+     * Installs this connection's authenticator.
      *
-     * <p>La base tira `UnsupportedOperationException`, igual que el JDK: no toda implementacion sabe
-     * autenticar por conexion --el JDK tiene un autenticador global desde antes que este metodo
-     * existiera-- y la que sepa lo pisa. Aceptarlo en silencio seria peor: el que llama creeria que
-     * sus credenciales se van a usar.
+     * <p>The base throws `UnsupportedOperationException`, just like the JDK: not every implementation
+     * knows how to authenticate per connection --the JDK has had a global authenticator since before
+     * this method existed-- and the one that does overrides it. Accepting it silently would be worse:
+     * the caller would believe their credentials were going to be used.
      *
-     * @throws UnsupportedOperationException siempre, en la implementacion base
-     * @throws NullPointerException          si {@code auth} es null
+     * @throws UnsupportedOperationException always, in the base implementation
+     * @throws NullPointerException          if {@code auth} is null
      */
     public void setAuthenticator(Authenticator auth) {
         throw new UnsupportedOperationException(
                 "Supplying an authenticator is not supported by " + this.getClass());
     }
 
-    // ---- la respuesta ---------------------------------------------------------------------------
+    // ---- the response ---------------------------------------------------------------------------
 
     /**
-     * El nombre de la cabecera numero {@code n}, o null.
+     * The name of header number {@code n}, or null.
      *
-     * <p>Devuelve null para {@code n == 0} aun cuando haya cabecera 0, porque la cabecera 0 es la
-     * **linea de estado** y no tiene nombre. Esa convencion es la que hace que `getHeaderField(0)`
-     * devuelva "HTTP/1.1 200 OK".
+     * <p>It returns null for {@code n == 0} even when there is a header 0, because header 0 is the
+     * **status line** and has no name. That convention is what makes `getHeaderField(0)` return
+     * "HTTP/1.1 200 OK".
      */
     @Override
     public String getHeaderFieldKey(int n) {
         return null;
     }
 
-    /** El valor de la cabecera numero {@code n}, o null. La base no tiene cabeceras. */
+    /** The value of header number {@code n}, or null. The base has no headers. */
     @Override
     public String getHeaderField(int n) {
         return null;
     }
 
     /**
-     * El codigo de estado: 200, 404, 500.
+     * The status code: 200, 404, 500.
      *
-     * <p>Sale de parsear la linea de estado que la subclase dejo en la cabecera 0. Devuelve -1 si no
-     * hay linea de estado o si no tiene la forma esperada -- no se inventa un codigo.
+     * <p>It comes from parsing the status line the subclass left in header 0. It returns -1 if there
+     * is no status line or if it is not of the expected shape -- a code is not invented.
      *
-     * @throws IOException si falla la conexion mientras se lee la respuesta
+     * @throws IOException if the connection fails while the response is being read
      */
     public int getResponseCode() throws IOException {
         if (this.responseCode != -1) {
             return this.responseCode;
         }
 
-        // Primero se fuerza la conexion, porque la linea de estado no existe hasta que el otro lado
-        // contesto. La excepcion se GUARDA en vez de propagarse: si igual aparecio una linea de
-        // estado, el pedido se completo y el fallo era de otra cosa --leer el cuerpo, tipicamente--
-        // y tapar el codigo de respuesta con esa excepcion perderia justo lo que se estaba pidiendo.
-        Exception falla = null;
+        // The connection is forced first, because the status line does not exist until the far end
+        // has answered. The exception is KEPT instead of propagating: if a status line appeared
+        // anyway, the request completed and the failure was about something else --reading the body,
+        // typically-- and covering the response code with that exception would lose exactly what was
+        // being asked for.
+        Exception failure = null;
         try {
             getInputStream();
         } catch (Exception e) {
-            falla = e;
+            failure = e;
         }
 
-        String lineaDeEstado = getHeaderField(0);
-        if (lineaDeEstado == null) {
-            // Sin linea de estado no hubo respuesta, y ahi la excepcion guardada SI es la
-            // explicacion; devolver -1 y tragarsela dejaria al que llamo sin saber que paso.
-            if (falla != null) {
-                if (falla instanceof RuntimeException) {
-                    throw (RuntimeException) falla;
+        String statusLine = getHeaderField(0);
+        if (statusLine == null) {
+            // With no status line there was no response, and there the kept exception IS the
+            // explanation; returning -1 and swallowing it would leave the caller not knowing what
+            // happened.
+            if (failure != null) {
+                if (failure instanceof RuntimeException) {
+                    throw (RuntimeException) failure;
                 }
-                throw (IOException) falla;
+                throw (IOException) failure;
             }
             return -1;
         }
 
-        // "HTTP-Version SP Status-Code SP Reason-Phrase", del RFC 2616. La frase es opcional: hay
-        // servidores que la omiten, y el JDK los acepta a proposito.
-        if (lineaDeEstado.startsWith("HTTP/1.")) {
-            int posCodigo = lineaDeEstado.indexOf(' ');
-            if (posCodigo > 0) {
-                int posFrase = lineaDeEstado.indexOf(' ', posCodigo + 1);
-                if (posFrase > 0 && posFrase < lineaDeEstado.length()) {
-                    // Sin recortar: la frase es lo que vino, espacios incluidos.
-                    this.responseMessage = lineaDeEstado.substring(posFrase + 1);
+        // "HTTP-Version SP Status-Code SP Reason-Phrase", from RFC 2616. The phrase is optional:
+        // there are servers that omit it, and the JDK accepts them on purpose.
+        if (statusLine.startsWith("HTTP/1.")) {
+            int codePos = statusLine.indexOf(' ');
+            if (codePos > 0) {
+                int phrasePos = statusLine.indexOf(' ', codePos + 1);
+                if (phrasePos > 0 && phrasePos < statusLine.length()) {
+                    // Untrimmed: the phrase is what arrived, spaces included.
+                    this.responseMessage = statusLine.substring(phrasePos + 1);
                 }
-                if (posFrase < 0) {
-                    posFrase = lineaDeEstado.length();
+                if (phrasePos < 0) {
+                    phrasePos = statusLine.length();
                 }
                 try {
                     this.responseCode =
-                            Integer.parseInt(lineaDeEstado.substring(posCodigo + 1, posFrase));
+                            Integer.parseInt(statusLine.substring(codePos + 1, phrasePos));
                     return this.responseCode;
-                } catch (NumberFormatException noEsUnCodigo) {
-                    // Cae al -1 de abajo: no se inventa un codigo.
+                } catch (NumberFormatException notACode) {
+                    // It falls through to the -1 below: a code is not invented.
                 }
             }
         }
@@ -304,9 +307,9 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * El texto que acompana al codigo ("Not Found"), o null si no vino ninguno.
+     * The text accompanying the code ("Not Found"), or null if none came.
      *
-     * @throws IOException si falla la conexion mientras se lee la respuesta
+     * @throws IOException if the connection fails while the response is being read
      */
     public String getResponseMessage() throws IOException {
         getResponseCode();
@@ -314,11 +317,11 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * Esa cabecera leida como fecha.
+     * That header read as a date.
      *
-     * <p>Se pisa la version de `URLConnection` para agregarle "GMT" a una fecha que no lo traiga,
-     * que es lo que hace el JDK: hay servidores que lo omiten, y todas las gramaticas de fecha de
-     * HTTP son en GMT de todos modos.
+     * <p>It overrides `URLConnection`'s version to add "GMT" to a date that does not carry it, which
+     * is what the JDK does: there are servers that omit it, and all of HTTP's date grammars are in
+     * GMT anyway.
      */
     @Override
     public long getHeaderFieldDate(String name, long Default) {
@@ -337,25 +340,25 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * El flujo con el cuerpo de un error, o null.
+     * The stream with an error's body, or null.
      *
-     * <p>Existe porque un `404` **tambien trae cuerpo**, y `getInputStream()` tira para cualquier
-     * codigo de error: sin este metodo, la pagina que explica el error seria inalcanzable. Devuelve
-     * null cuando no hay error, no hay cuerpo, o la conexion no llego a establecerse.
+     * <p>It exists because a `404` **also carries a body**, and `getInputStream()` throws for any
+     * error code: without this method, the page explaining the error would be unreachable. It returns
+     * null when there is no error, no body, or the connection never got established.
      *
-     * <p>La base devuelve null, como en el JDK.
+     * <p>The base returns null, as in the JDK.
      */
     public InputStream getErrorStream() {
         return null;
     }
 
     /**
-     * El permiso que hace falta para hacer este pedido.
+     * The permission needed to make this request.
      *
-     * <p>Un `SocketPermission` de conexion al host y puerto de la URL, que es lo que el JDK devuelve.
-     * Se puede armar entero aca porque construir un permiso es texto, no red.
+     * <p>A `SocketPermission` to connect to the URL's host and port, which is what the JDK returns.
+     * It can be built whole here because building a permission is text, not network.
      *
-     * @throws IOException si no se pudo determinar
+     * @throws IOException if it could not be determined
      */
     @Override
     public Permission getPermission() throws IOException {
@@ -368,132 +371,133 @@ public abstract class HttpURLConnection extends URLConnection {
     }
 
     /**
-     * Suelta la conexion; los pedidos que siguen abren una nueva.
+     * Releases the connection; the requests that follow open a new one.
      *
-     * <p>Abstracto: es uno de los dos metodos que necesitan saber si hay algo vivo del otro lado.
+     * <p>Abstract: it is one of the two methods that need to know whether anything is alive on the
+     * other side.
      */
     public abstract void disconnect();
 
     /**
-     * Si este pedido sale por un proxy.
+     * Whether this request goes out through a proxy.
      *
-     * <p>Abstracto: solo la implementacion sabe por donde salio.
+     * <p>Abstract: only the implementation knows which way it went out.
      */
     public abstract boolean usingProxy();
 
-    // ---- codigos de estado ----------------------------------------------------------------------
+    // ---- status codes ---------------------------------------------------------------------------
 
-    /** 200: salio bien. */
+    /** 200: it went well. */
     public static final int HTTP_OK = 200;
 
-    /** 201: se creo el recurso. */
+    /** 201: the resource was created. */
     public static final int HTTP_CREATED = 201;
 
-    /** 202: se acepto, pero todavia no se hizo. */
+    /** 202: it was accepted, but not done yet. */
     public static final int HTTP_ACCEPTED = 202;
 
-    /** 203: la informacion viene de una copia, no del origen. */
+    /** 203: the information comes from a copy, not from the origin. */
     public static final int HTTP_NOT_AUTHORITATIVE = 203;
 
-    /** 204: salio bien y no hay cuerpo. */
+    /** 204: it went well and there is no body. */
     public static final int HTTP_NO_CONTENT = 204;
 
-    /** 205: salio bien; el cliente deberia limpiar el formulario. */
+    /** 205: it went well; the client should clear the form. */
     public static final int HTTP_RESET = 205;
 
-    /** 206: viene solo el pedazo que se pidio. */
+    /** 206: only the piece that was asked for is coming. */
     public static final int HTTP_PARTIAL = 206;
 
-    /** 300: hay varias respuestas posibles. */
+    /** 300: there are several possible responses. */
     public static final int HTTP_MULT_CHOICE = 300;
 
-    /** 301: se mudo, y para siempre. */
+    /** 301: it moved, and for good. */
     public static final int HTTP_MOVED_PERM = 301;
 
-    /** 302: se mudo, por ahora. */
+    /** 302: it moved, for now. */
     public static final int HTTP_MOVED_TEMP = 302;
 
-    /** 303: mira en otro lado, con un GET. */
+    /** 303: look somewhere else, with a GET. */
     public static final int HTTP_SEE_OTHER = 303;
 
-    /** 304: no cambio desde la fecha que mandaste. */
+    /** 304: it has not changed since the date you sent. */
     public static final int HTTP_NOT_MODIFIED = 304;
 
-    /** 305: hay que pasar por un proxy. */
+    /** 305: you have to go through a proxy. */
     public static final int HTTP_USE_PROXY = 305;
 
-    /** 400: el pedido esta mal formado. */
+    /** 400: the request is malformed. */
     public static final int HTTP_BAD_REQUEST = 400;
 
-    /** 401: hace falta autenticarse. */
+    /** 401: authentication is needed. */
     public static final int HTTP_UNAUTHORIZED = 401;
 
-    /** 402: reservado para pagos; casi nadie lo usa. */
+    /** 402: reserved for payments; hardly anyone uses it. */
     public static final int HTTP_PAYMENT_REQUIRED = 402;
 
-    /** 403: te identificaste y aun asi no podes. */
+    /** 403: you identified yourself and still you may not. */
     public static final int HTTP_FORBIDDEN = 403;
 
-    /** 404: no existe. */
+    /** 404: it does not exist. */
     public static final int HTTP_NOT_FOUND = 404;
 
-    /** 405: ese metodo no vale para este recurso. */
+    /** 405: that method is not valid for this resource. */
     public static final int HTTP_BAD_METHOD = 405;
 
-    /** 406: no se puede dar en ninguno de los formatos que aceptas. */
+    /** 406: it cannot be given in any of the formats you accept. */
     public static final int HTTP_NOT_ACCEPTABLE = 406;
 
-    /** 407: hay que autenticarse ante el proxy. */
+    /** 407: you have to authenticate to the proxy. */
     public static final int HTTP_PROXY_AUTH = 407;
 
-    /** 408: el cliente tardo demasiado en mandar el pedido. */
+    /** 408: the client took too long to send the request. */
     public static final int HTTP_CLIENT_TIMEOUT = 408;
 
-    /** 409: choca con el estado actual del recurso. */
+    /** 409: it clashes with the resource's current state. */
     public static final int HTTP_CONFLICT = 409;
 
-    /** 410: existia y ya no, a proposito. */
+    /** 410: it existed and no longer does, on purpose. */
     public static final int HTTP_GONE = 410;
 
-    /** 411: falta el `Content-Length`. */
+    /** 411: the `Content-Length` is missing. */
     public static final int HTTP_LENGTH_REQUIRED = 411;
 
-    /** 412: no se cumplio una condicion del pedido. */
+    /** 412: a condition of the request was not met. */
     public static final int HTTP_PRECON_FAILED = 412;
 
-    /** 413: el cuerpo es demasiado grande. */
+    /** 413: the body is too large. */
     public static final int HTTP_ENTITY_TOO_LARGE = 413;
 
-    /** 414: la URL es demasiado larga. */
+    /** 414: the URL is too long. */
     public static final int HTTP_REQ_TOO_LONG = 414;
 
-    /** 415: el tipo del cuerpo no se acepta. */
+    /** 415: the body's type is not accepted. */
     public static final int HTTP_UNSUPPORTED_TYPE = 415;
 
     /**
-     * 500: error del servidor.
+     * 500: server error.
      *
-     * @deprecated Estaba mal nombrado desde el principio; el nombre bueno es
-     *             {@link #HTTP_INTERNAL_ERROR}. Se conserva porque hay codigo que lo usa.
+     * @deprecated It was badly named from the start; the good name is {@link #HTTP_INTERNAL_ERROR}.
+     *             It is kept because there is code using it.
      */
     @Deprecated
     public static final int HTTP_SERVER_ERROR = 500;
 
-    /** 500: el servidor se rompio. */
+    /** 500: the server broke. */
     public static final int HTTP_INTERNAL_ERROR = 500;
 
-    /** 501: el servidor no sabe hacer eso. */
+    /** 501: the server does not know how to do that. */
     public static final int HTTP_NOT_IMPLEMENTED = 501;
 
-    /** 502: el de mas atras contesto cualquier cosa. */
+    /** 502: the one further back answered rubbish. */
     public static final int HTTP_BAD_GATEWAY = 502;
 
-    /** 503: no esta disponible ahora. */
+    /** 503: it is not available right now. */
     public static final int HTTP_UNAVAILABLE = 503;
 
-    /** 504: el de mas atras no contesto a tiempo. */
+    /** 504: the one further back did not answer in time. */
     public static final int HTTP_GATEWAY_TIMEOUT = 504;
 
-    /** 505: esa version de HTTP no se soporta. */
+    /** 505: that version of HTTP is not supported. */
     public static final int HTTP_VERSION = 505;
 }

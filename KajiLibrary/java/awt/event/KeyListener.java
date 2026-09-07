@@ -3,20 +3,20 @@ package java.awt.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse del teclado.
-
- <p>Los tres métodos no son lo mismo. {@code keyPressed} y {@code keyReleased} hablan de **teclas**
- y traen un código de tecla; {@code keyTyped} habla de **caracteres** y trae el carácter que resultó.
- Una tecla muerta seguida de una vocal son tres pulsaciones y un solo carácter tecleado.
+ * Whoever wants to hear about the keyboard.
+ *
+ * <p>The three methods are not the same thing. {@code keyPressed} and {@code keyReleased} talk about
+ * **keys** and bring a key code; {@code keyTyped} talks about **characters** and brings the character
+ * that resulted. A dead key followed by a vowel is three key events and a single character typed.
  */
 public interface KeyListener extends EventListener {
 
-    /** Se produjo un carácter. */
+    /** A character was produced. */
     void keyTyped(KeyEvent e);
 
-    /** Se apretó una tecla. */
+    /** A key was pressed. */
     void keyPressed(KeyEvent e);
 
-    /** Se soltó una tecla. */
+    /** A key was released. */
     void keyReleased(KeyEvent e);
 }

@@ -28,7 +28,7 @@ import java.io.Serializable;
 // reachability, and any other place a compiler intersects sets in a loop.
 //
 // Subset of the JDK's: toByteArray/valueOf(byte[]) and the NIO buffer factories, get(int,int),
-// previousClearBit, stream() and clone are not modelled.
+// previousClearBit and stream() are not modelled.
 public class BitSet implements Serializable, Cloneable {
 
     // The bits, six bits of index per word. Never null; may hold trailing zero words.
@@ -692,6 +692,29 @@ public class BitSet implements Serializable, Cloneable {
     // Two BitSets are equal when the same bits are set — which, given the wordsInUse
     // invariant, is exactly word-for-word equality over the words in use. Allocated capacity
     // deliberately does not count.
+    /**
+     * A copy of this set, independent of it.
+     *
+     * <p>The array is copied, not shared: setting a bit on the clone leaves the original alone.
+     * That is the whole point of the method and the only thing that can go wrong with it.
+     *
+     * <p>Declared here even though {@code Object} already has it, for one reason that shows up at
+     * the call site: {@code Object.clone()} is {@code protected} and declares
+     * {@code CloneNotSupportedException}. Redeclaring it public and without the {@code throws} is
+     * what lets {@code (BitSet) b.clone()} be written without a {@code try}, which is how the JDK
+     * declares it too.
+     *
+     * @return the copy
+     */
+    @Override
+    public Object clone() {
+        BitSet copia = new BitSet();
+        copia.words = new long[this.words.length];
+        System.arraycopy(this.words, 0, copia.words, 0, this.words.length);
+        copia.wordsInUse = this.wordsInUse;
+        return copia;
+    }
+
     public boolean equals(Object obj) {
         boolean same;
         if (obj == this) {

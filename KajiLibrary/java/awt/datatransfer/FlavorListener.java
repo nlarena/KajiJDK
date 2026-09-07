@@ -3,12 +3,13 @@ package java.awt.datatransfer;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que cambió lo que hay en el portapapeles.
+ * Whoever wants to hear that what is on the clipboard has changed.
  *
- * <p>El uso típico es habilitar o deshabilitar el botón de pegar según haya algo pegable.
+ * <p>The typical use is enabling or disabling the paste button according to whether there is
+ * anything pasteable.
  */
 public interface FlavorListener extends EventListener {
 
-    /** Avisa que el contenido del portapapeles es otro. */
+    /** Reports that the clipboard's contents are now something else. */
     void flavorsChanged(FlavorEvent e);
 }
