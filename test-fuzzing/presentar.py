@@ -2,7 +2,7 @@
 
 Los datos van embebidos en la página: así se puede abrir sin servidor, mandar como archivo o publicar.
 
-    python test-fuzzing/presentar.py [--prueba bigint|strings] [--semilla 1] [--fragmento]
+    python test-fuzzing/presentar.py [--prueba bigint|strings] [--semilla 1] [--fragmento] [--pdf]
 
 Por defecto escribe un documento completo, para abrir como archivo. Con --fragmento
 escribe sólo el contenido, sin doctype ni head, que es lo que espera el publicador
@@ -10,9 +10,36 @@ de páginas.
 """
 import argparse
 import json
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
+
+# Chrome imprime la página a PDF, igual que el generador del roadmap (docs/gen_roadmap_pdf.js).
+NAVEGADORES = [
+    Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+    Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+]
+
+
+def a_pdf(html, pdf):
+    """Imprime `html` a `pdf` con Chrome en modo headless. Devuelve el navegador que usó."""
+    navegador = next((n for n in NAVEGADORES if n.exists()), None)
+    if navegador is None:
+        raise RuntimeError("no encontré Chrome ni Edge para imprimir el PDF")
+    with tempfile.TemporaryDirectory() as perfil:
+        # `--virtual-time-budget` le da tiempo a la página a escribir sus datos antes de imprimir.
+        r = subprocess.run([
+            str(navegador), "--headless=new", "--disable-gpu", "--no-first-run",
+            f"--user-data-dir={perfil}", "--no-pdf-header-footer",
+            "--virtual-time-budget=5000", f"--print-to-pdf={pdf}",
+            html.resolve().as_uri(),
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
+    if not pdf.exists() or pdf.stat().st_size == 0:
+        raise RuntimeError(f"{navegador.name} no escribió el PDF:\n{r.stderr[-1500:]}")
+    return navegador.name
 
 PLANTILLA = r"""<title>__CLASE__ contra OpenJDK</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -117,6 +144,28 @@ PLANTILLA = r"""<title>__CLASE__ contra OpenJDK</title>
   ul.plain, ol.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch; }
   ul.plain li strong, ol.plain li strong { font-weight: 600; }
   footer { font-size: 13px; color: var(--muted); max-width: 72ch; }
+
+  /* En papel: fondo claro, todo desplegado y nada cortado por la mitad. */
+  @media print {
+    @page { size: A4; margin: 14mm 12mm; }
+    :root {
+      --ground: #FFFFFF; --surface: #FFFFFF; --sunken: #F1F4F1; --ink: #14201B; --muted: #545F59;
+      --rule: #C7D0C9; --accent: #17553F; --accent-soft: #E3EFE8; --bad: #8E2C22; --bad-soft: #F7E3E0;
+      --warn: #7A4E00; --warn-soft: #F6ECD7; --bar: #17553F; --bar-bad: #8E2C22;
+    }
+    body { padding: 0; font-size: 10.5pt; }
+    .wrap { max-width: none; gap: 22px; }
+    a { color: inherit; text-decoration: none; }
+    /* Un `details` cerrado esconde su contenido, y en papel no hay nada que abrir. */
+    details:not([open]) > *:not(summary), details > *:not(summary) { display: block !important; }
+    summary { list-style: none; }
+    .table-scroll, pre { overflow: visible !important; }
+    .case, article, .tile, .bars, .minimo, .steps li, tr { break-inside: avoid; }
+    h1, h2, h3 { break-after: avoid; }
+    th, td { font-size: 8pt; }
+    td code { font-size: 7.5pt; }
+    .tile .big { font-size: 20pt; }
+  }
   .uses { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; border-top: 1px solid var(--rule); padding-top: 28px; }
   .uses ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 60ch; }
   .uses li strong { font-weight: 600; }
@@ -459,6 +508,7 @@ def main():
     ap.add_argument("--salida", default=None)
     ap.add_argument("--fragmento", action="store_true",
                     help="escribir sólo el contenido, para publicar la página")
+    ap.add_argument("--pdf", action="store_true", help="además del HTML, imprimir el informe a PDF")
     a = ap.parse_args()
     PRUEBAS = {
         "bigint": {
@@ -507,6 +557,12 @@ def main():
     salida.write_text(pagina, encoding="utf-8")
     print(f"{salida} · estado {datos['estado']} · {datos['stats']['divergen']} divergencias · "
           f"{len(datos['reducidas'])} casos mínimos")
+    if a.pdf:
+        if a.fragmento:
+            raise SystemExit("--pdf necesita el documento completo: no lo combines con --fragmento")
+        pdf = salida.with_suffix(".pdf")
+        navegador = a_pdf(salida, pdf)
+        print(f"{pdf} · {round(pdf.stat().st_size / 1024)} KB · impreso con {navegador}")
 
 
 if __name__ == "__main__":

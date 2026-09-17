@@ -107,6 +107,28 @@
   ul.plain, ol.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch; }
   ul.plain li strong, ol.plain li strong { font-weight: 600; }
   footer { font-size: 13px; color: var(--muted); max-width: 72ch; }
+
+  /* En papel: fondo claro, todo desplegado y nada cortado por la mitad. */
+  @media print {
+    @page { size: A4; margin: 14mm 12mm; }
+    :root {
+      --ground: #FFFFFF; --surface: #FFFFFF; --sunken: #F1F4F1; --ink: #14201B; --muted: #545F59;
+      --rule: #C7D0C9; --accent: #17553F; --accent-soft: #E3EFE8; --bad: #8E2C22; --bad-soft: #F7E3E0;
+      --warn: #7A4E00; --warn-soft: #F6ECD7; --bar: #17553F; --bar-bad: #8E2C22;
+    }
+    body { padding: 0; font-size: 10.5pt; }
+    .wrap { max-width: none; gap: 22px; }
+    a { color: inherit; text-decoration: none; }
+    /* Un `details` cerrado esconde su contenido, y en papel no hay nada que abrir. */
+    details:not([open]) > *:not(summary), details > *:not(summary) { display: block !important; }
+    summary { list-style: none; }
+    .table-scroll, pre { overflow: visible !important; }
+    .case, article, .tile, .bars, .minimo, .steps li, tr { break-inside: avoid; }
+    h1, h2, h3 { break-after: avoid; }
+    th, td { font-size: 8pt; }
+    td code { font-size: 7.5pt; }
+    .tile .big { font-size: 20pt; }
+  }
   .uses { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; border-top: 1px solid var(--rule); padding-top: 28px; }
   .uses ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 60ch; }
   .uses li strong { font-weight: 600; }
