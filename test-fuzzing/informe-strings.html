@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>String contra OpenJDK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  body { margin: 0; }
+  :root {
+    --ground: #F5F7F4; --surface: #FFFFFF; --sunken: #EBEFEA; --ink: #15201B; --muted: #5D6962;
+    --rule: #D6DDD7; --accent: #1E6B50; --accent-soft: #DCEBE3; --bad: #B2382D; --bad-soft: #F6E0DD;
+    --warn: #9C6400; --warn-soft: #F5E8CF; --bar: #1E6B50; --bar-bad: #B2382D;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0F1513; --surface: #161F1B; --sunken: #1C2722; --ink: #E4EBE7; --muted: #93A19A;
+      --rule: #2B3731; --accent: #56B690; --accent-soft: #1B3329; --bad: #E26C5F; --bad-soft: #3A1F1C;
+      --warn: #D9A548; --warn-soft: #362A15; --bar: #56B690; --bar-bad: #E26C5F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0F1513; --surface: #161F1B; --sunken: #1C2722; --ink: #E4EBE7; --muted: #93A19A;
+    --rule: #2B3731; --accent: #56B690; --accent-soft: #1B3329; --bad: #E26C5F; --bad-soft: #3A1F1C;
+    --warn: #D9A548; --warn-soft: #362A15; --bar: #56B690; --bar-bad: #E26C5F;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; padding-inline: 20px; padding-block: 32px 56px; }
+  .wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 40px; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.2; }
+  h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; }
+  h3 { font-size: 15px; font-weight: 600; }
+  p { margin: 0; }
+  section { display: grid; gap: 14px; }
+  section > p { max-width: 72ch; color: var(--muted); }
+  .eyebrow { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+  header { display: grid; gap: 12px; }
+  .lede { max-width: 70ch; color: var(--muted); font-size: 16px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+  .meta b { color: var(--ink); font-weight: 600; }
+  code, pre, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.ok { background: var(--accent-soft); color: var(--accent); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .tile { padding: 16px; display: grid; gap: 2px; border-left: 1px solid var(--rule); }
+  .tile:first-child { border-left: 0; }
+  .tile .big { font: 600 28px var(--mono); letter-spacing: -0.02em; }
+  .tile .big.bad { color: var(--bad); }
+  .tile .lbl { font-size: 13px; color: var(--muted); }
+  @media (max-width: 560px) { .tile { border-left: 0; border-top: 1px solid var(--rule); } .tile:first-child { border-top: 0; } }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .divexp { display: grid; gap: 10px; max-width: 72ch; }
+  .divexp p { color: var(--muted); }
+  .divexp p strong, .divexp li strong { color: var(--ink); font-weight: 600; }
+  .divexp ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); }
+  .divexp code { font-size: 0.92em; }
+
+  .cases { display: grid; gap: 14px; }
+  .case { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+  .case-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  pre { margin: 0; padding: 10px 12px; background: var(--sunken); border-radius: 6px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  .vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+  .side { display: grid; gap: 2px; }
+  .side .who { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .side .val { font: 500 14px var(--mono); word-break: break-all; }
+  .side.kaji .val { color: var(--bad); font-weight: 600; }
+  details { border-top: 1px solid var(--rule); padding-top: 10px; }
+  summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  .steps { margin: 10px 0 0; padding-left: 22px; display: grid; gap: 10px; }
+  .steps li { display: grid; gap: 4px; }
+  .steps .res { font-size: 13px; color: var(--muted); }
+  .steps .res .mono { color: var(--ink); }
+  .why { max-width: 72ch; }
+  .why code { font-size: 0.92em; }
+  .where { font-size: 13px; color: var(--muted); }
+  .minimo { display: grid; gap: 10px; border-top: 1px solid var(--rule); padding-top: 12px; }
+  .count { font-size: 13px; color: var(--muted); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .bars { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 150px; gap: 12px; align-items: center; font-size: 13px; }
+  .bar-row .name { font-family: var(--mono); }
+  .bar-track { height: 10px; background: var(--sunken); border-radius: 5px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--bar); border-radius: 5px; }
+  .bar-fill.hot { background: var(--bar-bad); }
+  .bar-row .num { font-family: var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) { .bar-row { grid-template-columns: 90px 1fr; } .bar-row .num { grid-column: 1 / -1; text-align: left; } }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: var(--sunken); white-space: nowrap; }
+  td { border-top: 1px solid var(--rule); }
+  td code { font-size: 12px; word-break: break-all; }
+  td.expr { min-width: 320px; }
+  td.v { font-family: var(--mono); font-size: 12px; word-break: break-all; min-width: 140px; }
+  td.v.kaji { color: var(--bad); }
+  ul.plain, ol.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch; }
+  ul.plain li strong, ol.plain li strong { font-weight: 600; }
+  footer { font-size: 13px; color: var(--muted); max-width: 72ch; }
+  .uses { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; border-top: 1px solid var(--rule); padding-top: 28px; }
+  .uses ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 60ch; }
+  .uses li strong { font-weight: 600; }
+  .intro { display: grid; gap: 14px; }
+  .intro > p { max-width: 72ch; }
+  .intro > p strong, .intro li strong { font-weight: 600; }
+  .oracles { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .oracles li { display: grid; gap: 4px; align-content: start; border-top: 2px solid var(--rule); padding-top: 10px; }
+  .oracles li.here { border-top-color: var(--accent); }
+  .oracles h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .oracles p { color: var(--muted); font-size: 14px; }
+  .args { margin: 0; padding-left: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px 28px; }
+  .args li p { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Campaña de fuzzing diferencial · datos reales</span>
+    <h1>String contra OpenJDK</h1>
+  </header>
+
+  <section>
+    <h2>La prueba</h2>
+    <p class="lede" id="lede"></p>
+    <div class="meta" id="meta"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="chips" id="chips"></div>
+    <div class="divexp">
+      <h3>Qué es una divergencia</h3>
+      <div id="divexp"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Qué encontró</h2>
+    <p>El reductor achicó cada divergencia distinta hasta su caso mínimo, y varias quedaron en la misma expresión. Acá están agrupadas por causa. Los números salen de la campaña; la explicación de cada causa se escribió a mano, después de leer el código de las dos implementaciones y verificarla en OpenJDK.</p>
+    <div class="cases" id="cases"></div>
+  </section>
+
+  <section>
+    <h2>Dónde se concentran las divergencias</h2>
+    <p>Para cada operación, en cuántas de las expresiones que la usan hubo divergencia. Que una operación aparezca en una expresión que diverge no prueba que sea la culpable: eso lo dicen los casos mínimos.</p>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section>
+    <h2>Todas las divergencias</h2>
+    <p>Cada expresión en la que OpenJDK y KajiJDK dieron un resultado distinto, en el orden en que aparecieron.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>Tipo</th><th>Expresión generada</th><th>OpenJDK</th><th>KajiJDK</th></tr></thead>
+        <tbody id="all"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cómo se obtuvo</h2>
+    <ul class="plain" id="method"></ul>
+  </section>
+
+  <section class="uses">
+    <div>
+      <h2>Dónde sirve</h2>
+      <ul>
+        <li><strong>Reescrituras y migraciones.</strong> La versión vieja hace de oráculo, así que no hay que escribir el resultado esperado de cada caso.</li>
+        <li><strong>Versión contra versión.</strong> La release de hoy contra la de ayer, sobre las mismas entradas generadas.</li>
+        <li><strong>Código numérico.</strong> Redondeos, desbordes, divisiones, fechas y coma flotante: donde viven los bordes.</li>
+        <li><strong>Parsers y serializadores.</strong> Lo que se codifica y se decodifica tiene que volver igual.</li>
+        <li><strong>Dos implementaciones de una misma especificación.</strong> Cualquier diferencia es un error de una de las dos, como KajiLibrary y OpenJDK en este informe.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Lo que no resuelve</h2>
+      <ul>
+        <li><strong>Necesita una referencia.</strong> Una implementación confiable, o una propiedad que valga siempre, como que decodificar lo codificado devuelva la entrada.</li>
+        <li><strong>Necesita determinismo.</strong> Fecha, hora y todo lo aleatorio tienen que quedar fijos, o el oráculo reporta ruido.</li>
+        <li><strong>Encuentra diferencias, no culpables.</strong> Qué versión tiene razón lo decide una persona con la especificación en la mano.</li>
+        <li><strong>Hay que auditar el instrumento.</strong> Un oráculo roto, por ejemplo uno que compare una implementación consigo misma, reporta cero divergencias aunque haya errores.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script id="datos" type="application/json">{"campaña": {"estado": "terminada", "meta": {"prueba": "java.lang.String", "fecha": "2026-09-17T14:55:00", "referencia": "Eclipse Adoptium 25.0.4.1", "referencia_ruta": "C:\\Users\\nicol\\AppData\\Local\\Temp\\claude\\C--Users-nicol-Sources-Larena-KajiJVM\\f61a8b0f-0d8f-48a4-be8a-cf7cec8b350a\\scratchpad\\openjdk\\jdk-25.0.4.1+1", "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary", "binario_kaji_fecha": "2026-09-17T11:59:15", "semilla": 1, "lotes": 6, "por_lote": 120}, "stats": {"expresiones": 720, "coinciden": 715, "divergen": 5, "por_tipo": {"otro valor": 5}, "por_vista": {"compareToIgnoreCase": 3, "indexOfFrom": 2}, "ops_total": {"substring": 229, "concat": 218, "replace": 250, "lastIndexOf": 34, "stripTrailing": 82, "toUpperCase": 65, "isEmpty": 26, "getBytes": 62, "toLowerCase": 108, "codePointAt": 30, "stripLeading": 94, "hashCode": 20, "codePointCount": 27, "length": 50, "trim": 82, "equals": 21, "contains": 25, "repeat": 69, "startsWith": 29, "strip": 85, "indexOf": 64, "endsWith": 22, "charAt": 27, "isBlank": 25, "compareTo": 22, "equalsIgnoreCase": 26, "compareToIgnoreCase": 19}, "ops_divergentes": {"compareToIgnoreCase": 3, "indexOf": 2, "replace": 1, "strip": 1}, "segundos_jdk": 0.7, "segundos_kaji": 0.6, "segundos_total": 22.9}, "lotes": [{"lote": 0, "salida_kaji": 0, "stderr_kaji": "", "segundos_jdk": 0.11, "segundos_kaji": 0.1}, {"lote": 1, "salida_kaji": 0, "stderr_kaji": "", "segundos_jdk": 0.11, "segundos_kaji": 0.09}, {"lote": 2, "salida_kaji": 0, "stderr_kaji": "", "segundos_jdk": 0.1, "segundos_kaji": 0.09}, {"lote": 3, "salida_kaji": 0, "stderr_kaji": "", "segundos_jdk": 0.11, "segundos_kaji": 0.09}, {"lote": 4, "salida_kaji": 0, "stderr_kaji": "", "segundos_jdk": 0.11, "segundos_kaji": 0.09}, {"lote": 5, "salida_kaji": 0, "stderr_kaji": "", "segundos_jdk": 0.13, "segundos_kaji": 0.12}], "divergencias": [{"lote": 0, "k": 119, "tipo": "otro valor", "vista": "compareToIgnoreCase", "ops": ["compareToIgnoreCase"], "java": "String.valueOf(s(32, 8486, 122, 56283, 47, 49337).compareToIgnoreCase(s(56274, 56703)))", "jdk": "-1067359", "kaji": "-56242"}, {"lote": 3, "k": 93, "tipo": "otro valor", "vista": "indexOfFrom", "ops": ["indexOf"], "java": "String.valueOf(s(41116, 52566).indexOf(s(), 3))", "jdk": "2", "kaji": "-1"}, {"lote": 4, "k": 90, "tipo": "otro valor", "vista": "indexOfFrom", "ops": ["indexOf"], "java": "String.valueOf(s(82, 304, 769, 67, 92, 8486, 42, 8486).indexOf(s(), 100))", "jdk": "8", "kaji": "-1"}, {"lote": 5, "k": 11, "tipo": "otro valor", "vista": "compareToIgnoreCase", "ops": ["compareToIgnoreCase"], "java": "String.valueOf(s(56272, 57206, 56320, 106, 111).compareToIgnoreCase(s(56114, 56773, 55296, 55620, 57182, 39, 769, 931, 56067, 56641, 453, 7838)))", "jdk": "162225", "kaji": "158"}, {"lote": 5, "k": 99, "tipo": "otro valor", "vista": "compareToIgnoreCase", "ops": ["compareToIgnoreCase", "replace", "strip"], "java": "String.valueOf(s(101, 8486, 10, 56, 223, 65279, 453, 55596, 57077, 90, 160, 16420).replace((char) 223, (char) 65).compareToIgnoreCase(s(55297, 56320, 7838, 55357, 56832, 962, 33, 111, 78).strip()))", "jdk": "-66499", "kaji": "-55196"}], "reducidas": [{"divergencia": 0, "tipo": "otro valor", "original": "String.valueOf(s(32, 8486, 122, 56283, 47, 49337).compareToIgnoreCase(s(56274, 56703)))", "original_jdk": "-1067359", "original_kaji": "-56242", "minimo": "String.valueOf(s(56283).compareToIgnoreCase(s(56274, 56703)))", "minimo_jdk": "-1011108", "minimo_kaji": "9", "pasos": [{"java": "String.valueOf(s(56283, 47, 49337).compareToIgnoreCase(s(56274, 56703)))", "jdk": "-1011108", "ours": "9"}, {"java": "String.valueOf(s(56283).compareToIgnoreCase(s(56274, 56703)))", "jdk": "-1011108", "ours": "9"}], "segundos": 3.2}, {"divergencia": 1, "tipo": "otro valor", "original": "String.valueOf(s(41116, 52566).indexOf(s(), 3))", "original_jdk": "2", "original_kaji": "-1", "minimo": "String.valueOf(s().indexOf(s(), 1))", "minimo_jdk": "0", "minimo_kaji": "-1", "pasos": [{"java": "String.valueOf(s().indexOf(s(), 3))", "jdk": "0", "ours": "-1"}, {"java": "String.valueOf(s().indexOf(s(), 1))", "jdk": "0", "ours": "-1"}], "segundos": 3.2}, {"divergencia": 4, "tipo": "otro valor", "original": "String.valueOf(s(101, 8486, 10, 56, 223, 65279, 453, 55596, 57077, 90, 160, 16420).replace((char) 223, (char) 65).compareToIgnoreCase(s(55297, 56320, 7838, 55357, 56832, 962, 33, 111, 78).strip()))", "original_jdk": "-66499", "original_kaji": "-55196", "minimo": "String.valueOf(s(8486).compareToIgnoreCase(s(55297)))", "minimo_jdk": "-54328", "minimo_kaji": "-46811", "pasos": [{"java": "String.valueOf(s(101, 8486, 10, 56, 223, 65279, 453, 55596, 57077, 90, 160, 16420).compareToIgnoreCase(s(55297, 56320, 7838, 55357, 56832, 962, 33, 111, 78).strip()))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(101, 8486, 10, 56, 223, 65279, 453, 55596, 57077, 90, 160, 16420).compareToIgnoreCase(s(55297, 56320, 7838, 55357, 56832, 962, 33, 111, 78)))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(101, 8486, 10, 56, 223, 65279).compareToIgnoreCase(s(55297, 56320, 7838, 55357, 56832, 962, 33, 111, 78)))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(101, 8486, 10, 56, 223, 65279).compareToIgnoreCase(s(55297, 56320, 7838, 55357)))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(101, 8486, 10).compareToIgnoreCase(s(55297, 56320, 7838, 55357)))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(101, 8486, 10).compareToIgnoreCase(s(55297, 56320)))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(101, 8486).compareToIgnoreCase(s(55297, 56320)))", "jdk": "-66499", "ours": "-55196"}, {"java": "String.valueOf(s(8486).compareToIgnoreCase(s(55297, 56320)))", "jdk": "-65631", "ours": "-46811"}, {"java": "String.valueOf(s(8486).compareToIgnoreCase(s(55297)))", "jdk": "-54328", "ours": "-46811"}], "segundos": 9.4}]}, "diagnostico": {"nota": "Diagnóstico hecho a mano después de leer el código de las dos implementaciones y verificar cada causa en OpenJDK. Cada causa lista las expresiones mínimas que el reductor dejó para ella.", "causas": [{"id": "fold", "tipo": "error", "titulo": "Comparar ignorando mayúsculas solo funciona con la A a la Z", "explicacion": "KajiLibrary pliega cada carácter con una función que suma 32 cuando está entre <code>A<\/code> y <code>Z<\/code>, y deja todo lo demás igual. OpenJDK pliega por punto de código, con las mayúsculas y minúsculas de Unicode y tratando los pares de surrogates. Así, para OpenJDK el signo ohm <code>Ω<\/code> (U+2126) se pliega a <code>ω<\/code> y para KajiLibrary no se pliega, y la comparación devuelve otro número. El mismo plegado lo usan <code>equalsIgnoreCase<\/code> y el comparador <code>CASE_INSENSITIVE_ORDER<\/code>, así que el error los alcanza a los tres.", "donde": "KajiLibrary: java/lang/String.java, fold, líneas 766 a 771. OpenJDK: StringUTF16.compareToCIImpl y StringLatin1.compareToCI.", "casos": ["String.valueOf(s(56283).compareToIgnoreCase(s(56274, 56703)))", "String.valueOf(s(8486).compareToIgnoreCase(s(55297)))"]}, {"id": "indexOfVacia", "tipo": "error", "titulo": "Buscar una cadena vacía más allá del final devuelve −1", "explicacion": "La especificación de <code>indexOf(String, int)<\/code> dice que la respuesta arranca en <code>Math.min(fromIndex, this.length())<\/code>, y que una cadena vacía siempre se encuentra: <code>\"\".indexOf(\"\", 1)<\/code> da 0. OpenJDK acota <code>fromIndex<\/code> al largo de la cadena y, si lo buscado está vacío, devuelve esa posición. KajiLibrary delega en su propia versión de tres argumentos, que tiene otro contrato —hasta dónde buscar—, y ahí una posición de arranque mayor que el final significa que no hay nada que encontrar: devuelve −1.", "donde": "KajiLibrary: java/lang/String.java, indexOf(String, int) en la línea 894, que llama a indexOf(String, int, int) en la 904. OpenJDK: String.indexOf(byte[], byte, int, String, int), que hace Math.clamp(fromIndex, 0, srcCount).", "casos": ["String.valueOf(s().indexOf(s(), 1))"]}]}}</script>
+<script>
+(() => {
+  const RAW = JSON.parse(document.getElementById("datos").textContent);
+  const D = RAW.campaña;
+  const G = RAW.diagnostico || { causas: [] };
+  const $ = id => document.getElementById(id);
+  const n = x => Number(x).toLocaleString("es-AR");
+  const esc = s => String(s ?? "—").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const S = D.stats, M = D.meta;
+  const fecha = new Date(M.fecha).toLocaleString("es-AR", { dateStyle: "long", timeStyle: "short" });
+  const minutos = S.segundos_total / 60;
+
+  $("lede").innerHTML =
+    `El fuzzer generó expresiones de <strong>java.lang.String</strong> con valores elegidos hacia los bordes, ` +
+    `y las corrió en <strong>${esc(M.referencia)}</strong> y en <strong>KajiJDK con KajiLibrary</strong>. ` +
+    `O sea, se llamó a dos clases que deberían dar el mismo resultado, el <code>String</code> de OpenJDK y el de KajiLibrary, ` +
+    `y se las probó con entradas aleatorias. ` +
+    `Después comparó los resultados uno por uno y redujo cada divergencia distinta a su caso más chico.`;
+
+  const estado = D.estado === "terminada"
+    ? `<span class="pill ok">Campaña terminada</span>`
+    : `<span class="pill warn">Campaña incompleta: ${esc(D.estado)}</span>`;
+  $("meta").innerHTML = [
+    estado,
+    `<span>Referencia <b>${esc(M.referencia)}</b></span>`,
+    `<span>Bajo prueba <b>${esc(M.bajo_prueba)}</b></span>`,
+    `<span>Semilla <b>${esc(M.semilla)}</b> · ${n(M.lotes)} lotes de ${n(M.por_lote)}</span>`,
+    `<span>${esc(fecha)}</span>`,
+  ].join("");
+
+  const tiles = [
+    [n(S.expresiones), "expresiones comparadas", ""],
+    [n(S.coinciden), "dieron lo mismo", ""],
+    [n(S.divergen), "divergieron", "bad"],
+    [n(G.causas.filter(c => c.tipo === "error").length), "errores distintos en KajiLibrary", "bad"],
+    [n(D.reducidas.length), "casos mínimos", ""],
+    [minutos >= 1 ? `${minutos.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min` : `${n(Math.round(S.segundos_total))} s`, "de campaña", ""],
+  ];
+  $("tiles").innerHTML = tiles.map(([v, l, c]) => `<div class="tile"><span class="big ${c}">${v}</span><span class="lbl">${l}</span></div>`).join("");
+  $("chips").innerHTML = Object.entries(S.por_tipo).sort((a, b) => b[1] - a[1])
+    .map(([t, c]) => `<span class="pill bad">${esc(t)}: ${n(c)}</span>`).join("");
+
+  // Cada expresión mínima puede venir de varias divergencias; cada causa diagnosticada, de varias
+  // expresiones mínimas. Lo que no figura en el diagnóstico se muestra igual, como pendiente.
+  const porMinimo = new Map();
+  for (const r of D.reducidas) {
+    if (!porMinimo.has(r.minimo)) porMinimo.set(r.minimo, []);
+    porMinimo.get(r.minimo).push(r);
+  }
+  const grupos = G.causas
+    .map(c => ({ c, minimos: c.casos.filter(m => porMinimo.has(m)) }))
+    .filter(g => g.minimos.length);
+  const sinCausa = [...porMinimo.keys()].filter(m => !G.causas.some(c => c.casos.includes(m)));
+  if (sinCausa.length) {
+    grupos.push({ c: { tipo: "pendiente", titulo: "Sin diagnosticar", explicacion: "Estos casos todavía no se analizaron." }, minimos: sinCausa });
+  }
+  const pill = c => c.tipo === "error"
+    ? `<span class="pill bad">Error de KajiLibrary</span>`
+    : c.tipo === "consecuencia"
+      ? `<span class="pill warn">Consecuencia de otro error</span>`
+      : `<span class="pill warn">Pendiente</span>`;
+  const reduccion = r => `
+    <details>
+      <summary>Cómo se redujo: de ${n(r.original.length)} a ${n(r.minimo.length)} caracteres en ${n(r.pasos.length)} pasos</summary>
+      <ol class="steps">
+        <li><span>Expresión generada:</span><pre><code>${esc(r.original)}</code></pre>
+          <span class="res">OpenJDK <span class="mono">${esc(r.original_jdk)}</span> · KajiJDK <span class="mono">${esc(r.original_kaji)}</span></span></li>
+        ${r.pasos.map(p => `<li><pre><code>${esc(p.java)}</code></pre>
+          <span class="res">OpenJDK <span class="mono">${esc(p.jdk)}</span> · KajiJDK <span class="mono">${esc(p.ours)}</span></span></li>`).join("")}
+      </ol>
+    </details>`;
+  // --- qué es una divergencia, con un ejemplo de esta misma campaña ---
+  const TIPOS = {
+    "otro valor": "las dos devolvieron un resultado, pero distinto.",
+    "excepción contra valor": "una lanzó una excepción y la otra devolvió un resultado.",
+    "otra excepción": "las dos lanzaron una excepción, pero de clases distintas.",
+    "falta en la biblioteca": "KajiJDK no encontró el método o la clase que usa la expresión.",
+    "sin salida (crash o cuelgue)": "KajiJDK no llegó a devolver un resultado: se cayó o no terminó a tiempo.",
+  };
+  const causaError = G.causas.find(c => c.tipo === "error");
+  const ejemplo = (causaError && D.reducidas.find(r => causaError.casos.includes(r.minimo))) || D.reducidas[0];
+  const errores = G.causas.filter(c => c.tipo === "error").length;
+  $("divexp").innerHTML =
+    `<p>Una <strong>divergencia</strong> es una expresión en la que OpenJDK y KajiJDK devolvieron resultados distintos. ` +
+    (ejemplo ? `Por ejemplo, <code>${esc(ejemplo.minimo)}</code> da <code>${esc(ejemplo.minimo_jdk)}</code> en OpenJDK y <code>${esc(ejemplo.minimo_kaji)}</code> en KajiJDK. ` : "") +
+    `Como OpenJDK hace de referencia, cada divergencia indica que KajiLibrary se aparta de lo que tendría que hacer.</p>` +
+    `<p>Las etiquetas de arriba dicen de qué forma difieren:</p>` +
+    `<ul>${Object.keys(S.por_tipo).sort((a, b) => S.por_tipo[b] - S.por_tipo[a])
+      .map(t => `<li><strong>${esc(t)}</strong>: ${esc(TIPOS[t] || "los resultados no coinciden.")}</li>`).join("")}</ul>` +
+    `<p>Una divergencia no es lo mismo que un error: varias pueden salir del mismo error, con entradas distintas. ` +
+    (errores ? `Las ${n(S.divergen)} divergencias de esta campaña se explican con ${n(errores)} ${errores === 1 ? "error" : "errores"}, que se detallan abajo.` : "") +
+    `</p>`;
+
+  $("cases").innerHTML = grupos.length ? grupos.map(({ c, minimos }) => `
+    <article class="case">
+      <div class="case-head"><h3>${esc(c.titulo)}</h3>${pill(c)}</div>
+      <p class="why">${c.explicacion}</p>
+      ${c.donde ? `<p class="where">${esc(c.donde)}</p>` : ""}
+      ${minimos.map(m => {
+        const rs = porMinimo.get(m), r0 = rs[0];
+        return `
+        <div class="minimo">
+          <pre><code>${esc(m)}</code></pre>
+          <div class="vs">
+            <div class="side"><span class="who">OpenJDK</span><span class="val">${esc(r0.minimo_jdk)}</span></div>
+            <div class="side kaji"><span class="who">KajiJDK</span><span class="val">${esc(r0.minimo_kaji)}</span></div>
+          </div>
+          <p class="count">${rs.length === 1 ? "Una divergencia de la campaña se redujo" : `${n(rs.length)} divergencias de la campaña se redujeron`} a esta expresión.</p>
+          ${rs.map(reduccion).join("")}
+        </div>`;
+      }).join("")}
+    </article>`).join("") : `<p>Esta campaña todavía no tiene casos reducidos.</p>`;
+
+  const ops = Object.keys(S.ops_total).map(op => {
+    const t = S.ops_total[op], d = S.ops_divergentes[op] || 0;
+    return { op, t, d, r: t ? d / t : 0 };
+  }).sort((a, b) => b.r - a.r || b.t - a.t);
+  const maxR = Math.max(...ops.map(o => o.r), 0.0001);
+  $("bars").innerHTML = ops.map(o => `
+    <div class="bar-row">
+      <span class="name">${esc(o.op)}</span>
+      <span class="bar-track"><span class="bar-fill ${o.r >= maxR * 0.5 && o.d ? "hot" : ""}" style="width:${(o.r / maxR) * 100}%; display:block"></span></span>
+      <span class="num">${n(o.d)} de ${n(o.t)} · ${(o.r * 100).toLocaleString("es-AR", { maximumFractionDigits: 1 })} %</span>
+    </div>`).join("");
+
+  $("all").innerHTML = D.divergencias.map((d, i) => `
+    <tr>
+      <td class="mono">${i + 1}</td>
+      <td><span class="pill bad">${esc(d.tipo)}</span></td>
+      <td class="expr"><code>${esc(d.java)}</code></td>
+      <td class="v">${esc(d.jdk)}</td>
+      <td class="v kaji">${esc(d.kaji)}</td>
+    </tr>`).join("");
+
+  $("method").innerHTML = [
+    `<li><strong>Generar.</strong> ${n(M.lotes)} lotes de ${n(M.por_lote)} expresiones de <code>String</code>, de hasta tres niveles de operaciones anidadas. Los caracteres salen, casi la mitad de las veces, de una lista de bordes: espacios raros, la ß alemana, la I y la i turcas, la sigma final griega, marcas combinables, surrogates sueltos y emojis de fuera del plano básico.</li>`,
+    `<li><strong>Ejecutar.</strong> Cada lote es un único programa Java, compilado una sola vez con el <code>javac</code> de ${esc(M.referencia)}. El mismo <code>.class</code> corre en ese JDK y en KajiJDK con KajiLibrary.</li>`,
+    `<li><strong>Comparar.</strong> Dos resultados coinciden si su texto es idéntico. Cuando una expresión lanza una excepción se compara la clase de la excepción, no el mensaje, que puede variar entre implementaciones sin estar mal.</li>`,
+    `<li><strong>Reducir.</strong> De cada tipo de divergencia distinto se toma la primera, y se prueban versiones más chicas: quitar una operación, cambiar una constante por 0, 1, −1 o 2, acortar sus dígitos. Se queda con la más chica que todavía diverge del mismo modo, y repite.</li>`,
+    `<li><strong>Reproducir.</strong> La misma semilla genera las mismas expresiones: <code>python test-fuzzing/fuzzer/strfuzz.py --jdk "$OPENJDK" --seed ${esc(M.semilla)} --lotes ${esc(M.lotes)} --por-lote ${esc(M.por_lote)}</code>.</li>`,
+  ].join("");
+
+  $("footer").textContent =
+    `Datos de ${fecha}. KajiJDK compilado el ${new Date(M.binario_kaji_fecha).toLocaleString("es-AR", { dateStyle: "long", timeStyle: "short" })}. ` +
+    `Tiempo de ejecución: ${n(Math.round(S.segundos_jdk))} s en OpenJDK y ${n(Math.round(S.segundos_kaji))} s en KajiJDK, sin contar la reducción.`;
+})();
+</script>
+</body>
+</html>

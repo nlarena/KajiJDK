@@ -1,0 +1,38 @@
+{
+  "nota": "Diagnóstico hecho a mano después de leer el código de las dos implementaciones y verificar cada causa en OpenJDK. Cada causa lista las expresiones mínimas que el reductor dejó para ella.",
+  "causas": [
+    {
+      "id": "shiftRight",
+      "tipo": "error",
+      "titulo": "shiftRight redondea hacia cero con los negativos",
+      "explicacion": "La especificación dice que <code>shiftRight(n)</code> calcula <code>floor(this / 2ⁿ)</code>: redondea hacia menos infinito, igual que <code>&gt;&gt;</code> sobre un <code>int</code>. KajiLibrary desplaza la magnitud y conserva el signo, y así trunca hacia cero: <code>−1 &gt;&gt; 1</code> da 0 en vez de −1. OpenJDK corrige ese caso sumando uno a la magnitud cuando el número es negativo y el desplazamiento pierde algún bit en 1.",
+      "donde": "KajiLibrary: java/math/BigInteger.java, shiftRight, líneas 522 a 527. OpenJDK: shiftRightImpl.",
+      "casos": [
+        "new BigInteger(\"-1\").shiftRight(1).toString()",
+        "new BigInteger(\"-2\").shiftRight(64).toString()"
+      ]
+    },
+    {
+      "id": "testBit",
+      "tipo": "error",
+      "titulo": "testBit ignora el signo",
+      "explicacion": "La especificación dice que <code>testBit(n)</code> responde sobre la representación en complemento a dos, la misma que usan <code>and</code>, <code>or</code> y <code>not</code>. En complemento a dos −1 tiene todos los bits en 1, así que <code>testBit(31)</code> es <code>true</code>. KajiLibrary lee el bit de la magnitud sin mirar el signo: la magnitud de −1 es 1, que no tiene el bit 31 encendido, y responde <code>false</code>.",
+      "donde": "KajiLibrary: java/math/BigInteger.java, testBit, líneas 508 a 513, y testBitMag, líneas 270 a 276.",
+      "casos": [
+        "String.valueOf(new BigInteger(\"-2\").testBit(31))",
+        "String.valueOf(new BigInteger(\"-1\").testBit(31))",
+        "String.valueOf(new BigInteger(\"1\").negate().testBit(63))"
+      ]
+    },
+    {
+      "id": "modPow",
+      "tipo": "consecuencia",
+      "titulo": "modPow lanza una excepción, por culpa de shiftRight",
+      "explicacion": "Por el error de <code>shiftRight</code>, KajiLibrary calcula <code>−1 &gt;&gt; 1</code> como 0, y 0 no tiene inverso módulo 2: un <code>modPow</code> con exponente negativo tiene que lanzar. OpenJDK hace exactamente lo mismo si recibe un 0, porque <code>BigInteger.ZERO.modPow(−2, 2)</code> también lanza <code>ArithmeticException</code>. <code>modPow</code> se comporta bien; el valor equivocado llega de antes.",
+      "donde": "Se arregla con shiftRight.",
+      "casos": [
+        "new BigInteger(\"-1\").shiftRight(1).modPow(new BigInteger(\"2\").negate(), new BigInteger(\"2\")).toString()"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,568 @@
+{
+  "estado": "terminada",
+  "meta": {
+    "fecha": "2026-09-17T12:29:39",
+    "referencia": "Eclipse Adoptium 25.0.4.1",
+    "referencia_ruta": "C:\\Users\\nicol\\AppData\\Local\\Temp\\claude\\C--Users-nicol-Sources-Larena-KajiJVM\\f61a8b0f-0d8f-48a4-be8a-cf7cec8b350a\\scratchpad\\openjdk\\jdk-25.0.4.1+1",
+    "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary",
+    "binario_kaji_fecha": "2026-09-17T11:59:15",
+    "semilla": 1,
+    "lotes": 6,
+    "por_lote": 120
+  },
+  "stats": {
+    "expresiones": 720,
+    "coinciden": 704,
+    "divergen": 16,
+    "por_tipo": {
+      "excepción contra valor": 1,
+      "otro valor": 15
+    },
+    "por_vista": {
+      "longValue": 3,
+      "testBit": 4,
+      "getLowestSetBit": 1,
+      "radix": 1,
+      "str": 6,
+      "intValue": 1
+    },
+    "ops_total": {
+      "pow": 76,
+      "divide": 54,
+      "min": 69,
+      "mod": 71,
+      "modPow": 119,
+      "multiply": 56,
+      "modInverse": 55,
+      "not": 82,
+      "and": 65,
+      "shiftRight": 84,
+      "subtract": 58,
+      "gcd": 69,
+      "max": 60,
+      "add": 59,
+      "negate": 92,
+      "or": 49,
+      "shiftLeft": 95,
+      "flipBit": 97,
+      "xor": 71,
+      "clearBit": 83,
+      "sqrt": 91,
+      "remainder": 43,
+      "andNot": 49,
+      "setBit": 80,
+      "abs": 89
+    },
+    "ops_divergentes": {
+      "flipBit": 2,
+      "modPow": 1,
+      "negate": 4,
+      "shiftRight": 11,
+      "andNot": 1,
+      "clearBit": 3,
+      "pow": 1,
+      "xor": 4,
+      "max": 2,
+      "multiply": 1,
+      "and": 1,
+      "gcd": 2,
+      "min": 2,
+      "divide": 1,
+      "shiftLeft": 3,
+      "subtract": 3,
+      "add": 2,
+      "not": 1,
+      "setBit": 1
+    },
+    "segundos_jdk": 0.6,
+    "segundos_kaji": 250.3,
+    "segundos_total": 969.3
+  },
+  "lotes": [
+    {
+      "lote": 0,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 44.87
+    },
+    {
+      "lote": 1,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 94.14
+    },
+    {
+      "lote": 2,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 8.65
+    },
+    {
+      "lote": 3,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 7.34
+    },
+    {
+      "lote": 4,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 4.43
+    },
+    {
+      "lote": 5,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 90.88
+    }
+  ],
+  "divergencias": [
+    {
+      "lote": 0,
+      "k": 108,
+      "tipo": "excepción contra valor",
+      "vista": "longValue",
+      "ops": [
+        "flipBit",
+        "modPow",
+        "negate",
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"3822933037875768063649085183642879854\").modPow(new BigInteger(\"85687768007531051271327124\").modPow(new BigInteger(\"330478879430472332414269\"), new BigInteger(\"340282366920938463463374607431768211456\")).flipBit(1), new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"4811923206227507985\").negate(), new BigInteger(\"9031773851424641005820520004304797591325152537675991331314\").modPow(new BigInteger(\"-9223372036854775808\"), new BigInteger(\"484412637231616293449897\")))).longValue())",
+      "jdk": "-5642153257516419978",
+      "kaji": "EXC:java.lang.ArithmeticException"
+    },
+    {
+      "lote": 1,
+      "k": 11,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [
+        "andNot",
+        "clearBit",
+        "pow",
+        "xor"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-2\").clearBit(31).andNot(new BigInteger(\"1962795419463368916\").pow(2)).xor(new BigInteger(\"256\")).testBit(31))",
+      "jdk": "false",
+      "kaji": "true"
+    },
+    {
+      "lote": 1,
+      "k": 66,
+      "tipo": "otro valor",
+      "vista": "longValue",
+      "ops": [
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-1\").shiftRight(33).longValue())",
+      "jdk": "-1",
+      "kaji": "0"
+    },
+    {
+      "lote": 1,
+      "k": 69,
+      "tipo": "otro valor",
+      "vista": "getLowestSetBit",
+      "ops": [
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-2147483648\").shiftRight(32).getLowestSetBit())",
+      "jdk": "0",
+      "kaji": "-1"
+    },
+    {
+      "lote": 2,
+      "k": 23,
+      "tipo": "otro valor",
+      "vista": "radix",
+      "ops": [
+        "clearBit",
+        "max",
+        "multiply",
+        "negate",
+        "shiftRight"
+      ],
+      "java": "new BigInteger(\"-98765432109876543210987654321\").shiftRight(31).multiply(new BigInteger(\"340282366920938463463374607431768211456\").negate().max(new BigInteger(\"10\").clearBit(32))).toString(8)",
+      "jdk": "-61672210063577733044164",
+      "kaji": "-61672210063577733044152"
+    },
+    {
+      "lote": 2,
+      "k": 24,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "and",
+        "flipBit",
+        "gcd",
+        "min",
+        "shiftRight"
+      ],
+      "java": "new BigInteger(\"-18446744073709551616\").min(new BigInteger(\"6465398639695\")).and(new BigInteger(\"18446744073709551615\").flipBit(64).gcd(new BigInteger(\"-2\").shiftRight(64))).toString()",
+      "jdk": "0",
+      "kaji": "18446744073709551616"
+    },
+    {
+      "lote": 2,
+      "k": 53,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [],
+      "java": "String.valueOf(new BigInteger(\"-407584303955795180166036188761314192023918\").testBit(31))",
+      "jdk": "false",
+      "kaji": "true"
+    },
+    {
+      "lote": 2,
+      "k": 68,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [
+        "negate"
+      ],
+      "java": "String.valueOf(new BigInteger(\"256\").negate().testBit(63))",
+      "jdk": "true",
+      "kaji": "false"
+    },
+    {
+      "lote": 2,
+      "k": 87,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "divide",
+        "max",
+        "shiftLeft",
+        "shiftRight",
+        "subtract",
+        "xor"
+      ],
+      "java": "new BigInteger(\"-390136690303871613558547759\").shiftRight(64).shiftLeft(0).xor(new BigInteger(\"-18446744073709551616\").subtract(new BigInteger(\"0\")).divide(new BigInteger(\"-18446744073709551616\").max(new BigInteger(\"10\")))).toString()",
+      "jdk": "1844674407358476080",
+      "kaji": "1844674407358476095"
+    },
+    {
+      "lote": 2,
+      "k": 94,
+      "tipo": "otro valor",
+      "vista": "longValue",
+      "ops": [
+        "add",
+        "not",
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-18446744073709551616\").add(new BigInteger(\"18446744073709551616\").not()).shiftRight(65).longValue())",
+      "jdk": "-2",
+      "kaji": "-1"
+    },
+    {
+      "lote": 3,
+      "k": 15,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [],
+      "java": "String.valueOf(new BigInteger(\"-65965822096338883813426810717\").testBit(64))",
+      "jdk": "false",
+      "kaji": "true"
+    },
+    {
+      "lote": 3,
+      "k": 95,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "shiftRight",
+        "subtract",
+        "xor"
+      ],
+      "java": "new BigInteger(\"-1\").xor(new BigInteger(\"9223372036854775808\")).subtract(new BigInteger(\"-368085817248671590511407942005123312455\").shiftRight(32)).toString()",
+      "jdk": "85701657740645462007791682427",
+      "kaji": "85701657740645462007791682426"
+    },
+    {
+      "lote": 3,
+      "k": 111,
+      "tipo": "otro valor",
+      "vista": "intValue",
+      "ops": [
+        "negate",
+        "setBit",
+        "shiftLeft"
+      ],
+      "java": "String.valueOf(new BigInteger(\"18446744073709551615\").negate().setBit(63).shiftLeft(-1).intValue())",
+      "jdk": "0",
+      "kaji": "1"
+    },
+    {
+      "lote": 4,
+      "k": 58,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "add",
+        "gcd",
+        "shiftLeft",
+        "shiftRight",
+        "subtract"
+      ],
+      "java": "new BigInteger(\"6376482070658812300672125607\").gcd(new BigInteger(\"2\")).shiftLeft(65).add(new BigInteger(\"-40731248420276610866911063409357836402191615\").subtract(new BigInteger(\"9435496438862\")).shiftRight(100)).toString()",
+      "jdk": "36893456016129603630",
+      "kaji": "36893456016129603631"
+    },
+    {
+      "lote": 4,
+      "k": 90,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "min",
+        "shiftRight"
+      ],
+      "java": "new BigInteger(\"-2\").shiftRight(32).min(new BigInteger(\"123456789012345678901234567890\")).toString()",
+      "jdk": "-1",
+      "kaji": "0"
+    },
+    {
+      "lote": 5,
+      "k": 26,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "clearBit",
+        "shiftRight",
+        "xor"
+      ],
+      "java": "new BigInteger(\"4294967296\").xor(new BigInteger(\"-4294967296\")).shiftRight(65).clearBit(31).toString()",
+      "jdk": "-2147483649",
+      "kaji": "0"
+    }
+  ],
+  "reducidas": [
+    {
+      "divergencia": 0,
+      "tipo": "excepción contra valor",
+      "original": "String.valueOf(new BigInteger(\"3822933037875768063649085183642879854\").modPow(new BigInteger(\"85687768007531051271327124\").modPow(new BigInteger(\"330478879430472332414269\"), new BigInteger(\"340282366920938463463374607431768211456\")).flipBit(1), new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"4811923206227507985\").negate(), new BigInteger(\"9031773851424641005820520004304797591325152537675991331314\").modPow(new BigInteger(\"-9223372036854775808\"), new BigInteger(\"484412637231616293449897\")))).longValue())",
+      "original_jdk": "-5642153257516419978",
+      "original_kaji": "EXC:java.lang.ArithmeticException",
+      "minimo": "new BigInteger(\"-1\").shiftRight(1).modPow(new BigInteger(\"2\").negate(), new BigInteger(\"2\")).toString()",
+      "minimo_jdk": "1",
+      "minimo_kaji": "EXC:java.lang.ArithmeticException",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"4811923206227507985\").negate(), new BigInteger(\"9031773851424641005820520004304797591325152537675991331314\").modPow(new BigInteger(\"-9223372036854775808\"), new BigInteger(\"484412637231616293449897\"))).longValue())",
+          "jdk": "-3909297753048599043",
+          "ours": "EXC:java.lang.ArithmeticException"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"4811923206227507985\").negate(), new BigInteger(\"9031773851424641005820520004304797591325152537675991331314\")).longValue())",
+          "jdk": "-8320588441139521717",
+          "ours": "EXC:java.lang.ArithmeticException"
+        },
+        {
+          "java": "new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"4811923206227507985\").negate(), new BigInteger(\"9031773851424641005820520004304797591325152537675991331314\")).toString()",
+          "jdk": "6199064393162628437497992947100023776974766752770717931339",
+          "ours": "EXC:java.lang.ArithmeticException"
+        },
+        {
+          "java": "new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"4811923206227507985\").negate(), new BigInteger(\"2\")).toString()",
+          "jdk": "1",
+          "ours": "EXC:java.lang.ArithmeticException"
+        },
+        {
+          "java": "new BigInteger(\"-189279246255402\").shiftRight(31).modPow(new BigInteger(\"2\").negate(), new BigInteger(\"2\")).toString()",
+          "jdk": "1",
+          "ours": "EXC:java.lang.ArithmeticException"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(31).modPow(new BigInteger(\"2\").negate(), new BigInteger(\"2\")).toString()",
+          "jdk": "1",
+          "ours": "EXC:java.lang.ArithmeticException"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(1).modPow(new BigInteger(\"2\").negate(), new BigInteger(\"2\")).toString()",
+          "jdk": "1",
+          "ours": "EXC:java.lang.ArithmeticException"
+        }
+      ],
+      "segundos": 685.5
+    },
+    {
+      "divergencia": 1,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-2\").clearBit(31).andNot(new BigInteger(\"1962795419463368916\").pow(2)).xor(new BigInteger(\"256\")).testBit(31))",
+      "original_jdk": "false",
+      "original_kaji": "true",
+      "minimo": "String.valueOf(new BigInteger(\"-2\").testBit(31))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-2\").clearBit(31).xor(new BigInteger(\"256\")).testBit(31))",
+          "jdk": "false",
+          "ours": "true"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-2\").clearBit(31).testBit(31))",
+          "jdk": "false",
+          "ours": "true"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-2\").testBit(31))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 4.1
+    },
+    {
+      "divergencia": 2,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-1\").shiftRight(33).longValue())",
+      "original_jdk": "-1",
+      "original_kaji": "0",
+      "minimo": "new BigInteger(\"-1\").shiftRight(1).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(33).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(1).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 3.1
+    },
+    {
+      "divergencia": 3,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-2147483648\").shiftRight(32).getLowestSetBit())",
+      "original_jdk": "0",
+      "original_kaji": "-1",
+      "minimo": "new BigInteger(\"-1\").shiftRight(1).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "new BigInteger(\"-2147483648\").shiftRight(32).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(32).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(1).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 4.0
+    },
+    {
+      "divergencia": 4,
+      "tipo": "otro valor",
+      "original": "new BigInteger(\"-98765432109876543210987654321\").shiftRight(31).multiply(new BigInteger(\"340282366920938463463374607431768211456\").negate().max(new BigInteger(\"10\").clearBit(32))).toString(8)",
+      "original_jdk": "-61672210063577733044164",
+      "original_kaji": "-61672210063577733044152",
+      "minimo": "new BigInteger(\"-1\").shiftRight(1).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "new BigInteger(\"-98765432109876543210987654321\").shiftRight(31).toString(8)",
+          "jdk": "-4771015470277774235162",
+          "ours": "-4771015470277774235161"
+        },
+        {
+          "java": "new BigInteger(\"-98765432109876543210987654321\").shiftRight(31).toString()",
+          "jdk": "-45991238257790237298",
+          "ours": "-45991238257790237297"
+        },
+        {
+          "java": "new BigInteger(\"-98765432109876543210987654321\").shiftRight(1).toString()",
+          "jdk": "-49382716054938271605493827161",
+          "ours": "-49382716054938271605493827160"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(1).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 6.7
+    },
+    {
+      "divergencia": 5,
+      "tipo": "otro valor",
+      "original": "new BigInteger(\"-18446744073709551616\").min(new BigInteger(\"6465398639695\")).and(new BigInteger(\"18446744073709551615\").flipBit(64).gcd(new BigInteger(\"-2\").shiftRight(64))).toString()",
+      "original_jdk": "0",
+      "original_kaji": "18446744073709551616",
+      "minimo": "new BigInteger(\"-2\").shiftRight(64).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "new BigInteger(\"18446744073709551615\").flipBit(64).gcd(new BigInteger(\"-2\").shiftRight(64)).toString()",
+          "jdk": "1",
+          "ours": "36893488147419103231"
+        },
+        {
+          "java": "new BigInteger(\"-2\").shiftRight(64).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 3.5
+    },
+    {
+      "divergencia": 6,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-407584303955795180166036188761314192023918\").testBit(31))",
+      "original_jdk": "false",
+      "original_kaji": "true",
+      "minimo": "String.valueOf(new BigInteger(\"-1\").testBit(31))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-1\").testBit(31))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 2.4
+    },
+    {
+      "divergencia": 7,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"256\").negate().testBit(63))",
+      "original_jdk": "true",
+      "original_kaji": "false",
+      "minimo": "String.valueOf(new BigInteger(\"1\").negate().testBit(63))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"1\").negate().testBit(63))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 2.4
+    }
+  ]
+}

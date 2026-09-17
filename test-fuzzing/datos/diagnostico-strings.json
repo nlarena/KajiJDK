@@ -1,0 +1,26 @@
+{
+  "nota": "Diagnóstico hecho a mano después de leer el código de las dos implementaciones y verificar cada causa en OpenJDK. Cada causa lista las expresiones mínimas que el reductor dejó para ella.",
+  "causas": [
+    {
+      "id": "fold",
+      "tipo": "error",
+      "titulo": "Comparar ignorando mayúsculas solo funciona con la A a la Z",
+      "explicacion": "KajiLibrary pliega cada carácter con una función que suma 32 cuando está entre <code>A</code> y <code>Z</code>, y deja todo lo demás igual. OpenJDK pliega por punto de código, con las mayúsculas y minúsculas de Unicode y tratando los pares de surrogates. Así, para OpenJDK el signo ohm <code>Ω</code> (U+2126) se pliega a <code>ω</code> y para KajiLibrary no se pliega, y la comparación devuelve otro número. El mismo plegado lo usan <code>equalsIgnoreCase</code> y el comparador <code>CASE_INSENSITIVE_ORDER</code>, así que el error los alcanza a los tres.",
+      "donde": "KajiLibrary: java/lang/String.java, fold, líneas 766 a 771. OpenJDK: StringUTF16.compareToCIImpl y StringLatin1.compareToCI.",
+      "casos": [
+        "String.valueOf(s(56283).compareToIgnoreCase(s(56274, 56703)))",
+        "String.valueOf(s(8486).compareToIgnoreCase(s(55297)))"
+      ]
+    },
+    {
+      "id": "indexOfVacia",
+      "tipo": "error",
+      "titulo": "Buscar una cadena vacía más allá del final devuelve −1",
+      "explicacion": "La especificación de <code>indexOf(String, int)</code> dice que la respuesta arranca en <code>Math.min(fromIndex, this.length())</code>, y que una cadena vacía siempre se encuentra: <code>\"\".indexOf(\"\", 1)</code> da 0. OpenJDK acota <code>fromIndex</code> al largo de la cadena y, si lo buscado está vacío, devuelve esa posición. KajiLibrary delega en su propia versión de tres argumentos, que tiene otro contrato —hasta dónde buscar—, y ahí una posición de arranque mayor que el final significa que no hay nada que encontrar: devuelve −1.",
+      "donde": "KajiLibrary: java/lang/String.java, indexOf(String, int) en la línea 894, que llama a indexOf(String, int, int) en la 904. OpenJDK: String.indexOf(byte[], byte, int, String, int), que hace Math.clamp(fromIndex, 0, srcCount).",
+      "casos": [
+        "String.valueOf(s().indexOf(s(), 1))"
+      ]
+    }
+  ]
+}

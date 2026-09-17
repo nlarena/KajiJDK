@@ -1,0 +1,4 @@
+# Los programas que genera cada campaña y el registro de su corrida: se rehacen corriendo el script.
+fuzzer/runs/
+datos/*.log
+datos/*.err
